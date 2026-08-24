@@ -13,8 +13,9 @@
  * - Space: Launch ball / Pause
  * - Q: Quit to menu
  */
-import { ClientDoor, AudioEngine, KeyStateTracker, } from '@amiexpress/bbs-door-sdk/client';
+import { ClientDoor, AudioEngine, KeyStateTracker, ScreenBuffer, } from '@amiexpress/bbs-door-sdk/client';
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
+import { stepBall } from './ball-physics';
 // =============================================================================
 // ANSI Escape Codes and Colors
 // =============================================================================
@@ -150,34 +151,39 @@ const POWERUP_COLORS = {
 // =============================================================================
 // Renderer
 // =============================================================================
+/**
+ * Draws into an SDK ScreenBuffer and emits only the cells that changed.
+ *
+ * The previous version concatenated a fresh cursor-move + colour + reset for
+ * every block it drew, so a gameplay frame was 4669 bytes and went out 25-62
+ * times a second (measured at the door output boundary, 2026-08-24). xterm.js
+ * paints on its own animation frame while it is still parsing, so it kept
+ * showing the playfield erased but not yet repainted - the brick flicker.
+ * With the buffer a frame costs the cells that actually moved.
+ */
 class Renderer {
     constructor() {
-        this.buffer = '';
+        this.buffer = new ScreenBuffer({ cols: SCREEN_WIDTH, rows: SCREEN_HEIGHT });
     }
-    clear() {
-        this.buffer = '';
+    /** Blank every cell. Stale content is diffed away, not flashed away. */
+    clearScreen() {
+        this.buffer.clear();
+        this.buffer.setCursorHidden(true);
     }
-    add(str) {
-        this.buffer += str;
-    }
-    goto(x, y) {
-        this.buffer += ANSI.goto(x, y);
+    hideCursor() {
+        this.buffer.setCursorHidden(true);
     }
     drawBlock(x, y, bgColor, width = 1) {
-        this.buffer += ANSI.goto(x, y) + bgColor + BLOCK.space.repeat(width) + ANSI.reset;
+        this.buffer.drawBlock(x, y, bgColor, width);
     }
     drawText(x, y, text, fg = '', bg = '') {
-        this.buffer += ANSI.goto(x, y) + fg + bg + text + ANSI.reset;
+        this.buffer.drawText(x, y, text, fg, bg);
     }
     drawBox(x, y, width, height, bgColor) {
-        for (let row = 0; row < height; row++) {
-            this.drawBlock(x, y + row, bgColor, width);
-        }
+        this.buffer.drawBox(x, y, width, height, bgColor);
     }
     flush() {
-        const result = this.buffer;
-        this.buffer = '';
-        return result;
+        return this.buffer.flush();
     }
 }
 // =============================================================================
@@ -295,7 +301,7 @@ class ArkanoidGame {
             }
             else if (this.data.state === 'paused') {
                 this.data.state = 'playing';
-                this.door.send(this.render());
+                this.paint();
             }
             else if (this.data.state === 'menu') {
                 switch (this.data.menuSelection) {
@@ -315,7 +321,7 @@ class ArkanoidGame {
                         this.quit();
                         return;
                 }
-                this.door.send(this.render());
+                this.paint();
             }
         });
         // START button to pause/unpause
@@ -324,11 +330,11 @@ class ArkanoidGame {
                 return;
             if (this.data.state === 'playing') {
                 this.data.state = 'paused';
-                this.door.send(this.render());
+                this.paint();
             }
             else if (this.data.state === 'paused') {
                 this.data.state = 'playing';
-                this.door.send(this.render());
+                this.paint();
             }
         });
         // B or SELECT button to quit/back
@@ -338,7 +344,7 @@ class ArkanoidGame {
             if (this.data.state === 'playing' || this.data.state === 'paused') {
                 this.data.state = 'menu';
                 this.stopMusic();
-                this.door.send(this.render());
+                this.paint();
             }
         });
         this.gamepad.on('button:select', (pressed) => {
@@ -347,7 +353,7 @@ class ArkanoidGame {
             if (this.data.state === 'playing' || this.data.state === 'paused') {
                 this.data.state = 'menu';
                 this.stopMusic();
-                this.door.send(this.render());
+                this.paint();
             }
         });
         // D-pad up/down for menu navigation
@@ -355,14 +361,14 @@ class ArkanoidGame {
             if (this.data.state === 'menu') {
                 const maxOptions = 4;
                 this.data.menuSelection = (this.data.menuSelection - 1 + maxOptions + 1) % (maxOptions + 1);
-                this.door.send(this.render());
+                this.paint();
             }
         });
         this.gamepad.on('dpad:down', () => {
             if (this.data.state === 'menu') {
                 const maxOptions = 4;
                 this.data.menuSelection = (this.data.menuSelection + 1) % (maxOptions + 1);
-                this.door.send(this.render());
+                this.paint();
             }
         });
     }
@@ -370,7 +376,7 @@ class ArkanoidGame {
         this.door.onConnect(async (user) => {
             this.data.playerName = user.name?.substring(0, 10) || 'PLAYER';
             await this.loadHighscores();
-            this.door.send(this.render());
+            this.paint();
             // Start key state tracker for instant paddle movement (no delay!)
             this.keyTracker.start((key) => {
                 // Only handle paddle movement during gameplay
@@ -410,7 +416,7 @@ class ArkanoidGame {
                     normalizedKey !== 'a' && normalizedKey !== 'd') {
                     this.handleInput(normalizedKey);
                     if (this.data.state !== 'playing') {
-                        this.door.send(this.render());
+                        this.paint();
                     }
                 }
                 return;
@@ -442,7 +448,7 @@ class ArkanoidGame {
             }
             this.handleInput(k);
             if (this.data.state !== 'playing') {
-                this.door.send(this.render());
+                this.paint();
             }
         });
         this.door.onUpdate((delta) => {
@@ -462,7 +468,7 @@ class ArkanoidGame {
                     this.movePaddle(movement);
                 }
                 this.update(delta);
-                this.door.send(this.render());
+                this.paint();
             }
         });
     }
@@ -580,74 +586,37 @@ class ArkanoidGame {
                 ball.y = paddle.y - 1;
                 continue;
             }
-            const moveX = ball.vx * ball.speed;
-            const moveY = ball.vy * ball.speed;
-            ball.x += moveX;
-            ball.y += moveY;
-            // Wall collisions
-            if (ball.x <= GAME_LEFT) {
-                ball.x = GAME_LEFT + 1;
-                ball.vx = Math.abs(ball.vx);
-                this.playSound('hit');
-            }
-            if (ball.x >= GAME_RIGHT) {
-                ball.x = GAME_RIGHT - 1;
-                ball.vx = -Math.abs(ball.vx);
-                this.playSound('hit');
-            }
-            if (ball.y <= GAME_TOP) {
-                ball.y = GAME_TOP + 1;
-                ball.vy = Math.abs(ball.vy);
-                this.playSound('hit');
-            }
-            // Paddle collision
-            if (ball.vy > 0 &&
-                ball.y >= paddle.y - 1 && ball.y <= paddle.y &&
-                ball.x >= paddle.x && ball.x <= paddle.x + paddle.width) {
-                const hitPos = (ball.x - paddle.x) / paddle.width;
-                const angle = (hitPos - 0.5) * 1.2;
-                ball.vx = angle * 2;
-                ball.vy = -Math.abs(ball.vy);
-                ball.y = paddle.y - 1;
-                if (paddle.sticky) {
-                    ball.active = false;
-                    paddle.sticky = false;
-                }
-                this.playSound('hit');
-                this.data.comboCount = 0;
-            }
-            // Brick collisions
-            for (const brick of this.data.bricks) {
-                if (brick.destroyed)
-                    continue;
-                if (ball.x >= brick.x && ball.x < brick.x + brick.width &&
-                    ball.y >= brick.y && ball.y < brick.y + brick.height) {
-                    const fromLeft = ball.x - brick.x;
-                    const fromRight = brick.x + brick.width - ball.x;
-                    const fromTop = ball.y - brick.y;
-                    const fromBottom = brick.y + brick.height - ball.y;
-                    const minHoriz = Math.min(fromLeft, fromRight);
-                    const minVert = Math.min(fromTop, fromBottom);
-                    if (minHoriz < minVert) {
-                        ball.vx = -ball.vx;
-                    }
-                    else {
-                        ball.vy = -ball.vy;
-                    }
-                    brick.hits--;
-                    if (brick.hits <= 0) {
-                        brick.destroyed = true;
+            // Movement and collision live in ball-physics.ts (substepped so the
+            // ball cannot tunnel through 1-cell bricks); this loop owns the game
+            // consequences - sound, score, combo, power-ups.
+            const events = stepBall(ball, paddle, this.data.bricks, {
+                left: GAME_LEFT,
+                right: GAME_RIGHT,
+                top: GAME_TOP,
+            });
+            for (const event of events) {
+                switch (event.type) {
+                    case 'wall':
+                        this.playSound('hit');
+                        break;
+                    case 'paddle':
+                    case 'paddleCatch':
+                        this.playSound('hit');
+                        this.data.comboCount = 0;
+                        break;
+                    case 'brickDestroyed': {
+                        const brick = event.brick;
                         this.data.score += brick.points * (1 + Math.floor(this.data.comboCount / 3));
                         this.data.comboCount++;
                         if (brick.powerUp) {
                             this.spawnPowerUp(brick.x + brick.width / 2, brick.y, brick.powerUp);
                         }
                         this.playSound('explosion');
+                        break;
                     }
-                    else {
+                    case 'brickHit':
                         this.playSound('hit');
-                    }
-                    break;
+                        break;
                 }
             }
             // Ball fell below paddle
@@ -840,8 +809,18 @@ class ArkanoidGame {
     // =============================================================================
     // Rendering
     // =============================================================================
+    /**
+     * Send the frame, unless nothing changed.
+     *
+     * An unchanged frame diffs to an empty string; sending it would still cost
+     * a full browser -> backend -> browser round trip for zero pixels.
+     */
+    paint() {
+        const frame = this.render();
+        if (frame)
+            this.door.send(frame);
+    }
     render() {
-        this.renderer.clear();
         switch (this.data.state) {
             case 'menu':
                 return this.renderMenu();
@@ -862,7 +841,7 @@ class ArkanoidGame {
         return '';
     }
     renderMenu() {
-        this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
+        this.renderer.clearScreen();
         const title = [' ARKANOID ', '  BLOCKS  '];
         let y = 4;
         for (const line of title) {
@@ -890,7 +869,7 @@ class ArkanoidGame {
         return this.renderer.flush();
     }
     renderGame() {
-        this.renderer.add(ANSI.hide);
+        this.renderer.hideCursor();
         for (let row = GAME_TOP; row <= GAME_BOTTOM; row++) {
             this.renderer.drawBlock(GAME_LEFT, row, ANSI.bg.black, GAME_WIDTH);
         }
@@ -947,7 +926,7 @@ class ArkanoidGame {
         return this.renderer.flush();
     }
     renderGameOver() {
-        this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
+        this.renderer.clearScreen();
         this.renderer.drawText(33, 8, '  GAME OVER  ', ANSI.fg.white, ANSI.bg.red);
         this.renderer.drawText(30, 11, `Final Score: ${this.data.score}`, ANSI.fg.brightYellow);
         this.renderer.drawText(30, 12, `Level Reached: ${this.data.level}`, ANSI.fg.brightCyan);
@@ -960,7 +939,7 @@ class ArkanoidGame {
         return this.renderer.flush();
     }
     renderVictory() {
-        this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
+        this.renderer.clearScreen();
         this.renderer.drawText(32, 7, '  VICTORY!  ', ANSI.fg.black, ANSI.bg.brightGreen);
         this.renderer.drawText(28, 9, 'You completed all 20 levels!', ANSI.fg.brightYellow);
         this.renderer.drawText(30, 12, `Final Score: ${this.data.score}`, ANSI.fg.brightCyan);
@@ -977,7 +956,7 @@ class ArkanoidGame {
         return this.renderer.flush();
     }
     renderHighscores() {
-        this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
+        this.renderer.clearScreen();
         this.renderer.drawText(32, 2, '  HIGH SCORES  ', ANSI.fg.black, ANSI.bg.yellow);
         this.renderer.drawText(15, 5, 'RANK  NAME          SCORE      LEVEL  DATE', ANSI.fg.brightCyan);
         this.renderer.drawText(15, 6, '----  ----------  ----------  -----  ----------', ANSI.fg.brightBlack);
@@ -1001,7 +980,7 @@ class ArkanoidGame {
         return this.renderer.flush();
     }
     renderEnterName() {
-        this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
+        this.renderer.clearScreen();
         this.renderer.drawText(30, 8, '  NEW HIGH SCORE!  ', ANSI.fg.black, ANSI.bg.brightGreen);
         this.renderer.drawText(30, 11, `Your Score: ${this.data.score}`, ANSI.fg.brightYellow);
         this.renderer.drawText(28, 14, 'Enter your name:', ANSI.fg.white);
@@ -1010,7 +989,7 @@ class ArkanoidGame {
         return this.renderer.flush();
     }
     renderHelp() {
-        this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
+        this.renderer.clearScreen();
         this.renderer.drawText(32, 2, '  HOW TO PLAY  ', ANSI.fg.black, ANSI.bg.cyan);
         const help = [
             '',
@@ -1076,7 +1055,7 @@ class ArkanoidGame {
             case 'enterName':
                 // handleNameInput is async - need to re-render after it completes
                 this.handleNameInput(key).then(() => {
-                    this.door.send(this.render());
+                    this.paint();
                 });
                 break;
         }
@@ -1173,7 +1152,7 @@ class ArkanoidGame {
                 }
             }
             // Render immediately for smooth mouse movement
-            this.door.send(this.render());
+            this.paint();
         }
         else if (this.data.state === 'menu') {
             // Menu mouse handling - check Y position for menu items
@@ -1184,7 +1163,7 @@ class ArkanoidGame {
                 if (event.type === 'mouse-hover') {
                     if (this.data.menuSelection !== selection) {
                         this.data.menuSelection = selection;
-                        this.door.send(this.render());
+                        this.paint();
                     }
                 }
                 // Execute action on click
@@ -1207,7 +1186,7 @@ class ArkanoidGame {
                             this.quit();
                             return; // Return immediately, don't render after quit
                     }
-                    this.door.send(this.render());
+                    this.paint();
                 }
             }
         }
@@ -1223,27 +1202,27 @@ class ArkanoidGame {
                     else {
                         this.data.state = 'menu';
                     }
-                    this.door.send(this.render());
+                    this.paint();
                     break;
                 case 'highscores':
                 case 'help':
                     // Click anywhere to return to menu
                     this.data.state = 'menu';
-                    this.door.send(this.render());
+                    this.paint();
                     break;
                 case 'enterName':
                     // Click to confirm name entry (like pressing Enter)
                     if (this.data.playerName.length > 0) {
                         this.saveHighscore().then(() => {
                             this.data.state = 'highscores';
-                            this.door.send(this.render());
+                            this.paint();
                         });
                     }
                     break;
                 case 'paused':
                     // Click to resume
                     this.data.state = 'playing';
-                    this.door.send(this.render());
+                    this.paint();
                     break;
             }
         }
