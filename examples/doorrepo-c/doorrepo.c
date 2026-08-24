@@ -2425,6 +2425,76 @@ static void index_remove(const dr_config *cfg, const char *archive)
     }
 }
 
+/* Rebuilds `v->index` to hold only the catalog rows the install index
+ * (g_index[], above) says are installed - the "installed doors" screen's
+ * counterpart to ui_view_rebuild(), which filters on the user's text/type
+ * search instead. Shares that function's shape: `v->count` is reset, then
+ * `cat->rows[]` is walked once, appending a row's global index into
+ * `v->index[]` when it belongs.
+ *
+ * `archives[]` is the known-installed set flow_is_installed_row() scans,
+ * built from g_index[] once here rather than once per row - g_index[]
+ * itself can only be read after index_load() has run, which is why this
+ * function (unlike the pure predicate in flow.c) needs `cfg`.
+ *
+ * Also reports orphans via `orphan_count_out`: an archive in g_index[]
+ * that matched no catalog row at all - installed, but since removed or
+ * renamed upstream (see the plan's Scope Decision). flow_is_installed_row()
+ * only answers yes/no for one row, so which known archive a row matched is
+ * tracked in `matched[]`, updated on the SAME lookup that decides whether
+ * to keep the row - no second walk of the catalog or the index just to
+ * count orphans. */
+static void ui_view_rebuild_installed(ui_view *v, const dr_catalog *cat,
+                                      const dr_config *cfg,
+                                      unsigned long *orphan_count_out)
+{
+    /* INDEX_MAX_ENTRIES-sized locals, static for the same reason
+     * browse_loop_ansi()'s view_index is: 256 pointers plus 256 ints is a
+     * large slice of a 68K door's STACK=8192 icon setting to spend on
+     * locals a nested call chain (ANSI draw, prompts) will also be using. */
+    static const char *archives[INDEX_MAX_ENTRIES];
+    static int matched[INDEX_MAX_ENTRIES];
+    int known_count;
+    int i;
+    unsigned long r;
+    unsigned long matched_total = 0;
+
+    if (!g_index_loaded) {
+        index_load(cfg);
+    }
+    known_count = g_index_count;
+    for (i = 0; i < known_count; i++) {
+        archives[i] = g_index[i].archive;
+        matched[i] = 0;
+    }
+
+    v->count = 0;
+    for (r = 0; r < cat->count; r++) {
+        const dr_entry *e = &cat->rows[r];
+
+        if (!flow_is_installed_row(e->archive, archives, known_count)) {
+            continue;
+        }
+        v->index[v->count++] = r;
+
+        for (i = 0; i < known_count; i++) {
+            if (!matched[i] && strcmp(archives[i], e->archive) == 0) {
+                matched[i] = 1;
+                break;
+            }
+        }
+    }
+
+    for (i = 0; i < known_count; i++) {
+        if (matched[i]) {
+            matched_total++;
+        }
+    }
+    if (orphan_count_out != (unsigned long *) 0) {
+        *orphan_count_out = (unsigned long) known_count - matched_total;
+    }
+}
+
 /* Defined below, next to the other UI prompt helpers. */
 static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
                           const ui_geometry *g, const char *label,

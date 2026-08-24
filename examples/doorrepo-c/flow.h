@@ -627,4 +627,24 @@ int flow_index_parse_line(const char *line, char *archive_out, unsigned long arc
  * fit. */
 int flow_build_index_path(char *out, unsigned long outsize, const char *download_dir);
 
+/* ---- Installed-only view ------------------------------------------------
+ *
+ * The new "installed doors" screen (doorrepo.c's installed_loop_ansi())
+ * keeps only the catalog rows whose archive name is in the install index
+ * (g_index[], doorrepo.c). g_index and the dr_catalog it is matched
+ * against both live in doorrepo.c and touch the filesystem via
+ * index_load(), so the membership test itself is pulled out here as a
+ * plain array scan - the caller builds `known_archives` from g_index[]
+ * once per screen-open (see ui_view_rebuild_installed(), doorrepo.c),
+ * this function does none of that I/O and knows nothing of g_index.
+ */
+
+/* Non-zero when `row_archive` equals one of `known_archives[0..known_count)`.
+ * Case-sensitive strcmp, matching index_lookup()'s own comparison - archive
+ * names are not case-folded anywhere else in this door, so this does not
+ * introduce it either. A NULL `row_archive` or a NULL entry in
+ * `known_archives` never matches. */
+int flow_is_installed_row(const char *row_archive,
+                          const char *known_archives[], int known_count);
+
 #endif /* DOORREPO_FLOW_H */

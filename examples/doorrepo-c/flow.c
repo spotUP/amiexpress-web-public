@@ -941,6 +941,30 @@ int flow_build_index_path(char *out, unsigned long outsize, const char *download
     return flow_build_local_path(out, outsize, download_dir, FLOW_INDEX_FILENAME);
 }
 
+/* ---- Installed-only view -------------------------------------------------
+ *
+ * See flow.h for why this lives here rather than next to g_index in
+ * doorrepo.c. Pure array scan only; doorrepo.c owns building
+ * `known_archives` from g_index[] and walking the catalog.
+ */
+
+int flow_is_installed_row(const char *row_archive,
+                          const char *known_archives[], int known_count)
+{
+    int i;
+
+    if (row_archive == (const char *) 0) {
+        return 0;
+    }
+    for (i = 0; i < known_count; i++) {
+        if (known_archives[i] != (const char *) 0
+            && strcmp(row_archive, known_archives[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Quotes are the only character this refuses; see flow.h for why escaping
  * is not attempted. */
 static int extract_arg_ok(const char *value)

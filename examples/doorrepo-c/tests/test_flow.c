@@ -1131,6 +1131,145 @@ TEST(index_path_sits_in_the_download_dir)
     ASSERT_STR_EQ(out, "Work:Downloads/DoorRepo.idx", "separator inserted");
 }
 
+/* ---- flow_is_installed_row / the installed-only view's walk -------------
+ *
+ * ui_view_rebuild_installed() (doorrepo.c) walks cat->rows[] once, keeping
+ * a row when flow_is_installed_row() says its archive is in the known-
+ * installed set built from g_index[], and separately counts distinct known
+ * archives that never matched any row (a door installed but no longer
+ * present in the catalog - an orphan). doorrepo.c itself has no unit-test
+ * target (it needs a real dr_catalog/g_index and index_load()'s file I/O),
+ * so this local walker mirrors that exact algorithm over plain arrays,
+ * exercising it entirely through flow_is_installed_row() - the split the
+ * brief calls for. INDEX_MAX_ENTRIES itself is doorrepo.c's; 256 is
+ * hardcoded here to match it for the boundary case below. */
+
+#define TEST_INDEX_MAX_ENTRIES 256
+
+static void rebuild_installed_view(const char *catalog[], int catalog_count,
+                                    const char *known_archives[], int known_count,
+                                    int *count_out, int *orphan_count_out)
+{
+    int matched[TEST_INDEX_MAX_ENTRIES];
+    int i;
+    int kept = 0;
+    int matched_total = 0;
+
+    for (i = 0; i < known_count; i++) {
+        matched[i] = 0;
+    }
+
+    for (i = 0; i < catalog_count; i++) {
+        if (flow_is_installed_row(catalog[i], known_archives, known_count)) {
+            int j;
+            kept++;
+            for (j = 0; j < known_count; j++) {
+                if (known_archives[j] != (const char *) 0
+                    && strcmp(known_archives[j], catalog[i]) == 0) {
+                    matched[j] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (i = 0; i < known_count; i++) {
+        if (matched[i]) {
+            matched_total++;
+        }
+    }
+
+    *count_out = kept;
+    *orphan_count_out = known_count - matched_total;
+}
+
+TEST(installed_view_empty_index_keeps_nothing)
+{
+    const char *catalog[] = { "A.LHA", "B.LHA", "C.LHA" };
+    const char *known[1];
+    int count = -1;
+    int orphans = -1;
+
+    rebuild_installed_view(catalog, 3, known, 0, &count, &orphans);
+    ASSERT_EQ(count, 0, "nothing kept when nothing is installed");
+    ASSERT_EQ(orphans, 0, "no orphans when nothing is installed");
+}
+
+TEST(installed_view_one_match_is_kept)
+{
+    const char *catalog[] = { "A.LHA", "B.LHA", "C.LHA" };
+    const char *known[] = { "B.LHA" };
+    int count = -1;
+    int orphans = -1;
+
+    rebuild_installed_view(catalog, 3, known, 1, &count, &orphans);
+    ASSERT_EQ(count, 1, "the one installed archive is kept");
+    ASSERT_EQ(orphans, 0, "it was found, so it is not an orphan");
+}
+
+TEST(installed_view_one_orphan_is_counted_not_kept)
+{
+    const char *catalog[] = { "A.LHA", "B.LHA", "C.LHA" };
+    const char *known[] = { "GONE.LHA" };
+    int count = -1;
+    int orphans = -1;
+
+    rebuild_installed_view(catalog, 3, known, 1, &count, &orphans);
+    ASSERT_EQ(count, 0, "an installed archive absent from the catalog is not shown");
+    ASSERT_EQ(orphans, 1, "it counts as one orphan");
+}
+
+TEST(installed_view_mixed_matches_and_orphans_split_correctly)
+{
+    const char *catalog[] = { "A.LHA", "B.LHA", "C.LHA" };
+    const char *known[] = { "A.LHA", "GONE1.LHA", "C.LHA", "GONE2.LHA" };
+    int count = -1;
+    int orphans = -1;
+
+    rebuild_installed_view(catalog, 3, known, 4, &count, &orphans);
+    ASSERT_EQ(count, 2, "A.LHA and C.LHA are both kept");
+    ASSERT_EQ(orphans, 2, "GONE1.LHA and GONE2.LHA are both orphans");
+}
+
+TEST(installed_view_256_entries_all_matching_does_not_overflow)
+{
+    static char names[TEST_INDEX_MAX_ENTRIES][16];
+    static const char *catalog[TEST_INDEX_MAX_ENTRIES];
+    static const char *known[TEST_INDEX_MAX_ENTRIES];
+    int i;
+    int count = -1;
+    int orphans = -1;
+
+    for (i = 0; i < TEST_INDEX_MAX_ENTRIES; i++) {
+        sprintf(names[i], "D%03d.LHA", i);
+        catalog[i] = names[i];
+        known[i] = names[i];
+    }
+
+    rebuild_installed_view(catalog, TEST_INDEX_MAX_ENTRIES, known, TEST_INDEX_MAX_ENTRIES,
+                            &count, &orphans);
+    ASSERT_EQ(count, TEST_INDEX_MAX_ENTRIES, "all 256 installed entries are kept");
+    ASSERT_EQ(orphans, 0, "none of them are orphans");
+}
+
+TEST(is_installed_row_rejects_a_null_row_archive)
+{
+    const char *known[] = { "A.LHA" };
+
+    ASSERT_TRUE(!flow_is_installed_row((const char *) 0, known, 1),
+                "a NULL row archive never matches");
+}
+
+TEST(is_installed_row_is_case_sensitive_like_index_lookup)
+{
+    const char *known[] = { "A.LHA" };
+
+    ASSERT_TRUE(!flow_is_installed_row("a.lha", known, 1),
+                "differently-cased archive name does not match");
+    ASSERT_TRUE(flow_is_installed_row("A.LHA", known, 1),
+                "exact case matches");
+}
+
 
 /* ---- flow_build_extract_command ----
  *
@@ -1379,6 +1518,14 @@ int main(void)
     RUN_TEST(index_parse_rejects_half_records);
     RUN_TEST(index_parse_tolerates_crlf_and_long_fields);
     RUN_TEST(index_path_sits_in_the_download_dir);
+
+    RUN_TEST(installed_view_empty_index_keeps_nothing);
+    RUN_TEST(installed_view_one_match_is_kept);
+    RUN_TEST(installed_view_one_orphan_is_counted_not_kept);
+    RUN_TEST(installed_view_mixed_matches_and_orphans_split_correctly);
+    RUN_TEST(installed_view_256_entries_all_matching_does_not_overflow);
+    RUN_TEST(is_installed_row_rejects_a_null_row_archive);
+    RUN_TEST(is_installed_row_is_case_sensitive_like_index_lookup);
     RUN_TEST(eof_key_ends_the_session);
     RUN_TEST(bbs_command_accepts_upper_alnum);
     RUN_TEST(bbs_command_rejects_everything_else);
