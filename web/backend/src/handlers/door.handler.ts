@@ -1799,6 +1799,12 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
     // In Docker, /app/Doors symlinks to /app/data/bbs/Doors for path consistency
     const projectRoot = process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..');
 
+    // The door's root directory (where package.json lives) - known whenever
+    // door.path is a directory. The manifest probe after import MUST use
+    // this, not dirname(entry): in production the entry is dist/server.js
+    // and dirname points inside dist/, which broke hybrid detection on live.
+    let doorRootDir: string | null = null;
+
     // For hybrid doors, use the server entry point from package.json
     // Check if path is a directory and if it has a package.json with server entry
     // Use amigafs for case-insensitive path resolution (AmigaOS compatibility)
@@ -1806,6 +1812,7 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
         amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
       
       const doorDir = path.join(projectRoot, doorPath);
+      doorRootDir = doorDir;
       
       // In production (NODE_ENV=production), always use compiled dist/ output.
       // In development, prefer .ts source if it exists (prevents stale .js).
@@ -1935,7 +1942,8 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
     // These doors call door.start() when imported and don't export runDoor()
     let packageJson: any = null;
     try {
-      const packageJsonPath = path.join(path.dirname(doorPath), 'package.json');
+      const { doorManifestPath } = require('../doors/door-manifest-path');
+      const packageJsonPath = doorManifestPath(doorRootDir, doorPath);
       if (amigafs.existsSync(packageJsonPath)) {
         packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8') as string);
       }
