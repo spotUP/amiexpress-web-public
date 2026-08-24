@@ -626,25 +626,52 @@ console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
   }
 }
 
+// runLoginBatches() is fired non-blocking from login-post.service.ts on
+// every successful login (one real BBS session's worth of work per call:
+// several batch files, each running one or more spawned door processes
+// like QuickNew's new-mail scan). It is keyed only by nodeId, with no
+// guard against a second login on the SAME node overlapping a first run
+// that hasn't finished yet - e.g. a client that disconnects and quickly
+// reconnects to the same node slot while the prior connection's
+// still-running QuickNew scan is orphaned in the background (it's a
+// detached child process, so it outlives the socket that spawned it).
+// Real incident: 5 duplicate QuickNew emulator processes (2 on Node2, 2
+// on Node4) accumulated within a 20-second window on the live BBS,
+// ~2GB combined RSS, contributing to two OOM kills. Guard by nodeId so a
+// reconnect's login-batch run never overlaps its predecessor's.
+const activeLoginBatchNodes = new Set<number>();
+
 export async function runLoginBatches(nodeId: number): Promise<void> {
-  const baseDir = config.getConfig().dataDir;
-  const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
-  const appRoot = process.cwd(); // App root where batch files live
-  const day = getSystemTime().getDay(); // 0-6, Sunday = 0
-  const batchName = `batch${day}`;
-  const batch000 = 'batch000';
+  const effectiveNodeId = nodeId || 1;
 
-  const candidates = [
-    path.join(appRoot, batchName),           // App root batch files (primary)
-    path.join(baseDir, batchName),           // Data dir batch files
-    path.join(bbsRoot, `Node${nodeId}`, batchName),
-    path.join(appRoot, batch000),            // App root batch000
-    path.join(baseDir, batch000),
-    path.join(bbsRoot, `Node${nodeId}`, batch000),
-  ];
+  if (activeLoginBatchNodes.has(effectiveNodeId)) {
+console.warn(`[BatchScheduler] Login batches already running for node ${effectiveNodeId} - skipping duplicate run (likely a fast reconnect to the same node)`);
+    return;
+  }
+  activeLoginBatchNodes.add(effectiveNodeId);
 
-  for (const candidate of candidates) {
-    await runBatchFile(candidate, nodeId || 1);
+  try {
+    const baseDir = config.getConfig().dataDir;
+    const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
+    const appRoot = process.cwd(); // App root where batch files live
+    const day = getSystemTime().getDay(); // 0-6, Sunday = 0
+    const batchName = `batch${day}`;
+    const batch000 = 'batch000';
+
+    const candidates = [
+      path.join(appRoot, batchName),           // App root batch files (primary)
+      path.join(baseDir, batchName),           // Data dir batch files
+      path.join(bbsRoot, `Node${nodeId}`, batchName),
+      path.join(appRoot, batch000),            // App root batch000
+      path.join(baseDir, batch000),
+      path.join(bbsRoot, `Node${nodeId}`, batch000),
+    ];
+
+    for (const candidate of candidates) {
+      await runBatchFile(candidate, effectiveNodeId);
+    }
+  } finally {
+    activeLoginBatchNodes.delete(effectiveNodeId);
   }
 }
 
