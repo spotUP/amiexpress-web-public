@@ -1554,6 +1554,26 @@ TEST(rewrite_access_lines_appends_access_when_missing)
                   "ACCESS appended at the end, everything else untouched");
 }
 
+TEST(rewrite_access_lines_appends_access_after_a_final_line_missing_its_newline)
+{
+    /* The intersection the two tests above each miss individually: ACCESS
+     * is absent (so it must be appended) AND the file's last line has no
+     * trailing \n (so a naive append would merge into it). Without the
+     * newline guard this produced "STACK=8192ACCESS=100\n" - one corrupted
+     * tooltype and no ACCESS line at all, which the backend's parser would
+     * read as "no ACCESS key", silently undoing whatever the sysop just
+     * set. */
+    const char *content = "TYPE=XIM\nSTACK=8192";
+    char out[256];
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 100, -1);
+
+    ASSERT_STR_EQ(out, "TYPE=XIM\nSTACK=8192\nACCESS=100\n",
+                  "a newline separates the appended ACCESS from the prior unterminated line");
+    ASSERT_TRUE(strstr(out, "8192ACCESS") == (char *) 0,
+                 "STACK's value never merges with the appended ACCESS line");
+}
+
 TEST(rewrite_access_lines_drops_a_duplicate_access_line)
 {
     /* A hand-edited or corrupted .info with two ACCESS lines - the result
@@ -2369,6 +2389,7 @@ int main(void)
     RUN_TEST(rewrite_access_lines_removes_draccess_on_restore);
     RUN_TEST(rewrite_access_lines_updates_existing_draccess_without_duplicating_it);
     RUN_TEST(rewrite_access_lines_appends_access_when_missing);
+    RUN_TEST(rewrite_access_lines_appends_access_after_a_final_line_missing_its_newline);
     RUN_TEST(rewrite_access_lines_drops_a_duplicate_access_line);
     RUN_TEST(rewrite_access_lines_preserves_crlf_of_untouched_lines);
     RUN_TEST(rewrite_access_lines_handles_a_final_line_with_no_trailing_newline);

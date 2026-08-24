@@ -1058,12 +1058,30 @@ int flow_rewrite_access_lines(const char *content, char *out, unsigned long outs
     }
 
     if (!access_emitted) {
+        /* The last pass-through line may have had no trailing '\n' (a
+         * .info missing a final newline) - appending straight onto it
+         * would merge "ACCESS=<n>" into that line's own value, and the
+         * backend would then read no ACCESS key at all. */
+        if (pos > 0 && out[pos - 1] != '\n') {
+            if (rewrite_append(out, outsize, &pos, "\n") != 0) {
+                return -1;
+            }
+        }
         if (rewrite_append(out, outsize, &pos, access_line) != 0) {
             return -1;
         }
         access_emitted = 1;
     }
     if (!draccess_emitted && draccess_line[0] != '\0') {
+        /* Same trailing-newline hazard as the ACCESS append above: the
+         * ACCESS line just emitted always ends in '\n', but if ACCESS was
+         * already present in the file and DRACCESS still needs appending,
+         * the content between them may not. */
+        if (pos > 0 && out[pos - 1] != '\n') {
+            if (rewrite_append(out, outsize, &pos, "\n") != 0) {
+                return -1;
+            }
+        }
         if (rewrite_append(out, outsize, &pos, draccess_line) != 0) {
             return -1;
         }

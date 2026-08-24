@@ -3553,8 +3553,13 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     long current_access;
     long new_access;
     long prior_access;
-    char info_raw[2048];
-    char info_content[2048];
+    /* Static rather than automatic: 4KB combined is far too much for a
+     * 68K door's stack (same reasoning as UI_FRAME_BYTES/view_index above).
+     * do_edit_access() is single-threaded and non-reentrant, called once
+     * per M keypress from the main event loop, so a static scratch buffer
+     * is safe here. */
+    static char info_raw[2048];
+    static char info_content[2048];
     char msg[420];
     char logmsg[300];
 
