@@ -155,6 +155,62 @@ describe('arkanoid ball physics', () => {
     });
   });
 
+  describe('penetration resolution (the machine-gun bug)', () => {
+    function insideAnyBrick(b: PhysicsBall, bricks: PhysicsBrick[]): boolean {
+      return bricks.some(
+        (br) =>
+          !br.destroyed &&
+          b.x >= br.x &&
+          b.x < br.x + br.width &&
+          b.y >= br.y &&
+          b.y < br.y + br.height
+      );
+    }
+
+    /** The real game's brick wall: 8 contiguous rows of 12 bricks. */
+    function brickWall(): PhysicsBrick[] {
+      const bricks: PhysicsBrick[] = [];
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 12; col++) {
+          bricks.push(brick({ x: 4 + col * 6, y: 5 + row, width: 6, hits: 1 }));
+        }
+      }
+      return bricks;
+    }
+
+    it('never ends a frame embedded in a brick, across a full simulated game', () => {
+      // A corner hit that flips vx used to leave vy carrying the ball
+      // deeper into the contiguous grid; embedded, it destroyed a brick
+      // nearly every substep ("the ball goes crazy and removes many
+      // bricks"). Reverting to the pre-substep position on every hit
+      // makes embedding impossible - checked over a long deterministic
+      // run at the worst-case speed.
+      const bricks = brickWall();
+      const b = ball({ x: 43.8, y: 15, vx: 1.2, vy: -1, speed: 1.05 });
+
+      for (let frame = 0; frame < 600; frame++) {
+        stepBall(b, paddle(), bricks, BOUNDS);
+        expect(insideAnyBrick(b, bricks)).toBe(false);
+        // Keep the ball in play forever: bounce it back up off the floor.
+        if (b.y > 22) {
+          b.y = 22;
+          b.vy = -Math.abs(b.vy);
+        }
+      }
+    });
+
+    it('a single frame cannot strip more bricks than it has substeps', () => {
+      const bricks = brickWall();
+      const b = ball({ x: 43.8, y: 6.5, vx: 1.2, vy: -1, speed: 1.05 });
+
+      const events = stepBall(b, paddle(), bricks, BOUNDS);
+      const destroyed = events.filter((e) => e.type === 'brickDestroyed').length;
+
+      // 1.26 cells of travel is 3 substeps - one contact each, at most.
+      expect(destroyed).toBeLessThanOrEqual(3);
+    });
+  });
+
   describe('a bounce mid-frame deflects the rest of the frame', () => {
     it('does not keep travelling into the brick after reflecting', () => {
       const target = brick({ x: 36, y: 8, hits: 1 });

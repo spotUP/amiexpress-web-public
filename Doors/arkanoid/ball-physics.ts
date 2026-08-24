@@ -98,6 +98,13 @@ export function stepBall<TBrick extends PhysicsBrick>(
   for (let s = 0; s < substeps; s++) {
     // Velocity is re-read each substep so a bounce mid-frame deflects the
     // remainder of the path instead of finishing the old straight line.
+    // The pre-move position is kept: a brick hit reverts to it, so the
+    // ball reflects from open space instead of staying embedded in the
+    // grid - an embedded ball found a fresh neighbor brick every substep
+    // and machine-gunned through the wall (reported as "the ball goes
+    // crazy and removes many bricks").
+    const preX = ball.x;
+    const preY = ball.y;
     ball.x += (ball.vx * ball.speed) / substeps;
     ball.y += (ball.vy * ball.speed) / substeps;
 
@@ -168,6 +175,12 @@ export function stepBall<TBrick extends PhysicsBrick>(
         } else {
           ball.vy = -ball.vy;
         }
+
+        // Resolve the penetration: back out to where this substep began.
+        // That position was either the frame's start or a previous
+        // substep's resolved position - open space either way.
+        ball.x = preX;
+        ball.y = preY;
 
         brick.hits--;
         if (brick.hits <= 0) {
