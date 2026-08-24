@@ -193,6 +193,14 @@ class ArkanoidGame {
     constructor() {
         this.lastUpdate = 0;
         this.musicStarted = false;
+        // Guards against a double-submit: the 'enterName' state accepts BOTH a
+        // keyboard Enter (handleNameInput) and a mouse click as "confirm name"
+        // (see the two call sites of saveHighscore()), and neither transitions
+        // state or sets a flag before its `await` - a stray click landing while
+        // the Enter-triggered save is still in flight fires a second RPC call
+        // (and a second DOOR_SCORE webhook post) for the same score. Reported
+        // live: a Discord webhook fired twice for one highscore entry.
+        this.highscoreSaved = false;
         this.heldKeys = new Set(); // Track held keys for smooth movement
         this.gamepadAxis = 0; // Track analog stick position
         this.door = new ClientDoor({
@@ -483,6 +491,9 @@ class ArkanoidGame {
         }
     }
     async saveHighscore() {
+        if (this.highscoreSaved)
+            return; // already submitted for this game
+        this.highscoreSaved = true;
         try {
             await this.door.rpc('saveHighscore', {
                 name: this.data.playerName,
@@ -1042,6 +1053,7 @@ class ArkanoidGame {
                 if (k === 'enter' || k === '\r' || k === '\n') {
                     if (this.isHighScore()) {
                         this.data.state = 'enterName';
+                        this.highscoreSaved = false; // a new game's entry can submit again
                     }
                     else {
                         this.data.state = 'menu';
@@ -1198,6 +1210,7 @@ class ArkanoidGame {
                     // Click anywhere to proceed
                     if (this.isHighScore()) {
                         this.data.state = 'enterName';
+                        this.highscoreSaved = false; // a new game's entry can submit again
                     }
                     else {
                         this.data.state = 'menu';
