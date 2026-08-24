@@ -81,22 +81,17 @@ exports.downloadArchive = downloadArchive;
  * RepoClientConfig.cacheFile — this module never guesses or derives a
  * path itself (Task 6 passes `<resolveBbsRoot()>/door-repo-cache.json`).
  *
- * Manifest typing comes from repo-types.generated.ts, a GENERATED,
- * verbatim (byte-for-byte, not hand-retyped) copy of the ManifestDoor /
- * DoorRepoManifest interfaces from web/backend's door-repo-manifest.ts —
- * the single source of truth for the shape both the server and this
- * client agree on. See scripts/gen-repo-types.ts for why: Doors/door-manager
- * and web/backend are separate TypeScript compilation units (own tsconfig,
- * own rootDir), and door-repo-manifest.ts pulls in better-sqlite3 and
- * other server-only modules. A raw cross-package `import type` still
- * forces TypeScript to add that whole file (and its transitive graph) to
- * THIS package's program in order to resolve the types, which trips
- * TS6059 ("File is not under rootDir") once rootDir is set — needed here
- * to keep dist/ flat (sibling to app.js, matching `require('./repo-client')`)
- * and to keep backend server code from being duplicate-compiled into this
- * door's dist output. Regenerate repo-types.generated.ts
- * (`npm run gen:repo-types`, i.e. `npx tsx scripts/gen-repo-types.ts`)
- * whenever door-repo-manifest.ts's manifest shape changes upstream.
+ * Manifest typing comes from repo-types.generated.ts, a GENERATED mirror
+ * of the ManifestDoor / DoorRepoManifest interfaces owned by the standalone
+ * door server's contract (amiexpress-doorserver/contract/manifest-types.ts —
+ * that repo is now the single source of truth for the shape both the server
+ * and this client agree on, not web/backend). Doors/door-manager and that
+ * contract live in separate checkouts, so this is a committed mirror rather
+ * than a cross-repo import; web/backend/tests/doors/contract-mirror-staleness.test.ts
+ * fails loudly if this mirror drifts from the door server's contract
+ * whenever that checkout is present alongside this one. Regenerate with
+ * `npx tsx scripts/gen-contract-types.ts <path-to-this-file>` from the
+ * amiexpress-doorserver checkout whenever its contract shape changes.
  */
 const fs = __importStar(require("fs"));
 const crypto = __importStar(require("crypto"));

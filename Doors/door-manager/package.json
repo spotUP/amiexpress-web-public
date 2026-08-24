@@ -8,8 +8,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "gen:repo-types": "npx tsx scripts/gen-repo-types.ts"
+    "clean": "rm -rf dist"
   },
   "keywords": ["bbs", "door", "manager", "sysop", "admin"],
   "author": "AmiExpress",
