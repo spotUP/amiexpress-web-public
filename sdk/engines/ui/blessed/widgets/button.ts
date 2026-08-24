@@ -22,6 +22,20 @@ export interface ExtendedButtonOptions extends ButtonOptions {
   mobileHeight?: number;
   /** Inline mode: no borders, 1 row high (default: false) */
   inline?: boolean;
+  /**
+   * When true, this button's own bg/fg only show at full strength while
+   * focused or hovered - while idle it renders muted gray instead. Use
+   * for pure action buttons that sit in a row with other buttons (Leave,
+   * Cancel, Force Start): a row of buttons each keeping their own
+   * saturated color all the time reads as "everything is highlighted",
+   * so only the current Tab target should be in color.
+   *
+   * Default false - a button whose color communicates persistent state
+   * (e.g. a Ready/Not-Ready toggle set via `button.style.bg = ...`) must
+   * keep showing that color regardless of focus, so this needs an
+   * explicit opt-in rather than being on by default for every button.
+   */
+  ghostWhenIdle?: boolean;
 }
 
 export class Button extends Element {
@@ -46,6 +60,7 @@ export class Button extends Element {
 
     // Inline mode: no borders, no padding, compact 1-row buttons
     const isInline = options.inline === true;
+    const isGhosted = options.ghostWhenIdle === true;
 
     super({
       focusable: true,
@@ -61,6 +76,9 @@ export class Button extends Element {
         fg: baseStyle.fg ?? 'white',
         bg: baseStyle.bg ?? 'black',
         ...baseStyle,
+        // Override AFTER the baseStyle spread so ghosting wins over
+        // whatever fg/bg the caller asked for as this button's idle look.
+        ...(isGhosted ? { fg: 'gray', bg: 'black' } : {}),
         focus: focusStyle,
         hover: hoverStyle,
       },

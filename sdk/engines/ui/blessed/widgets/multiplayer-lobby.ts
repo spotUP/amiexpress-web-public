@@ -864,7 +864,11 @@ export class MultiplayerLobby extends EventEmitter {
     } as any);
     if (hasReadyFlow) buttonLeft += 12;
 
-    // Start button — always visible when readyFlow is disabled; host-only otherwise
+    // Start button — always visible when readyFlow is disabled; host-only otherwise.
+    // Only ghost it when readyFlow is on: in that mode it's a pure "launch the
+    // match" trigger for the host. When readyFlow is off, startMatch() repaints
+    // it blue/" Ready! " as a persistent status readout (see below) - that must
+    // stay visible even when focus has moved elsewhere, so it can't be ghosted.
     this.startButton = new Button({
       parent: this.container,
       top: buttonTop,
@@ -880,11 +884,12 @@ export class MultiplayerLobby extends EventEmitter {
       border: 'none',
       mouse: true,
       hidden: hasReadyFlow,  // setAsHost() will un-hide for host when readyFlow is on
+      ghostWhenIdle: hasReadyFlow,
       tags: true,
     } as any);
     buttonLeft += 12;
 
-    // Leave button
+    // Leave button — pure action, safe to ghost when not focused.
     this.leaveButton = new Button({
       parent: this.container,
       top: buttonTop,
@@ -899,11 +904,12 @@ export class MultiplayerLobby extends EventEmitter {
       },
       border: 'none',
       mouse: true,
+      ghostWhenIdle: true,
       tags: true,
     } as any);
     buttonLeft += 12;
 
-    // Fill Bots button (optional, host only)
+    // Fill Bots button (optional, host only) — pure action, safe to ghost.
     if (this.features.bots !== false && this.adapter.fillWithBots) {
       this.fillBotsButton = new Button({
         parent: this.container,
@@ -920,13 +926,15 @@ export class MultiplayerLobby extends EventEmitter {
         border: 'none',
         mouse: true,
         hidden: true,
+        ghostWhenIdle: true,
         tags: true,
       } as any);
 
       this.fillBotsButton.on('press', () => this.toggleBots());
     }
 
-    // Force Start button (readyFlow:false, host only, shown after host presses Start)
+    // Force Start button (readyFlow:false, host only, shown after host presses
+    // Start) — pure action, safe to ghost.
     if (!hasReadyFlow) {
       this.forceStartButton = new Button({
         parent: this.container,
@@ -943,6 +951,7 @@ export class MultiplayerLobby extends EventEmitter {
         border: 'none',
         mouse: true,
         hidden: true,
+        ghostWhenIdle: true,
         tags: true,
       } as any);
       this.forceStartButton.on('press', () => void this.forceStart());
@@ -952,6 +961,19 @@ export class MultiplayerLobby extends EventEmitter {
     this.readyButton.on('press', () => void this.toggleReady());
     this.startButton.on('press', () => void this.startMatch());
     this.leaveButton.on('press', () => void this.leaveLobby());
+
+    // Footer hint - TAB-to-switch-panel is not discoverable otherwise;
+    // there's no visual cue that focus can move between the player list,
+    // the settings list, and the button row.
+    new Box({
+      parent: this.container,
+      top: buttonTop + 1,
+      left: 2,
+      width: screenWidth - 4,
+      height: 1,
+      content: '{gray-fg}TAB{/gray-fg} switch panel   {gray-fg}↑↓{/gray-fg} navigate   {gray-fg}ENTER{/gray-fg} select   {gray-fg}ESC{/gray-fg} leave',
+      tags: true,
+    });
 
     // Log ALL screen-level keypresses for debugging
     this.parent.on('keypress', (ch: any, key: any) => {
@@ -1256,6 +1278,7 @@ export class MultiplayerLobby extends EventEmitter {
         hover: { bg: 'cyan', fg: 'black' },
       },
       mouse: true,
+      ghostWhenIdle: true,
       tags: true,
     });
     buttonLeft += 11;
@@ -1276,6 +1299,7 @@ export class MultiplayerLobby extends EventEmitter {
         hover: { bg: 'cyan', fg: 'black' },
       },
       mouse: true,
+      ghostWhenIdle: true,
       tags: true,
     });
     buttonLeft += 9;
@@ -1298,6 +1322,7 @@ export class MultiplayerLobby extends EventEmitter {
           hover: { bg: 'white', fg: 'black' },
         },
         mouse: true,
+        ghostWhenIdle: true,
         tags: true,
       });
       buttonLeft += 12;
@@ -1319,6 +1344,7 @@ export class MultiplayerLobby extends EventEmitter {
         hover: { bg: 'cyan', fg: 'black' },
       },
       mouse: true,
+      ghostWhenIdle: true,
       tags: true,
     });
     buttonLeft += 12;
@@ -1338,6 +1364,7 @@ export class MultiplayerLobby extends EventEmitter {
         focus: { bg: 'yellow', fg: 'black' },
         hover: { bg: 'yellow', fg: 'black' },
       },
+      ghostWhenIdle: true,
       mouse: true,
       tags: true,
     });

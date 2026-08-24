@@ -2804,18 +2804,7 @@ export class Element extends EventEmitter {
     if (!pos) return;
 
     // Apply state-based styles for background clearing
-    let style = this.options.style;
-    const focusStyle = (this.options.style as any)?.focus;
-    const hoverStyle = (this.options.style as any)?.hover;
-    const disabledStyle = (this.options.style as any)?.disabled;
-
-    if (this.disabled && disabledStyle) {
-      style = { ...style, ...disabledStyle };
-    } else if (this.focused && focusStyle) {
-      style = { ...style, ...focusStyle };
-    } else if (this._hovered && hoverStyle) {
-      style = { ...style, ...hoverStyle };
-    }
+    const style = this.getEffectiveContentStyle();
     const attr = this.sattr(style);
     const border = this.hasBorder() ? 1 : 0;
     const padding = this.getPadding();
@@ -2855,6 +2844,36 @@ export class Element extends EventEmitter {
   /**
    * Render content text (called by subclasses)
    */
+  /**
+   * Resolve the content style for the element's current state (disabled >
+   * focused > hovered > idle). Focus forces `bold` by default so a focus
+   * change reads as a text-weight change, not just a color swap - a
+   * color-only swap is easy to miss when the element's own idle bg is
+   * already bright/saturated (e.g. a yellow button), or when the same
+   * focus color is reused elsewhere on screen for something unrelated (a
+   * selected list row, a highlighted setting). Bold is a hue-independent
+   * cue that survives both cases, and mirrors the border-focus default a
+   * few hundred lines up. Exposed (not inlined in renderContent) so this
+   * resolution is directly testable.
+   */
+  getEffectiveContentStyle(): any {
+    const style = this.options.style || {};
+    if (this.disabled && (style as any).disabled) {
+      return { ...style, ...(style as any).disabled };
+    }
+    if (this.disabled) {
+      // Default disabled style: gray text
+      return { ...style, fg: 'gray' };
+    }
+    if (this.focused && (style as any).focus) {
+      return { ...style, bold: true, ...(style as any).focus };
+    }
+    if (this._hovered && (style as any).hover) {
+      return { ...style, ...(style as any).hover };
+    }
+    return style;
+  }
+
   renderContent(): void {
     if (!this.screen) return;
 
@@ -2864,19 +2883,7 @@ export class Element extends EventEmitter {
     const lines = this.getVisibleLines();
 
     // Apply state-based styles (disabled, focused, hover)
-    let style = this.options.style;
-    if (this.disabled && (this.options.style as any)?.disabled) {
-      style = { ...style, ...(this.options.style as any).disabled };
-    } else if (this.disabled) {
-      // Default disabled style: gray text
-      style = { ...style, fg: 'gray' };
-    } else if (this.focused && (this.options.style as any)?.focus) {
-      // Apply focus style when element is focused
-      style = { ...style, ...(this.options.style as any).focus };
-    } else if (this._hovered && (this.options.style as any)?.hover) {
-      // Apply hover style when element is hovered
-      style = { ...style, ...(this.options.style as any).hover };
-    }
+    const style = this.getEffectiveContentStyle();
 
     const attr = this.sattr(style);
 
