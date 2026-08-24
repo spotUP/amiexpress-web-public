@@ -1,10 +1,10 @@
 /**
  * GENERATED FILE -- DO NOT EDIT BY HAND.
  *
- * Extracted verbatim from ../../web/backend/src/doors/door-repo-manifest.ts by scripts/gen-repo-types.ts.
- * Regenerate with: npx tsx scripts/gen-repo-types.ts
- * (run whenever door-repo-manifest.ts's manifest shape changes upstream)
+ * Mirror of amiexpress-doorserver contract/manifest-types.ts.
+ * Regenerate with: npx tsx scripts/gen-contract-types.ts
  */
+export declare const CONTRACT_VERSION = "1";
 export interface ManifestDoor {
     archiveName: string;
     doorType: string;
