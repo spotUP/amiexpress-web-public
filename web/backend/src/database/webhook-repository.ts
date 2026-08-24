@@ -21,6 +21,7 @@ export class WebhookRepository extends BaseRepository<any> {
       type: row.type as 'discord' | 'slack',
       enabled: Boolean(row.enabled),
       triggers: JSON.parse(row.triggers || '[]'),
+      doorFilter: JSON.parse(row.door_filter || '[]'),
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     }));
@@ -40,18 +41,19 @@ export class WebhookRepository extends BaseRepository<any> {
       type: row.type as 'discord' | 'slack',
       enabled: Boolean(row.enabled),
       triggers: JSON.parse(row.triggers || '[]'),
+      doorFilter: JSON.parse(row.door_filter || '[]'),
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     };
   }
 
-  async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[] }): Promise<number> {
+  async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[]; doorFilter?: string[] }): Promise<number> {
 
     const stmt = this.prepare(`
-      INSERT INTO webhooks (name, url, type, enabled, triggers)
-      VALUES (?, ?, ?, 1, ?)
+      INSERT INTO webhooks (name, url, type, enabled, triggers, door_filter)
+      VALUES (?, ?, ?, 1, ?, ?)
     `);
-    const result = stmt.run(data.name, data.url, data.type, JSON.stringify(data.triggers));
+    const result = stmt.run(data.name, data.url, data.type, JSON.stringify(data.triggers), JSON.stringify(data.doorFilter ?? []));
     return result.lastInsertRowid as number;
   }
 
@@ -80,6 +82,10 @@ export class WebhookRepository extends BaseRepository<any> {
       fields.push('triggers = ?');
       values.push(JSON.stringify(data.triggers));
     }
+    if (data.doorFilter !== undefined) {
+      fields.push('door_filter = ?');
+      values.push(JSON.stringify(data.doorFilter));
+    }
 
     if (fields.length === 0) return;
 
@@ -97,7 +103,15 @@ export class WebhookRepository extends BaseRepository<any> {
     stmt.run(id);
   }
 
-  async getWebhooksByTrigger(trigger: string): Promise<Webhook[]> {
+  /**
+   * Webhooks subscribed to `trigger`.
+   *
+   * When `door` is supplied, a webhook with a non-empty doorFilter only
+   * matches if that door is listed (case-insensitive). A webhook with an
+   * empty doorFilter matches everything, which is what every pre-existing
+   * webhook has, so behaviour is unchanged until a filter is set.
+   */
+  async getWebhooksByTrigger(trigger: string, door?: string): Promise<Webhook[]> {
 
     const stmt = this.prepare('SELECT * FROM webhooks WHERE enabled = 1');
     const rows = stmt.all() as any[];
@@ -110,9 +124,16 @@ export class WebhookRepository extends BaseRepository<any> {
         type: row.type as 'discord' | 'slack',
         enabled: Boolean(row.enabled),
         triggers: JSON.parse(row.triggers || '[]'),
+        doorFilter: JSON.parse(row.door_filter || '[]'),
         created: new Date(row.created * 1000),
         updated: new Date(row.updated * 1000)
       }))
-      .filter(webhook => webhook.triggers.includes(trigger));
+      .filter(webhook => webhook.triggers.includes(trigger))
+      .filter(webhook => {
+        if (!webhook.doorFilter || webhook.doorFilter.length === 0) return true;
+        if (!door) return true;
+        const wanted = door.trim().toLowerCase();
+        return webhook.doorFilter.some((d: string) => String(d).trim().toLowerCase() === wanted);
+      });
   }
 }

@@ -228,6 +228,60 @@ export class WebhookCommandsHandler {
   /**
    * Show actions for a specific webhook
    */
+  /**
+   * Prompt for the list of doors this webhook is limited to.
+   *
+   * Free-text rather than a picker because the door list is dynamic and can
+   * be long; an empty answer clears the filter back to "all doors".
+   */
+  static async promptDoorFilter(socket: any, session: any, webhookId: number): Promise<void> {
+    const webhook = await db.getWebhook(webhookId);
+    if (!webhook) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('Webhook not found'));
+      await this.listWebhooks(socket, session);
+      return;
+    }
+
+    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', AnsiUtil.headerBox(`DOORS: ${webhook.name}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', 'Limit this webhook to specific doors so it only fires for those.\r\n');
+    socket.emit('ansi-output', 'Enter door names separated by commas, or leave blank for all doors.\r\n\r\n');
+    socket.emit('ansi-output', `\x1b[36mCurrent:\x1b[0m ${webhook.doorFilter && webhook.doorFilter.length > 0 ? webhook.doorFilter.join(', ') : 'All doors'}\r\n\r\n`);
+    socket.emit('ansi-output', '\x1b[36mDoors:\x1b[0m ');
+
+    session.inputBuffer = '';
+    session.tempData = { webhookDoorFilter: { webhookId } };
+    session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+  }
+
+  /**
+   * Apply a comma-separated door filter typed at the prompt above.
+   */
+  static async handleDoorFilterInput(socket: any, session: any, input: string): Promise<void> {
+    const webhookId = session.tempData?.webhookDoorFilter?.webhookId;
+    delete session.tempData;
+
+    if (webhookId === undefined) {
+      await this.handleWebhookCommand(socket, session);
+      return;
+    }
+
+    const doors = input
+      .split(',')
+      .map(d => d.trim())
+      .filter(d => d.length > 0);
+
+    await db.updateWebhook(webhookId, { doorFilter: doors });
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.successLine(
+      doors.length > 0
+        ? `Webhook limited to: ${doors.join(', ')}`
+        : 'Webhook will fire for all doors'
+    ));
+    await this.showWebhookActions(socket, session, webhookId);
+  }
+
   static async showWebhookActions(socket: any, session: any, webhookId: number): Promise<void> {
     const webhook = await db.getWebhook(webhookId);
     if (!webhook) {
@@ -247,11 +301,13 @@ export class WebhookCommandsHandler {
     socket.emit('ansi-output', `\x1b[36mURL:\x1b[0m ${webhook.url.substring(0, 60)}${webhook.url.length > 60 ? '...' : ''}\r\n`);
     socket.emit('ansi-output', `\x1b[36mStatus:\x1b[0m ${webhook.enabled ? '\x1b[32mENABLED\x1b[0m' : '\x1b[31mDISABLED\x1b[0m'}\r\n`);
     socket.emit('ansi-output', `\x1b[36mTriggers:\x1b[0m ${webhook.triggers.length > 0 ? webhook.triggers.join(', ') : 'None'}\r\n`);
+    socket.emit('ansi-output', `\x1b[36mDoors:\x1b[0m ${webhook.doorFilter && webhook.doorFilter.length > 0 ? webhook.doorFilter.join(', ') : 'All doors'}\r\n`);
     socket.emit('ansi-output', '\r\n');
 
     // Actions menu
     const menuItems: MenuItem[] = [
       { label: webhook.enabled ? 'Disable' : 'Enable', action: 'toggle', description: 'Toggle webhook on/off' },
+      { label: 'Doors', action: 'doors', description: 'Limit this webhook to specific doors' },
       { label: 'Test', action: 'test', description: 'Send test notification' },
       { label: 'Delete', action: 'delete', description: 'Remove this webhook' },
       { label: 'Back', action: 'back', description: 'Return to webhook list' }
@@ -293,6 +349,10 @@ export class WebhookCommandsHandler {
           await db.updateWebhook(menuData.webhookId, { enabled: !menuData.webhook.enabled });
           socket.emit('ansi-output', AnsiUtil.successLine('Webhook updated!'));
           await this.listWebhooks(socket, session);
+          break;
+
+        case 'doors':
+          await this.promptDoorFilter(socket, session, menuData.webhookId);
           break;
 
         case 'test':

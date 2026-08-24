@@ -104,7 +104,11 @@ class WebhookService {
    */
   async sendWebhook(trigger: WebhookTrigger, data: WebhookEventData['data']): Promise<void> {
     try {
-      const webhooks = await db.getWebhooksByTrigger(trigger);
+      // Pass the door so webhooks scoped to specific doors are skipped for
+      // everything else. Without this every door_score webhook fired for
+      // every door, so a board with one webhook per game saw each score
+      // posted to all of them.
+      const webhooks = await db.getWebhooksByTrigger(trigger, typeof data.door === 'string' ? data.door : undefined);
 
       if (webhooks.length === 0) {
         return; // No webhooks configured for this trigger
@@ -320,8 +324,16 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
       case WebhookTrigger.DOOR_SCORE:
         color = 0xffd700; // Gold
         title = `🏆 ${data.door || 'Door'} Score`;
-        description = data.message || `${data.username} posted a score`;
+        description = data.message
+          ? `${data.username ?? 'Someone'} — ${data.message}`
+          : `${data.username ?? 'Someone'} posted a score`;
         fields = [];
+        // Player first, and unconditionally: doors supply their own `message`
+        // (e.g. "Score: 6,080 | Level: 3 | Rank: #2") which took over the
+        // description entirely, so the scorer's name appeared nowhere in the
+        // embed. `username` is already run through applyPiiPolicy(), so this
+        // shows "User #12"/"anon" when PII reporting is off.
+        if (data.username) fields.push({ name: 'Player', value: String(data.username), inline: true });
         if (data.score !== undefined) fields.push({ name: 'Score', value: String(data.score), inline: true });
         if (data.grade) fields.push({ name: 'Grade', value: data.grade, inline: true });
         if (data.level !== undefined) fields.push({ name: 'Level', value: String(data.level), inline: true });

@@ -172,6 +172,13 @@ export interface Webhook {
   type: 'discord' | 'slack';
   enabled: boolean;
   triggers: string[];
+  /**
+   * Door names this webhook is restricted to, matched case-insensitively.
+   * Empty means "every door" - without this, every door_score webhook fired
+   * for every door, so a board with one webhook per game got each score
+   * posted to all of them.
+   */
+  doorFilter: string[];
   created: Date;
   updated: Date;
 }

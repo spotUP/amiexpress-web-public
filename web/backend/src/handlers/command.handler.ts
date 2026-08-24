@@ -2786,6 +2786,25 @@ console.log(' In file upload state - canceling upload');
   // prompt. Merely routing through a different subState (FILE_DIR_SELECT
   // instead of READ_COMMAND) does not add buffering by itself - only
   // READ_COMMAND/GDPR_BACKFILL happen to already have their own.
+  // Door-filter input reuses the identical line-buffering contract below;
+  // handled first because both set tempData and only one is ever active.
+  if (session.tempData?.webhookDoorFilter) {
+    if (data === '\r' || data === '\n') {
+      const dfInput = (session.inputBuffer || '');
+      session.inputBuffer = '';
+      await WebhookCommandsHandler.handleDoorFilterInput(socket, session, dfInput);
+    } else if (data === '\x7f' || data === '\b') {
+      if (session.inputBuffer?.length) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      socket.emit('ansi-output', data);
+    }
+    return;
+  }
+
   if (session.tempData?.webhookAdd) {
     if (data === '\r' || data === '\n') {
       const whInput = (session.inputBuffer || '').trim();

@@ -1462,10 +1462,22 @@ console.error('Error running migrations:', error);
           type TEXT NOT NULL CHECK (type IN ('discord', 'slack')),
           enabled INTEGER DEFAULT 1,
           triggers TEXT DEFAULT '[]',
+          -- JSON array of door names this webhook is limited to. Empty array
+          -- (the default) means "every door", preserving the old behaviour
+          -- where a door_score webhook fired for every door on the board.
+          door_filter TEXT DEFAULT '[]',
           created INTEGER DEFAULT (strftime('%s', 'now')),
           updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
+
+      // Migration: door_filter was added after webhooks shipped, so existing
+      // boards have the table without it.
+      const webhookCols = (this.db.prepare('PRAGMA table_info(webhooks)').all() as any[]).map(c => c.name);
+      if (!webhookCols.includes('door_filter')) {
+        this.db.exec("ALTER TABLE webhooks ADD COLUMN door_filter TEXT DEFAULT '[]'");
+        console.log('✓ Added door_filter column to webhooks');
+      }
 
       // ===== Configuration Tables =====
 
