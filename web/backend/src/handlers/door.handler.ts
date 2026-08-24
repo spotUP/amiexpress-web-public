@@ -4081,8 +4081,12 @@ console.log(`[executeClientDoor] Emitted game-mode=true to frontend`);
     // Set a no-op input handler to prevent BBS from echoing input
     // The actual input handling is done by the client-door-bridge
     session.doorInputHandler = (data: string) => {
-console.log(`[executeClientDoor] No-op doorInputHandler called with:`, JSON.stringify(data));
-      // Input is handled by client-door-bridge, not here
+      // Input is handled by client-door-bridge, not here. This fires once per
+      // pointer sample while a game door runs (60+/s), so it stays quiet
+      // unless DOOR_DEBUG is on - the log line itself was measurable noise.
+      if (process.env.DOOR_DEBUG === '1') {
+        console.log(`[executeClientDoor] No-op doorInputHandler called with:`, JSON.stringify(data));
+      }
     };
 console.log(`[executeClientDoor] Set doorInputHandler (no-op)`);
 

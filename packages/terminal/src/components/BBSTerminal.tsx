@@ -2551,11 +2551,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const coords = getTerminalCoords(event);
     if (!coords) return;
 
-    console.log('[BBSTerminal] mousemove: mouseButtonDown=', mouseButtonDown.current, 'event.buttons=', event.buttons);
+    // Mouse-move logging sits on the hot path: a door game gets one of these
+    // per pointer sample (60+/s) and each console.log is real main-thread work
+    // competing with the terminal renderer. Opt in with
+    // `window.__MOUSE_DEBUG__ = true` when tracing pointer plumbing.
+    if ((window as any).__MOUSE_DEBUG__) {
+      console.log('[BBSTerminal] mousemove: mouseButtonDown=', mouseButtonDown.current, 'event.buttons=', event.buttons);
+    }
 
     if (mouseButtonDown.current) {
       // Dragging - send drag event
-      console.log('[BBSTerminal] Emitting mouse-drag');
+      if ((window as any).__MOUSE_DEBUG__) {
+        console.log('[BBSTerminal] Emitting mouse-drag');
+      }
       socket.emit('mouse-drag', {
         x: coords.x,
         y: coords.y,
