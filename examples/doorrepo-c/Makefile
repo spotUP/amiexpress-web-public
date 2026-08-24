@@ -100,8 +100,8 @@ endif
 
 LIVE_HOST = http://bbs.uprough.net
 
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c json_lite.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h json_lite.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c
@@ -174,13 +174,17 @@ probe-amiga: $(PROBE_SOURCES) $(HEADERS)
 # POSIX socket declarations that glibc hides under -std=c89.
 TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
-.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache
+.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite
 
-test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache
+test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
 	./build-test-flow
+
+test-json-lite: json_lite.c tests/test_json_lite.c json_lite.h
+	$(CC) $(TEST_CFLAGS) json_lite.c tests/test_json_lite.c -o build-test-json-lite
+	./build-test-json-lite
 
 test-md5: md5.c tests/test_md5.c md5.h
 	$(CC) $(TEST_CFLAGS) md5.c tests/test_md5.c -o build-test-md5
@@ -235,7 +239,7 @@ live: native
 
 clean:
 	rm -f doorrepo doorrepo.amiga doorrepo.amiga-stub
-	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-guide build-test-ansi build-test-listtxt build-test-config build-test-http build-test-aedoor-native
+	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-guide build-test-ansi build-test-listtxt build-test-config build-test-http build-test-aedoor-native build-test-json-lite
 	rm -f *.o
 	rm -rf *.dSYM
 	rm -rf $(AMIGA_NDK_SHIM) $(AMIGA_NETINCLUDE_VENDOR_LINK)
