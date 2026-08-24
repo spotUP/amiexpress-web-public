@@ -475,3 +475,7 @@ dev/scripts/door-corpus/corpus-progress.json
 Doors/DoorRepo/DoorRepo.log
 Doors/DoorRepo/downloads/*
 !Doors/DoorRepo/downloads/.keep
+
+# Python bytecode from dev/scripts helpers
+__pycache__/
+*.pyc

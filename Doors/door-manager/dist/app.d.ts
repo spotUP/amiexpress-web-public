@@ -12,6 +12,9 @@ interface DoorSession {
     bbs: any;
     params: string[];
 }
+export declare function commandClaimedByOtherArchive(getInstallByCommand: (command: string) => {
+    archive_name: string;
+} | null, command: string, archiveName: string): boolean;
 export declare function resolveArchivePath(archivePath: string | null | undefined): string | null;
 /** Content of the .info-style command config written on install. Pure and
  * exported for testing: door_type must flow through as TYPE= (a FIM door
@@ -59,12 +62,12 @@ export interface InstallDeps {
     findExtractedBinary: (destDir: string, binaryName: string | null | undefined) => string | null;
     writeInfoFile: (infoPath: string, content: string) => void;
     /** Caller-supplied: encapsulates whatever "persist the install locally"
-     * means for this mode (owner: always call markInstalled(e.id, ...);
-     * consumer: only when a real local catalog row exists -- see
-     * installConsumerDoor). Errors are caught and logged here, exactly like
-     * the pre-Task-7 inline behavior: a bookkeeping failure never rolls back
-     * a working on-disk install. */
-    markInstalled: () => void;
+     * means for this mode -- both owner and consumer now record a row in
+     * door_installs (Task 5); door_catalog no longer carries install state.
+     * Errors are caught and logged here, exactly like the pre-Task-5 inline
+     * behavior: a bookkeeping failure never rolls back a working on-disk
+     * install. */
+    recordInstall: () => void;
     refreshDoorRegistry: () => Promise<boolean>;
 }
 export type InstallOutcome = {
@@ -78,99 +81,49 @@ export type InstallOutcome = {
     detail: string;
 };
 export declare function extractAndRegisterDoor(archivePath: string, installDir: string, infoPath: string, doorType: string, binaryName: string | null, finalCmd: string, deps: InstallDeps): Promise<InstallOutcome>;
-/**
- * Same stable-slug convention dev/scripts/door-corpus/build-door-catalog.ts
- * uses to derive a door_catalog.id from an archive_name (that script's
- * `baseId`, duplicated here rather than imported: it's a standalone tsx
- * script outside both this package's and web/backend's TypeScript program,
- * not an importable module). Reusing the exact formula matters, not just
- * for readability parity with scanned rows (e.g. "!ALSTER.LHA" -> "_alster"
- * in the seed data) -- it means a door that is BOTH consumer-installed here
- * AND later indexed by a local scan resolves to the SAME id instead of two
- * divergent rows colliding on door_catalog.archive_name's UNIQUE
- * constraint. Deterministic in archiveName alone, so install -> uninstall
- * -> reinstall of the same archive always targets the same row (idempotent
- * upsert, never a duplicate).
- */
-export declare function catalogIdForArchive(archiveName: string): string;
-/** Mirrors door_catalog's columns (door-catalog.service.ts's upsertCatalogEntry
- * SQL, read directly rather than imported -- see the ConsumerInstallDeps
- * comment below for why). Every column the INSERT statement names must be
- * present here; better-sqlite3's named-parameter binding throws on any
- * referenced column missing from the bound object. */
-export interface ConsumerCatalogUpsertRow {
+/** Mirrors door_installs' columns (door-installs.repository.ts's
+ * DoorInstall, read directly rather than imported -- DOORMAN cannot import
+ * web/backend source paths; getInstallsRepo() above reaches the
+ * already-loaded module via require.cache instead). `installed_at` is
+ * stamped by the repository itself and is intentionally absent. */
+export interface DoorInstallEntry {
     id: string;
+    catalog_id: string | null;
     archive_name: string;
-    archive_path: string;
-    binary_name: string | null;
-    door_type: string;
-    name: string;
-    version: string | null;
-    author: string | null;
-    release_group: string | null;
+    command: string;
+    install_dir: string;
+    door_type: string | null;
+    name: string | null;
+    md5: string | null;
     description: string | null;
-    file_id_diz: string | null;
-    doc_filename: string | null;
-    doc_raw: string | null;
-    suggested_tooltypes: string | null;
     category: string | null;
-    archive_size: number;
-    junk_count: number;
-    installed: number;
-    installed_as: string | null;
-    install_dir: string | null;
-    corpus_id: string | null;
-    source: string;
+    version: string | null;
+    release_group: string | null;
+    source_url: string | null;
+    source_revision: string | null;
 }
-/** New door_catalog.source value for this install path. The column's only
- * existing value anywhere in the codebase (schema DEFAULT, every seed row)
- * is 'scan' -- the local archive-corpus scanner's provenance tag. 'door-repo'
- * extends that same informal enum minimally: it marks a row as created by
- * a consumer-mode install from the central door-repo API, never by a local
- * filesystem scan. */
-export declare const CONSUMER_INSTALL_SOURCE = "door-repo";
 /**
  * Consumer-mode install: download + verify the archive from the central
  * door-repo API, then hand off to extractAndRegisterDoor for the identical
  * extract/register flow owner mode already uses. destPath always lives
  * under tmp-door-repo/ and is removed in the finally on every path,
- * including every failure — downloadArchive (Task 5) already deletes it on
- * a network/checksum failure, but a failure further down (extract,
+ * including every failure — downloadArchive already deletes it on a
+ * network/checksum failure, but a failure further down (extract,
  * write-info) still leaves a successfully-downloaded archive sitting in
  * tmp-door-repo/ unless this cleans it up too.
  *
- * Local registration (fix round 1, overriding the original "never invent a
- * local row" reading of the plan): on a consumer BBS, "no local catalog row
- * yet" is the NORMAL case for a fresh install, not an edge case — a
- * consumer browses the manifest precisely because it has never locally
- * indexed these archives. Leaving `installed` permanently false for every
- * consumer install would break the primary flow. So: `lookupLocal` is
- * re-run here (fresh, never trusting whatever id the browse-time
- * CatalogEntry carried, since that id falls back to archiveName for
- * never-indexed rows and is not a real primary key) --
- *   - a real local row already exists (previously scanned, or previously
- *     installed-then-uninstalled -- markUninstalled keeps the row) ->
- *     markInstalled(localRow.id, ...) runs exactly as before.
- *   - no local row -> UPSERT one first (door-catalog.service.ts's existing,
- *     previously-unused upsertCatalogEntry -- its ON CONFLICT(id) clause
- *     deliberately does not touch installed/installed_as/install_dir, so
- *     it only ever writes metadata, never install state), using
- *     catalogIdForArchive(archiveName) as a deterministic id, populated
- *     ONLY from facts this function actually has (the manifest row's
- *     archive_name/door_type/name/description/archive_size, plus
- *     source='door-repo' recording its provenance) -- never fabricated, and
- *     never claiming the archive is locally stored: archive_path is left
- *     '' (matches repoDataSource.ts's own convention for "no local path
- *     known", and satisfies the column's NOT NULL constraint). Then
- *     markInstalled(newId, ...) runs against that real row exactly like
- *     the "row already exists" branch. `installed` now reads back 1 next
- *     time this archive is resolved locally, satisfying Task 6's
- *     lookupLocal-driven resolution in the repo browse view.
- *   - id collision with a DIFFERENT archive_name already at that slug
- *     (rare -- e.g. two archive names that normalize to the same id) ->
- *     never clobber the unrelated row (same philosophy as the corpus
- *     builder's own collision handling); falls back to registry-only,
- *     logged loudly.
+ * Local registration (Task 5): door_installs, not door_catalog, is the
+ * install-state store -- no "invent a local catalog row" step. `lookupLocal`
+ * still runs (door_catalog) purely to capture `catalog_id` for provenance
+ * when a real local row exists; never required for the install to succeed.
+ *
+ * door_installs enforces uniqueness on `command` (ON CONFLICT(command)
+ * upserts, so reinstalling is naturally idempotent) -- which is also why a
+ * collision guard is still needed: installing a NEW archive under a command
+ * some OTHER archive already owns would otherwise silently overwrite that
+ * install's row. `getInstallByCommand(finalCmd)` checks for that and
+ * refuses (registry-only, loudly logged) rather than clobbering -- the
+ * backfill has shown this BBS has commands claimed by up to nine archives.
  */
 export interface ConsumerInstallDeps {
     fetchManifest: (cfg: RepoClientConfig) => Promise<FetchManifestResult>;
@@ -179,14 +132,11 @@ export interface ConsumerInstallDeps {
     findExtractedBinary: InstallDeps['findExtractedBinary'];
     writeInfoFile: InstallDeps['writeInfoFile'];
     lookupLocal: LocalCatalogLookup;
-    /** Existence check ONLY (archive_name of whatever row currently holds
-     * this id, if any) -- used to detect a slug collision before upserting.
-     * Not the full row; nothing else here needs more than that. */
-    getCatalogEntry: (id: string) => {
+    /** Existence check ONLY -- detects a command collision before recording. */
+    getInstallByCommand: (command: string) => {
         archive_name: string;
     } | null;
-    upsertCatalogEntry: (entry: ConsumerCatalogUpsertRow) => void;
-    markInstalled: (id: string, cmd: string, dir: string) => void;
+    recordInstall: (entry: DoorInstallEntry) => void;
     refreshDoorRegistry: () => Promise<boolean>;
     mkdir: (dir: string) => void;
     unlink: (path: string) => void;

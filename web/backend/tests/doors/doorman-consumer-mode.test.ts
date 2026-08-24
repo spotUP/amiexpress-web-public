@@ -92,6 +92,39 @@ describe('DOORMAN repoDataSource: loadLocalCatalogEntries (owner/disabled parity
     expect(searchCatalog).toHaveBeenCalledWith('foo');
     expect(searchCatalog).toHaveBeenCalledTimes(1);
   });
+
+  // ── lookupInstall (Task 5, review fix): owner mode's OWN local browse ───
+  //
+  // Review finding (commit 6bc3b54cc): an owner-mode install now records
+  // ONLY to door_installs (never door_catalog), so a sysop's local browse
+  // list -- sourced from door_catalog's searchCatalog -- would show every
+  // freshly-installed door as never installed unless door_installs is
+  // overlaid here too, the same way mapManifestDoorToEntry already overlays
+  // it for the consumer browse view.
+
+  it('lookupInstall omitted: rows pass through verbatim (byte-identical to pre-fix behavior)', () => {
+    const rows: CatalogEntry[] = [makeEntry({ archive_name: 'FOO.LHA', installed: 1, installed_as: 'FOODOOR' })];
+    const result = loadLocalCatalogEntries({ searchCatalog: () => rows }, 'foo');
+    expect(result.entries).toEqual(rows);
+  });
+
+  it('lookupInstall provided: overlays installed/installed_as/install_dir from door_installs, keyed by archive_name', () => {
+    const rows: CatalogEntry[] = [
+      makeEntry({ archive_name: 'FOO.LHA', installed: 0, installed_as: null, install_dir: null }),
+    ];
+    const lookupInstall = jest.fn().mockReturnValue({ command: 'FOODOOR', install_dir: 'Doors/FOODOOR' });
+    const result = loadLocalCatalogEntries({ searchCatalog: () => rows }, 'foo', lookupInstall);
+    expect(lookupInstall).toHaveBeenCalledWith('FOO.LHA');
+    expect(result.entries[0]).toMatchObject({ installed: 1, installed_as: 'FOODOOR', install_dir: 'Doors/FOODOOR' });
+  });
+
+  it('lookupInstall provided but returns null: installed stays 0 even when door_catalog carries a stale installed=1 row', () => {
+    const rows: CatalogEntry[] = [
+      makeEntry({ archive_name: 'FOO.LHA', installed: 1, installed_as: 'STALE', install_dir: 'Doors/STALE' }),
+    ];
+    const result = loadLocalCatalogEntries({ searchCatalog: () => rows }, 'foo', () => null);
+    expect(result.entries[0]).toMatchObject({ installed: 0, installed_as: null, install_dir: null });
+  });
 });
 
 // ─── Entry mapping: mapManifestDoorToEntry ──────────────────────────────────
@@ -218,6 +251,48 @@ describe('DOORMAN repoDataSource: mapManifestDoorToEntry', () => {
     const door = makeManifestDoor({ archiveSize: null });
     const entry = mapManifestDoorToEntry(door, () => null);
     expect(entry.archive_size).toBe(0);
+  });
+
+  // ── lookupInstall (Task 5): door_installs, not door_catalog, is the ────
+  // install-state source of truth. A consumer-mode install (installConsumerDoor)
+  // now records directly into door_installs without ever touching door_catalog,
+  // so `installed`/`installed_as`/`install_dir` must resolve from there --
+  // lookupLocal alone (door_catalog) would show a freshly-installed door as
+  // never installed.
+
+  it('lookupInstall present with a record: installed/installed_as/install_dir resolve from door_installs, even with no local door_catalog row', () => {
+    const door = makeManifestDoor({ archiveName: 'FOO.LHA' });
+    const entry = mapManifestDoorToEntry(door, () => null, () => ({ command: 'FOODOOR', install_dir: 'Doors/FOODOOR' }));
+    expect(entry.installed).toBe(1);
+    expect(entry.installed_as).toBe('FOODOOR');
+    expect(entry.install_dir).toBe('Doors/FOODOOR');
+    // id/archive_path/binary_name still fall back the same way -- no local
+    // door_catalog row exists for this archive.
+    expect(entry.id).toBe('FOO.LHA');
+  });
+
+  it('lookupInstall present but returns null (never installed): installed stays 0 even when door_catalog shows a stale installed row', () => {
+    const door = makeManifestDoor({ archiveName: 'FOO.LHA' });
+    const local: LocalCatalogRow = {
+      id: 'local-id-7', installed: 1, installed_as: 'STALE', install_dir: 'Doors/STALE',
+      binary_name: null, archive_path: 'FAME/FOO.LHA',
+    };
+    const entry = mapManifestDoorToEntry(door, () => local, () => null);
+    expect(entry.installed).toBe(0);
+    expect(entry.installed_as).toBeNull();
+    expect(entry.install_dir).toBeNull();
+  });
+
+  it('lookupInstall omitted entirely: falls back to the door_catalog-sourced fields (pre-Task-5 behavior, unchanged)', () => {
+    const door = makeManifestDoor({ archiveName: 'FOO.LHA' });
+    const local: LocalCatalogRow = {
+      id: 'local-id-7', installed: 1, installed_as: 'LEGACY', install_dir: 'Doors/LEGACY',
+      binary_name: null, archive_path: 'FAME/FOO.LHA',
+    };
+    const entry = mapManifestDoorToEntry(door, () => local);
+    expect(entry.installed).toBe(1);
+    expect(entry.installed_as).toBe('LEGACY');
+    expect(entry.install_dir).toBe('Doors/LEGACY');
   });
 });
 
@@ -369,5 +444,25 @@ describe('DOORMAN repoDataSource: loadConsumerCatalog', () => {
     await expect(
       loadConsumerCatalog('https://bbs.uprough.net', '/data/door-repo-cache.json', () => null, fetchManifestFn)
     ).rejects.toThrow(/DOOR REPO: manifest fetch failed/);
+  });
+
+  it('threads the optional lookupInstall param into every mapped row (Task 5: door_installs-backed browse state)', async () => {
+    const doors = [
+      makeManifestDoor({ archiveName: 'A.LHA' }),
+      makeManifestDoor({ archiveName: 'B.LHA' }),
+    ];
+    const fetchManifestFn = jest.fn(async (): Promise<FetchManifestResult> => (
+      { manifest: makeManifest(doors), fromCache: false, cachedAt: null }
+    ));
+    const lookupInstall = jest.fn((name: string) => (name === 'A.LHA' ? { command: 'ADOOR', install_dir: 'Doors/ADOOR' } : null));
+
+    const result = await loadConsumerCatalog(
+      'https://bbs.uprough.net', '/data/door-repo-cache.json', () => null, fetchManifestFn, lookupInstall
+    );
+
+    expect(lookupInstall).toHaveBeenCalledWith('A.LHA');
+    expect(lookupInstall).toHaveBeenCalledWith('B.LHA');
+    expect(result.entries[0]).toMatchObject({ archive_name: 'A.LHA', installed: 1, installed_as: 'ADOOR' });
+    expect(result.entries[1]).toMatchObject({ archive_name: 'B.LHA', installed: 0, installed_as: null });
   });
 });

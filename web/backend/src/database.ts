@@ -799,6 +799,17 @@ console.log('[+] Added md5 column to door_catalog');
 console.log('[+] Added sha256 column to door_catalog');
       }
 
+      // door_installs — what THIS node installed. The catalog itself now
+      // lives in the standalone door server (see
+      // docs/superpowers/specs/2026-08-23-door-server-split-design.md), which
+      // cannot know who installed what, so these rows stay local.
+      {
+        const installsDdl = fs.readFileSync(
+          path.join(__dirname, 'doors', 'door-installs.schema.sql'), 'utf-8');
+        this.db.exec(installsDdl);
+console.log('[+] door_installs table ensured');
+      }
+
       // Reset all non-zero scan_flags to 0. File scanning is controlled exclusively by the
       // SHOW_NEW_FILES conference .info tooltype — DB scan_flags no longer gate AquaScan.
       {

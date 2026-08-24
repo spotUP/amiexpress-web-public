@@ -1,49 +1,60 @@
 /**
  * doorman-repo-e2e: end-to-end consumer flow against a REAL, locally-started
- * HTTP server — Task 10 of the door-repo API plan.
+ * HTTP server — Task 10 of the door-repo API plan, repointed for the
+ * door-repo phase-2 split (Task 3 fix round 1).
  *
- * Unlike tests/api/door-repo-routes.test.ts (supertest, no real socket) and
- * tests/doors/doorman-repo-client.test.ts (real client, mocked fetch), this
- * test wires the REAL client (Doors/door-manager/repo-client.ts:
- * fetchManifest/downloadArchive) against the REAL doorRepoRouter bound to a
- * real ephemeral TCP port via app.listen(0) — no mocks on either side, all
- * traffic over 127.0.0.1. It proves the whole round trip actually works over
- * the wire: ETag/If-None-Match conditional GET, real Content-Length framing,
- * and real sha256 verification against bytes the client actually received.
+ * Before the split, this test bound the REAL client (Doors/door-manager/
+ * repo-client.ts: fetchManifest/downloadArchive) directly to the REAL
+ * sqlite-backed doorRepoRouter, both over a real socket, no mocks on either
+ * side. That sqlite-backed router no longer exists — door-repo.routes.ts is
+ * now a byte-exact proxy to DOOR_SERVER_URL (the standalone door server).
  *
- * DB/env setup mirrors door-repo-routes.test.ts's pattern exactly: an
- * isolated sqlite DB seeded via DATABASE_DIR/DATABASE_FILE, and the router
- * module required only AFTER those env vars (plus DOOR_ARCHIVES_ROOT) are
- * set, via jest.resetModules() + require() — door-repo-manifest.ts and
- * door-catalog.service.ts resolve their DB path from process.env at first
- * require, so importing them earlier would point at the real repo database.
+ * So this test now wires THREE real pieces instead of two:
  *
- * Run with SKIP_DB_INIT=1 (see the task command) so tests/setup.ts's global
- * testDb bootstrap — irrelevant here, this suite manages its own DB — never
- * runs; the isolated per-suite sqlite file below is the only DB touched.
+ *   repo-client.ts  --http-->  the real BBS app (src/server/app.ts),
+ *                               DOOR_SERVER_URL pointed at...
+ *                     --http-->  a small stub Express server that serves
+ *                               what the old local router used to serve
+ *                               (a manifest + one real archive on disk).
+ *
+ * This is STRICTLY BETTER coverage than the pre-split version: it now also
+ * exercises door-repo.routes.ts's proxy — real Content-Length framing,
+ * real ETag/If-None-Match forwarding and the 304 short-circuit, and real
+ * archive-byte streaming — all through the same code path a real DOORMAN
+ * install talks to in production, not just the client library against a
+ * server that no longer exists.
+ *
+ * The stub's manifest/archive routes are deliberately hand-rolled JSON/
+ * bytes (not door-repo-manifest.ts's buildManifest()) — this suite proves
+ * the CLIENT<->PROXY<->UPSTREAM round trip, not the standalone door
+ * server's own catalog logic, which is that project's own test suite's
+ * job.
+ *
+ * Requires a fresh require() of src/server/app.ts (the mount decision runs
+ * once at module-load time) via jest.resetModules() + process.env
+ * manipulation, same pattern as tests/server/door-repo-mount.test.ts.
  */
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import Database from 'better-sqlite3';
-import express, { Express, Router } from 'express';
+import express, { Express } from 'express';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 import type { RepoClientConfig } from '../../../../Doors/door-manager/repo-client';
+import type { DoorRepoManifest } from '../../../../Doors/door-manager/repo-types.generated';
 
-describe('doorman repo-client E2E against a real local server', () => {
+describe('doorman repo-client E2E against the real proxy and a stub upstream', () => {
   let tmpDir: string;
-  let archiveDir: string;
-  let app: Express;
-  let server: Server;
-  let baseUrl: string;
-  let realArchivePath: string;
+  let stubServer: Server;
+  let bbsServer: Server;
+  let baseUrl: string; // the BBS app — what the client is configured with
   let realArchiveContent: Buffer;
   const ORIGINAL_ENV = { ...process.env };
+  const REVISION = 'e2e-rev-1';
 
   // Real fetchManifest/downloadArchive — loaded via jest.resetModules() +
-  // require() alongside the router below so both sides of the flow come
+  // require() alongside the BBS app below so both sides of the flow come
   // from the SAME require pass (avoids any stale-module surprises from
   // resetModules() being called elsewhere in the suite run).
   let fetchManifest: typeof import('../../../../Doors/door-manager/repo-client').fetchManifest;
@@ -53,115 +64,103 @@ describe('doorman repo-client E2E against a real local server', () => {
     jest.resetModules();
 
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'door-repo-e2e-'));
-    archiveDir = path.join(tmpDir, 'Archives');
-    fs.mkdirSync(archiveDir, { recursive: true });
-    const dbPath = path.join(tmpDir, 'test.sqlite');
-
-    process.env.DOOR_ARCHIVES_ROOT = archiveDir;
-    process.env.DATABASE_DIR = tmpDir;
-    process.env.DATABASE_FILE = 'test.sqlite';
-
-    const db = new Database(dbPath);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS door_catalog (
-        id                  TEXT PRIMARY KEY,
-        archive_name        TEXT NOT NULL UNIQUE,
-        archive_path        TEXT NOT NULL,
-        binary_name         TEXT,
-        door_type           TEXT DEFAULT 'XIM',
-        name                TEXT NOT NULL,
-        version             TEXT,
-        author              TEXT,
-        release_group       TEXT,
-        description         TEXT,
-        file_id_diz         TEXT,
-        doc_filename        TEXT,
-        doc_raw             TEXT,
-        suggested_tooltypes TEXT,
-        category            TEXT,
-        archive_size        INTEGER DEFAULT 0,
-        junk_count          INTEGER DEFAULT 0,
-        installed           INTEGER DEFAULT 0,
-        installed_as        TEXT,
-        install_dir         TEXT,
-        corpus_id           TEXT,
-        source              TEXT DEFAULT 'scan',
-        indexed_at          INTEGER DEFAULT (strftime('%s','now')),
-        md5                 TEXT,
-        sha256               TEXT
-      )
-    `);
 
     realArchiveContent = Buffer.from(
       'door-repo-e2e-test-archive-contents\r\nreal bytes for real checksum verification\r\n' +
         crypto.randomBytes(64).toString('hex')
     );
-    realArchivePath = path.join(archiveDir, 'real.lha');
-    fs.writeFileSync(realArchivePath, realArchiveContent);
 
-    // Row 1: real archive on disk — the one fetched/downloaded below.
-    db.prepare(
-      `INSERT INTO door_catalog
-        (id, archive_name, archive_path, door_type, name, author, release_group, category, description, file_id_diz, archive_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      'id-1',
-      'E2E_REAL_DOOR.LHA',
-      'real.lha',
-      'XIM',
-      'E2E Real Door',
-      'E2E Author',
-      'E2EGroup',
-      'Games',
-      'A real archive on disk for the e2e flow',
-      'E2E file_id.diz',
-      realArchiveContent.length
-    );
+    const manifest: DoorRepoManifest = {
+      formatVersion: 1,
+      revision: REVISION,
+      generatedAt: new Date().toISOString(),
+      doors: [
+        // The real archive fetched/downloaded below.
+        {
+          archiveName: 'E2E_REAL_DOOR.LHA',
+          doorType: 'XIM',
+          name: 'E2E Real Door',
+          author: 'E2E Author',
+          releaseGroup: 'E2EGroup',
+          category: 'Games',
+          description: 'A real archive on disk for the e2e flow',
+          fileIdDiz: 'E2E file_id.diz',
+          archiveSize: realArchiveContent.length,
+          md5: crypto.createHash('md5').update(realArchiveContent).digest('hex'),
+          sha256: crypto.createHash('sha256').update(realArchiveContent).digest('hex'),
+          junkCount: 0,
+          hasDoc: false,
+        },
+        // A catalog entry whose archive was never written to disk — just
+        // proves the manifest round-trips a mixed catalog; not otherwise
+        // exercised.
+        {
+          archiveName: 'E2E_MISSING_DOOR.LHA',
+          doorType: 'DD',
+          name: 'E2E Missing Door',
+          author: null,
+          releaseGroup: null,
+          category: 'Utils',
+          description: 'A door whose archive is absent',
+          fileIdDiz: null,
+          archiveSize: 999,
+          md5: null,
+          sha256: null,
+          junkCount: 0,
+          hasDoc: false,
+        },
+      ],
+    };
 
-    // Row 2: catalog row whose archive was never written to disk — just
-    // proves the manifest tolerates a mixed catalog (matches
-    // door-repo-routes.test.ts's seeding shape); not otherwise exercised.
-    db.prepare(
-      `INSERT INTO door_catalog
-        (id, archive_name, archive_path, door_type, name, author, release_group, category, description, file_id_diz, archive_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      'id-2',
-      'E2E_MISSING_DOOR.LHA',
-      'missing.lha',
-      'DD',
-      'E2E Missing Door',
-      null,
-      null,
-      'Utils',
-      'A door whose archive is absent',
-      null,
-      999
-    );
+    // ─── Stub upstream: what the standalone door server would answer ────
+    const stub = express();
+    stub.get('/api/door-repo/manifest', (req, res) => {
+      res.set('ETag', `"${REVISION}"`);
+      res.set('X-Door-Repo-Revision', REVISION);
+      if (req.headers['if-none-match'] === `"${REVISION}"`) {
+        res.status(304).end();
+        return;
+      }
+      res.json(manifest);
+    });
+    stub.get('/api/door-repo/archive/:name', (req, res) => {
+      if (req.params.name === 'E2E_REAL_DOOR.LHA') {
+        res.set('Content-Type', 'application/octet-stream');
+        res.send(realArchiveContent);
+        return;
+      }
+      res.status(404).set('Content-Type', 'text/plain').send(`NOT FOUND: ${req.params.name}\r\n`);
+    });
 
-    db.close();
+    await new Promise<void>((resolve, reject) => {
+      stubServer = stub.listen(0, '127.0.0.1', () => resolve());
+      stubServer.once('error', reject);
+    });
+    const stubUrl = `http://127.0.0.1:${(stubServer.address() as AddressInfo).port}`;
+
+    // ─── The real BBS app, proxying to the stub above ────────────────────
+    process.env.DOOR_SERVER_URL = stubUrl;
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { doorRepoRouter } = require('../../src/server/door-repo.routes') as { doorRepoRouter: Router };
+    const { app } = require('../../src/server/app') as { app: Express };
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const repoClient = require('../../../../Doors/door-manager/repo-client') as typeof import('../../../../Doors/door-manager/repo-client');
     fetchManifest = repoClient.fetchManifest;
     downloadArchive = repoClient.downloadArchive;
 
-    app = express();
-    app.use('/api/door-repo', doorRepoRouter);
-
     await new Promise<void>((resolve, reject) => {
-      server = app.listen(0, '127.0.0.1', () => resolve());
-      server.once('error', reject);
+      bbsServer = app.listen(0, '127.0.0.1', () => resolve());
+      bbsServer.once('error', reject);
     });
-    const address = server.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    baseUrl = `http://127.0.0.1:${(bbsServer.address() as AddressInfo).port}`;
   });
 
   afterAll(async () => {
     await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
+      bbsServer.close((err) => (err ? reject(err) : resolve()));
+    });
+    await new Promise<void>((resolve, reject) => {
+      stubServer.close((err) => (err ? reject(err) : resolve()));
     });
     fs.rmSync(tmpDir, { recursive: true, force: true });
     process.env = { ...ORIGINAL_ENV };
@@ -191,28 +190,18 @@ describe('doorman repo-client E2E against a real local server', () => {
     expect(cached.manifest).toEqual(result.manifest);
   });
 
-  // FIXED (was: DISCOVERED DEFECT). Task 10 originally found that a real
-  // fetchManifest() refetch never reached the server's 304 path: Node's
-  // fetch() (undici) sends `Cache-Control: no-cache` on every outgoing
-  // request by default, and door-repo.routes.ts correctly (RFC 9111
-  // s5.2.1.4) treats an incoming `no-cache` as "must revalidate end to
-  // end", so it could never return 304 to an unmodified fetch() call --
-  // silently defeating the whole point of If-None-Match. Every "conditional"
-  // fetch paid the full buildManifest() cost (md5+sha256 for every catalog
-  // row, ~3300 archives in production) server-side on every call. See
-  // task-5-report.md's fix-round-2 section for the full root-cause analysis
-  // and the options considered.
-  //
-  // Fixed in repo-client.ts's fetchManifest(): it now sends an explicit
-  // `Cache-Control: max-age=0` request header (chosen over `cache:
-  // 'force-cache'` -- see repo-client.ts's own inline comment for why),
-  // which undici respects instead of overwriting with `no-cache`, so the
-  // server's real conditional-GET/304 logic now actually runs for a real
-  // Node client. This test (this exact assertion, run against the
-  // then-unmodified client) was RED before that fix landed and is GREEN
-  // after -- see task-5-report.md's fix-round-2 section for the RED/GREEN
-  // command transcript.
-  it('fetchManifest: a refetch through the real client sends Cache-Control: max-age=0, reaches the server 304 path, and returns fromCache:true', async () => {
+  // repo-client.ts's fetchManifest() sends an explicit `Cache-Control:
+  // max-age=0` request header (see its own inline comment for why, and
+  // task-5-report.md's fix-round-2 section for the root-cause analysis of
+  // why that was needed at all: Node's fetch() otherwise sends
+  // `Cache-Control: no-cache` on every request by default, which a
+  // correct RFC 9111 server treats as "never 304"). The BBS proxy does not
+  // forward Cache-Control upstream at all (door-repo.routes.ts's
+  // FORWARDED_REQUEST_HEADERS), so the stub above only ever sees
+  // If-None-Match — simpler than the original sqlite router's
+  // `req.fresh`-based check, but exercises the same client-visible
+  // contract: a matching If-None-Match gets a 304.
+  it('fetchManifest: a refetch through the real client sends If-None-Match, reaches the proxied 304 path, and returns fromCache:true', async () => {
     const cfg = freshClientConfig('cache-304.json');
 
     const first = await fetchManifest(cfg);
@@ -227,14 +216,12 @@ describe('doorman repo-client E2E against a real local server', () => {
     expect(second.cachedAt).toBe(first.cachedAt);
     expect(second.manifest).toEqual(first.manifest);
 
-    // Independent confirmation the server's conditional-GET logic itself
-    // still works correctly (already unit-tested in
-    // door-repo-routes.test.ts, re-verified here end-to-end): a raw fetch
-    // of the exact same URL with the exact same If-None-Match value, using
+    // Independent confirmation the PROXY forwards a 304 unchanged (already
+    // unit-tested in door-repo-proxy.test.ts; re-verified here end-to-end
+    // through the real BBS app and a real stub upstream): a raw fetch of
+    // the exact same URL with the exact same If-None-Match value, using
     // `cache: 'force-cache'` to suppress undici's default Cache-Control
-    // injection (the other option confirmed to work, not the one chosen
-    // for repo-client.ts itself -- see its inline comment), DOES get a
-    // real 304 from the real server over the real socket.
+    // injection, DOES get a real 304 back through the real proxy.
     const manifestUrl = `${baseUrl}/api/door-repo/manifest`;
     const rawConditional = await fetch(manifestUrl, {
       headers: { 'If-None-Match': persistedEtag },
@@ -243,7 +230,7 @@ describe('doorman repo-client E2E against a real local server', () => {
     expect(rawConditional.status).toBe(304);
   });
 
-  it('downloadArchive: downloads the real archive and verifies it against the server\'s own manifest sha256', async () => {
+  it('downloadArchive: downloads the real archive through the proxy and verifies it against the manifest sha256', async () => {
     const cfg = freshClientConfig('cache-download.json');
     const manifestResult = await fetchManifest(cfg);
     const door = manifestResult.manifest.doors.find((d) => d.archiveName === 'E2E_REAL_DOOR.LHA');

@@ -83,17 +83,42 @@ function resolveDoorRepoMode(env = process.env) {
     // not route, turning a config typo into a silent-looking 404.
     return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
 }
+/** Overlays door_installs state onto an already-built CatalogEntry (e.g.
+ * one door_catalog's searchCatalog produced). `lookupInstall` is
+ * authoritative even on a null result -- a stale door_catalog installed
+ * flag must never outrank a real, or a really-absent, door_installs
+ * record (same rule mapManifestDoorToEntry's lookupInstall follows). */
+function overlayInstallState(entry, lookupInstall) {
+    const install = lookupInstall(entry.archive_name);
+    return {
+        ...entry,
+        installed: install ? 1 : 0,
+        installed_as: install?.command ?? null,
+        install_dir: install?.install_dir ?? null,
+    };
+}
 /**
- * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries(): a missing
- * catalog service, or any error thrown by searchCatalog (e.g. the live
- * volume DB has no door_catalog table), yields an empty list with
- * repoUnavailable:true rather than propagating.
+ * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries() when
+ * `lookupInstall` is omitted: a missing catalog service, or any error
+ * thrown by searchCatalog (e.g. the live volume DB has no door_catalog
+ * table), yields an empty list with repoUnavailable:true rather than
+ * propagating.
+ *
+ * `lookupInstall` (Task 5, optional): when supplied, every returned entry's
+ * installed/installed_as/install_dir is overlaid from door_installs instead
+ * of trusting door_catalog's own columns -- an owner-mode install (Task 5)
+ * no longer writes those columns, so without this an owner's own local
+ * browse list would show every newly-installed door as never installed.
  */
-function loadLocalCatalogEntries(svc, filter) {
+function loadLocalCatalogEntries(svc, filter, lookupInstall) {
     if (!svc)
         return { entries: [], repoUnavailable: true };
     try {
-        return { entries: svc.searchCatalog(filter), repoUnavailable: false };
+        const entries = svc.searchCatalog(filter);
+        return {
+            entries: lookupInstall ? entries.map(e => overlayInstallState(e, lookupInstall)) : entries,
+            repoUnavailable: false,
+        };
     }
     catch {
         return { entries: [], repoUnavailable: true };
@@ -101,15 +126,31 @@ function loadLocalCatalogEntries(svc, filter) {
 }
 /**
  * Maps one central-repo manifest row into the CatalogEntry shape the view
- * renders. `installed`/`installed_as`/`install_dir` (and, when available,
- * `id`/`archive_path`/`binary_name`) come from `lookupLocal` -- the central
- * manifest has no concept of what is installed on this particular BBS.
+ * renders. `id`/`archive_path`/`binary_name` come from `lookupLocal` (real
+ * only when this archive was also indexed by a local door_catalog scan) --
+ * the central manifest has no concept of what is installed on this
+ * particular BBS.
+ *
+ * `installed`/`installed_as`/`install_dir` come from `lookupInstall`
+ * (door_installs) whenever the caller supplies one -- door_installs is now
+ * the source of truth for install state on THIS node, since a
+ * consumer-mode install (Task 5) records there directly without ever
+ * touching door_catalog. A supplied `lookupInstall` is authoritative even
+ * when it returns null (no install record): that null must win over a
+ * stale door_catalog row, which is exactly the drift this split exists to
+ * prevent. `lookupLocal`'s door_catalog-sourced installed/installed_as/
+ * install_dir are used ONLY when `lookupInstall` is omitted entirely (not
+ * the same as "returned null"), so existing callers that have no
+ * door_installs lookup to give keep working unchanged.
+ *
  * Fields the manifest genuinely has no equivalent for (version,
  * doc_filename, doc_raw, suggested_tooltypes, junk_count) are left at a
  * neutral default; browsing/filtering never reads them for manifest rows.
  */
-function mapManifestDoorToEntry(door, lookupLocal) {
+function mapManifestDoorToEntry(door, lookupLocal, lookupInstall) {
     const local = lookupLocal(door.archiveName);
+    const install = lookupInstall?.(door.archiveName);
+    const installKnown = lookupInstall !== undefined;
     return {
         id: local?.id ?? door.archiveName,
         archive_name: door.archiveName,
@@ -128,9 +169,9 @@ function mapManifestDoorToEntry(door, lookupLocal) {
         category: door.category,
         archive_size: door.archiveSize ?? 0,
         junk_count: 0,
-        installed: local?.installed ? 1 : 0,
-        installed_as: local?.installed_as ?? null,
-        install_dir: local?.install_dir ?? null,
+        installed: installKnown ? (install ? 1 : 0) : (local?.installed ? 1 : 0),
+        installed_as: installKnown ? (install?.command ?? null) : (local?.installed_as ?? null),
+        install_dir: installKnown ? (install?.install_dir ?? null) : (local?.install_dir ?? null),
     };
 }
 /**
@@ -154,9 +195,9 @@ function filterManifestEntries(entries, query) {
  * call this once per browse session (e.g. on view enter), not per
  * keystroke -- see filterManifestEntries above.
  */
-async function loadConsumerCatalog(url, cacheFile, lookupLocal, fetchManifestFn = repo_client_1.fetchManifest) {
+async function loadConsumerCatalog(url, cacheFile, lookupLocal, fetchManifestFn = repo_client_1.fetchManifest, lookupInstall) {
     const { manifest, fromCache, cachedAt } = await fetchManifestFn({ url, cacheFile });
-    const entries = manifest.doors.map(door => mapManifestDoorToEntry(door, lookupLocal));
+    const entries = manifest.doors.map(door => mapManifestDoorToEntry(door, lookupLocal, lookupInstall));
     return { entries, fromCache, cachedAt };
 }
 /** Cache-file path for the consumer-mode manifest cache -- always derived

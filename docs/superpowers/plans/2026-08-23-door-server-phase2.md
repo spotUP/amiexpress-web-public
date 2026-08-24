@@ -553,7 +553,7 @@ rm -f /tmp/backfill-test.db
 ```
 Expected: the two counts match (or differ only by rows with an empty `installed_as`, which the script reports as skipped). NEVER run against the real file.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add dev/scripts/backfill-door-installs.ts web/backend/tests/doors/backfill-door-installs.test.ts
@@ -573,6 +573,22 @@ git commit -m "feat(bbs): backfill door_installs from the catalog's installed ro
 **Interfaces:**
 - Consumes: nothing from Tasks 1-2.
 - Produces: `export function isDoorRepoProxyEnabled(env?: NodeJS.ProcessEnv): boolean` (true when `DOOR_SERVER_URL` is a non-empty string) and `export const doorRepoRouter: express.Router`. `app.ts` mounts it only when `isDoorRepoProxyEnabled()`.
+
+**Facts measured before this task was written - do not re-derive them, and do not "fix" what they establish:**
+
+1. **`req.url` inside this mounted router excludes the mount path and keeps the query string**, verified against express 5.1.0:
+   `/api/door-repo/list.txt?type=XIM` -> `req.url = /list.txt?type=XIM`, `baseUrl = /api/door-repo`.
+   So `${base}/api/door-repo${req.url}` is the correct target. Using `originalUrl` would double the prefix.
+2. **Percent-encoding survives raw**: `/api/door-repo/files/%24CP-BU%DF1.LZX` arrives as
+   `req.url = /files/%24CP-BU%DF1.LZX` - NOT decoded. This is load-bearing. The door server's
+   `candidateArchiveNames` needs the raw `%DF` to do its Latin-1 fallback, and the catalog has an
+   archive named `$CP-BUß1.LZX`. Never decode and re-encode the path in the proxy; pass `req.url`
+   through byte-for-byte.
+3. **CORS preflight never reaches this router.** `doorRepoCors` (mounted at app.ts:90, ahead of the
+   router at :234) answers `OPTIONS` itself with 204 and returns WITHOUT calling `next()`
+   (door-repo-cors.ts:72-77). Do NOT add OPTIONS handling or CORS headers to the proxy - doing so
+   would duplicate headers, which is precisely the bug that broke `Cross-Origin-Resource-Policy` on
+   this host before.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1035,11 +1051,28 @@ In `app.ts`, replace the `upsertCatalogEntry` / `markInstalled` pair in the cons
             version: e.version ?? null,
             release_group: e.release_group ?? null,
             source_url: process.env.DOOR_REPO_URL ?? null,
-            source_revision: manifestRevision ?? null,
+            // No manifest revision is in scope at this call site - verified,
+            // `manifestRevision` does not exist in app.ts. Recording null is
+            // honest; threading the revision down from fetchManifest is a
+            // separate change and not worth it for a provenance field.
+            source_revision: null,
           });
         },
 ```
-and at :1296 replace `svc?.markUninstalled(e.id)` with `deps.removeInstall(e.installed_as ?? e.archive_name)`. In `repoDataSource.ts`, the `installed` flag resolver switches from a catalog lookup to `isArchiveInstalled(entry.archive_name)`.
+
+**Preserve the collision guard.** The code you are replacing does not blindly
+write: it first checks whether the command is already held by a DIFFERENT
+archive and refuses, warning `"... is already installed from a different
+archive (X) -- not clobbering it"`. That check currently runs against the
+local catalog row. It must survive against `door_installs`: call
+`getInstallByCommand(finalCmd)` and, when a row exists whose `archive_name`
+differs from the one being installed, emit the same refusal rather than
+overwriting. Losing this would let one door silently take over another's
+command name - and the backfill has already shown this BBS has commands
+claimed by up to nine different archives.
+and at :1296 replace `svc?.markUninstalled(e.id)` with `deps.removeInstall(e.installed_as ?? e.archive_name)`. In `repoDataSource.ts:160` the resolver is currently
+`installed: local?.installed ? 1 : 0`; it switches to
+`isArchiveInstalled(entry.archive_name) ? 1 : 0`.
 
 Owner mode's curation screens (`deleteCatalogEntry`, `stripArchiveOnServer`, `updateJunkCount`, `removeArchiveFiles`) are NOT touched here - they move to the admin API in phase 3. If they no longer compile because the catalog service is gone, guard them behind the existing `svc?.` optional-call pattern so they degrade to "unavailable" rather than crashing, and note it for phase 3.
 
@@ -1051,7 +1084,7 @@ cd ~/Code/amiexpress-web/Doors/door-manager && npm run build
 ```
 Expected: 3 tests pass, and `dist/app.js` is rebuilt - a source-only commit is invisible to the running BBS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add Doors/door-manager/app.ts Doors/door-manager/repoDataSource.ts Doors/door-manager/dist web/backend/tests/doors/doorman-records-install.test.ts
@@ -1148,17 +1181,54 @@ git commit -m "feat(doorman): vendor the door server's contract and test it for 
 - Consumes: everything above.
 - Produces: a live BBS whose `/api/door-repo/*` is served by the door server.
 
-- [ ] **Step 1: Add the environment variable to compose**
+- [ ] **Step 1: Put both containers on a shared network, then set the URL**
 
-In `docker-compose.yml`'s `bbs` service environment block:
+**Do NOT use `http://127.0.0.1:3010`.** Measured on the live host: inside the
+BBS container that address is the container itself, and the two containers sit
+on separate bridge networks (`amiexpress_default`, `doorserver_default`), so
+the BBS cannot reach the door server at all. The door server publishes on
+`127.0.0.1:3010` of the HOST deliberately - that is what keeps it off every
+interface - so widening the bind or using `host.docker.internal` would undo a
+phase-1 security decision.
 
+Instead, give the two containers a shared network and let service DNS do the
+work. The host publish stays loopback-only, so Caddy keeps serving the public
+vhost exactly as it does now (verified: host -> 127.0.0.1:3010 returns 200).
+
+On the host, once:
+```bash
+docker network create doorserver-net
+```
+
+In THIS repo's `docker-compose.yml`, on the `bbs` service:
 ```yaml
+    networks:
+      - default
+      - doorserver-net
+    environment:
       # The door catalog lives in the standalone door server; this BBS proxies
       # to it so shipped clients (RepoHost=bbs.uprough.net) keep working.
       # Unset = the /api/door-repo paths 404, exactly as a disabled feature should.
-      DOOR_SERVER_URL: ${DOOR_SERVER_URL:-http://127.0.0.1:3010}
+      # Reached by service DNS over the shared network - NOT 127.0.0.1, which
+      # inside a container is the container.
+      DOOR_SERVER_URL: ${DOOR_SERVER_URL:-http://doorserver:3010}
 ```
-127.0.0.1:3010 is the door server's loopback bind on the same host; it never leaves the machine.
+and at the file's top level:
+```yaml
+networks:
+  doorserver-net:
+    external: true
+```
+
+In the OTHER repo (`~/Code/amiexpress-doorserver/docker-compose.yml`),
+add the same `networks:` stanza to its `doorserver` service and the same
+top-level `external: true` block, so the service is reachable by the name
+`doorserver`. That is a separate commit in that repo; it is additive and does
+not change the published port. Verify from inside the BBS container before
+trusting it:
+```bash
+docker exec amiexpress-bbs sh -lc 'wget -qO- http://doorserver:3010/api/door-repo/health'
+```
 
 - [ ] **Step 2: Capture the CURRENT live responses before changing anything**
 
@@ -1219,14 +1289,35 @@ git commit -m "docs(handoff): the BBS now proxies the door-repo API to the door 
 
 **STOP - this task needs explicit human approval before Step 3 runs against anything live.** It deletes 3300 rows and 58400 file rows from the BBS's database. The door server holds the authoritative copy, and a database backup must exist first.
 
-- [ ] **Step 1: Confirm nothing still reads the tables**
+- [ ] **Step 1: Remove the DDL, or the drop will not stick**
+
+**The BBS recreates these tables on every boot.** Verified:
+`web/backend/src/database.ts:1732` has `CREATE TABLE IF NOT EXISTS door_catalog`
+and `:1763` the same for `door_catalog_files`, plus a column-migration block at
+`:786-800` that `ALTER`s `door_catalog`. Dropping the tables without removing
+that DDL means the next restart silently recreates them EMPTY - and the grep
+gate below could never pass.
+
+So this task removes, in `web/backend/src/database.ts`:
+- the `CREATE TABLE IF NOT EXISTS door_catalog (...)` statement at ~:1732
+- the `CREATE TABLE IF NOT EXISTS door_catalog_files (...)` statement at ~:1763
+- the door_catalog column-migration block at ~:786-800 (the `PRAGMA table_info`
+  probe and the two `ADD COLUMN` calls)
+and leaves the `door_installs` DDL added in Task 1 exactly where it is.
+
+`dev/scripts/door-corpus/build-door-catalog.ts` also creates these tables. It is
+the corpus BUILDER, is never run by the BBS, and moves to the door server repo
+in phase 3 - leave it alone and note it in the report.
+
+- [ ] **Step 2: Confirm nothing still reads the tables**
 
 ```bash
 grep -rn "door_catalog" web/backend/src Doors --include='*.ts' | grep -v '/dist/' | grep -v 'door-installs'
 ```
-Expected: hits only inside the three modules being deleted. Any other hit blocks this task.
+Expected after Step 1: hits only inside the three modules being deleted. Any
+other hit blocks this task.
 
-- [ ] **Step 2: Delete the modules and their suites, run the whole backend suite**
+- [ ] **Step 3: Delete the modules and their suites, run the whole backend suite**
 
 ```bash
 git rm web/backend/src/doors/door-catalog.service.ts web/backend/src/doors/door-repo-manifest.ts web/backend/src/doors/door-repo-checksums.ts
@@ -1235,7 +1326,7 @@ cd web/backend && npx tsc --noEmit && npx jest --config dev-scripts/jest.config.
 ```
 Expected: type-check clean and the suite green. A compile error here means something still depends on the catalog - fix that before going further, do not delete more.
 
-- [ ] **Step 3: Write the drop script (do not run it yet)**
+- [ ] **Step 4: Write the drop script (do not run it yet)**
 
 ```typescript
 /**
@@ -1285,7 +1376,7 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 4: Test it against a copy**
+- [ ] **Step 5: Test it against a copy**
 
 ```typescript
 // web/backend/tests/doors/drop-bbs-catalog-tables.test.ts
@@ -1315,7 +1406,7 @@ it('drops both catalog tables and reports what it removed', () => {
 });
 ```
 
-- [ ] **Step 5: STOP. Get explicit approval, back up, then run it on live**
+- [ ] **Step 6: STOP. Get explicit approval, back up, then run it on live**
 
 ```bash
 # only after a human says go
@@ -1323,7 +1414,7 @@ ssh root@bbs.uprough.net 'docker exec amiexpress-bbs sh -lc "sqlite3 /app/data/d
 ```
 Then run the backfill (Task 2) if it has not run on live yet, THEN the drop, then confirm the BBS still serves and DOORMAN still shows installed doors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add dev/scripts/drop-bbs-catalog-tables.ts web/backend/tests/doors/drop-bbs-catalog-tables.test.ts

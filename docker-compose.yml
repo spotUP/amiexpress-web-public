@@ -37,6 +37,9 @@ services:
     volumes:
       # Persistent data volume - survives container rebuilds
       - bbs-data:/app/data
+    networks:
+      - default
+      - doorserver-net
     environment:
       # Core settings
       - NODE_ENV=production
@@ -97,6 +100,13 @@ services:
       #   DOOR_REPO_URL=...      (override the built-in default; "" disables)
       # The default URL lives in exactly one place in code:
       # Doors/door-manager/repoDataSource.ts (DEFAULT_DOOR_REPO_URL).
+
+      # The door catalog lives in the standalone door server; this BBS proxies
+      # to it so shipped clients (RepoHost=bbs.uprough.net) keep working.
+      # Unset = the /api/door-repo paths 404, exactly as a disabled feature should.
+      # Reached by service DNS over the shared network - NOT 127.0.0.1, which
+      # inside a container is the container.
+      - DOOR_SERVER_URL=${DOOR_SERVER_URL:-http://doorserver:3010}
     env_file:
       - path: .env
         required: false
@@ -108,6 +118,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+networks:
+  # Shared with the amiexpress-doorserver stack so the bbs container can
+  # reach the doorserver container by service DNS. Created once on the host
+  # via `docker network create doorserver-net` - not managed by this compose
+  # file (external: true), since it's shared across two independent compose
+  # projects.
+  doorserver-net:
+    external: true
 
 volumes:
   bbs-data:

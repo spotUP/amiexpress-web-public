@@ -1,10 +1,11 @@
 /**
  * GENERATED FILE -- DO NOT EDIT BY HAND.
  *
- * Extracted verbatim from ../../web/backend/src/doors/door-repo-manifest.ts by scripts/gen-repo-types.ts.
- * Regenerate with: npx tsx scripts/gen-repo-types.ts
- * (run whenever door-repo-manifest.ts's manifest shape changes upstream)
+ * Mirror of amiexpress-doorserver contract/manifest-types.ts.
+ * Regenerate with: npx tsx scripts/gen-contract-types.ts
  */
+
+export const CONTRACT_VERSION = '1';
 
 export interface ManifestDoor {
   archiveName: string;
@@ -22,10 +23,10 @@ export interface ManifestDoor {
   // row carries documentation at all. Both exist so a client can decide what
   // to OFFER before it fetches anything: DOORMAN gates its [S]trip and
   // [V]iew doc footer keys on exactly these two values
-  // (Doors/door-manager/app.ts, repoViewFooterParts), and a list.txt client
-  // had no way to answer either question without a per-entry round trip to
-  // /files or /doc — so it advertised keys that then turned out to do
-  // nothing.
+  // (amiexpress-web's Doors/door-manager/app.ts, repoViewFooterParts), and a
+  // list.txt client had no way to answer either question without a
+  // per-entry round trip to /files or /doc — so it advertised keys that
+  // then turned out to do nothing.
   junkCount: number;
   hasDoc: boolean;
 }
