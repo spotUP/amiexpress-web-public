@@ -842,7 +842,11 @@ fi
 echo ""
 printf "%b\n" "${CYAN}→ Waiting for backend to be ready (port 3001)...${RESET}"
 WAIT_COUNT=0
-MAX_WAIT=60  # 60 seconds max
+# Backend boot registers every door in Doors/ (~100 of them) before it opens
+# port 3001; on a warm cache that alone runs past 60s. 60s here killed a
+# healthy backend mid-registration (2026-08-24). The crash check inside the
+# loop still catches a genuinely dead backend within a second.
+MAX_WAIT=240
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
   if lsof -ti:3001 > /dev/null 2>&1; then
     printf "%b\n" "   ${GREEN}[OK] Backend listening on port 3001${RESET}"
@@ -864,7 +868,7 @@ done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
   echo ""
-  printf "%b\n" "${YELLOW}[WARNING] Backend did not start within 60 seconds${RESET}"
+  printf "%b\n" "${YELLOW}[WARNING] Backend did not start within ${MAX_WAIT} seconds${RESET}"
   printf "%b\n" "${WHITE}Check logs/backend.log for details${RESET}"
   exit 1
 fi
