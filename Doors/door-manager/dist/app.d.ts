@@ -12,6 +12,9 @@ interface DoorSession {
     bbs: any;
     params: string[];
 }
+export declare function commandClaimedByOtherArchive(getInstallByCommand: (command: string) => {
+    archive_name: string;
+} | null, command: string, archiveName: string): boolean;
 export declare function resolveArchivePath(archivePath: string | null | undefined): string | null;
 /** Content of the .info-style command config written on install. Pure and
  * exported for testing: door_type must flow through as TYPE= (a FIM door
@@ -129,8 +132,7 @@ export interface ConsumerInstallDeps {
     findExtractedBinary: InstallDeps['findExtractedBinary'];
     writeInfoFile: InstallDeps['writeInfoFile'];
     lookupLocal: LocalCatalogLookup;
-    /** Existence check ONLY (archive_name of whatever install currently holds
-     * this command, if any) -- used to detect a command collision. */
+    /** Existence check ONLY -- detects a command collision before recording. */
     getInstallByCommand: (command: string) => {
         archive_name: string;
     } | null;

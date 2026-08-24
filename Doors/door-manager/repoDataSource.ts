@@ -80,6 +80,42 @@ export function resolveDoorRepoMode(
   return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
 }
 
+// ─── Install state (door_installs) ──────────────────────────────────────────
+//
+// Shared by BOTH the local ("owner"/"disabled") and consumer data sources
+// below: door_installs, not door_catalog, is the source of truth for what
+// THIS node has installed (Task 5) -- a consumer-mode install never touches
+// door_catalog at all, and an owner-mode install no longer writes
+// installed/installed_as/install_dir there either.
+
+/** This node's install record for an archive -- e.g. the door-installs
+ * repository's getInstallByArchive (web/backend/src/doors/
+ * door-installs.repository.ts). Distinct from LocalCatalogLookup: install
+ * state (installed/installed_as/install_dir) now lives in door_installs,
+ * a separate table from door_catalog's metadata (id/archive_path/
+ * binary_name) -- see door-installs.repository.ts's header comment for why
+ * the split exists. Returns null when this archive has no install record. */
+export interface InstallRecord {
+  command: string;
+  install_dir: string;
+}
+export type InstallLookup = (archiveName: string) => InstallRecord | null;
+
+/** Overlays door_installs state onto an already-built CatalogEntry (e.g.
+ * one door_catalog's searchCatalog produced). `lookupInstall` is
+ * authoritative even on a null result -- a stale door_catalog installed
+ * flag must never outrank a real, or a really-absent, door_installs
+ * record (same rule mapManifestDoorToEntry's lookupInstall follows). */
+function overlayInstallState(entry: CatalogEntry, lookupInstall: InstallLookup): CatalogEntry {
+  const install = lookupInstall(entry.archive_name);
+  return {
+    ...entry,
+    installed: install ? 1 : 0,
+    installed_as: install?.command ?? null,
+    install_dir: install?.install_dir ?? null,
+  };
+}
+
 // ─── Local ("owner"/"disabled") data source ─────────────────────────────────
 
 export interface LocalCatalogSvc {
@@ -92,18 +128,30 @@ export interface LoadLocalCatalogResult {
 }
 
 /**
- * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries(): a missing
- * catalog service, or any error thrown by searchCatalog (e.g. the live
- * volume DB has no door_catalog table), yields an empty list with
- * repoUnavailable:true rather than propagating.
+ * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries() when
+ * `lookupInstall` is omitted: a missing catalog service, or any error
+ * thrown by searchCatalog (e.g. the live volume DB has no door_catalog
+ * table), yields an empty list with repoUnavailable:true rather than
+ * propagating.
+ *
+ * `lookupInstall` (Task 5, optional): when supplied, every returned entry's
+ * installed/installed_as/install_dir is overlaid from door_installs instead
+ * of trusting door_catalog's own columns -- an owner-mode install (Task 5)
+ * no longer writes those columns, so without this an owner's own local
+ * browse list would show every newly-installed door as never installed.
  */
 export function loadLocalCatalogEntries(
   svc: LocalCatalogSvc | null,
-  filter: string
+  filter: string,
+  lookupInstall?: InstallLookup
 ): LoadLocalCatalogResult {
   if (!svc) return { entries: [], repoUnavailable: true };
   try {
-    return { entries: svc.searchCatalog(filter), repoUnavailable: false };
+    const entries = svc.searchCatalog(filter);
+    return {
+      entries: lookupInstall ? entries.map(e => overlayInstallState(e, lookupInstall)) : entries,
+      repoUnavailable: false,
+    };
   } catch {
     return { entries: [], repoUnavailable: true };
   }
@@ -124,19 +172,6 @@ export interface LocalCatalogRow {
  * catalog service's getCatalogEntryByArchive). Returns null when the door
  * has never been indexed/installed locally. */
 export type LocalCatalogLookup = (archiveName: string) => LocalCatalogRow | null;
-
-/** This node's install record for an archive -- e.g. the door-installs
- * repository's getInstallByArchive (web/backend/src/doors/
- * door-installs.repository.ts). Distinct from LocalCatalogLookup: install
- * state (installed/installed_as/install_dir) now lives in door_installs,
- * a separate table from door_catalog's metadata (id/archive_path/
- * binary_name) -- see door-installs.repository.ts's header comment for why
- * the split exists. Returns null when this archive has no install record. */
-export interface InstallRecord {
-  command: string;
-  install_dir: string;
-}
-export type InstallLookup = (archiveName: string) => InstallRecord | null;
 
 /**
  * Maps one central-repo manifest row into the CatalogEntry shape the view

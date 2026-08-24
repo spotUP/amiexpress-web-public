@@ -47,6 +47,7 @@ jest.mock('../../../../Doors/door-manager/repo-client', () => ({
 import {
   extractAndRegisterDoor,
   installConsumerDoor,
+  commandClaimedByOtherArchive,
   type InstallDeps,
   type ConsumerInstallDeps,
   type DoorInstallEntry,
@@ -88,6 +89,42 @@ const CFG: RepoClientConfig = { url: 'https://bbs.uprough.net', cacheFile: '/dat
 beforeEach(() => {
   mockDownloadArchive.mockReset();
   mockFetchManifest.mockReset();
+});
+
+// ─── commandClaimedByOtherArchive: the shared command-collision guard ───────
+//
+// Review finding (commit 6bc3b54cc): the original fix wired this guard into
+// installConsumerDoor's recordInstall closure but left owner-mode's install
+// call site (doInstallUninstall, RepoView -- not exported, requires a live
+// blessed Screen, so not unit-testable directly) calling recordInstallSafe
+// unconditionally. Since door_installs.recordInstall upserts ON
+// CONFLICT(command), an owner-mode install of a DIFFERENT archive under a
+// command another archive's install already owns would silently steal that
+// row. Fixed by extracting the guard into this one shared, exported,
+// directly-testable function and wiring it into BOTH install call sites.
+
+describe('DOORMAN app.ts: commandClaimedByOtherArchive (shared collision guard)', () => {
+  it('no existing install under this command -> false, no log', () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const getInstallByCommand = jest.fn().mockReturnValue(null);
+    expect(commandClaimedByOtherArchive(getInstallByCommand, 'FOODOOR', 'FOO.LHA')).toBe(false);
+    expect(logSpy).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+  });
+
+  it('existing install under this command is the SAME archive (reinstall) -> false, no log', () => {
+    const getInstallByCommand = jest.fn().mockReturnValue({ archive_name: 'FOO.LHA' });
+    expect(commandClaimedByOtherArchive(getInstallByCommand, 'FOODOOR', 'FOO.LHA')).toBe(false);
+  });
+
+  it('existing install under this command is a DIFFERENT archive -> true, logs the refusal', () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const getInstallByCommand = jest.fn().mockReturnValue({ archive_name: 'OTHER.LHA' });
+    expect(commandClaimedByOtherArchive(getInstallByCommand, 'FOODOOR', 'FOO.LHA')).toBe(true);
+    expect(getInstallByCommand).toHaveBeenCalledWith('FOODOOR');
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('OTHER.LHA'));
+    logSpy.mockRestore();
+  });
 });
 
 // ─── extractAndRegisterDoor: the shared owner/consumer install core ─────────

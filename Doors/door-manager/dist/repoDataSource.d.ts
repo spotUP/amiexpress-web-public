@@ -38,32 +38,6 @@ export declare const DEFAULT_DOOR_REPO_URL = "https://bbs.uprough.net";
  * defaulting to DEFAULT_DOOR_REPO_URL when unset.
  */
 export declare function resolveDoorRepoMode(env?: Record<string, string | undefined>): DoorRepoMode;
-export interface LocalCatalogSvc {
-    searchCatalog: (query: string) => CatalogEntry[];
-}
-export interface LoadLocalCatalogResult {
-    entries: CatalogEntry[];
-    repoUnavailable: boolean;
-}
-/**
- * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries(): a missing
- * catalog service, or any error thrown by searchCatalog (e.g. the live
- * volume DB has no door_catalog table), yields an empty list with
- * repoUnavailable:true rather than propagating.
- */
-export declare function loadLocalCatalogEntries(svc: LocalCatalogSvc | null, filter: string): LoadLocalCatalogResult;
-export interface LocalCatalogRow {
-    id: string;
-    installed: number;
-    installed_as: string | null;
-    install_dir: string | null;
-    binary_name: string | null;
-    archive_path: string | null;
-}
-/** Looks up a manifest door's local install state by archive name (e.g. the
- * catalog service's getCatalogEntryByArchive). Returns null when the door
- * has never been indexed/installed locally. */
-export type LocalCatalogLookup = (archiveName: string) => LocalCatalogRow | null;
 /** This node's install record for an archive -- e.g. the door-installs
  * repository's getInstallByArchive (web/backend/src/doors/
  * door-installs.repository.ts). Distinct from LocalCatalogLookup: install
@@ -76,6 +50,39 @@ export interface InstallRecord {
     install_dir: string;
 }
 export type InstallLookup = (archiveName: string) => InstallRecord | null;
+export interface LocalCatalogSvc {
+    searchCatalog: (query: string) => CatalogEntry[];
+}
+export interface LoadLocalCatalogResult {
+    entries: CatalogEntry[];
+    repoUnavailable: boolean;
+}
+/**
+ * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries() when
+ * `lookupInstall` is omitted: a missing catalog service, or any error
+ * thrown by searchCatalog (e.g. the live volume DB has no door_catalog
+ * table), yields an empty list with repoUnavailable:true rather than
+ * propagating.
+ *
+ * `lookupInstall` (Task 5, optional): when supplied, every returned entry's
+ * installed/installed_as/install_dir is overlaid from door_installs instead
+ * of trusting door_catalog's own columns -- an owner-mode install (Task 5)
+ * no longer writes those columns, so without this an owner's own local
+ * browse list would show every newly-installed door as never installed.
+ */
+export declare function loadLocalCatalogEntries(svc: LocalCatalogSvc | null, filter: string, lookupInstall?: InstallLookup): LoadLocalCatalogResult;
+export interface LocalCatalogRow {
+    id: string;
+    installed: number;
+    installed_as: string | null;
+    install_dir: string | null;
+    binary_name: string | null;
+    archive_path: string | null;
+}
+/** Looks up a manifest door's local install state by archive name (e.g. the
+ * catalog service's getCatalogEntryByArchive). Returns null when the door
+ * has never been indexed/installed locally. */
+export type LocalCatalogLookup = (archiveName: string) => LocalCatalogRow | null;
 /**
  * Maps one central-repo manifest row into the CatalogEntry shape the view
  * renders. `id`/`archive_path`/`binary_name` come from `lookupLocal` (real

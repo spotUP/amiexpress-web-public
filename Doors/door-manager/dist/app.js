@@ -39,6 +39,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerRepoViewActionKeys = exports.repoViewFooterParts = exports.repoViewCurationAllowed = exports.clampSelection = exports.wrapText = void 0;
+exports.commandClaimedByOtherArchive = commandClaimedByOtherArchive;
 exports.resolveArchivePath = resolveArchivePath;
 exports.buildDoorInfoContent = buildDoorInfoContent;
 exports.extractArchiveTo = extractArchiveTo;
@@ -93,9 +94,8 @@ function getInstallsRepo() {
             return require.cache[k]?.exports ?? null;
     return null;
 }
-/** Shared by both owner- and consumer-mode install call sites: no-ops with
- * a console warning (instead of throwing) when the repository isn't in
- * require.cache, matching this file's svc?. optional-call defensiveness. */
+// Shared by owner/consumer install call sites: no-op + warning (not a
+// throw) when the repo isn't in require.cache, matching svc?. elsewhere.
 function recordInstallSafe(entry) {
     const repo = getInstallsRepo();
     if (!repo) {
@@ -103,6 +103,17 @@ function recordInstallSafe(entry) {
         return;
     }
     repo.recordInstall(entry);
+}
+// True when `command` is already claimed by a DIFFERENT archive -- guards
+// both install call sites against recordInstall's ON CONFLICT(command)
+// upsert silently stealing another install's row.
+function commandClaimedByOtherArchive(getInstallByCommand, command, archiveName) {
+    const collision = getInstallByCommand(command);
+    if (!collision || collision.archive_name === archiveName)
+        return false;
+    console.log(`[DOORMAN] install: "${command}" already installed from a different archive ` +
+        `(${collision.archive_name}) -- not clobbering it; ${archiveName} installs registry-only.`);
+    return true;
 }
 function getExtractorFactory() {
     // Same require.cache discovery as getCatalogSvc — the backend's shared
@@ -368,14 +379,8 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
             writeInfoFile: deps.writeInfoFile,
             refreshDoorRegistry: deps.refreshDoorRegistry,
             recordInstall: () => {
-                const collision = deps.getInstallByCommand(finalCmd);
-                if (collision && collision.archive_name !== archiveName) {
-                    console.log(`[DOORMAN] consumer install: "${finalCmd}" is already installed from a different ` +
-                        `archive (${collision.archive_name}) -- not clobbering it. ${archiveName} ` +
-                        `installs registry-only (on disk, registered with the BBS; repo browse ` +
-                        `'installed' flag needs its own command).`);
+                if (commandClaimedByOtherArchive(deps.getInstallByCommand, finalCmd, archiveName))
                     return;
-                }
                 deps.recordInstall({
                     id: `install-${finalCmd}`,
                     catalog_id: localRow?.id ?? null,
@@ -857,11 +862,11 @@ class RepoView extends ViewManager_1.BaseView {
             this.repoUnavailable = false;
             return;
         }
-        // Owner mode AND disabled mode: byte-identical to pre-Task-6 —
-        // extracted into repoDataSource.ts's loadLocalCatalogEntries so both
-        // modes share one implementation.
+        // Owner mode AND disabled mode share loadLocalCatalogEntries.
+        // buildInstallLookup() overlays door_installs (Task 5) so a fresh
+        // owner-mode install still shows as installed here.
         const svc = getCatalogSvc();
-        const result = (0, repoDataSource_1.loadLocalCatalogEntries)(svc, this.filter);
+        const result = (0, repoDataSource_1.loadLocalCatalogEntries)(svc, this.filter, buildInstallLookup());
         this.entries = result.entries;
         this.repoUnavailable = result.repoUnavailable;
     }
@@ -1284,25 +1289,29 @@ class RepoView extends ViewManager_1.BaseView {
                             extractArchiveTo,
                             findExtractedBinary,
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
-                            // Owner mode records the same door_installs shape
-                            // consumer mode does (Task 5), using the real local
-                            // catalog row's id (e.id) as provenance.
-                            recordInstall: () => recordInstallSafe({
-                                id: `install-${finalCmd}`,
-                                catalog_id: e.id ?? null,
-                                archive_name: e.archive_name,
-                                command: finalCmd,
-                                install_dir: `Doors/${finalCmd}`,
-                                door_type: e.door_type ?? null,
-                                name: e.name ?? null,
-                                md5: null,
-                                description: e.description ?? null,
-                                category: e.category ?? null,
-                                version: e.version ?? null,
-                                release_group: e.release_group ?? null,
-                                source_url: null, // resolved from this BBS's own local archive corpus, not the central repo
-                                source_revision: null,
-                            }),
+                            // Same door_installs shape + collision guard as consumer
+                            // mode, using the real local catalog row's id (e.id).
+                            recordInstall: () => {
+                                const chk = (cmd) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
+                                if (commandClaimedByOtherArchive(chk, finalCmd, e.archive_name))
+                                    return;
+                                recordInstallSafe({
+                                    id: `install-${finalCmd}`,
+                                    catalog_id: e.id ?? null,
+                                    archive_name: e.archive_name,
+                                    command: finalCmd,
+                                    install_dir: `Doors/${finalCmd}`,
+                                    door_type: e.door_type ?? null,
+                                    name: e.name ?? null,
+                                    md5: null,
+                                    description: e.description ?? null,
+                                    category: e.category ?? null,
+                                    version: e.version ?? null,
+                                    release_group: e.release_group ?? null,
+                                    source_url: null, // resolved from this BBS's own local archive corpus, not the central repo
+                                    source_revision: null,
+                                });
+                            },
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,
                         });
                         if (!outcome.ok) {

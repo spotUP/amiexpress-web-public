@@ -92,6 +92,39 @@ describe('DOORMAN repoDataSource: loadLocalCatalogEntries (owner/disabled parity
     expect(searchCatalog).toHaveBeenCalledWith('foo');
     expect(searchCatalog).toHaveBeenCalledTimes(1);
   });
+
+  // ── lookupInstall (Task 5, review fix): owner mode's OWN local browse ───
+  //
+  // Review finding (commit 6bc3b54cc): an owner-mode install now records
+  // ONLY to door_installs (never door_catalog), so a sysop's local browse
+  // list -- sourced from door_catalog's searchCatalog -- would show every
+  // freshly-installed door as never installed unless door_installs is
+  // overlaid here too, the same way mapManifestDoorToEntry already overlays
+  // it for the consumer browse view.
+
+  it('lookupInstall omitted: rows pass through verbatim (byte-identical to pre-fix behavior)', () => {
+    const rows: CatalogEntry[] = [makeEntry({ archive_name: 'FOO.LHA', installed: 1, installed_as: 'FOODOOR' })];
+    const result = loadLocalCatalogEntries({ searchCatalog: () => rows }, 'foo');
+    expect(result.entries).toEqual(rows);
+  });
+
+  it('lookupInstall provided: overlays installed/installed_as/install_dir from door_installs, keyed by archive_name', () => {
+    const rows: CatalogEntry[] = [
+      makeEntry({ archive_name: 'FOO.LHA', installed: 0, installed_as: null, install_dir: null }),
+    ];
+    const lookupInstall = jest.fn().mockReturnValue({ command: 'FOODOOR', install_dir: 'Doors/FOODOOR' });
+    const result = loadLocalCatalogEntries({ searchCatalog: () => rows }, 'foo', lookupInstall);
+    expect(lookupInstall).toHaveBeenCalledWith('FOO.LHA');
+    expect(result.entries[0]).toMatchObject({ installed: 1, installed_as: 'FOODOOR', install_dir: 'Doors/FOODOOR' });
+  });
+
+  it('lookupInstall provided but returns null: installed stays 0 even when door_catalog carries a stale installed=1 row', () => {
+    const rows: CatalogEntry[] = [
+      makeEntry({ archive_name: 'FOO.LHA', installed: 1, installed_as: 'STALE', install_dir: 'Doors/STALE' }),
+    ];
+    const result = loadLocalCatalogEntries({ searchCatalog: () => rows }, 'foo', () => null);
+    expect(result.entries[0]).toMatchObject({ installed: 0, installed_as: null, install_dir: null });
+  });
 });
 
 // ─── Entry mapping: mapManifestDoorToEntry ──────────────────────────────────

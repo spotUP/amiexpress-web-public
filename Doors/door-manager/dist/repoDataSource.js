@@ -83,17 +83,42 @@ function resolveDoorRepoMode(env = process.env) {
     // not route, turning a config typo into a silent-looking 404.
     return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
 }
+/** Overlays door_installs state onto an already-built CatalogEntry (e.g.
+ * one door_catalog's searchCatalog produced). `lookupInstall` is
+ * authoritative even on a null result -- a stale door_catalog installed
+ * flag must never outrank a real, or a really-absent, door_installs
+ * record (same rule mapManifestDoorToEntry's lookupInstall follows). */
+function overlayInstallState(entry, lookupInstall) {
+    const install = lookupInstall(entry.archive_name);
+    return {
+        ...entry,
+        installed: install ? 1 : 0,
+        installed_as: install?.command ?? null,
+        install_dir: install?.install_dir ?? null,
+    };
+}
 /**
- * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries(): a missing
- * catalog service, or any error thrown by searchCatalog (e.g. the live
- * volume DB has no door_catalog table), yields an empty list with
- * repoUnavailable:true rather than propagating.
+ * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries() when
+ * `lookupInstall` is omitted: a missing catalog service, or any error
+ * thrown by searchCatalog (e.g. the live volume DB has no door_catalog
+ * table), yields an empty list with repoUnavailable:true rather than
+ * propagating.
+ *
+ * `lookupInstall` (Task 5, optional): when supplied, every returned entry's
+ * installed/installed_as/install_dir is overlaid from door_installs instead
+ * of trusting door_catalog's own columns -- an owner-mode install (Task 5)
+ * no longer writes those columns, so without this an owner's own local
+ * browse list would show every newly-installed door as never installed.
  */
-function loadLocalCatalogEntries(svc, filter) {
+function loadLocalCatalogEntries(svc, filter, lookupInstall) {
     if (!svc)
         return { entries: [], repoUnavailable: true };
     try {
-        return { entries: svc.searchCatalog(filter), repoUnavailable: false };
+        const entries = svc.searchCatalog(filter);
+        return {
+            entries: lookupInstall ? entries.map(e => overlayInstallState(e, lookupInstall)) : entries,
+            repoUnavailable: false,
+        };
     }
     catch {
         return { entries: [], repoUnavailable: true };
