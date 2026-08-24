@@ -67,12 +67,20 @@
  * sufficient here - "derived" is this module's own reserved/known key
  * name, not attacker-chosen text this door needs to defend a false-match
  * against) and, if found, NUL-terminate the row buffer at that byte
- * BEFORE extracting id/archiveName/size/md5/note/status from it. Every
- * field this door actually reads from a row (per the /submissions shape)
- * is documented to appear before "derived" in a well-formed row, so
- * truncating there loses nothing this door needs while guaranteeing no
- * field is ever read from inside "derived"'s own content. This was
- * deliberately NOT built into this module itself: doing so would require
+ * BEFORE extracting id/archiveName/size/md5/note/status from it. This is
+ * a FAIL-SAFE mitigation, not a provably complete one, and the two ways
+ * it can fall short are both benign rather than dangerous: (1) `strstr`
+ * matches the literal bytes `"derived"` wherever they occur, so a row
+ * field whose own VALUE happens to be the string "derived" (e.g.
+ * `"note":"derived"`) truncates earlier than necessary; (2) JSON object
+ * key order is a convention this server has followed so far, not a
+ * guaranteed invariant, so a future response that emits "derived" before
+ * one of the fields this door reads would truncate that field away too.
+ * Both cases only ever cause a field this door wanted to read to come
+ * back ABSENT (a clean, already-handled extraction failure) - never a
+ * field silently populated with the WRONG value, which is the actual
+ * defect this mitigation exists to prevent. This was deliberately NOT
+ * built into this module itself: doing so would require
  * either abandoning the "flat or nested" search this function is
  * otherwise documented (and tested) to support, or hardcoding the literal
  * name "derived" into a supposedly key-agnostic extractor - both are a
@@ -109,17 +117,28 @@ int json_extract_bool(const char *json, const char *key, int *out);
  *
  * MATCHING RULE, STATED PRECISELY (tightened in task review - a prior
  * draft matched the first array-of-objects found ANYWHERE in `json`,
- * with no anchor to a specific key at all): the scan is anchored to
- * exactly the array whose key equals `array_key`, found via the same
- * string-respecting key search json_find_value() uses internally for
- * json_extract_string()/json_extract_bool() - so an unrelated array
- * appearing earlier in the document (e.g. a hypothetical `{"filters":
- * [{"a":1}],"rows":[{...}]}` response gaining a "filters" array ahead of
- * "rows") can never be mistaken for the target and returned as a "row".
- * Everything before that array's own '[' - the response's own outer
- * wrapping object, any other array, any other key - is never even
- * scanned, let alone matched. `array_key` must be present in `json` with
- * an array value, or this returns non-zero immediately (key absent, or
+ * with no anchor to a specific key at all): the scan is anchored to the
+ * array that follows the FIRST occurrence of `array_key` found via the
+ * same string-respecting key search json_find_value() uses internally
+ * for json_extract_string()/json_extract_bool() - so an unrelated array
+ * appearing earlier in the document under a DIFFERENT key (e.g. a
+ * hypothetical `{"filters":[{"a":1}],"rows":[{...}]}` response gaining a
+ * "filters" array ahead of "rows") can never be mistaken for the target
+ * and returned as a "row". RESIDUAL CAVEAT this rule does NOT close (out
+ * of scope for the finding that prompted this rewrite, noted here rather
+ * than silently left implicit): the search is not anchored to
+ * TOP-LEVEL, so a response carrying the SAME key name at more than one
+ * nesting depth (e.g. `{"debug":{"rows":[...]},"rows":[real]}`) still
+ * anchors to whichever occurrence comes first in scan order, which may
+ * not be the top-level one. This module's own key-uniqueness premise
+ * (file header above) covers this the same way it covers every other
+ * key this door looks for - real only if the server-controlled response
+ * shape ever legitimately nests a same-named key, which the documented
+ * `/submissions` shape does not. Everything before the matched array's
+ * own '[' - the response's own outer wrapping object, any other array,
+ * any other key - is never even scanned, let alone matched. `array_key`
+ * must be present in `json` with an array value, or this returns
+ * non-zero immediately (key absent, or
  * present but not an array).
  *
  * This is the one function in this module that DOES track bracket

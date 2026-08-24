@@ -203,6 +203,23 @@ int json_next_array_object(const char *json, unsigned long *cursor,
                             const char **obj_start, unsigned long *obj_len);
 ```
 
+**UPDATED (task review, implemented):** the shipped signature adds one
+parameter, `array_key`, so the scan anchors to the array under a specific
+named key instead of "the first array-of-objects found anywhere" (a real
+finding — the original design let an unrelated earlier array in the
+response be mistaken for the target). Current signature:
+
+```c
+int json_next_array_object(const char *json, const char *array_key,
+                            unsigned long *cursor,
+                            const char **obj_start, unsigned long *obj_len);
+```
+
+Callers pass `array_key = "rows"` for `GET /submissions`. See
+`examples/doorrepo-c/json_lite.h`'s doc comment on this function for the
+full, current contract — it is more precise than the prose above and is
+the source of truth for implementation.
+
 - **Malformed/truncated input**: every function above returns a clean
   failure code, never reads past a NUL terminator, never loops unbounded on
   input that never produces a closing quote/brace (a hard scan-length cap
