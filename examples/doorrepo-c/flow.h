@@ -1,8 +1,12 @@
 /* flow.h - pure decision logic extracted from the DoorRepo door (doorrepo.c)
  * so it is testable without blessed/door/network dependencies.
  *
- * Every function here is a plain, deterministic transform over its
+ * Almost every function here is a plain, deterministic transform over its
  * arguments: no I/O, no aedoor.h, no http.h, no netio.h, no global state.
+ * The one deliberate exception is flow_read_door_info(), a thin fopen/
+ * fgets wrapper kept here (rather than doorrepo.c) so its line-by-line
+ * parsing logic sits next to flow_build_info_content(), the writer whose
+ * exact format it has to match - see that function's comment for why.
  * tests/test_flow.c links only this file (plus <string.h>) to exercise it.
  *
  * C89. No stdint.h (not available on the m68k-amiga-elf/vbcc toolchain).
@@ -533,6 +537,49 @@ int flow_build_info_path(char *out, unsigned long outsize,
 int flow_build_info_content(char *out, unsigned long outsize,
                              const char *door_type, const char *cmd,
                              const char *binary_rel);
+
+/* ---- Reading a .info's tooltypes -----------------------------------------
+ *
+ * The reader half of flow_build_info_content() above. DoorRepo has only
+ * ever WRITTEN .info files, at install time; the .info/access-level editor
+ * (key M) needs to show a door's current ACCESS before letting a sysop
+ * change it, which means reading one back.
+ */
+
+/* Parses ONE "KEY=value\n" tooltype line. Returns 0 and fills key_out/
+ * value_out on success; non-zero (and leaves both outputs as empty
+ * strings) on a malformed line (no '=', empty key, line too long for the
+ * caller's buffers) - malformed lines are skipped by the caller, not
+ * fatal, matching flow_index_parse_line()'s "a hand-edited file can have
+ * a bad line" tolerance. Trailing \r and \n are stripped (a .info edited
+ * on a Windows machine or copied through a CRLF-preserving transfer must
+ * still parse). */
+int flow_parse_tooltype_line(const char *line, char *key_out, unsigned long key_size,
+                              char *value_out, unsigned long value_size);
+
+/* Reads all tooltypes DoorRepo cares about from the .info at info_path in
+ * one pass: TYPE, LOCATION, STACK, ACCESS, and (if present) DRACCESS (the
+ * prior access level this plan's Task 2 stashes before an edit). Built as
+ * ONE struct-returning reader rather than a narrow ACCESS-only one, since
+ * Task 4's rewrite needs TYPE/LOCATION back too so it never silently
+ * resets them on write. Each field's "found" flag is independent: a
+ * .info missing STACK (hand-edited, or written by a different tool) still
+ * yields whatever it does have rather than failing the whole read.
+ * access/prior_access are `long` (numeric, parsed); type/location are
+ * fixed-size char buffers the caller supplies (same ownership pattern as
+ * flow_index_parse_line's out params - no dynamic allocation in this
+ * codebase). Returns 1 if the file opened at all, 0 if it could not be
+ * opened (missing/unreadable) or `out` is NULL - the caller checks each
+ * field's own found-flag for anything finer than that. */
+typedef struct {
+    int type_found;      char type[16];
+    int location_found;  char location[192];
+    int stack_found;     long stack;
+    int access_found;    long access;
+    int prior_access_found; long prior_access;
+} dr_info_fields;
+
+int flow_read_door_info(const char *info_path, dr_info_fields *out);
 
 /* ---- /files listing helpers ----
  *

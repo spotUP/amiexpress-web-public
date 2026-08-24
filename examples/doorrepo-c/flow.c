@@ -1,8 +1,10 @@
 /* flow.c - pure decision logic extracted from doorrepo.c. See flow.h for
  * the interface contract and the reasoning behind each decision.
  *
- * C89. No platform I/O of any kind - every function here is a plain
- * deterministic transform over its arguments.
+ * C89. Almost every function here does no platform I/O at all - a plain
+ * deterministic transform over its arguments. The one exception is
+ * flow_read_door_info(), a thin fopen/fgets wrapper; see flow.h's file
+ * header and that function's comment for why it lives here anyway.
  */
 
 #include <stdio.h>
@@ -663,6 +665,154 @@ int flow_build_info_content(char *out, unsigned long outsize,
     strcat(out, binary_rel);
     strcat(out, "\nSTACK=65536\nACCESS=0\n");
     return (int) need;
+}
+
+int flow_parse_tooltype_line(const char *line, char *key_out, unsigned long key_size,
+                              char *value_out, unsigned long value_size)
+{
+    const char *eq;
+    const char *value_start;
+    const char *end;
+    unsigned long key_len;
+    unsigned long value_len;
+
+    if (line == (const char *) 0 || key_out == (char *) 0 || value_out == (char *) 0
+        || key_size == 0 || value_size == 0) {
+        return 1;
+    }
+    key_out[0] = '\0';
+    value_out[0] = '\0';
+
+    /* Same shape as flow_index_parse_line(): find the delimiter, reject if
+     * absent or at position 0 (empty key) - "GARBAGE LINE" and "=10" are
+     * both malformed, not a door with an empty-string tooltype name. */
+    eq = strchr(line, '=');
+    if (eq == (const char *) 0 || eq == line) {
+        return 1;
+    }
+
+    /* Value runs to end of line, stopping at \r or \n so a .info edited on
+     * a non-Amiga machine (or copied through a CRLF-preserving transfer)
+     * still parses cleanly. */
+    value_start = eq + 1;
+    end = value_start;
+    while (*end != '\0' && *end != '\n' && *end != '\r') {
+        end++;
+    }
+
+    key_len = (unsigned long) (eq - line);
+    value_len = (unsigned long) (end - value_start);
+
+    /* Unlike flow_index_parse_line(), an over-long field is refused rather
+     * than silently truncated: a truncated LOCATION or ACCESS value read
+     * back into an .info editor could get written back out as something
+     * other than what the file actually said. */
+    if (key_len + 1 > key_size || value_len + 1 > value_size) {
+        return 1;
+    }
+
+    memcpy(key_out, line, (size_t) key_len);
+    key_out[key_len] = '\0';
+    memcpy(value_out, value_start, (size_t) value_len);
+    value_out[value_len] = '\0';
+    return 0;
+}
+
+/* Parses `value` as a non-negative base-10 long into *out, matching the
+ * ACCESS/STACK/DRACCESS validation flow_read_door_info() below needs three
+ * times: reject if strtol() consumed nothing, if anything but the field's
+ * own terminating NUL follows the digits, or if the value is negative.
+ * Leaves *out untouched on failure - the caller's found-flag simply stays
+ * 0, matching every other malformed-input path in this file. */
+static int parse_nonneg_long(const char *value, long *out)
+{
+    char *endptr;
+    long v;
+
+    v = strtol(value, &endptr, 10);
+    if (endptr == value || *endptr != '\0' || v < 0) {
+        return 1;
+    }
+    *out = v;
+    return 0;
+}
+
+#define FLOW_INFO_MAX_LINES 32
+
+int flow_read_door_info(const char *info_path, dr_info_fields *out)
+{
+    FILE *f;
+    char line[256];
+    char key[32];
+    char value[256];
+    int line_count;
+
+    if (out == (dr_info_fields *) 0) {
+        return 0;
+    }
+    out->type_found = 0;
+    out->type[0] = '\0';
+    out->location_found = 0;
+    out->location[0] = '\0';
+    out->stack_found = 0;
+    out->stack = 0;
+    out->access_found = 0;
+    out->access = 0;
+    out->prior_access_found = 0;
+    out->prior_access = 0;
+
+    if (info_path == (const char *) 0) {
+        return 0;
+    }
+
+    f = fopen(info_path, "r");
+    if (f == (FILE *) 0) {
+        return 0;
+    }
+
+    /* This door's own .info files are 4-5 lines; capped anyway on the same
+     * "trust nothing you read back, even your own output" instinct as
+     * flow_declared_count_exceeds_cap() elsewhere in this file - a hand-
+     * edited or corrupted .info should not turn this loop unbounded. */
+    line_count = 0;
+    while (line_count < FLOW_INFO_MAX_LINES && fgets(line, sizeof(line), f) != (char *) 0) {
+        line_count++;
+
+        if (flow_parse_tooltype_line(line, key, sizeof(key), value, sizeof(value)) != 0) {
+            continue; /* malformed line: skipped, not fatal */
+        }
+
+        if (strcmp(key, "TYPE") == 0) {
+            strncpy(out->type, value, sizeof(out->type) - 1);
+            out->type[sizeof(out->type) - 1] = '\0';
+            out->type_found = 1;
+        } else if (strcmp(key, "LOCATION") == 0) {
+            strncpy(out->location, value, sizeof(out->location) - 1);
+            out->location[sizeof(out->location) - 1] = '\0';
+            out->location_found = 1;
+        } else if (strcmp(key, "STACK") == 0) {
+            long v;
+            if (parse_nonneg_long(value, &v) == 0) {
+                out->stack = v;
+                out->stack_found = 1;
+            }
+        } else if (strcmp(key, "ACCESS") == 0) {
+            long v;
+            if (parse_nonneg_long(value, &v) == 0) {
+                out->access = v;
+                out->access_found = 1;
+            }
+        } else if (strcmp(key, "DRACCESS") == 0) {
+            long v;
+            if (parse_nonneg_long(value, &v) == 0) {
+                out->prior_access = v;
+                out->prior_access_found = 1;
+            }
+        }
+    }
+
+    fclose(f);
+    return 1;
 }
 
 /* Copies field `index` (0-based, '|'-delimited) of `line` into `out`.

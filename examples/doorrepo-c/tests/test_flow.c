@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "../flow.h"
 
 static int tests_run = 0;
@@ -1207,6 +1208,148 @@ TEST(index_path_sits_in_the_download_dir)
     ASSERT_STR_EQ(out, "Work:Downloads/DoorRepo.idx", "separator inserted");
 }
 
+/* ---- flow_parse_tooltype_line / flow_read_door_info ----------------------
+ *
+ * The reader half of install_door()'s .info writer (flow_build_info_content
+ * above). flow_parse_tooltype_line is the pure per-line parser, unit-tested
+ * directly; flow_read_door_info is the thin fopen/fgets wrapper around it,
+ * exercised here against real temp files the same way test_config.c drives
+ * config_load().
+ */
+
+TEST(parse_tooltype_line_basic)
+{
+    char key[32], value[64];
+    int rc = flow_parse_tooltype_line("ACCESS=10\n", key, sizeof(key), value, sizeof(value));
+    ASSERT_EQ(rc, 0, "parses ACCESS=10");
+    ASSERT_STR_EQ(key, "ACCESS", "key is ACCESS");
+    ASSERT_STR_EQ(value, "10", "value is 10");
+}
+
+TEST(parse_tooltype_line_strips_crlf)
+{
+    char key[32], value[64];
+    flow_parse_tooltype_line("ACCESS=10\r\n", key, sizeof(key), value, sizeof(value));
+    ASSERT_STR_EQ(value, "10", "CRLF stripped from value");
+}
+
+TEST(parse_tooltype_line_no_equals_fails)
+{
+    char key[32], value[64];
+    int rc = flow_parse_tooltype_line("GARBAGE LINE\n", key, sizeof(key), value, sizeof(value));
+    ASSERT_TRUE(rc != 0, "no '=' is malformed");
+    ASSERT_STR_EQ(key, "", "key left empty on failure");
+}
+
+TEST(parse_tooltype_line_empty_key_fails)
+{
+    char key[32], value[64];
+    int rc = flow_parse_tooltype_line("=10\n", key, sizeof(key), value, sizeof(value));
+    ASSERT_TRUE(rc != 0, "empty key is malformed");
+}
+
+TEST(parse_tooltype_line_too_long_for_buffer_fails)
+{
+    char key[32], value[8];
+    int rc = flow_parse_tooltype_line("LOCATION=Doors:SOMELONGCMD/some/very/long/path\n",
+                                       key, sizeof(key), value, sizeof(value));
+    ASSERT_TRUE(rc != 0, "value too long for the caller's buffer is malformed, not truncated");
+    ASSERT_STR_EQ(key, "", "key left empty on failure");
+    ASSERT_STR_EQ(value, "", "value left empty on failure");
+}
+
+TEST(read_door_info_missing_file_returns_zero)
+{
+    dr_info_fields fields;
+    int rc;
+
+    unlink("/tmp/test_flow_info_missing.info");
+    rc = flow_read_door_info("/tmp/test_flow_info_missing.info", &fields);
+    ASSERT_EQ(rc, 0, "fopen failure returns 0");
+    ASSERT_EQ(fields.type_found, 0, "type not found");
+    ASSERT_EQ(fields.location_found, 0, "location not found");
+    ASSERT_EQ(fields.stack_found, 0, "stack not found");
+    ASSERT_EQ(fields.access_found, 0, "access not found");
+    ASSERT_EQ(fields.prior_access_found, 0, "prior_access not found");
+}
+
+TEST(read_door_info_parses_a_real_installed_info)
+{
+    dr_info_fields fields;
+    int rc;
+    FILE *f = fopen("/tmp/test_flow_info_basic.info", "w");
+    fprintf(f, "TYPE=XIM\nLOCATION=Doors:MYDOOR/mydoor\nSTACK=65536\nACCESS=0\n");
+    fclose(f);
+
+    rc = flow_read_door_info("/tmp/test_flow_info_basic.info", &fields);
+    ASSERT_EQ(rc, 1, "file opened");
+    ASSERT_EQ(fields.type_found, 1, "TYPE found");
+    ASSERT_STR_EQ(fields.type, "XIM", "TYPE value");
+    ASSERT_EQ(fields.location_found, 1, "LOCATION found");
+    ASSERT_STR_EQ(fields.location, "Doors:MYDOOR/mydoor", "LOCATION value");
+    ASSERT_EQ(fields.stack_found, 1, "STACK found");
+    ASSERT_EQ(fields.stack, 65536, "STACK value");
+    ASSERT_EQ(fields.access_found, 1, "ACCESS found");
+    ASSERT_EQ(fields.access, 0, "ACCESS value");
+    ASSERT_EQ(fields.prior_access_found, 0, "DRACCESS absent, not found");
+    unlink("/tmp/test_flow_info_basic.info");
+}
+
+TEST(read_door_info_reads_draccess_when_present)
+{
+    dr_info_fields fields;
+    FILE *f = fopen("/tmp/test_flow_info_draccess.info", "w");
+    fprintf(f, "TYPE=XIM\nLOCATION=Doors:MYDOOR/mydoor\nSTACK=65536\nACCESS=10\nDRACCESS=5\n");
+    fclose(f);
+
+    (void) flow_read_door_info("/tmp/test_flow_info_draccess.info", &fields);
+    ASSERT_EQ(fields.prior_access_found, 1, "DRACCESS found");
+    ASSERT_EQ(fields.prior_access, 5, "DRACCESS value");
+    unlink("/tmp/test_flow_info_draccess.info");
+}
+
+TEST(read_door_info_missing_stack_leaves_other_fields_intact)
+{
+    dr_info_fields fields;
+    FILE *f = fopen("/tmp/test_flow_info_nostack.info", "w");
+    fprintf(f, "TYPE=AIM\nLOCATION=Doors:MYDOOR/mydoor\nACCESS=20\n");
+    fclose(f);
+
+    (void) flow_read_door_info("/tmp/test_flow_info_nostack.info", &fields);
+    ASSERT_EQ(fields.type_found, 1, "TYPE still found");
+    ASSERT_EQ(fields.location_found, 1, "LOCATION still found");
+    ASSERT_EQ(fields.access_found, 1, "ACCESS still found");
+    ASSERT_EQ(fields.access, 20, "ACCESS value");
+    ASSERT_EQ(fields.stack_found, 0, "a hand-edited .info missing STACK doesn't fail the whole read");
+    unlink("/tmp/test_flow_info_nostack.info");
+}
+
+TEST(read_door_info_rejects_negative_access)
+{
+    dr_info_fields fields;
+    FILE *f = fopen("/tmp/test_flow_info_negaccess.info", "w");
+    fprintf(f, "TYPE=XIM\nACCESS=-5\n");
+    fclose(f);
+
+    (void) flow_read_door_info("/tmp/test_flow_info_negaccess.info", &fields);
+    ASSERT_EQ(fields.access_found, 0, "negative ACCESS is rejected, not stored");
+    unlink("/tmp/test_flow_info_negaccess.info");
+}
+
+TEST(read_door_info_tolerates_a_malformed_line)
+{
+    dr_info_fields fields;
+    FILE *f = fopen("/tmp/test_flow_info_malformed.info", "w");
+    fprintf(f, "TYPE=XIM\nGARBAGE LINE WITH NO EQUALS\nACCESS=15\n");
+    fclose(f);
+
+    (void) flow_read_door_info("/tmp/test_flow_info_malformed.info", &fields);
+    ASSERT_EQ(fields.type_found, 1, "TYPE before the bad line still parses");
+    ASSERT_EQ(fields.access_found, 1, "ACCESS after the bad line still parses");
+    ASSERT_EQ(fields.access, 15, "ACCESS value");
+    unlink("/tmp/test_flow_info_malformed.info");
+}
+
 /* ---- flow_is_installed_row / the installed-only view's walk -------------
  *
  * ui_view_rebuild_installed() (doorrepo.c) walks cat->rows[] once, keeping
@@ -1864,6 +2007,18 @@ int main(void)
     RUN_TEST(index_parse_rejects_half_records);
     RUN_TEST(index_parse_tolerates_crlf_and_long_fields);
     RUN_TEST(index_path_sits_in_the_download_dir);
+
+    RUN_TEST(parse_tooltype_line_basic);
+    RUN_TEST(parse_tooltype_line_strips_crlf);
+    RUN_TEST(parse_tooltype_line_no_equals_fails);
+    RUN_TEST(parse_tooltype_line_empty_key_fails);
+    RUN_TEST(parse_tooltype_line_too_long_for_buffer_fails);
+    RUN_TEST(read_door_info_missing_file_returns_zero);
+    RUN_TEST(read_door_info_parses_a_real_installed_info);
+    RUN_TEST(read_door_info_reads_draccess_when_present);
+    RUN_TEST(read_door_info_missing_stack_leaves_other_fields_intact);
+    RUN_TEST(read_door_info_rejects_negative_access);
+    RUN_TEST(read_door_info_tolerates_a_malformed_line);
 
     RUN_TEST(installed_view_empty_index_keeps_nothing);
     RUN_TEST(installed_view_one_match_is_kept);
