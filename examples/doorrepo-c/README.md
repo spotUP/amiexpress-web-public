@@ -383,6 +383,7 @@ same thing:
 | `V` | show the door's own documentation - offered only for a door that has any |
 | `F` | filter by text - live, over the rows already loaded, no refetch |
 | `C` | cycle the door type (the types actually present, so it never offers an empty one) |
+| `L` | open a dedicated screen listing only the doors this door has installed, with its own `U=Uninstall`/`S=Strip` |
 | `Q` | leave the door |
 
 `F` matches the archive name, door name, description, author and release
@@ -457,6 +458,10 @@ so `Q` is the one documented way out.
 **Terminals that cannot do ANSI:** set `Ansi=no` in `DoorRepo.cfg` and the
 door falls back to the original line-at-a-time listing, which needs nothing
 but plain text. `ScreenRows`/`ScreenCols` set the geometry (default 80x24).
+This fallback offers `[L]ist installed` on its own menu line too: a line per
+installed door, a typed row number to select one, then `[U]ninstall
+[S]trip [Q]uit` - the same two actions the full-screen `L` screen offers,
+just without a detail pane or cursor movement.
 
 ## Configuration
 

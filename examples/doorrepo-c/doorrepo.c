@@ -1561,7 +1561,10 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
         strcat(bar, "  V=Doc");
     }
-    strcat(bar, "  F=Find  C=System  Q=Quit");
+    /* L opens the dedicated "installed doors" screen (Task 4) - listed
+     * unconditionally, the same as F/C, since it never depends on which row
+     * is selected. */
+    strcat(bar, "  F=Find  C=System  L=Installed  Q=Quit");
     ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
 }
 
@@ -2638,22 +2641,75 @@ static int strip_ad_files(const char *install_dir, const char *files_body)
     return removed;
 }
 
-/* Removes the ad files from a door that is ALREADY installed - DOORMAN's
- * [S]trip, which works on an installed door at any time rather than only
- * during the install. Needs two things this door did not have until the
- * install index existed: which command the archive was installed as, and
- * therefore which directory to delete from.
+/* The actual strip - listing, confirm, delete, log - shared by the ANSI
+ * screen below and Task 4's non-ANSI fallback (installed_loop_plain()).
+ * Every line this prints is already plain ae_put() text with no ANSI
+ * positioning of its own, which is what makes the split possible: only the
+ * full-screen clear/cursor bracket around this call (see
+ * strip_installed_door() below) is ANSI-specific.
  *
  * The ad paths come from the same /files listing the install used. That
  * listing describes the ARCHIVE, so it only names files this door itself
  * extracted - nothing a sysop added afterwards can match it. */
+static void strip_installed_door_apply(const dr_config *cfg, const char *archive,
+                                       const char *cmdname, const char *install_dir)
+{
+    char msg[320];
+    int removed;
+
+    files_load(cfg, archive);
+    if (!g_files_ok) {
+        ae_put("The repository has no file listing for this archive, so there is no way", 1);
+        ae_put("to tell which of its files are ads. Nothing was removed.", 1);
+        return;
+    }
+
+    {
+        int listed;
+
+        sprintf(msg, "Ad files in %s:", cmdname);
+        ae_put(msg, 1);
+        listed = ui_show_ad_files(g_files);
+
+        if (listed == 0) {
+            /* The catalog row said there were ads but the listing names
+             * none - nothing can be deleted, and saying so is better than a
+             * prompt that would remove nothing. */
+            ae_put("The file listing names none of them, so there is nothing to remove.", 1);
+            return;
+        }
+
+        ae_put("", 1);
+        ae_put("Remove these?  [Y/N] ", 0);
+        {
+            int key = ae_key();
+            ae_put("", 1);
+            if (key != 'y' && key != 'Y') {
+                ae_put("Nothing was removed.", 1);
+                return;
+            }
+            removed = strip_ad_files(install_dir, g_files);
+            sprintf(msg, "Removed %d ad file(s) from %s.", removed, install_dir);
+            ae_put(msg, 1);
+            {
+                char logmsg[256];
+                sprintf(logmsg, "STRIP OK cmd=%s files=%d", cmdname, removed);
+                log_line(cfg, logmsg);
+            }
+        }
+    }
+}
+
+/* Removes the ad files from a door that is ALREADY installed - DOORMAN's
+ * [S]trip, which works on an installed door at any time rather than only
+ * during the install. Needs two things this door did not have until the
+ * install index existed: which command the archive was installed as, and
+ * therefore which directory to delete from. */
 static void strip_installed_door(const dr_config *cfg, const char *archive,
                                  long junk, ansi_buf *b, char *frame, long framecap)
 {
     const char *cmdname = index_lookup(cfg, archive);
     char install_dir[256];
-    char msg[320];
-    int removed;
 
     if (cmdname == (const char *) 0) {
         return; /* not installed by this door - S does nothing, per the footer */
@@ -2674,47 +2730,38 @@ static void strip_installed_door(const dr_config *cfg, const char *archive,
     ansi_clear(b);
     ansi_flush(b);
 
-    files_load(cfg, archive);
-    if (!g_files_ok) {
-        ae_put("The repository has no file listing for this archive, so there is no way", 1);
-        ae_put("to tell which of its files are ads. Nothing was removed.", 1);
-    } else {
-        int listed;
-
-        sprintf(msg, "Ad files in %s:", cmdname);
-        ae_put(msg, 1);
-        listed = ui_show_ad_files(g_files);
-
-        if (listed == 0) {
-            /* The catalog row said there were ads but the listing names
-             * none - nothing can be deleted, and saying so is better than a
-             * prompt that would remove nothing. */
-            ae_put("The file listing names none of them, so there is nothing to remove.", 1);
-        } else {
-            ae_put("", 1);
-            ae_put("Remove these?  [Y/N] ", 0);
-            {
-                int key = ae_key();
-                ae_put("", 1);
-                if (key != 'y' && key != 'Y') {
-                    ae_put("Nothing was removed.", 1);
-                } else {
-                    removed = strip_ad_files(install_dir, g_files);
-                    sprintf(msg, "Removed %d ad file(s) from %s.", removed, install_dir);
-                    ae_put(msg, 1);
-                    {
-                        char logmsg[256];
-                        sprintf(logmsg, "STRIP OK cmd=%s files=%d", cmdname, removed);
-                        log_line(cfg, logmsg);
-                    }
-                }
-            }
-        }
-    }
+    strip_installed_door_apply(cfg, archive, cmdname, install_dir);
 
     ae_put("", 1);
     ae_put("Press any key to return to the list.", 1);
     (void) ae_key();
+}
+
+/* Task 4's non-ANSI (Ansi=no) counterpart to strip_installed_door() above -
+ * same resolution and the same strip_installed_door_apply(), just without
+ * the full-screen ANSI clear/cursor bracket, which would print as raw
+ * escape bytes on a terminal that does not understand them. Unlike the ANSI
+ * screen, which hides S entirely when a row has no ads (see
+ * ui_draw_footer_installed()), this fallback's menu line is fixed text
+ * (installed_loop_plain() offers S unconditionally), so a door with nothing
+ * to strip gets a plain message here instead of doing nothing silently. */
+static void plain_strip_installed_door(const dr_config *cfg, const char *archive, long junk)
+{
+    const char *cmdname = index_lookup(cfg, archive);
+    char install_dir[256];
+
+    if (cmdname == (const char *) 0) {
+        return; /* not installed by this door */
+    }
+    if (junk == 0) {
+        ae_put("This archive has no ad files to strip.", 1);
+        return;
+    }
+    if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
+        return;
+    }
+
+    strip_installed_door_apply(cfg, archive, cmdname, install_dir);
 }
 
 /* The whole install, from an entry in the list to a runnable BBS command.
@@ -3118,9 +3165,13 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     (void) ae_key();
 }
 
-/* Removes a BBS command this door installed: the .info first (that is what
- * makes the door reachable at all), then the files the archive listing says
- * are in its directory, then the directory itself.
+/* The actual removal - .info, then the archive's files, then its now
+ * (hopefully) empty directory, then the index entry - shared by the ANSI
+ * screen below and Task 4's non-ANSI fallback (installed_loop_plain()).
+ * Callers have already resolved `cmdname`/`install_dir`/`info_path` and
+ * gotten the sysop's confirmation; everything here is plain ae_put() text,
+ * the same reason strip_installed_door_apply() above could split the same
+ * way.
  *
  * Why file-by-file rather than a recursive delete: C89 cannot enumerate a
  * directory, and building a "delete all" shell command would put a second,
@@ -3129,6 +3180,66 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
  * something already known. Anything else in that directory - a config the
  * sysop wrote, a log the door kept - is deliberately left, and the final
  * message says so when the directory could not be removed. */
+static void uninstall_door_apply(const dr_config *cfg, const char *archive,
+                                 const char *cmdname, const char *install_dir,
+                                 const char *info_path)
+{
+    char msg[320];
+    int removed = 0;
+
+    if (remove(info_path) != 0) {
+        sprintf(msg, "Could not remove %s. The command is still installed.", info_path);
+        ae_put(msg, 1);
+        log_line(cfg, "UNINSTALL FAILED: could not remove the .info");
+        return;
+    }
+    ae_put("BBS command removed.", 1);
+
+    files_load(cfg, archive);
+    if (g_files_ok) {
+        const char *line = g_files;
+
+        if (strncmp(line, "FILES|", 6) == 0) {
+            line = flow_files_next_line(line);
+        }
+        while (line != (const char *) 0) {
+            char rel[160];
+            char full[320];
+
+            if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0,
+                                      rel, sizeof(rel)) == 0) {
+                if (flow_build_local_path(full, sizeof(full), install_dir, rel) >= 0) {
+                    if (remove(full) == 0) {
+                        removed++;
+                    }
+                }
+            }
+            line = flow_files_next_line(line);
+        }
+    }
+
+    sprintf(msg, "Removed %d file(s) from %s.", removed, install_dir);
+    ae_put(msg, 1);
+
+    if (remove(install_dir) != 0) {
+        sprintf(msg, "%s still exists - it is not empty. Anything left there was not", install_dir);
+        ae_put(msg, 1);
+        ae_put("part of the archive and has been left alone.", 1);
+    }
+
+    index_remove(cfg, archive);
+
+    {
+        char logmsg[256];
+        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d", cmdname, removed);
+        log_line(cfg, logmsg);
+    }
+}
+
+/* ANSI screen wrapper: resolves cmdname (offering the sysop a chance to
+ * retype it), confirms, brackets the mutation with a full-screen clear, and
+ * pauses for a keypress afterwards. See uninstall_door_apply() above for
+ * the removal itself. */
 static void uninstall_door(const dr_config *cfg, const char *archive,
                            ansi_buf *b, char *frame, long framecap,
                            const ui_geometry *g)
@@ -3137,7 +3248,6 @@ static void uninstall_door(const dr_config *cfg, const char *archive,
     char install_dir[256];
     char info_path[256];
     char msg[320];
-    int removed = 0;
 
     /* The index knows exactly what this archive was installed as, so the
      * prompt is pre-filled with the right answer instead of a guess from
@@ -3190,60 +3300,62 @@ static void uninstall_door(const dr_config *cfg, const char *archive,
     ansi_clear(b);
     ansi_flush(b);
 
-    if (remove(info_path) != 0) {
-        sprintf(msg, "Could not remove %s. The command is still installed.", info_path);
-        ae_put(msg, 1);
-        log_line(cfg, "UNINSTALL FAILED: could not remove the .info");
-        ae_put("", 1);
-        ae_put("Press any key to return to the list.", 1);
-        (void) ae_key();
-        return;
-    }
-    ae_put("BBS command removed.", 1);
-
-    files_load(cfg, archive);
-    if (g_files_ok) {
-        const char *line = g_files;
-
-        if (strncmp(line, "FILES|", 6) == 0) {
-            line = flow_files_next_line(line);
-        }
-        while (line != (const char *) 0) {
-            char rel[160];
-            char full[320];
-
-            if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0,
-                                      rel, sizeof(rel)) == 0) {
-                if (flow_build_local_path(full, sizeof(full), install_dir, rel) >= 0) {
-                    if (remove(full) == 0) {
-                        removed++;
-                    }
-                }
-            }
-            line = flow_files_next_line(line);
-        }
-    }
-
-    sprintf(msg, "Removed %d file(s) from %s.", removed, install_dir);
-    ae_put(msg, 1);
-
-    if (remove(install_dir) != 0) {
-        sprintf(msg, "%s still exists - it is not empty. Anything left there was not", install_dir);
-        ae_put(msg, 1);
-        ae_put("part of the archive and has been left alone.", 1);
-    }
-
-    index_remove(cfg, archive);
-
-    {
-        char logmsg[256];
-        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d", cmdname, removed);
-        log_line(cfg, logmsg);
-    }
+    uninstall_door_apply(cfg, archive, cmdname, install_dir, info_path);
 
     ae_put("", 1);
     ae_put("Press any key to return to the list.", 1);
     (void) ae_key();
+}
+
+/* Task 4's non-ANSI (Ansi=no) counterpart to uninstall_door() above. The
+ * ANSI version's ui_text_prompt() lets a sysop retype the command name in
+ * place on the footer row - a purely ANSI-positioned control this fallback
+ * has no use for, since the row selected from installed_loop_plain()'s
+ * listing is already known-installed under an exact command name
+ * (index_lookup() always resolves it, the fallback below matching
+ * uninstall_door()'s own only exists for an archive the index somehow
+ * lost). Confirmation is a plain ae_put()/ae_key() Y/N instead of
+ * ui_confirm()'s ANSI-positioned prompt. */
+static void plain_uninstall_door(const dr_config *cfg, const char *archive)
+{
+    const char *known = index_lookup(cfg, archive);
+    char cmdname[FLOW_MAX_BBS_COMMAND + 1];
+    char install_dir[256];
+    char info_path[256];
+    char msg[320];
+
+    cmdname[0] = '\0';
+    if (known != (const char *) 0) {
+        strncpy(cmdname, known, sizeof(cmdname) - 1);
+        cmdname[sizeof(cmdname) - 1] = '\0';
+    } else {
+        (void) flow_suggest_bbs_command(archive, cmdname, sizeof(cmdname));
+    }
+
+    if (!flow_is_valid_bbs_command(cmdname)
+        || flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0
+        || flow_build_info_path(info_path, sizeof(info_path), cfg->bbscmd_dir, cmdname) < 0) {
+        return;
+    }
+
+    if (!file_exists(info_path)) {
+        sprintf(msg, "No such BBS command: %s", info_path);
+        ae_put(msg, 1);
+        return;
+    }
+
+    sprintf(msg, "Uninstall %s?  [Y/N] ", cmdname);
+    ae_put(msg, 0);
+    {
+        int key = ae_key();
+        ae_put("", 1);
+        if (key != 'y' && key != 'Y') {
+            ae_put("Cancelled - nothing was removed.", 1);
+            return;
+        }
+    }
+
+    uninstall_door_apply(cfg, archive, cmdname, install_dir, info_path);
 }
 
 /* Reads a short line of text on the footer bar, seeded with `buf`'s current
@@ -3304,6 +3416,11 @@ static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
         }
     }
 }
+
+/* Defined below (the "Installed doors screen" section) - forward declared
+ * here so this loop's 'l'/'L' case (Task 4) can call it before its own
+ * definition appears in the file. */
+static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat);
 
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
@@ -3664,6 +3781,10 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 ansi_flush(&buf);
                 need_full_redraw = 1;
             }
+            break;
+        case 'l': case 'L':
+            installed_loop_ansi(cfg, cat);
+            need_full_redraw = 1;
             break;
         case 'b': case 'B':
             if (info_mode == UI_INFO_DOC && g_guide_ok && g_guide_history_len > 0) {
@@ -4049,6 +4170,171 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
     }
 }
 
+/* ---------------------------------------------------------------------
+ * Installed doors screen - non-ANSI (Ansi=no) fallback
+ *
+ * The line-at-a-time counterpart to installed_loop_ansi() above, entered
+ * from browse_loop()'s own 'l'/'L' case below (Task 4). Same data
+ * (ui_view_rebuild_installed(), Task 2), no cursor movement or detail pane:
+ * each installed door is printed as one line, and a typed row number opens
+ * a small per-entry menu - the same two-level shape browse_loop() already
+ * uses for its own numbered selections into view_entry(). Deliberately
+ * much simpler than installed_loop_ansi(): no F=Find/C=System (nothing
+ * left to narrow further, matching that screen's own cuts) and no digit
+ * guide-links/B=Back (no detail pane here at all).
+ * ------------------------------------------------------------------- */
+
+/* One installed door's menu, opened by picking its row number from
+ * installed_loop_plain()'s listing. Mirrors view_entry()'s own shape
+ * (print a few lines, ae_key() for a single-letter command) rather than
+ * anything ANSI. `view`'s `index[row]` is read fresh on every pass so a
+ * strip (which does not change what is installed) can loop back to the
+ * same entry, while an uninstall - which does - returns to the caller
+ * immediately rather than dereferencing a row the next rebuild may drop. */
+static void plain_installed_entry(const dr_config *cfg, ui_view *view, dr_catalog *cat,
+                                  unsigned long row)
+{
+    for (;;) {
+        const dr_entry *e = &cat->rows[view->index[row]];
+        const char *cmdname = index_lookup(cfg, e->archive);
+        char line[256];
+        int key;
+
+        if (carrier_lost()) {
+            stop_for_carrier_loss();
+        }
+
+        ae_put("", 1);
+        sprintf(line, "Archive: %s", e->archive);
+        ae_put(line, 1);
+        sprintf(line, "Command: %s", cmdname != (const char *) 0 ? cmdname : "?");
+        ae_put(line, 1);
+        ae_put("", 1);
+        ae_put("[U]ninstall [S]trip [Q]uit to list: ", 0);
+
+        key = ae_key();
+        if (key == -1) {
+            stop_for_carrier_loss();
+        }
+        if (key == 'u' || key == 'U') {
+            ae_put("", 1);
+            plain_uninstall_door(cfg, e->archive);
+            return; /* this row may no longer be installed - back to the list */
+        }
+        if (key == 's' || key == 'S') {
+            ae_put("", 1);
+            plain_strip_installed_door(cfg, e->archive, e->junk);
+            continue; /* still installed - stay on this entry */
+        }
+        if (key == 'q' || key == 'Q') {
+            return;
+        }
+    }
+}
+
+static void installed_loop_plain(const dr_config *cfg, dr_catalog *cat)
+{
+    /* Own static index array - separate from browse_loop_ansi()'s and
+     * installed_loop_ansi()'s, the same reason those two do not share one:
+     * this screen can be mid-loop on the call stack alongside browse_loop()
+     * itself (it is entered FROM there). */
+    static unsigned long view_index[MAX_CATALOG_ROWS];
+    ui_view view;
+    unsigned long orphan_count = 0;
+    char input[64];
+    int consecutive_empty = 0;
+
+    view.index = view_index;
+    view.count = 0;
+    view.text[0] = '\0';
+    view.type[0] = '\0';
+    view.scroll_top = 0;
+
+    for (;;) {
+        unsigned long i;
+
+        if (carrier_lost()) {
+            stop_for_carrier_loss();
+        }
+
+        /* Rebuilt every pass through the top of this loop - the same
+         * points installed_loop_ansi() rebuilds at (on entry, and again
+         * after an uninstall) - so a row removed from the per-entry menu
+         * above is gone from the very next listing, not stale until
+         * something else happens to refresh it. */
+        ui_view_rebuild_installed(&view, cat, cfg, &orphan_count);
+
+        ae_put("", 1);
+        if (view.count == 0) {
+            ae_put("No doors are currently installed.", 1);
+            ae_put("", 1);
+            ae_put("Press any key to return to the browser: ", 0);
+            (void) ae_key();
+            return;
+        }
+
+        {
+            char header[80];
+            sprintf(header, "%lu door(s) installed", view.count);
+            ae_put(header, 1);
+        }
+        if (orphan_count > 0) {
+            char oline[64];
+            sprintf(oline, "(+%lu not in current catalog listing)", orphan_count);
+            ae_put(oline, 1);
+        }
+        ae_put("INDEX ARCHIVE                        COMMAND", 1);
+        for (i = 0; i < view.count; i++) {
+            const dr_entry *e = &cat->rows[view.index[i]];
+            const char *cmdname = index_lookup(cfg, e->archive);
+            char line[256];
+
+            /* `%-30.30s` truncates as well as pads - e->archive can be up
+             * to 63 bytes (see the dr_entry field, listtxt.h), which would
+             * overrun a line sized for an 80-column row if only padded, the
+             * same reason print_row() above truncates its own name field. */
+            sprintf(line, "%3lu   %-30.30s %-.12s", i + 1, e->archive,
+                   cmdname != (const char *) 0 ? cmdname : "?");
+            ae_put(line, 1);
+        }
+        ae_put("", 1);
+
+        ae_put("Selection (number), [Q]uit to browser: ", 0);
+        get_trimmed_line(input, sizeof(input));
+
+        if (carrier_lost()) {
+            stop_for_carrier_loss();
+        }
+
+        if (input[0] == '\0') {
+            if (note_empty_input_and_check_giveup(&consecutive_empty)) {
+                ae_put("No input received - disconnecting.", 1);
+                stop_for_carrier_loss();
+            }
+            continue;
+        }
+        consecutive_empty = 0;
+
+        if (input[0] == 'q' || input[0] == 'Q') {
+            return;
+        }
+
+        if (!is_all_digits(input)) {
+            ae_put("Unrecognized selection.", 1);
+            continue;
+        }
+
+        {
+            unsigned long sel = strtoul(input, (char **) 0, 10);
+            if (sel < 1 || sel > view.count) {
+                ae_put("No such entry number.", 1);
+                continue;
+            }
+            plain_installed_entry(cfg, &view, cat, sel - 1);
+        }
+    }
+}
+
 static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
     int page_number = 1;
@@ -4066,7 +4352,7 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
         page_number = (int) info.page_number;
         print_page(cat, &info, filter_desc);
 
-        ae_put("Selection (number), [N]ext [P]rev [T]ype [S]earch [A]ll [Q]uit: ", 0);
+        ae_put("Selection (number), [N]ext [P]rev [T]ype [S]earch [A]ll [L]ist installed [Q]uit: ", 0);
         get_trimmed_line(input, sizeof(input));
 
         if (carrier_lost()) {
@@ -4112,6 +4398,9 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
             return BROWSE_FILTER_SEARCH;
         case 'a': case 'A':
             return BROWSE_ALL;
+        case 'l': case 'L':
+            installed_loop_plain(cfg, cat);
+            break;
         case 'q': case 'Q':
             return BROWSE_QUIT;
         default:
