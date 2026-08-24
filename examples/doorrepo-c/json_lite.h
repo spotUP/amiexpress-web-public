@@ -11,6 +11,14 @@
  * depth is unavoidable (a row's own closing brace must not be confused
  * with its nested "derived" object's closing brace).
  *
+ * CAVEAT ON "every key is unique" (found in task review, not merely
+ * theoretical): this premise holds for id/archiveName/size/md5/note/
+ * status ONLY as long as the slice handed to json_extract_string()/
+ * json_extract_bool() does not itself contain a "derived" sub-object -
+ * see those functions' own doc comments below for the exact risk and the
+ * required caller mitigation before extracting from a row that may carry
+ * one.
+ *
  * This is the single most important security surface in the owner-mode
  * curation plan (see this door's own README.md, "Security" section,
  * vulnerability class #4 - "unbounded response bodies"): these functions
@@ -28,17 +36,48 @@
 #define DOORREPO_JSON_LITE_H
 
 /* Finds "key":"value" (a string field) anywhere in a flat or nested JSON
- * object and copies the unescaped value into `out` (\" \\ \/ \n \t \r and
- * \uXXXX are unescaped per the JSON spec's minimum - this door's own
- * values never need more; a \uXXXX code point above 0xFF is truncated to
- * its low byte, matching the Latin-1-everywhere assumption this door
+ * object and copies the unescaped value into `out` (\" \\ \/ \n \t \r \b
+ * \f and \uXXXX are unescaped per the JSON spec's minimum - this door's
+ * own values never need more; a \uXXXX code point above 0xFF is truncated
+ * to its low byte, matching the Latin-1-everywhere assumption this door
  * already makes elsewhere - see listtxt.h's file header). Scans
  * byte-by-byte and respects quoted strings (a key name appearing inside
  * an unrelated string VALUE, e.g. `{"note":"the token field matters"}`,
  * must not false-match when looking for "token") but does NOT track {}
  * object-nesting depth - safe for this door's use because every key it
  * looks for is unique within the one response it's read from (see the
- * file header above).
+ * file header above) - WITH ONE DOCUMENTED EXCEPTION:
+ *
+ * DERIVED-OBJECT COLLISION (found in task review): because this function
+ * scans linearly and does not track nesting, a row object carrying a
+ * "derived":{...} sub-object (per json_next_array_object()'s doc comment
+ * below, opaque server-side metadata about the derived/processed archive)
+ * that ITSELF happens to carry a same-named field - e.g. "derived":
+ * {"size":999,"md5":"..."} - will be matched INSTEAD OF the row's own
+ * top-level field, if "derived" appears earlier in the row than the field
+ * being searched for. This is server-controlled content, not something
+ * this door controls, and the consequence is real: a sysop approving or
+ * rejecting a submission by an id/size/md5 read from the wrong slice of
+ * the response.
+ *
+ * REQUIRED MITIGATION for any caller extracting from a row slice that may
+ * contain "derived": before calling json_extract_string()/
+ * json_extract_bool() on the row, locate `"derived"` in the row's own
+ * copied buffer (a plain, bounded `strstr(row, "\"derived\"")` is
+ * sufficient here - "derived" is this module's own reserved/known key
+ * name, not attacker-chosen text this door needs to defend a false-match
+ * against) and, if found, NUL-terminate the row buffer at that byte
+ * BEFORE extracting id/archiveName/size/md5/note/status from it. Every
+ * field this door actually reads from a row (per the /submissions shape)
+ * is documented to appear before "derived" in a well-formed row, so
+ * truncating there loses nothing this door needs while guaranteeing no
+ * field is ever read from inside "derived"'s own content. This was
+ * deliberately NOT built into this module itself: doing so would require
+ * either abandoning the "flat or nested" search this function is
+ * otherwise documented (and tested) to support, or hardcoding the literal
+ * name "derived" into a supposedly key-agnostic extractor - both are a
+ * worse trade than one documented `strstr` at the one call site that
+ * actually needs it.
  *
  * Returns 0 on success. Returns non-zero if the key is absent, the value
  * is not a JSON string, the input is truncated/malformed (an unterminated
@@ -54,41 +93,72 @@ int json_extract_string(const char *json, const char *key,
  * negative run of ASCII digits; anything else at the value position
  * (a string, null, an object/array, or no digits at all) is refused.
  * Same key-finding rule as json_extract_string() above (string-respecting,
- * no {} nesting tracking). Returns 0/non-zero the same way; `*out` is
- * left untouched on failure. */
+ * no {} nesting tracking) - INCLUDING the same "derived" sub-object
+ * collision risk and required mitigation documented on that function;
+ * it applies here identically (e.g. a row's "derived":{"size":999} could
+ * shadow the row's own top-level "size" field). Returns 0/non-zero the
+ * same way; `*out` is left untouched on failure. */
 int json_extract_bool(const char *json, const char *key, int *out);
 
 /* Cursor-based scanner for a top-level JSON array of objects (GET
  * /submissions' `{"rows":[{...},{...}]}` shape). Call repeatedly with
  * the same `*cursor` (start it at 0); each call returns a pointer to the
- * START of the next {...} object that is a DIRECT ELEMENT of the first
- * array found in `json` (so the response's own outer wrapping object,
- * e.g. the `{` before `"rows":`, is never itself mistaken for a row), and
- * its length, and advances *cursor past it.
+ * START of the next {...} object that is a DIRECT ELEMENT of the array
+ * that follows `array_key`'s own colon (e.g. "rows"), and its length,
+ * and advances *cursor past it.
+ *
+ * MATCHING RULE, STATED PRECISELY (tightened in task review - a prior
+ * draft matched the first array-of-objects found ANYWHERE in `json`,
+ * with no anchor to a specific key at all): the scan is anchored to
+ * exactly the array whose key equals `array_key`, found via the same
+ * string-respecting key search json_find_value() uses internally for
+ * json_extract_string()/json_extract_bool() - so an unrelated array
+ * appearing earlier in the document (e.g. a hypothetical `{"filters":
+ * [{"a":1}],"rows":[{...}]}` response gaining a "filters" array ahead of
+ * "rows") can never be mistaken for the target and returned as a "row".
+ * Everything before that array's own '[' - the response's own outer
+ * wrapping object, any other array, any other key - is never even
+ * scanned, let alone matched. `array_key` must be present in `json` with
+ * an array value, or this returns non-zero immediately (key absent, or
+ * present but not an array).
  *
  * This is the one function in this module that DOES track bracket
  * nesting - a small, fixed-depth stack of container types ('{' / '[')
  * rather than a single integer, so a row's own nested "derived":{...}
  * object is walked through (its braces balanced, its content otherwise
  * ignored) without ending the row early, and so an object nested inside
- * something OTHER than the target array (the response's own wrapping
- * object) is never mistaken for a row either. "derived" is never parsed
- * by this module - it is opaque, skipped whole; v1 has no use for it. The
- * caller then runs json_extract_string()/json_extract_bool() against
- * just that object's slice (copied into a small NUL-terminated buffer
- * first - this function returns a pointer/length INTO `json`, not a
- * NUL-terminated string on its own) for id/archiveName/size/md5/note/
- * status.
+ * something OTHER than the target array is never mistaken for a row
+ * either. "derived" is never parsed by THIS function - it is opaque,
+ * skipped whole; v1 has no use for it. The caller then runs
+ * json_extract_string()/json_extract_bool() against just that object's
+ * slice (copied into a small NUL-terminated buffer first - this function
+ * returns a pointer/length INTO `json`, not a NUL-terminated string on
+ * its own) for id/archiveName/size/md5/note/status - see those two
+ * functions' own doc comments for the required "derived" truncation
+ * mitigation before doing so on a row that may carry one.
+ *
+ * Once the target array's own closing `]` is reached, the scan stops
+ * cleanly (non-zero return, "end of array") WITHOUT interpreting
+ * anything beyond it - bytes after the array (sibling keys, the
+ * document's own outer closing brace) are outside this function's
+ * anchored scope and are never treated as bracket-balance errors just
+ * because they weren't modeled.
  *
  * Returns 0 and sets *obj_start and *obj_len when an object was found,
  * non-zero at the end of the array (including a genuinely empty `[]`),
  * on malformed input (mismatched/unbalanced brackets, an unterminated
  * string, nesting deeper than this scanner's fixed stack, or a
- * scan-length cap reached before a terminator was found), or on bad
- * arguments (`*cursor` past the end of `json`). A non-zero return means
- * "stop calling" - the caller should not keep looping on the same
- * cursor expecting a different answer. */
-int json_next_array_object(const char *json, unsigned long *cursor,
+ * scan-length cap reached before a terminator was found - the latter is
+ * an explicit REFUSAL, not a best-effort partial scan: a *cursor value
+ * whose reconstruction would require re-walking more than this
+ * function's scan cap is treated as unusable rather than proceeding with
+ * an incompletely-reconstructed bracket depth, since this door's own
+ * real catalog is documented at ~442KB, well over that cap), or on bad
+ * arguments (`array_key` absent/not-an-array, or `*cursor` past the end
+ * of `json`). A non-zero return means "stop calling" - the caller should
+ * not keep looping on the same cursor expecting a different answer. */
+int json_next_array_object(const char *json, const char *array_key,
+                            unsigned long *cursor,
                             const char **obj_start, unsigned long *obj_len);
 
 /* Builds `{"username":"...","password":"..."}` into `out`, JSON-escaping
