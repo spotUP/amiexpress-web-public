@@ -1546,7 +1546,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
                           int installed, int has_junk)
 {
     char bar[160];
-    const char *optional[6];
+    const char *optional[7];
     int n = 0;
     int len;
 
@@ -1558,6 +1558,17 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * offers V. */
     if (installed && has_junk) {
         optional[n++] = "S=Strip ads";
+    }
+    /* M edits/disables/restores a door's ACCESS level (Task 4) - only
+     * offered when installed, the same gate S already applies, since an
+     * uninstalled archive has no .info to edit. Placed here, right after
+     * S: both act on the one selected, already-installed door, which
+     * makes them higher priority than the screen-level F/C/L keys below
+     * (those never depend on which row is selected) but this is still an
+     * optional part, not folded into the mandatory prefix, since M only
+     * ever makes sense for an installed entry. */
+    if (installed) {
+        optional[n++] = "M=Access";
     }
     optional[n++] = "A=Archive";
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
@@ -2780,6 +2791,64 @@ static void plain_strip_installed_door(const dr_config *cfg, const char *archive
     strip_installed_door_apply(cfg, archive, cmdname, install_dir);
 }
 
+/* Writes `content` to `info_path` via temp-file-then-rename(), the pattern
+ * every .info write in this door must use so a BBSCmd command config
+ * appears complete or not at all - see the block this was extracted from
+ * (originally inline in install_door()) for the full story on why: a
+ * directory's mtime, which the BBS's command cache keys off, changes at
+ * CREATE time, not at fclose() time, so a bare fopen()+fputs() can publish
+ * an empty .info the BBS reads before the content ever lands.
+ *
+ * `log_verb` (e.g. "INSTALL", "ACCESS") is used only in the log_line()
+ * entries, matching this door's existing "<VERB> FAILED: <reason>"
+ * convention; the on-screen ae_put() messages stay generic ("Failed:
+ * ...") since the caller's own screen has already said which action is
+ * running. Returns 1 on success, 0 on failure (having already reported
+ * the failure); the caller still owns its own "press any key to return"
+ * / redraw follow-up, since that differs between install_door()'s
+ * multi-step report and a shorter screen like do_edit_access()'s. */
+static int write_info_file_atomic(const dr_config *cfg, const char *info_path,
+                                  const char *content, const char *log_verb)
+{
+    char info_tmp_path[288];
+    char msg[420];
+    char logmsg[300];
+    FILE *f;
+
+    if (flow_build_info_temp_path(info_tmp_path, sizeof(info_tmp_path), info_path) < 0) {
+        ae_put("Failed: the command config path would not fit its buffer.", 1);
+        sprintf(logmsg, "%s FAILED: .info temp path too long", log_verb);
+        log_line(cfg, logmsg);
+        return 0;
+    }
+
+    f = fopen(info_tmp_path, "wb");
+    if (f == (FILE *) 0) {
+        sprintf(msg, "Failed: could not write %s.", info_tmp_path);
+        ae_put(msg, 1);
+        ae_put("Check BBSCmdDir in DoorRepo.cfg - the directory must already exist.", 1);
+        sprintf(logmsg, "%s FAILED: could not write the .info", log_verb);
+        log_line(cfg, logmsg);
+        return 0;
+    }
+    fputs(content, f);
+    fclose(f);
+
+    /* An existing config is replaced: rename() over an existing file is not
+     * portable, and leaving the old one in place would silently keep the
+     * door pointing at whatever it used to point at. */
+    remove(info_path);
+    if (rename(info_tmp_path, info_path) != 0) {
+        remove(info_tmp_path);
+        sprintf(msg, "Failed: could not put %s in place.", info_path);
+        ae_put(msg, 1);
+        sprintf(logmsg, "%s FAILED: could not rename the .info into place", log_verb);
+        log_line(cfg, logmsg);
+        return 0;
+    }
+    return 1;
+}
+
 /* The whole install, from an entry in the list to a runnable BBS command.
  * Reports every step to the user, because on a real node this is the one
  * action that changes what the BBS itself will do. */
@@ -2794,7 +2863,6 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     char binary_rel[160];
     char binary_check[420];
     char info_content[320];
-    char info_tmp_path[288];
     char msg[420];
     int extract_ok;
     int have_listing;
@@ -2802,7 +2870,6 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     int listed_checked;
     int listed_present;
     int verdict;
-    FILE *f;
 
     /* The archive name has already passed the CWE-22 filename check at
      * catalog-parse time; re-checked here for the same reason the
@@ -3072,38 +3139,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
      * is also what makes the mtime change at the moment the CONTENT becomes
      * visible. C89 guarantees rename(); on AmigaDOS it is a Rename() within
      * the same directory, which is atomic. */
-    if (flow_build_info_temp_path(info_tmp_path, sizeof(info_tmp_path), info_path) < 0) {
-        ae_put("Install failed: the command config path would not fit its buffer.", 1);
-        log_line(cfg, "INSTALL FAILED: .info temp path too long");
-        ae_put("", 1);
-        ae_put("Press any key to return to the list.", 1);
-        (void) ae_key();
-        return;
-    }
-
-    f = fopen(info_tmp_path, "wb");
-    if (f == (FILE *) 0) {
-        sprintf(msg, "Install failed: could not write %s.", info_tmp_path);
-        ae_put(msg, 1);
-        ae_put("Check BBSCmdDir in DoorRepo.cfg - the directory must already exist.", 1);
-        log_line(cfg, "INSTALL FAILED: could not write the .info");
-        ae_put("", 1);
-        ae_put("Press any key to return to the list.", 1);
-        (void) ae_key();
-        return;
-    }
-    fputs(info_content, f);
-    fclose(f);
-
-    /* An existing config is replaced: rename() over an existing file is not
-     * portable, and leaving the old one in place would silently keep the
-     * door pointing at whatever it used to point at. */
-    remove(info_path);
-    if (rename(info_tmp_path, info_path) != 0) {
-        remove(info_tmp_path);
-        sprintf(msg, "Install failed: could not put %s in place.", info_path);
-        ae_put(msg, 1);
-        log_line(cfg, "INSTALL FAILED: could not rename the .info into place");
+    if (!write_info_file_atomic(cfg, info_path, info_content, "INSTALL")) {
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
         (void) ae_key();
@@ -3431,6 +3467,220 @@ static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
             buf[len] = '\0';
         }
     }
+}
+
+/* ---------------------------------------------------------------------
+ * Access level edit / one-key disable-restore (key M)
+ *
+ * DoorRepo has only ever WRITTEN a door's ACCESS at install time, always
+ * 0. A sysop who wants to take a door offline for a while, without losing
+ * track of what its access level used to be, needs two things this gives
+ * them with a single key: a way to change ACCESS, and a way to get back
+ * to whatever it was before - see the disable/restore rule below for the
+ * exact three cases that make "type a new value" serve as both.
+ * ------------------------------------------------------------------- */
+
+/* Modeled on strip_installed_door()'s shape (an archive name in, not a
+ * full dr_entry, plus the ansi buf/frame/geometry the other mutating
+ * screens take). Resolves cmdname through the install index first, exactly
+ * like strip_installed_door() does, and defends against "not installed"
+ * even though the footer already hides M for that case (index_lookup()
+ * NULL check, same pattern). */
+static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
+                           ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g)
+{
+    const char *cmdname = index_lookup(cfg, entry->archive);
+    char info_path[256];
+    dr_info_fields fields;
+    char access_buf[8];
+    long current_access;
+    long new_access;
+    long prior_access;
+    const char *binary_rel;
+    char info_content[320];
+    char msg[420];
+    char logmsg[300];
+
+    if (cmdname == (const char *) 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("This archive is not installed - there is no access level to edit.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (flow_build_info_path(info_path, sizeof(info_path), cfg->bbscmd_dir, cmdname) < 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("Access edit refused: BBSCmdDir plus this command name is too long.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (!flow_read_door_info(info_path, &fields)) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        sprintf(msg, "Could not read %s.", info_path);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    /* TYPE/LOCATION come back from the reader, never hardcoded or
+     * reconstructed - flow_build_info_content() emits all four tooltypes
+     * every call, so a .info this editor cannot fully account for is one
+     * it must refuse to rewrite rather than guess at. */
+    if (!fields.type_found || !fields.location_found) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("This command's .info is missing TYPE or LOCATION - DoorRepo will not rewrite", 1);
+        ae_put("a config it cannot fully account for. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    /* A .info with no ACCESS line at all (hand-edited, or written by some
+     * other tool) still gets a usable default rather than an
+     * uninitialized value - but the sysop is told, not left to assume the
+     * door was already at 0. */
+    if (!fields.access_found) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("This command's .info has no ACCESS line - defaulting to 0.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to continue.", 1);
+        (void) ae_key();
+    }
+    current_access = fields.access_found ? fields.access : 0;
+
+    access_buf[0] = '\0';
+    ui_append_ulong(access_buf, (unsigned long) current_access);
+
+    if (!ui_text_prompt(b, frame, framecap, g, "New access level (0-255):",
+                        access_buf, 3)) {
+        return; /* empty answer = changed their mind */
+    }
+
+    if (flow_validate_access_level(access_buf, &new_access) != 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("That is not a usable access level: digits only, 0-255. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    /* One-key disable/restore (RULING - implemented exactly as specified,
+     * not redesigned): typing a new value IS both "edit" and "disable"/
+     * "restore" depending on what is typed, so there is no separate mode
+     * and no second key.
+     *
+     *   1. Not currently tracking a "before" value, and this edit moves
+     *      away from the current level: remember it (prior = current) -
+     *      this is the first step away from the door's normal level.
+     *   2. Already tracking one, and this edit lands exactly back on it:
+     *      this IS the restore - stop tracking (omit DRACCESS), since the
+     *      door is back at its remembered normal level.
+     *   3. Already tracking one, and this edit lands on neither the
+     *      current nor the tracked level (a further edit to a THIRD level
+     *      while already disabled): keep the tracked value unchanged - it
+     *      names the ORIGINAL normal level, not the most recently set
+     *      one, so restore always returns to where the door started. */
+    if (!fields.prior_access_found) {
+        prior_access = (new_access != current_access) ? current_access : -1;
+    } else if (new_access == fields.prior_access) {
+        prior_access = -1;
+    } else {
+        prior_access = fields.prior_access;
+    }
+
+    /* The exact inverse of what install_door() writes: LOCATION is always
+     * "Doors:<cmd>/<binary_rel>" (flow_build_info_content()'s own
+     * comment), and cmdname here already IS <cmd> (index_lookup() gave it
+     * to us) - so strip the "Doors:" assign, then the "<cmd>/" that
+     * follows it, rather than guessing at binary_rel from scratch. */
+    binary_rel = fields.location;
+    if (strncmp(binary_rel, "Doors:", 6) == 0) {
+        binary_rel += 6;
+    }
+    {
+        unsigned long cmdlen = strlen(cmdname);
+        if (strncmp(binary_rel, cmdname, cmdlen) == 0 && binary_rel[cmdlen] == '/') {
+            binary_rel += cmdlen + 1;
+        }
+    }
+
+    if (flow_build_info_content(info_content, sizeof(info_content),
+                                fields.type, cmdname, binary_rel,
+                                new_access, prior_access) < 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("Access edit failed: the command config would not fit its buffer.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    if (!write_info_file_atomic(cfg, info_path, info_content, "ACCESS")) {
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    sprintf(msg, "Access level for %s changed from %ld to %ld.", cmdname,
+            current_access, new_access);
+    ae_put(msg, 1);
+    if (prior_access >= 0) {
+        ae_put("The previous level is remembered - press M and type it back in to restore.", 1);
+    }
+    {
+        sprintf(logmsg, "ACCESS OK archive=%s cmd=%s from=%ld to=%ld",
+                entry->archive, cmdname, current_access, new_access);
+        log_line(cfg, logmsg);
+    }
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
 }
 
 /* Defined below (the "Installed doors screen" section) - forward declared
@@ -3791,6 +4041,16 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         case 'u': case 'U':
             if (view.count > 0) {
                 uninstall_door(cfg, cat->rows[view.index[selected]].archive, &buf, frame,
+                               (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'm': case 'M':
+            if (view.count > 0) {
+                do_edit_access(cfg, &cat->rows[view.index[selected]], &buf, frame,
                                (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
