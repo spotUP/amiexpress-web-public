@@ -162,15 +162,22 @@ export function stepBall<TBrick extends PhysicsBrick>(
         ball.y >= brick.y &&
         ball.y < brick.y + brick.height
       ) {
-        const fromLeft = ball.x - brick.x;
-        const fromRight = brick.x + brick.width - ball.x;
-        const fromTop = ball.y - brick.y;
-        const fromBottom = brick.y + brick.height - ball.y;
+        // Which face was crossed this substep, judged by where the ball
+        // CAME FROM - not by distance to the nearest edge. Bricks are 6x1:
+        // the old nearest-edge heuristic called any entry within half a
+        // cell of a brick's side a horizontal hit, flipped vx, and let the
+        // ball sail straight up through the cell it had just emptied
+        // (reported as "the ball does not bounce back when removing a
+        // brick"). The pre-substep position is open space, so the axis it
+        // was outside on is the axis that was crossed.
+        const crossedY = preY < brick.y || preY >= brick.y + brick.height;
+        const crossedX = preX < brick.x || preX >= brick.x + brick.width;
 
-        const minHoriz = Math.min(fromLeft, fromRight);
-        const minVert = Math.min(fromTop, fromBottom);
-
-        if (minHoriz < minVert) {
+        if (crossedY && crossedX) {
+          // True corner entry - reflect both axes.
+          ball.vx = -ball.vx;
+          ball.vy = -ball.vy;
+        } else if (crossedX) {
           ball.vx = -ball.vx;
         } else {
           ball.vy = -ball.vy;

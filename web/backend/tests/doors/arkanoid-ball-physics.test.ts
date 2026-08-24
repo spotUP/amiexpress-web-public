@@ -155,6 +155,32 @@ describe('arkanoid ball physics', () => {
     });
   });
 
+  describe('reflection axis (the no-bounce-back bug)', () => {
+    it('bounces back down off a brick even when entering near its side edge', () => {
+      // Entering from below, 0.15 cells from the brick's left edge: the
+      // old nearest-edge heuristic flipped vx and let the ball continue
+      // upward through the destroyed brick. The crossed face is the
+      // bottom - vy must flip.
+      const target = brick({ x: 44, y: 8, width: 6 });
+      const b = ball({ x: 44.05, y: 9.1, vx: 0.3, vy: -1, speed: 1.05 });
+
+      const events = stepBall(b, paddle(), [target], BOUNDS);
+
+      expect(events.some((e) => e.type === 'brickDestroyed')).toBe(true);
+      expect(b.vy).toBe(1);
+    });
+
+    it('reflects horizontally when genuinely hitting a brick side', () => {
+      // Coming from the left of the brick at its own row height.
+      const target = brick({ x: 44, y: 8, width: 6 });
+      const b = ball({ x: 43.5, y: 8.5, vx: 1.2, vy: -0.01, speed: 1.05 });
+
+      stepBall(b, paddle(), [target], BOUNDS);
+
+      expect(b.vx).toBeLessThan(0);
+    });
+  });
+
   describe('penetration resolution (the machine-gun bug)', () => {
     function insideAnyBrick(b: PhysicsBall, bricks: PhysicsBrick[]): boolean {
       return bricks.some(

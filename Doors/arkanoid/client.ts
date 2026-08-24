@@ -309,6 +309,11 @@ class ArkanoidGame {
   private renderer: Renderer;
   private data: GameData;
   private lastUpdate: number = 0;
+  // Set by quit(): the SDK keeps delivering input events after shutdown,
+  // and a stray mouse-hover used to reach paint() -> updateMusic() ->
+  // ensureTracker(), which resurrected a fresh AudioContext and restarted
+  // the menu music AFTER the door had exited.
+  private shuttingDown: boolean = false;
   private tracker: TrackerEngine | null = null;
   private trackerContext: AudioContext | null = null;
   private currentTrack: string | null = null;
@@ -987,6 +992,7 @@ class ArkanoidGame {
 
     try {
       const tracker = this.ensureTracker();
+      if (!tracker) return;
 
       let buffer = this.trackCache.get(name);
       if (!buffer) {
@@ -1008,7 +1014,8 @@ class ArkanoidGame {
     }
   }
 
-  private ensureTracker(): TrackerEngine {
+  private ensureTracker(): TrackerEngine | null {
+    if (this.shuttingDown) return null;
     if (!this.tracker) {
       // Own the AudioContext so we can resume it: chiptune3 never resumes a
       // context the autoplay policy suspended. By door time the user has
@@ -1047,6 +1054,7 @@ class ArkanoidGame {
    * a full browser -> backend -> browser round trip for zero pixels.
    */
   private paint(): void {
+    if (this.shuttingDown) return;
     this.updateMusic();
     const frame = this.render();
     if (frame) this.door.send(frame);
@@ -1461,6 +1469,7 @@ class ArkanoidGame {
   }
 
   private quit(): void {
+    this.shuttingDown = true;
     this.door.send(ANSI.show + ANSI.reset);
     this.door.send(ANSI.clear + ANSI.home);
     this.door.send('\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
