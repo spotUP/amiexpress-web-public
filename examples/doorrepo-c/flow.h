@@ -54,6 +54,31 @@ void flow_compute_page(unsigned long total_rows, int page_size,
 unsigned long flow_nav_target(int action, unsigned long selected,
                               unsigned long count, unsigned long page);
 
+/* Re-anchors a scrolled list's selection/window after the row set behind it
+ * changes size out from under the cursor - a filter narrowing the view, or
+ * (installed_loop_ansi()'s case) an uninstalled row disappearing from an
+ * install-status-filtered one. Distinct from flow_nav_target(): that one
+ * only repairs a stale `selected` when the NEXT navigation key arrives (see
+ * nav_repairs_a_selection_left_past_the_end in tests/test_flow.c); this one
+ * is for the caller to apply immediately, right after the mutation, so the
+ * very next dereference of `view.index[selected]` is already safe rather
+ * than depending on another pass of the render loop happening first.
+ *
+ * Mirrors DOORMAN's clampSelection() (Doors/door-manager/repo-view-helpers.ts)
+ * plus its scroll-follow half: without the first half, uninstalling the
+ * LAST row currently in view leaves `*selected` one past the new end (see
+ * InstalledView.refresh()'s comment, Doors/door-manager/app.ts:627-628);
+ * without the second, `*top_index` can be left pointing past the new end of
+ * the list too, once `*selected` has been pulled back under it.
+ *
+ * `*selected` and `*top_index` are updated in place. `count` is the new
+ * (post-mutation) row count of the view; `visible_rows` is how many rows
+ * fit on screen (0 is tolerated and treated as "no scroll window to keep
+ * in sync", not a divide/underflow hazard). A NULL `selected` or
+ * `top_index` is a no-op. */
+void flow_clamp_view(unsigned long *selected, unsigned long *top_index,
+                      unsigned long count, unsigned long visible_rows);
+
 /* ---- Download verification retry state machine ---- */
 
 typedef enum {

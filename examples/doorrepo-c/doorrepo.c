@@ -3388,18 +3388,16 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         if (selected != prev_selected) {
             info_scroll = 0;   /* a different entry starts at its own top */
         }
-        if (view.count > 0 && selected >= view.count) {
-            selected = view.count - 1;
-        }
-        if (view.count == 0) {
-            selected = 0;
-        }
-        if (selected < top_index) {
-            top_index = selected;
-        }
-        if (selected >= top_index + (unsigned long) g.visible_rows) {
-            top_index = selected - (unsigned long) g.visible_rows + 1;
-        }
+        /* Re-anchors selected/top_index to view.count every pass,
+         * unconditionally - the same invariant installed_loop_ansi() applies
+         * explicitly right after an uninstall (see flow_clamp_view()'s
+         * doc comment in flow.h). This screen's view never actually shrinks
+         * out from under the cursor today (its 'F'/'C' mutators both reset
+         * selected/top_index to 0 themselves before this point), so the call
+         * is defensive here rather than fixing an observed defect - but it
+         * is the same tested logic installed_loop_ansi() depends on for
+         * real, not a second hand-written copy that could drift from it. */
+        flow_clamp_view(&selected, &top_index, view.count, (unsigned long) g.visible_rows);
 
         /* ONE frame, ONE write, and as small a frame as the change allows.
          * Composing into a buffer and flushing once removed the ~100 XIM
@@ -3699,6 +3697,352 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_clear(&buf);
             ansi_flush(&buf);
             return BROWSE_QUIT;
+        default:
+            break;
+        }
+    }
+}
+
+/* ---------------------------------------------------------------------
+ * Installed doors screen
+ *
+ * A second full-screen ANSI view, entered from the main browser (Task 4
+ * wires the entry key), over the same list+detail layout as
+ * browse_loop_ansi() but restricted to the rows ui_view_rebuild_installed()
+ * (Task 2) says are installed. Trimmed of every key that does not make
+ * sense once the list is already "installed only": no F=Find or C=System
+ * (nothing left to narrow further), no I=Install (nothing to install from
+ * here), no digit guide-links or B=Back-in-guide (v1 scope cut - V still
+ * opens documentation, just without in-doc link-following).
+ * ------------------------------------------------------------------- */
+
+/* Step 4's header: "N installed" - `v->count`, the number of catalog rows
+ * this screen actually matched, NOT index_installed_count(cfg)'s raw
+ * install-index size, which also counts orphans (see below). Folding
+ * orphans into that number would overstate what is actually usable from
+ * this screen, so they get their own line instead, and only when there are
+ * any - an all-zero "(+0 not in current catalog listing)" under an
+ * otherwise ordinary list would read as something being wrong. */
+static void ui_draw_installed_header(ansi_buf *b, const ui_geometry *g,
+                                     unsigned long installed_count,
+                                     unsigned long orphan_count)
+{
+    char title[96];
+
+    strcpy(title, "DoorRepo v");
+    strcat(title, DOOR_VERSION);
+    strcat(title, "   ");
+    ui_append_ulong(title, installed_count);
+    strcat(title, " installed");
+
+    ui_draw_bar(b, 1, g->cols, title);
+
+    if (orphan_count > 0) {
+        char orphan_line[64];
+
+        strcpy(orphan_line, "(+");
+        ui_append_ulong(orphan_line, orphan_count);
+        strcat(orphan_line, " not in current catalog listing)");
+        ansi_color(b, ANSI_YELLOW, ANSI_BLUE, 0);
+        ansi_center(b, 1 + 2, 1, g->cols, orphan_line);
+    }
+}
+
+/* Step 5's footer legend: `ENTER/R=Get  A=Archive  V=Doc  U=Uninstall
+ * S=Strip  Q=Back`, F=Find/C=System/I=Install dropped along with the keys
+ * they name. Every row here is already installed, so unlike
+ * ui_draw_footer()'s browse-screen version there is no install/uninstall
+ * ternary - U=Uninstall is unconditional. V and S keep the same gates
+ * ui_draw_footer() applies (has_doc, has_junk) for the same reason: hiding
+ * a key that would still work is the worse of the two errors. */
+static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
+                                     const dr_entry *e, int has_junk)
+{
+    char bar[160];
+
+    strcpy(bar, "ENTER/R=Get  A=Archive");
+    if (e == (const dr_entry *) 0 || e->has_doc != 0) {
+        strcat(bar, "  V=Doc");
+    }
+    strcat(bar, "  U=Uninstall");
+    if (has_junk) {
+        strcat(bar, "  S=Strip");
+    }
+    strcat(bar, "  Q=Back");
+    ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
+}
+
+static void ui_draw_installed_chrome(ansi_buf *b, const ui_geometry *g,
+                                     const ui_view *v, unsigned long orphan_count,
+                                     const dr_entry *sel_entry, int has_junk)
+{
+    char label[48];
+
+    strcpy(label, "INSTALLED (");
+    ui_append_ulong(label, v->count);
+    strcat(label, ")");
+
+    ui_draw_installed_header(b, g, v->count, orphan_count);
+    if (g->list_width > 0) {
+        ansi_box(b, g->pane_top, g->list_left, g->pane_height, g->list_width, ANSI_CYAN, label);
+    }
+    ansi_box(b, g->pane_top, g->info_left, g->pane_height, g->info_width, ANSI_BLUE,
+             (const char *) 0);
+    ui_draw_footer_installed(b, g, sel_entry, has_junk);
+    ansi_reset(b);
+}
+
+static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
+{
+    ui_geometry g;
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    static char frame[UI_FRAME_BYTES];
+    /* Own static index array, separate from browse_loop_ansi()'s - both
+     * screens can be mid-loop on the call stack (this one is entered FROM
+     * the browser), so they cannot share one buffer. */
+    static unsigned long view_index[MAX_CATALOG_ROWS];
+    ui_view view;
+    unsigned long orphan_count = 0;
+    ansi_buf buf;
+    int need_full_redraw = 1;
+    unsigned long prev_selected = 0;
+    unsigned long prev_top = 0;
+    int info_rows_used = 0;
+    int info_mode = UI_INFO_DIZ;
+    int prev_info_mode = UI_INFO_DIZ;
+    int info_scroll = 0;
+    unsigned long pane_selected = (unsigned long) -1;
+    int pane_is_stale = 0;
+
+    ui_compute_geometry(cfg, &g, 0);
+
+    view.index = view_index;
+    view.count = 0;
+    view.text[0] = '\0';
+    view.type[0] = '\0';
+    view.scroll_top = 0;
+    /* Built once on entry - this list only changes when something is
+     * uninstalled from inside this same screen, at which point the 'u'/'U'
+     * case below rebuilds it again. */
+    ui_view_rebuild_installed(&view, cat, cfg, &orphan_count);
+
+    for (;;) {
+        int key;
+        const dr_entry *sel_entry;
+
+        if (carrier_lost()) {
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            stop_for_carrier_loss();
+        }
+
+        if (info_mode != prev_info_mode) {
+            ui_compute_geometry(cfg, &g, info_mode != UI_INFO_DIZ);
+            need_full_redraw = 1;
+            prev_info_mode = info_mode;
+        }
+
+        pane_is_stale = (selected != pane_selected) || need_full_redraw;
+
+        if (selected != prev_selected) {
+            info_scroll = 0;
+        }
+        /* Step 3a's fix, reused rather than re-derived: the same clamp
+         * browse_loop_ansi() now also calls, applied here every pass for
+         * the same reason - and again, explicitly, right after the 'u'/'U'
+         * case rebuilds a SHRUNKEN view below, so the very next
+         * cat->rows[view.index[selected]] in this same pass is already
+         * safe. */
+        flow_clamp_view(&selected, &top_index, view.count, (unsigned long) g.visible_rows);
+
+        view.scroll_top = top_index;
+
+        sel_entry = (view.count > 0)
+            ? &cat->rows[view.index[selected]]
+            : (const dr_entry *) 0;
+
+        ansi_begin(&buf, frame, (long) sizeof(frame));
+        if (need_full_redraw) {
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+            ui_draw_installed_chrome(&buf, &g, &view, orphan_count, sel_entry,
+                                     sel_entry != (const dr_entry *) 0 && sel_entry->junk != 0);
+            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
+            info_rows_used = 0;
+        } else if (top_index != prev_top) {
+            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
+        } else if (selected != prev_selected) {
+            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected,
+                         (int) (prev_selected - top_index),
+                         (int) (selected - top_index));
+        }
+        if (selected != prev_selected) {
+            ui_draw_footer_installed(&buf, &g, sel_entry,
+                                     sel_entry != (const dr_entry *) 0 && sel_entry->junk != 0);
+            ansi_reset(&buf);
+        }
+        ansi_goto(&buf, g.rows, g.cols);
+        ansi_flush(&buf);
+        prev_selected = selected;
+        prev_top = top_index;
+        need_full_redraw = 0;
+
+        if (pane_is_stale && view.count > 0) {
+            int settled = 1;
+            int slice;
+
+            for (slice = 0; slice < PANE_DEBOUNCE_SLICES; slice++) {
+                if (ae_input_pending()) {
+                    settled = 0;
+                    break;
+                }
+                ae_delay_ticks(PANE_DEBOUNCE_TICKS);
+            }
+            if (settled && ae_input_pending()) {
+                settled = 0;
+            }
+
+            if (settled) {
+                const char *sel_archive = cat->rows[view.index[selected]].archive;
+
+                if (info_needs_fetch(info_mode, sel_archive)) {
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                    ansi_text(&buf, g.pane_top + 1, g.info_left + 2,
+                              "Fetching...", g.info_width - 4);
+                    ansi_flush(&buf);
+                }
+
+                if (info_mode == UI_INFO_FILES) {
+                    files_load(cfg, sel_archive);
+                } else if (info_mode == UI_INFO_DOC) {
+                    doc_load(cfg, sel_archive);
+                } else {
+                    diz_load(cfg, sel_archive);
+                }
+
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
+                                              info_rows_used, info_mode, info_scroll);
+                ansi_goto(&buf, g.rows, g.cols);
+                ansi_flush(&buf);
+                pane_selected = selected;
+            }
+        }
+
+        key = ui_read_key();
+
+        if (carrier_lost()) {
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            stop_for_carrier_loss();
+        }
+
+        if (info_mode != UI_INFO_DIZ
+            && (key == UI_KEY_UP || key == UI_KEY_DOWN
+                || key == UI_KEY_PGUP || key == UI_KEY_PGDN
+                || key == UI_KEY_HOME || key == UI_KEY_END)) {
+            int page = g.visible_rows - 1;
+            if (page < 1) page = 1;
+            if (key == UI_KEY_UP && info_scroll > 0) info_scroll--;
+            else if (key == UI_KEY_DOWN) info_scroll++;
+            else if (key == UI_KEY_PGUP) info_scroll = (info_scroll > page) ? info_scroll - page : 0;
+            else if (key == UI_KEY_PGDN) info_scroll += page;
+            else if (key == UI_KEY_HOME) info_scroll = 0;
+            continue;
+        }
+
+        switch (key) {
+        case UI_KEY_UP:
+        case UI_KEY_DOWN:
+        case UI_KEY_PGUP: case 'p': case 'P':
+        case UI_KEY_PGDN: case 'n': case 'N':
+        case UI_KEY_HOME:
+        case UI_KEY_END:
+            selected = flow_nav_target(ui_nav_action(key), selected, view.count,
+                                        (unsigned long) g.visible_rows);
+            break;
+        case UI_KEY_ENTER:
+        case 'r': case 'R':
+            if (view.count > 0) {
+                const dr_entry *sel = &cat->rows[view.index[selected]];
+                char question[160];
+
+                strcpy(question, "Download ");
+                strncat(question, sel->archive, sizeof(question) - 40);
+                strcat(question, "?  [Y/N]");
+
+                if (ui_confirm(&buf, frame, (long) sizeof(frame), &g, question)) {
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_cursor(&buf, 1);
+                    ansi_reset(&buf);
+                    ansi_clear(&buf);
+                    ansi_flush(&buf);
+
+                    download_and_verify(cfg, sel);
+
+                    ae_put("", 1);
+                    ae_put("Press any key to return to the list.", 1);
+                    (void) ae_key();
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_cursor(&buf, 0);
+                    ansi_flush(&buf);
+                }
+                need_full_redraw = 1;
+            }
+            break;
+        case 'a': case 'A':
+            info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
+            info_scroll = 0;
+            break;
+        case 's': case 'S':
+            if (view.count > 0) {
+                strip_installed_door(cfg, cat->rows[view.index[selected]].archive,
+                                     cat->rows[view.index[selected]].junk, &buf, frame,
+                                     (long) sizeof(frame));
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'u': case 'U':
+            if (view.count > 0) {
+                uninstall_door(cfg, cat->rows[view.index[selected]].archive, &buf, frame,
+                               (long) sizeof(frame), &g);
+                /* The uninstalled row must disappear: rebuild against the
+                 * now-current install index, then clamp immediately (Step
+                 * 3, reusing Step 3a's fix) rather than leaving selected/
+                 * top_index stale until the next pass happens to fix them
+                 * up before anything dereferences view.index[selected]. */
+                ui_view_rebuild_installed(&view, cat, cfg, &orphan_count);
+                flow_clamp_view(&selected, &top_index, view.count,
+                                (unsigned long) g.visible_rows);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'v': case 'V':
+            if (sel_entry != (const dr_entry *) 0 && sel_entry->has_doc == 0) {
+                break;
+            }
+            info_mode = (info_mode == UI_INFO_DOC) ? UI_INFO_DIZ : UI_INFO_DOC;
+            info_scroll = 0;
+            break;
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
         default:
             break;
         }

@@ -375,6 +375,35 @@ unsigned long flow_nav_target(int action, unsigned long selected,
     }
 }
 
+void flow_clamp_view(unsigned long *selected, unsigned long *top_index,
+                      unsigned long count, unsigned long visible_rows)
+{
+    if (selected == (unsigned long *) 0 || top_index == (unsigned long *) 0) {
+        return;
+    }
+
+    /* The row set shrank under `*selected` (or vanished entirely): pull it
+     * back to the new last row, or 0 when there is none. `>=`, not `>` -
+     * `*selected == count` is exactly "one past the new end", the DOORMAN
+     * bug this mirrors the fix for. */
+    if (count > 0 && *selected >= count) {
+        *selected = count - 1;
+    }
+    if (count == 0) {
+        *selected = 0;
+    }
+
+    /* Follow the window to wherever `*selected` ended up: pull it up if the
+     * selection is now above it, or down if the selection is now below the
+     * last visible row. visible_rows == 0 has no window to keep in sync. */
+    if (*selected < *top_index) {
+        *top_index = *selected;
+    }
+    if (visible_rows > 0 && *selected >= *top_index + visible_rows) {
+        *top_index = *selected - visible_rows + 1;
+    }
+}
+
 int flow_build_info_temp_path(char *out, unsigned long outsize, const char *info_path)
 {
     static const char suffix[] = ".new";

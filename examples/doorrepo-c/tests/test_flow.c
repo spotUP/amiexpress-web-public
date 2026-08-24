@@ -637,6 +637,82 @@ TEST(nav_treats_a_zero_page_as_one)
 }
 
 /* ---------------------------------------------------------------------
+ * flow_clamp_view() - re-anchoring selected/top_index after a mutation
+ * shrinks the view out from under the cursor (Task 3 Step 3a: the clamp
+ * installed_loop_ansi() needs after uninstalling a row, extracted so
+ * browse_loop_ansi()'s equivalent per-pass clamp is the same tested code
+ * rather than a second hand-written copy).
+ * ------------------------------------------------------------------- */
+
+TEST(clamp_view_leaves_a_still_valid_selection_alone)
+{
+    unsigned long selected = 3;
+    unsigned long top_index = 0;
+    flow_clamp_view(&selected, &top_index, 10, 5);
+    ASSERT_EQ(selected, 3UL, "selected");
+    ASSERT_EQ(top_index, 0UL, "top_index");
+}
+
+TEST(clamp_view_uninstalling_the_last_row_in_view_pulls_selected_back)
+{
+    /* The exact DOORMAN scenario (app.ts:627-628): 5 installed doors,
+     * cursor on the last one (index 4); it gets uninstalled and the view
+     * is rebuilt to 4 rows. Without the fix `selected` stays 4, one past
+     * the new end (view.index[4] is out of range for a 4-row view). */
+    unsigned long selected = 4;
+    unsigned long top_index = 0;
+    flow_clamp_view(&selected, &top_index, 4, 10);
+    ASSERT_EQ(selected, 3UL, "selected lands on the new last row, not one past it");
+    ASSERT_EQ(top_index, 0UL, "top_index unaffected - the new last row is still on screen");
+}
+
+TEST(clamp_view_uninstalling_the_only_row_empties_the_view)
+{
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    flow_clamp_view(&selected, &top_index, 0, 10);
+    ASSERT_EQ(selected, 0UL, "selected");
+    ASSERT_EQ(top_index, 0UL, "top_index");
+}
+
+TEST(clamp_view_pulls_top_index_down_to_a_selection_that_scrolled_above_it)
+{
+    /* A deep scroll (top_index=15) whose selection then gets clamped by a
+     * drastic shrink down to row 2 - top_index must follow it back up the
+     * list, not leave the window stranded past the end of the new view. */
+    unsigned long selected = 19;
+    unsigned long top_index = 15;
+    flow_clamp_view(&selected, &top_index, 3, 10);
+    ASSERT_EQ(selected, 2UL, "selected");
+    ASSERT_EQ(top_index, 2UL, "top_index follows selected back up");
+}
+
+TEST(clamp_view_pulls_top_index_up_when_selected_is_below_the_window)
+{
+    /* selected is already in range, but the window itself is stale (as if
+     * caller only changed top_index) - the fourth branch, not reachable via
+     * the other three, needs its own case. */
+    unsigned long selected = 12;
+    unsigned long top_index = 0;
+    flow_clamp_view(&selected, &top_index, 20, 5);
+    ASSERT_EQ(selected, 12UL, "selected");
+    ASSERT_EQ(top_index, 8UL, "top_index advances so selected is the bottom visible row");
+}
+
+TEST(clamp_view_tolerates_a_zero_visible_rows)
+{
+    /* Geometry this degenerate never happens in practice (ui_compute_geometry
+     * floors visible_rows at 1), but the function's own contract promises no
+     * underflow here - unsigned arithmetic makes "0 - 1" a very large number
+     * if the visible_rows>0 guard is ever dropped. */
+    unsigned long selected = 5;
+    unsigned long top_index = 0;
+    flow_clamp_view(&selected, &top_index, 10, 0);
+    ASSERT_EQ(selected, 5UL, "selected");
+    ASSERT_EQ(top_index, 0UL, "top_index left alone - no window to keep in sync");
+}
+
+/* ---------------------------------------------------------------------
  * Quarantine path for a mismatching download (KeepFailedDownloads)
  * ------------------------------------------------------------------- */
 
@@ -1630,6 +1706,13 @@ int main(void)
     RUN_TEST(nav_repairs_a_selection_left_past_the_end);
     RUN_TEST(nav_none_leaves_the_selection_alone);
     RUN_TEST(nav_treats_a_zero_page_as_one);
+
+    RUN_TEST(clamp_view_leaves_a_still_valid_selection_alone);
+    RUN_TEST(clamp_view_uninstalling_the_last_row_in_view_pulls_selected_back);
+    RUN_TEST(clamp_view_uninstalling_the_only_row_empties_the_view);
+    RUN_TEST(clamp_view_pulls_top_index_down_to_a_selection_that_scrolled_above_it);
+    RUN_TEST(clamp_view_pulls_top_index_up_when_selected_is_below_the_window);
+    RUN_TEST(clamp_view_tolerates_a_zero_visible_rows);
     RUN_TEST(info_temp_path_is_the_config_path_plus_new);
     RUN_TEST(info_temp_path_stays_in_the_same_directory);
     RUN_TEST(info_temp_path_too_small_buffer_returns_error);
