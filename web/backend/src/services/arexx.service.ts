@@ -2338,6 +2338,115 @@ export class AREXXInterpreter {
   // `SHUTDOWN; EXIT`; the EXIT must end the script, not just the
   // CALL OFF / CALL ON subroutine.
   private exitRequested: boolean = false;
+  // ─── runaway-loop watchdog ──────────────────────────────────────
+  // A script clause loop (executeLines' `while (true)`) is pure
+  // synchronous JS between `await`s that resolve instantly (e.g. an
+  // unopened file handle's Seek/ReadCH short-circuiting to 0/''), so
+  // it produces only MICROTASKS — never a macrotask. Node drains the
+  // microtask queue to completion before it will even LOOK at the
+  // macrotask queue, and if the loop keeps re-scheduling more
+  // microtasks forever, the macrotask queue is never serviced again:
+  // no timers, no socket data (so Ctrl+C can never arrive), nothing.
+  // Verified empirically: a diagnostic `setInterval(500ms)` wrapped
+  // around a reproduction of this exact class of hang (ACCV103's
+  // `Do Until NrUsers > 0` against a never-opened 'UserData' handle)
+  // never fired ONCE in 4 real seconds — the whole process was dead,
+  // not merely the script. `docker restart` was the only way out.
+  //
+  // yieldIfBusy() is called once per clause (top of executeLines'
+  // loop, before anything else, so it also covers a DO loop whose
+  // body is empty) and periodically hands control to a REAL
+  // macrotask (`setImmediate`), which lets queued socket I/O
+  // (Ctrl+C), health-check timers and other nodes' work run even
+  // while this script keeps spinning. If the script is STILL
+  // clause-bound after MAX_BUSY_MS of accumulated compute time, it is
+  // aborted through the exact same flags Ctrl+C uses
+  // (maybeAbortInterpreter) — a HALT trap gets its clean jump, a
+  // script with none gets RC=-1 and a clean exit, same as a user
+  // hitting Ctrl+C. Never a hard kill of the process.
+  private busyMsAccumulated: number = 0;
+  private lastYieldCheckAt: number = 0;
+  // Not `readonly`: tests shrink these via the hooks below so a
+  // 30-second real-time abort can be verified in milliseconds instead
+  // of blowing the suite's time budget. Production always runs with
+  // the defaults set here.
+  private static YIELD_CHECK_INTERVAL_MS = 15;
+  // A gap this much larger than one tick means the interpreter just
+  // resumed from something that genuinely yielded for a while — a
+  // real GETCHAR/PROMPT/context.input() wait on a user, most often —
+  // not compute. Don't charge that wall-clock time against the
+  // budget; AmiExpress doors routinely sit idle on a keypress for
+  // minutes, and that must never be mistaken for a runaway script.
+  private static YIELD_GAP_RESET_MS = AREXXInterpreter.YIELD_CHECK_INTERVAL_MS * 20;
+  // Generous on purpose: real AmiExpress doors are simple menu/utility
+  // scripts, nothing in the corpus should legitimately need anywhere
+  // close to 30 CONTINUOUS seconds of clause-bound execution.
+  private static MAX_BUSY_MS = 30_000;
+
+  /**
+   * Test-only: shrink the watchdog's timing so a real abort can be
+   * exercised in milliseconds. Never called from production code.
+   */
+  static _setWatchdogTuningForTests(intervalMs: number, maxBusyMs: number): void {
+    AREXXInterpreter.YIELD_CHECK_INTERVAL_MS = intervalMs;
+    AREXXInterpreter.YIELD_GAP_RESET_MS = intervalMs * 20;
+    AREXXInterpreter.MAX_BUSY_MS = maxBusyMs;
+  }
+
+  /** Test-only: restore production watchdog timing. */
+  static _resetWatchdogTuningForTests(): void {
+    AREXXInterpreter.YIELD_CHECK_INTERVAL_MS = 15;
+    AREXXInterpreter.YIELD_GAP_RESET_MS = 15 * 20;
+    AREXXInterpreter.MAX_BUSY_MS = 30_000;
+  }
+
+  /**
+   * Called once per executed clause. Most calls are a no-op (cheap
+   * `Date.now()` read, below YIELD_CHECK_INTERVAL_MS). Every ~15ms of
+   * real compute it yields one macrotask turn; past MAX_BUSY_MS of
+   * accumulated compute it aborts the script exactly as Ctrl+C would.
+   */
+  private async yieldIfBusy(): Promise<void> {
+    if (this.lastYieldCheckAt === 0) {
+      this.lastYieldCheckAt = Date.now();
+      return;
+    }
+    const now = Date.now();
+    const elapsed = now - this.lastYieldCheckAt;
+    // Deliberately NOT updating lastYieldCheckAt on this early return: it
+    // is the checkpoint the interval accumulates AGAINST, so touching it
+    // on every fast clause would reset the clock every call and elapsed
+    // would never reach 15ms — a real bug caught by testing this against
+    // the actual reproduction (the watchdog fired only sporadically,
+    // roughly on GC-pause jitter, instead of on a real ~15ms cadence).
+    if (elapsed < AREXXInterpreter.YIELD_CHECK_INTERVAL_MS) return;
+    this.lastYieldCheckAt = now;
+
+    if (elapsed > AREXXInterpreter.YIELD_GAP_RESET_MS) {
+      // Resumed from a real wait (user input, a slow host command) —
+      // that time was never "busy". Start the budget fresh.
+      this.busyMsAccumulated = 0;
+      return;
+    }
+
+    this.busyMsAccumulated += elapsed;
+    if (this.busyMsAccumulated > AREXXInterpreter.MAX_BUSY_MS) {
+      console.warn(
+        `[AREXX] runaway script aborted after ${this.busyMsAccumulated}ms of continuous clause execution ` +
+        `with no yield to real I/O — see the door's own logic for an unconditional loop (Do Until / Do While) ` +
+        `whose condition never becomes true.`
+      );
+      maybeAbortInterpreter({ interpreter: this }, 'RUNAWAY');
+      // Don't re-fire on the very next clause: returnRequested/exitRequested
+      // unwind the call stack over the following few iterations (the DO
+      // frame, then the top-level script loop), each of which would
+      // otherwise still see busyMsAccumulated over budget and log again.
+      this.busyMsAccumulated = 0;
+      return;
+    }
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
   // REXX file I/O state — open handles, current pragma directory.
   // Constructed in the constructor so each script run gets its own
   // sandbox. AREXXFileIO.closeAll() is called on script exit so leaked
@@ -2498,6 +2607,8 @@ export class AREXXInterpreter {
     this.signalLabel = '';
     this.labels.clear();
     this.recursionDepth = 0;
+    this.busyMsAccumulated = 0;
+    this.lastYieldCheckAt = 0;
 
     try {
       const lines = this.preprocessScript(script);
@@ -2680,6 +2791,14 @@ console.log(`Label registered: ${label} at line ${i}`);
     // exited before processing the signal, so the menu redraw never
     // happened and the user saw the whole script run linearly once.
     while (true) {
+      // Runaway-loop watchdog — see the field comments above the
+      // class's busyMsAccumulated declaration. Checked FIRST, before
+      // even the `i >= end` bound check, so a DO loop with an EMPTY
+      // body (no clauses between DO and END — the outer loop in
+      // executeDo still calls executeLines once per pass) is covered
+      // too, not just loops that execute real statements.
+      await this.yieldIfBusy();
+
       // Handle SIGNAL jump (Phase 4 + condition-trap fallback).
       // RKRM §7: an unmatched SIGNAL target (whether explicit goto
       // or a condition trap whose label doesn't exist in the
@@ -3525,6 +3644,20 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
         if (this.returnRequested) {
           break;
         }
+        // A SIGNAL whose target lies OUTSIDE this loop's own body range
+        // left the flag set (executeLines' propagation contract - see
+        // its own signalRequested handling) so the frame that opened
+        // this DO block can jump there. Without this check, this
+        // do/while/for loop keeps blindly re-entering executeLines for
+        // the next body pass; each call immediately no-ops (target is
+        // still out of range) and the interpreter spins forever without
+        // ever reaching a frame that CAN act on the signal - the
+        // watchdog's HALT-trap path hits this exactly: `signal on halt`
+        // routes through here, not through returnRequested, and the
+        // HALT: label always lives outside the loop body.
+        if (this.signalRequested) {
+          break;
+        }
       }
     } else if (doLine.toUpperCase().startsWith('WHILE ')) {
       // DO WHILE condition
@@ -3542,6 +3675,20 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
         if (this.returnRequested) {
           break;
         }
+        // A SIGNAL whose target lies OUTSIDE this loop's own body range
+        // left the flag set (executeLines' propagation contract - see
+        // its own signalRequested handling) so the frame that opened
+        // this DO block can jump there. Without this check, this
+        // do/while/for loop keeps blindly re-entering executeLines for
+        // the next body pass; each call immediately no-ops (target is
+        // still out of range) and the interpreter spins forever without
+        // ever reaching a frame that CAN act on the signal - the
+        // watchdog's HALT-trap path hits this exactly: `signal on halt`
+        // routes through here, not through returnRequested, and the
+        // HALT: label always lives outside the loop body.
+        if (this.signalRequested) {
+          break;
+        }
       }
     } else if (doLine.toUpperCase().startsWith('UNTIL ')) {
       // DO UNTIL condition
@@ -3557,6 +3704,20 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
           break;
         }
         if (this.returnRequested) {
+          break;
+        }
+        // A SIGNAL whose target lies OUTSIDE this loop's own body range
+        // left the flag set (executeLines' propagation contract - see
+        // its own signalRequested handling) so the frame that opened
+        // this DO block can jump there. Without this check, this
+        // do/while/for loop keeps blindly re-entering executeLines for
+        // the next body pass; each call immediately no-ops (target is
+        // still out of range) and the interpreter spins forever without
+        // ever reaching a frame that CAN act on the signal - the
+        // watchdog's HALT-trap path hits this exactly: `signal on halt`
+        // routes through here, not through returnRequested, and the
+        // HALT: label always lives outside the loop body.
+        if (this.signalRequested) {
           break;
         }
       } while (!(await this.evaluateCondition(condition)));
@@ -3586,6 +3747,20 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
         if (this.returnRequested) {
           break;
         }
+        // A SIGNAL whose target lies OUTSIDE this loop's own body range
+        // left the flag set (executeLines' propagation contract - see
+        // its own signalRequested handling) so the frame that opened
+        // this DO block can jump there. Without this check, this
+        // do/while/for loop keeps blindly re-entering executeLines for
+        // the next body pass; each call immediately no-ops (target is
+        // still out of range) and the interpreter spins forever without
+        // ever reaching a frame that CAN act on the signal - the
+        // watchdog's HALT-trap path hits this exactly: `signal on halt`
+        // routes through here, not through returnRequested, and the
+        // HALT: label always lives outside the loop body.
+        if (this.signalRequested) {
+          break;
+        }
       }
     } else {
       // DO count
@@ -3601,6 +3776,20 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
           break;
         }
         if (this.returnRequested) {
+          break;
+        }
+        // A SIGNAL whose target lies OUTSIDE this loop's own body range
+        // left the flag set (executeLines' propagation contract - see
+        // its own signalRequested handling) so the frame that opened
+        // this DO block can jump there. Without this check, this
+        // do/while/for loop keeps blindly re-entering executeLines for
+        // the next body pass; each call immediately no-ops (target is
+        // still out of range) and the interpreter spins forever without
+        // ever reaching a frame that CAN act on the signal - the
+        // watchdog's HALT-trap path hits this exactly: `signal on halt`
+        // routes through here, not through returnRequested, and the
+        // HALT: label always lives outside the loop body.
+        if (this.signalRequested) {
           break;
         }
       }
