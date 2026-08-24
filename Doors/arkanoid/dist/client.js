@@ -13,9 +13,10 @@
  * - Space: Launch ball / Pause
  * - Q: Quit to menu
  */
-import { ClientDoor, AudioEngine, KeyStateTracker, ScreenBuffer, } from '@amiexpress/bbs-door-sdk/client';
+import { ClientDoor, AudioEngine, KeyStateTracker, ScreenBuffer, TrackerEngine, } from '@amiexpress/bbs-door-sdk/client';
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 import { stepBall } from './ball-physics';
+import { trackForState } from './music-select';
 // =============================================================================
 // ANSI Escape Codes and Colors
 // =============================================================================
@@ -192,7 +193,11 @@ class Renderer {
 class ArkanoidGame {
     constructor() {
         this.lastUpdate = 0;
-        this.musicStarted = false;
+        this.tracker = null;
+        this.trackerContext = null;
+        this.currentTrack = null;
+        this.trackSeq = 0;
+        this.trackCache = new Map();
         // Guards against a double-submit: the 'enterName' state accepts BOTH a
         // keyboard Enter (handleNameInput) and a mouse click as "confirm name"
         // (see the two call sites of saveHighscore()), and neither transitions
@@ -351,7 +356,6 @@ class ArkanoidGame {
                 return;
             if (this.data.state === 'playing' || this.data.state === 'paused') {
                 this.data.state = 'menu';
-                this.stopMusic();
                 this.paint();
             }
         });
@@ -360,7 +364,6 @@ class ArkanoidGame {
                 return;
             if (this.data.state === 'playing' || this.data.state === 'paused') {
                 this.data.state = 'menu';
-                this.stopMusic();
                 this.paint();
             }
         });
@@ -723,7 +726,6 @@ class ArkanoidGame {
         this.playSound('gameover');
         if (this.data.lives <= 0) {
             this.data.state = 'gameover';
-            this.stopMusic();
         }
         else {
             this.data.balls = [this.createBall(true)];
@@ -738,7 +740,6 @@ class ArkanoidGame {
     nextLevel() {
         if (this.data.level >= 20) {
             this.data.state = 'victory';
-            this.stopMusic();
         }
         else {
             this.data.score += 1000 * this.data.level;
@@ -791,27 +792,70 @@ class ArkanoidGame {
             // Audio not available, silently fail
         }
     }
-    async startMusic() {
-        if (this.musicStarted)
-            return;
-        try {
-            await this.audio.init();
-            await this.audio.generateMusic({
-                prompt: 'upbeat arcade game chiptune',
-                tempo: 140,
-                pattern: 'x-x-x-x-',
-                instruments: ['square', 'triangle'],
-            });
-            this.musicStarted = true;
+    // ===========================================================================
+    // Music - real tracker modules (Zabutom XM pack) via the SDK TrackerEngine.
+    // trackForState() (music-select.ts) is the single source of which module
+    // belongs to which screen; updateMusic() runs every paint so the music can
+    // never drift from the rendered state. Sound effects stay on AudioEngine.
+    // ===========================================================================
+    /** Keep music in step with the rendered state. Deduped by currentTrack. */
+    updateMusic() {
+        const track = trackForState(this.data.state, this.data.level);
+        if (track === null) {
         }
-        catch (e) {
-            // Music not available, silently fail
+        else {
+            void this.playTrack(track);
         }
     }
-    stopMusic() {
+    async playTrack(name) {
+        if (this.currentTrack === name)
+            return;
+        this.currentTrack = name;
+        const seq = ++this.trackSeq;
         try {
-            this.audio.stopMusic();
-            this.musicStarted = false;
+            const tracker = this.ensureTracker();
+            let buffer = this.trackCache.get(name);
+            if (!buffer) {
+                const base = globalThis.__BBS__?.backendUrl || '';
+                const res = await fetch(`${base}/api/doors/ARKANOID/assets/${encodeURIComponent(name)}`);
+                if (!res.ok)
+                    throw new Error(`asset ${name}: HTTP ${res.status}`);
+                buffer = await res.arrayBuffer();
+                this.trackCache.set(name, buffer);
+            }
+            // The state may have moved on while the module downloaded - a stale
+            // fetch must not stomp the track that state now wants.
+            if (seq !== this.trackSeq)
+                return;
+            tracker.play(buffer);
+        }
+        catch (e) {
+            // Music is optional; sound effects keep working.
+            console.warn('[Arkanoid] music unavailable:', e);
+        }
+    }
+    ensureTracker() {
+        if (!this.tracker) {
+            // Own the AudioContext so we can resume it: chiptune3 never resumes a
+            // context the autoplay policy suspended. By door time the user has
+            // long since typed at the BBS, so sticky activation lets resume() win.
+            this.trackerContext = new AudioContext();
+            this.tracker = new TrackerEngine({
+                audioContext: this.trackerContext,
+                repeatCount: -1, // loop the module until the state changes it
+                volume: 0.6, // under the sound effects
+            });
+        }
+        if (this.trackerContext && this.trackerContext.state === 'suspended') {
+            void this.trackerContext.resume().catch(() => { });
+        }
+        return this.tracker;
+    }
+    stopMusic() {
+        this.currentTrack = null;
+        this.trackSeq++;
+        try {
+            this.tracker?.stop();
         }
         catch (e) {
             // Ignore
@@ -827,6 +871,7 @@ class ArkanoidGame {
      * a full browser -> backend -> browser round trip for zero pixels.
      */
     paint() {
+        this.updateMusic();
         const frame = this.render();
         if (frame)
             this.door.send(frame);
@@ -1045,7 +1090,6 @@ class ArkanoidGame {
                 }
                 else if (k === 'q') {
                     this.data.state = 'menu';
-                    this.stopMusic();
                 }
                 break;
             case 'gameover':
@@ -1117,7 +1161,6 @@ class ArkanoidGame {
         }
         else if (k === 'q') {
             this.data.state = 'menu';
-            this.stopMusic();
         }
     }
     async handleNameInput(key) {
@@ -1251,13 +1294,21 @@ class ArkanoidGame {
         this.data.startTime = Date.now();
         this.initLevel(1);
         this.data.state = 'playing';
-        this.startMusic();
     }
     quit() {
         this.door.send(ANSI.show + ANSI.reset);
         this.door.send(ANSI.clear + ANSI.home);
         this.door.send('\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
         this.stopMusic();
+        try {
+            this.tracker?.dispose();
+            void this.trackerContext?.close();
+        }
+        catch (e) {
+            // Ignore - the page is leaving the door either way.
+        }
+        this.tracker = null;
+        this.trackerContext = null;
         this.keyTracker.stop();
         this.gamepad?.destroy();
         this.door.shutdown();
