@@ -16,7 +16,8 @@
  * router, exactly as before; the door server sets none of those headers.
  */
 import express, { NextFunction, Request, Response } from 'express';
-import { Readable } from 'stream';
+import * as http from 'http';
+import * as https from 'https';
 
 /** True when a door server is configured. When false, app.ts does not mount
  *  the router at all, so the path 404s through Express's own no-route
@@ -50,41 +51,58 @@ function upstreamBase(): string {
 
 export const doorRepoRouter = express.Router();
 
-doorRepoRouter.use(async (req: Request, res: Response, next: NextFunction) => {
+doorRepoRouter.use((req: Request, res: Response, next: NextFunction) => {
   const base = upstreamBase();
   if (!base) {
     next();
     return;
   }
 
-  const target = `${base}/api/door-repo${req.url}`;
+  const target = new URL(`${base}/api/door-repo${req.url}`);
   const headers: Record<string, string> = { 'accept-encoding': 'identity' };
   for (const name of FORWARDED_REQUEST_HEADERS) {
     const value = req.headers[name];
     if (typeof value === 'string') headers[name] = value;
   }
 
-  let upstream: globalThis.Response;
-  try {
-    upstream = await fetch(target, { method: req.method, headers, redirect: 'manual' });
-  } catch (err) {
+  // Node's global fetch() is deliberately NOT used here: per the WHATWG
+  // spec, fetch() auto-injects Cache-Control: no-cache / Pragma: no-cache
+  // onto any request that already carries a manual conditional header
+  // (If-None-Match/If-Modified-Since above). The door server's req.fresh
+  // (Express's `fresh` package) treats Cache-Control: no-cache as "never
+  // fresh" regardless of ETag match, so a fetch()-based proxy silently
+  // never gets a 304 -- confirmed live 2026-08-24 (a raw http.request to
+  // the identical URL with the identical header got 304, fetch() got 200).
+  // http.request/https.request add no such header.
+  const client = target.protocol === 'https:' ? https : http;
+  const upstreamReq = client.request(
+    target,
+    { method: req.method, headers },
+    (upstream) => {
+      res.status(upstream.statusCode ?? 502);
+      for (const name of FORWARDED_RESPONSE_HEADERS) {
+        const value = upstream.headers[name];
+        if (typeof value === 'string') res.set(name, value);
+      }
+
+      if (upstream.statusCode === 304 || req.method === 'HEAD') {
+        upstream.resume();
+        res.end();
+        return;
+      }
+
+      upstream.pipe(res);
+    },
+  );
+
+  upstreamReq.on('error', (err) => {
     // Plain text in the same register as the API's own 404 body, so a C
     // client parsing bytes sees something predictable rather than HTML.
-    console.error(`[door-repo proxy] ERROR upstream unreachable: ${(err as Error).message}`);
-    res.status(502).set('Content-Type', 'text/plain').send('DOOR REPO UNAVAILABLE\r\n');
-    return;
-  }
+    console.error(`[door-repo proxy] ERROR upstream unreachable: ${err.message}`);
+    if (!res.headersSent) {
+      res.status(502).set('Content-Type', 'text/plain').send('DOOR REPO UNAVAILABLE\r\n');
+    }
+  });
 
-  res.status(upstream.status);
-  for (const name of FORWARDED_RESPONSE_HEADERS) {
-    const value = upstream.headers.get(name);
-    if (value !== null) res.set(name, value);
-  }
-
-  if (upstream.status === 304 || req.method === 'HEAD' || upstream.body === null) {
-    res.end();
-    return;
-  }
-
-  Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
+  upstreamReq.end();
 });
