@@ -357,7 +357,8 @@ export class WebhookCommandsHandler {
       { name: WebhookTrigger.VOTE_CAST, desc: 'Vote cast' },
       { name: WebhookTrigger.PRIVATE_MESSAGE, desc: 'Private message sent' },
       { name: WebhookTrigger.USER_KICKED, desc: 'User kicked/banned' },
-      { name: WebhookTrigger.MAIL_SCAN, desc: 'Mail scan performed' }
+      { name: WebhookTrigger.MAIL_SCAN, desc: 'Mail scan performed' },
+      { name: WebhookTrigger.DOOR_SCORE, desc: 'Door score or match result submitted' }
     ];
 
     for (const trigger of triggers) {
@@ -384,7 +385,13 @@ export class WebhookCommandsHandler {
     socket.emit('ansi-output', '\r\n');
 
     socket.emit('ansi-output', 'Webhook Name: ');
-    session.subState = LoggedOnSubState.READ_COMMAND;
+    // FILE_DIR_SELECT, not READ_COMMAND: READ_COMMAND has its own dedicated
+    // per-keystroke line-buffering in command.handler.ts (session.inputBuffer)
+    // that this handler never goes through, since the webhookAdd routing
+    // check fires first and treats every single keystroke as a complete
+    // line. FILE_DIR_SELECT is the substate every other free-text prompt in
+    // this codebase reuses for exactly this reason (see account.handler.ts).
+    session.subState = LoggedOnSubState.FILE_DIR_SELECT;
     session.tempData = { webhookAdd: { step: 'name' } };
   }
 
