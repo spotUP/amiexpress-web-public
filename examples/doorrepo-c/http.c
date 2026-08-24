@@ -1,4 +1,4 @@
-/* http.c - streaming HTTP/1.1 GET client for the DoorRepo repo endpoints.
+/* http.c - streaming HTTP/1.1 client for the DoorRepo repo endpoints.
  * See http.h for the interface contract.
  *
  * Platform-neutral: this file must never contain "#ifdef AMIGA" (or any
@@ -32,7 +32,13 @@
  * would be a real risk of running the stack out on a real Amiga. Static is
  * safe here: this door is single-threaded and http_get() never recurses. */
 #define BODY_CHUNK_SIZE  32768
-#define REQUEST_BUF_SIZE   512  /* the whole "GET ... HTTP/1.1\r\n...\r\n\r\n" request */
+/* The whole "<METHOD> <path> HTTP/1.1\r\nHost: ...\r\n...\r\n\r\n" header
+ * block (method line through the blank line that ends the headers,
+ * including any Content-Length line and any caller-supplied extra
+ * headers) - NOT the request body, which is written separately straight
+ * from the caller's buffer (see http_request()) rather than copied in
+ * here first. */
+#define REQUEST_BUF_SIZE   512
 
 /* A buffered socket reader: net_read() is called in READ_AHEAD_SIZE-byte
  * chunks and lines are extracted from that buffer, so header parsing never
@@ -314,44 +320,125 @@ static void format_port_suffix(char *out, int port)
     *out = '\0';
 }
 
-/* Builds "GET <path_and_query> HTTP/1.1\r\nHost: <host>[:<port>]\r\n
- * Connection: close\r\nUser-Agent: ...\r\n\r\n" into `out`. Never uses an
+/* Formats `v` in decimal (no leading zeros, "0" for v == 0) into `out`,
+ * NUL-terminated, bounded to outsize bytes including the NUL. Returns the
+ * number of digit characters written (excluding the NUL), or 0 if it
+ * would not fit - at most 10 digits are ever needed for a 32-bit unsigned
+ * long, so this only matters for a pathologically small buffer. Avoids
+ * sprintf(): C89 has no snprintf. */
+static unsigned long format_ulong(char *out, unsigned long outsize, unsigned long v)
+{
+    char tmp[24];
+    unsigned long i = 0;
+    unsigned long n;
+
+    if (v == 0) {
+        tmp[i++] = '0';
+    } else {
+        while (v > 0) {
+            tmp[i++] = (char) ('0' + (v % 10));
+            v /= 10;
+        }
+    }
+    n = i;
+    if (n + 1 > outsize) {
+        return 0;
+    }
+    while (i > 0) {
+        i--;
+        *out++ = tmp[i];
+    }
+    *out = '\0';
+    return n;
+}
+
+/* Writes exactly `len` bytes from `buf` to `fd`, looping over short
+ * net_write()s the same way http_get() always has. Returns 0 on success,
+ * -1 on the first write error (net_write() returning <= 0). */
+static int write_all(int fd, const char *buf, unsigned long len)
+{
+    unsigned long written = 0;
+    while (written < len) {
+        long n = net_write(fd, buf + written, len - written);
+        if (n <= 0) {
+            return -1;
+        }
+        written += (unsigned long) n;
+    }
+    return 0;
+}
+
+/* Builds "<method> <path_and_query> HTTP/1.1\r\nHost: <host>[:<port>]\r\n
+ * Connection: close\r\nUser-Agent: ...\r\n[Content-Length: <body_len>\r\n]
+ * [<extra_headers[i]>...]\r\n" into `out` - the full header block up to
+ * and including the blank line that ends it, but NOT the body (written
+ * separately by the caller, straight from its own buffer). Never uses an
  * unbounded string function on caller-supplied text: the total length is
  * computed first and checked against outsize before any byte is copied,
- * so an oversized host/path is a clean HTTP_ERR_REQUEST_TOO_LONG rather
- * than a buffer overrun. Returns the request length, or -1 if it would
- * not fit. */
-static int build_request(char *out, unsigned long outsize, const char *host, int port, const char *path_and_query)
+ * so an oversized host/path/headers is a clean -1 (HTTP_ERR_REQUEST_TOO_LONG
+ * to the caller) rather than a buffer overrun. Returns the header block
+ * length, or -1 if it would not fit. */
+static int build_request(char *out, unsigned long outsize, const char *method,
+                          const char *host, int port, const char *path_and_query,
+                          int have_body, unsigned long body_len,
+                          const char * const *extra_headers, int extra_header_count)
 {
-    static const char p1[] = "GET ";
     static const char p2[] = " HTTP/1.1\r\nHost: ";
-    static const char p3[] = "\r\nConnection: close\r\nUser-Agent: DoorRepo-C-Client/1.0\r\n\r\n";
+    static const char p3[] = "\r\nConnection: close\r\nUser-Agent: DoorRepo-C-Client/1.0\r\n";
+    static const char cl_prefix[] = "Content-Length: ";
     char portbuf[16];
+    char cl_value[24];
+    unsigned long cl_value_len = 0;
     unsigned long need;
     unsigned long pos;
-    unsigned long l1, l2, l3, lh, lp, lport;
+    unsigned long lm, l2, l3, lh, lp, lport;
+    int i;
 
     format_port_suffix(portbuf, port);
 
-    l1 = (unsigned long) (sizeof(p1) - 1);
+    lm = (unsigned long) strlen(method);
     l2 = (unsigned long) (sizeof(p2) - 1);
     l3 = (unsigned long) (sizeof(p3) - 1);
     lh = (unsigned long) strlen(host);
     lp = (unsigned long) strlen(path_and_query);
     lport = (unsigned long) strlen(portbuf);
 
-    need = l1 + lp + l2 + lh + lport + l3;
+    need = lm + 1 /* space between method and path */ + lp + l2 + lh + lport + l3;
+
+    if (have_body) {
+        cl_value_len = format_ulong(cl_value, sizeof(cl_value), body_len);
+        need += (unsigned long) (sizeof(cl_prefix) - 1) + cl_value_len + 2 /* \r\n */;
+    }
+    for (i = 0; i < extra_header_count; i++) {
+        if (extra_headers[i] == (const char *) 0) {
+            return -1;
+        }
+        need += (unsigned long) strlen(extra_headers[i]);
+    }
+    need += 2; /* the blank line that ends the header block */
+
     if (need + 1 > outsize) {
         return -1;
     }
 
     pos = 0;
-    memcpy(out + pos, p1, l1); pos += l1;
+    memcpy(out + pos, method, lm); pos += lm;
+    out[pos++] = ' ';
     memcpy(out + pos, path_and_query, lp); pos += lp;
     memcpy(out + pos, p2, l2); pos += l2;
     memcpy(out + pos, host, lh); pos += lh;
     memcpy(out + pos, portbuf, lport); pos += lport;
     memcpy(out + pos, p3, l3); pos += l3;
+    if (have_body) {
+        memcpy(out + pos, cl_prefix, sizeof(cl_prefix) - 1); pos += sizeof(cl_prefix) - 1;
+        memcpy(out + pos, cl_value, cl_value_len); pos += cl_value_len;
+        out[pos++] = '\r'; out[pos++] = '\n';
+    }
+    for (i = 0; i < extra_header_count; i++) {
+        unsigned long hl = (unsigned long) strlen(extra_headers[i]);
+        memcpy(out + pos, extra_headers[i], hl); pos += hl;
+    }
+    out[pos++] = '\r'; out[pos++] = '\n';
     out[pos] = '\0';
 
     return (int) pos;
@@ -362,10 +449,22 @@ int http_get(const dr_config *cfg, const char *path_and_query,
              int (*sink)(void *ctx, const unsigned char *buf, unsigned long len),
              void *ctx)
 {
+    return http_request(cfg, "GET", path_and_query, (const char *) 0, 0,
+                         (const char * const *) 0, 0, resp, sink, ctx);
+}
+
+int http_request(const dr_config *cfg, const char *method,
+                  const char *path_and_query,
+                  const char *body, unsigned long body_len,
+                  const char * const *extra_headers, int extra_header_count,
+                  http_response *resp,
+                  int (*sink)(void *ctx, const unsigned char *buf, unsigned long len),
+                  void *ctx)
+{
     int fd;
     char request[REQUEST_BUF_SIZE];
     int req_len;
-    unsigned long written;
+    int have_body;
     http_conn conn;
     char line[LINE_BUF_SIZE];
     long linelen;
@@ -374,13 +473,22 @@ int http_get(const dr_config *cfg, const char *path_and_query,
     unsigned long avail;
     static unsigned char bodybuf[BODY_CHUNK_SIZE];
 
-    if (cfg == (const dr_config *) 0 || path_and_query == (const char *) 0
+    if (cfg == (const dr_config *) 0 || method == (const char *) 0 || path_and_query == (const char *) 0
         || resp == (http_response *) 0 || sink == 0) {
+        return HTTP_ERR_ARGS;
+    }
+    if (extra_header_count < 0 || (extra_header_count > 0 && extra_headers == (const char * const *) 0)) {
+        return HTTP_ERR_ARGS;
+    }
+    if (body_len > 0 && body == (const char *) 0) {
         return HTTP_ERR_ARGS;
     }
     memset(resp, 0, sizeof(*resp));
 
-    req_len = build_request(request, sizeof(request), cfg->host, cfg->port, path_and_query);
+    have_body = (body != (const char *) 0);
+
+    req_len = build_request(request, sizeof(request), method, cfg->host, cfg->port, path_and_query,
+                             have_body, body_len, extra_headers, extra_header_count);
     if (req_len < 0) {
         return HTTP_ERR_REQUEST_TOO_LONG;
     }
@@ -390,14 +498,16 @@ int http_get(const dr_config *cfg, const char *path_and_query,
         return HTTP_ERR_CONNECT;
     }
 
-    written = 0;
-    while (written < (unsigned long) req_len) {
-        long n = net_write(fd, request + written, (unsigned long) req_len - written);
-        if (n <= 0) {
+    if (write_all(fd, request, (unsigned long) req_len) != 0) {
+        net_close(fd);
+        return HTTP_ERR_WRITE;
+    }
+
+    if (have_body && body_len > 0) {
+        if (write_all(fd, body, body_len) != 0) {
             net_close(fd);
             return HTTP_ERR_WRITE;
         }
-        written += (unsigned long) n;
     }
 
     conn.fd = fd;

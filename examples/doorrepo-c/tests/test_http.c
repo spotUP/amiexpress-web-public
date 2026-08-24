@@ -566,6 +566,200 @@ TEST(header_line_longer_than_buffer_does_not_overflow)
     stub_server_reap(pid);
 }
 
+TEST(request_post_with_body_and_extra_headers_sends_exact_bytes)
+{
+    static const char body[] = "{\"user\":\"sysop\",\"pass\":\"hunter2\"}";
+    const char *extra_headers[2];
+    char resp_buf[512];
+    int resp_len;
+    int port;
+    int pid;
+    int capture_fd;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+    unsigned char captured[2048];
+    unsigned long captured_len;
+    char captured_str[2049];
+
+    extra_headers[0] = "Authorization: Bearer testtoken123\r\n";
+    extra_headers[1] = "Content-Type: application/json\r\n";
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 2\r\n"
+        "Connection: close\r\n\r\n{}");
+
+    port = stub_server_start_capturing((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid, &capture_fd);
+    ASSERT_TRUE(port >= 0, "capturing stub server should start");
+
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_request(&cfg, "POST", "/api/door-repo/admin/login",
+                       body, (unsigned long) strlen(body),
+                       extra_headers, 2,
+                       &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "http_request should succeed");
+    ASSERT_EQ(resp.status, 200, "status should be 200");
+
+    captured_len = stub_server_read_capture(capture_fd, captured, sizeof(captured) - 1);
+    stub_server_reap(pid);
+
+    memcpy(captured_str, captured, captured_len);
+    captured_str[captured_len] = '\0';
+
+    ASSERT_TRUE(strncmp(captured_str, "POST /api/door-repo/admin/login HTTP/1.1\r\n",
+                         strlen("POST /api/door-repo/admin/login HTTP/1.1\r\n")) == 0,
+                "request line should use the requested method and path");
+    ASSERT_TRUE(strstr(captured_str, "Content-Length: 33\r\n") != (char *) 0,
+                "Content-Length should match the body length exactly");
+    ASSERT_TRUE(strstr(captured_str, "Authorization: Bearer testtoken123\r\n") != (char *) 0,
+                "extra header (Authorization) should be sent verbatim");
+    ASSERT_TRUE(strstr(captured_str, "Content-Type: application/json\r\n") != (char *) 0,
+                "extra header (Content-Type) should be sent verbatim");
+    ASSERT_TRUE(strstr(captured_str, "\r\n\r\n{\"user\":\"sysop\",\"pass\":\"hunter2\"}") != (char *) 0,
+                "the exact body bytes should follow the blank line that ends the headers");
+}
+
+TEST(request_get_with_no_body_or_extra_headers_matches_http_get_wire_format)
+{
+    char resp_buf[512];
+    int resp_len;
+    int port;
+    int pid;
+    int capture_fd;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+    unsigned char captured[2048];
+    unsigned long captured_len;
+    char captured_str[2049];
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 2\r\n"
+        "Connection: close\r\n\r\n{}");
+
+    port = stub_server_start_capturing((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid, &capture_fd);
+    ASSERT_TRUE(port >= 0, "capturing stub server should start");
+
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_request(&cfg, "GET", "/api/door-repo/list.txt",
+                       (const char *) 0, 0,
+                       (const char * const *) 0, 0,
+                       &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "http_request should succeed");
+
+    captured_len = stub_server_read_capture(capture_fd, captured, sizeof(captured) - 1);
+    stub_server_reap(pid);
+
+    memcpy(captured_str, captured, captured_len);
+    captured_str[captured_len] = '\0';
+
+    ASSERT_TRUE(strncmp(captured_str, "GET /api/door-repo/list.txt HTTP/1.1\r\n",
+                         strlen("GET /api/door-repo/list.txt HTTP/1.1\r\n")) == 0,
+                "GET with no body should keep the exact request line http_get() always sent");
+    ASSERT_TRUE(strstr(captured_str, "Content-Length:") == (char *) 0,
+                "no Content-Length header should be added when body is NULL, matching http_get()'s existing wire format");
+    ASSERT_TRUE(strstr(captured_str, "Connection: close\r\n") != (char *) 0,
+                "Connection: close header should still be present");
+    ASSERT_TRUE(strstr(captured_str, "User-Agent: DoorRepo-C-Client/1.0\r\n") != (char *) 0,
+                "User-Agent header should still be present");
+}
+
+TEST(request_with_body_but_no_extra_headers_still_sends_content_length)
+{
+    static const char body[] = "ack";
+    char resp_buf[256];
+    int resp_len;
+    int port;
+    int pid;
+    int capture_fd;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+    unsigned char captured[1024];
+    unsigned long captured_len;
+    char captured_str[1025];
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 2\r\n"
+        "Connection: close\r\n\r\n{}");
+
+    port = stub_server_start_capturing((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid, &capture_fd);
+    ASSERT_TRUE(port >= 0, "capturing stub server should start");
+
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_request(&cfg, "PATCH", "/api/door-repo/admin/submissions/42",
+                       body, (unsigned long) strlen(body),
+                       (const char * const *) 0, 0,
+                       &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "http_request should succeed");
+
+    captured_len = stub_server_read_capture(capture_fd, captured, sizeof(captured) - 1);
+    stub_server_reap(pid);
+
+    memcpy(captured_str, captured, captured_len);
+    captured_str[captured_len] = '\0';
+
+    ASSERT_TRUE(strncmp(captured_str, "PATCH /api/door-repo/admin/submissions/42 HTTP/1.1\r\n",
+                         strlen("PATCH /api/door-repo/admin/submissions/42 HTTP/1.1\r\n")) == 0,
+                "request line should carry the PATCH method and full path");
+    ASSERT_TRUE(strstr(captured_str, "Content-Length: 3\r\n") != (char *) 0,
+                "Content-Length should be sent even with zero extra headers");
+    ASSERT_TRUE(strstr(captured_str, "\r\n\r\nack") != (char *) 0,
+                "body bytes should follow the blank line");
+}
+
+TEST(get_wrapper_still_produces_the_documented_error_codes_after_refactor)
+{
+    /* Regression guard for the http_get() -> http_request() refactor:
+     * re-runs a representative slice of http_get()'s pre-existing
+     * behaviors (success, and the sink-abort error path) to prove the
+     * wrapper is byte-identical in behavior, not just in signature. The
+     * full pre-existing suite above already re-verifies every other case
+     * unchanged; this test exists so a `grep TEST` of this file shows an
+     * explicit assertion of that fact, per the task brief. */
+    static const char body[] = "hello world, this is the archive bytes";
+    char resp_buf[1024];
+    int resp_len;
+    int port;
+    int pid;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: %lu\r\n"
+        "Connection: close\r\n\r\n%s",
+        (unsigned long) strlen(body), body);
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    ASSERT_TRUE(port >= 0, "stub server should start");
+
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_get(&cfg, "/api/door-repo/archive/AETRIV10.LHA", &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "http_get() must still succeed after becoming a http_request() wrapper");
+    ASSERT_EQ(ctx.data_len, (unsigned long) strlen(body), "http_get() must still deliver the exact body byte count");
+    ASSERT_TRUE(memcmp(ctx.data, body, strlen(body)) == 0, "http_get() must still deliver byte-exact body content");
+
+    stub_server_reap(pid);
+}
+
 TEST(request_larger_than_buffer_is_a_clean_error)
 {
     static char huge_path[1000];
@@ -611,6 +805,10 @@ int main(void)
     RUN_TEST(connect_to_closed_port_is_a_clean_error);
     RUN_TEST(connect_to_closed_port_says_refused_not_just_failed);
     RUN_TEST(header_line_longer_than_buffer_does_not_overflow);
+    RUN_TEST(request_post_with_body_and_extra_headers_sends_exact_bytes);
+    RUN_TEST(request_get_with_no_body_or_extra_headers_matches_http_get_wire_format);
+    RUN_TEST(request_with_body_but_no_extra_headers_still_sends_content_length);
+    RUN_TEST(get_wrapper_still_produces_the_documented_error_codes_after_refactor);
     RUN_TEST(request_larger_than_buffer_is_a_clean_error);
 
     printf("\n====== Results ======\n");

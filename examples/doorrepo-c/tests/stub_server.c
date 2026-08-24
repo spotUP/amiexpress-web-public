@@ -10,9 +10,12 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "stub_server.h"
+
+#define CAPTURE_BUF_SIZE 4096
 
 static int make_listener(int *out_port)
 {
@@ -138,4 +141,130 @@ int stub_closed_port(void)
     }
     close(fd); /* never listen()s: nothing accepts connections on this port now */
     return port;
+}
+
+int stub_server_start_capturing(const unsigned char *response, unsigned long response_len,
+                                 int *out_pid, int *out_capture_fd)
+{
+    int listen_fd;
+    int port;
+    int pipefd[2];
+    pid_t pid;
+
+    if (pipe(pipefd) != 0) {
+        return -1;
+    }
+
+    listen_fd = make_listener(&port);
+    if (listen_fd < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+    if (listen(listen_fd, 1) != 0) {
+        close(listen_fd);
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+
+    pid = fork();
+    if (pid < 0) {
+        close(listen_fd);
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+
+    if (pid == 0) {
+        /* Child: capture the request, hand it to the parent over the
+         * pipe, THEN serve the scripted response, then exit - see
+         * stub_server.h's doc comment for why this ordering matters. */
+        int conn_fd;
+        unsigned long sent;
+        static unsigned char capbuf[CAPTURE_BUF_SIZE];
+        unsigned long caplen = 0;
+        struct timeval tv;
+
+        close(pipefd[0]);
+
+        conn_fd = accept(listen_fd, (struct sockaddr *) 0, (socklen_t *) 0);
+        close(listen_fd);
+        if (conn_fd >= 0) {
+            /* A short receive timeout is how this loop knows the client
+             * is done sending: the client (http_get()/http_request())
+             * never closes its write side before reading the response,
+             * so waiting for EOF here would deadlock. Once no more bytes
+             * arrive within the timeout, everything the client sent has
+             * necessarily already been delivered on a loopback
+             * connection. */
+            tv.tv_sec = 0;
+            tv.tv_usec = 200000;
+            setsockopt(conn_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+            while (caplen < sizeof(capbuf)) {
+                ssize_t n = read(conn_fd, capbuf + caplen, sizeof(capbuf) - caplen);
+                if (n <= 0) {
+                    break;
+                }
+                caplen += (unsigned long) n;
+            }
+
+            {
+                unsigned long off = 0;
+                while (off < caplen) {
+                    ssize_t n = write(pipefd[1], capbuf + off, (size_t) (caplen - off));
+                    if (n <= 0) {
+                        break;
+                    }
+                    off += (unsigned long) n;
+                }
+            }
+            close(pipefd[1]);
+
+            sent = 0;
+            while (sent < response_len) {
+                ssize_t n = write(conn_fd, response + sent, (size_t) (response_len - sent));
+                if (n <= 0) {
+                    break;
+                }
+                sent += (unsigned long) n;
+            }
+            close(conn_fd);
+        } else {
+            close(pipefd[1]);
+        }
+        _exit(0);
+    }
+
+    /* Parent: the child owns the connection and the pipe's write end now. */
+    close(pipefd[1]);
+    close(listen_fd);
+    *out_pid = (int) pid;
+    *out_capture_fd = pipefd[0];
+    return port;
+}
+
+unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsigned long outsize)
+{
+    unsigned char drain[512];
+    unsigned long total = 0;
+
+    for (;;) {
+        ssize_t n = read(capture_fd, drain, sizeof(drain));
+        if (n <= 0) {
+            break;
+        }
+        {
+            unsigned long avail = (unsigned long) n;
+            unsigned long room = (total < outsize) ? outsize - total : 0;
+            unsigned long copy = (avail < room) ? avail : room;
+            if (copy > 0) {
+                memcpy(out + total, drain, copy);
+            }
+            total += copy;
+        }
+    }
+    close(capture_fd);
+    return total;
 }

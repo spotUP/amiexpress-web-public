@@ -67,10 +67,78 @@ typedef struct {
  *
  * Returns HTTP_OK (0) on a fully-received response (regardless of HTTP
  * status - a 404 with a well-formed body is HTTP_OK with resp->status ==
- * 404), or one of the HTTP_ERR_* codes above. */
+ * 404), or one of the HTTP_ERR_* codes above.
+ *
+ * Implemented as a thin wrapper around http_request() (see below) - this
+ * signature, and every byte http_get() puts on the wire or hands to
+ * `sink`, is unchanged from before http_request() existed. */
 int http_get(const dr_config *cfg, const char *path_and_query,
              http_response *resp,
              int (*sink)(void *ctx, const unsigned char *buf, unsigned long len),
              void *ctx);
+
+/* Generalizes http_get(): any method, an optional request body, and extra
+ * headers beyond Host/Connection/User-Agent (Authorization, Content-Type,
+ * ...). http_get() is exactly the thin wrapper:
+ *   http_get(cfg, path, resp, sink, ctx) ==
+ *     http_request(cfg, "GET", path, (const char *) 0, 0,
+ *                  (const char * const *) 0, 0, resp, sink, ctx)
+ * so every existing caller and every existing test of http_get() needed
+ * no changes when this function was added.
+ *
+ * `method` is sent verbatim as the request line's method token (e.g.
+ * "GET", "POST", "PATCH") - not validated against a fixed set, since this
+ * module only assembles bytes, it does not know which methods the admin
+ * API accepts.
+ *
+ * `body`/`body_len`: when `body` is non-NULL, a "Content-Length:
+ * <body_len>" header is sent (even if body_len is 0) and exactly
+ * `body_len` bytes from `body` are written after the header block, before
+ * any response byte is read - the same buffered-write discipline
+ * http_get() already used for the request line, just followed by a
+ * second write for the body. When `body` is NULL, no Content-Length
+ * header is added and nothing is written after the headers - this is
+ * exactly http_get()'s original wire format.
+ *
+ * `extra_headers` is an array of `extra_header_count` already-formatted
+ * "Name: value\r\n" strings (the caller assembles
+ * "Authorization: Bearer <token>\r\n", "Content-Type: application/json\r\n",
+ * etc.) inserted into the header block after the fixed
+ * Host/Connection/User-Agent/Content-Length headers and before the blank
+ * line that ends it. Pass (const char * const *) 0 and 0 for none. This
+ * module deliberately has no generic header-map type - C89 has no good
+ * container for one, and every other part of this module already prefers
+ * the caller doing string assembly while http.c does only transport.
+ *
+ * Response handling - status line, header parsing, Content-Length/EOF
+ * body framing, the chunked rejection, the byte-cap discipline in
+ * conn_read_line()/the fixed body-chunk buffer - is entirely unchanged
+ * and shared with http_get(): all of it runs exactly once per call,
+ * regardless of which entry point was used.
+ *
+ * Response-size ceiling: http_request() does NOT itself cap how many
+ * response bytes `sink` receives beyond what http_get() already enforced
+ * (Content-Length framing when present; otherwise EOF-terminated, chunked
+ * transfer bounded only by conn_read_line()'s per-line cap on header
+ * lines). It stays transport-generic on purpose: a JSON-specific ceiling
+ * (e.g. capping an admin login/submissions-list/PATCH-acknowledgment
+ * response's *accumulation buffer* to a fixed size like 16 KB) belongs in
+ * the `sink` callback a future admin-API caller writes, the same way this
+ * door's other unbounded-response defences already live at the call site
+ * that actually buffers the data (see README.md's "Security" section,
+ * vulnerability class #4) rather than in this generic streaming client.
+ *
+ * Returns HTTP_OK (0) or one of the HTTP_ERR_* codes above, exactly like
+ * http_get() - plus HTTP_ERR_ARGS if `method` is NULL, if
+ * extra_header_count is negative, if extra_header_count > 0 but
+ * extra_headers is NULL (or contains a NULL entry), or if body_len > 0
+ * but body is NULL. */
+int http_request(const dr_config *cfg, const char *method,
+                  const char *path_and_query,
+                  const char *body, unsigned long body_len,
+                  const char * const *extra_headers, int extra_header_count,
+                  http_response *resp,
+                  int (*sink)(void *ctx, const unsigned char *buf, unsigned long len),
+                  void *ctx);
 
 #endif /* DOORREPO_HTTP_H */

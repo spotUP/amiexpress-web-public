@@ -25,4 +25,28 @@ void stub_server_reap(int pid);
  * path. Returns -1 on failure. */
 int stub_closed_port(void);
 
+/* Like stub_server_start(), but also captures every byte the client sends
+ * (request line, headers, and any request body) instead of discarding
+ * them. The forked child drains the client's request with a short receive
+ * timeout (so it stops once no more bytes arrive, without needing to know
+ * the request length up front or waiting for the client to close its
+ * write side - the client never does, since it is still waiting to read
+ * the response), THEN writes the captured bytes across a pipe to the
+ * parent, THEN sends `response`, exactly like stub_server_start().
+ *
+ * Returns the port to connect to on success (storing the child pid in
+ * *out_pid and a pipe read-fd in *out_capture_fd, for
+ * stub_server_read_capture()), or -1 on failure. */
+int stub_server_start_capturing(const unsigned char *response, unsigned long response_len,
+                                 int *out_pid, int *out_capture_fd);
+
+/* Reads everything the paired stub_server_start_capturing() child
+ * captured from the pipe at capture_fd into `out` (bounded to outsize
+ * bytes - any excess captured bytes are still drained from the pipe so
+ * the child never blocks on a full pipe buffer, but are not copied into
+ * `out`), then closes capture_fd. Call this after the HTTP exchange
+ * (e.g. after http_get()/http_request() returns), before
+ * stub_server_reap(). Returns the number of bytes copied into `out`. */
+unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsigned long outsize);
+
 #endif /* DOORREPO_TEST_STUB_SERVER_H */
