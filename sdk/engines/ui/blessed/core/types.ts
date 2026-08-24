@@ -20,6 +20,20 @@ export interface Colors {
   opacity?: number;  // Web-only: CSS opacity for element (0-1). Emits OSC overlay event for web clients.
 }
 
+/**
+ * Style for a state variant (focus / hover / active / disabled).
+ *
+ * Same as Colors but may also restyle the element's border - every renderer
+ * already reads `style.focus.border` / `style.hover.border` /
+ * `style.disabled.border` (see Screen._renderBorder and
+ * Element.renderBorderWithLabel), but the state styles were typed as plain
+ * `Colors`, so declaring a focus border was a TypeScript error despite
+ * being fully supported at runtime.
+ */
+export interface StateColors extends Colors {
+  border?: Colors;
+}
+
 export interface Border {
   type?: 'line' | 'bg' | 'none' | 'heavy' | 'double' | 'round' | 'ascii';
   fg?: Color;
@@ -84,10 +98,10 @@ export interface ElementOptions {
   style?: Colors & {
     border?: Colors;
     scrollbar?: Colors;
-    focus?: Colors;
-    hover?: Colors;
-    active?: Colors;
-    disabled?: Colors;
+    focus?: StateColors;
+    hover?: StateColors;
+    active?: StateColors;
+    disabled?: StateColors;
   };
 
   border?: Border | 'line' | 'bg';
@@ -446,10 +460,10 @@ export interface Element {
   style: Colors & {
     border?: Colors;
     scrollbar?: Colors;
-    focus?: Colors;
-    hover?: Colors;
-    active?: Colors;
-    disabled?: Colors;
+    focus?: StateColors;
+    hover?: StateColors;
+    active?: StateColors;
+    disabled?: StateColors;
   };
   border: Border | null;
   parent: Element | null;

@@ -41,7 +41,7 @@ function cycleFocus(
   if (visible.length === 0) return;
   const currentIndex = visible.indexOf(screen.focused as any);
   const nextIndex = currentIndex === -1
-    ? 0
+    ? (direction === 1 ? 0 : visible.length - 1)
     : (currentIndex + direction + visible.length) % visible.length;
   screen.focused = visible[nextIndex];
 }
@@ -69,6 +69,22 @@ describe('MultiplayerLobby Tab cycle', () => {
     // Wraps back to the first target.
     cycleFocus(targets, screen, 1);
     expect(screen.focused).toBe(playerList);
+  });
+
+  it('enters at the LAST target when Shift-Tab starts from outside the cycle', () => {
+    // Shift-Tab means "travel backwards", so arriving from outside (chat
+    // input, a tab button) should land on the end of the row, not jump to
+    // the front the way plain Tab does.
+    const playerList = makeTarget('playerList');
+    const startButton = makeTarget('startButton');
+    const leaveButton = makeTarget('leaveButton');
+    const chatInput = makeTarget('chatInput'); // outside the cycle
+    const targets = [playerList, startButton, leaveButton];
+    const screen = { focused: chatInput as FocusTarget | null };
+
+    cycleFocus(targets, screen, -1);
+
+    expect(screen.focused).toBe(leaveButton);
   });
 
   it('falls back to the first visible target when focus is on something outside the cycle', () => {

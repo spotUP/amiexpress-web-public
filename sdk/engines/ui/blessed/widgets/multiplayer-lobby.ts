@@ -529,7 +529,7 @@ export class MultiplayerLobby extends EventEmitter {
       width: leftColWidth,
       height: playerListHeight,
       label: this.features.slotBased ? 'Players (Slots)' : 'Players',
-      style: { border: { fg: 'cyan' }, bg: 'black' },
+      style: { border: { fg: 'cyan' }, bg: 'black', focus: { border: { fg: 'light-white', bold: true } } },
       fitContent: false,
       allowAutoDock: false,
       resizable: false,
@@ -590,7 +590,7 @@ export class MultiplayerLobby extends EventEmitter {
         width: rightColWidth,
         height: teamSelectorHeight,
         label: 'Select Team',
-        style: { border: { fg: 'magenta' }, bg: 'black' },
+        style: { border: { fg: 'magenta' }, bg: 'black', focus: { border: { fg: 'light-white', bold: true } } },
         fitContent: false,
         allowAutoDock: false,
         resizable: false,
@@ -658,7 +658,7 @@ export class MultiplayerLobby extends EventEmitter {
         width: rightColWidth,
         height: settingsEditorHeight,
         label: 'Game Options (O)',
-        style: { border: { fg: 'yellow' }, bg: 'black' },
+        style: { border: { fg: 'yellow' }, bg: 'black', focus: { border: { fg: 'light-white', bold: true } } },
         fitContent: false,
         allowAutoDock: false,
         resizable: false,
@@ -747,7 +747,7 @@ export class MultiplayerLobby extends EventEmitter {
           width: socialLeftWidth,
           height: availableHeight,
           label: 'Leaderboard / Winlist',
-          style: { border: { fg: 'cyan' }, bg: 'black' },
+          style: { border: { fg: 'cyan' }, bg: 'black', focus: { border: { fg: 'light-white', bold: true } } },
           fitContent: false,
           allowAutoDock: false,
           resizable: false,
@@ -778,7 +778,7 @@ export class MultiplayerLobby extends EventEmitter {
           width: chatWidth,
           height: availableHeight,
           label: 'Chat (T to type)',
-          style: { border: { fg: 'white' }, bg: 'black' },
+          style: { border: { fg: 'white' }, bg: 'black', focus: { border: { fg: 'light-white', bold: true } } },
           fitContent: false,
           allowAutoDock: false,
           resizable: false,
@@ -1025,7 +1025,12 @@ export class MultiplayerLobby extends EventEmitter {
       this.parent.key(['t'], () => {
         if (!this.widgetHasFocus()) {
           if (this.currentTab !== 1) this.switchTab(1);
-          this.chatInput?.focus();
+          // Focus on the NEXT tick, not inside this keypress. Focusing the
+          // Textbox synchronously means the very keypress that triggered
+          // this shortcut goes on to reach the now-focused input, which
+          // (inputOnFocus) types it - so pressing T to open the chat left a
+          // stray "t" sitting in the box (reported live 2026-08-25).
+          setTimeout(() => this.chatInput?.focus(), 0);
         }
       });
     }
@@ -1064,8 +1069,11 @@ export class MultiplayerLobby extends EventEmitter {
       const focusTargets = getVisibleFocusTargets();
       if (focusTargets.length === 0) return;
       const currentIndex = focusTargets.indexOf(this.parent.focused as any);
+      // Focus sitting outside the cycle entirely (chat input, a tab button):
+      // enter at whichever END the travel direction implies, so Shift-Tab
+      // reaches the LAST target rather than jumping to the first like Tab.
       const nextIndex = currentIndex === -1
-        ? 0
+        ? (direction === 1 ? 0 : focusTargets.length - 1)
         : (currentIndex + direction + focusTargets.length) % focusTargets.length;
       focusTargets[nextIndex]?.focus();
       this.parent.render();
@@ -1234,7 +1242,7 @@ export class MultiplayerLobby extends EventEmitter {
       width: 76,
       height: tableListHeight,
       label: 'Available Tables',
-      style: { border: { fg: 'cyan' }, bg: 'black' },
+      style: { border: { fg: 'cyan' }, bg: 'black', focus: { border: { fg: 'light-white', bold: true } } },
       fitContent: false,
       allowAutoDock: true,
       resizable: true,
@@ -1953,6 +1961,12 @@ export class MultiplayerLobby extends EventEmitter {
         nextLeft += 12;
       }
     }
+    // Force Start is CONSTRUCTED at the same left as Bots (both at the
+    // post-Leave slot), so without this it sits directly on top of the Bots
+    // button the moment startMatch() un-hides it while Bots is still shown.
+    if (this.forceStartButton) {
+      (this.forceStartButton as any).left = nextLeft;
+    }
 
     // Enable settings editing for host
     this.updateSettingsEditor();
@@ -2022,15 +2036,21 @@ export class MultiplayerLobby extends EventEmitter {
       }
 
       // HOST only from here ─────────────────────────────────────────────────
-      if (this.forceStartButton) {
-        this.forceStartButton.hidden = false;
-        this.parent.render();
-      }
-
       // All humans already ready — launch immediately without countdown
       if (this.checkAllHumansReady()) {
         await this.launchMatch();
         return;
+      }
+
+      // Only now is Force Start meaningful: it exists purely to cut short
+      // the "waiting for other players" countdown below. It used to be
+      // revealed the instant the host pressed Start - including in the
+      // common case where the match launches immediately and there is no
+      // countdown to skip, leaving a button on screen that genuinely did
+      // nothing.
+      if (this.forceStartButton) {
+        this.forceStartButton.hidden = false;
+        this.parent.render();
       }
 
       // Start countdown — fires forceStart() on expiry
@@ -2106,6 +2126,11 @@ export class MultiplayerLobby extends EventEmitter {
       clearInterval(this.autoStartTimer);
       this.autoStartTimer = null;
     }
+    // Force Start only skips the countdown, so it has nothing left to do
+    // once the countdown is over.
+    if (this.forceStartButton) {
+      this.forceStartButton.hidden = true;
+    }
   }
 
   /**
@@ -2138,7 +2163,11 @@ export class MultiplayerLobby extends EventEmitter {
       const humanCount = state.players.filter(p => !p.isBot).length;
       if (humanCount < minPlayers || state.players.length < minPlayers) {
         this.updateStatus(`Adding bots to fill ${minPlayers - state.players.length} slot(s)...`);
-        await this.adapter.fillWithBots(this.botDifficulty);
+        // (count, difficulty) - matching LobbyNetworkAdapter.fillWithBots and
+        // the toggleBots() call below. This used to pass botDifficulty as the
+        // FIRST argument, so an adapter reading arg 0 as the player count got
+        // the difficulty instead (and vice-versa via the Bots button).
+        await this.adapter.fillWithBots(minPlayers, this.botDifficulty);
         this.hasBots = true;
         this.updatePlayerList();
         this.parent.render();
@@ -2403,7 +2432,15 @@ export class MultiplayerLobby extends EventEmitter {
     if (lobbyId) {
       lines.push(`  Code: {magenta-fg}${lobbyId}{/magenta-fg}`);
     }
-    lines.push(`  Status: {green-fg}${state.status.toUpperCase()}{/green-fg}`);
+    // `status` is required by LobbyState, but a real adapter can still hand
+    // back a state object without it - and this threw
+    // "Cannot read properties of undefined (reading 'toUpperCase')" from
+    // inside updateSettings(), which is called in a try/catch whose only
+    // output is a chat line, so the whole Room Settings panel silently
+    // stopped updating with no visible error.
+    if (state.status) {
+      lines.push(`  Status: {green-fg}${String(state.status).toUpperCase()}{/green-fg}`);
+    }
 
     this.settingsBox.setContent(lines.join('\n'));
     this.parent.render();

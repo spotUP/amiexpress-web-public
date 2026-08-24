@@ -143,7 +143,11 @@ export class List extends Element {
     // treating it as a 1-row offset caused the list to select the row
     // above the one the user clicked (reported 2026-04-24). Only count
     // border rows when a real border is actually rendered.
-    const hasDrawnBorder = !!(this.options.border && (this.options.border as any).type && (this.options.border as any).type !== 'none');
+    // Use Element.hasBorder() rather than a local truthiness test: `border`
+    // accepts a string ('line'/'none') as well as an object ({type:'line'}),
+    // and the old check here required `.type` to exist, so the string form
+    // read as "no border" while Element/Screen said otherwise.
+    const hasDrawnBorder = this.hasBorder();
     const border = hasDrawnBorder ? 1 : 0;
     const padding = this.options.padding || 0;
     const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
@@ -922,7 +926,11 @@ export class List extends Element {
     // Skip hover logic if mouse is over the scrollbar area (rightmost column).
     // Same `border: { type: 'none' }` truthiness trap as _onClick — only
     // offset when a border is actually drawn.
-    const hasDrawnBorder = !!(this.options.border && (this.options.border as any).type && (this.options.border as any).type !== 'none');
+    // Use Element.hasBorder() rather than a local truthiness test: `border`
+    // accepts a string ('line'/'none') as well as an object ({type:'line'}),
+    // and the old check here required `.type` to exist, so the string form
+    // read as "no border" while Element/Screen said otherwise.
+    const hasDrawnBorder = this.hasBorder();
     const border = hasDrawnBorder ? 1 : 0;
     if (this.hasScrollbar() && event.x === coords.xl - border - 1) {
       if (this._hoveredItem !== -1) {

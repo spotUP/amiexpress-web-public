@@ -30,10 +30,14 @@ export type LobbyMode = 'matchmaking' | 'custom' | 'browse';
 class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapter {
   private network: GrandmasterNetworkManager;
   private botDifficulty: BotDifficulty = 5;
+  private localPlayerId: string;
+  /** Monotonic id source for locally-originated chat messages. */
+  private chatSeq = 0;
 
-  constructor(network: GrandmasterNetworkManager) {
+  constructor(network: GrandmasterNetworkManager, localPlayerId: string) {
     super();
     this.network = network;
+    this.localPlayerId = localPlayerId;
     this.setupEventForwarding();
   }
 
@@ -136,7 +140,8 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
     // Auto-fill with bots if not enough humans
     const humanCount = matchState.players.filter(p => !p.isBot).length;
     if (humanCount < 2) {
-      await this.fillWithBots(this.botDifficulty);
+      // (count, difficulty) - undefined count means "the mode's minimum".
+      await this.fillWithBots(undefined, this.botDifficulty);
     }
 
     // Host triggers countdown via broker — fires game:starting + game:start on ALL nodes,
@@ -145,10 +150,17 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
   }
 
   /**
-   * Fill lobby with bots to meet minimum player count
+   * Fill lobby with bots to meet a target player count.
+   *
+   * Argument order follows the SDK's LobbyNetworkAdapter.fillWithBots
+   * contract - (count, difficulty). It previously took (difficulty) alone,
+   * so the SDK's Bots button, which correctly passes (count, difficulty),
+   * handed the player count in as the difficulty.
+   *
+   * @param count Target number of players (defaults to the mode's minimum)
    * @param difficulty Bot difficulty level (1-10)
    */
-  async fillWithBots(difficulty?: number): Promise<void> {
+  async fillWithBots(count?: number, difficulty?: number): Promise<void> {
     const matchState = this.network.getMatchState();
     if (!matchState) return;
 
@@ -158,7 +170,7 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
       team_2v2: 4,
       battle_royale: 2,
     };
-    const minPlayers = modeMinPlayers[matchState.mode] || 2;
+    const minPlayers = count ?? modeMinPlayers[matchState.mode] ?? 2;
 
     const diff = (difficulty ?? this.botDifficulty) as BotDifficulty;
     matchState.players = fillLobbyWithBots(matchState.players, minPlayers, diff);
@@ -175,11 +187,24 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
     this.emit('state:updated');
   }
 
-  sendChat(message: string, _isAction?: boolean): void {
-    // For local lobbies, just add the message to chat log
-    // In a real networked game, this would broadcast to other players
-    console.log(`[GrandmasterLobbyAdapter] sendChat: ${message}`);
-    // Chat messages are handled by the SDK widget locally for now
+  sendChat(message: string, isAction?: boolean): void {
+    // The SDK widget does NOT echo sent messages into its own chat log - it
+    // forwards them here and then renders whatever comes back on the
+    // adapter's 'chat:message' event. This used to be a bare console.log
+    // with a "handled by the SDK widget locally for now" note, so nothing
+    // ever appended the message on either side and typing in the lobby chat
+    // silently did nothing (reported live 2026-08-25).
+    const state = this.network.getMatchState();
+    const me = state?.players?.find((p: { id: string }) => p.id === this.localPlayerId);
+
+    this.emit('chat:message', {
+      id: `chat-${this.chatSeq++}`,
+      playerId: this.localPlayerId,
+      playerName: me?.name ?? 'you',
+      text: message,
+      timestamp: Date.now(),
+      isAction: !!isAction,
+    });
   }
 }
 
@@ -218,7 +243,7 @@ export class LobbyScreen {
     this.screen.program.enableMouse();
 
     // Create adapter
-    const adapter = new GrandmasterLobbyAdapter(this.network);
+    const adapter = new GrandmasterLobbyAdapter(this.network, this.localPlayerId);
 
     // Create lobby widget
     this.lobby = new MultiplayerLobby({

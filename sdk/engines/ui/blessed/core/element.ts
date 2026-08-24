@@ -47,7 +47,36 @@ export class Element extends EventEmitter {
 
   // State
   visible: boolean = true;
-  hidden: boolean = false;
+  /**
+   * Backing field for `hidden`. Never assign `hidden` from inside show()/
+   * hide() - use this, or the accessor below recurses back into them.
+   */
+  private _hidden: boolean = false;
+  /**
+   * Whether this element is hidden.
+   *
+   * Routed through show()/hide() rather than being a plain field because
+   * `visible` is a SEPARATE flag that renderElement() also tests
+   * (`if (!this.visible || this.hidden) return`). hide() clears both, so
+   * any code that later did the obvious `el.hidden = false` un-hid the
+   * element while leaving `visible === false` - the element then reported
+   * `hidden: false`, had correct coords, and still never painted. That
+   * silently ate the Grandmaster lobby's Bots button, which is built with
+   * `hidden: true` and revealed by `setAsHost()` (2026-08-25). Assigning
+   * this property now performs the real show/hide so the two flags cannot
+   * drift apart.
+   */
+  get hidden(): boolean {
+    return this._hidden;
+  }
+  set hidden(value: boolean) {
+    if (value === this._hidden) return;
+    if (value) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  }
   focused: boolean = false;
   destroyed: boolean = false;
   disabled: boolean = false;
@@ -347,9 +376,24 @@ export class Element extends EventEmitter {
     return { left: 0, right: 0, top: 0, bottom: 0 };
   }
 
-  protected hasBorder(): boolean {
+  /**
+   * Whether this element actually draws a border.
+   *
+   * Public because Screen's own render path needs the SAME predicate -
+   * `border` accepts both a string (`'line'` / `'none'`) and an object
+   * (`{type:'line'}`), and screen.ts used to test only the object form
+   * (`options.border?.type !== 'none'`). For the string `'none'`, `.type`
+   * is undefined, so that test read as "has a border" while this method
+   * said otherwise, and Screen then inset content by 1 row. On a 1-row
+   * element that made startY exceed maxY and the element painted NOTHING
+   * (Grandmaster lobby's whole button row vanished, 2026-08-25); on a
+   * 3-row one it pushed the text a row down into its neighbour.
+   */
+  hasBorder(): boolean {
     const border = this.options.border as any;
-    if (!border || border === 'none') return false;
+    if (!border) return false;
+    if (border === 'none') return false;
+    if (typeof border === 'object' && border.type === 'none') return false;
     return true;
   }
 
@@ -1241,6 +1285,17 @@ export class Element extends EventEmitter {
         'light-white': 15,
         gray: 8,
         grey: 8,
+        // Non-hyphenated aliases - Screen._colorToCode() spells these
+        // 'lightwhite' etc. Both maps must accept both spellings or a name
+        // valid in one renderer silently resolves differently in the other.
+        lightblack: 8,
+        lightred: 9,
+        lightgreen: 10,
+        lightyellow: 11,
+        lightblue: 12,
+        lightmagenta: 13,
+        lightcyan: 14,
+        lightwhite: 15,
       };
 
       const lower = color.toLowerCase();
@@ -1540,8 +1595,8 @@ export class Element extends EventEmitter {
   show(): void {
     if (this.destroyed) return;
 
-    if (this.hidden) {
-      this.hidden = false;
+    if (this._hidden) {
+      this._hidden = false;  // backing field: assigning `hidden` re-enters here
       this.visible = true;
       this._invalidateCoords();  // Ensure fresh coords when shown
       // Mark dirty for optimized rendering
@@ -1560,7 +1615,7 @@ export class Element extends EventEmitter {
   hide(): void {
     if (this.destroyed) return;
 
-    if (!this.hidden) {
+    if (!this._hidden) {
       // Mark dirty BEFORE clearing (so the region is tracked)
       if (this.screen && (this.screen as any).markDirtyElement) {
         (this.screen as any).markDirtyElement(this);
@@ -1572,7 +1627,7 @@ export class Element extends EventEmitter {
         this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
       }
 
-      this.hidden = true;
+      this._hidden = true;  // backing field: assigning `hidden` re-enters here
       this.visible = false;
       this.blur();
       this.emit('hide');

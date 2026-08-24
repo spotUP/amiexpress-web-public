@@ -502,10 +502,16 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
   startCountdown(seconds: number = 5): void {
     if (!this._current || !this.isHost()) return;
 
-    // Check if minimum players
+    // Require at least one real participant. This used to demand TWO, which
+    // made a solo host permanently unable to start: bots are held in the
+    // door's own match state, not in the broker lobby this module sees, so
+    // filling the lobby with bots never moved this count off 1 and Start
+    // just sat there reporting "Need at least 2 players" (reported live
+    // 2026-08-25). Whether a given game is actually playable solo is the
+    // door's call - it knows about its bots - not this transport module's.
     const nonSpectators = this._current.players.filter(p => !p.team || p.team > 0);
-    if (nonSpectators.length < 2) {
-      this.emit('error', new Error('Need at least 2 players'));
+    if (nonSpectators.length < 1) {
+      this.emit('error', new Error('Need at least 1 player'));
       return;
     }
 

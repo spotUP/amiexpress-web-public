@@ -1002,7 +1002,7 @@ export class Screen extends Element {
     this._renderContent(element, pos);
 
     // Render border
-    if (element.options.border) {
+    if (this._elementHasBorder(element)) {
       this._renderBorder(element, pos);
     }
 
@@ -1025,7 +1025,7 @@ export class Screen extends Element {
     // Re-render parent border AFTER children to ensure it stays visible
     // This handles cases where child content might extend into the border area
     // (e.g., during resize operations or with scrollable content)
-    if (element.options.border && sortedChildren.length > 0) {
+    if (this._elementHasBorder(element) && sortedChildren.length > 0) {
       this._renderBorder(element, pos);
     }
   }
@@ -1066,11 +1066,31 @@ export class Screen extends Element {
     }
   }
 
+  /**
+   * Single source of truth for "does this element draw a border".
+   *
+   * Defers to Element.hasBorder() so Screen and Element can never disagree.
+   * They used to: the checks here tested only the object form of the option
+   * (`border?.type !== 'none'`), which silently reads as TRUE for the string
+   * form `border: 'none'` (a string has no `.type`). Screen then inset the
+   * content box by 1 row for a border Element wasn't drawing - which on a
+   * 1-row element makes startY exceed maxY so it paints nothing at all.
+   * The fallback covers plain objects that aren't Elements.
+   */
+  private _elementHasBorder(element: any): boolean {
+    if (typeof element?.hasBorder === 'function') return element.hasBorder();
+    const border = element?.options?.border;
+    if (!border) return false;
+    if (border === 'none') return false;
+    if (typeof border === 'object' && border.type === 'none') return false;
+    return true;
+  }
+
   private _renderContent(element: Element, pos: any): void {
     // Use getVisibleLines() to respect scroll position (childBase)
     const lines = (element as any).getVisibleLines ? (element as any).getVisibleLines() : element.getLines();
     const padding = element.options.padding || 0;
-    const hasBorder = element.options.border && (element.options.border as any)?.type !== 'none';
+    const hasBorder = this._elementHasBorder(element);
     const border = hasBorder ? 1 : 0;
 
     const padLeft = typeof padding === 'number' ? padding : (padding as any).left || 0;
@@ -1096,7 +1116,7 @@ export class Screen extends Element {
       const parentPos = element.parent._getCoords();
       if (parentPos) {
         // Clamp to parent's content area (inside border)
-        const parentHasBorder = element.parent.options?.border && (element.parent.options.border as any)?.type !== 'none';
+        const parentHasBorder = this._elementHasBorder(element.parent);
         const parentBorder = parentHasBorder ? 1 : 0;
         const parentMaxX = parentPos.xl - parentBorder;
         const parentMaxY = parentPos.yl - parentBorder;
@@ -2283,38 +2303,10 @@ export class Screen extends Element {
    * Set focused element (called by Element.focus())
    */
   setFocused(element: Element | null): void {
-    // Helper to find the element with a visible border (may be parent)
-    const findBorderElement = (el: any): any => {
-      if (!el) return null;
-      // Check if element has a border with fg color
-      if (el.options?.border && el.options?.border.type !== 'none') {
-        return el;
-      }
-      // Walk up to parent (but stop at screen)
-      if (el.parent && el.parent !== this) {
-        return findBorderElement(el.parent);
-      }
-      return null;
-    };
-
     // Blur previous focused element
     if (this._focused && this._focused !== element) {
       this._focused.focused = false;
       this._focused.emit('blur');
-
-      // Restore original border color on blur
-      const prevBorderEl = findBorderElement(this._focused);
-      if (prevBorderEl && prevBorderEl._originalBorderColor) {
-        // Update both options.style.border and style.border for consistency
-        if (prevBorderEl.options?.style?.border) {
-          prevBorderEl.options.style.border.fg = prevBorderEl._originalBorderColor;
-          prevBorderEl.options.style.border.bold = prevBorderEl._originalBorderBold || false;
-        }
-        if (prevBorderEl.style?.border) {
-          prevBorderEl.style.border.fg = prevBorderEl._originalBorderColor;
-          prevBorderEl.style.border.bold = prevBorderEl._originalBorderBold || false;
-        }
-      }
     }
 
     // Focus new element
@@ -2322,29 +2314,22 @@ export class Screen extends Element {
     if (element) {
       element.focused = true;
       element.emit('focus');
-
-      // Automatically set high-contrast borders on focused elements
-      const borderEl = findBorderElement(element);
-      if (borderEl) {
-        // Store original border color if not already stored
-        const currentStyle = borderEl.options?.style?.border || borderEl.style?.border || {};
-        if (!borderEl._originalBorderColor) {
-          borderEl._originalBorderColor = currentStyle.fg || 'cyan';
-          borderEl._originalBorderBold = currentStyle.bold || false;
-        }
-        // Set yellow border for focused element (white is reserved for hover)
-        if (borderEl.options?.style?.border) {
-          borderEl.options.style.border.fg = 'yellow';
-          borderEl.options.style.border.bold = true;
-        }
-        if (borderEl.style?.border) {
-          borderEl.style.border.fg = 'yellow';
-          borderEl.style.border.bold = true;
-        }
-      }
     }
 
-    // Re-render to update focus border styling
+    // Re-render. The focused element's nearest bordered ancestor is
+    // highlighted by _renderBorder(), which DERIVES the border style from
+    // hasFocusedChild() on every frame (honouring the element's own
+    // `style.focus.border`, falling back to cyan+bold).
+    //
+    // This method used to ALSO highlight, by mutating the shared
+    // `style.border` object to yellow and stashing `_originalBorderColor`
+    // to restore on blur. Two mechanisms writing the same border fought
+    // each other: the mutation is persistent state, the render path is
+    // derived, and anything that rebuilt or re-read a panel's style
+    // between the two left the highlight stuck or reverted it a frame
+    // later (reported live: "the players panel just flashes cyan for a
+    // frame", 2026-08-25). Deriving it in one place removes the race and
+    // makes a widget's declared focus style authoritative.
     this.render();
   }
 
@@ -2530,6 +2515,17 @@ export class Screen extends Element {
       lightmagenta: 13,
       lightcyan: 14,
       lightwhite: 15,
+      // Hyphenated aliases - Element._colorToNumber() spells these
+      // 'light-white' etc. Without both spellings in both maps, a name valid
+      // in one renderer silently falls back to plain white in the other.
+      'light-black': 8,
+      'light-red': 9,
+      'light-green': 10,
+      'light-yellow': 11,
+      'light-blue': 12,
+      'light-magenta': 13,
+      'light-cyan': 14,
+      'light-white': 15,
     };
 
     const lowerColor = String(color).toLowerCase();
