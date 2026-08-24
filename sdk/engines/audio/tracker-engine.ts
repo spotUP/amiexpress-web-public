@@ -1,3 +1,4 @@
+/// <reference path="../../types/chiptune3.d.ts" />
 /**
  * Tracker Engine - MOD/XM/S3M/IT Module Player
  *

@@ -170,6 +170,38 @@ console.error(`[DoorAPI] Error serving asset for ${doorId}:`, error);
 });
 
 /**
+ * GET /api/doors/:doorId/chiptune3.worklet.js
+ * GET /api/doors/:doorId/libopenmpt.worklet.js
+ *
+ * chiptune3 (the SDK TrackerEngine's mod/xm player) registers its
+ * AudioWorklet with `new URL('./chiptune3.worklet.js', import.meta.url)`.
+ * Inside a door bundle import.meta.url is the bundle's own URL
+ * (/api/doors/:doorId/bundle.js), so the browser asks for the worklet
+ * files as siblings of the bundle. They cannot be bundled - AudioWorklet
+ * modules load over HTTP by design - so serve them straight from the
+ * SDK's chiptune3 package: one source, no per-door copies.
+ */
+const CHIPTUNE_WORKLET_FILES = new Set(['chiptune3.worklet.js', 'libopenmpt.worklet.js']);
+
+doorApiRouter.get(/^\/doors\/[^/]+\/(chiptune3\.worklet\.js|libopenmpt\.worklet\.js)$/u, (req: Request, res: Response) => {
+  const fileName = req.params[0];
+  if (!CHIPTUNE_WORKLET_FILES.has(fileName)) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const workletPath = path.join(getBbsRoot(), 'sdk', 'node_modules', 'chiptune3', fileName);
+  if (!fs.existsSync(workletPath)) {
+console.error(`[DoorAPI] chiptune3 worklet missing: ${workletPath} - run npm install in sdk/`);
+    return res.status(404).json({ error: 'Worklet not installed' });
+  }
+
+  res.setHeader('Content-Type', 'text/javascript');
+  // libopenmpt.worklet.js is 1.7 MB; let the browser keep it for an hour.
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(workletPath);
+});
+
+/**
  * GET /api/doors/list
  * List all available doors
  */

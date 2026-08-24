@@ -2134,7 +2134,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       script.src = data.bundleUrl.startsWith('http')
         ? data.bundleUrl
         : `${finalBackendUrl}${data.bundleUrl}`;
-      script.type = 'text/javascript';
+      // Bundles are built with esbuild --format=esm. As a classic script
+      // that only works while the bundle avoids module-only syntax; the
+      // SDK TrackerEngine's chiptune3 player uses import.meta.url (to find
+      // its AudioWorklet next to the bundle), which is a SyntaxError
+      // outside a module. Module scripts still fire onload/onerror.
+      script.type = 'module';
 
       script.onload = () => {
         console.log(`[ClientDoor] Bundle loaded successfully: ${data.doorId}`);

@@ -718,6 +718,8 @@ export { UIEngine } from '../engines/ui/ui-engine';
 export { GraphicsEngine } from '../engines/graphics/graphics-engine';
 export { PhysicsEngine } from '../engines/physics/physics-engine';
 export { AudioEngine } from '../engines/audio/audio-engine';
+export { TrackerEngine, InterpolationFilter, PlaybackState } from '../engines/audio/tracker-engine';
+export type { TrackerConfig, ModuleMetadata, PlaybackPosition, TrackerFormat } from '../engines/audio/tracker-engine';
 export { VoiceCapture, type VoiceCaptureOptions } from '../media/VoiceCapture';
 export { NetworkEngine } from '../engines/network/network-engine';
 export { AIEngine } from '../engines/ai/ai-engine';
