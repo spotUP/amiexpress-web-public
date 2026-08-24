@@ -9,8 +9,10 @@
  * which button currently had keyboard focus - everything looked equally
  * "highlighted". Fixed with two independent, composable defaults:
  *  - Element.getEffectiveContentStyle() forces `bold` on focus by default.
- *  - Button's `ghostWhenIdle` opt-in mutes bg/fg to gray while unfocused,
- *    so only the current Tab target shows color.
+ *  - Button's `ghostWhenIdle` opt-in mutes bg/fg to white-on-black while
+ *    unfocused, so only the current Tab target shows its real color.
+ *    (Originally used 'gray' - #808080 read as invisible against black in
+ *    practice and made a whole button row disappear; switched to white.)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
@@ -67,7 +69,7 @@ describe('Focus visibility', () => {
   });
 
   describe('Button ghostWhenIdle', () => {
-    it('mutes bg/fg to gray while unfocused when ghostWhenIdle is true', () => {
+    it('mutes bg/fg to white-on-black while unfocused when ghostWhenIdle is true', () => {
       const button = new Button({
         parent: screen,
         content: ' Leave ',
@@ -76,7 +78,7 @@ describe('Focus visibility', () => {
       } as any);
 
       expect(button.style.bg).toBe('black');
-      expect(button.style.fg).toBe('gray');
+      expect(button.style.fg).toBe('white');
     });
 
     it('restores the caller color once focused', () => {

@@ -985,7 +985,11 @@ export class MultiplayerLobby extends EventEmitter {
       left: 2,
       width: screenWidth - 4,
       height: 1,
-      content: '{gray-fg}TAB{/gray-fg} switch panel   {gray-fg}↑↓{/gray-fg} navigate   {gray-fg}ENTER{/gray-fg} select   {gray-fg}ESC{/gray-fg} leave',
+      // "navigate" read as a claim that arrows do something Tab doesn't -
+      // they don't, arrows only ever act on whatever panel Tab last
+      // focused (scroll the player list, move/change a setting). Worded
+      // to say that instead of implying a competing navigation scheme.
+      content: '{gray-fg}TAB{/gray-fg} switch panel   {gray-fg}↑↓{/gray-fg} move in panel   {gray-fg}ENTER{/gray-fg} select   {gray-fg}ESC{/gray-fg} leave',
       tags: true,
     });
 
@@ -1042,25 +1046,32 @@ export class MultiplayerLobby extends EventEmitter {
       hasReadyFlow ? this.readyButton : null,
       this.startButton,
       this.leaveButton,
+      this.fillBotsButton,
+      this.forceStartButton,
     ].filter(Boolean) as any[];
 
     const getVisibleFocusTargets = () => allFocusTargets.filter(t => !t.hidden);
 
-    let focusIndex = 0;
-    this.parent.key(['tab'], () => {
+    // Derive the next target from whoever ACTUALLY has focus right now,
+    // rather than a separately-tracked index. A tracked index drifts the
+    // moment focus changes through any other path (the initial
+    // playerList.focus() below, the 'p'/'t'/'o' shortcuts, '1'/'2' tab
+    // switches, a mouse click) without updating it - then the next Tab
+    // press advances from the stale position instead of the real one,
+    // which can land on an already-focused element (looks like Tab does
+    // nothing) or skip past several. Reported live 2026-08-24.
+    const cycleFocus = (direction: 1 | -1): void => {
       const focusTargets = getVisibleFocusTargets();
       if (focusTargets.length === 0) return;
-      focusIndex = (focusIndex + 1) % focusTargets.length;
-      focusTargets[focusIndex]?.focus();
+      const currentIndex = focusTargets.indexOf(this.parent.focused as any);
+      const nextIndex = currentIndex === -1
+        ? 0
+        : (currentIndex + direction + focusTargets.length) % focusTargets.length;
+      focusTargets[nextIndex]?.focus();
       this.parent.render();
-    });
-    this.parent.key(['S-tab'], () => {
-      const focusTargets = getVisibleFocusTargets();
-      if (focusTargets.length === 0) return;
-      focusIndex = (focusIndex - 1 + focusTargets.length) % focusTargets.length;
-      focusTargets[focusIndex]?.focus();
-      this.parent.render();
-    });
+    };
+    this.parent.key(['tab'], () => cycleFocus(1));
+    this.parent.key(['S-tab'], () => cycleFocus(-1));
 
     // P key to focus player list
     this.parent.key(['p'], () => {

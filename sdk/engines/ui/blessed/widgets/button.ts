@@ -78,7 +78,12 @@ export class Button extends Element {
         ...baseStyle,
         // Override AFTER the baseStyle spread so ghosting wins over
         // whatever fg/bg the caller asked for as this button's idle look.
-        ...(isGhosted ? { fg: 'gray', bg: 'black' } : {}),
+        // Plain white, not 'gray' (#808080 read as invisible against black
+        // in practice - a lobby's whole button row disappeared until
+        // focused, reported live 2026-08-24). White still reads as
+        // quieter than the focused state, which is bold *and* the
+        // button's real saturated color.
+        ...(isGhosted ? { fg: 'white', bg: 'black' } : {}),
         focus: focusStyle,
         hover: hoverStyle,
       },
