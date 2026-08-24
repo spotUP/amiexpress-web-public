@@ -507,13 +507,24 @@ export class WebhookCommandsHandler {
     return items;
   }
 
+  /**
+   * 20 rows (18 triggers + Select All + Create Webhook) is taller than a
+   * standard 24-row terminal once the header box, title, and footer bar
+   * are accounted for - reported live as the screen "jumping" while
+   * navigating (renderMenu clears and redraws the FULL list on every
+   * keystroke, so an off-screen selection scrolled the terminal itself).
+   * Windowed via MenuState.maxVisible instead.
+   */
+  private static readonly TRIGGERS_MENU_MAX_VISIBLE = 12;
+
   private static renderTriggersMenu(socket: any, selected: Set<string>, selectedIndex: number): void {
     const items = this.buildTriggerMenuItems(selected);
     const menuState: MenuState = {
       title: 'SELECT TRIGGERS',
       items,
       selectedIndex,
-      footer: 'Use ↑↓ arrows to navigate, ENTER to toggle/select, Q to cancel'
+      footer: 'Use ↑↓ arrows to navigate, ENTER to toggle/select, Q to cancel',
+      maxVisible: this.TRIGGERS_MENU_MAX_VISIBLE
     };
     socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
   }

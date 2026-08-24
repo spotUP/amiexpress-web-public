@@ -2399,6 +2399,30 @@ console.log(' [DOWNLOAD] User confirming download');
     return;
   }
 
+  // Handle return to webhook menu / webhook action menu ("Press any key
+  // to continue..." after an info screen like "No webhooks configured").
+  // MUST run before the isDisplayFlowState() check below: DISPLAY_CONF_BULL
+  // is reused here the same way FILE_DIR_SELECT is reused elsewhere for a
+  // generic prompt substate, but DISPLAY_CONF_BULL is ALSO a real,
+  // unconditionally-checked login-flow state (isDisplayFlowState() below
+  // matches on subState alone, no tempData gating) - pressing Enter at the
+  // webhook "Press any key" prompt was being swallowed by the login
+  // display-flow advancer instead, kicking the session into the normal
+  // post-login bulletin/conference-join sequence (reported live: exiting
+  // "No webhooks configured" showed ASCII-art login bulletins instead of
+  // returning to the WEBHOOK menu).
+  if (session.tempData?.returnToWebhookMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
+    delete session.tempData;
+    await WebhookCommandsHandler.handleWebhookCommand(socket, session);
+    return;
+  }
+
+  if (session.tempData?.returnToWebhookActionMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
+    const menuData = session.tempData.returnToWebhookActionMenu;
+    await WebhookCommandsHandler.showWebhookActions(socket, session, menuData.webhookId);
+    return;
+  }
+
   if (isDisplayFlowState(session.subState)) {
 console.log('[handleCommand] Display flow branch, subState=', session.subState);
     await advanceDisplayFlow(socket, session);
@@ -2748,20 +2772,6 @@ console.log(' In file upload state - canceling upload');
   // Handle Add Webhook's trigger picker (multi-select arrow menu)
   if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookAddTriggersSelect) {
     await WebhookCommandsHandler.handleAddWebhookTriggersSelectInput(socket, session, data);
-    return;
-  }
-
-  // Handle return to webhook menu
-  if (session.tempData?.returnToWebhookMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
-    delete session.tempData;
-    await WebhookCommandsHandler.handleWebhookCommand(socket, session);
-    return;
-  }
-
-  // Handle return to webhook action menu
-  if (session.tempData?.returnToWebhookActionMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
-    const menuData = session.tempData.returnToWebhookActionMenu;
-    await WebhookCommandsHandler.showWebhookActions(socket, session, menuData.webhookId);
     return;
   }
 

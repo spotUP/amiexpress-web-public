@@ -17,6 +17,18 @@ export interface MenuState {
   items: MenuItem[];
   selectedIndex: number;
   footer?: string;
+  /**
+   * Maximum rows to render at once. Omit (or <= 0) for the original
+   * behaviour: every item, every render - fine for short menus, but a
+   * 20-row list (e.g. the webhook trigger picker) both scrolls the
+   * terminal off-screen AND redraws the FULL list on every single
+   * keystroke (renderMenu clears and reprints from scratch each call),
+   * which is what made that screen visibly "jump" while navigating.
+   * When set, only a window of `maxVisible` rows around selectedIndex is
+   * drawn, with "N more above/below" markers so the full list stays
+   * discoverable without scrolling the terminal itself.
+   */
+  maxVisible?: number;
 }
 
 export class MenuUtil {
@@ -41,8 +53,27 @@ export class MenuUtil {
     output += AnsiUtil.headerBox(state.title);
     output += '\r\n';
 
-    // Render menu items
-    state.items.forEach((item, index) => {
+    // Render menu items - windowed around selectedIndex when maxVisible is
+    // set and the list is actually longer than that (otherwise every item
+    // renders, matching the original unwindowed behaviour exactly).
+    const total = state.items.length;
+    const maxVisible = state.maxVisible && state.maxVisible > 0 ? state.maxVisible : total;
+    let start = 0;
+    if (total > maxVisible) {
+      // Keep the selection roughly centered in the window rather than
+      // pinned to an edge, clamped so the window never runs past either
+      // end of the list.
+      start = state.selectedIndex - Math.floor(maxVisible / 2);
+      start = Math.max(0, Math.min(start, total - maxVisible));
+    }
+    const end = Math.min(total, start + maxVisible);
+
+    if (start > 0) {
+      output += this.WHITE + `   ↑ ${start} more above` + this.RESET + '\r\n';
+    }
+
+    for (let index = start; index < end; index++) {
+      const item = state.items[index];
       const isSelected = index === state.selectedIndex;
 
       if (isSelected) {
@@ -66,7 +97,11 @@ export class MenuUtil {
         }
         output += '\r\n';
       }
-    });
+    }
+
+    if (end < total) {
+      output += this.WHITE + `   ↓ ${total - end} more below` + this.RESET + '\r\n';
+    }
 
     output += '\r\n';
     output += this.BLUE + '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' + this.RESET + '\r\n';
