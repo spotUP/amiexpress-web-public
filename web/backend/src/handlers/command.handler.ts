@@ -2739,6 +2739,18 @@ console.log(' In file upload state - canceling upload');
     return;
   }
 
+  // Handle Add Webhook's type picker (Discord/Slack arrow menu)
+  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookAddTypeSelect) {
+    await WebhookCommandsHandler.handleAddWebhookTypeSelectInput(socket, session, data);
+    return;
+  }
+
+  // Handle Add Webhook's trigger picker (multi-select arrow menu)
+  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookAddTriggersSelect) {
+    await WebhookCommandsHandler.handleAddWebhookTriggersSelectInput(socket, session, data);
+    return;
+  }
+
   // Handle return to webhook menu
   if (session.tempData?.returnToWebhookMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
     delete session.tempData;
@@ -2772,11 +2784,22 @@ console.log(' In file upload state - canceling upload');
     } else if (data === '\x7f' || data === '\b') {
       if (session.inputBuffer?.length) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
+        // webhook-commands.handler.ts's whole flow uses raw
+        // socket.emit('ansi-output', ...) throughout, never the buffered
+        // ansi-buffer queue emitText()/emitPrompt() use elsewhere in this
+        // file. Echoing via the buffered API here raced against the
+        // handler's own unbuffered "Webhook URL:" emit on Enter - the
+        // buffered echo could still be queued (16ms/60fps batching) when
+        // the unbuffered next-prompt text was already delivered, so the
+        // prompt visibly landed before the just-typed characters caught
+        // up. Match this flow's own convention (raw emit) instead of
+        // GDPR_BACKFILL's (which stays internally consistent because its
+        // own handler also uses the buffered API).
+        socket.emit('ansi-output', '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer = (session.inputBuffer || '') + data;
-      emitText(socket, data);
+      socket.emit('ansi-output', data);
     }
     return;
   }

@@ -333,6 +333,36 @@ export class WebhookCommandsHandler {
   }
 
   /**
+   * Every trigger this door can fire a webhook on. Shared by "Show
+   * Triggers" (read-only display) and the Add Webhook triggers picker
+   * (arrow-key multi-select) so the two never drift out of sync - this
+   * list previously lived only inline in showTriggers() and silently
+   * omitted DOOR_SCORE (the trigger GrandMaster and other score/match
+   * doors actually use), which meant a sysop reading the menu had no
+   * way to discover the one trigger name they were most likely to want.
+   */
+  private static readonly ALL_TRIGGERS: { name: string; desc: string }[] = [
+    { name: WebhookTrigger.NEW_UPLOAD, desc: 'New file upload' },
+    { name: WebhookTrigger.NEW_MESSAGE, desc: 'New message posted' },
+    { name: WebhookTrigger.NEW_USER, desc: 'New user registration' },
+    { name: WebhookTrigger.SYSOP_PAGED, desc: 'Sysop page request' },
+    { name: WebhookTrigger.USER_LOGIN, desc: 'User login' },
+    { name: WebhookTrigger.USER_LOGOUT, desc: 'User logout' },
+    { name: WebhookTrigger.FILE_DOWNLOADED, desc: 'File downloaded' },
+    { name: WebhookTrigger.COMMENT_POSTED, desc: 'Comment to sysop' },
+    { name: WebhookTrigger.NODE_FULL, desc: 'All nodes busy' },
+    { name: WebhookTrigger.SYSTEM_ERROR, desc: 'System error occurred' },
+    { name: WebhookTrigger.CONFERENCE_JOINED, desc: 'Conference joined' },
+    { name: WebhookTrigger.SECURITY_CHANGED, desc: 'Security level changed' },
+    { name: WebhookTrigger.DOOR_LAUNCHED, desc: 'Door program launched' },
+    { name: WebhookTrigger.VOTE_CAST, desc: 'Vote cast' },
+    { name: WebhookTrigger.PRIVATE_MESSAGE, desc: 'Private message sent' },
+    { name: WebhookTrigger.USER_KICKED, desc: 'User kicked/banned' },
+    { name: WebhookTrigger.MAIL_SCAN, desc: 'Mail scan performed' },
+    { name: WebhookTrigger.DOOR_SCORE, desc: 'Door score or match result submitted' }
+  ];
+
+  /**
    * Show available triggers
    */
   private static async showTriggers(socket: any, session: any): Promise<void> {
@@ -340,28 +370,7 @@ export class WebhookCommandsHandler {
     socket.emit('ansi-output', AnsiUtil.headerBox('AVAILABLE WEBHOOK TRIGGERS'));
     socket.emit('ansi-output', '\r\n');
 
-    const triggers = [
-      { name: WebhookTrigger.NEW_UPLOAD, desc: 'New file upload' },
-      { name: WebhookTrigger.NEW_MESSAGE, desc: 'New message posted' },
-      { name: WebhookTrigger.NEW_USER, desc: 'New user registration' },
-      { name: WebhookTrigger.SYSOP_PAGED, desc: 'Sysop page request' },
-      { name: WebhookTrigger.USER_LOGIN, desc: 'User login' },
-      { name: WebhookTrigger.USER_LOGOUT, desc: 'User logout' },
-      { name: WebhookTrigger.FILE_DOWNLOADED, desc: 'File downloaded' },
-      { name: WebhookTrigger.COMMENT_POSTED, desc: 'Comment to sysop' },
-      { name: WebhookTrigger.NODE_FULL, desc: 'All nodes busy' },
-      { name: WebhookTrigger.SYSTEM_ERROR, desc: 'System error occurred' },
-      { name: WebhookTrigger.CONFERENCE_JOINED, desc: 'Conference joined' },
-      { name: WebhookTrigger.SECURITY_CHANGED, desc: 'Security level changed' },
-      { name: WebhookTrigger.DOOR_LAUNCHED, desc: 'Door program launched' },
-      { name: WebhookTrigger.VOTE_CAST, desc: 'Vote cast' },
-      { name: WebhookTrigger.PRIVATE_MESSAGE, desc: 'Private message sent' },
-      { name: WebhookTrigger.USER_KICKED, desc: 'User kicked/banned' },
-      { name: WebhookTrigger.MAIL_SCAN, desc: 'Mail scan performed' },
-      { name: WebhookTrigger.DOOR_SCORE, desc: 'Door score or match result submitted' }
-    ];
-
-    for (const trigger of triggers) {
+    for (const trigger of this.ALL_TRIGGERS) {
       socket.emit('ansi-output', AnsiUtil.complexPrompt([
         { text: '  • ', color: 'cyan' },
         { text: trigger.name, color: 'yellow' },
@@ -411,7 +420,7 @@ export class WebhookCommandsHandler {
         return;
       }
       session.tempData.webhookAdd.name = input.trim();
-      socket.emit('ansi-output', 'Webhook URL: ');
+      socket.emit('ansi-output', '\r\nWebhook URL: ');
       session.tempData.webhookAdd.step = 'url';
     } else if (step === 'url') {
       if (input.trim().length === 0 || !input.includes('http')) {
@@ -419,43 +428,171 @@ export class WebhookCommandsHandler {
         await this.handleWebhookCommand(socket, session);
         return;
       }
-      session.tempData.webhookAdd.url = input.trim();
-      socket.emit('ansi-output', 'Type [DISCORD/SLACK]: ');
-      session.tempData.webhookAdd.step = 'type';
-    } else if (step === 'type') {
-      const type = input.trim().toLowerCase();
-      if (type !== 'discord' && type !== 'slack') {
-        socket.emit('ansi-output', AnsiUtil.errorLine('Invalid type. Must be DISCORD or SLACK'));
-        await this.handleWebhookCommand(socket, session);
+      // Type and triggers are arrow-key pickers, not free text - see
+      // addWebhookTypeSelectPrompt()/addWebhookTriggersSelectPrompt()
+      // below. Carries name/url forward since this is still one
+      // continuous "add webhook" flow, just switching input styles.
+      await this.addWebhookTypeSelectPrompt(socket, session, session.tempData.webhookAdd.name, input.trim());
+    }
+  }
+
+  /**
+   * Step 3 of Add Webhook: pick Discord or Slack with an arrow-key menu
+   * instead of typing the exact word - same MenuUtil pattern the main
+   * WEBHOOK menu already uses, so the whole flow feels consistent rather
+   * than switching between "arrow menu" and "type this exact string" for
+   * no reason a sysop would know from the prompt alone.
+   */
+  private static async addWebhookTypeSelectPrompt(socket: any, session: any, name: string, url: string): Promise<void> {
+    const menuItems: MenuItem[] = [
+      { label: 'Discord', action: 'discord', description: 'Post to a Discord channel webhook' },
+      { label: 'Slack', action: 'slack', description: 'Post to a Slack incoming webhook' }
+    ];
+
+    session.tempData = {
+      webhookAddTypeSelect: { selectedIndex: 0, items: menuItems, name, url }
+    };
+
+    const menuState: MenuState = {
+      title: 'WEBHOOK TYPE',
+      items: menuItems,
+      selectedIndex: 0
+    };
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+  }
+
+  /**
+   * Handle arrow-key input for the type picker.
+   */
+  static async handleAddWebhookTypeSelectInput(socket: any, session: any, input: string): Promise<void> {
+    const menuData = session.tempData.webhookAddTypeSelect;
+    const result = MenuUtil.handleMenuInput(input, menuData.selectedIndex, menuData.items.length);
+    menuData.selectedIndex = result.newIndex;
+
+    if (result.action === 'select') {
+      const type = menuData.items[menuData.selectedIndex].action;
+      await this.addWebhookTriggersSelectPrompt(socket, session, menuData.name, menuData.url, type);
+    } else if (result.action === 'quit') {
+      await this.handleWebhookCommand(socket, session);
+    } else {
+      const menuState: MenuState = { title: 'WEBHOOK TYPE', items: menuData.items, selectedIndex: menuData.selectedIndex };
+      socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    }
+  }
+
+  /**
+   * Builds the trigger picker's menu items fresh from the current
+   * selection set on every render - two trailing control rows
+   * ("Select All" and "Create Webhook") ride the same arrow-key list
+   * rather than needing a separate confirm keystroke.
+   */
+  private static buildTriggerMenuItems(selected: Set<string>): MenuItem[] {
+    const items: MenuItem[] = this.ALL_TRIGGERS.map(t => ({
+      label: `${selected.has(t.name) ? '[x]' : '[ ]'} ${t.name}`,
+      action: `toggle:${t.name}`,
+      description: t.desc
+    }));
+    const allSelected = selected.size === this.ALL_TRIGGERS.length;
+    items.push({
+      label: `${allSelected ? '[x]' : '[ ]'} Select All`,
+      action: 'select-all',
+      description: 'Toggle every trigger at once'
+    });
+    items.push({
+      label: `>> Create Webhook (${selected.size} trigger${selected.size === 1 ? '' : 's'} selected)`,
+      action: 'confirm',
+      description: 'Finish and save this webhook'
+    });
+    return items;
+  }
+
+  private static renderTriggersMenu(socket: any, selected: Set<string>, selectedIndex: number): void {
+    const items = this.buildTriggerMenuItems(selected);
+    const menuState: MenuState = {
+      title: 'SELECT TRIGGERS',
+      items,
+      selectedIndex,
+      footer: 'Use ↑↓ arrows to navigate, ENTER to toggle/select, Q to cancel'
+    };
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+  }
+
+  /**
+   * Step 4 of Add Webhook: multi-select trigger picker, replacing the
+   * old "type a comma-separated list of exact trigger names" prompt - a
+   * sysop had no way to see the valid names without leaving this flow to
+   * run "Show Triggers" first. ENTER on a trigger row toggles it; ENTER
+   * on "Select All" toggles every trigger; ENTER on "Create Webhook"
+   * saves (refused if nothing is selected, matching this door's other
+   * "can't submit an empty choice" prompts).
+   */
+  private static async addWebhookTriggersSelectPrompt(socket: any, session: any, name: string, url: string, type: string): Promise<void> {
+    const selected = new Set<string>();
+    session.tempData = {
+      webhookAddTriggersSelect: { selectedIndex: 0, selected, name, url, type }
+    };
+    this.renderTriggersMenu(socket, selected, 0);
+    session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+  }
+
+  /**
+   * Handle arrow-key input for the trigger picker.
+   */
+  static async handleAddWebhookTriggersSelectInput(socket: any, session: any, input: string): Promise<void> {
+    const menuData = session.tempData.webhookAddTriggersSelect;
+    const items = this.buildTriggerMenuItems(menuData.selected);
+    const result = MenuUtil.handleMenuInput(input, menuData.selectedIndex, items.length);
+    menuData.selectedIndex = result.newIndex;
+
+    if (result.action === 'select') {
+      const action = items[menuData.selectedIndex].action;
+
+      if (action === 'confirm') {
+        if (menuData.selected.size === 0) {
+          socket.emit('ansi-output', '\r\n' + AnsiUtil.errorLine('Select at least one trigger first.'));
+          this.renderTriggersMenu(socket, menuData.selected, menuData.selectedIndex);
+          return;
+        }
+
+        try {
+          const webhookId = await db.createWebhook({
+            name: menuData.name,
+            url: menuData.url,
+            type: menuData.type,
+            triggers: Array.from(menuData.selected)
+          });
+
+          socket.emit('ansi-output', '\r\n' + AnsiUtil.successLine(`Webhook created successfully! ID: ${webhookId}`));
+          socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          session.tempData = { returnToWebhookMenu: true };
+        } catch (error: any) {
+          socket.emit('ansi-output', '\r\n' + AnsiUtil.errorLine(`Failed to create webhook: ${error.message}`));
+          await this.handleWebhookCommand(socket, session);
+        }
         return;
       }
-      session.tempData.webhookAdd.type = type;
-      socket.emit('ansi-output', 'Triggers (comma-separated, or ALL): ');
-      session.tempData.webhookAdd.step = 'triggers';
-    } else if (step === 'triggers') {
-      let triggers: string[];
-      if (input.trim().toUpperCase() === 'ALL') {
-        triggers = Object.values(WebhookTrigger);
-      } else {
-        triggers = input.split(',').map(t => t.trim()).filter(t => t.length > 0);
-      }
 
-      try {
-        const webhookId = await db.createWebhook({
-          name: session.tempData.webhookAdd.name,
-          url: session.tempData.webhookAdd.url,
-          type: session.tempData.webhookAdd.type,
-          triggers
-        });
-
-        socket.emit('ansi-output', AnsiUtil.successLine(`Webhook created successfully! ID: ${webhookId}`));
-        socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = { returnToWebhookMenu: true };
-      } catch (error: any) {
-        socket.emit('ansi-output', AnsiUtil.errorLine(`Failed to create webhook: ${error.message}`));
-        await this.handleWebhookCommand(socket, session);
+      if (action === 'select-all') {
+        if (menuData.selected.size === this.ALL_TRIGGERS.length) {
+          menuData.selected.clear();
+        } else {
+          this.ALL_TRIGGERS.forEach(t => menuData.selected.add(t.name));
+        }
+      } else if (action.startsWith('toggle:')) {
+        const triggerName = action.slice('toggle:'.length);
+        if (menuData.selected.has(triggerName)) {
+          menuData.selected.delete(triggerName);
+        } else {
+          menuData.selected.add(triggerName);
+        }
       }
+      this.renderTriggersMenu(socket, menuData.selected, menuData.selectedIndex);
+    } else if (result.action === 'quit') {
+      await this.handleWebhookCommand(socket, session);
+    } else {
+      this.renderTriggersMenu(socket, menuData.selected, menuData.selectedIndex);
     }
   }
 
