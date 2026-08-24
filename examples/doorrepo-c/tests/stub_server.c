@@ -245,6 +245,81 @@ int stub_server_start_capturing(const unsigned char *response, unsigned long res
     return port;
 }
 
+int stub_server_start_sequence(const unsigned char * const *responses,
+                                const unsigned long *response_lens,
+                                int count, int *out_pid)
+{
+    int listen_fd;
+    int port;
+    pid_t pid;
+
+    if (count <= 0) {
+        return -1;
+    }
+
+    listen_fd = make_listener(&port);
+    if (listen_fd < 0) {
+        return -1;
+    }
+    if (listen(listen_fd, count) != 0) {
+        close(listen_fd);
+        return -1;
+    }
+
+    pid = fork();
+    if (pid < 0) {
+        close(listen_fd);
+        return -1;
+    }
+
+    if (pid == 0) {
+        /* Child: serve exactly `count` connections, in order, then exit. */
+        int idx;
+
+        for (idx = 0; idx < count; idx++) {
+            int conn_fd;
+            unsigned long sent;
+            char reqbuf[2048];
+            long got;
+
+            conn_fd = accept(listen_fd, (struct sockaddr *) 0, (socklen_t *) 0);
+            if (conn_fd < 0) {
+                break;
+            }
+
+            got = 0;
+            while (got < (long) sizeof(reqbuf) - 1) {
+                ssize_t n = read(conn_fd, reqbuf + got, sizeof(reqbuf) - 1 - (size_t) got);
+                if (n <= 0) {
+                    break;
+                }
+                got += n;
+                reqbuf[got] = '\0';
+                if (strstr(reqbuf, "\r\n\r\n") != (char *) 0) {
+                    break;
+                }
+            }
+
+            sent = 0;
+            while (sent < response_lens[idx]) {
+                ssize_t n = write(conn_fd, responses[idx] + sent, (size_t) (response_lens[idx] - sent));
+                if (n <= 0) {
+                    break;
+                }
+                sent += (unsigned long) n;
+            }
+            close(conn_fd);
+        }
+        close(listen_fd);
+        _exit(0);
+    }
+
+    /* Parent: the child owns the connections now. */
+    close(listen_fd);
+    *out_pid = (int) pid;
+    return port;
+}
+
 unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsigned long outsize)
 {
     unsigned char drain[512];

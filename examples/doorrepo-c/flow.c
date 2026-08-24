@@ -229,6 +229,15 @@ int flow_build_doc_path(char *out, unsigned long outsize,
     return build_entry_path(out, outsize, base_path, "/doc/", archive_name);
 }
 
+int flow_build_admin_login_path(char *out, unsigned long outsize,
+                                 const char *base_path)
+{
+    /* Reuses build_entry_path() with an empty "archive_name" - this route
+     * has no per-entry segment, but the helper's bounds-checked
+     * concatenation is exactly what's needed here too. */
+    return build_entry_path(out, outsize, base_path, "/admin/login", "");
+}
+
 int flow_contains_forbidden_shell_char(const char *value)
 {
     /* "#" added after the Round 2 bypass (LhaCommand's trailing-comment

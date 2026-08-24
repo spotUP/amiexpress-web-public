@@ -238,6 +238,117 @@ TEST(parse_log_file)
     unlink("/tmp/test_config_log.cfg");
 }
 
+TEST(defaults_admin_credentials_empty)
+{
+    /* "Absent config = feature off" - see config.h's field comment and
+     * owner_auth.h: no AdminUsername=/AdminPassword= means owner mode's
+     * O key never even appears. */
+    dr_config cfg;
+    config_defaults(&cfg);
+    ASSERT_STR_EQ(cfg.admin_username, "", "admin_username empty by default");
+    ASSERT_STR_EQ(cfg.admin_password, "", "admin_password empty by default");
+}
+
+TEST(parse_admin_username)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_admin_user.cfg", "w");
+    fprintf(f, "AdminUsername=spot\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_admin_user.cfg", NULL);
+    ASSERT_STR_EQ(cfg.admin_username, "spot", "AdminUsername parsed");
+    unlink("/tmp/test_config_admin_user.cfg");
+}
+
+TEST(parse_admin_password)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_admin_pass.cfg", "w");
+    fprintf(f, "AdminPassword=hunter2\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_admin_pass.cfg", NULL);
+    ASSERT_STR_EQ(cfg.admin_password, "hunter2", "AdminPassword parsed");
+    unlink("/tmp/test_config_admin_pass.cfg");
+}
+
+/* REGRESSION GUARD (controller ruling, progress.md item #3): the plan's
+ * original text prescribed running AdminUsername/AdminPassword through
+ * flow_contains_forbidden_shell_char() - the SAME denylist DownloadDir/
+ * LhaCommand/RepoPath/LogFile get. That was overridden: these two fields
+ * are never shell-interpolated, so the denylist would only reject strong
+ * real passwords for no security benefit. This test proves every
+ * character that denylist WOULD reject (see the reject_downloaddir_*
+ * tests above and flow.c's flow_contains_forbidden_shell_char()) is
+ * accepted here instead - if someone "fixes" config.c by copying the
+ * DownloadDir pattern onto AdminPassword, this fails. */
+TEST(admin_password_accepts_every_shell_metacharacter_the_denylist_would_reject)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_config_admin_pass_special.cfg", "w");
+    /* One password exercising every byte flow_contains_forbidden_shell_char()
+     * denies: " ' ` $ ; | & < > # and backslash. */
+    fprintf(f, "AdminPassword=p\"a'ss`w$o;r|d&<n>a#me\\end\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_admin_pass_special.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.admin_password, "p\"a'ss`w$o;r|d&<n>a#me\\end",
+                  "password with shell metacharacters accepted verbatim, not rejected");
+    ASSERT_EQ(skipped, 0, "not counted as a skipped line");
+    ASSERT_EQ(config_last_unsafe_value_count(), 0, "not counted as an unsafe-value rejection");
+    unlink("/tmp/test_config_admin_pass_special.cfg");
+}
+
+TEST(admin_username_accepts_every_shell_metacharacter_the_denylist_would_reject)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_config_admin_user_special.cfg", "w");
+    fprintf(f, "AdminUsername=us\"er'na`me$;|&<>#\\end\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_admin_user_special.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.admin_username, "us\"er'na`me$;|&<>#\\end",
+                  "username with shell metacharacters accepted verbatim, not rejected");
+    ASSERT_EQ(skipped, 0, "not counted as a skipped line");
+    ASSERT_EQ(config_last_unsafe_value_count(), 0, "not counted as an unsafe-value rejection");
+    unlink("/tmp/test_config_admin_user_special.cfg");
+}
+
+TEST(admin_password_truncated_and_null_terminated_when_too_long)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_admin_pass_trunc.cfg", "w");
+    char long_value[256];
+    int i;
+    for (i = 0; i < 200; i++)
+        long_value[i] = 'P';
+    long_value[200] = '\0';
+    fprintf(f, "AdminPassword=%s\n", long_value);
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_admin_pass_trunc.cfg", NULL);
+    ASSERT_TRUE(strlen(cfg.admin_password) == 127 && cfg.admin_password[127] == '\0',
+                "password truncated to buffer size and NUL-terminated, not overrun");
+    unlink("/tmp/test_config_admin_pass_trunc.cfg");
+}
+
+TEST(admin_username_password_case_insensitive_keys)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_admin_case.cfg", "w");
+    fprintf(f, "adminusername=spot\n");
+    fprintf(f, "ADMINPASSWORD=hunter2\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_admin_case.cfg", NULL);
+    ASSERT_STR_EQ(cfg.admin_username, "spot", "lowercase adminusername matched");
+    ASSERT_STR_EQ(cfg.admin_password, "hunter2", "uppercase ADMINPASSWORD matched");
+    unlink("/tmp/test_config_admin_case.cfg");
+}
+
 TEST(ignore_comments)
 {
     dr_config cfg;
@@ -1032,6 +1143,13 @@ int main(void)
     RUN_TEST(parse_extract_1);
     RUN_TEST(parse_extract_0);
     RUN_TEST(parse_log_file);
+    RUN_TEST(defaults_admin_credentials_empty);
+    RUN_TEST(parse_admin_username);
+    RUN_TEST(parse_admin_password);
+    RUN_TEST(admin_password_accepts_every_shell_metacharacter_the_denylist_would_reject);
+    RUN_TEST(admin_username_accepts_every_shell_metacharacter_the_denylist_would_reject);
+    RUN_TEST(admin_password_truncated_and_null_terminated_when_too_long);
+    RUN_TEST(admin_username_password_case_insensitive_keys);
     RUN_TEST(ignore_comments);
     RUN_TEST(ignore_blank_lines);
     RUN_TEST(unknown_key_skipped);

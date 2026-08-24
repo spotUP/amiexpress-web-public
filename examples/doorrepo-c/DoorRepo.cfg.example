@@ -61,6 +61,18 @@ larger window. Valid ranges: ScreenRows 10-200, ScreenCols 40-250.
 The AmigaDOS path where the door logs its activity and errors.
 # LogFile=T:DoorRepo.log
 
+Owner-mode admin credentials for the door repository server (approving or
+rejecting submissions, editing catalog fields, from inside the door). Both
+are optional and absent by default - if either is not set, owner mode's O
+key does not appear in the footer at all, the same way V=Doc is hidden for
+a doc-less door. Stored here in PLAINTEXT: this is a real, deliberate
+security tradeoff (this file is only as safe as your AmigaDOS filesystem's
+own protection bits/ACLs), accepted so v1 can ship against the door
+server's existing human-admin login rather than waiting on a separate
+scoped API-key mechanism. Keep DoorRepo.cfg readable only by the sysop.
+# AdminUsername=spot
+# AdminPassword=<plaintext>
+
 CONFIGURATION NOTES
 ---
 

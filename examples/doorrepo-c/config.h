@@ -30,6 +30,23 @@ typedef struct {
      * of deleting it. Off by default; see flow.h's flow_build_bad_path() for
      * why the option exists at all and why it is not the default. */
     int keep_failed_downloads;
+    /* Owner-mode admin credentials (see owner_auth.h). Both empty by
+     * default - "absent config = feature off", the same rule Ansi=no
+     * already follows: no AdminUsername=/AdminPassword= configured means
+     * owner mode's O key does not even appear in the footer.
+     *
+     * Validated with a bounded strncpy + explicit-null-terminate ONLY,
+     * matching RepoHost's handling below - deliberately NOT run through
+     * flow_contains_forbidden_shell_char() (see config_load()'s
+     * AdminUsername/AdminPassword branches for why: that denylist exists
+     * to stop shell injection for values interpolated into system(), and
+     * these two are never shell-interpolated - applying it here would
+     * only reject strong real passwords for no security benefit).
+     *
+     * NEVER logged - see owner_auth.c/.h for the login flow that consumes
+     * these, and audit every log_line()/ae_put() call near it. */
+    char admin_username[64];
+    char admin_password[128];
 } dr_config;
 
 void config_defaults(dr_config *cfg);

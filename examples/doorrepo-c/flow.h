@@ -154,6 +154,13 @@ int flow_build_files_path(char *out, unsigned long outsize,
 int flow_build_doc_path(char *out, unsigned long outsize,
                         const char *base_path, const char *archive_name);
 
+/* Builds "<base_path>/admin/login" into `out` - the owner-mode admin API's
+ * login route (see owner_auth.h/.c). No archive_name segment; unlike
+ * flow_build_archive_path() and friends this endpoint is not per-entry.
+ * Returns the output length, or -1 if it would not fit `outsize`. */
+int flow_build_admin_login_path(char *out, unsigned long outsize,
+                                 const char *base_path);
+
 /* Builds a local filesystem path for a downloaded archive:
  * "<download_dir><archive_name>", inserting a "/" separator between them
  * only when `download_dir` does not already end in a path separator.

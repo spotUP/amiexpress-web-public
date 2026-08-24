@@ -259,6 +259,21 @@ TEST(build_archive_path_too_small_buffer_returns_error)
     ASSERT_TRUE(n < 0, "buffer too small must fail, not truncate");
 }
 
+TEST(build_admin_login_path_basic)
+{
+    char out[128];
+    int n = flow_build_admin_login_path(out, sizeof(out), "/api/door-repo");
+    ASSERT_STR_EQ(out, "/api/door-repo/admin/login", "admin login path built");
+    ASSERT_EQ(n, (int) strlen("/api/door-repo/admin/login"), "return length matches");
+}
+
+TEST(build_admin_login_path_too_small_buffer_returns_error)
+{
+    char out[10];
+    int n = flow_build_admin_login_path(out, sizeof(out), "/api/door-repo");
+    ASSERT_TRUE(n < 0, "buffer too small must fail, not truncate");
+}
+
 /* ---------------------------------------------------------------------
  * Shell-metacharacter rejection (the config.c / doorrepo.c shared
  * validator - see flow.h for the full vulnerability writeup)
@@ -2447,6 +2462,8 @@ int main(void)
     RUN_TEST(build_archive_path_ampersand_left_unencoded);
     RUN_TEST(build_archive_path_caret_left_unencoded);
     RUN_TEST(build_archive_path_too_small_buffer_returns_error);
+    RUN_TEST(build_admin_login_path_basic);
+    RUN_TEST(build_admin_login_path_too_small_buffer_returns_error);
 
     RUN_TEST(shell_char_ordinary_amiga_path_is_safe);
     RUN_TEST(shell_char_exact_reported_injection_is_unsafe);

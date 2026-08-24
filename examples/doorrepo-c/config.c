@@ -32,6 +32,9 @@ void config_defaults(dr_config *cfg)
     cfg->screen_cols = 80;
     strncpy(cfg->log_file, "T:DoorRepo.log", sizeof(cfg->log_file) - 1);
     cfg->log_file[sizeof(cfg->log_file) - 1] = '\0';
+    /* Absent by default - see config.h's field comment. */
+    cfg->admin_username[0] = '\0';
+    cfg->admin_password[0] = '\0';
 }
 
 static char *trim_leading(char *str)
@@ -338,6 +341,22 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
                 strncpy(cfg->log_file, value, sizeof(cfg->log_file) - 1);
                 cfg->log_file[sizeof(cfg->log_file) - 1] = '\0';
             }
+        } else if (str_icmp(key, "AdminUsername") == 0) {
+            /* Bounded copy ONLY - no denylist. See config.h's field comment
+             * and owner_auth.h's file header: these values are never
+             * shell-interpolated, so flow_contains_forbidden_shell_char()
+             * does not apply here (controller ruling; the plan's original
+             * text prescribing that check was wrong for this field). */
+            strncpy(cfg->admin_username, value, sizeof(cfg->admin_username) - 1);
+            cfg->admin_username[sizeof(cfg->admin_username) - 1] = '\0';
+        } else if (str_icmp(key, "AdminPassword") == 0) {
+            /* Same bounded-copy-only rule as AdminUsername above - and this
+             * line's value is NEVER logged even when LogFile records other
+             * skipped/invalid config lines, because this branch never
+             * rejects a value (any password parses), so no log_line() call
+             * on this path can ever be reached with `value` in scope. */
+            strncpy(cfg->admin_password, value, sizeof(cfg->admin_password) - 1);
+            cfg->admin_password[sizeof(cfg->admin_password) - 1] = '\0';
         } else {
             local_skipped++;
         }

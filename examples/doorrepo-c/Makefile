@@ -100,8 +100,8 @@ endif
 
 LIVE_HOST = http://bbs.uprough.net
 
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c json_lite.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h json_lite.h
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c json_lite.c owner_auth.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h json_lite.h owner_auth.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c
@@ -174,9 +174,9 @@ probe-amiga: $(PROBE_SOURCES) $(HEADERS)
 # POSIX socket declarations that glibc hides under -std=c89.
 TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
-.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite
+.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite test-owner-auth
 
-test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite
+test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite test-owner-auth
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
@@ -222,6 +222,13 @@ test-infocache: infocache.c tests/test_infocache.c infocache.h
 	$(CC) $(TEST_CFLAGS) infocache.c tests/test_infocache.c -o build-test-infocache
 	./build-test-infocache
 
+# Same stub-server precedent as test-http (tests/stub_server.c) - see that
+# target's comment above and owner_auth.h's file header.
+test-owner-auth: owner_auth.c http.c netio.c config.c flow.c json_lite.c tests/test_owner_auth.c tests/stub_server.c \
+                  owner_auth.h http.h netio.h config.h flow.h json_lite.h tests/stub_server.h
+	$(CC) $(TEST_CFLAGS) owner_auth.c http.c netio.c config.c flow.c json_lite.c tests/stub_server.c tests/test_owner_auth.c -o build-test-owner-auth
+	./build-test-owner-auth
+
 # ---------------------------------------------------------------------
 # live (explicitly network-touching: runs the real native binary against
 # the live, public door repo API)
@@ -239,7 +246,7 @@ live: native
 
 clean:
 	rm -f doorrepo doorrepo.amiga doorrepo.amiga-stub
-	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-guide build-test-ansi build-test-listtxt build-test-config build-test-http build-test-aedoor-native build-test-json-lite
+	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-guide build-test-ansi build-test-listtxt build-test-config build-test-http build-test-aedoor-native build-test-json-lite build-test-owner-auth
 	rm -f *.o
 	rm -rf *.dSYM
 	rm -rf $(AMIGA_NDK_SHIM) $(AMIGA_NETINCLUDE_VENDOR_LINK)
