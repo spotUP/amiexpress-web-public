@@ -608,6 +608,37 @@ typedef struct {
 
 int flow_read_door_info(const char *info_path, dr_info_fields *out);
 
+/* Task 4's one-key disable/restore RULING, as a pure function: typing a new
+ * ACCESS value is both "edit" and "disable"/"restore" depending on what is
+ * typed and what is already tracked, with no second key or mode. Returns
+ * the `prior_access` value the caller should pass to
+ * flow_build_info_content() - either a real 0-255 level to keep tracking,
+ * or -1 (that function's "omit DRACCESS" sentinel).
+ *
+ * Exact rule (controller ruling - do not redesign):
+ *   1. `prior_access_found` is 0 (not currently tracking a "before" value)
+ *      and `new_access != current_access`: this is the first step away from
+ *      the door's normal level - start tracking it (`return current_access`).
+ *   2. `prior_access_found` is 1 (already tracking one) and
+ *      `new_access == prior_access`: this edit IS the restore - stop
+ *      tracking (`return -1`), since the door is back at its remembered
+ *      normal level.
+ *   3. `prior_access_found` is 1 and `new_access` is neither
+ *      `current_access` nor `prior_access` (a further edit to a THIRD level
+ *      while already disabled): keep the tracked value unchanged (`return
+ *      prior_access`) - it names the ORIGINAL normal level, not the most
+ *      recently set one, so restore always returns to where the door
+ *      started.
+ * Two cases the ruling does not name explicitly fall out of the same two
+ * checks: not tracking and `new_access == current_access` (a no-op edit)
+ * returns -1, same as "nothing to track"; and tracking with
+ * `new_access == current_access` but `current_access != prior_access` (the
+ * sysop retyped the door's already-disabled level) falls to case 3's
+ * "keep unchanged" - restore still returns to where the door started, not
+ * to whatever it was most recently set to. */
+long flow_compute_prior_access(long current_access, long new_access,
+                                int prior_access_found, long prior_access);
+
 /* ---- /files listing helpers ----
  *
  * The archive-contents listing (GET /files/<archive>, section 6 of the API

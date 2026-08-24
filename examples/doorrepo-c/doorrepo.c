@@ -2803,9 +2803,14 @@ static void plain_strip_installed_door(const dr_config *cfg, const char *archive
  * entries, matching this door's existing "<VERB> FAILED: <reason>"
  * convention; the on-screen ae_put() messages stay generic ("Failed:
  * ...") since the caller's own screen has already said which action is
- * running. Returns 1 on success, 0 on failure (having already reported
- * the failure); the caller still owns its own "press any key to return"
- * / redraw follow-up, since that differs between install_door()'s
+ * running. This is a deliberate trade-off, not an oversight: threading a
+ * second, differently-cased "display verb" through just to keep the old
+ * per-caller wording ("Install failed: ..." vs "Access edit failed: ...")
+ * was not worth it for three words of screen text, given log_line()'s
+ * output - the durable, greppable record - stays byte-identical either
+ * way. Returns 1 on success, 0 on failure (having already reported the
+ * failure); the caller still owns its own "press any key to return" /
+ * redraw follow-up, since that differs between install_door()'s
  * multi-step report and a shorter screen like do_edit_access()'s. */
 static int write_info_file_atomic(const dr_config *cfg, const char *info_path,
                                   const char *content, const char *log_verb)
@@ -3498,6 +3503,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     long new_access;
     long prior_access;
     const char *binary_rel;
+    unsigned long cmdlen;
     char info_content[320];
     char msg[420];
     char logmsg[300];
@@ -3560,6 +3566,83 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
+    /* LOCATION must be EXACTLY "Doors:<cmdname>/<binary_rel>" -
+     * install_door()'s own format (see flow_build_info_content()'s
+     * comment; grepped for the only place in this codebase that writes a
+     * "Doors:" LOCATION, since doorrepo.c itself has no such literal).
+     * cmdname here already IS <cmd> (index_lookup() gave it to us), so
+     * every token up to binary_rel is fully known - checked, not assumed.
+     * A hand-edited .info, one installed by a different tool, or one
+     * installed under a different command name would otherwise silently
+     * yield a wrong or partial binary_rel here, which
+     * flow_build_info_content() would then happily reassemble into a
+     * corrupted LOCATION and WRITE - refused instead, same defense as the
+     * missing-TYPE/LOCATION case just above. */
+    cmdlen = strlen(cmdname);
+    binary_rel = fields.location;
+    if (strncmp(binary_rel, "Doors:", 6) != 0) {
+        binary_rel = (const char *) 0;
+    } else {
+        binary_rel += 6;
+        if (strncmp(binary_rel, cmdname, cmdlen) != 0 || binary_rel[cmdlen] != '/') {
+            binary_rel = (const char *) 0;
+        } else {
+            binary_rel += cmdlen + 1;
+        }
+    }
+    if (binary_rel == (const char *) 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        sprintf(msg, "This command's LOCATION (%s) does not match the Doors:%s/<program>",
+                fields.location, cmdname);
+        ae_put(msg, 1);
+        ae_put("format DoorRepo expects - the .info may be hand-edited or installed by", 1);
+        ae_put("another tool. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    /* parse_nonneg_long() (flow_read_door_info()'s own number parser) only
+     * rejects a NEGATIVE value - it has no upper bound, so a hand-edited or
+     * corrupted ACCESS/DRACCESS line (e.g. 8+ digits) can hand back a
+     * `long` far outside this door's 0-255 convention. That value is about
+     * to be formatted with ui_append_ulong() into a small fixed buffer
+     * below (which has no length cap of its own) and reasoned about as a
+     * disable/restore level - refuse rather than clamp: clamping would let
+     * a sysop believe they are editing one value when the file actually
+     * held garbage. */
+    if (fields.access_found && (fields.access < 0 || fields.access > 255)) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("This command's ACCESS value is outside 0-255 - the .info may be corrupted", 1);
+        ae_put("or hand-edited. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+    if (fields.prior_access_found && (fields.prior_access < 0 || fields.prior_access > 255)) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("This command's DRACCESS value is outside 0-255 - the .info may be", 1);
+        ae_put("corrupted or hand-edited. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
     /* A .info with no ACCESS line at all (hand-edited, or written by some
      * other tool) still gets a usable default rather than an
      * uninitialized value - but the sysop is told, not left to assume the
@@ -3601,42 +3684,14 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     /* One-key disable/restore (RULING - implemented exactly as specified,
      * not redesigned): typing a new value IS both "edit" and "disable"/
      * "restore" depending on what is typed, so there is no separate mode
-     * and no second key.
-     *
-     *   1. Not currently tracking a "before" value, and this edit moves
-     *      away from the current level: remember it (prior = current) -
-     *      this is the first step away from the door's normal level.
-     *   2. Already tracking one, and this edit lands exactly back on it:
-     *      this IS the restore - stop tracking (omit DRACCESS), since the
-     *      door is back at its remembered normal level.
-     *   3. Already tracking one, and this edit lands on neither the
-     *      current nor the tracked level (a further edit to a THIRD level
-     *      while already disabled): keep the tracked value unchanged - it
-     *      names the ORIGINAL normal level, not the most recently set
-     *      one, so restore always returns to where the door started. */
-    if (!fields.prior_access_found) {
-        prior_access = (new_access != current_access) ? current_access : -1;
-    } else if (new_access == fields.prior_access) {
-        prior_access = -1;
-    } else {
-        prior_access = fields.prior_access;
-    }
-
-    /* The exact inverse of what install_door() writes: LOCATION is always
-     * "Doors:<cmd>/<binary_rel>" (flow_build_info_content()'s own
-     * comment), and cmdname here already IS <cmd> (index_lookup() gave it
-     * to us) - so strip the "Doors:" assign, then the "<cmd>/" that
-     * follows it, rather than guessing at binary_rel from scratch. */
-    binary_rel = fields.location;
-    if (strncmp(binary_rel, "Doors:", 6) == 0) {
-        binary_rel += 6;
-    }
-    {
-        unsigned long cmdlen = strlen(cmdname);
-        if (strncmp(binary_rel, cmdname, cmdlen) == 0 && binary_rel[cmdlen] == '/') {
-            binary_rel += cmdlen + 1;
-        }
-    }
+     * and no second key. The 3-case logic itself is
+     * flow_compute_prior_access() (flow.c/flow.h), extracted there so it is
+     * unit-tested (tests/test_flow.c) rather than living untested as
+     * inline branching here - see that function's doc comment for the
+     * exact rule text. */
+    prior_access = flow_compute_prior_access(current_access, new_access,
+                                             fields.prior_access_found,
+                                             fields.prior_access);
 
     if (flow_build_info_content(info_content, sizeof(info_content),
                                 fields.type, cmdname, binary_rel,
@@ -3672,11 +3727,9 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     if (prior_access >= 0) {
         ae_put("The previous level is remembered - press M and type it back in to restore.", 1);
     }
-    {
-        sprintf(logmsg, "ACCESS OK archive=%s cmd=%s from=%ld to=%ld",
-                entry->archive, cmdname, current_access, new_access);
-        log_line(cfg, logmsg);
-    }
+    sprintf(logmsg, "ACCESS OK archive=%s cmd=%s from=%ld to=%ld",
+            entry->archive, cmdname, current_access, new_access);
+    log_line(cfg, logmsg);
 
     ae_put("", 1);
     ae_put("Press any key to return to the list.", 1);

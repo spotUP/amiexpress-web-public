@@ -898,6 +898,23 @@ int flow_read_door_info(const char *info_path, dr_info_fields *out)
     return 1;
 }
 
+/* See flow.h for the full ruling this implements verbatim - the exact three
+ * cases the plan's controller specified for Task 4's one-key disable/
+ * restore, extracted here (out of doorrepo.c's UI glue) so it is testable
+ * without a server, a terminal or a filesystem, the same reason every other
+ * decision function in this file lives here rather than there. */
+long flow_compute_prior_access(long current_access, long new_access,
+                                int prior_access_found, long prior_access)
+{
+    if (!prior_access_found) {
+        return (new_access != current_access) ? current_access : -1;
+    }
+    if (new_access == prior_access) {
+        return -1;
+    }
+    return prior_access;
+}
+
 /* Copies field `index` (0-based, '|'-delimited) of `line` into `out`.
  * Returns 0 on success, non-zero when the line has no such field. */
 static int files_field(const char *line, int index, char *out, unsigned long outsize)

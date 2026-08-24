@@ -955,6 +955,48 @@ TEST(validate_access_level_rejects_leading_zero) { long v; ASSERT_TRUE(flow_vali
 TEST(validate_access_level_rejects_double_zero)  { long v; ASSERT_TRUE(flow_validate_access_level("00", &v) != 0, "\"00\" rejected - not a single \"0\""); }
 
 
+/* ---------------------------------------------------------------------
+ * flow_compute_prior_access() - Task 4's one-key disable/restore RULING,
+ * exact 3 named cases plus the 2 unnamed sub-cases the controller's ruling
+ * implies (a no-op edit, and retyping the already-disabled level). One test
+ * per branch - see flow.h for the full rule text this mirrors.
+ * ------------------------------------------------------------------- */
+
+TEST(compute_prior_access_case1_first_disable_starts_tracking) {
+    /* Not tracking, edit moves away from current: remember current as the
+     * value to restore to. */
+    ASSERT_EQ(flow_compute_prior_access(42, 100, 0, 0), 42,
+              "not tracking + moved away => start tracking current_access");
+}
+TEST(compute_prior_access_noop_edit_stays_untracked) {
+    /* Not tracking, edit matches current: nothing changed, nothing to
+     * track - the unnamed trivial sub-case. */
+    ASSERT_EQ(flow_compute_prior_access(42, 42, 0, 0), -1,
+              "not tracking + no real change => stays untracked (-1)");
+}
+TEST(compute_prior_access_case2_restore_stops_tracking) {
+    /* Tracking 42, currently disabled at 100, edit lands exactly back on
+     * the tracked value: this IS the restore. */
+    ASSERT_EQ(flow_compute_prior_access(100, 42, 1, 42), -1,
+              "tracking + new == prior => restore, stop tracking (-1)");
+}
+TEST(compute_prior_access_case3_third_level_keeps_original_tracked) {
+    /* Tracking 42, currently disabled at 100, edit goes to a THIRD level
+     * (200): the tracked value must stay 42 (the door's ORIGINAL level),
+     * not become 100 (the level it was most recently disabled at). */
+    ASSERT_EQ(flow_compute_prior_access(100, 200, 1, 42), 42,
+              "tracking + new is neither current nor prior => keep original tracked value");
+}
+TEST(compute_prior_access_resubmit_disabled_value_keeps_tracking) {
+    /* Tracking 42, currently disabled at 100, edit resubmits the SAME
+     * disabled value (100 again): not the restore (that requires landing
+     * on the tracked 42), so tracking must continue - the unnamed
+     * resubmit sub-case. */
+    ASSERT_EQ(flow_compute_prior_access(100, 100, 1, 42), 42,
+              "tracking + new == current (disabled value retyped) => keep tracking prior");
+}
+
+
 /* ---- Install support (2026-08-18) ---------------------------------- */
 
 TEST(bbs_command_accepts_upper_alnum)
@@ -2249,6 +2291,12 @@ int main(void)
     RUN_TEST(validate_access_level_rejects_overlong);
     RUN_TEST(validate_access_level_rejects_leading_zero);
     RUN_TEST(validate_access_level_rejects_double_zero);
+
+    RUN_TEST(compute_prior_access_case1_first_disable_starts_tracking);
+    RUN_TEST(compute_prior_access_noop_edit_stays_untracked);
+    RUN_TEST(compute_prior_access_case2_restore_stops_tracking);
+    RUN_TEST(compute_prior_access_case3_third_level_keeps_original_tracked);
+    RUN_TEST(compute_prior_access_resubmit_disabled_value_keeps_tracking);
 
     RUN_TEST(footer_bar_fits_everything_when_there_is_room);
     RUN_TEST(footer_bar_drops_one_low_priority_part_to_fit);
