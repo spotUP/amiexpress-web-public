@@ -38,13 +38,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerRepoViewActionKeys = exports.repoViewFooterParts = exports.repoViewCurationAllowed = exports.clampSelection = exports.wrapText = exports.CONSUMER_INSTALL_SOURCE = void 0;
+exports.registerRepoViewActionKeys = exports.repoViewFooterParts = exports.repoViewCurationAllowed = exports.clampSelection = exports.wrapText = void 0;
 exports.resolveArchivePath = resolveArchivePath;
 exports.buildDoorInfoContent = buildDoorInfoContent;
 exports.extractArchiveTo = extractArchiveTo;
 exports.findExtractedBinary = findExtractedBinary;
 exports.extractAndRegisterDoor = extractAndRegisterDoor;
-exports.catalogIdForArchive = catalogIdForArchive;
 exports.installConsumerDoor = installConsumerDoor;
 exports.createApp = createApp;
 const path = __importStar(require("path"));
@@ -85,6 +84,26 @@ function getCatalogSvc() {
             return require.cache[k]?.exports ?? null;
     return null;
 }
+function getInstallsRepo() {
+    // Same require.cache discovery as getCatalogSvc -- the backend's
+    // door_installs repository, the single source of truth for what THIS
+    // node has installed (door_catalog only ever describes shared metadata).
+    for (const k of Object.keys(require.cache))
+        if (k.includes('door-installs.repository'))
+            return require.cache[k]?.exports ?? null;
+    return null;
+}
+/** Shared by both owner- and consumer-mode install call sites: no-ops with
+ * a console warning (instead of throwing) when the repository isn't in
+ * require.cache, matching this file's svc?. optional-call defensiveness. */
+function recordInstallSafe(entry) {
+    const repo = getInstallsRepo();
+    if (!repo) {
+        console.log('[DOORMAN] warning: door-installs repository unavailable -- install not recorded locally');
+        return;
+    }
+    repo.recordInstall(entry);
+}
 function getExtractorFactory() {
     // Same require.cache discovery as getCatalogSvc — the backend's shared
     // archive-extractor (WASM unlzx included) when loaded in this process.
@@ -120,6 +139,23 @@ function buildLocalCatalogLookup() {
                 binary_name: row.binary_name ?? null,
                 archive_path: row.archive_path ?? null,
             };
+        }
+        catch {
+            return null;
+        }
+    };
+}
+/** Adapts getInstallByArchive into the InstallLookup shape
+ * mapManifestDoorToEntry expects -- missing repo or a thrown lookup error
+ * both fold into "nothing known locally" rather than propagating. */
+function buildInstallLookup() {
+    const repo = getInstallsRepo();
+    return (archiveName) => {
+        try {
+            const row = repo?.getInstallByArchive?.(archiveName);
+            if (!row)
+                return null;
+            return { command: row.command, install_dir: row.install_dir };
         }
         catch {
             return null;
@@ -277,43 +313,19 @@ async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorTyp
         return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}` };
     }
     try {
-        deps.markInstalled();
+        deps.recordInstall();
     }
     catch (err) {
         // The door is on disk and the .info is written — it will run. The
-        // catalog just won't show it as installed. Surface it but don't roll
-        // back a working install over a bookkeeping error.
-        console.log(`[DOORMAN] install failed: mark-installed: ${err?.message ?? err}`);
+        // install just won't show as installed locally. Surface it but don't
+        // roll back a working install over a bookkeeping error.
+        console.log(`[DOORMAN] install failed: record-install: ${err?.message ?? err}`);
     }
     const refreshed = await deps.refreshDoorRegistry();
     if (!refreshed)
         console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
     return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel };
 }
-/**
- * Same stable-slug convention dev/scripts/door-corpus/build-door-catalog.ts
- * uses to derive a door_catalog.id from an archive_name (that script's
- * `baseId`, duplicated here rather than imported: it's a standalone tsx
- * script outside both this package's and web/backend's TypeScript program,
- * not an importable module). Reusing the exact formula matters, not just
- * for readability parity with scanned rows (e.g. "!ALSTER.LHA" -> "_alster"
- * in the seed data) -- it means a door that is BOTH consumer-installed here
- * AND later indexed by a local scan resolves to the SAME id instead of two
- * divergent rows colliding on door_catalog.archive_name's UNIQUE
- * constraint. Deterministic in archiveName alone, so install -> uninstall
- * -> reinstall of the same archive always targets the same row (idempotent
- * upsert, never a duplicate).
- */
-function catalogIdForArchive(archiveName) {
-    return archiveName.replace(/\.(lha|lzx|lzh)$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '_');
-}
-/** New door_catalog.source value for this install path. The column's only
- * existing value anywhere in the codebase (schema DEFAULT, every seed row)
- * is 'scan' -- the local archive-corpus scanner's provenance tag. 'door-repo'
- * extends that same informal enum minimally: it marks a row as created by
- * a consumer-mode install from the central door-repo API, never by a local
- * filesystem scan. */
-exports.CONSUMER_INSTALL_SOURCE = 'door-repo';
 async function installConsumerDoor(cfg, archiveName, doorType, binaryName, finalCmd, installDir, infoPath, tmpDir, deps) {
     const destPath = path.join(tmpDir, archiveName);
     try {
@@ -355,46 +367,31 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
             findExtractedBinary: deps.findExtractedBinary,
             writeInfoFile: deps.writeInfoFile,
             refreshDoorRegistry: deps.refreshDoorRegistry,
-            markInstalled: () => {
-                if (localRow) {
-                    deps.markInstalled(localRow.id, finalCmd, `Doors/${finalCmd}`);
-                    registeredLocally = true;
-                    return;
-                }
-                const newId = catalogIdForArchive(archiveName);
-                const collision = deps.getCatalogEntry(newId);
+            recordInstall: () => {
+                const collision = deps.getInstallByCommand(finalCmd);
                 if (collision && collision.archive_name !== archiveName) {
-                    console.log(`[DOORMAN] consumer install: id "${newId}" already belongs to a different ` +
+                    console.log(`[DOORMAN] consumer install: "${finalCmd}" is already installed from a different ` +
                         `archive (${collision.archive_name}) -- not clobbering it. ${archiveName} ` +
                         `installs registry-only (on disk, registered with the BBS; repo browse ` +
-                        `'installed' flag needs its own local catalog row).`);
+                        `'installed' flag needs its own command).`);
                     return;
                 }
-                deps.upsertCatalogEntry({
-                    id: newId,
+                deps.recordInstall({
+                    id: `install-${finalCmd}`,
+                    catalog_id: localRow?.id ?? null,
                     archive_name: archiveName,
-                    archive_path: '', // lives on the central server, not this BBS -- never claim otherwise
-                    binary_name: null,
+                    command: finalCmd,
+                    install_dir: `Doors/${finalCmd}`,
                     door_type: doorType || 'XIM',
                     name: manifestRow.name ?? archiveName,
-                    version: null,
-                    author: null,
-                    release_group: null,
+                    md5: null, // ManifestDoor carries no md5; the digest was already verified at download time
                     description: manifestRow.description ?? null,
-                    file_id_diz: null,
-                    doc_filename: null,
-                    doc_raw: null,
-                    suggested_tooltypes: null,
-                    category: null,
-                    archive_size: manifestRow.archiveSize ?? 0,
-                    junk_count: 0,
-                    installed: 0, // markInstalled (below) owns installed/installed_as/install_dir
-                    installed_as: null,
-                    install_dir: null,
-                    corpus_id: null,
-                    source: exports.CONSUMER_INSTALL_SOURCE,
+                    category: manifestRow.category ?? null,
+                    version: null, // the manifest has no version concept -- see mapManifestDoorToEntry
+                    release_group: manifestRow.releaseGroup ?? null,
+                    source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
+                    source_revision: null, // no manifest revision is threaded down to this call site
                 });
-                deps.markInstalled(newId, finalCmd, `Doors/${finalCmd}`);
                 registeredLocally = true;
             },
         });
@@ -883,7 +880,8 @@ class RepoView extends ViewManager_1.BaseView {
         try {
             const cacheFile = (0, repoDataSource_1.consumerCacheFilePath)(PROJECT_ROOT);
             const lookupLocal = buildLocalCatalogLookup();
-            const result = await (0, repoDataSource_1.loadConsumerCatalog)(this.repoMode.url, cacheFile, lookupLocal);
+            const lookupInstall = buildInstallLookup();
+            const result = await (0, repoDataSource_1.loadConsumerCatalog)(this.repoMode.url, cacheFile, lookupLocal, repo_client_1.fetchManifest, lookupInstall);
             this.consumerEntries = result.entries;
             this.consumerFromCache = result.fromCache;
             this.consumerCachedAt = result.cachedAt;
@@ -1169,7 +1167,6 @@ class RepoView extends ViewManager_1.BaseView {
             return;
         if (e.installed) {
             this.vm.push(new ConfirmView(this.layout, `Uninstall {yellow-fg}${e.installed_as}{/yellow-fg}?\n\nRemoves .info + Doors/${e.installed_as}/`, 'Uninstall', 'Cancel', () => {
-                const svc = getCatalogSvc();
                 const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
                 const infoPath = path.join(bbsCmdDir, `${e.installed_as}.info`);
                 if (fs.existsSync(infoPath))
@@ -1179,7 +1176,10 @@ class RepoView extends ViewManager_1.BaseView {
                     if (fs.existsSync(abs))
                         fs.rmSync(abs, { recursive: true, force: true });
                 }
-                svc?.markUninstalled(e.id);
+                // door_installs (Task 5) is keyed by command -- installed_as is
+                // the command this door was installed as; archive_name is only a
+                // fallback for a stale row where installed_as was never set.
+                getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
                 void (0, ViewManager_1.refreshDoorRegistry)(); // doors list is boot-cached; drop the entry now
                 this.setStatus(`Uninstalled ${e.installed_as}`, 'green', 4000);
                 this.refresh(this.layout.listSelected);
@@ -1217,9 +1217,8 @@ class RepoView extends ViewManager_1.BaseView {
                             findExtractedBinary,
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                             lookupLocal: buildLocalCatalogLookup(),
-                            getCatalogEntry: (id) => getCatalogSvc()?.getCatalogEntry(id) ?? null,
-                            upsertCatalogEntry: (entry) => { getCatalogSvc()?.upsertCatalogEntry(entry); },
-                            markInstalled: (id, cmd2, dir) => { getCatalogSvc()?.markInstalled(id, cmd2, dir); },
+                            getInstallByCommand: (command) => getInstallsRepo()?.getInstallByCommand(command) ?? null,
+                            recordInstall: recordInstallSafe,
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,
                             mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
                             unlink: (p) => { try {
@@ -1285,7 +1284,25 @@ class RepoView extends ViewManager_1.BaseView {
                             extractArchiveTo,
                             findExtractedBinary,
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
-                            markInstalled: () => { getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`); },
+                            // Owner mode records the same door_installs shape
+                            // consumer mode does (Task 5), using the real local
+                            // catalog row's id (e.id) as provenance.
+                            recordInstall: () => recordInstallSafe({
+                                id: `install-${finalCmd}`,
+                                catalog_id: e.id ?? null,
+                                archive_name: e.archive_name,
+                                command: finalCmd,
+                                install_dir: `Doors/${finalCmd}`,
+                                door_type: e.door_type ?? null,
+                                name: e.name ?? null,
+                                md5: null,
+                                description: e.description ?? null,
+                                category: e.category ?? null,
+                                version: e.version ?? null,
+                                release_group: e.release_group ?? null,
+                                source_url: null, // resolved from this BBS's own local archive corpus, not the central repo
+                                source_revision: null,
+                            }),
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,
                         });
                         if (!outcome.ok) {
