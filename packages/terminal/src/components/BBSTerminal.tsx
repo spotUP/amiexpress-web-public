@@ -130,6 +130,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   const mouseButtonDown = useRef<boolean>(false);  // Track mouse button state for drag events
   const lastMouseHoverTime = useRef<number>(0);  // Throttle hover events
+  // Pointer-lock virtual pointer (game mode): while the lock holds, real
+  // clientX/Y freeze and movementX/Y carry the deltas - this ref is the
+  // accumulated position the game keeps steering with.
+  const lockedPointer = useRef<{ x: number; y: number } | null>(null);
   const guruTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const guruPhaseRef = useRef<number>(0);
   const guruStaticRendered = useRef<boolean>(false);
@@ -2093,6 +2097,49 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     // Game mode: bypass OS key repeat for real-time game controls
+    // Game-mode pointer tracking lives on WINDOW, not the terminal div:
+    // slipping off the canvas mid-game must not drop paddle control. With
+    // the pointer lock held, movementX/Y accumulate into a virtual
+    // position; without it, page-wide coordinates clamp into the grid.
+    const gameWindowMouseMove = (event: MouseEvent) => {
+      if (!gameMode.current) return;
+
+      if (document.pointerLockElement) {
+        const rect = terminalRef.current?.getBoundingClientRect();
+        const virtual = lockedPointer.current ?? {
+          x: rect ? rect.left + rect.width / 2 : event.clientX,
+          y: rect ? rect.top + rect.height / 2 : event.clientY,
+        };
+        virtual.x += event.movementX;
+        virtual.y += event.movementY;
+        // Keep the virtual pointer inside the terminal so full mouse travel
+        // maps onto full paddle travel without unbounded overshoot.
+        if (rect) {
+          virtual.x = Math.max(rect.left, Math.min(rect.right - 1, virtual.x));
+          virtual.y = Math.max(rect.top, Math.min(rect.bottom - 1, virtual.y));
+        }
+        lockedPointer.current = virtual;
+        emitPointerMove(virtual.x, virtual.y, {
+          buttons: event.buttons,
+          shift: event.shiftKey,
+          ctrl: event.ctrlKey,
+          alt: event.altKey
+        });
+        return;
+      }
+
+      // Unlocked: track anywhere over the page. The container's own React
+      // handler also fires when the pointer is over the terminal, but the
+      // shared hover throttle collapses the duplicate.
+      emitPointerMove(event.clientX, event.clientY, {
+        buttons: event.buttons,
+        shift: event.shiftKey,
+        ctrl: event.ctrlKey,
+        alt: event.altKey
+      });
+    };
+    window.addEventListener('mousemove', gameWindowMouseMove);
+
     socket.on('game-mode', (enabled: boolean) => {
       gameMode.current = enabled;
       // Clear key states and repeat timers when switching modes
@@ -2120,6 +2167,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
       if (enabled) {
         term.clearSelection();
+      } else {
+        lockedPointer.current = null;
+        if (document.pointerLockElement) {
+          document.exitPointerLock?.();
+        }
       }
     });
 
@@ -2433,6 +2485,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       keyRepeatTimers.current = {};
       window.removeEventListener('keydown', handleGameKeyDown);
       window.removeEventListener('keyup', handleGameKeyUp);
+      window.removeEventListener('mousemove', gameWindowMouseMove);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       // Clean up wheel handler
@@ -2528,11 +2581,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const socket = socketRef.current;
     if (!socket?.connected) return;
 
-    const coords = getTerminalCoords(event);
+    // With the pointer lock held the event's clientX/Y are frozen at the
+    // lock point - the virtual pointer is where the player actually is.
+    const point = document.pointerLockElement && lockedPointer.current
+      ? lockedPointer.current
+      : { x: event.clientX, y: event.clientY };
+    const coords = getTerminalCoordsFromPoint(point.x, point.y);
     if (!coords) return;
 
     mouseButtonDown.current = true;
-    console.log('[BBSTerminal] mouseButtonDown set to:', mouseButtonDown.current);
+
+    // Game mode: lock the pointer to the terminal on the first click.
+    // Locked, the mouse cannot stray off the playfield mid-game - the OS
+    // pointer is captured and movement arrives as deltas that the window
+    // listener below steers with. Esc releases the lock (browser UI);
+    // the next click re-arms it.
+    if (gameMode.current && !document.pointerLockElement && terminalRef.current) {
+      lockedPointer.current = { x: event.clientX, y: event.clientY };
+      terminalRef.current.requestPointerLock?.();
+    }
 
     socket.emit('mouse-click', {
       x: coords.x,
@@ -2565,12 +2632,57 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
   };
 
+  /**
+   * Shared pointer-move emitter for both event paths: the container's React
+   * handler and the game-mode window listener. getTerminalCoordsFromPoint
+   * clamps into the grid, so a pointer anywhere on the page still steers.
+   */
+  const emitPointerMove = (
+    clientX: number,
+    clientY: number,
+    modifiers: { buttons: number; shift: boolean; ctrl: boolean; alt: boolean }
+  ) => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    const coords = getTerminalCoordsFromPoint(clientX, clientY);
+    if (!coords) return;
+
+    if (mouseButtonDown.current) {
+      if ((window as any).__MOUSE_DEBUG__) {
+        console.log('[BBSTerminal] Emitting mouse-drag');
+      }
+      socket.emit('mouse-drag', {
+        x: coords.x,
+        y: coords.y,
+        button: modifiers.buttons === 1 ? 0 : modifiers.buttons === 2 ? 2 : modifiers.buttons === 4 ? 1 : 0,
+        shift: modifiers.shift,
+        ctrl: modifiers.ctrl,
+        alt: modifiers.alt
+      });
+    } else {
+      // Hovering - throttle to ~60fps (16ms) to avoid flooding
+      const now = Date.now();
+      if (now - lastMouseHoverTime.current < 16) return;
+      lastMouseHoverTime.current = now;
+
+      socket.emit('mouse-hover', {
+        x: coords.x,
+        y: coords.y,
+        shift: modifiers.shift,
+        ctrl: modifiers.ctrl,
+        alt: modifiers.alt
+      });
+    }
+  };
+
   const handleMouseMove = (event: React.MouseEvent) => {
     // Only send mouse events when door is active or in game mode
     if (!doorActive.current && !gameMode.current) return;
 
-    const socket = socketRef.current;
-    if (!socket?.connected) return;
+    // While the pointer lock holds, the window-level game listener owns
+    // movement; the frozen clientX/Y here would fight the virtual pointer.
+    if (document.pointerLockElement) return;
 
     const coords = getTerminalCoords(event);
     if (!coords) return;
@@ -2583,33 +2695,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[BBSTerminal] mousemove: mouseButtonDown=', mouseButtonDown.current, 'event.buttons=', event.buttons);
     }
 
-    if (mouseButtonDown.current) {
-      // Dragging - send drag event
-      if ((window as any).__MOUSE_DEBUG__) {
-        console.log('[BBSTerminal] Emitting mouse-drag');
-      }
-      socket.emit('mouse-drag', {
-        x: coords.x,
-        y: coords.y,
-        button: event.buttons === 1 ? 0 : event.buttons === 2 ? 2 : event.buttons === 4 ? 1 : 0,
-        shift: event.shiftKey,
-        ctrl: event.ctrlKey,
-        alt: event.altKey
-      });
-    } else {
-      // Hovering - throttle to ~60fps (16ms) to avoid flooding
-      const now = Date.now();
-      if (now - lastMouseHoverTime.current < 16) return;
-      lastMouseHoverTime.current = now;
-
-      socket.emit('mouse-hover', {
-        x: coords.x,
-        y: coords.y,
-        shift: event.shiftKey,
-        ctrl: event.ctrlKey,
-        alt: event.altKey
-      });
-    }
+    emitPointerMove(event.clientX, event.clientY, {
+      buttons: event.buttons,
+      shift: event.shiftKey,
+      ctrl: event.ctrlKey,
+      alt: event.altKey
+    });
   };
 
   const handleWheel = (event: React.WheelEvent) => {
