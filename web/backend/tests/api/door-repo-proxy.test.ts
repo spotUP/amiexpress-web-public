@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import * as http from 'http';
 import type { AddressInfo } from 'net';
 import type { Server } from 'http';
 
@@ -140,6 +141,63 @@ describe('door-repo proxy', () => {
     expect(seen.every((r) => !r.headers['accept-encoding'] ||
       String(r.headers['accept-encoding']).includes('identity'))).toBe(true);
   });
+
+  it('rejects a non-GET/HEAD method with 405, never reaching the door server admin routes', async () => {
+    const res = await request(bbs()).post('/api/door-repo/manifest');
+    expect(res.status).toBe(405);
+    expect(res.text).toContain('METHOD NOT ALLOWED');
+    expect(seen).toHaveLength(0);
+  });
+
+  // Raw requests below bypass supertest/superagent's own URL handling
+  // (which would silently normalize the very bytes/segments under test),
+  // by listening the app on a real port and sending a hand-built request
+  // line with Node's http.request.
+  function rawRequest(app: express.Express, rawPath: string): Promise<{ status: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const server = app.listen(0, () => {
+        const port = (server.address() as AddressInfo).port;
+        const req = http.request(
+          { host: '127.0.0.1', port, path: rawPath, method: 'GET' },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (d) => chunks.push(d));
+            res.on('end', () => {
+              server.close();
+              resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('latin1') });
+            });
+          },
+        );
+        req.on('error', (err) => { server.close(); reject(err); });
+        req.end();
+      });
+    });
+  }
+
+  it('does not resolve ".." segments, so a request cannot escape this proxy namespace', async () => {
+    // Regression test: new URL() resolves dot-segments before the request
+    // ever reaches the upstream socket, so "/api/door-repo/../admin/hidden"
+    // silently became "/api/admin/hidden" -- outside the door-repo contract
+    // this proxy exists to serve. A plain string path sends the literal
+    // ".." segment on the wire, which matches no real upstream route.
+    await rawRequest(bbs(), '/api/door-repo/../admin/hidden');
+    expect(seen.some((r) => r.url.includes('..'))).toBe(true);
+    expect(seen.some((r) => r.url.includes('/admin/hidden') && !r.url.includes('..'))).toBe(false);
+  });
+
+  it('times out and abandons a door server that never responds', async () => {
+    const hangingServer = http.createServer(() => { /* never responds */ });
+    await new Promise<void>((resolve) => hangingServer.listen(0, resolve));
+    process.env.DOOR_SERVER_URL = `http://127.0.0.1:${(hangingServer.address() as AddressInfo).port}`;
+    jest.resetModules();
+    const routesModule = require('../../src/server/door-repo.routes');
+    routesModule._setUpstreamTimeoutForTests(50);
+    const app = express();
+    app.use('/api/door-repo', routesModule.doorRepoRouter);
+    const res = await request(app).get('/api/door-repo/health');
+    expect(res.status).toBe(502);
+    await new Promise<void>((resolve) => hangingServer.close(() => resolve()));
+  }, 10_000);
 
   it('answers 502 in plain text when the door server is unreachable', async () => {
     process.env.DOOR_SERVER_URL = 'http://127.0.0.1:1';

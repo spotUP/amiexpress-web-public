@@ -808,6 +808,33 @@ console.log('[+] Added sha256 column to door_catalog');
           path.join(__dirname, 'doors', 'door-installs.schema.sql'), 'utf-8');
         this.db.exec(installsDdl);
 console.log('[+] door_installs table ensured');
+
+        // command needs COLLATE NOCASE (AmigaDOS commands are
+        // case-insensitive; the real catalog has commands recorded in
+        // mixed case). CREATE TABLE IF NOT EXISTS above is a no-op against
+        // a table that already exists with the old BINARY-collation
+        // column, so an already-deployed door_installs needs a one-time
+        // rebuild. Safe to run every boot: it's a no-op once the column
+        // already carries the right collation.
+        const installsSql = (this.db.prepare(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='door_installs'"
+        ).get() as { sql?: string } | undefined)?.sql ?? '';
+        if (installsSql && !/command\s+TEXT\s+NOT\s+NULL\s+UNIQUE\s+COLLATE\s+NOCASE/i.test(installsSql)) {
+          this.db.exec('ALTER TABLE door_installs RENAME TO door_installs_precollate');
+          this.db.exec(installsDdl);
+          this.db.exec(`
+            INSERT INTO door_installs
+              (id, catalog_id, archive_name, command, install_dir, door_type, name, md5,
+               description, category, version, release_group,
+               installed_at, source_url, source_revision)
+            SELECT id, catalog_id, archive_name, command, install_dir, door_type, name, md5,
+                   description, category, version, release_group,
+                   installed_at, source_url, source_revision
+            FROM door_installs_precollate
+          `);
+          this.db.exec('DROP TABLE door_installs_precollate');
+console.log('[+] door_installs migrated to COLLATE NOCASE on command');
+        }
       }
 
       // Reset all non-zero scan_flags to 0. File scanning is controlled exclusively by the

@@ -34,9 +34,14 @@ export interface DoorInstall {
 }
 
 function dbPath(): string {
+  // Matches database.ts's Database constructor default exactly (DATABASE_DIR
+  // || <cwd>/data, DATABASE_FILE || amiexpress.db) -- this used to diverge
+  // (repo-root/database.sqlite), which is silently correct in production
+  // (both env vars are always set there) but sends local dev debugging down
+  // a "table doesn't exist" dead end against the wrong file.
   return path.join(
-    process.env.DATABASE_DIR || path.join(__dirname, '..', '..', '..', '..'),
-    process.env.DATABASE_FILE || 'database.sqlite'
+    process.env.DATABASE_DIR || path.join(process.cwd(), 'data'),
+    process.env.DATABASE_FILE || 'amiexpress.db'
   );
 }
 
@@ -78,7 +83,7 @@ export function recordInstall(
 export function removeInstall(command: string): void {
   const db = openDb();
   try {
-    db.prepare('DELETE FROM door_installs WHERE command = ?').run(command);
+    db.prepare('DELETE FROM door_installs WHERE command = ? COLLATE NOCASE').run(command);
   } finally {
     db.close();
   }
@@ -87,7 +92,7 @@ export function removeInstall(command: string): void {
 export function getInstallByCommand(command: string): DoorInstall | null {
   const db = openDb(true);
   try {
-    return (db.prepare('SELECT * FROM door_installs WHERE command = ?')
+    return (db.prepare('SELECT * FROM door_installs WHERE command = ? COLLATE NOCASE')
       .get(command) as DoorInstall | undefined) ?? null;
   } finally {
     db.close();

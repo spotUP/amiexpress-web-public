@@ -68,18 +68,15 @@ function getCatalogSvc(): any {
     if (k.includes('door-catalog.service')) return require.cache[k]?.exports ?? null;
   return null;
 }
-
 function getInstallsRepo(): any {
-  // Same require.cache discovery as getCatalogSvc -- the backend's
-  // door_installs repository, the single source of truth for what THIS
-  // node has installed (door_catalog only ever describes shared metadata).
+  // Same require.cache discovery as getCatalogSvc -- door_installs is the
+  // single source of truth for what THIS node has installed.
   for (const k of Object.keys(require.cache))
     if (k.includes('door-installs.repository')) return require.cache[k]?.exports ?? null;
   return null;
 }
 
-// Shared by owner/consumer install call sites: no-op + warning (not a
-// throw) when the repo isn't in require.cache, matching svc?. elsewhere.
+// Shared by owner/consumer install sites: no-op + warning, not a throw, when unavailable.
 function recordInstallSafe(entry: DoorInstallEntry): void {
   const repo = getInstallsRepo();
   if (!repo) {
@@ -146,20 +143,23 @@ function buildLocalCatalogLookup(): LocalCatalogLookup {
   };
 }
 
-/** Adapts getInstallByArchive into the InstallLookup shape
- * mapManifestDoorToEntry expects -- missing repo or a thrown lookup error
- * both fold into "nothing known locally" rather than propagating. */
+/** Adapts the installs repository into the InstallLookup shape
+ * mapManifestDoorToEntry expects. Reads listInstalls() ONCE into a Map
+ * rather than opening a sqlite connection per manifest row (was 3300 opens
+ * per browse); missing repo or a thrown read both fold into "nothing known
+ * locally". Keys are lower-cased -- archive_name lookups are NOCASE. */
 function buildInstallLookup(): InstallLookup {
   const repo = getInstallsRepo();
-  return (archiveName: string) => {
-    try {
-      const row = repo?.getInstallByArchive?.(archiveName);
-      if (!row) return null;
-      return { command: row.command, install_dir: row.install_dir };
-    } catch {
-      return null;
-    }
-  };
+  let byArchive: Map<string, { command: string; install_dir: string }> | null = null;
+  try {
+    byArchive = new Map(
+      (repo?.listInstalls?.() ?? []).map((row: any) =>
+        [String(row.archive_name).toLowerCase(), { command: row.command, install_dir: row.install_dir }])
+    );
+  } catch {
+    byArchive = null;
+  }
+  return (archiveName: string) => byArchive?.get(archiveName.toLowerCase()) ?? null;
 }
 
 async function fetchDoors(bbs: any): Promise<DoorInfo[]> {

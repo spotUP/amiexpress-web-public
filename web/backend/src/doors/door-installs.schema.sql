@@ -5,7 +5,13 @@ CREATE TABLE IF NOT EXISTS door_installs (
   id              TEXT PRIMARY KEY,
   catalog_id      TEXT,
   archive_name    TEXT NOT NULL,
-  command         TEXT NOT NULL UNIQUE,
+  -- COLLATE NOCASE: AmigaDOS command names are case-insensitive, and the
+  -- real catalog has commands recorded in mixed case ("ulist", "req", "bk").
+  -- Without this, ON CONFLICT(command) misses a same-command-different-case
+  -- reinstall (creating a duplicate row) and the collision guard misses an
+  -- existing install held by a different archive under the same command in
+  -- a different case (letting it silently take over).
+  command         TEXT NOT NULL UNIQUE COLLATE NOCASE,
   install_dir     TEXT NOT NULL,
   door_type       TEXT,
   name            TEXT,

@@ -91,4 +91,30 @@ describe('door_installs repository', () => {
   it('returns null rather than throwing for an unknown command', () => {
     expect(repo().getInstallByCommand('NOSUCH')).toBeNull();
   });
+
+  it('finds an install by command regardless of case (AmigaDOS commands are case-insensitive)', () => {
+    // Regression test: the real catalog has commands recorded in mixed
+    // case ("ulist", "req", "bk"). A case-sensitive lookup here silently
+    // broke BBSApi's installed-metadata overlay and DOORMAN's
+    // command-collision guard for every such command.
+    const r = repo();
+    r.recordInstall({ ...base, command: 'ulist' });
+    expect(r.getInstallByCommand('ULIST')?.archive_name).toBe('ACC-V103.LHA');
+    expect(r.getInstallByCommand('Ulist')?.archive_name).toBe('ACC-V103.LHA');
+  });
+
+  it('re-installing the same command in a different case replaces the row rather than duplicating it', () => {
+    const r = repo();
+    r.recordInstall({ ...base, command: 'ulist' });
+    r.recordInstall({ ...base, id: 'i2', archive_name: 'ACC-V105.LHA', command: 'ULIST' });
+    expect(r.listInstalls()).toHaveLength(1);
+    expect(r.getInstallByCommand('ulist')?.archive_name).toBe('ACC-V105.LHA');
+  });
+
+  it('removes an install regardless of case', () => {
+    const r = repo();
+    r.recordInstall({ ...base, command: 'ulist' });
+    r.removeInstall('ULIST');
+    expect(r.getInstallByCommand('ulist')).toBeNull();
+  });
 });
