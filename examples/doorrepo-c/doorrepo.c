@@ -3045,7 +3045,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
      * references. */
     if (flow_build_info_content(info_content, sizeof(info_content),
                                  flow_effective_door_type(entry->type, binary_rel),
-                                 cmdname, binary_rel) < 0) {
+                                 cmdname, binary_rel, 0, -1) < 0) {
         ae_put("Install failed: the command config would not fit its buffer.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);

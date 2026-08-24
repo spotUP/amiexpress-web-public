@@ -634,9 +634,15 @@ int flow_build_info_path(char *out, unsigned long outsize,
 
 int flow_build_info_content(char *out, unsigned long outsize,
                              const char *door_type, const char *cmd,
-                             const char *binary_rel)
+                             const char *binary_rel, long access, long prior_access)
 {
     unsigned long need;
+    /* 32 bytes covers any `long`'s decimal rendering, sign included, on
+     * every platform this code targets (32-bit m68k or 64-bit native
+     * dev/test host) - the actual byte count that feeds `need` below comes
+     * from strlen()ing what sprintf() really wrote, not from this size. */
+    char access_buf[32];
+    char prior_access_buf[32];
     const char *type = (door_type != (const char *) 0 && door_type[0] != '\0')
         ? door_type : "XIM";
 
@@ -645,25 +651,46 @@ int flow_build_info_content(char *out, unsigned long outsize,
         return -1;
     }
 
-    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\nACCESS=0\n")
-                            + strlen(type) + strlen(cmd) + strlen(binary_rel));
+    sprintf(access_buf, "%ld", access);
+    if (prior_access >= 0) {
+        sprintf(prior_access_buf, "%ld", prior_access);
+    } else {
+        prior_access_buf[0] = '\0';
+    }
+
+    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\nACCESS=\n")
+                            + strlen(type) + strlen(cmd) + strlen(binary_rel)
+                            + strlen(access_buf));
+    if (prior_access >= 0) {
+        need += (unsigned long) (strlen("DRACCESS=\n") + strlen(prior_access_buf));
+    }
     if (need + 1 > outsize) {
         out[0] = '\0';
         return -1;
     }
 
-    /* Byte-identical to DOORMAN's buildDoorInfoContent() (app.ts) - the
-     * BBS reads these four tooltypes, and a door installed by either
-     * client must be indistinguishable to it. LOCATION is always the
+    /* TYPE/LOCATION/STACK/ACCESS are byte-identical in shape to DOORMAN's
+     * buildDoorInfoContent() (app.ts) - a door installed by either client
+     * must be indistinguishable to the BBS - except ACCESS now carries the
+     * caller's value instead of a hardcoded 0. LOCATION is always the
      * "Doors:" assign, never the sysop's DoorsDir spelling, because that
-     * is what the BBS resolves against. */
+     * is what the BBS resolves against. DRACCESS is DoorRepo-only: it is
+     * appended after ACCESS, never in between, so a reader that stops at
+     * the four DOORMAN keys still sees the same first four lines. */
     strcpy(out, "TYPE=");
     strcat(out, type);
     strcat(out, "\nLOCATION=Doors:");
     strcat(out, cmd);
     strcat(out, "/");
     strcat(out, binary_rel);
-    strcat(out, "\nSTACK=65536\nACCESS=0\n");
+    strcat(out, "\nSTACK=65536\nACCESS=");
+    strcat(out, access_buf);
+    strcat(out, "\n");
+    if (prior_access >= 0) {
+        strcat(out, "DRACCESS=");
+        strcat(out, prior_access_buf);
+        strcat(out, "\n");
+    }
     return (int) need;
 }
 

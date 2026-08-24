@@ -523,20 +523,36 @@ int flow_build_install_dir(char *out, unsigned long outsize,
 int flow_build_info_path(char *out, unsigned long outsize,
                           const char *bbscmd_dir, const char *cmd);
 
-/* Renders the four tooltype lines the BBS reads for a door command:
+/* Renders the tooltype lines the BBS reads for a door command:
  *
  *   TYPE=<doorType>
  *   LOCATION=Doors:<CMD>/<binaryRel>
  *   STACK=65536
- *   ACCESS=0
+ *   ACCESS=<access>
+ *   DRACCESS=<prior_access>     (only when prior_access >= 0)
  *
- * Byte-identical to DOORMAN's buildDoorInfoContent() (Doors/door-manager/
- * app.ts) - a door installed by either client must look the same to the
- * BBS. An empty door_type becomes "XIM", the same default DOORMAN applies.
+ * The first four lines are byte-identical to DOORMAN's
+ * buildDoorInfoContent() (Doors/door-manager/app.ts) - a door installed by
+ * either client must look the same to the BBS - except ACCESS now carries
+ * whatever `access` the caller passes instead of a hardcoded 0.
+ * install_door()'s call site passes (0, -1): doors always install at
+ * ACCESS=0 with no DRACCESS line, unchanged from before this parameter was
+ * added.
+ *
+ * `prior_access` of -1 means "omit the DRACCESS line entirely" (the normal
+ * case). >= 0 appends a DRACCESS=<value> line, which is how "disable,
+ * remembering what ACCESS used to be" survives a DoorRepo restart and a
+ * round trip through the BBS's own tooltype parser. That parser
+ * (amiga-command-parser.util.ts's extractTooltypesFromInfoFile /
+ * parseInfoFileFallback) walks KEY=value lines into a generic map and only
+ * reads back keys it recognizes, so an unrecognized DRACCESS line is inert
+ * to it - confirmed by reading that parser, not assumed.
+ *
+ * An empty door_type becomes "XIM", the same default DOORMAN applies.
  * Returns the length written, or -1 if it would not fit. */
 int flow_build_info_content(char *out, unsigned long outsize,
                              const char *door_type, const char *cmd,
-                             const char *binary_rel);
+                             const char *binary_rel, long access, long prior_access);
 
 /* ---- Reading a .info's tooltypes -----------------------------------------
  *

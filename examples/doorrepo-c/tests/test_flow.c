@@ -1013,18 +1013,45 @@ TEST(info_content_matches_doormans_format)
 {
     char out[256];
 
-    (void) flow_build_info_content(out, sizeof(out), "XIM", "MYDOOR", "bin/MyDoor");
+    (void) flow_build_info_content(out, sizeof(out), "XIM", "MYDOOR", "bin/MyDoor", 0, -1);
     ASSERT_STR_EQ(out,
                   "TYPE=XIM\nLOCATION=Doors:MYDOOR/bin/MyDoor\nSTACK=65536\nACCESS=0\n",
                   "byte-identical to buildDoorInfoContent()");
 
-    (void) flow_build_info_content(out, sizeof(out), "", "MYDOOR", "MyDoor");
+    (void) flow_build_info_content(out, sizeof(out), "", "MYDOOR", "MyDoor", 0, -1);
     ASSERT_STR_EQ(out,
                   "TYPE=XIM\nLOCATION=Doors:MYDOOR/MyDoor\nSTACK=65536\nACCESS=0\n",
                   "empty door type defaults to XIM");
 
-    ASSERT_EQ(flow_build_info_content(out, 10, "XIM", "MYDOOR", "MyDoor"), -1,
+    ASSERT_EQ(flow_build_info_content(out, 10, "XIM", "MYDOOR", "MyDoor", 0, -1), -1,
               "too small a buffer");
+}
+
+TEST(build_info_content_no_prior_access_omits_draccess)
+{
+    char out[320];
+    flow_build_info_content(out, sizeof(out), "XIM", "GVS", "5D-GetVersion", 0, -1);
+    ASSERT_TRUE(strstr(out, "DRACCESS") == (char *) 0, "no DRACCESS line when prior_access is -1");
+    ASSERT_TRUE(strstr(out, "ACCESS=0") != (char *) 0, "ACCESS=0 still present");
+}
+
+TEST(build_info_content_with_prior_access_appends_draccess)
+{
+    char out[320];
+    flow_build_info_content(out, sizeof(out), "XIM", "GVS", "5D-GetVersion", 255, 20);
+    ASSERT_TRUE(strstr(out, "ACCESS=255") != (char *) 0, "disabled sentinel written");
+    ASSERT_TRUE(strstr(out, "DRACCESS=20") != (char *) 0, "prior access remembered");
+}
+
+TEST(build_info_content_preserves_type_location_stack_format)
+{
+    /* Byte-for-byte parity check against the pre-existing format, minus
+     * the hardcoded ACCESS=0 - a regression here silently breaks every
+     * door DoorRepo installs, not just the editor feature. */
+    char out[320];
+    flow_build_info_content(out, sizeof(out), "XIM", "GVS", "5D-GetVersion", 0, -1);
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:GVS/5D-GetVersion\nSTACK=65536\nACCESS=0\n",
+                  "format unchanged when access=0, prior_access=-1");
 }
 
 /* A real /files body: this is what GET /files/1OO-WALL.LHA returns, with
@@ -2034,6 +2061,9 @@ int main(void)
     RUN_TEST(suggest_command_fails_when_nothing_usable_remains);
     RUN_TEST(install_paths_join_amigados_style);
     RUN_TEST(info_content_matches_doormans_format);
+    RUN_TEST(build_info_content_no_prior_access_omits_draccess);
+    RUN_TEST(build_info_content_with_prior_access_appends_draccess);
+    RUN_TEST(build_info_content_preserves_type_location_stack_format);
     RUN_TEST(files_rows_parse);
     RUN_TEST(pick_binary_prefers_the_extensionless_file);
     RUN_TEST(pick_binary_prefers_an_exact_name_match);
