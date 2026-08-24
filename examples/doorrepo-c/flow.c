@@ -534,6 +534,62 @@ int flow_is_plain_alnum(const char *value)
     return 1;
 }
 
+int flow_validate_access_level(const char *input, long *value_out)
+{
+    unsigned long len;
+    unsigned long i;
+    char *endptr;
+    long parsed;
+
+    /* Allowlist: every byte must be an ASCII digit. Reject anything else
+     * here (leading '+'/'-', whitespace, trailing garbage) rather than
+     * trying to enumerate the bytes to deny - this project's house rule
+     * after its own denylist-bypass history. */
+    if (input == (const char *) 0 || input[0] == '\0') {
+        return -1;
+    }
+    len = (unsigned long) strlen(input);
+    for (i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) input[i];
+        if (c < '0' || c > '9') {
+            return -1;
+        }
+    }
+
+    /* Length check: 1-3 digits. Rejecting on length first (before ever
+     * calling strtol) means a pathological caller can't trick this into
+     * parsing an arbitrarily long digit run. */
+    if (len < 1 || len > 3) {
+        return -1;
+    }
+
+    /* No leading zero beyond a single "0" - "00" and "025" are rejected
+     * even though strtol would happily parse them, matching this
+     * function's documented contract (flow.h). */
+    if (input[0] == '0' && len > 1) {
+        return -1;
+    }
+
+    /* strtol + endptr check: endptr must land exactly on the terminating
+     * '\0', or there was trailing content strtol stopped at. With the
+     * allowlist above already limiting input to 1-3 ASCII digits, this
+     * cannot fail to parse or overflow a long. */
+    parsed = strtol(input, &endptr, 10);
+    if (endptr != input + len) {
+        return -1;
+    }
+
+    /* Range check: this door's ACCESS convention runs 0-255, with 255
+     * meaning "sysop-only, the practical maximum" (see
+     * command-execution.handler.ts's own ACCESS=255 example). */
+    if (parsed < 0 || parsed > 255) {
+        return -1;
+    }
+
+    *value_out = parsed;
+    return 0;
+}
+
 /* ---- Install support: command names, paths, .info content, file lists ----
  *
  * All pure string work, deliberately here rather than in doorrepo.c so it

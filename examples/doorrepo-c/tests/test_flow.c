@@ -938,6 +938,22 @@ TEST(plain_alnum_rejects_whitespace_and_punctuation)
     ASSERT_TRUE(!flow_is_plain_alnum("XIM."), "period is rejected");
 }
 
+/* ---------------------------------------------------------------------
+ * flow_validate_access_level() - the M-key access-level editor's
+ * validator. Allowlist (digits only), not denylist.
+ * ------------------------------------------------------------------- */
+
+TEST(validate_access_level_accepts_zero)   { long v; ASSERT_EQ(flow_validate_access_level("0", &v), 0, "0 is valid"); ASSERT_EQ(v, 0, "value is 0"); }
+TEST(validate_access_level_accepts_max)    { long v; ASSERT_EQ(flow_validate_access_level("255", &v), 0, "255 is valid"); ASSERT_EQ(v, 255, "value is 255"); }
+TEST(validate_access_level_rejects_over_max) { long v; ASSERT_TRUE(flow_validate_access_level("256", &v) != 0, "256 rejected"); }
+TEST(validate_access_level_rejects_negative) { long v; ASSERT_TRUE(flow_validate_access_level("-1", &v) != 0, "-1 rejected (leading '-' not a digit)"); }
+TEST(validate_access_level_rejects_empty)    { long v; ASSERT_TRUE(flow_validate_access_level("", &v) != 0, "empty rejected"); }
+TEST(validate_access_level_rejects_garbage)  { long v; ASSERT_TRUE(flow_validate_access_level("12x", &v) != 0, "trailing garbage rejected"); }
+TEST(validate_access_level_rejects_whitespace) { long v; ASSERT_TRUE(flow_validate_access_level(" 10", &v) != 0, "leading space rejected"); }
+TEST(validate_access_level_rejects_overlong)  { long v; ASSERT_TRUE(flow_validate_access_level("1234", &v) != 0, "4+ digits rejected (over range anyway, but reject on length first)"); }
+TEST(validate_access_level_rejects_leading_zero) { long v; ASSERT_TRUE(flow_validate_access_level("025", &v) != 0, "leading zero followed by more digits rejected per the documented contract"); }
+TEST(validate_access_level_rejects_double_zero)  { long v; ASSERT_TRUE(flow_validate_access_level("00", &v) != 0, "\"00\" rejected - not a single \"0\""); }
+
 
 /* ---- Install support (2026-08-18) ---------------------------------- */
 
@@ -2222,6 +2238,17 @@ int main(void)
     RUN_TEST(plain_alnum_rejects_query_injection_attempt);
     RUN_TEST(plain_alnum_rejects_empty_and_null);
     RUN_TEST(plain_alnum_rejects_whitespace_and_punctuation);
+
+    RUN_TEST(validate_access_level_accepts_zero);
+    RUN_TEST(validate_access_level_accepts_max);
+    RUN_TEST(validate_access_level_rejects_over_max);
+    RUN_TEST(validate_access_level_rejects_negative);
+    RUN_TEST(validate_access_level_rejects_empty);
+    RUN_TEST(validate_access_level_rejects_garbage);
+    RUN_TEST(validate_access_level_rejects_whitespace);
+    RUN_TEST(validate_access_level_rejects_overlong);
+    RUN_TEST(validate_access_level_rejects_leading_zero);
+    RUN_TEST(validate_access_level_rejects_double_zero);
 
     RUN_TEST(footer_bar_fits_everything_when_there_is_room);
     RUN_TEST(footer_bar_drops_one_low_priority_part_to_fit);

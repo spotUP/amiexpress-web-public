@@ -486,6 +486,17 @@ unsigned long flow_archive_byte_ceiling(unsigned long declared_size,
  * inject extra, unintended query parameters into the request line. */
 int flow_is_plain_alnum(const char *value);
 
+/* Validates a sysop-typed access-level string. Digits only (no leading
+ * '+'/'-', no whitespace, no leading zeros beyond a single "0"), length
+ * 1-3 characters, numeric value 0-255 inclusive (this project's own
+ * ACCESS convention treats 255 as "sysop-only, the practical maximum" -
+ * see command-execution.handler.ts's own ACCESS=255 example). On success
+ * returns 0 and writes the parsed value to *value_out; on failure returns
+ * non-zero and leaves *value_out untouched - this is the ONE validator
+ * for this feature's only new input surface, so callers never need a
+ * second ad-hoc check. */
+int flow_validate_access_level(const char *input, long *value_out);
+
 /* ---- Install support ---------------------------------------------------
  *
  * Installing means three things a download does not: the archive is
