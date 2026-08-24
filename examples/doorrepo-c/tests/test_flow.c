@@ -1711,25 +1711,118 @@ TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols)
 
 TEST(footer_bar_installed_screen_real_parts_fit_at_80_cols)
 {
-    /* Mirrors ui_draw_footer_installed()'s real part set (U=Uninstall
-     * folded into the mandatory prefix, per the fix). Doesn't overflow
-     * today, but two more sibling plans are about to add to this footer
-     * too - lock the "everything fits, nothing silently dropped" case in
-     * now, while it's still true by construction rather than by luck. */
-    const char *optional[2];
+    /* Mirrors ui_draw_footer_installed()'s real part set. U=Uninstall is
+     * folded into the mandatory prefix (the screen's core action, same as
+     * ENTER/R=Get); A=Archive is now an OPTIONAL part, lowest priority
+     * (last), because folding it into the mandatory prefix too was itself
+     * the residual bug this test's cols=40 sibling below exists to catch -
+     * see footer_bar_installed_screen_fits_the_documented_cols_40_floor.
+     * At 80 cols nothing needs to be dropped either way; this test locks
+     * in that "everything fits, nothing silently dropped" case, ahead of
+     * two more sibling plans about to add to this footer too. */
+    const char *optional[3];
     char out[160];
     int len;
 
     optional[0] = "V=Doc";
     optional[1] = "S=Strip";
+    optional[2] = "A=Archive";
 
     len = flow_build_footer_bar(out, sizeof(out), 80,
-                                "ENTER/R=Get  A=Archive  U=Uninstall",
-                                optional, 2, "Q=Back");
+                                "ENTER/R=Get  U=Uninstall",
+                                optional, 3, "Q=Back");
 
-    ASSERT_STR_EQ(out, "ENTER/R=Get  A=Archive  U=Uninstall  V=Doc  S=Strip  Q=Back",
+    ASSERT_STR_EQ(out, "ENTER/R=Get  U=Uninstall  V=Doc  S=Strip  A=Archive  Q=Back",
                   "every real part present, all fits comfortably under 80 cols");
     ASSERT_TRUE(len <= 80, "fits the real 80-column screen");
+}
+
+TEST(footer_bar_installed_screen_fits_the_documented_cols_40_floor)
+{
+    /* config.c's validate_screen_cols() accepts ScreenCols as low as 40 -
+     * "below 40 the two-pane layout cannot be drawn at all" - so 40 is a
+     * REAL, sysop-settable, supported floor, not a pathological edge case
+     * (unlike footer_bar_never_drops_the_suffix_even_when_prefix_and_
+     * suffix_alone_overflow's synthetic cols=10, which IS pathological).
+     *
+     * The residual bug this pins down: before this test's fix,
+     * ui_draw_footer_installed()'s mandatory prefix folded in BOTH
+     * A=Archive and U=Uninstall - "ENTER/R=Get  A=Archive  U=Uninstall"
+     * plus the "  Q=Back" suffix is 43 bytes, already past 40 before any
+     * optional part is even considered. flow_build_footer_bar()'s "never
+     * drop the suffix" guarantee only covers ITS OWN return value (the
+     * suffix really is always appended in full); it cannot rescue a
+     * caller whose MANDATORY portion alone already exceeds `cols`,
+     * because ui_draw_bar()'s render-layer truncation (ansi_center(),
+     * first `cols` bytes) still cuts the tail off whatever this function
+     * returns. At cols=40 that truncated the real screen to
+     * "ENTER/R=Get  A=Archive  U=Uninstall  Q=" - "Back" gone entirely,
+     * on any sysop's ScreenCols=40 config, independent of which optional
+     * parts were or were not present.
+     *
+     * The fix: A=Archive reclassified out of the mandatory prefix into
+     * the optional parts, lowest priority (dropped first under budget
+     * pressure) - it is a secondary lookup a sysop can still reach after
+     * ENTER/R, unlike U=Uninstall, the screen's core action, which stays
+     * mandatory. That drops the mandatory-only total from 43 to 32,
+     * comfortably under the 40-col floor. */
+    const char *optional[3];
+    char out[160];
+    int len;
+
+    optional[0] = "V=Doc";
+    optional[1] = "S=Strip";
+    optional[2] = "A=Archive";
+
+    len = flow_build_footer_bar(out, sizeof(out), 40,
+                                "ENTER/R=Get  U=Uninstall",
+                                optional, 3, "Q=Back");
+
+    ASSERT_STR_EQ(out, "ENTER/R=Get  U=Uninstall  V=Doc  Q=Back",
+                  "at the 40-col floor, S=Strip and A=Archive are dropped (lowest priority) "
+                  "but V=Doc and the full Q=Back survive");
+    ASSERT_TRUE(len <= 40, "fits the documented cols=40 floor");
+    ASSERT_TRUE(strlen(out) >= 6 && strcmp(out + strlen(out) - 6, "Q=Back") == 0,
+                "bar always ends with the full, unmangled Q=Back at the 40-col floor");
+}
+
+TEST(footer_bar_browse_screen_fits_the_documented_cols_40_floor)
+{
+    /* Symmetry check requested alongside the installed-screen fix above:
+     * ui_draw_footer() (the main browse screen) never folded A=Archive
+     * into its mandatory prefix in the first place - only S=Strip ads,
+     * A=Archive, V=Doc, F=Find, C=System and L=Installed are optional
+     * there, so its mandatory-only total (worst case, the "installed"
+     * prefix: "ENTER/R=Get  U=Uninstall" + "  Q=Quit" = 32 bytes) already
+     * fit the 40-col floor before this fix and needed no change. Locked
+     * in here so a future edit to ui_draw_footer()'s prefix gets the same
+     * regression coverage the installed screen just needed. */
+    const char *optional[6];
+    char out[160];
+    int len;
+
+    optional[0] = "S=Strip ads";
+    optional[1] = "A=Archive";
+    optional[2] = "V=Doc";
+    optional[3] = "F=Find";
+    optional[4] = "C=System";
+    optional[5] = "L=Installed";
+
+    len = flow_build_footer_bar(out, sizeof(out), 40, "ENTER/R=Get  U=Uninstall",
+                                optional, 6, "Q=Quit");
+
+    ASSERT_TRUE(len <= 40, "fits the documented cols=40 floor");
+    ASSERT_TRUE(strlen(out) >= 6 && strcmp(out + strlen(out) - 6, "Q=Quit") == 0,
+                "bar always ends with the full, unmangled Q=Quit at the 40-col floor");
+
+    /* Same check for the not-installed prefix (shorter mandatory portion,
+     * so strictly easier to fit - covered for completeness). */
+    len = flow_build_footer_bar(out, sizeof(out), 40, "ENTER/R=Get  I=Install",
+                                optional, 6, "Q=Quit");
+
+    ASSERT_TRUE(len <= 40, "not-installed prefix also fits the documented cols=40 floor");
+    ASSERT_TRUE(strlen(out) >= 6 && strcmp(out + strlen(out) - 6, "Q=Quit") == 0,
+                "bar always ends with the full, unmangled Q=Quit (not-installed prefix)");
 }
 
 TEST(footer_bar_empty_list_case_is_just_the_suffix)
@@ -1951,6 +2044,8 @@ int main(void)
     RUN_TEST(footer_bar_never_drops_the_suffix_even_when_prefix_and_suffix_alone_overflow);
     RUN_TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols);
     RUN_TEST(footer_bar_installed_screen_real_parts_fit_at_80_cols);
+    RUN_TEST(footer_bar_installed_screen_fits_the_documented_cols_40_floor);
+    RUN_TEST(footer_bar_browse_screen_fits_the_documented_cols_40_floor);
     RUN_TEST(footer_bar_empty_list_case_is_just_the_suffix);
     RUN_TEST(footer_bar_too_small_buffer_returns_error);
 

@@ -3885,19 +3885,33 @@ static void ui_draw_installed_header(ansi_buf *b, const ui_geometry *g,
     }
 }
 
-/* Step 5's footer legend: `ENTER/R=Get  A=Archive  U=Uninstall  V=Doc
- * S=Strip  Q=Back`, F=Find/C=System/I=Install dropped along with the keys
+/* Step 5's footer legend: `ENTER/R=Get  U=Uninstall  V=Doc  S=Strip
+ * A=Archive  Q=Back`, F=Find/C=System/I=Install dropped along with the keys
  * they name. Every row here is already installed, so unlike
  * ui_draw_footer()'s browse-screen version there is no install/uninstall
- * ternary - U=Uninstall is unconditional, exactly like ENTER/R=Get and
- * A=Archive, so it is folded into the mandatory prefix rather than being
- * one of the (genuinely optional) parts flow_build_footer_bar() may drop
- * for width; this moves it one slot earlier than the old strcat chain had
- * it (which put it after V=Doc) - the simplest shape, per the fix plan,
- * since a mandatory key has no business living in the droppable list. V
- * and S keep the same gates ui_draw_footer() applies (has_doc, has_junk)
- * for the same reason: hiding a key that would still work is the worse of
- * the two errors.
+ * ternary - U=Uninstall is unconditional, exactly like ENTER/R=Get, so it
+ * is folded into the mandatory prefix rather than being one of the
+ * (genuinely optional) parts flow_build_footer_bar() may drop for width.
+ *
+ * A=Archive is NOT folded in alongside it, even though it too is shown
+ * unconditionally in practice - it is the LOWEST-priority optional part
+ * instead (dropped first under budget pressure), because the mandatory
+ * prefix has a hard floor it must never cross: config.c's
+ * validate_screen_cols() accepts ScreenCols as low as 40 ("below 40 the
+ * two-pane layout cannot be drawn at all" - a real, sysop-settable,
+ * SUPPORTED floor, not a pathological edge case), and
+ * "ENTER/R=Get  A=Archive  U=Uninstall" + "  Q=Back" alone is 43 bytes -
+ * already past 40 before any optional part is even considered. At that
+ * point flow_build_footer_bar()'s "never drop the suffix" guarantee
+ * cannot help: it only covers ITS OWN return value (the full suffix really
+ * is always appended), but ui_draw_bar()'s render-layer truncation
+ * (ansi_center(), first `cols` bytes) still cuts the tail off whatever
+ * this function returns, turning "Q=Back" into "Q=" on any ScreenCols=40
+ * config. A=Archive is a secondary lookup a sysop can still reach after
+ * ENTER/R, so it is what gives way; U=Uninstall, the screen's core action,
+ * stays mandatory. V=Doc and S=Strip keep the same gates ui_draw_footer()
+ * applies (has_doc, has_junk) for the same reason: hiding a key that
+ * would still work is the worse of the two errors.
  *
  * `e == NULL` means the list is empty (installed_loop_ansi()'s view.count
  * == 0) - none of A/U/V/S do anything with nothing installed, so rather
@@ -3913,7 +3927,7 @@ static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
         len = flow_build_footer_bar(bar, sizeof(bar), g->cols, "",
                                     (const char *const *) 0, 0, "Q=Back");
     } else {
-        const char *optional[2];
+        const char *optional[3];
         int n = 0;
 
         if (e->has_doc != 0) {
@@ -3922,8 +3936,9 @@ static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
         if (has_junk) {
             optional[n++] = "S=Strip";
         }
+        optional[n++] = "A=Archive";
         len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
-                                    "ENTER/R=Get  A=Archive  U=Uninstall",
+                                    "ENTER/R=Get  U=Uninstall",
                                     optional, n, "Q=Back");
     }
     if (len < 0) {
