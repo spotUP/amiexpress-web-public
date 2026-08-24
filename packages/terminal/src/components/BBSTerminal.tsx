@@ -2619,7 +2619,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const socket = socketRef.current;
     if (!socket?.connected) return;
 
-    const coords = getTerminalCoords(event);
+    // Same substitution as handleMouseDown: locked events carry clientX/Y
+    // frozen at the lock origin. Doors move on mouse-up too (arkanoid
+    // steers the paddle on every event type), so a release at the left
+    // edge must not teleport the paddle to wherever the lock began.
+    const point = document.pointerLockElement && lockedPointer.current
+      ? lockedPointer.current
+      : { x: event.clientX, y: event.clientY };
+    const coords = getTerminalCoordsFromPoint(point.x, point.y);
     if (!coords) return;
 
     socket.emit('mouse-up', {
@@ -2709,7 +2716,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const socket = socketRef.current;
     if (!socket?.connected) return;
 
-    const coords = getTerminalCoordsFromPoint(event.clientX, event.clientY);
+    const wheelPoint = document.pointerLockElement && lockedPointer.current
+      ? lockedPointer.current
+      : { x: event.clientX, y: event.clientY };
+    const coords = getTerminalCoordsFromPoint(wheelPoint.x, wheelPoint.y);
     if (!coords) return;
 
     event.preventDefault();
