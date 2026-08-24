@@ -2753,9 +2753,31 @@ console.log(' In file upload state - canceling upload');
     return;
   }
 
-  // Handle webhook add input (text input for new webhook)
+  // Handle webhook add input (text input for new webhook).
+  // Line-input: accumulate chars until Enter, then dispatch - same pattern
+  // as GDPR_BACKFILL above. socket-handlers.ts forwards every keystroke as
+  // its own event (no client-side line buffering exists anywhere in this
+  // BBS); only states that explicitly buffer, like this one, ever see a
+  // complete line. Without this, handleAddWebhookInput() was called once
+  // per keystroke, each one treated as a "complete" answer - the FIRST
+  // character typed for "Webhook Name" immediately advanced to the next
+  // prompt. Merely routing through a different subState (FILE_DIR_SELECT
+  // instead of READ_COMMAND) does not add buffering by itself - only
+  // READ_COMMAND/GDPR_BACKFILL happen to already have their own.
   if (session.tempData?.webhookAdd) {
-    await WebhookCommandsHandler.handleAddWebhookInput(socket, session, data.trim());
+    if (data === '\r' || data === '\n') {
+      const whInput = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await WebhookCommandsHandler.handleAddWebhookInput(socket, session, whInput);
+    } else if (data === '\x7f' || data === '\b') {
+      if (session.inputBuffer?.length) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        emitText(socket, '\b \b');
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      emitText(socket, data);
+    }
     return;
   }
 

@@ -385,13 +385,16 @@ export class WebhookCommandsHandler {
     socket.emit('ansi-output', '\r\n');
 
     socket.emit('ansi-output', 'Webhook Name: ');
-    // FILE_DIR_SELECT, not READ_COMMAND: READ_COMMAND has its own dedicated
-    // per-keystroke line-buffering in command.handler.ts (session.inputBuffer)
-    // that this handler never goes through, since the webhookAdd routing
-    // check fires first and treats every single keystroke as a complete
-    // line. FILE_DIR_SELECT is the substate every other free-text prompt in
-    // this codebase reuses for exactly this reason (see account.handler.ts).
+    // FILE_DIR_SELECT rather than READ_COMMAND, matching every other
+    // free-text prompt in this codebase (see account.handler.ts) - keeps
+    // this out of READ_COMMAND's own command-line semantics (history
+    // navigation, syscmd dispatch, etc). The actual per-keystroke line
+    // buffering for this flow lives in command.handler.ts's
+    // `tempData?.webhookAdd` dispatch (same accumulate-until-Enter pattern
+    // GDPR_BACKFILL uses) - reset here in case session.inputBuffer has
+    // leftover content from an unrelated earlier prompt.
     session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+    session.inputBuffer = '';
     session.tempData = { webhookAdd: { step: 'name' } };
   }
 
