@@ -721,6 +721,42 @@ TEST(request_with_body_but_no_extra_headers_still_sends_content_length)
                 "body bytes should follow the blank line");
 }
 
+TEST(request_with_null_entry_in_extra_headers_is_args_error_not_too_long)
+{
+    /* Task-review regression: a NULL entry inside a non-empty
+     * extra_headers array used to be caught deep inside build_request(),
+     * which returned the same generic -1 sentinel it uses for "the
+     * request does not fit REQUEST_BUF_SIZE" - http_request() then
+     * unconditionally mapped every -1 to HTTP_ERR_REQUEST_TOO_LONG,
+     * hiding a caller bug (a malformed header array) behind a misleading
+     * "too long" error. http_request() must now validate every
+     * extra_headers[] entry itself and report HTTP_ERR_ARGS - never
+     * connecting at all, exactly like the well-formed-but-oversized-
+     * request case just above does not connect either. */
+    const char *extra_headers[2];
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    extra_headers[0] = "Authorization: Bearer testtoken123\r\n";
+    extra_headers[1] = (const char *) 0;
+
+    config_defaults(&cfg);
+    strncpy(cfg.host, "127.0.0.1", sizeof(cfg.host) - 1);
+    cfg.host[sizeof(cfg.host) - 1] = '\0';
+    cfg.port = 1; /* never actually connected to - rejected before net_open() */
+    cfg.timeout_secs = 3;
+    ctx_init(&ctx);
+
+    rc = http_request(&cfg, "POST", "/api/door-repo/admin/login",
+                       (const char *) 0, 0,
+                       extra_headers, 2,
+                       &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_ERR_ARGS, "a NULL entry in extra_headers must be HTTP_ERR_ARGS, not HTTP_ERR_REQUEST_TOO_LONG");
+}
+
 TEST(get_wrapper_still_produces_the_documented_error_codes_after_refactor)
 {
     /* Regression guard for the http_get() -> http_request() refactor:
@@ -808,6 +844,7 @@ int main(void)
     RUN_TEST(request_post_with_body_and_extra_headers_sends_exact_bytes);
     RUN_TEST(request_get_with_no_body_or_extra_headers_matches_http_get_wire_format);
     RUN_TEST(request_with_body_but_no_extra_headers_still_sends_content_length);
+    RUN_TEST(request_with_null_entry_in_extra_headers_is_args_error_not_too_long);
     RUN_TEST(get_wrapper_still_produces_the_documented_error_codes_after_refactor);
     RUN_TEST(request_larger_than_buffer_is_a_clean_error);
 

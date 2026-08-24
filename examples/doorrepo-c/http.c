@@ -377,7 +377,13 @@ static int write_all(int fd, const char *buf, unsigned long len)
  * computed first and checked against outsize before any byte is copied,
  * so an oversized host/path/headers is a clean -1 (HTTP_ERR_REQUEST_TOO_LONG
  * to the caller) rather than a buffer overrun. Returns the header block
- * length, or -1 if it would not fit. */
+ * length, or -1 if it would not fit.
+ *
+ * Every entry in extra_headers[0..extra_header_count) must already be
+ * non-NULL by the time this function is called - http_request() validates
+ * that (returning the distinct HTTP_ERR_ARGS, not this function's single
+ * -1 "too long" sentinel) before ever calling build_request(), so this
+ * function does not re-check it. */
 static int build_request(char *out, unsigned long outsize, const char *method,
                           const char *host, int port, const char *path_and_query,
                           int have_body, unsigned long body_len,
@@ -410,9 +416,6 @@ static int build_request(char *out, unsigned long outsize, const char *method,
         need += (unsigned long) (sizeof(cl_prefix) - 1) + cl_value_len + 2 /* \r\n */;
     }
     for (i = 0; i < extra_header_count; i++) {
-        if (extra_headers[i] == (const char *) 0) {
-            return -1;
-        }
         need += (unsigned long) strlen(extra_headers[i]);
     }
     need += 2; /* the blank line that ends the header block */
@@ -479,6 +482,14 @@ int http_request(const dr_config *cfg, const char *method,
     }
     if (extra_header_count < 0 || (extra_header_count > 0 && extra_headers == (const char * const *) 0)) {
         return HTTP_ERR_ARGS;
+    }
+    {
+        int i;
+        for (i = 0; i < extra_header_count; i++) {
+            if (extra_headers[i] == (const char *) 0) {
+                return HTTP_ERR_ARGS;
+            }
+        }
     }
     if (body_len > 0 && body == (const char *) 0) {
         return HTTP_ERR_ARGS;
