@@ -2591,16 +2591,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     mouseButtonDown.current = true;
 
-    // Game mode: lock the pointer to the terminal on the first click.
-    // Locked, the mouse cannot stray off the playfield mid-game - the OS
-    // pointer is captured and movement arrives as deltas that the window
-    // listener below steers with. Esc releases the lock (browser UI);
-    // the next click re-arms it.
-    if (gameMode.current && !document.pointerLockElement && terminalRef.current) {
-      lockedPointer.current = { x: event.clientX, y: event.clientY };
-      terminalRef.current.requestPointerLock?.();
-    }
-
+    // The click is the game input - it goes out FIRST, unconditionally.
+    // The pointer lock below is an enhancement, and requestPointerLock can
+    // throw synchronously (permissions policy, unsupported) or reject as a
+    // promise; when it sat above this emit, a failed lock swallowed every
+    // menu click.
     socket.emit('mouse-click', {
       x: coords.x,
       y: coords.y,
@@ -2609,6 +2604,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       ctrl: event.ctrlKey,
       alt: event.altKey
     });
+
+    // Game mode: lock the pointer to the terminal on the first click.
+    // Locked, the mouse cannot stray off the playfield mid-game - the OS
+    // pointer is captured and movement arrives as deltas that the window
+    // listener below steers with. Esc releases the lock (browser UI);
+    // the next click re-arms it.
+    if (gameMode.current && !document.pointerLockElement && terminalRef.current) {
+      lockedPointer.current = { x: event.clientX, y: event.clientY };
+      try {
+        const result: any = terminalRef.current.requestPointerLock?.();
+        // Newer Chrome returns a promise; a rejection (e.g. the browser
+        // refuses re-lock too soon after an Esc exit) must not surface as
+        // an unhandled error.
+        result?.catch?.(() => { lockedPointer.current = null; });
+      } catch {
+        lockedPointer.current = null;
+      }
+    }
   };
 
   const handleMouseUp = (event: React.MouseEvent) => {
