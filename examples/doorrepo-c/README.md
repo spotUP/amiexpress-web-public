@@ -363,12 +363,12 @@ same thing:
 +------------------------------------------------------------------------------+
 |                  DoorRepo v1.0   3301 of 3301 doors                          |   header bar
 +- REPO (3301) ------------++--------------------------------------------------+
-|*!ALSTER.LHA           39k|| !ALSTER.LHA                                      |
-| $CP-PS12.LZX          17k|| XIM   39k   #1   [downloaded]                    |
+|+!ALSTER.LHA           39k|| !ALSTER.LHA                                      |
+| $CP-PS12.LZX          17k|| XIM   39k   #1   [ALSTER]                        |
 | -D-DOR11.LHA           7k|| by Loop/Abuse / ABS            2 ads             |
 | ...                      ||   ______    ________.  /\    ______.__________   |   FILE_ID.DIZ,
 +--------------------------++--------------------------------------------------+   line for line
-|ENTER/R=Get  I=Install  A=Archive  V=Doc  F=Find  C=System  L=Installed  Q=Quit|
+|ENTER/R=Get  U=Uninstall  S=Strip ads  M=Access  A=Archive  V=Doc  Q=Quit      |
 +------------------------------------------------------------------------------+
 ```
 
@@ -379,6 +379,7 @@ same thing:
 | `I` | install it as a BBS command: extract, write the command config, offer to strip ads |
 | `U` | uninstall it again (only shown for an installed door) |
 | `S` | strip the ad files from an installed door (only shown when it has any) |
+| `M` | edit the access level of an installed door - typing a new level also doubles as disable/restore, remembering the level it replaced (only shown for an installed door) |
 | `A` | show what is inside the archive, with ad files flagged |
 | `V` | show the door's own documentation - offered only for a door that has any |
 | `F` | filter by text - live, over the rows already loaded, no refetch |
