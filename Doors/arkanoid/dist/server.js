@@ -56,8 +56,15 @@ export function getHighscores() {
 }
 /**
  * RPC Handler: Save a new highscore
+ *
+ * Persists to highscores.json, then broadcasts a 'score_submitted' door
+ * event - LiveChat shows it, and bbs-event-emitter forwards it to any
+ * sysop-configured DOOR_SCORE webhook (Discord/Slack). Same pattern as
+ * GrandMaster's score broadcast. The event is strictly best-effort:
+ * persistence must succeed even when no session is attached (native runs)
+ * or the emitter throws.
  */
-export function saveHighscore(params) {
+export function saveHighscore(params, session) {
     const { name, score, level } = params;
     const entry = {
         name: name.substring(0, 10).toUpperCase(),
@@ -70,6 +77,23 @@ export function saveHighscore(params) {
     highscores.sort((a, b) => b.score - a.score);
     const trimmed = highscores.slice(0, MAX_HIGHSCORES);
     saveHighscores(trimmed);
+    try {
+        if (session?.bbs?.emitCustomEvent) {
+            const rank = trimmed.indexOf(entry) + 1; // 0 -> fell off the board
+            const parts = [`Score: ${score.toLocaleString('en-US')}`, `Level: ${level}`];
+            if (rank > 0)
+                parts.push(`Rank: #${rank}`);
+            session.bbs.emitCustomEvent('score_submitted', parts.join(' | '), {
+                name: entry.name,
+                score,
+                level,
+                rank: rank > 0 ? rank : undefined,
+            });
+        }
+    }
+    catch (e) {
+        console.error('[Arkanoid Server] Failed to broadcast score event:', e);
+    }
     return { success: true };
 }
 /**

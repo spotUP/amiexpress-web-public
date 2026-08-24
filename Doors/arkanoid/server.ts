@@ -69,9 +69,32 @@ export function getHighscores(): { highscores: HighScore[] } {
 }
 
 /**
- * RPC Handler: Save a new highscore
+ * Slice of the hybrid-door session object the RPC bridge passes as the
+ * handler's second argument (door.handler.ts builds it with `bbs` set to
+ * the BBSApi). Only emitCustomEvent is used here; everything else is
+ * irrelevant to this door.
  */
-export function saveHighscore(params: { name: string; score: number; level: number }): { success: boolean } {
+interface DoorSessionLike {
+  user?: { username?: string };
+  bbs?: {
+    emitCustomEvent?: (eventType: string, message: string, data?: Record<string, any>) => void;
+  };
+}
+
+/**
+ * RPC Handler: Save a new highscore
+ *
+ * Persists to highscores.json, then broadcasts a 'score_submitted' door
+ * event - LiveChat shows it, and bbs-event-emitter forwards it to any
+ * sysop-configured DOOR_SCORE webhook (Discord/Slack). Same pattern as
+ * GrandMaster's score broadcast. The event is strictly best-effort:
+ * persistence must succeed even when no session is attached (native runs)
+ * or the emitter throws.
+ */
+export function saveHighscore(
+  params: { name: string; score: number; level: number },
+  session?: DoorSessionLike
+): { success: boolean } {
   const { name, score, level } = params;
 
   const entry: HighScore = {
@@ -87,6 +110,23 @@ export function saveHighscore(params: { name: string; score: number; level: numb
   const trimmed = highscores.slice(0, MAX_HIGHSCORES);
 
   saveHighscores(trimmed);
+
+  try {
+    if (session?.bbs?.emitCustomEvent) {
+      const rank = trimmed.indexOf(entry) + 1; // 0 -> fell off the board
+      const parts = [`Score: ${score.toLocaleString('en-US')}`, `Level: ${level}`];
+      if (rank > 0) parts.push(`Rank: #${rank}`);
+
+      session.bbs.emitCustomEvent('score_submitted', parts.join(' | '), {
+        name: entry.name,
+        score,
+        level,
+        rank: rank > 0 ? rank : undefined,
+      });
+    }
+  } catch (e) {
+    console.error('[Arkanoid Server] Failed to broadcast score event:', e);
+  }
 
   return { success: true };
 }
