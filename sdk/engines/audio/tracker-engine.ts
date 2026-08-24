@@ -283,6 +283,16 @@ export class TrackerEngine {
         context: this.config.audioContext,
       });
 
+      // chiptune3's contract: when the caller supplies the AudioContext it
+      // sets destination=false and NEVER connects its gain node - routing
+      // becomes the caller's job. Without this connect the whole engine
+      // plays into the void (found as "arkanoid music is silent",
+      // 2026-08-24). With no supplied context chiptune3 wires itself to
+      // the speakers and this must not double-connect.
+      if (this.config.audioContext && this.player.gain) {
+        this.player.gain.connect(this.config.audioContext.destination);
+      }
+
       // Set initial volume
       this.player.setVol(this.config.volume);
 

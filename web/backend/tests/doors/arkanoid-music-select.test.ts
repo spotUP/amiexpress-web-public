@@ -2,7 +2,7 @@
  * Arkanoid music selection (Doors/arkanoid/music-select.ts).
  *
  * The Zabutom XM pack assignment: menu music on the menu and its help
- * screen, highscore music while viewing AND entering highscores, 11 level
+ * screen, highscore music on the highscore board, 11 level
  * tracks cycling across the game's 20 levels, silence on the gameover and
  * victory screens. Every file named here must actually ship in the door's
  * assets/ directory - a typo'd name would fail silently at runtime (the
@@ -26,9 +26,10 @@ describe('arkanoid music selection', () => {
     expect(trackForState('help', 1)).toBe(MENU_TRACK);
   });
 
-  it('plays the highscore track while viewing and while entering highscores', () => {
+  it('plays the highscore track on the highscore board', () => {
+    // Name entry no longer exists - scores submit automatically under the
+    // BBS username, landing straight on the board.
     expect(trackForState('highscores', 1)).toBe(HIGHSCORE_TRACK);
-    expect(trackForState('enterName', 1)).toBe(HIGHSCORE_TRACK);
   });
 
   it('gives each of the first 11 levels its own track, in pack order', () => {

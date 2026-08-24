@@ -17,9 +17,14 @@ const fakePlayers: FakeChiptunePlayer[] = [];
 class FakeChiptunePlayer {
   public calls: Array<{ method: string; arg?: unknown }> = [];
   public initialized = false;
+  /** Mirrors chiptune3: a caller-supplied context means destination=false
+   *  and the CALLER must connect the gain, or audio goes nowhere. */
+  public destination: unknown;
+  public gain = { connect: (target: unknown) => { this.calls.push({ method: 'gain.connect', arg: target }); } };
   private initHandlers: Array<() => void> = [];
 
-  constructor(_config: unknown) {
+  constructor(config: any) {
+    this.destination = config && config.context ? false : { speakers: true };
     fakePlayers.push(this);
   }
 
@@ -111,6 +116,29 @@ describe('TrackerEngine initialization race', () => {
     player.fireInitialized();
 
     expect(player.calls.filter((c) => c.method === 'play')).toHaveLength(0);
+  });
+
+  it('routes the gain to the destination of a caller-supplied AudioContext', async () => {
+    // chiptune3 sets destination=false for a supplied context and never
+    // connects its gain - the engine must do it, or every note plays into
+    // the void (the silent-arkanoid bug).
+    const destination = { speakers: true };
+    const ctx = { destination, state: 'running' } as unknown as AudioContext;
+    new TrackerEngine({ audioContext: ctx });
+    await flushMicrotasks();
+    const player = fakePlayers[0];
+
+    const connects = player.calls.filter((c) => c.method === 'gain.connect');
+    expect(connects).toHaveLength(1);
+    expect(connects[0].arg).toBe(destination);
+  });
+
+  it('does not double-connect when chiptune3 owns the context', async () => {
+    new TrackerEngine(); // no context supplied - chiptune3 self-wires
+    await flushMicrotasks();
+    const player = fakePlayers[0];
+
+    expect(player.calls.filter((c) => c.method === 'gain.connect')).toHaveLength(0);
   });
 
   it('plays immediately once initialized - no queue detour', async () => {

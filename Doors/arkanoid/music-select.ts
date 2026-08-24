@@ -4,7 +4,7 @@
  * Maps game state to the tracker module that should be playing. Zabutom
  * XM pack, wired 2026-08-24:
  *   - menu (and its help screen)          -> Zb-zfc2.xm
- *   - highscores (viewing and entering)   -> DECSYS4.xm
+ *   - highscores                          -> DECSYS4.xm
  *   - playing/paused                      -> one of 11 level tracks
  *   - gameover/victory                    -> silence (their jingles stand alone)
  *
@@ -19,7 +19,6 @@ export type MusicGameState =
   | 'gameover'
   | 'victory'
   | 'highscores'
-  | 'enterName'
   | 'help';
 
 export const MENU_TRACK = 'Zb-zfc2.xm';
@@ -52,7 +51,6 @@ export function trackForState(state: MusicGameState, level: number): string | nu
     case 'help':
       return MENU_TRACK;
     case 'highscores':
-    case 'enterName':
       return HIGHSCORE_TRACK;
     case 'playing':
     case 'paused': {

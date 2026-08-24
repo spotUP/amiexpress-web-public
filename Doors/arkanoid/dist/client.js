@@ -198,13 +198,13 @@ class ArkanoidGame {
         this.currentTrack = null;
         this.trackSeq = 0;
         this.trackCache = new Map();
-        // Guards against a double-submit: the 'enterName' state accepts BOTH a
-        // keyboard Enter (handleNameInput) and a mouse click as "confirm name"
-        // (see the two call sites of saveHighscore()), and neither transitions
-        // state or sets a flag before its `await` - a stray click landing while
-        // the Enter-triggered save is still in flight fires a second RPC call
+        // Guards against a double-submit: the gameover/victory screen accepts
+        // BOTH a keyboard Enter and a mouse click as "continue", and the score
+        // submission awaits an RPC round trip - a stray click landing while the
+        // Enter-triggered save is still in flight would fire a second RPC call
         // (and a second DOOR_SCORE webhook post) for the same score. Reported
-        // live: a Discord webhook fired twice for one highscore entry.
+        // live before scores were automatic: a Discord webhook fired twice for
+        // one highscore entry.
         this.highscoreSaved = false;
         this.heldKeys = new Set(); // Track held keys for smooth movement
         this.gamepadAxis = 0; // Track analog stick position
@@ -437,13 +437,6 @@ class ArkanoidGame {
                 this.heldKeys.delete(normalizedKey);
                 return;
             }
-            else if (keyType === 'keypress') {
-                // Ignore keypress events in enterName state to prevent double character input
-                // The keydown event already handled the input
-                if (this.data.state === 'enterName') {
-                    return;
-                }
-            }
             // Fallback for regular key events (non-game-mode)
             const k = key.key?.toLowerCase() || '';
             // Handle arrow/movement keys for paddle control
@@ -491,6 +484,29 @@ class ArkanoidGame {
         catch (e) {
             console.warn('Failed to load highscores:', e);
             this.data.highscores = [];
+        }
+    }
+    /**
+     * Leave the gameover/victory screen. A qualifying score is submitted
+     * automatically under the BBS username (captured at connect) - the BBS
+     * already knows who is playing, so there is nothing to type - and the
+     * board is shown; otherwise straight back to the menu.
+     */
+    submitScoreAndShowBoard() {
+        if (this.isHighScore()) {
+            if (this.highscoreSaved) {
+                // A save for this game is already in flight (Enter and a click can
+                // land together); the .then() below will move to the board.
+                return;
+            }
+            void this.saveHighscore().then(() => {
+                this.data.state = 'highscores';
+                this.paint();
+            });
+        }
+        else {
+            this.data.state = 'menu';
+            this.paint();
         }
     }
     async saveHighscore() {
@@ -889,8 +905,6 @@ class ArkanoidGame {
                 return this.renderVictory();
             case 'highscores':
                 return this.renderHighscores();
-            case 'enterName':
-                return this.renderEnterName();
             case 'help':
                 return this.renderHelp();
         }
@@ -1035,15 +1049,6 @@ class ArkanoidGame {
         this.renderer.drawText(30, 20, 'Press any key to return', ANSI.fg.white);
         return this.renderer.flush();
     }
-    renderEnterName() {
-        this.renderer.clearScreen();
-        this.renderer.drawText(30, 8, '  NEW HIGH SCORE!  ', ANSI.fg.black, ANSI.bg.brightGreen);
-        this.renderer.drawText(30, 11, `Your Score: ${this.data.score}`, ANSI.fg.brightYellow);
-        this.renderer.drawText(28, 14, 'Enter your name:', ANSI.fg.white);
-        this.renderer.drawText(28, 16, `> ${this.data.playerName}_`, ANSI.fg.brightCyan, ANSI.bg.blue);
-        this.renderer.drawText(25, 19, 'Press ENTER when done (max 10 chars)', ANSI.fg.brightBlack);
-        return this.renderer.flush();
-    }
     renderHelp() {
         this.renderer.clearScreen();
         this.renderer.drawText(32, 2, '  HOW TO PLAY  ', ANSI.fg.black, ANSI.bg.cyan);
@@ -1095,24 +1100,12 @@ class ArkanoidGame {
             case 'gameover':
             case 'victory':
                 if (k === 'enter' || k === '\r' || k === '\n') {
-                    if (this.isHighScore()) {
-                        this.data.state = 'enterName';
-                        this.highscoreSaved = false; // a new game's entry can submit again
-                    }
-                    else {
-                        this.data.state = 'menu';
-                    }
+                    this.submitScoreAndShowBoard();
                 }
                 break;
             case 'highscores':
             case 'help':
                 this.data.state = 'menu';
-                break;
-            case 'enterName':
-                // handleNameInput is async - need to re-render after it completes
-                this.handleNameInput(key).then(() => {
-                    this.paint();
-                });
                 break;
         }
     }
@@ -1161,22 +1154,6 @@ class ArkanoidGame {
         }
         else if (k === 'q') {
             this.data.state = 'menu';
-        }
-    }
-    async handleNameInput(key) {
-        if (key === 'enter' || key === '\r' || key === '\n') {
-            if (this.data.playerName.length > 0) {
-                await this.saveHighscore();
-                this.data.state = 'highscores';
-            }
-        }
-        else if (key === 'backspace' || key === '\x7f') {
-            this.data.playerName = this.data.playerName.slice(0, -1);
-        }
-        else if (key.length === 1 && this.data.playerName.length < 10) {
-            if (/[a-zA-Z0-9]/.test(key)) {
-                this.data.playerName += key.toUpperCase();
-            }
         }
     }
     handleMouseInput(event) {
@@ -1251,29 +1228,13 @@ class ArkanoidGame {
                 case 'gameover':
                 case 'victory':
                     // Click anywhere to proceed
-                    if (this.isHighScore()) {
-                        this.data.state = 'enterName';
-                        this.highscoreSaved = false; // a new game's entry can submit again
-                    }
-                    else {
-                        this.data.state = 'menu';
-                    }
-                    this.paint();
+                    this.submitScoreAndShowBoard();
                     break;
                 case 'highscores':
                 case 'help':
                     // Click anywhere to return to menu
                     this.data.state = 'menu';
                     this.paint();
-                    break;
-                case 'enterName':
-                    // Click to confirm name entry (like pressing Enter)
-                    if (this.data.playerName.length > 0) {
-                        this.saveHighscore().then(() => {
-                            this.data.state = 'highscores';
-                            this.paint();
-                        });
-                    }
                     break;
                 case 'paused':
                     // Click to resume
@@ -1289,6 +1250,7 @@ class ArkanoidGame {
         this.data.difficulty = difficulties[(idx + 1) % difficulties.length];
     }
     startGame() {
+        this.highscoreSaved = false; // a new game's score can submit again
         this.data.score = 0;
         this.data.lives = INITIAL_LIVES;
         this.data.startTime = Date.now();
