@@ -166,11 +166,18 @@ int owner_auth_login(const dr_config *cfg, owner_auth_state *state,
          * something more specific (this response was too large to be a
          * real login response), worth distinguishing from a network-level
          * failure. */
+        memset(capture.data, 0, sizeof(capture.data));
         return OWNER_AUTH_ERR_BAD_RESPONSE;
     }
 
     outcome = owner_auth_classify_login(http_rc, resp.status, capture.data,
                                          token, sizeof(token), error_out, error_out_cap);
+
+    /* capture.data held the raw response body, including the JWT on
+     * success - wipe it from the stack now that classify_login() has
+     * pulled out of it everything it needs, the same discipline `body`
+     * and `token` already get above/below. */
+    memset(capture.data, 0, sizeof(capture.data));
 
     if (outcome == OWNER_AUTH_OK) {
         strncpy(state->token, token, sizeof(state->token) - 1);
@@ -190,7 +197,8 @@ int owner_auth_call(const dr_config *cfg, owner_auth_state *state,
                      const char * const *extra_headers, int extra_header_count,
                      http_response *resp,
                      int (*sink)(void *ctx, const unsigned char *buf, unsigned long len),
-                     void *ctx)
+                     void *ctx,
+                     void (*reset_ctx)(void *ctx))
 {
     char auth_header[OWNER_AUTH_TOKEN_MAX + 32];
     const char *combined[OWNER_AUTH_MAX_CALLER_HEADERS + 1];
@@ -219,6 +227,13 @@ int owner_auth_call(const dr_config *cfg, owner_auth_state *state,
     }
 
     for (attempt = 1; attempt <= 2; attempt++) {
+        /* Defensive, not merely trusting owner_auth_reset()/owner_auth_login()
+         * to have left state->token NUL-terminated within OWNER_AUTH_TOKEN_MAX
+         * bytes - a caller that sets state->token/have_token by hand (as
+         * this module's own test suite does) could otherwise hand sprintf()
+         * an unterminated buffer. state is non-const, so forcing this is
+         * safe and cheap. */
+        state->token[sizeof(state->token) - 1] = '\0';
         sprintf(auth_header, "Authorization: Bearer %s\r\n", state->token);
 
         combined_count = 0;
@@ -248,6 +263,15 @@ int owner_auth_call(const dr_config *cfg, owner_auth_state *state,
             if (login_rc != OWNER_AUTH_OK) {
                 return login_rc;
             }
+        }
+
+        /* The failed attempt's body was already streamed into `ctx` above -
+         * give an accumulating caller a chance to clear it before the
+         * retried attempt streams its own body into the SAME ctx, or the
+         * two responses end up concatenated (see owner_auth_call()'s doc
+         * comment in owner_auth.h). */
+        if (reset_ctx != (void (*)(void *)) 0) {
+            reset_ctx(ctx);
         }
     }
 

@@ -57,9 +57,14 @@ unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsig
  * separate connections, since http_request() always sends
  * Connection: close). `responses[i]`/`response_lens[i]` is served to the
  * i-th connection accepted, in order; each connection's inbound bytes are
- * drained and discarded first, exactly like stub_server_start(). Returns
- * the port to connect to on success (storing the child pid in *out_pid,
- * for stub_server_reap()), or -1 on failure. */
+ * drained and discarded first, exactly like stub_server_start(). If the
+ * code under test makes FEWER connections than `count` (e.g. a retry that
+ * should have fired but didn't), the child gives up waiting for the next
+ * one after a few seconds and exits instead of blocking forever - a
+ * connection-count shortfall then surfaces as a clean connect failure on
+ * whichever attempt never arrives, not a hung test suite. Returns the
+ * port to connect to on success (storing the child pid in *out_pid, for
+ * stub_server_reap()), or -1 on failure. */
 int stub_server_start_sequence(const unsigned char * const *responses,
                                 const unsigned long *response_lens,
                                 int count, int *out_pid);

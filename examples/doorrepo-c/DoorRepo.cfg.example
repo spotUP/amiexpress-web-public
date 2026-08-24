@@ -70,6 +70,10 @@ security tradeoff (this file is only as safe as your AmigaDOS filesystem's
 own protection bits/ACLs), accepted so v1 can ship against the door
 server's existing human-admin login rather than waiting on a separate
 scoped API-key mechanism. Keep DoorRepo.cfg readable only by the sysop.
+Like every other key in this file, leading/trailing whitespace around the
+value is trimmed and AdminPassword is capped at 127 characters (truncated
+silently past that, same as every other key here) - avoid leading/trailing
+spaces in a real password and keep it under that length.
 # AdminUsername=spot
 # AdminPassword=<plaintext>
 

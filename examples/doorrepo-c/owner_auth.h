@@ -122,7 +122,23 @@ int owner_auth_login(const dr_config *cfg, owner_auth_state *state,
  *     reported, not retried again.
  *
  * `method`/`path_and_query`/`body`/`body_len`/`resp`/`sink`/`ctx` are
- * exactly http_request()'s own parameters and behave identically -
+ * exactly http_request()'s own parameters, with ONE important difference
+ * from a plain http_request() call: `sink`/`ctx` may be invoked across TWO
+ * separate HTTP responses, not one, when the retry fires - first the
+ * failed (401) attempt's body, then the retried attempt's body, both
+ * through the SAME `ctx`, one full http_request() call after another (never
+ * interleaved). A `sink` that accumulates into `ctx` (the shape
+ * json_extract_string() needs) would otherwise end up holding BOTH bodies
+ * concatenated after a retry, and a caller checking `ctx` for an "error"
+ * field could find the stale 401 error text even after the retry
+ * succeeded. `reset_ctx`, if non-NULL, is called with `ctx` exactly once,
+ * immediately before the retried attempt's http_request() call (i.e.
+ * between the failed first attempt and the second one) - an accumulating
+ * caller should pass a function that clears its buffer back to empty.
+ * Pass (void (*)(void *)) 0 if `sink`/`ctx` don't accumulate state (e.g. a
+ * caller that only cares about `resp->status`, like `discard_sink`) or if
+ * a leftover first-attempt body genuinely does not matter to this caller.
+ *
  * `path_and_query` is the caller's responsibility to build (e.g. via
  * flow_build_archive_path()-style helpers), not something this function
  * derives.
@@ -145,7 +161,8 @@ int owner_auth_call(const dr_config *cfg, owner_auth_state *state,
                      const char * const *extra_headers, int extra_header_count,
                      http_response *resp,
                      int (*sink)(void *ctx, const unsigned char *buf, unsigned long len),
-                     void *ctx);
+                     void *ctx,
+                     void (*reset_ctx)(void *ctx));
 
 /* ---- Pure decision logic (no I/O - unit-tested directly) ------------- */
 
@@ -166,7 +183,12 @@ int owner_auth_call(const dr_config *cfg, owner_auth_state *state,
  *   - status == 429: OWNER_AUTH_ERR_LOCKED_OUT.
  *   - status == 503: OWNER_AUTH_ERR_SERVER_DISABLED.
  *   - anything else: OWNER_AUTH_ERR_BAD_RESPONSE (an HTTP status this
- *     module was not told to expect from this route).
+ *     module was not told to expect from this route - includes 400,
+ *     which the real /admin/login route sends for a missing username/
+ *     password; practically unreachable through owner_auth_login(),
+ *     which already refuses empty credentials before any I/O, but
+ *     classify_login() itself has no way to know that about a caller
+ *     handing it a raw status/body pair directly, e.g. in a test).
  *
  * `token_out`/`token_out_cap` receive the token on OWNER_AUTH_OK, left as
  * "" on any other outcome (never partially filled - matches

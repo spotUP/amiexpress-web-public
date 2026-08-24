@@ -9,11 +9,18 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "stub_server.h"
+
+/* How long stub_server_start_sequence()'s child waits for EACH connection
+ * before giving up - see that function's own comment. Generous for a
+ * loopback test (every real connection here arrives in well under a
+ * second) without making a genuinely hung test suite wait long. */
+#define SEQUENCE_ACCEPT_TIMEOUT_SECS 5
 
 #define CAPTURE_BUF_SIZE 4096
 
@@ -273,7 +280,16 @@ int stub_server_start_sequence(const unsigned char * const *responses,
     }
 
     if (pid == 0) {
-        /* Child: serve exactly `count` connections, in order, then exit. */
+        /* Child: serve exactly `count` connections, in order, then exit.
+         * If the code under test makes FEWER connections than scripted
+         * (e.g. a broken retry that gives up after one attempt instead of
+         * two), accept() below would otherwise block forever and the
+         * parent's stub_server_reap() would hang the whole test suite
+         * with it - a connection-count shortfall must fail fast instead.
+         * select() with a timeout ahead of each accept() bounds the wait;
+         * a timeout (or a select() error) exits the child non-zero, which
+         * closes listen_fd and every future connect() to this port then
+         * fails cleanly (ECONNREFUSED) instead of hanging. */
         int idx;
 
         for (idx = 0; idx < count; idx++) {
@@ -281,6 +297,22 @@ int stub_server_start_sequence(const unsigned char * const *responses,
             unsigned long sent;
             char reqbuf[2048];
             long got;
+            fd_set readfds;
+            struct timeval tv;
+            int sel_rc;
+
+            FD_ZERO(&readfds);
+            FD_SET(listen_fd, &readfds);
+            tv.tv_sec = SEQUENCE_ACCEPT_TIMEOUT_SECS;
+            tv.tv_usec = 0;
+            sel_rc = select(listen_fd + 1, &readfds, (fd_set *) 0, (fd_set *) 0, &tv);
+            if (sel_rc <= 0) {
+                /* Timed out (0) or an error (<0) waiting for connection
+                 * idx - the caller scripted `count` responses but the
+                 * code under test only made `idx` connections. Fail fast. */
+                close(listen_fd);
+                _exit(1);
+            }
 
             conn_fd = accept(listen_fd, (struct sockaddr *) 0, (socklen_t *) 0);
             if (conn_fd < 0) {

@@ -84,6 +84,45 @@ static int discard_sink(void *ctx, const unsigned char *buf, unsigned long len)
     return 0;
 }
 
+/* A REAL accumulating sink - the shape a genuine admin-API caller uses
+ * (e.g. buffering a response to hand to json_extract_string()), unlike
+ * discard_sink() above. Every owner_auth_call() orchestration test before
+ * this one used discard_sink(), which is exactly why the "retry leaks the
+ * first response's bytes into ctx" defect (fixed alongside this test)
+ * shipped uncaught - discard_sink() can never observe a leak. */
+#define ACCUM_SINK_CAP 512
+typedef struct {
+    char data[ACCUM_SINK_CAP];
+    unsigned long len;
+} accum_sink_ctx;
+
+static void accum_sink_init(accum_sink_ctx *c)
+{
+    c->data[0] = '\0';
+    c->len = 0;
+}
+
+static int accum_sink(void *vctx, const unsigned char *buf, unsigned long len)
+{
+    accum_sink_ctx *c = (accum_sink_ctx *) vctx;
+    unsigned long room = (c->len < sizeof(c->data) - 1) ? (sizeof(c->data) - 1 - c->len) : 0;
+    unsigned long copy = (len < room) ? len : room;
+    if (copy > 0) {
+        memcpy(c->data + c->len, buf, copy);
+        c->len += copy;
+        c->data[c->len] = '\0';
+    }
+    return 0;
+}
+
+/* owner_auth_call()'s reset_ctx callback for accum_sink_ctx - matches the
+ * void (*)(void *) signature owner_auth_call() invokes between the failed
+ * first attempt and the retried attempt. */
+static void accum_sink_reset(void *vctx)
+{
+    accum_sink_init((accum_sink_ctx *) vctx);
+}
+
 /* Formats "HTTP/1.1 <status> X\r\nContent-Length: <len>\r\nConnection: close\r\n\r\n<body>"
  * into `out` with an exact, computed Content-Length - shared by every I/O
  * test below so a hand-counted length never silently breaks a test via
@@ -462,7 +501,7 @@ TEST(call_lazily_logs_in_before_the_first_admin_call)
 
     rc = owner_auth_call(&cfg, &state, "GET", "/api/door-repo/admin/submissions",
                           (const char *) 0, 0, (const char * const *) 0, 0,
-                          &resp, discard_sink, (void *) 0);
+                          &resp, discard_sink, (void *) 0, (void (*)(void *)) 0);
     stub_server_reap(pid);
 
     ASSERT_EQ(rc, OWNER_AUTH_OK, "return code");
@@ -506,12 +545,64 @@ TEST(call_retries_once_after_401_and_succeeds)
 
     rc = owner_auth_call(&cfg, &state, "GET", "/api/door-repo/admin/submissions",
                           (const char *) 0, 0, (const char * const *) 0, 0,
-                          &resp, discard_sink, (void *) 0);
+                          &resp, discard_sink, (void *) 0, (void (*)(void *)) 0);
     stub_server_reap(pid);
 
     ASSERT_EQ(rc, OWNER_AUTH_OK, "return code after retry");
     ASSERT_EQ(resp.status, 200, "final call status");
     ASSERT_STR_EQ(state.token, "tok2", "token replaced by the re-login");
+}
+
+TEST(call_retries_with_accumulating_sink_does_not_leak_first_response_into_second)
+{
+    /* Same three-connection shape as call_retries_once_after_401_and_succeeds,
+     * but with a REAL accumulating sink + reset_ctx instead of
+     * discard_sink() - proves the failed attempt's "{\"error\":...}" body
+     * does not survive into the ctx the retried attempt's success body
+     * lands in (Important #1 fix). Without the reset_ctx call, `data`
+     * would end up holding BOTH bodies concatenated. */
+    char call_401_resp[256];
+    char login_resp[256];
+    char call_200_resp[256];
+    int call_401_len, login_len, call_200_len;
+    const unsigned char *responses[3];
+    unsigned long lens[3];
+    int port, pid, rc;
+    dr_config cfg;
+    owner_auth_state state;
+    http_response resp;
+    accum_sink_ctx ctx;
+
+    call_401_len = format_json_response(call_401_resp, 401, "{\"error\":\"not authenticated\"}");
+    login_len = format_json_response(login_resp, 200, "{\"token\":\"tok4\"}");
+    call_200_len = format_json_response(call_200_resp, 200, "{\"rows\":[]}");
+
+    responses[0] = (const unsigned char *) call_401_resp;
+    lens[0] = (unsigned long) call_401_len;
+    responses[1] = (const unsigned char *) login_resp;
+    lens[1] = (unsigned long) login_len;
+    responses[2] = (const unsigned char *) call_200_resp;
+    lens[2] = (unsigned long) call_200_len;
+
+    port = stub_server_start_sequence(responses, lens, 3, &pid);
+    ASSERT_TRUE(port >= 0, "sequence stub server should start");
+
+    cfg_for_port(&cfg, port);
+    state.have_token = 1;
+    strcpy(state.token, "stale-expired-token");
+    accum_sink_init(&ctx);
+
+    rc = owner_auth_call(&cfg, &state, "GET", "/api/door-repo/admin/submissions",
+                          (const char *) 0, 0, (const char * const *) 0, 0,
+                          &resp, accum_sink, &ctx, accum_sink_reset);
+    stub_server_reap(pid);
+
+    ASSERT_EQ(rc, OWNER_AUTH_OK, "return code after retry");
+    ASSERT_EQ(resp.status, 200, "final call status");
+    ASSERT_STR_EQ(ctx.data, "{\"rows\":[]}",
+                  "ctx holds ONLY the retried response, not the 401 body concatenated onto it");
+    ASSERT_TRUE(strstr(ctx.data, "not authenticated") == (char *) 0,
+                "the failed first attempt's body must not survive into the retry's ctx");
 }
 
 TEST(call_reports_invalid_creds_after_a_second_401_and_does_not_retry_again)
@@ -550,7 +641,7 @@ TEST(call_reports_invalid_creds_after_a_second_401_and_does_not_retry_again)
 
     rc = owner_auth_call(&cfg, &state, "GET", "/api/door-repo/admin/submissions",
                           (const char *) 0, 0, (const char * const *) 0, 0,
-                          &resp, discard_sink, (void *) 0);
+                          &resp, discard_sink, (void *) 0, (void (*)(void *)) 0);
     stub_server_reap(pid);
 
     ASSERT_EQ(rc, OWNER_AUTH_ERR_INVALID_CREDS, "return code (second 401 is a real failure)");
@@ -581,7 +672,7 @@ TEST(call_sends_authorization_header_built_from_the_held_token)
 
     rc = owner_auth_call(&cfg, &state, "GET", "/api/door-repo/admin/submissions",
                           (const char *) 0, 0, (const char * const *) 0, 0,
-                          &resp, discard_sink, (void *) 0);
+                          &resp, discard_sink, (void *) 0, (void (*)(void *)) 0);
 
     captured_len = stub_server_read_capture(capture_fd, captured, sizeof(captured) - 1);
     stub_server_reap(pid);
@@ -612,8 +703,85 @@ TEST(call_refuses_too_many_extra_headers)
 
     rc = owner_auth_call(&cfg, &state, "GET", "/x", (const char *) 0, 0,
                           too_many, OWNER_AUTH_MAX_CALLER_HEADERS + 1,
-                          &resp, discard_sink, (void *) 0);
+                          &resp, discard_sink, (void *) 0, (void (*)(void *)) 0);
     ASSERT_EQ(rc, OWNER_AUTH_ERR_ARGS, "return code");
+}
+
+/* ---------------------------------------------------------------------
+ * Fail-closed guarantees, proven end to end (not just by inspection):
+ * a token too long for OWNER_AUTH_TOKEN_MAX, and a response too long for
+ * OWNER_AUTH_RESPONSE_CAP, must each come back a clean error, never a
+ * truncated token or a partially-parsed body silently used.
+ * ------------------------------------------------------------------- */
+
+TEST(login_token_over_512_bytes_is_a_clean_bad_response_not_truncated)
+{
+    char long_token[600];
+    char body[700];
+    char resp_buf[900];
+    int resp_len;
+    int i;
+    int port, pid, rc;
+    dr_config cfg;
+    owner_auth_state state;
+
+    /* One byte over OWNER_AUTH_TOKEN_MAX (512) - well under
+     * OWNER_AUTH_RESPONSE_CAP (4096), so this isolates the token-buffer
+     * guarantee from the overall-response-size guarantee tested below. */
+    for (i = 0; i < 599; i++) {
+        long_token[i] = 'A';
+    }
+    long_token[599] = '\0';
+    sprintf(body, "{\"token\":\"%s\"}", long_token);
+
+    resp_len = format_json_response(resp_buf, 200, body);
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    ASSERT_TRUE(port >= 0, "stub server should start");
+
+    cfg_for_port(&cfg, port);
+    state.have_token = 0;
+    rc = owner_auth_login(&cfg, &state, (char *) 0, 0);
+    stub_server_reap(pid);
+
+    ASSERT_EQ(rc, OWNER_AUTH_ERR_BAD_RESPONSE, "return code (token too long to fit token_out)");
+    ASSERT_EQ(state.have_token, 0, "have_token must stay unset, never partially updated");
+    ASSERT_STR_EQ(state.token, "", "token buffer must stay empty, never a truncated fragment");
+}
+
+TEST(login_response_over_4096_bytes_is_refused_not_partially_parsed)
+{
+    char big_value[7900];
+    char body[8100];
+    char resp_buf[8300];
+    int resp_len;
+    int i;
+    int port, pid, rc;
+    dr_config cfg;
+    owner_auth_state state;
+
+    /* A well-formed 200 {"token": "<huge>"} response whose TOTAL body
+     * exceeds OWNER_AUTH_RESPONSE_CAP (4096) - login_capture_sink() must
+     * abort the transfer rather than accept it truncated. */
+    for (i = 0; i < 7899; i++) {
+        big_value[i] = 'A';
+    }
+    big_value[7899] = '\0';
+    sprintf(body, "{\"token\":\"%s\"}", big_value);
+
+    resp_len = format_json_response(resp_buf, 200, body);
+    ASSERT_TRUE((unsigned long) resp_len > 4096, "sanity: response is actually over the cap");
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    ASSERT_TRUE(port >= 0, "stub server should start");
+
+    cfg_for_port(&cfg, port);
+    state.have_token = 0;
+    rc = owner_auth_login(&cfg, &state, (char *) 0, 0);
+    stub_server_reap(pid);
+
+    ASSERT_EQ(rc, OWNER_AUTH_ERR_BAD_RESPONSE, "return code (oversized response refused outright)");
+    ASSERT_EQ(state.have_token, 0, "have_token must stay unset");
 }
 
 int main(void)
@@ -650,9 +818,13 @@ int main(void)
 
     RUN_TEST(call_lazily_logs_in_before_the_first_admin_call);
     RUN_TEST(call_retries_once_after_401_and_succeeds);
+    RUN_TEST(call_retries_with_accumulating_sink_does_not_leak_first_response_into_second);
     RUN_TEST(call_reports_invalid_creds_after_a_second_401_and_does_not_retry_again);
     RUN_TEST(call_sends_authorization_header_built_from_the_held_token);
     RUN_TEST(call_refuses_too_many_extra_headers);
+
+    RUN_TEST(login_token_over_512_bytes_is_a_clean_bad_response_not_truncated);
+    RUN_TEST(login_response_over_4096_bytes_is_refused_not_partially_parsed);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);
