@@ -2102,6 +2102,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         clearTimeout(keyRepeatTimers.current[key]);
       });
       keyRepeatTimers.current = {};
+
+      // Real-time games own the pointer: hide it over the playfield and
+      // keep xterm from starting a text selection on click-drag. Game-mode
+      // doors receive mouse input through our socket events on the parent
+      // container, so cutting pointer events to the xterm layer changes
+      // nothing for them - while blessed TUI doors (not game mode) keep
+      // xterm's native mouse tracking and text selection untouched.
+      const xtermEl = terminalRef.current?.querySelector('.xterm') as HTMLElement | null;
+      if (xtermEl) {
+        xtermEl.style.pointerEvents = enabled ? 'none' : '';
+      }
+      if (terminalRef.current) {
+        terminalRef.current.style.cursor = enabled ? 'none' : '';
+        terminalRef.current.style.userSelect = enabled ? 'none' : '';
+        (terminalRef.current.style as any).webkitUserSelect = enabled ? 'none' : '';
+      }
+      if (enabled) {
+        term.clearSelection();
+      }
     });
 
     socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
