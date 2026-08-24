@@ -23,7 +23,40 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-/** State for a single open REXX file handle. */
+/**
+ * A line terminator: CRLF, LF, or a bare CR. Matched against the RAW
+ * content string, which is decoded latin1 so each JS character index is
+ * exactly one on-disk byte.
+ */
+const LINE_TERMINATOR = /\r\n|\n|\r/;
+
+/**
+ * State for a single open REXX file handle.
+ *
+ * `content` + `pos` is ONE byte-accurate cursor shared by readln, readch
+ * AND seek — not a pre-split line array. rexxsupport.library's Seek()
+ * and ReadCh() are byte-offset operations against arbitrary binary
+ * content (AmiExpress doors use them on fixed-record files like a
+ * legacy UserData database: `Seek(h,-234,'C')` walks backward one
+ * 234-byte record at a time). A previous version of this file stored
+ * pre-split TEXT LINES and had Seek/ReadCh operate in LINE units — every
+ * negative-byte-offset Seek against binary content was silently wrong,
+ * and once a Seek clamped to a boundary, ReadCh could settle into
+ * returning the SAME bytes forever. That is exactly what hung the
+ * ACCV103 door script in production: `Do Until NrUsers > 0` around
+ * Seek/ReadCh on a handle that had failed to open never made progress
+ * and never terminated (see arexx.service.ts's runaway-watchdog comment
+ * for the process-wide fallout of an interpreter loop that never
+ * terminates).
+ *
+ * readln() still needs to match the OLD line-splitting behaviour byte
+ * for byte (including its one quirk: a trailing terminator yields one
+ * extra empty final read, for symmetry with writeln — see readln()).
+ * It gets that by scanning for the next terminator from `pos` on every
+ * call rather than from a precomputed array, which is exactly as fast
+ * for how these doors use it (small config/log files) and never
+ * disagrees with a byte-accurate seek() on the same handle.
+ */
 interface RexxFileHandle {
   /** Original filename / path the script asked for. */
   name: string;
@@ -31,10 +64,10 @@ interface RexxFileHandle {
   resolvedPath: string;
   /** Open mode: 'R' = read, 'W' = write/truncate, 'A' = append. */
   mode: 'R' | 'W' | 'A';
-  /** Pre-read lines for 'R' mode (we slurp the file at open time). */
-  readLines: string[];
-  /** Index of next unread line in readLines. */
-  readPos: number;
+  /** Full content for 'R' mode, latin1-decoded (1 JS char = 1 byte). */
+  content: string;
+  /** Byte offset of the read cursor into `content`. */
+  pos: number;
   /** True when the read cursor has hit end-of-file. */
   atEof: boolean;
   /** Pending output buffer for 'W' / 'A' mode (flushed on close). */
@@ -203,13 +236,9 @@ export class AREXXFileIO {
     if (finalMode === 'R') {
       try {
         const buf = fs.readFileSync(resolved, 'latin1');
-        const lines = buf.split(/\r\n|\n|\r/);
-        // If the file ended on a newline the split yields a trailing
-        // empty element; keep it so writeln/readln stay symmetric
-        // (REXX readln returns '' once for that trailing newline).
         this.handles.set(h, {
           name: filename, resolvedPath: resolved, mode: finalMode,
-          readLines: lines, readPos: 0, atEof: lines.length === 0,
+          content: buf, pos: 0, atEof: false,
           writeBuffer: [],
         });
         return 1;
@@ -231,7 +260,7 @@ export class AREXXFileIO {
     }
     this.handles.set(h, {
       name: filename, resolvedPath: resolved, mode: finalMode,
-      readLines: [], readPos: 0, atEof: false, writeBuffer: [],
+      content: '', pos: 0, atEof: false, writeBuffer: [],
     });
     return 1;
   }
@@ -264,21 +293,41 @@ export class AREXXFileIO {
    * Sets atEof when the cursor reaches past the last line. Returns
    * '' for the final read (REXX semantics). Reading from a non-open
    * or non-read handle returns ''.
+   *
+   * Scans for the next terminator from the byte cursor `pos` on every
+   * call, rather than indexing a precomputed array — the SAME cursor
+   * seek()/readch() advance, so a script that mixes readln with seek on
+   * one handle never disagrees with itself about where it is.
+   *
+   * Matches `content.split(/\r\n|\n|\r/)`'s behaviour exactly,
+   * including its one quirk: content ending on a terminator produces
+   * ONE trailing empty read before atEof (kept for symmetry with
+   * writeln — a file written with N writeln calls reads back as N
+   * non-empty lines plus that one trailing empty read, matching what a
+   * door that round-trips a file through writeln then readln expects).
    */
   readln(handle: string): string {
     const h = String(handle || '').toUpperCase();
     const fh = this.handles.get(h);
     if (!fh || fh.mode !== 'R') return '';
-    if (fh.readPos >= fh.readLines.length) {
-      fh.atEof = true;
-      return '';
+    if (fh.atEof) return '';
+
+    const rest = fh.content.slice(fh.pos);
+    const m = LINE_TERMINATOR.exec(rest);
+    if (m) {
+      const line = rest.slice(0, m.index);
+      fh.pos += m.index + m[0].length;
+      // More elements may follow (split()'s semantics), including a
+      // trailing '' if this terminator was the last thing in the
+      // file — don't set atEof yet, the NEXT call delivers that.
+      return line;
     }
-    const line = fh.readLines[fh.readPos];
-    fh.readPos++;
-    if (fh.readPos >= fh.readLines.length) {
-      fh.atEof = true;
-    }
-    return line ?? '';
+    // No terminator in what's left: this is split()'s FINAL element,
+    // whether that's genuine trailing content or the empty string left
+    // after consuming a trailing terminator on the previous call.
+    fh.pos = fh.content.length;
+    fh.atEof = true;
+    return rest;
   }
 
   /**
@@ -312,36 +361,23 @@ export class AREXXFileIO {
   }
 
   /**
-   * readch(handle, n) — read up to n characters from current line +
-   * any subsequent lines. Approximation: we re-flatten the read
-   * buffer and slice — fine for the small reads (header bytes,
-   * fixed-width records) AmiExpress doors typically use.
+   * readch(handle, n) — read up to n BYTES from the cursor. Byte-
+   * accurate: `content` is latin1-decoded (1 char = 1 byte) and this
+   * slices it directly — no line splitting/rejoining, so embedded
+   * `\n`/`\r` bytes in binary content (a fixed-record UserData file,
+   * a packed high-score table) are read back exactly as written, and
+   * this stays in lockstep with seek() on the same cursor.
    */
   readch(handle: string, n: number): string {
     const h = String(handle || '').toUpperCase();
     const fh = this.handles.get(h);
     if (!fh || fh.mode !== 'R') return '';
-    // Flatten remaining lines back to a single buffer, slice n chars.
-    const remaining = fh.readLines.slice(fh.readPos).join('\n');
-    if (remaining.length === 0) { fh.atEof = true; return ''; }
-    const slice = remaining.slice(0, Math.max(0, Number(n) || 0));
-    // Advance readPos by however many newlines we consumed plus a
-    // partial-line offset stored as the next slice's leading text.
-    const consumedNewlines = (slice.match(/\n/g) || []).length;
-    fh.readPos += consumedNewlines;
-    // Stash any partial line back at readLines[readPos] so the next
-    // readch / readln picks up where we left off.
-    if (consumedNewlines > 0) {
-      const lastNl = slice.lastIndexOf('\n');
-      const remainderOfLastLine = remaining.slice(lastNl + 1, slice.length);
-      const fullLine = fh.readLines[fh.readPos] ?? '';
-      fh.readLines[fh.readPos] = fullLine.slice(remainderOfLastLine.length);
-    } else {
-      // No newlines consumed — current line shrunk by slice length.
-      const cur = fh.readLines[fh.readPos] ?? '';
-      fh.readLines[fh.readPos] = cur.slice(slice.length);
-    }
-    if (fh.readPos >= fh.readLines.length) fh.atEof = true;
+    const remaining = fh.content.length - fh.pos;
+    if (remaining <= 0) { fh.atEof = true; return ''; }
+    const take = Math.max(0, Math.min(Number(n) || 0, remaining));
+    const slice = fh.content.slice(fh.pos, fh.pos + take);
+    fh.pos += take;
+    if (fh.pos >= fh.content.length) fh.atEof = true;
     return slice;
   }
 
@@ -358,9 +394,15 @@ export class AREXXFileIO {
   }
 
   /**
-   * seek(handle, offset, anchor) — set the read position. Anchor:
-   * 'B' = from beginning, 'C' = from current, 'E' = from end.
-   * Approximated against our line-buffered representation.
+   * seek(handle, offset, anchor) — set the read position, in BYTES.
+   * Anchor: 'B' = from beginning, 'C' = from current, 'E' = from end.
+   *
+   * Per rexxsupport.library: a position beyond either end is clamped
+   * to that end, not an error. That clamping is exactly what let
+   * ACCV103's `Seek(h,-234,'C')` pin at 0 forever once it first
+   * underflowed — clamping itself isn't the bug (it's the documented,
+   * correct behaviour); operating in LINE units instead of BYTE units
+   * against binary content was.
    */
   seek(handle: string, offset: number, anchor: string): number {
     const h = String(handle || '').toUpperCase();
@@ -369,12 +411,12 @@ export class AREXXFileIO {
     const off = Number(offset) || 0;
     const a = String(anchor || 'B').toUpperCase().charAt(0);
     let target = 0;
-    if (a === 'C') target = fh.readPos + off;
-    else if (a === 'E') target = fh.readLines.length + off;
+    if (a === 'C') target = fh.pos + off;
+    else if (a === 'E') target = fh.content.length + off;
     else target = off;
-    fh.readPos = Math.max(0, Math.min(fh.readLines.length, target));
-    fh.atEof = fh.readPos >= fh.readLines.length;
-    return fh.readPos;
+    fh.pos = Math.max(0, Math.min(fh.content.length, target));
+    fh.atEof = fh.pos >= fh.content.length;
+    return fh.pos;
   }
 
   /** Close ALL open handles — called when the interpreter exits. */
