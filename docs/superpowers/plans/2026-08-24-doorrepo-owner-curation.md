@@ -18,11 +18,12 @@ three parallel DoorRepo feature plans (siblings: an `.info`/access-level
 editor claiming key `M`, an installed-doors list view claiming key `L` — do
 not collide with those).
 
-**This plan is honest about two things it cannot resolve on its own**: the
-credential-storage tradeoff (see Task 1) and the security review of the new
-input surfaces (Task 7) both need a second pair of eyes before this ships,
-the same way the door's four existing vulnerability classes were found by
-adversarial review, not by the original author.
+**The credential-storage tradeoff (Task 1) was escalated for explicit user
+sign-off rather than resolved by guessing — see the ruling there.** The
+security review of the new input surfaces (Task 7) still needs a second
+pair of eyes during implementation review, the same way the door's four
+existing vulnerability classes were found by adversarial review, not by
+the original author.
 
 ## Global Constraints
 
@@ -71,21 +72,12 @@ a config file" is the right starting point. `AdminUsername`/`AdminPassword`
 are NEVER logged (`log_line()` calls near login must not print them, unlike
 most of this door's other logging).
 
-**Open Question #1 for the controller (do not resolve by guessing):** is
-storing a real admin password in a plaintext file on the same disk as the
-door binary an acceptable risk for v1? The alternative — a long-lived,
-scoped, revocable API-key primitive distinct from the human admin login
-(closer to a deploy key: one purpose, one archive-name-and-verb scope,
-revocable without changing the sysop's own login password) — is **better**
-but is a **cross-repo prerequisite**: it does not exist in
-`amiexpress-doorserver` today and would need its own design and
-implementation there first. This plan's recommendation: ship v1 against the
-real login (accept the stated risk, mitigated by the config-gating and
-never-logged rule above), and file the API-key primitive as a follow-up
-against `amiexpress-doorserver` rather than blocking this door's curation
-feature on a change in a different repository. The controller may override
-this and require the API-key prerequisite first — that is a real, valid
-choice, just not the one this plan defaults to.
+**RULING (user, explicit sign-off, not the controller's call to make
+unilaterally — this is a real security tradeoff):** ship v1 against the
+real login, storing username+password in `DoorRepo.cfg` per the design
+above. The proper long-term answer — a scoped, revocable API-key primitive
+distinct from the human admin login — is filed as a future, separate
+project against `amiexpress-doorserver`, not blocking this plan.
 
 **Token lifecycle**: login once, lazily, the first time owner mode is
 entered in a session (not at door startup — most sysops running DoorRepo are
@@ -312,14 +304,11 @@ which field to revert (a short menu of the fields THIS door has ever
 edited this session, or just N/D/C always offered) and calls `DELETE
 /doors/:archiveName/overrides/:field`.
 
-**Open Question #2 for the controller**: should owner mode's `O` key
-double-purpose this way (enter-mode vs. edit-current-entry depending on
-context), or should edit-current-entry get its OWN distinct key (there are
-still free letters: `D`, `E`, `G`, `H`, `J`, `K`, `N`, `P`, `T`, `W`, `X`,
-`Y`, `Z`)? This plan's default (`O` does both, disambiguated by context —
-top-level browse vs. inside an entry) keeps the footer from growing another
-line, but a reviewer may prefer explicit distinct keys for clarity. Pick
-one before implementation starts.
+**RULING (controller):** accept this plan's default — `O` double-purposes
+(enter-mode from the top-level browse, edit-current-entry when already in
+owner mode and viewing an entry), disambiguated by context. Keeps the
+footer from growing a second line; low cost to split into distinct keys
+later if it proves confusing in the `make live`/emulator pass.
 
 ## New shared UI helper — Task 6
 
@@ -411,12 +400,12 @@ not a fresh ad-hoc pass):
   unreachable is not done" rule — an emulator run that never actually logs
   in, approves, or edits anything for real is not sufficient sign-off.
 
-## Open questions (both explicit — do not resolve by guessing)
+## Open questions — RESOLVED
 
-1. **Credential storage** (Task 1): ship v1 against real username+password
-   in `DoorRepo.cfg` (this plan's default), or require a new door-server
-   API-key primitive first (cross-repo prerequisite, not in this plan's
-   scope)?
-2. **`O` key double-purpose vs. distinct keys** (Task 5): context-sensitive
-   single key (this plan's default) or separate keys for "enter owner
-   mode" vs. "edit this entry"?
+1. **Credential storage**: user explicitly approved v1 against real
+   username+password in `DoorRepo.cfg` (see Task 1 ruling above).
+2. **`O` key double-purpose**: controller-ruled, accept plan default (see
+   Task 5 ruling above).
+
+Both rulings recorded in-place above; nothing left open before
+implementation.
