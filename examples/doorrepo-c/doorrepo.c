@@ -2577,10 +2577,10 @@ static int strip_ad_files(const char *install_dir, const char *files_body)
  * The ad paths come from the same /files listing the install used. That
  * listing describes the ARCHIVE, so it only names files this door itself
  * extracted - nothing a sysop added afterwards can match it. */
-static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
-                                 ansi_buf *b, char *frame, long framecap)
+static void strip_installed_door(const dr_config *cfg, const char *archive,
+                                 long junk, ansi_buf *b, char *frame, long framecap)
 {
-    const char *cmdname = index_lookup(cfg, entry->archive);
+    const char *cmdname = index_lookup(cfg, archive);
     char install_dir[256];
     char msg[320];
     int removed;
@@ -2588,7 +2588,7 @@ static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
     if (cmdname == (const char *) 0) {
         return; /* not installed by this door - S does nothing, per the footer */
     }
-    if (entry->junk == 0) {
+    if (junk == 0) {
         return; /* the server says there is nothing to strip */
     }
     if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
@@ -2604,7 +2604,7 @@ static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
     ansi_clear(b);
     ansi_flush(b);
 
-    files_load(cfg, entry->archive);
+    files_load(cfg, archive);
     if (!g_files_ok) {
         ae_put("The repository has no file listing for this archive, so there is no way", 1);
         ae_put("to tell which of its files are ads. Nothing was removed.", 1);
@@ -3059,7 +3059,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
  * something already known. Anything else in that directory - a config the
  * sysop wrote, a log the door kept - is deliberately left, and the final
  * message says so when the directory could not be removed. */
-static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
+static void uninstall_door(const dr_config *cfg, const char *archive,
                            ansi_buf *b, char *frame, long framecap,
                            const ui_geometry *g)
 {
@@ -3076,12 +3076,12 @@ static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
      * same archive by hand under another name) but ENTER is now correct. */
     cmdname[0] = '\0';
     {
-        const char *known = index_lookup(cfg, entry->archive);
+        const char *known = index_lookup(cfg, archive);
         if (known != (const char *) 0) {
             strncpy(cmdname, known, sizeof(cmdname) - 1);
             cmdname[sizeof(cmdname) - 1] = '\0';
         } else {
-            (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+            (void) flow_suggest_bbs_command(archive, cmdname, sizeof(cmdname));
         }
     }
 
@@ -3131,7 +3131,7 @@ static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
     }
     ae_put("BBS command removed.", 1);
 
-    files_load(cfg, entry->archive);
+    files_load(cfg, archive);
     if (g_files_ok) {
         const char *line = g_files;
 
@@ -3163,7 +3163,7 @@ static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
         ae_put("part of the archive and has been left alone.", 1);
     }
 
-    index_remove(cfg, entry->archive);
+    index_remove(cfg, archive);
 
     {
         char logmsg[256];
@@ -3578,7 +3578,8 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             break;
         case 's': case 'S':
             if (view.count > 0) {
-                strip_installed_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                strip_installed_door(cfg, cat->rows[view.index[selected]].archive,
+                                     cat->rows[view.index[selected]].junk, &buf, frame,
                                      (long) sizeof(frame));
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
@@ -3588,7 +3589,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             break;
         case 'u': case 'U':
             if (view.count > 0) {
-                uninstall_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                uninstall_door(cfg, cat->rows[view.index[selected]].archive, &buf, frame,
                                (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
