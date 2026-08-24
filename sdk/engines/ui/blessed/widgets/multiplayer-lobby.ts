@@ -844,13 +844,23 @@ export class MultiplayerLobby extends EventEmitter {
     let buttonLeft = 2;
     console.log('[MultiplayerLobby] Creating buttons at row', buttonTop, 'screenHeight=', screenHeight);
 
-    // Ready button — hidden permanently when readyFlow is disabled
+    // Ready button — hidden permanently when readyFlow is disabled.
+    // `inline: true` is required here, not cosmetic: Button hardcodes
+    // `touchFriendly: !isInline`, and the responsive mixin's
+    // applyTouchFriendlySizing() enforces MIN_TOUCH_HEIGHT (3 rows)
+    // unconditionally at init - it never actually checks isMobile - so a
+    // non-inline button silently grows to 3 rows tall even on an 80-col
+    // desktop terminal. That went unnoticed while the 2 extra rows below
+    // just ate into blank margin; it collided visibly once the footer
+    // hint (below) started using that margin. See browser-mode's buttons
+    // a few hundred lines down, which already use inline:true correctly.
     this.readyButton = new Button({
       parent: this.container,
       top: buttonTop,
       left: buttonLeft,
       width: 10,
       height: 1,
+      inline: true,
       content: ' Ready ',
       style: {
         bg: 'green',
@@ -875,6 +885,7 @@ export class MultiplayerLobby extends EventEmitter {
       left: buttonLeft,
       width: 10,
       height: 1,
+      inline: true,
       content: ' Start ',
       style: {
         bg: 'yellow',
@@ -896,6 +907,7 @@ export class MultiplayerLobby extends EventEmitter {
       left: buttonLeft,
       width: 10,
       height: 1,
+      inline: true,
       content: ' Leave ',
       style: {
         bg: 'red',
@@ -917,6 +929,7 @@ export class MultiplayerLobby extends EventEmitter {
         left: buttonLeft,
         width: 10,
         height: 1,
+        inline: true,
         content: ' Bots ',
         style: {
           bg: 'cyan',
@@ -942,6 +955,7 @@ export class MultiplayerLobby extends EventEmitter {
         left: buttonLeft,
         width: 14,
         height: 1,
+        inline: true,
         content: ' Force Start ',
         style: {
           bg: 'red',

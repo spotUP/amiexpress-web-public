@@ -107,4 +107,34 @@ describe('Focus visibility', () => {
       expect(button.style.fg).toBe('white');
     });
   });
+
+  describe('Button height vs the touch-friendly minimum', () => {
+    // Symptom (GRANDMASTER lobby, 2026-08-24): Button hardcodes
+    // `touchFriendly: !isInline`, and ResponsiveBehavior.applyTouchFriendlySizing()
+    // enforces MIN_TOUCH_HEIGHT (3 rows) unconditionally at init - it never
+    // checks isMobile - so a non-inline `height: 1` button silently grows to
+    // 3 rows even on an 80-col desktop terminal. The 2 extra rows ate into
+    // what looked like blank margin below the lobby's button row, until a
+    // footer hint was added there and visibly collided with them.
+    it('silently grows a non-inline height:1 button to the touch minimum', () => {
+      const button = new Button({
+        parent: screen,
+        content: ' Start ',
+        height: 1,
+      });
+
+      expect(button.height).toBe(3);
+    });
+
+    it('leaves an inline height:1 button at its declared height', () => {
+      const button = new Button({
+        parent: screen,
+        content: ' Start ',
+        height: 1,
+        inline: true,
+      });
+
+      expect(button.height).toBe(1);
+    });
+  });
 });
