@@ -13,6 +13,9 @@ import type { BreakpointName } from '../core/responsive-constants';
 import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 export class Textbox extends Element {
+  /** blessed-style widget kind; see Element.type. */
+  get type(): string { return 'textbox'; }
+
   value: string = '';
   private cursorPos: number = 0;
   private viewOffset: number = 0; // Horizontal scroll offset for long text
@@ -930,6 +933,9 @@ export class Input extends Textbox {}
  * Textarea - Multi-line text input with vertical scrolling
  */
 export class Textarea extends Element {
+  /** blessed-style widget kind; see Element.type. */
+  get type(): string { return 'textarea'; }
+
   value: string = '';
   private cursorPos: number = 0;  // Position in flat string
   private viewOffsetY: number = 0;  // Vertical scroll offset (line number)

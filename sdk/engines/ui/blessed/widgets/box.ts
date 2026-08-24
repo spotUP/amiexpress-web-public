@@ -24,6 +24,9 @@ export interface BoxOptions extends ElementOptions {
 }
 
 export class Box extends Element {
+  /** blessed-style widget kind; see Element.type. */
+  get type(): string { return 'box'; }
+
   protected _responsivePadding?: BoxOptions['responsivePadding'];
   private _originalPadding?: number | Padding;
 

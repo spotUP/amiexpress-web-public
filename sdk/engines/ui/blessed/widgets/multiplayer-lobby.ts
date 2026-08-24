@@ -999,9 +999,9 @@ export class MultiplayerLobby extends EventEmitter {
         ch,
         keyName: key?.name,
         keyFull: key?.full,
-        focused: this.parent.focused ? {
-          type: (this.parent.focused as any).type,
-          name: (this.parent.focused as any).name
+        focused: this.focusedElement() ? {
+          type: (this.focusedElement() as any).type,
+          name: (this.focusedElement() as any).name
         } : null
       });
     });
@@ -1068,7 +1068,7 @@ export class MultiplayerLobby extends EventEmitter {
     const cycleFocus = (direction: 1 | -1): void => {
       const focusTargets = getVisibleFocusTargets();
       if (focusTargets.length === 0) return;
-      const currentIndex = focusTargets.indexOf(this.parent.focused as any);
+      const currentIndex = focusTargets.indexOf(this.focusedElement() as any);
       // Focus sitting outside the cycle entirely (chat input, a tab button):
       // enter at whichever END the travel direction implies, so Shift-Tab
       // reaches the LAST target rather than jumping to the first like Tab.
@@ -1092,9 +1092,9 @@ export class MultiplayerLobby extends EventEmitter {
     // Start with player list focused so user can navigate immediately
     console.log('[MultiplayerLobby] Focusing player list, exists:', !!this.playerList, 'keys:', (this.playerList as any)?.options?.keys, 'mouse:', (this.playerList as any)?.options?.mouse);
     this.playerList?.focus();
-    console.log('[MultiplayerLobby] After focus, screen.focused:', this.parent.focused ? {
-      type: (this.parent.focused as any).type,
-      name: (this.parent.focused as any).name
+    console.log('[MultiplayerLobby] After focus, screen.focused:', this.focusedElement() ? {
+      type: (this.focusedElement() as any).type,
+      name: (this.focusedElement() as any).name
     } : null);
   }
 
@@ -2645,8 +2645,26 @@ export class MultiplayerLobby extends EventEmitter {
    * Check if a widget that needs keyboard input (List, Textbox, etc.) has focus
    * Used to prevent shortcut keys from interfering with widget navigation
    */
+  /**
+   * The element that currently holds focus, or null.
+   *
+   * Must go through Screen.getFocused(). `screen.focused` looks like the
+   * right property but is NOT the focused element: Screen extends Element,
+   * which declares `focused` as a BOOLEAN ("am I focused"), and Screen keeps
+   * the actual element in a private `_focused`. So `this.parent.focused`
+   * silently evaluated to `false` here - widgetHasFocus() bailed on its
+   * `typeof focused !== 'object'` check every single time (letting chat
+   * keystrokes trigger lobby shortcuts), and the Tab cycle's indexOf() never
+   * matched, so Tab kept restarting from the same end instead of advancing
+   * (both reported live 2026-08-25).
+   */
+  private focusedElement(): any {
+    const screen = this.parent as any;
+    return typeof screen?.getFocused === 'function' ? screen.getFocused() : null;
+  }
+
   private widgetHasFocus(): boolean {
-    const focused = this.parent.focused;
+    const focused = this.focusedElement();
     console.log('[MultiplayerLobby] widgetHasFocus check - focused:', focused ? {
       type: (focused as any).type,
       name: (focused as any).name,

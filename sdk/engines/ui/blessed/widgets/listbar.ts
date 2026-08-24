@@ -37,6 +37,9 @@ export interface ListbarItem {
 }
 
 export class Listbar extends Box {
+  /** blessed-style widget kind; see Element.type. */
+  get type(): string { return 'listbar'; }
+
   private items: Map<string, { button: Button; item: ListbarItem }> = new Map();
   private selectedIndex: number = 0;
   private itemKeys: string[] = [];

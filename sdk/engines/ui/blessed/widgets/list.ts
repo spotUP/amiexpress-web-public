@@ -18,6 +18,9 @@ import { MIN_TOUCH_HEIGHT, SWIPE_THRESHOLD } from '../core/responsive-constants'
 const ESC = String.fromCharCode(27);
 
 export class List extends Element {
+  /** blessed-style widget kind; see Element.type. */
+  get type(): string { return 'list'; }
+
   items: string[] = [];
   selected: number = 0;
   private previousSelected: number = -1;

@@ -39,6 +39,9 @@ export interface ExtendedButtonOptions extends ButtonOptions {
 }
 
 export class Button extends Element {
+  /** blessed-style widget kind; see Element.type. */
+  get type(): string { return 'button'; }
+
   private _tapFeedback: boolean;
   private _tapFeedbackDuration: number;
   private _desktopHeight: number | string | undefined;

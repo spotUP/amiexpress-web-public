@@ -45,6 +45,22 @@ export class Element extends EventEmitter {
   private _contentDirty: boolean = false;
   private _lastParsedWidth: number = 0;  // Track width for content reflow on resize
 
+  /**
+   * Widget kind, blessed-style ('list', 'textbox', 'button', ...).
+   *
+   * Subclasses set this in their constructor. Callers use it to ask "is a
+   * text-entry widget focused right now" without importing every widget
+   * class - MultiplayerLobby.widgetHasFocus() has always read
+   * `focused.type`, but nothing ever DEFINED it, so it was permanently
+   * undefined and that guard always returned false. Every single-letter
+   * lobby shortcut therefore fired while the user was typing in the chat
+   * box: 'o' jumped to the Game tab, 's' started the match, and 'q'/ESC
+   * left the lobby outright (reported live 2026-08-25).
+   */
+  get type(): string {
+    return 'element';
+  }
+
   // State
   visible: boolean = true;
   /**
