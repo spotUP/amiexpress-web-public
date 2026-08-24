@@ -701,6 +701,13 @@ export {
 export { ClientDoor as Door };
 
 /**
+ * Export the cell-diffing back buffer for doors that repaint continuously.
+ * Emitting only changed cells is what keeps a 30 fps door from flooding the
+ * BBS round trip - see screen-buffer.ts for the measurements behind it.
+ */
+export { ScreenBuffer, type ScreenBufferOptions } from './screen-buffer';
+
+/**
  * Export UIEngine for client doors
  */
 export { UIEngine } from '../engines/ui/ui-engine';
