@@ -26,6 +26,7 @@ const TEST_MODULES = [
   './tetrinet-hold.test',
   './tetrinet-specials-input.test',
   './tetrinet-ai.test',
+  './tetrinet-protocol.test',
   './tetrinet-layout.test',
 ];
 

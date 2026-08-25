@@ -488,8 +488,15 @@ class TetriNetEngine {
         return tetrinet_pieces_1.TETRINET_PIECE_ORDER[0];
     }
     getRandomRotation(type) {
-        const count = (0, tetrinet_pieces_1.getRotationCount)(type);
-        return this.nextRandom(Math.max(1, count));
+        // The protocol draws the orientation from a range of FOUR for every
+        // piece, whatever its symmetry, then maps it onto the orientations that
+        // piece actually has. Drawing from the piece's own rotation count
+        // consumed the same LCG step - so the BLOCK sequence still lined up
+        // with other clients - but produced a different orientation for
+        // anything that is not four-way, which is visible in a 1.14
+        // same-blocks game.
+        const count = Math.max(1, (0, tetrinet_pieces_1.getRotationCount)(type));
+        return this.nextRandom(4) % count;
     }
     getRandomSpecial() {
         const specials = [
