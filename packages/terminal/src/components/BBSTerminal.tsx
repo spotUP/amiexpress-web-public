@@ -2341,8 +2341,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // a client door whose whole UI is mouse-driven (reported live
       // 2026-08-25). Only doors that set capturePointer in their manifest
       // own the pointer; leaving game mode always gives it back.
-      applyPointerCapture(enabled && capturePointer.current);
+      // Entering game mode does NOT hide the pointer. The pointer belongs to
+      // whichever door is running, and only its manifest says so - which
+      // arrives moments later on door:load-client. Applying the REMEMBERED
+      // value here meant a door that never declares capture (LiveChat) had
+      // the pointer taken away by whatever ran before it, because game-mode
+      // fires first and carries no manifest. That is the "still no mouse
+      // pointer in LiveChat" that survived two earlier fixes: both addressed
+      // ways the flag was left set, and this is the line that USED it.
       if (enabled) {
+        capturePointer.current = false;
+        applyPointerCapture(false);
         term.clearSelection();
       } else {
         capturePointer.current = false;

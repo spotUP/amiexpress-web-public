@@ -1669,6 +1669,17 @@ console.error(`Unknown door type: ${door.type}`);
         );
     }
 
+    // A door leaves a CLEAN screen behind it.
+    //
+    // The same contract 68K doors already get on launch (see the ESC[r 2J H
+    // above launchAmigaDoor), applied on the way out for every door. Without
+    // it a door's last frame stays on the terminal, and anything that does
+    // not repaint every cell shows it through: a TetriNET piece appeared
+    // over LiveChat's UI after the two were run in sequence (reported with a
+    // screenshot 2026-08-25). Cheap, and it removes the whole class rather
+    // than one path through it.
+    emitText(socket, '\x1b[r\x1b[2J\x1b[H');
+
     // Clean up drop files after door exit
     doorDropFileManager.cleanupDropFiles(nodeId);
     callersLogManager.logDoorExit(nodeId, door.name);

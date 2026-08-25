@@ -865,6 +865,14 @@ export class TetriNetScreen {
         // landing shadow and the motion blur now drawn per cell it was
         // enough to make the blur stutter over a BBS connection. Input
         // still feels immediate: every action calls renderNow().
+        // A destroyed screen means the door is gone: stop, rather than
+        // painting into a terminal that now belongs to something else.
+        if ((this.screen as any).destroyed) {
+          clearInterval(updateInterval);
+          this.running = false;
+          return;
+        }
+
         if (now - this.lastRender >= TetriNetScreen.RENDER_INTERVAL) {
           this.render();
           this.lastRender = now;
