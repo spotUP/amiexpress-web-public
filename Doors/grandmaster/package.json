@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "runtime": "hybrid",
+  "capturePointer": true,
   "client": {
     "entry": "./client.ts",
     "bundle": "./dist/client.bundle.js"

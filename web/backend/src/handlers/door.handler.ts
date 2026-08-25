@@ -4112,6 +4112,12 @@ console.log(`[executeClientDoor] Set doorInputHandler (no-op)`);
         name: manifest.name,
         version: manifest.version,
         runtime: manifest.runtime,
+        // Real-time games own the pointer: the cursor is hidden over the
+        // playfield and xterm's text selection is suppressed. That used to
+        // follow game mode, which this function switches on for EVERY
+        // client door - so LiveChat, a client door with a mouse-driven UI,
+        // lost its cursor and its clicks. Doors declare it now.
+        capturePointer: manifest.capturePointer === true,
       },
     });
 

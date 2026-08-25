@@ -6,6 +6,7 @@
   "main": "dist/server.js",
   "author": "AmiExpress Team",
   "runtime": "hybrid",
+  "capturePointer": true,
   "client": {
     "entry": "./client.ts",
     "bundle": "./dist/client.bundle.js"

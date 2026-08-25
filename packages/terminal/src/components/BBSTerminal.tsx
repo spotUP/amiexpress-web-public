@@ -194,6 +194,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // Pointer-lock virtual pointer (game mode): while the lock holds, real
   // clientX/Y freeze and movementX/Y carry the deltas - this ref is the
   // accumulated position the game keeps steering with.
+  /** Whether the running door declared that it owns the pointer. */
+  const capturePointer = useRef<boolean>(false);
   const lockedPointer = useRef<{ x: number; y: number } | null>(null);
   const guruTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const guruPhaseRef = useRef<number>(0);
@@ -1214,6 +1216,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (keyRepeatTimers.current[key]) {
         clearTimeout(keyRepeatTimers.current[key]);
         delete keyRepeatTimers.current[key];
+      }
+    };
+
+    // Cursor, text selection and xterm pointer events, in one place so the
+    // game-mode handler and door:load-client cannot drift apart.
+    const applyPointerCapture = (capture: boolean) => {
+      const xtermEl = terminalRef.current?.querySelector('.xterm') as HTMLElement | null;
+      if (xtermEl) {
+        xtermEl.style.pointerEvents = capture ? 'none' : '';
+      }
+      if (terminalRef.current) {
+        terminalRef.current.style.cursor = capture ? 'none' : '';
+        terminalRef.current.style.userSelect = capture ? 'none' : '';
+        (terminalRef.current.style as any).webkitUserSelect = capture ? 'none' : '';
       }
     };
 
@@ -2309,24 +2325,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
       keyRepeatTimers.current = {};
 
-      // Real-time games own the pointer: hide it over the playfield and
-      // keep xterm from starting a text selection on click-drag. Game-mode
-      // doors receive mouse input through our socket events on the parent
-      // container, so cutting pointer events to the xterm layer changes
-      // nothing for them - while blessed TUI doors (not game mode) keep
-      // xterm's native mouse tracking and text selection untouched.
-      const xtermEl = terminalRef.current?.querySelector('.xterm') as HTMLElement | null;
-      if (xtermEl) {
-        xtermEl.style.pointerEvents = enabled ? 'none' : '';
-      }
-      if (terminalRef.current) {
-        terminalRef.current.style.cursor = enabled ? 'none' : '';
-        terminalRef.current.style.userSelect = enabled ? 'none' : '';
-        (terminalRef.current.style as any).webkitUserSelect = enabled ? 'none' : '';
-      }
+      // Pointer capture follows the DOOR's declaration, not game mode.
+      //
+      // Game mode means "send raw key-down/key-up", and executeClientDoor
+      // switches it on for EVERY client door - so tying the pointer to it
+      // took the cursor, the clicks and text selection away from LiveChat,
+      // a client door whose whole UI is mouse-driven (reported live
+      // 2026-08-25). Only doors that set capturePointer in their manifest
+      // own the pointer; leaving game mode always gives it back.
+      applyPointerCapture(enabled && capturePointer.current);
       if (enabled) {
         term.clearSelection();
       } else {
+        capturePointer.current = false;
         lockedPointer.current = null;
         if (document.pointerLockElement) {
           document.exitPointerLock?.();
@@ -2335,6 +2346,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
+      // Real-time games declare this; TUI doors like LiveChat do not, and
+      // keep their cursor, their clicks and text selection.
+      capturePointer.current = data.manifest?.capturePointer === true;
+      applyPointerCapture(capturePointer.current);
       console.log(`[ClientDoor] Loading door: ${data.doorId}`);
 
       const doorName = data.manifest?.name || data.doorId;
