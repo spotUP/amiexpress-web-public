@@ -177,7 +177,8 @@ export default function ChatTerminal() {
       fitAddon.fit();
 
       // Get post-fit dimensions
-      let { cols, rows } = term;
+      let cols = term.cols;
+      const rows = term.rows;
       console.log(`[ChatTerminal] FitAddon: ${preFitCols}x${preFitRows} -> ${cols}x${rows}`);
 
       // In fixed mode, cap width at 80 columns for ANSI art compatibility

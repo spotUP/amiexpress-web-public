@@ -457,6 +457,9 @@ export function containsRIPCommands(input: string): boolean {
  * [1! = Enter pixel mode
  * [2! = Return to text mode
  */
+// RIP mode switches ARE escape sequences, so matching the escape character
+// is deliberate rather than the accident no-control-regex looks for.
+/* eslint-disable no-control-regex */
 export function parseRIPModeEscape(input: string): { mode: 'pixel' | 'text' | null; remaining: string } {
   if (input.includes('\x1b[1!') || input.includes('[1!')) {
     const remaining = input.replace(/\x1b?\[1!/g, '');
@@ -468,3 +471,4 @@ export function parseRIPModeEscape(input: string): { mode: 'pixel' | 'text' | nu
   }
   return { mode: null, remaining: input };
 }
+/* eslint-enable no-control-regex */
