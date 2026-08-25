@@ -18,6 +18,7 @@ const TEST_MODULES = [
   './network-wiring.test',
   './board-clear.test',
   './lockout.test',
+  './hard-drop-blur.test',
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',

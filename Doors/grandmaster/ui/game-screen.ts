@@ -684,8 +684,23 @@ export class GameScreen {
     // Detect board changes via hash
     const boardHash = this.getBoardHash(state);
     const isShaking = this.shaker.isShaking();
-    
-    if (boardHash !== this.lastBoardHash || this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || isShaking) {
+
+    // A fading hard-drop trail is an ANIMATION and has to keep the board
+    // repainting the way particles and shake do. It did not, so the streak
+    // was painted once by the frame that locked the piece and then FROZE:
+    // the piece is down, the hash stops changing, and the gate below blocked
+    // every later frame until the next piece moved - at which point the
+    // trail vanished in one step instead of fading. Reported live as "the
+    // motion blur freezes for a bit on hard drops" (2026-08-25).
+    //
+    // Expiry belongs here rather than in renderBoard() for the same reason:
+    // renderBoard only runs when the gate passes, so a blocked gate stopped
+    // the trail expiring at all.
+    const hadTrails = this.hardDropTrails.length > 0;
+    this.hardDropTrails = expireTrails(this.hardDropTrails, Date.now());
+    const hasTrails = this.hardDropTrails.length > 0;
+
+    if (boardHash !== this.lastBoardHash || hasTrails || hadTrails || this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || isShaking) {
       // Apply shake offset
       if (isShaking) {
         const offset = this.shaker.getOffset();
@@ -1231,7 +1246,7 @@ export class GameScreen {
     
     let content = '';
     const now = Date.now();
-    this.hardDropTrails = expireTrails(this.hardDropTrails, now);
+    // Trails are expired in render(), before the repaint gate.
 
     let pieceShape: number[][] | null = null;
     let ghostY: number | null = null;
