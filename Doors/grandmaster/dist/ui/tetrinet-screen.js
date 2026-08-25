@@ -14,7 +14,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TetriNetScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const config_1 = require("../input/config");
 const inventory_panel_1 = require("./tetrinet/inventory-panel");
 const target_selector_1 = require("./tetrinet/target-selector");
 const opponent_boards_1 = require("./tetrinet/opponent-boards");
@@ -45,8 +44,6 @@ class TetriNetScreen {
          */
         this.deathOrder = [];
         this.knownAlive = new Set();
-        /** TGM key layout, restored when the TetriNET game ends. */
-        this.previousKeys = null;
         this.screen = options.screen;
         this.engine = options.engine;
         this.inputHandler = options.inputHandler;
@@ -698,12 +695,6 @@ class TetriNetScreen {
      * Setup input handlers
      */
     setupInput() {
-        // TetriNET's own key layout for the duration of the game. The TGM
-        // layout collides with it head-on - Space is rotate-180 there, Enter is
-        // hard drop and D is move-right - so the reference client's special
-        // keys had nowhere to live.
-        this.previousKeys = this.inputHandler.getConfig();
-        this.inputHandler.updateConfig(config_1.TETRINET_KEYS);
         // Movement - confusion reversal is handled by engine.
         // Sound effects match game-screen/versus-screen: these bindings used to
         // be bare engine calls, so movement, rotation, hard drop and hold were
@@ -1103,11 +1094,6 @@ class TetriNetScreen {
      */
     cleanup() {
         this.running = false;
-        // Hand the TGM key layout back to the rest of the door.
-        if (this.previousKeys) {
-            this.inputHandler.updateConfig(this.previousKeys);
-            this.previousKeys = null;
-        }
         // Disable mouse tracking
         this.screen.program.disableMouse();
         this.unsubscribers.forEach(unsub => unsub());

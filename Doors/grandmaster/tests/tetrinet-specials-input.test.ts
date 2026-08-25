@@ -23,7 +23,7 @@ import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from '../ui/tetrinet-screen';
 import { TetriNetAI } from '../ai/tetrinet-ai';
-import { keyToAction, TETRINET_KEYS, DEFAULT_KEYS } from '../input/config';
+import { keyToAction, DEFAULT_KEYS } from '../input/config';
 
 const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
 const options: any = { nextPieceDelayMs: 0, delayBeforeSuddenDeath: 0 };
@@ -149,29 +149,34 @@ export async function anEmptyInventoryHitsNobody(): Promise<void> {
   } finally { m.done(); }
 }
 
-export async function theTetriNetKeyLayoutIsInstalledWhilePlaying(): Promise<void> {
-  const m = match();
-  try {
-    assert.strictEqual(m.input.config, TETRINET_KEYS,
-      'the game installs the TetriNET layout');
-    m.scr.cleanup();
-    assert.strictEqual(m.input.config, DEFAULT_KEYS,
-      'and hands the TGM layout back when it ends');
-  } finally { m.done(); }
+export async function theKeyLayoutIsUniversal(): Promise<void> {
+  // There is ONE key map for the whole door. TetriNET briefly installed a
+  // layout of its own for the duration of a game, which meant the same
+  // physical key did different things in different modes - and left the
+  // on-screen controls on mobile unable to know which map was live.
+  const source = readFileSync(join(__dirname, '..', 'ui', 'tetrinet-screen.ts'), 'utf8');
+
+  assert.ok(!/updateConfig\(/.test(source),
+    'the TetriNET screen must not swap the key layout out from under the door');
+  assert.ok(!/TETRINET_KEYS/.test(source),
+    'and there must be no mode-specific layout left to install');
 }
 
-export async function theReferenceKeysMapToTheRightActions(): Promise<void> {
-  assert.strictEqual(keyToAction('1', TETRINET_KEYS), 'use_special_1');
-  assert.strictEqual(keyToAction('6', TETRINET_KEYS), 'use_special_6');
-  assert.strictEqual(keyToAction('return', TETRINET_KEYS), 'use_special_self');
-  assert.strictEqual(keyToAction('tab', TETRINET_KEYS), 'use_special_random');
-  assert.strictEqual(keyToAction('d', TETRINET_KEYS), 'discard_special');
-  assert.strictEqual(keyToAction('space', TETRINET_KEYS), 'hard_drop');
-  assert.strictEqual(keyToAction('h', TETRINET_KEYS), 'hold');
+export async function theSpecialKeysLiveInTheOneLayout(): Promise<void> {
+  // The reference client uses D to discard and Enter for use-on-self, but
+  // both are taken in this door (D moves right, Enter hard drops), so those
+  // two sit on keys that are free in every mode.
+  assert.strictEqual(keyToAction('1', DEFAULT_KEYS), 'use_special_1');
+  assert.strictEqual(keyToAction('6', DEFAULT_KEYS), 'use_special_6');
+  assert.strictEqual(keyToAction('0', DEFAULT_KEYS), 'use_special_self');
+  assert.strictEqual(keyToAction('tab', DEFAULT_KEYS), 'use_special_random');
+  assert.strictEqual(keyToAction('backspace', DEFAULT_KEYS), 'discard_special');
 
-  // And the TGM layout is untouched by any of it.
+  // And nothing that already had a meaning lost it.
   assert.strictEqual(keyToAction('d', DEFAULT_KEYS), 'right');
   assert.strictEqual(keyToAction('space', DEFAULT_KEYS), 'rotate_180');
+  assert.strictEqual(keyToAction('return', DEFAULT_KEYS), 'hard_drop');
+  assert.strictEqual(keyToAction('c', DEFAULT_KEYS), 'hold');
 }
 
 export async function thePanelDescribesKeysThatExist(): Promise<void> {

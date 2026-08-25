@@ -52,33 +52,14 @@ export const DEFAULT_KEYS: KeyConfig = {
   sonicDrop: [],
   hold:      ['c', 'lshift', 'rshift'],
   pause:     ['p'],
-};
-
-/**
- * TetriNET layout, copied from the reference client
- * (TetriNET2.Client.ConsoleApp): arrows to move, Up to rotate, Space to
- * drop, H to hold, D to discard a special, 1-6 to use one on that slot,
- * Enter on yourself, Tab on a random opponent.
- *
- * It replaces the TGM layout while a TetriNET game is running, because the
- * two collide: TGM binds Space to rotate-180, Enter to hard drop and D to
- * move right, so the reference's special keys had nowhere to live.
- */
-export const TETRINET_KEYS: KeyConfig = {
-  left:      ['left'],
-  right:     ['right'],
-  rotateCW:  ['up', 'x'],
-  rotateCCW: ['z', 'lcontrol', 'rcontrol'],
-  rotate180: [],
-  softDrop:  ['down'],
-  hardDrop:  ['space'],
-  sonicDrop: [],
-  hold:      ['h', 'c'],
-  pause:     ['p'],
+  // TetriNET specials, in the SAME layout as everything else - the door has
+  // one key map, not one per mode. The reference client puts discard on D
+  // and use-on-self on Enter, but both are taken here (D moves right, Enter
+  // hard drops), so those two move to keys that are free everywhere.
   useSpecialOn: [['1'], ['2'], ['3'], ['4'], ['5'], ['6']],
-  useSpecialSelf: ['return', 'enter'],
+  useSpecialSelf: ['0'],
   useSpecialRandom: ['tab'],
-  discardSpecial: ['d'],
+  discardSpecial: ['backspace', 'delete'],
 };
 
 /**

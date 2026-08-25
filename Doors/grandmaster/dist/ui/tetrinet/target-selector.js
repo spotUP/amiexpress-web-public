@@ -194,7 +194,7 @@ class TargetSelector {
             }
         }
         // Instructions
-        content += '\n{gray-fg}1-6 use  ENTER self  TAB random  D drop{/gray-fg}';
+        content += '\n{gray-fg}1-6 use  0 self  TAB random  BS drop{/gray-fg}';
         this.box.setContent(content.trim());
     }
     /**

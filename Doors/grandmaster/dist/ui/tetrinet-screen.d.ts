@@ -82,8 +82,6 @@ export declare class TetriNetScreen {
      */
     private deathOrder;
     private knownAlive;
-    /** TGM key layout, restored when the TetriNET game ends. */
-    private previousKeys;
     constructor(options: TetriNetScreenOptions);
     /**
      * The special/garbage ROUTER - the layer TetriNET never had.
