@@ -124,3 +124,41 @@ export function fitFontSize(
   measure(winner);
   return winner;
 }
+
+/** What a viewport reports about the space actually on screen. */
+export interface ViewportLike {
+  innerHeight: number;
+  innerWidth: number;
+  visualViewport?: { height: number; width: number } | null;
+}
+
+/**
+ * The height the terminal may actually use.
+ *
+ * NOT window.innerHeight on a phone: that is the LAYOUT viewport, which on
+ * iOS includes the strip beneath Safari's floating address bar, so sizing
+ * against it puts the top rows underneath the bar where they cannot be read
+ * (reported with a screenshot, 2026-08-25). The VISUAL viewport is what is
+ * genuinely visible, and it shrinks as browser chrome and the keyboard
+ * appear.
+ *
+ * Falls back to innerHeight where visualViewport is unsupported, and ignores
+ * a visual viewport that is taller than the layout one (which only happens
+ * mid-pinch-zoom, and would hand back space that is not there).
+ */
+export function visibleHeight(view: ViewportLike): number {
+  const visual = view.visualViewport?.height;
+  if (typeof visual !== 'number' || !Number.isFinite(visual) || visual <= 0) {
+    return view.innerHeight;
+  }
+  return Math.min(visual, view.innerHeight);
+}
+
+/** The same reasoning horizontally. */
+export function visibleWidth(view: ViewportLike): number {
+  const visual = view.visualViewport?.width;
+  if (typeof visual !== 'number' || !Number.isFinite(visual) || visual <= 0) {
+    return view.innerWidth;
+  }
+  return Math.min(visual, view.innerWidth);
+}

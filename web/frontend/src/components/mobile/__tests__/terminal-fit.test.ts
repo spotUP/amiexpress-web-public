@@ -11,7 +11,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { fitFontSize, BBS_COLS, BBS_ROWS, DEFAULT_FIT_LIMITS, type Size } from '../terminal-fit';
+import {
+  fitFontSize,
+  visibleHeight,
+  visibleWidth,
+  BBS_COLS,
+  BBS_ROWS,
+  DEFAULT_FIT_LIMITS,
+  type Size,
+} from '../terminal-fit';
 
 /** mOsOul and the Topaz faces are half-width bitmap fonts. */
 const CHAR_ASPECT = 0.5;
@@ -123,5 +131,42 @@ describe('fitFontSize', () => {
     const fontSize = fitFontSize(11, { width: 0, height: 0 }, xtermMeasure(3));
 
     expect(fontSize).toBe(11);
+  });
+});
+
+describe('the height the terminal may use', () => {
+  // Reported with a screenshot 2026-08-25: on an iPhone the top rows sat
+  // under Safari's floating address bar. The layout viewport runs behind
+  // that bar; the visual viewport is what is genuinely on screen.
+  it('uses the visible viewport when the browser chrome overlaps the page', () => {
+    const view = { innerHeight: 844, innerWidth: 390, visualViewport: { height: 750, width: 390 } };
+
+    expect(visibleHeight(view)).toBe(750);
+  });
+
+  it('shrinks further when the keyboard is up', () => {
+    const view = { innerHeight: 844, innerWidth: 390, visualViewport: { height: 420, width: 390 } };
+
+    expect(visibleHeight(view)).toBe(420);
+  });
+
+  it('falls back to the layout viewport where visualViewport is unsupported', () => {
+    const view = { innerHeight: 844, innerWidth: 390, visualViewport: null };
+
+    expect(visibleHeight(view)).toBe(844);
+  });
+
+  it('never hands back more space than the page has', () => {
+    // Mid-pinch-zoom the visual viewport can report taller than the layout.
+    const view = { innerHeight: 844, innerWidth: 390, visualViewport: { height: 1200, width: 390 } };
+
+    expect(visibleHeight(view)).toBe(844);
+  });
+
+  it('ignores a nonsense report rather than sizing to zero', () => {
+    const view = { innerHeight: 844, innerWidth: 390, visualViewport: { height: 0, width: 0 } };
+
+    expect(visibleHeight(view)).toBe(844);
+    expect(visibleWidth(view)).toBe(390);
   });
 });

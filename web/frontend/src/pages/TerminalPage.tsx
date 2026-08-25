@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
+import { visibleHeight } from '../components/mobile/terminal-fit';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
 import { MobileGameGestures } from '../components/mobile/MobileGameGestures';
 import {
@@ -98,7 +99,10 @@ export function TerminalPage(): JSX.Element {
 
     // Host width already excludes the safe-area padding the page applies.
     const availableWidth = host.clientWidth || window.innerWidth;
-    const availableHeight = window.innerHeight - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0);
+    // The VISIBLE viewport, not the layout one: on iOS the layout viewport
+    // runs underneath Safari's floating address bar, so sizing against it
+    // hid the top rows behind the bar.
+    const availableHeight = visibleHeight(window) - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0);
 
     const fitted = fitFontSize(
       fontSizeRef.current,

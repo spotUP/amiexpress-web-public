@@ -20,6 +20,14 @@
   overflow: hidden;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  /*
+   * The top inset was missing, so on a phone the first rows sat under the
+   * notch and Safari's floating address bar (reported with a screenshot,
+   * 2026-08-25). The height budget now comes from the VISUAL viewport too -
+   * see visibleHeight() in components/mobile/terminal-fit.ts - and these two
+   * together are what keeps the top of the screen readable.
+   */
+  padding-top: env(safe-area-inset-top);
 }
 
 /*
