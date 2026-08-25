@@ -1468,7 +1468,13 @@ console.error('[BBSApi.deleteDoor] Error:', error);
         userId: (this.session.user as any)?.id,
         gdprConsented: !!(this.session.user as any)?.gdprConsentAt,
         nodeId: this.session.nodeId || 0,
-        doorName: this.session.commandText || 'Door',
+        // The door's REGISTERED command. commandText is the raw input line -
+        // it carries arguments ("GMASTER -X") and whatever alias or menu
+        // command was used to launch, none of which a per-door webhook
+        // filter can match. Falls back to the first word of the input.
+        doorName: this.session.currentDoorName
+          || this.session.commandText?.split(' ')[0]
+          || 'Door',
         eventType,
         message,
         data,

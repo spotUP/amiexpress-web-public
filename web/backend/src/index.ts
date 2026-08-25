@@ -362,6 +362,14 @@ export interface BBSSession {
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
   gameModeEnabled?: boolean; // Whether game mode is active (raw keydown/keyup events)
   currentDoorType?: string; // Type of currently running door (XIM, AMI, TS, etc.)
+  /**
+   * Registered command of the door currently running (e.g. "GMASTER").
+   * Door events are attributed with this rather than commandText, which is
+   * whatever the user typed - an alias, a differently-named menu entry or a
+   * command with arguments all produced a door name that per-door webhook
+   * filters could not match.
+   */
+  currentDoorName?: string;
   keyRepeatManager?:
     | import("./services/KeyRepeatManager").KeyRepeatManager
     | null; // Backend key repeat for 68K doors

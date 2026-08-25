@@ -1544,6 +1544,11 @@ export async function applyPostDoorMenuAction(
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
 console.log('Executing door:', door.name);
 
+  // Attribute this door's events to its REGISTERED command, not to whatever
+  // the user typed. session.commandText carries aliases and arguments, and
+  // per-door webhook filters match the door name exactly.
+  session.currentDoorName = door.command || door.id;
+
   const nodeId = session.nodeId || 0;
   let doorSession: DoorSession | null = null;
   const originalSubState = session.subState;
