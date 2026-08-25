@@ -50,6 +50,8 @@ export interface PlayerInfo {
 export interface GameUpdate {
   playerId: string;
   playerName?: string;
+  /** false = this player topped out; receivers drop them from the tracker. */
+  alive?: boolean;
   timestamp: number;
   board: Board;
   level: number;
@@ -165,6 +167,19 @@ export class GrandmasterNetworkManager extends EventEmitter {
       this.syncMatchStateFromLobby();
       // Signal adapter so lobby widget can check auto-start
       this.emit('player:ready', { playerId: '', ready: true });
+    });
+
+    // Lobby chat: the broker has routed 'lobby:chat' all along - the door
+    // simply never sent to it or listened. Forward incoming messages in the
+    // widget's LobbyChatMessage shape.
+    lobby.on('lobby:chat', (msg: any) => {
+      this.emit('chat:message', {
+        id: msg.id ?? `chat-${Date.now()}`,
+        playerId: String(msg.playerId ?? ''),
+        playerName: msg.username ?? 'Player',
+        text: msg.message ?? '',
+        timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
+      });
     });
 
     // Game starting — broker fires this on ALL connected nodes
@@ -406,12 +421,13 @@ export class GrandmasterNetworkManager extends EventEmitter {
   /**
    * Send game state update
    */
-  sendUpdate(gameState: GameState): void {
+  sendUpdate(gameState: GameState, alive: boolean = true): void {
     if (!this.localPlayerId) return;
 
     const update: GameUpdate = {
       playerId: this.localPlayerId,
       playerName: this.localPlayerName,
+      alive,
       timestamp: Date.now(),
       board: gameState.board,
       level: gameState.level,
@@ -426,11 +442,21 @@ export class GrandmasterNetworkManager extends EventEmitter {
     this.network.connection.getSocket()?.emit('game:update', update);
   }
 
+  /** Send a lobby chat message via the broker. */
+  sendLobbyChat(message: string): void {
+    this.network.lobby.chat(message);
+  }
+
   /**
    * Send attack to opponent(s)
    */
   sendAttack(attack: AttackPacket): void {
     this.network.connection.getSocket()?.emit('game:attack', attack);
+  }
+
+  /** Local player's id, as used in game:update/game:attack packets. */
+  getLocalPlayerId(): string | null {
+    return this.localPlayerId;
   }
 
   /**

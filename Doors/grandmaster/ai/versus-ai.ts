@@ -6,6 +6,7 @@
  */
 
 import { GameEngine } from '../core/game';
+import { AttackManager } from '../network/attack-system';
 import { BotPlayer, type BotDifficulty } from './bot-player';
 import type { PlayerSettings, Board } from '../core/types';
 import type { SoundEngine } from '../audio/sounds';
@@ -20,6 +21,13 @@ export interface AIOpponent {
   bot: BotPlayer;
   difficulty: BotDifficulty;
   alive: boolean;
+  /**
+   * This AI's own attack manager. Without one the engine's attack hooks are
+   * dead (both are guarded by `if (this.attackManager)` in core/game.ts):
+   * the AI could neither send garbage on its line clears nor receive any -
+   * which is why versus garbage never appeared in CPU battles.
+   */
+  attackManager: AttackManager;
 }
 
 /**
@@ -66,8 +74,10 @@ export class VersusAI {
     this.opponents = [];
 
     for (let i = 0; i < count; i++) {
-      // Create independent game engine for this AI
-      const engine = new GameEngine('versus', settings, sounds);
+      // Each AI gets its own attack manager wired into its engine so line
+      // clears generate attacks and queued garbage is applied on lock.
+      const attackManager = new AttackManager();
+      const engine = new GameEngine('versus', settings, sounds, attackManager);
 
       // Create bot controller for this AI's engine
       const bot = new BotPlayer(difficulty);
@@ -79,6 +89,7 @@ export class VersusAI {
         bot,
         difficulty,
         alive: true,
+        attackManager,
       };
 
       // Start AI engine

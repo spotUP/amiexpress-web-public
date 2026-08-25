@@ -17,7 +17,8 @@
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist",
     "copy-assets": "mkdir -p dist/server/database && cp server/database/schema.sql dist/server/database/",
-    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=iife --platform=browser --target=es2020 --minify --external:fs --external:path --external:net --external:child_process --external:crypto"
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=iife --platform=browser --target=es2020 --minify --external:fs --external:path --external:net --external:child_process --external:crypto",
+    "test": "tsx tests/run-tests.ts"
   },
   "keywords": [
     "tetris",

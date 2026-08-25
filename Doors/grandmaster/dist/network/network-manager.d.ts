@@ -42,6 +42,8 @@ export interface PlayerInfo {
 export interface GameUpdate {
     playerId: string;
     playerName?: string;
+    /** false = this player topped out; receivers drop them from the tracker. */
+    alive?: boolean;
     timestamp: number;
     board: Board;
     level: number;
@@ -136,11 +138,15 @@ export declare class GrandmasterNetworkManager extends EventEmitter {
     /**
      * Send game state update
      */
-    sendUpdate(gameState: GameState): void;
+    sendUpdate(gameState: GameState, alive?: boolean): void;
+    /** Send a lobby chat message via the broker. */
+    sendLobbyChat(message: string): void;
     /**
      * Send attack to opponent(s)
      */
     sendAttack(attack: AttackPacket): void;
+    /** Local player's id, as used in game:update/game:attack packets. */
+    getLocalPlayerId(): string | null;
     /**
      * Get current opponent states
      */

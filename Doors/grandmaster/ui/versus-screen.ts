@@ -62,9 +62,14 @@ export class VersusScreen {
   private minimapPanel: any;       // battle-royale minimap panel
   private minimapContainer: any;   // inner container for minimap widgets
   private garbageIndicator: any;
-  private attackIndicator: any;
   private statsBox: any;
   private lastOpponentCount: number = -1;  // tracks layout switch
+  /** Match outcome, readable after run() resolves. */
+  public victory: boolean = false;
+  /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
+  private garbageEnabled: boolean = true;
+  /** True once at least one networked opponent has been seen (win detection). */
+  private sawNetworkOpponent: boolean = false;
 
   // Board overlay compositor for inline effects (same as game-screen)
   private boardOverlay: (string | null)[][] = [];
@@ -149,6 +154,82 @@ export class VersusScreen {
     if (this.network) {
       this.setupNetworkListeners();
     }
+    this.setupAttackRouting();
+  }
+
+  /** Lobby "Garbage Lines" toggle. Call before run(). */
+  setGarbageEnabled(enabled: boolean): void {
+    this.garbageEnabled = enabled;
+  }
+
+  /**
+   * The attack ROUTER - the missing layer this whole feature dead-ended on.
+   *
+   * Every engine (human and AI) has a complete AttackManager: line clears
+   * produce attacks via onAttackSent, and queued garbage is applied to the
+   * board on lock. But nothing ever CONNECTED them: the human's only
+   * onAttackSent listener played a sound (and in CPU battle wasn't even
+   * registered, since setupNetworkListeners was gated on `this.network`),
+   * receiveAttack() had zero callers repo-wide, and the AI engines had no
+   * attack managers at all. Result: "No incoming attack" was a permanent
+   * state and the lobby's garbage setting described nothing.
+   */
+  private setupAttackRouting(): void {
+    // Human attacks out
+    this.attackManager.onAttackSentCallback((lines: number, _type: string) => {
+      this.sounds.playSfx('attack');
+      if (!this.garbageEnabled) return;
+
+      if (this.network) {
+        // Networked: broadcast; the broker fans it out to lobby members and
+        // receivers filter their own id.
+        this.network.sendAttack({
+          from: this.localAttackId(),
+          to: null,
+          lines,
+          type: lines >= 4 ? 'tetris' : lines === 3 ? 'triple' : lines === 2 ? 'double' : 'single',
+          combo: 0,
+          backToBack: false,
+        });
+      } else if (this.versusAI) {
+        // CPU battle: random living bot takes the hit.
+        const living = this.versusAI.getOpponents().filter((o: any) => o.alive);
+        if (living.length > 0) {
+          const target = living[Math.floor(Math.random() * living.length)];
+          target.attackManager.receiveAttack('You', lines);
+        }
+      }
+    });
+
+    // Feedback when garbage lands in the human's queue (was previously only
+    // registered in the networked path).
+    this.attackManager.onGarbageReceivedCallback((_lines: number, _sender: string) => {
+      this.sounds.playSfx('garbage');
+      this.shaker.shake('garbageReceive');
+    });
+
+    // AI attacks out (CPU battle): each bot targets a random living player -
+    // the human or another bot - standard free-for-all behaviour.
+    if (this.versusAI) {
+      for (const opp of this.versusAI.getOpponents()) {
+        opp.attackManager.onAttackSentCallback((lines: number) => {
+          if (!this.garbageEnabled) return;
+          const others = this.versusAI.getOpponents().filter((o: any) => o.alive && o.id !== opp.id);
+          // Human is one target slot among the others.
+          const slot = Math.floor(Math.random() * (others.length + 1));
+          if (slot === others.length) {
+            this.attackManager.receiveAttack(opp.name, lines);
+          } else {
+            others[slot].attackManager.receiveAttack(opp.name, lines);
+          }
+        });
+      }
+    }
+  }
+
+  /** Stable id used as `from` in outgoing network attacks. */
+  private localAttackId(): string {
+    return (this.network as any)?.getLocalPlayerId?.() ?? 'local';
   }
 
   /**
@@ -290,7 +371,6 @@ export class VersusScreen {
       clickable: false,
     });
 
-    this.attackIndicator = null;
 
     // Player stats — bottom row
     this.statsBox = createBox({
@@ -338,6 +418,7 @@ export class VersusScreen {
         this.opponentTracker.removeOpponent(update.playerId);
         return;
       }
+      this.sawNetworkOpponent = true;
       this.opponentTracker.updateOpponent(update.playerId, {
         id: update.playerId,
         name: update.playerName ?? (update as any).name ?? update.playerId,
@@ -349,14 +430,21 @@ export class VersusScreen {
     });
     this.unsubscribers.push(unsubUpdate);
 
-    this.attackManager.onGarbageReceivedCallback((_lines: number, _sender: string) => {
-      this.sounds.playSfx('garbage');
-      this.shaker.shake('garbageReceive');
-    });
-
-    this.attackManager.onAttackSentCallback((_lines: number, _type: string) => {
-      this.sounds.playSfx('attack');
-    });
+    // Incoming attacks: feed the local garbage queue. This subscription is
+    // the receive half the feature never had - game:attack reached
+    // network-manager's callback set, but nothing subscribed, so garbage
+    // evaporated before touching the queue.
+    if (this.network) {
+      const unsubAttack = this.network.onAttack((attack) => {
+        if (!this.garbageEnabled) return;
+        if (attack.from === this.localAttackId()) return; // broker echoes to all members
+        if (attack.to && attack.to !== this.localAttackId()) return;
+        this.attackManager.receiveAttack(attack.from, attack.lines);
+      });
+      this.unsubscribers.push(unsubAttack);
+    }
+    // NOTE: onAttackSent / onGarbageReceived feedback now lives in
+    // setupAttackRouting(), which runs for BOTH network and CPU battles.
   }
 
   /**
@@ -492,14 +580,66 @@ export class VersusScreen {
         // Render
         this.render();
 
+        // Victory: every AI opponent topped out (CPU battle)...
+        const cpuVictory = this.versusAI
+          ? this.versusAI.getOpponents().length > 0 && this.versusAI.allDead()
+          : false;
+        // ...or every networked opponent reported alive:false after we saw
+        // at least one (versusAI.allDead() previously had zero callers -
+        // outliving all bots never ended the match, so the player could
+        // only ever LOSE a CPU battle).
+        const netVictory = !!this.network && this.sawNetworkOpponent
+          && this.opponentTracker.getAliveOpponents().length === 0;
+
+        if (cpuVictory || netVictory) {
+          this.victory = true;
+          this.running = false;
+          clearInterval(updateInterval);
+          void this.showMatchResult(true).then(resolve);
+          return;
+        }
+
         // Check for game over
         if (gameState.status === 'gameover' || gameState.status === 'complete') {
           this.running = false;
           clearInterval(updateInterval);
-          resolve();
+          // Tell the opponent we topped out - sendUpdate never carried a
+          // death flag, so the survivor previously never learned the match
+          // was over.
+          if (this.network) {
+            this.network.sendUpdate(gameState, false);
+          }
+          void this.showMatchResult(false).then(resolve);
+          return;
         }
       }, 16);  // ~60 FPS
     });
+  }
+
+  /**
+   * Brief WIN/LOSE overlay before resolving back to the menu.
+   */
+  private async showMatchResult(won: boolean): Promise<void> {
+    try {
+      this.sounds.playSfx(won ? 'game_clear' : 'game_over');
+      const box = createBox({
+        parent: this.screen,
+        top: 9,
+        left: 25,
+        width: 30,
+        height: 5,
+        border: { type: 'line' },
+        style: { border: { fg: won ? 'green' : 'red' } },
+        content: won
+          ? '{center}{bold}{green-fg}YOU WIN!{/green-fg}{/bold}{/center}\n{center}All opponents eliminated{/center}'
+          : '{center}{bold}{red-fg}GAME OVER{/red-fg}{/bold}{/center}\n{center}Better luck next time{/center}',
+      });
+      this.screen.render();
+      await new Promise(r => setTimeout(r, 2500));
+      box.destroy();
+    } catch {
+      // Overlay is cosmetic; never block match end on it.
+    }
   }
 
   /**

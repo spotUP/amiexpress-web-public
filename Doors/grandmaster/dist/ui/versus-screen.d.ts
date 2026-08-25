@@ -42,9 +42,14 @@ export declare class VersusScreen {
     private minimapPanel;
     private minimapContainer;
     private garbageIndicator;
-    private attackIndicator;
     private statsBox;
     private lastOpponentCount;
+    /** Match outcome, readable after run() resolves. */
+    victory: boolean;
+    /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
+    private garbageEnabled;
+    /** True once at least one networked opponent has been seen (win detection). */
+    private sawNetworkOpponent;
     private boardOverlay;
     private running;
     private unsubscribers;
@@ -70,6 +75,23 @@ export declare class VersusScreen {
     private lastRainbowUpdate;
     constructor(screen: Screen, engine: GameEngine, inputHandler: InputHandler, sounds: SoundEngine, state: AppState, network: GrandmasterNetworkManager | null, attackManager: AttackManager, botOrAI?: number | any, // number = old botDifficulty, object = VersusAI controller
     sessionRef?: any);
+    /** Lobby "Garbage Lines" toggle. Call before run(). */
+    setGarbageEnabled(enabled: boolean): void;
+    /**
+     * The attack ROUTER - the missing layer this whole feature dead-ended on.
+     *
+     * Every engine (human and AI) has a complete AttackManager: line clears
+     * produce attacks via onAttackSent, and queued garbage is applied to the
+     * board on lock. But nothing ever CONNECTED them: the human's only
+     * onAttackSent listener played a sound (and in CPU battle wasn't even
+     * registered, since setupNetworkListeners was gated on `this.network`),
+     * receiveAttack() had zero callers repo-wide, and the AI engines had no
+     * attack managers at all. Result: "No incoming attack" was a permanent
+     * state and the lobby's garbage setting described nothing.
+     */
+    private setupAttackRouting;
+    /** Stable id used as `from` in outgoing network attacks. */
+    private localAttackId;
     /**
      * Setup UI layout — 80x24 terminal
      *
@@ -90,6 +112,10 @@ export declare class VersusScreen {
      * Run game loop
      */
     run(): Promise<void>;
+    /**
+     * Brief WIN/LOSE overlay before resolving back to the menu.
+     */
+    private showMatchResult;
     /**
      * Setup input handlers
      */

@@ -94,6 +94,18 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
             // Signal adapter so lobby widget can check auto-start
             this.emit('player:ready', { playerId: '', ready: true });
         });
+        // Lobby chat: the broker has routed 'lobby:chat' all along - the door
+        // simply never sent to it or listened. Forward incoming messages in the
+        // widget's LobbyChatMessage shape.
+        lobby.on('lobby:chat', (msg) => {
+            this.emit('chat:message', {
+                id: msg.id ?? `chat-${Date.now()}`,
+                playerId: String(msg.playerId ?? ''),
+                playerName: msg.username ?? 'Player',
+                text: msg.message ?? '',
+                timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
+            });
+        });
         // Game starting — broker fires this on ALL connected nodes
         lobby.on('game:starting', () => {
             if (this.matchState) {
@@ -309,12 +321,13 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
     /**
      * Send game state update
      */
-    sendUpdate(gameState) {
+    sendUpdate(gameState, alive = true) {
         if (!this.localPlayerId)
             return;
         const update = {
             playerId: this.localPlayerId,
             playerName: this.localPlayerName,
+            alive,
             timestamp: Date.now(),
             board: gameState.board,
             level: gameState.level,
@@ -327,11 +340,19 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         // NetworkEngine.emit() is local-only; broker delivery requires socket.emit().
         this.network.connection.getSocket()?.emit('game:update', update);
     }
+    /** Send a lobby chat message via the broker. */
+    sendLobbyChat(message) {
+        this.network.lobby.chat(message);
+    }
     /**
      * Send attack to opponent(s)
      */
     sendAttack(attack) {
         this.network.connection.getSocket()?.emit('game:attack', attack);
+    }
+    /** Local player's id, as used in game:update/game:attack packets. */
+    getLocalPlayerId() {
+        return this.localPlayerId;
     }
     /**
      * Get current opponent states

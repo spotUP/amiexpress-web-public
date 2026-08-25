@@ -844,9 +844,9 @@ export class GrandmasterApp {
         if (hasBots) {
           const bots = matchState?.players.filter(p => p.isBot) ?? [];
           const botDifficulty = bots[0]?.botDifficulty ?? 5;
-          await this.startCpuBattle(botDifficulty as number, Math.max(1, bots.length));
+          await this.startCpuBattle(botDifficulty as number, Math.max(1, bots.length), result.settings);
         } else {
-          await this.startVersusGame(result.mode);
+          await this.startVersusGame(result.mode, result.settings);
         }
         return;
 
@@ -1134,7 +1134,7 @@ export class GrandmasterApp {
       // Apply any custom settings from lobby
       startingLevel: (settings.startingLevel as number) || 0,
       startingHeight: (settings.startingHeight as number) || 0,
-      delayBeforeSuddenDeath: (settings.suddenDeathDelay as number) ?? 3,
+      delayBeforeSuddenDeath: (settings.delayBeforeSuddenDeath as number) ?? 3,
       suddenDeathTick: (settings.suddenDeathTick as number) || 5,
     };
 
@@ -2283,7 +2283,7 @@ export class GrandmasterApp {
   /**
    * Start versus game
    */
-  private async startVersusGame(mode: string): Promise<void> {
+  private async startVersusGame(mode: string, lobbySettings?: Record<string, unknown>): Promise<void> {
     if (!this.network) return;
 
     this.currentScreen = 'game';
@@ -2295,8 +2295,14 @@ export class GrandmasterApp {
     // Create attack manager for multiplayer
     this.attackManager = new AttackManager();
 
+    // Lobby settings, previously collected and then dropped on the floor -
+    // the versus path never read result.settings at all, so Start Level and
+    // Garbage Lines described nothing.
+    const startLevel = Math.max(0, Number(lobbySettings?.startingLevel ?? 0) || 0);
+    const garbageEnabled = lobbySettings?.garbage !== false;
+
     // Create game engine with attack manager
-    this.gameEngine = new GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
+    this.gameEngine = new GameEngine('versus', this.state.settings, this.sounds, this.attackManager, startLevel);
 
     // Create versus screen
     const versusScreen = new VersusScreen(
@@ -2310,6 +2316,7 @@ export class GrandmasterApp {
       undefined,        // botOrAI
       this.session,     // sessionRef for voice chat
     );
+    versusScreen.setGarbageEnabled(garbageEnabled);
 
     // Run game loop
     await versusScreen.run();
@@ -2346,7 +2353,7 @@ export class GrandmasterApp {
    *   (and a minimap grid otherwise) the player also got minimaps instead of
    *   the opponent's playfield.
    */
-  private async startCpuBattle(botDifficulty: number, opponentCount: number = 3): Promise<void> {
+  private async startCpuBattle(botDifficulty: number, opponentCount: number = 3, lobbySettings?: Record<string, unknown>): Promise<void> {
     this.currentScreen = 'game';
     this.state.currentMode = 'versus';
 
@@ -2375,7 +2382,10 @@ export class GrandmasterApp {
     this.attackManager = new AttackManager();
 
     // Create game engine for human player with attack manager
-    this.gameEngine = new GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
+    const startLevel = Math.max(0, Number(lobbySettings?.startingLevel ?? 0) || 0);
+    const garbageEnabled = lobbySettings?.garbage !== false;
+
+    this.gameEngine = new GameEngine('versus', this.state.settings, this.sounds, this.attackManager, startLevel);
 
     // Create AI opponents (3 opponents at selected difficulty)
     const { VersusAI } = await import('./ai/versus-ai');
@@ -2399,6 +2409,7 @@ export class GrandmasterApp {
       versusAI,         // Pass AI controller instead of botDifficulty
       this.session,     // sessionRef for voice chat
     );
+    versusScreen.setGarbageEnabled(garbageEnabled);
 
     // Run game loop
     await versusScreen.run();

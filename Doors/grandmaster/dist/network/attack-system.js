@@ -153,8 +153,12 @@ class GarbageQueue {
                 remaining = 0;
             }
         }
-        // Return excess attack lines (to send to opponents)
-        return outgoingLines - this.cancelledLines;
+        // Return excess attack lines (to send to opponents). `remaining` is what
+        // survived cancellation in THIS call - the earlier version subtracted
+        // this.cancelledLines, which is CUMULATIVE for the whole game
+        // (resetCancelled() had no callers), so after the first successful
+        // cancel every later attack was under-counted or went negative.
+        return remaining;
     }
     /**
      * Apply garbage to board (called when piece locks)

@@ -5,6 +5,7 @@
  * Each AI has an independent board visible on minimaps.
  */
 import { GameEngine } from '../core/game';
+import { AttackManager } from '../network/attack-system';
 import { BotPlayer, type BotDifficulty } from './bot-player';
 import type { PlayerSettings, Board } from '../core/types';
 import type { SoundEngine } from '../audio/sounds';
@@ -18,6 +19,13 @@ export interface AIOpponent {
     bot: BotPlayer;
     difficulty: BotDifficulty;
     alive: boolean;
+    /**
+     * This AI's own attack manager. Without one the engine's attack hooks are
+     * dead (both are guarded by `if (this.attackManager)` in core/game.ts):
+     * the AI could neither send garbage on its line clears nor receive any -
+     * which is why versus garbage never appeared in CPU battles.
+     */
+    attackManager: AttackManager;
 }
 /**
  * Get random AI name for difficulty

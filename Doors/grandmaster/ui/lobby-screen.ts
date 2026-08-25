@@ -86,6 +86,10 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
     on('lobby:updated', () => {
       this.emit('state:updated');
     });
+
+    on('chat:message', (msg: any) => {
+      this.emit('chat:message', msg);
+    });
   }
 
   /**
@@ -215,23 +219,11 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
   }
 
   sendChat(message: string, isAction?: boolean): void {
-    // The SDK widget does NOT echo sent messages into its own chat log - it
-    // forwards them here and then renders whatever comes back on the
-    // adapter's 'chat:message' event. This used to be a bare console.log
-    // with a "handled by the SDK widget locally for now" note, so nothing
-    // ever appended the message on either side and typing in the lobby chat
-    // silently did nothing (reported live 2026-08-25).
-    const state = this.network.getMatchState();
-    const me = state?.players?.find((p: { id: string }) => p.id === this.localPlayerId);
-
-    this.emit('chat:message', {
-      id: `chat-${this.chatSeq++}`,
-      playerId: this.localPlayerId,
-      playerName: me?.name ?? 'you',
-      text: message,
-      timestamp: Date.now(),
-      isAction: !!isAction,
-    });
+    // Through the broker, which has routed 'lobby:chat' all along - the old
+    // implementation only echoed locally, so the other player never saw
+    // anything typed here. The echo comes back to the sender too (the
+    // broker broadcasts to all members), so no local append is needed.
+    this.network.sendLobbyChat(isAction ? `* ${message}` : message);
   }
 }
 
@@ -299,28 +291,6 @@ export class LobbyScreen {
           min: 1,
           max: 20,
           default: 1,
-          hostOnly: true,
-        },
-        {
-          key: 'rule',
-          label: 'Rule Set',
-          type: 'select',
-          options: [
-            { value: 'classic', label: 'Classic' },
-            { value: 'standard', label: 'Standard' },
-            { value: 'extended', label: 'Extended' },
-          ],
-          default: 'standard',
-          hostOnly: true,
-        },
-        {
-          key: 'suddenDeath',
-          label: 'Sudden Death',
-          type: 'number',
-          min: 0,
-          max: 15,
-          default: 2,
-          description: 'Minutes until sudden death (0=off)',
           hostOnly: true,
         },
         {

@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VersusAI = void 0;
 exports.getAIName = getAIName;
 const game_1 = require("../core/game");
+const attack_system_1 = require("../network/attack-system");
 const bot_player_1 = require("./bot-player");
 /**
  * AI opponent names by difficulty
@@ -47,8 +48,10 @@ class VersusAI {
     createOpponents(count, difficulty, settings, sounds) {
         this.opponents = [];
         for (let i = 0; i < count; i++) {
-            // Create independent game engine for this AI
-            const engine = new game_1.GameEngine('versus', settings, sounds);
+            // Each AI gets its own attack manager wired into its engine so line
+            // clears generate attacks and queued garbage is applied on lock.
+            const attackManager = new attack_system_1.AttackManager();
+            const engine = new game_1.GameEngine('versus', settings, sounds, attackManager);
             // Create bot controller for this AI's engine
             const bot = new bot_player_1.BotPlayer(difficulty);
             const opponent = {
@@ -58,6 +61,7 @@ class VersusAI {
                 bot,
                 difficulty,
                 alive: true,
+                attackManager,
             };
             // Start AI engine
             engine.start();

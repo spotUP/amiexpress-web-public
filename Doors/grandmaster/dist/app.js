@@ -755,10 +755,10 @@ class GrandmasterApp {
                 if (hasBots) {
                     const bots = matchState?.players.filter(p => p.isBot) ?? [];
                     const botDifficulty = bots[0]?.botDifficulty ?? 5;
-                    await this.startCpuBattle(botDifficulty, Math.max(1, bots.length));
+                    await this.startCpuBattle(botDifficulty, Math.max(1, bots.length), result.settings);
                 }
                 else {
-                    await this.startVersusGame(result.mode);
+                    await this.startVersusGame(result.mode, result.settings);
                 }
                 return;
             }
@@ -1028,7 +1028,7 @@ class GrandmasterApp {
             // Apply any custom settings from lobby
             startingLevel: settings.startingLevel || 0,
             startingHeight: settings.startingHeight || 0,
-            delayBeforeSuddenDeath: settings.suddenDeathDelay ?? 3,
+            delayBeforeSuddenDeath: settings.delayBeforeSuddenDeath ?? 3,
             suddenDeathTick: settings.suddenDeathTick || 5,
         };
         // Create TetriNET engine for human player
@@ -2046,7 +2046,7 @@ class GrandmasterApp {
     /**
      * Start versus game
      */
-    async startVersusGame(mode) {
+    async startVersusGame(mode, lobbySettings) {
         if (!this.network)
             return;
         this.currentScreen = 'game';
@@ -2055,11 +2055,17 @@ class GrandmasterApp {
         this.screen.program.disableMouse();
         // Create attack manager for multiplayer
         this.attackManager = new attack_system_1.AttackManager();
+        // Lobby settings, previously collected and then dropped on the floor -
+        // the versus path never read result.settings at all, so Start Level and
+        // Garbage Lines described nothing.
+        const startLevel = Math.max(0, Number(lobbySettings?.startingLevel ?? 0) || 0);
+        const garbageEnabled = lobbySettings?.garbage !== false;
         // Create game engine with attack manager
-        this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
+        this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager, startLevel);
         // Create versus screen
         const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, this.network, this.attackManager, undefined, // botOrAI
         this.session);
+        versusScreen.setGarbageEnabled(garbageEnabled);
         // Run game loop
         await versusScreen.run();
         // Submit score and broadcast match result
@@ -2090,7 +2096,7 @@ class GrandmasterApp {
      *   (and a minimap grid otherwise) the player also got minimaps instead of
      *   the opponent's playfield.
      */
-    async startCpuBattle(botDifficulty, opponentCount = 3) {
+    async startCpuBattle(botDifficulty, opponentCount = 3, lobbySettings) {
         this.currentScreen = 'game';
         this.state.currentMode = 'versus';
         // Disable mouse control during gameplay
@@ -2115,7 +2121,9 @@ class GrandmasterApp {
         // Create attack manager for bot battles
         this.attackManager = new attack_system_1.AttackManager();
         // Create game engine for human player with attack manager
-        this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
+        const startLevel = Math.max(0, Number(lobbySettings?.startingLevel ?? 0) || 0);
+        const garbageEnabled = lobbySettings?.garbage !== false;
+        this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager, startLevel);
         // Create AI opponents (3 opponents at selected difficulty)
         const { VersusAI } = await Promise.resolve().then(() => __importStar(require('./ai/versus-ai')));
         const versusAI = new VersusAI();
@@ -2124,6 +2132,7 @@ class GrandmasterApp {
         const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, null, // No network for CPU battle
         this.attackManager, versusAI, // Pass AI controller instead of botDifficulty
         this.session);
+        versusScreen.setGarbageEnabled(garbageEnabled);
         // Run game loop
         await versusScreen.run();
         // Submit score and broadcast match result
