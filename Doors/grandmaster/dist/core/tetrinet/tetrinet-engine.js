@@ -362,6 +362,16 @@ class TetriNetEngine {
             }
             // Other continuous effects are applied to target via network
         }
+        else if (specials_1.SPECIALS[special].selfOnly) {
+            // Self-only specials (Clear Line) act on the user's OWN board. This
+            // branch did not exist: the special was popped off the inventory and
+            // announced to the callbacks, but its effect was never applied
+            // anywhere, so 'C' was a slot that deleted itself and did nothing.
+            (0, special_effects_1.applySpecialEffect)(special, this.board);
+            for (const callback of this.onBoardUpdateCallbacks) {
+                callback(this.board);
+            }
+        }
         // Notify callbacks
         for (const callback of this.onSpecialUsedCallbacks) {
             callback(special, targetId ?? null);
@@ -371,7 +381,7 @@ class TetriNetEngine {
     /**
      * Apply incoming special from opponent
      */
-    applyIncomingSpecial(special, senderId) {
+    applyIncomingSpecial(special, senderId, sourceBoard) {
         // Check immunity
         if (this.effectManager.hasImmunity() && special !== 'immunity') {
             return; // Blocked by immunity
@@ -381,8 +391,10 @@ class TetriNetEngine {
             this.effectManager.startEffect(special, senderId);
             return;
         }
-        // Apply instant effect
-        (0, special_effects_1.applySpecialEffect)(special, this.board);
+        // Apply instant effect. Switch Fields is the one special that needs the
+        // SENDER's board too - without it applySpecialEffect returns
+        // 'Switch requires two boards' and the special silently does nothing.
+        (0, special_effects_1.applySpecialEffect)(special, this.board, sourceBoard);
         // Notify board update
         for (const callback of this.onBoardUpdateCallbacks) {
             callback(this.board);

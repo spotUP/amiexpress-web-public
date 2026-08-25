@@ -59,6 +59,17 @@ export declare const EXTENDED_OPTIONS: TetriNetGameOptions;
 /**
  * Get default options for a rule type
  */
+/**
+ * Map the lobby settings editor's values onto game options.
+ *
+ * The editor has always offered six knobs; startTetriNetGame copied only
+ * three of them (starting level, sudden-death delay, sudden-death tick), so
+ * Lines for Special, Specials Added and Inventory Size were edited by the
+ * sysop and then silently discarded. Any key the editor did not set falls
+ * back to the rule set's default. Classic mode has no specials at all, so
+ * the three specials knobs do not apply there.
+ */
+export declare function optionsFromLobbySettings(rule: TetriNetRule, settings: Record<string, unknown>): TetriNetGameOptions;
 export declare function getDefaultOptions(rule: TetriNetRule): TetriNetGameOptions;
 /**
  * Create custom options

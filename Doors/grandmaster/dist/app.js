@@ -894,6 +894,15 @@ class GrandmasterApp {
             this.network = new network_manager_1.GrandmasterNetworkManager(this.session.bbsSession);
         }
         const adapter = new tetrinet_lobby_adapter_1.TetriNetLobbyAdapter(this.network);
+        // Seed the Winlist tab from this BBS's own TetriNET high scores. Without
+        // this the tab is fed only by an external server's winlist message, so a
+        // local lobby always showed an empty board.
+        adapter.setLocalWinlist(this.highScores.getTopScores('tetrinet', 10).map((entry, index) => ({
+            rank: index + 1,
+            name: entry.playerName,
+            score: entry.score,
+            isTeam: false,
+        })));
         // Add local player
         const playerName = this.session.user?.username || this.state.playerName;
         adapter.addLocalPlayer(playerName, 1);
@@ -1026,14 +1035,7 @@ class GrandmasterApp {
         const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
             ? mode
             : 'standard';
-        const gameOptions = {
-            ...(0, game_rules_1.getDefaultOptions)(rule),
-            // Apply any custom settings from lobby
-            startingLevel: settings.startingLevel || 0,
-            startingHeight: settings.startingHeight || 0,
-            delayBeforeSuddenDeath: settings.delayBeforeSuddenDeath ?? 3,
-            suddenDeathTick: settings.suddenDeathTick || 5,
-        };
+        const gameOptions = (0, game_rules_1.optionsFromLobbySettings)(rule, settings);
         // Create TetriNET engine for human player
         const gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, gameOptions);
         // Create AI opponents for local mode (3 opponents, difficulty 5)
@@ -1063,6 +1065,27 @@ class GrandmasterApp {
         gameScreen.updateOpponents(opponents);
         // Run the game until completion
         await gameScreen.run();
+        // Record the result. A TetriNET game used to save nothing at all - no
+        // high score, no stats - so the mode's leaderboard and the lobby's
+        // Winlist had no source of entries even in principle.
+        const finalState = gameEngine.getState();
+        const won = finalState.status === 'won';
+        this.highScores.addScore(this.state.playerName, {
+            mode: 'tetrinet',
+            score: finalState.score,
+            level: finalState.level,
+            lines: finalState.lines,
+            linesCleared: finalState.lines,
+            grade: won ? 'WIN' : '-',
+            time: finalState.startTime && finalState.endTime
+                ? finalState.endTime - finalState.startTime
+                : null,
+            combo: finalState.combo,
+            tetrisCount: 0,
+            tSpinCount: 0,
+            perfectClears: 0,
+            completed: won,
+        });
         // Cleanup AI
         aiController.destroy();
         gameScreen.cleanup();

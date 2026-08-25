@@ -18,6 +18,8 @@ const inventory_panel_1 = require("./tetrinet/inventory-panel");
 const target_selector_1 = require("./tetrinet/target-selector");
 const opponent_boards_1 = require("./tetrinet/opponent-boards");
 const effect_overlay_1 = require("./tetrinet/effect-overlay");
+const specials_1 = require("../core/tetrinet/specials");
+const tetrinet_ai_1 = require("../ai/tetrinet-ai");
 /**
  * TetriNET Game Screen
  */
@@ -35,8 +37,131 @@ class TetriNetScreen {
         this.aiController = options.aiController || null;
         this.setupUI();
         this.setupEngineCallbacks();
+        this.setupAttackRouting();
         if (this.network) {
             this.setupNetworkListeners();
+        }
+    }
+    /**
+     * The special/garbage ROUTER - the layer local TetriNET never had.
+     *
+     * Both halves of the exchange were already written and correct: engines
+     * SEND via onSpecialUsed/onLinesAdded and RECEIVE via
+     * applyIncomingSpecial/addGarbage. Nothing connected them. Both receive
+     * methods had exactly one caller repo-wide - the EXTERNAL TetriNET server
+     * path in app.ts - so against local AI a special was popped off the
+     * inventory, played a sound and vanished, and a classic-rules line clear
+     * sent garbage to a `if (this.network)` branch whose body was the comment
+     * "TODO: Send garbage to target via network". Local TetriNET was four
+     * players practising alone in the same room.
+     *
+     * Networked games are NOT routed here: the server owns fan-out and
+     * app.ts applies what comes back, so routing locally too would double
+     * every hit.
+     */
+    setupAttackRouting() {
+        if (this.network || !this.aiController)
+            return;
+        this.engine.onSpecialUsed((special, targetId) => {
+            this.routeSpecial(special, tetrinet_ai_1.HUMAN_TARGET_ID, targetId);
+        });
+        this.engine.onLinesAdded((count) => {
+            this.routeGarbage(count, tetrinet_ai_1.HUMAN_TARGET_ID);
+        });
+        for (const opponent of this.aiOpponents()) {
+            opponent.engine.onSpecialUsed((special, targetId) => {
+                this.routeSpecial(special, opponent.id, targetId);
+            });
+            opponent.engine.onLinesAdded((count) => {
+                this.routeGarbage(count, opponent.id);
+            });
+        }
+    }
+    aiOpponents() {
+        return this.aiController ? this.aiController.getOpponents() : [];
+    }
+    /** Engine for a participant id, or null if that player is out of the game. */
+    participantEngine(id) {
+        if (id === tetrinet_ai_1.HUMAN_TARGET_ID) {
+            const status = this.engine.getState().status;
+            return status === 'gameover' || status === 'won' ? null : this.engine;
+        }
+        const opponent = this.aiOpponents().find(o => o.id === id);
+        return opponent && opponent.alive ? opponent.engine : null;
+    }
+    participantName(id) {
+        if (id === tetrinet_ai_1.HUMAN_TARGET_ID)
+            return this.playerName;
+        return this.aiOpponents().find(o => o.id === id)?.name ?? id;
+    }
+    /**
+     * Deliver one special to its target.
+     *
+     * Self-only and self-applied continuous specials (Clear Line, Immunity)
+     * are handled inside the sending engine, so they are not routed anywhere.
+     *
+     * NOTE: useSpecial() POPS the inventory before firing the callback, so the
+     * special MUST be read from the callback argument - the inventory no
+     * longer holds it by the time we get here.
+     */
+    routeSpecial(special, sourceId, targetId) {
+        if (specials_1.SPECIALS[special].selfOnly || special === 'immunity')
+            return;
+        const source = this.participantEngine(sourceId);
+        if (!source)
+            return;
+        // A missing target means the sender had nobody selected; the human's
+        // fallback is whatever the target selector currently points at.
+        const resolvedId = targetId
+            ?? (sourceId === tetrinet_ai_1.HUMAN_TARGET_ID ? this.targetSelector.getSelectedTarget()?.id ?? null : null);
+        if (!resolvedId || resolvedId === sourceId)
+            return;
+        const target = this.participantEngine(resolvedId);
+        if (!target)
+            return;
+        const blocked = target.getEffectManager().hasImmunity();
+        // Switch Fields swaps the two grids, so the sender's board has to travel
+        // with the special.
+        target.applyIncomingSpecial(special, this.participantName(sourceId), special === 'switch' ? source.getBoard() : undefined);
+        if (resolvedId === tetrinet_ai_1.HUMAN_TARGET_ID) {
+            if (blocked) {
+                this.effectOverlay.showImmunityBlocked();
+            }
+            else {
+                this.sounds.playSfx('garbage');
+                this.effectOverlay.showIncomingWarning(specials_1.SPECIALS[special].name);
+            }
+        }
+    }
+    /**
+     * Victory: outliving every bot ends the match. TetriNetAI.allDead() had
+     * zero callers, so a local TetriNET game could only ever be LOST - the
+     * last player standing just kept stacking alone until they topped out.
+     */
+    checkVictory() {
+        if (!this.aiController)
+            return;
+        if (this.aiOpponents().length > 0 && this.aiController.allDead()) {
+            this.engine.win();
+        }
+    }
+    /**
+     * Classic-rules garbage goes to EVERY other living player (the cs1/cs2/cs4
+     * broadcast of the original protocol), not just the selected target.
+     */
+    routeGarbage(lines, sourceId) {
+        if (lines <= 0)
+            return;
+        for (const id of [tetrinet_ai_1.HUMAN_TARGET_ID, ...this.aiOpponents().map(o => o.id)]) {
+            if (id === sourceId)
+                continue;
+            const target = this.participantEngine(id);
+            if (!target)
+                continue;
+            target.addGarbage(lines, 'classic');
+            if (id === tetrinet_ai_1.HUMAN_TARGET_ID) {
+                this.sounds.playSfx('garbage');
+            }
         }
     }
     /**
@@ -274,10 +399,11 @@ class TetriNetScreen {
                             board: ai.engine.getBoard(),
                             level: ai.engine.getState().level,
                             alive: ai.alive,
-                            hasImmunity: false,
+                            hasImmunity: ai.engine.getEffectManager().hasImmunity(),
                         }));
                         this.updateOpponents(opponents);
                     }
+                    this.checkVictory();
                 }
                 // Send state to opponents (network mode)
                 if (this.network && now % 100 < deltaTime) {

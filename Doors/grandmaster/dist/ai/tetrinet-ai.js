@@ -6,9 +6,14 @@
  * Supports difficulty levels 1-10 with different behaviors.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TetriNetAI = void 0;
+exports.TetriNetAI = exports.HUMAN_TARGET_ID = void 0;
 exports.getAIName = getAIName;
 const tetrinet_engine_1 = require("../core/tetrinet/tetrinet-engine");
+/**
+ * Target id the bots use for the human player. The screen's router resolves
+ * it to the local engine, so both sides must agree on this string.
+ */
+exports.HUMAN_TARGET_ID = 'player';
 /**
  * AI player names by difficulty
  */
@@ -203,15 +208,14 @@ class TetriNetAI {
      * Pick attack target
      */
     pickTarget(opponent) {
-        // In local mode, AI uses specials on themselves or random targets
-        // This is a placeholder - real implementation would target human player
-        const aliveOpponents = this.opponents.filter(o => o.alive && o.id !== opponent.id);
-        if (aliveOpponents.length === 0) {
-            return 'player'; // Target human player
-        }
-        // Random target
-        const target = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
-        return target.id;
+        // Free-for-all: the human is one target slot among the living bots.
+        // Previously 'player' was returned ONLY when every other bot was dead,
+        // so while any bot lived the human could not be attacked at all.
+        const candidates = this.opponents
+            .filter(o => o.alive && o.id !== opponent.id)
+            .map(o => o.id);
+        candidates.push(exports.HUMAN_TARGET_ID);
+        return candidates[Math.floor(Math.random() * candidates.length)];
     }
     /**
      * Check if all AI opponents are dead

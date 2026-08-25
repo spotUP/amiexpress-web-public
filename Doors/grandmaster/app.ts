@@ -53,7 +53,7 @@ import { TetriNetServerBrowser, type TetriNetServer } from './network/tetrinet-s
 import { TetriNetExternalAdapter } from './network/tetrinet-external-adapter';
 import { TetriNetEngine } from './core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from './ui/tetrinet-screen';
-import { getDefaultOptions, type TetriNetRule, type TetriNetGameOptions } from './core/tetrinet/game-rules';
+import { optionsFromLobbySettings, type TetriNetRule, type TetriNetGameOptions } from './core/tetrinet/game-rules';
 import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
@@ -994,6 +994,18 @@ export class GrandmasterApp {
     }
     const adapter = new TetriNetLobbyAdapter(this.network);
 
+    // Seed the Winlist tab from this BBS's own TetriNET high scores. Without
+    // this the tab is fed only by an external server's winlist message, so a
+    // local lobby always showed an empty board.
+    adapter.setLocalWinlist(
+      this.highScores.getTopScores('tetrinet', 10).map((entry, index) => ({
+        rank: index + 1,
+        name: entry.playerName,
+        score: entry.score,
+        isTeam: false,
+      }))
+    );
+
     // Add local player
     const playerName = this.session.user?.username || this.state.playerName;
     adapter.addLocalPlayer(playerName, 1);
@@ -1132,14 +1144,7 @@ export class GrandmasterApp {
     const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
       ? mode as TetriNetRule
       : 'standard';
-    const gameOptions: Partial<TetriNetGameOptions> = {
-      ...getDefaultOptions(rule),
-      // Apply any custom settings from lobby
-      startingLevel: (settings.startingLevel as number) || 0,
-      startingHeight: (settings.startingHeight as number) || 0,
-      delayBeforeSuddenDeath: (settings.delayBeforeSuddenDeath as number) ?? 3,
-      suddenDeathTick: (settings.suddenDeathTick as number) || 5,
-    };
+    const gameOptions: TetriNetGameOptions = optionsFromLobbySettings(rule, settings);
 
     // Create TetriNET engine for human player
     const gameEngine = new TetriNetEngine(this.state.settings, gameOptions);
@@ -1175,6 +1180,28 @@ export class GrandmasterApp {
 
     // Run the game until completion
     await gameScreen.run();
+
+    // Record the result. A TetriNET game used to save nothing at all - no
+    // high score, no stats - so the mode's leaderboard and the lobby's
+    // Winlist had no source of entries even in principle.
+    const finalState = gameEngine.getState();
+    const won = finalState.status === 'won';
+    this.highScores.addScore(this.state.playerName, {
+      mode: 'tetrinet',
+      score: finalState.score,
+      level: finalState.level,
+      lines: finalState.lines,
+      linesCleared: finalState.lines,
+      grade: won ? 'WIN' : '-',
+      time: finalState.startTime && finalState.endTime
+        ? finalState.endTime - finalState.startTime
+        : null,
+      combo: finalState.combo,
+      tetrisCount: 0,
+      tSpinCount: 0,
+      perfectClears: 0,
+      completed: won,
+    });
 
     // Cleanup AI
     aiController.destroy();

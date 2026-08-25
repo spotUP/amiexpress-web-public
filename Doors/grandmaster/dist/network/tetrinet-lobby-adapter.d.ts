@@ -5,7 +5,7 @@
  * Supports both BBS-local and external TetriNET server connections.
  */
 import { EventEmitter } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import type { LobbyNetworkAdapter, LobbyState } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { LobbyNetworkAdapter, LobbyState, LobbyLeaderboardEntry } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { GrandmasterNetworkManager } from './network-manager';
 /**
  * TetriNET player slot (1-6)
@@ -19,6 +19,7 @@ export declare class TetriNetLobbyAdapter extends EventEmitter implements LobbyN
     private state;
     private messageIdCounter;
     private pendingLocalPlayer;
+    private localWinlist;
     constructor(network: GrandmasterNetworkManager);
     /**
      * Setup network event forwarding
@@ -93,6 +94,16 @@ export declare class TetriNetLobbyAdapter extends EventEmitter implements LobbyN
      * Get default game options for a mode
      */
     private getDefaultOptions;
+    /**
+     * Seed the Winlist tab for BBS-local games.
+     *
+     * state.winlist is written in exactly one place - the handler for the
+     * external server's 'tetrinet:winlist' message. Nothing emits that on the
+     * in-process bus, so a local lobby advertised a Winlist tab that was
+     * empty for ever. Local games fill it from the door's own TetriNET high
+     * scores instead.
+     */
+    setLocalWinlist(entries: LobbyLeaderboardEntry[]): void;
     /**
      * Add local player to lobby (called after connection established)
      */

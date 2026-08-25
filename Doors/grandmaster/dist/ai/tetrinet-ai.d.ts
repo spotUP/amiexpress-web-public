@@ -10,6 +10,11 @@ import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
  */
 export type AIDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 /**
+ * Target id the bots use for the human player. The screen's router resolves
+ * it to the local engine, so both sides must agree on this string.
+ */
+export declare const HUMAN_TARGET_ID = "player";
+/**
  * AI opponent data
  */
 export interface AIOpponent {

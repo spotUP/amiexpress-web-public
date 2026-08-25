@@ -163,6 +163,41 @@ export const EXTENDED_OPTIONS: TetriNetGameOptions = {
 /**
  * Get default options for a rule type
  */
+/**
+ * Map the lobby settings editor's values onto game options.
+ *
+ * The editor has always offered six knobs; startTetriNetGame copied only
+ * three of them (starting level, sudden-death delay, sudden-death tick), so
+ * Lines for Special, Specials Added and Inventory Size were edited by the
+ * sysop and then silently discarded. Any key the editor did not set falls
+ * back to the rule set's default. Classic mode has no specials at all, so
+ * the three specials knobs do not apply there.
+ */
+export function optionsFromLobbySettings(
+  rule: TetriNetRule,
+  settings: Record<string, unknown>
+): TetriNetGameOptions {
+  const base = getDefaultOptions(rule);
+  const num = (key: string, fallback: number): number =>
+    typeof settings[key] === 'number' ? settings[key] as number : fallback;
+
+  const options: TetriNetGameOptions = {
+    ...base,
+    startingLevel: num('startingLevel', base.startingLevel),
+    startingHeight: num('startingHeight', base.startingHeight),
+    delayBeforeSuddenDeath: num('delayBeforeSuddenDeath', base.delayBeforeSuddenDeath),
+    suddenDeathTick: num('suddenDeathTick', base.suddenDeathTick),
+  };
+
+  if (!base.noSpecials) {
+    options.linesToMakeForSpecials = num('linesToMakeForSpecials', base.linesToMakeForSpecials);
+    options.specialsAddedEachTime = num('specialsAddedEachTime', base.specialsAddedEachTime);
+    options.inventorySize = num('inventorySize', base.inventorySize);
+  }
+
+  return options;
+}
+
 export function getDefaultOptions(rule: TetriNetRule): TetriNetGameOptions {
   switch (rule) {
     case 'classic':

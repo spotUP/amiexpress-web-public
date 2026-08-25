@@ -19,6 +19,8 @@ const TEST_MODULES = [
   './board-clear.test',
   './lockout.test',
   './tetrinet-bots.test',
+  './tetrinet-routing.test',
+  './tetrinet-lobby.test',
   './tetrinet-layout.test',
 ];
 

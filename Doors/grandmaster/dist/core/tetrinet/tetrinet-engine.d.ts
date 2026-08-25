@@ -127,7 +127,7 @@ export declare class TetriNetEngine {
     /**
      * Apply incoming special from opponent
      */
-    applyIncomingSpecial(special: SpecialType, senderId: string): void;
+    applyIncomingSpecial(special: SpecialType, senderId: string, sourceBoard?: TetriNetBoard): void;
     /**
      * Add garbage lines to board
      */

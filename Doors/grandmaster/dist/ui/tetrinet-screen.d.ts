@@ -54,6 +54,50 @@ export declare class TetriNetScreen {
     private unsubscribers;
     constructor(options: TetriNetScreenOptions);
     /**
+     * The special/garbage ROUTER - the layer local TetriNET never had.
+     *
+     * Both halves of the exchange were already written and correct: engines
+     * SEND via onSpecialUsed/onLinesAdded and RECEIVE via
+     * applyIncomingSpecial/addGarbage. Nothing connected them. Both receive
+     * methods had exactly one caller repo-wide - the EXTERNAL TetriNET server
+     * path in app.ts - so against local AI a special was popped off the
+     * inventory, played a sound and vanished, and a classic-rules line clear
+     * sent garbage to a `if (this.network)` branch whose body was the comment
+     * "TODO: Send garbage to target via network". Local TetriNET was four
+     * players practising alone in the same room.
+     *
+     * Networked games are NOT routed here: the server owns fan-out and
+     * app.ts applies what comes back, so routing locally too would double
+     * every hit.
+     */
+    private setupAttackRouting;
+    private aiOpponents;
+    /** Engine for a participant id, or null if that player is out of the game. */
+    private participantEngine;
+    private participantName;
+    /**
+     * Deliver one special to its target.
+     *
+     * Self-only and self-applied continuous specials (Clear Line, Immunity)
+     * are handled inside the sending engine, so they are not routed anywhere.
+     *
+     * NOTE: useSpecial() POPS the inventory before firing the callback, so the
+     * special MUST be read from the callback argument - the inventory no
+     * longer holds it by the time we get here.
+     */
+    private routeSpecial;
+    /**
+     * Victory: outliving every bot ends the match. TetriNetAI.allDead() had
+     * zero callers, so a local TetriNET game could only ever be LOST - the
+     * last player standing just kept stacking alone until they topped out.
+     */
+    private checkVictory;
+    /**
+     * Classic-rules garbage goes to EVERY other living player (the cs1/cs2/cs4
+     * broadcast of the original protocol), not just the selected target.
+     */
+    private routeGarbage;
+    /**
      * Setup UI layout
      */
     private setupUI;

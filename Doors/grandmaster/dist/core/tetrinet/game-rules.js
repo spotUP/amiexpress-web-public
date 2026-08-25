@@ -10,6 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EXTENDED_OPTIONS = exports.STANDARD_OPTIONS = exports.CLASSIC_OPTIONS = void 0;
+exports.optionsFromLobbySettings = optionsFromLobbySettings;
 exports.getDefaultOptions = getDefaultOptions;
 exports.createCustomOptions = createCustomOptions;
 exports.validateOptions = validateOptions;
@@ -120,6 +121,33 @@ exports.EXTENDED_OPTIONS = {
 /**
  * Get default options for a rule type
  */
+/**
+ * Map the lobby settings editor's values onto game options.
+ *
+ * The editor has always offered six knobs; startTetriNetGame copied only
+ * three of them (starting level, sudden-death delay, sudden-death tick), so
+ * Lines for Special, Specials Added and Inventory Size were edited by the
+ * sysop and then silently discarded. Any key the editor did not set falls
+ * back to the rule set's default. Classic mode has no specials at all, so
+ * the three specials knobs do not apply there.
+ */
+function optionsFromLobbySettings(rule, settings) {
+    const base = getDefaultOptions(rule);
+    const num = (key, fallback) => typeof settings[key] === 'number' ? settings[key] : fallback;
+    const options = {
+        ...base,
+        startingLevel: num('startingLevel', base.startingLevel),
+        startingHeight: num('startingHeight', base.startingHeight),
+        delayBeforeSuddenDeath: num('delayBeforeSuddenDeath', base.delayBeforeSuddenDeath),
+        suddenDeathTick: num('suddenDeathTick', base.suddenDeathTick),
+    };
+    if (!base.noSpecials) {
+        options.linesToMakeForSpecials = num('linesToMakeForSpecials', base.linesToMakeForSpecials);
+        options.specialsAddedEachTime = num('specialsAddedEachTime', base.specialsAddedEachTime);
+        options.inventorySize = num('inventorySize', base.inventorySize);
+    }
+    return options;
+}
 function getDefaultOptions(rule) {
     switch (rule) {
         case 'classic':

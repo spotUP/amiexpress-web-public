@@ -54,6 +54,7 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
   private state: TetriNetLobbyState | null = null;
   private messageIdCounter: number = 0;
   private pendingLocalPlayer: { name: string; slot: PlayerSlot } | null = null;
+  private localWinlist: LobbyLeaderboardEntry[] = [];
 
   constructor(network: GrandmasterNetworkManager) {
     super();
@@ -308,7 +309,7 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
       localSlot: 1, // Host gets slot 1
       isHost: true,
       gameOptions: this.getDefaultOptions(mode),
-      winlist: [],
+      winlist: this.localWinlist,
       chatMessages: [],
     };
 
@@ -349,7 +350,7 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
       localSlot: null, // Will be assigned by server
       isHost: false,
       gameOptions: this.getDefaultOptions('standard'),
-      winlist: [],
+      winlist: this.localWinlist,
       chatMessages: [],
     };
 
@@ -493,6 +494,23 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
       delayBeforeSuddenDeath: 2,
       suddenDeathTick: 10,
     };
+  }
+
+  /**
+   * Seed the Winlist tab for BBS-local games.
+   *
+   * state.winlist is written in exactly one place - the handler for the
+   * external server's 'tetrinet:winlist' message. Nothing emits that on the
+   * in-process bus, so a local lobby advertised a Winlist tab that was
+   * empty for ever. Local games fill it from the door's own TetriNET high
+   * scores instead.
+   */
+  setLocalWinlist(entries: LobbyLeaderboardEntry[]): void {
+    this.localWinlist = entries;
+    if (this.state) {
+      this.state.winlist = entries;
+      this.emit('leaderboard:updated', entries);
+    }
   }
 
   /**

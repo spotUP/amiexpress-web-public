@@ -15,6 +15,12 @@ import type { SpecialType } from '../core/tetrinet/specials';
 export type AIDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 /**
+ * Target id the bots use for the human player. The screen's router resolves
+ * it to the local engine, so both sides must agree on this string.
+ */
+export const HUMAN_TARGET_ID = 'player';
+
+/**
  * AI opponent data
  */
 export interface AIOpponent {
@@ -253,17 +259,15 @@ export class TetriNetAI {
    * Pick attack target
    */
   private pickTarget(opponent: AIOpponent): string {
-    // In local mode, AI uses specials on themselves or random targets
-    // This is a placeholder - real implementation would target human player
-    const aliveOpponents = this.opponents.filter(o => o.alive && o.id !== opponent.id);
+    // Free-for-all: the human is one target slot among the living bots.
+    // Previously 'player' was returned ONLY when every other bot was dead,
+    // so while any bot lived the human could not be attacked at all.
+    const candidates = this.opponents
+      .filter(o => o.alive && o.id !== opponent.id)
+      .map(o => o.id);
+    candidates.push(HUMAN_TARGET_ID);
 
-    if (aliveOpponents.length === 0) {
-      return 'player';  // Target human player
-    }
-
-    // Random target
-    const target = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
-    return target.id;
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   /**

@@ -17,6 +17,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
         this.state = null;
         this.messageIdCounter = 0;
         this.pendingLocalPlayer = null;
+        this.localWinlist = [];
         this.network = network;
         this.setupEventListeners();
     }
@@ -242,7 +243,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             localSlot: 1, // Host gets slot 1
             isHost: true,
             gameOptions: this.getDefaultOptions(mode),
-            winlist: [],
+            winlist: this.localWinlist,
             chatMessages: [],
         };
         // Add pending local player if set before createLobby was called
@@ -279,7 +280,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             localSlot: null, // Will be assigned by server
             isHost: false,
             gameOptions: this.getDefaultOptions('standard'),
-            winlist: [],
+            winlist: this.localWinlist,
             chatMessages: [],
         };
         // In real implementation, would send join request to server
@@ -408,6 +409,22 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             delayBeforeSuddenDeath: 2,
             suddenDeathTick: 10,
         };
+    }
+    /**
+     * Seed the Winlist tab for BBS-local games.
+     *
+     * state.winlist is written in exactly one place - the handler for the
+     * external server's 'tetrinet:winlist' message. Nothing emits that on the
+     * in-process bus, so a local lobby advertised a Winlist tab that was
+     * empty for ever. Local games fill it from the door's own TetriNET high
+     * scores instead.
+     */
+    setLocalWinlist(entries) {
+        this.localWinlist = entries;
+        if (this.state) {
+            this.state.winlist = entries;
+            this.emit('leaderboard:updated', entries);
+        }
     }
     /**
      * Add local player to lobby (called after connection established)
