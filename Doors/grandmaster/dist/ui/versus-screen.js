@@ -308,7 +308,12 @@ class VersusScreen {
                 if (this.versusAI) {
                     this.versusAI.update(deltaTime);
                     // Update tracker every ~100 ms
-                    if (now % 100 < deltaTime) {
+                    // Sample every frame in 1v1 so the opponent's piece visibly falls.
+                    // The 100ms throttle exists for battle-royale sized fields; at one
+                    // opponent it just made the board update 10x a second, which is far
+                    // too coarse to show a piece in flight.
+                    const singleOpponent = this.versusAI.getOpponents().length <= 1;
+                    if (singleOpponent || now % 100 < deltaTime) {
                         const aiOpponents = this.versusAI.getOpponents();
                         // Compute danger rank = sorted by stack height descending
                         // (tallest stack = closest to topping out = highest priority)
@@ -335,13 +340,33 @@ class VersusScreen {
                                 this.opponentTracker.removeOpponent(opp.id);
                                 continue;
                             }
+                            // Absolute cells of the piece currently in flight. `board` only
+                            // ever holds LOCKED cells, so without this the opponent view
+                            // cannot show a piece falling - it appears the moment it locks.
+                            const oppState = opp.engine?.getState?.();
+                            let pieceCells;
+                            const cp = oppState?.currentPiece;
+                            if (cp) {
+                                const shape = opp.engine?.pieceManager?.getShape?.(cp.type, cp.rotation);
+                                if (shape) {
+                                    pieceCells = [];
+                                    for (let r = 0; r < shape.length; r++) {
+                                        for (let c = 0; c < shape[r].length; c++) {
+                                            if (shape[r][c]) {
+                                                pieceCells.push({ x: cp.x + c, y: cp.y + r, type: cp.type });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             this.opponentTracker.updateOpponent(opp.id, {
                                 name: opp.name,
-                                board: opp.engine?.getState?.()?.board ?? state?.board,
+                                board: oppState?.board ?? state?.board,
                                 level: state?.level ?? 0,
                                 grade: state?.grade ?? '9',
                                 alive: true,
                                 rank: i + 1,
+                                pieceCells,
                             });
                         }
                     }
@@ -1057,12 +1082,24 @@ class VersusScreen {
         if (!this.opponentBoardBox || !opponent.board)
             return;
         const board = opponent.board;
+        // Overlay the in-flight piece (see OpponentState.pieceCells): board.grid
+        // is locked cells only, so drawing it alone made pieces pop into
+        // existence at the bottom rather than fall.
+        const falling = new Map();
+        for (const c of (opponent.pieceCells ?? [])) {
+            falling.set(`${c.x},${c.y}`, c.type);
+        }
         let content = '';
         const startY = Math.max(0, board.height - 20);
         for (let y = startY; y < board.height; y++) {
             if (y > startY)
                 content += '\n';
             for (let x = 0; x < board.width; x++) {
+                const fallingType = falling.get(`${x},${y}`);
+                if (fallingType) {
+                    content += this.getBlockChar(fallingType);
+                    continue;
+                }
                 const cell = board.grid[y]?.[x];
                 content += cell?.filled ? this.getBlockChar(cell.color) : '  ';
             }

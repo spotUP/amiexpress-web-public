@@ -34,6 +34,16 @@ export interface OpponentState {
   alive: boolean;
   targeting?: boolean;  // Is this opponent targeting you?
   rank?: number;        // Current rank (1-99)
+  /**
+   * Absolute cells of the opponent's CURRENTLY FALLING piece.
+   *
+   * `board` holds locked cells only, so a view rendered from it alone never
+   * shows a piece in flight - the piece simply materialises at the bottom
+   * the instant it locks, which is what the AI opponent looked like
+   * (reported live 2026-08-25). Precomputed at sample time so the renderer
+   * does not need the opponent's PieceManager.
+   */
+  pieceCells?: Array<{ x: number; y: number; type: string }>;
 }
 
 /**

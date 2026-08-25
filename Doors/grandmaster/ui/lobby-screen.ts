@@ -41,35 +41,62 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
     this.setupEventForwarding();
   }
 
+  /**
+   * Handlers registered on the SHARED GrandmasterNetworkManager, kept so
+   * dispose() can take them off again. A new adapter is built every time the
+   * lobby is entered (app.ts loops back to it after each match), so without
+   * this they piled up on the same emitter: every event then also ran the
+   * handlers of long-dead adapters, and a throw from one - touching widgets
+   * that were already destroyed - aborts the emit before the LIVE adapter's
+   * handler gets to run.
+   */
+  private forwarded: Array<[string, (...args: any[]) => void]> = [];
+
   private setupEventForwarding(): void {
     // Forward network events to lobby adapter events
     // These come from the SDK lobby system via the broker
-    this.network.on('player:joined', (player: PlayerInfo) => {
+    const on = (event: string, handler: (...args: any[]) => void) => {
+      this.forwarded.push([event, handler]);
+      this.network.on(event, handler);
+    };
+
+    on('player:joined', (player: PlayerInfo) => {
       this.emit('player:joined', this.convertPlayer(player));
       this.emit('state:updated');
     });
 
-    this.network.on('player:left', (playerId: string) => {
+    on('player:left', (playerId: string) => {
       this.emit('player:left', playerId);
       this.emit('state:updated');
     });
 
-    this.network.on('player:ready', (data: { playerId: string; ready: boolean }) => {
+    on('player:ready', (data: { playerId: string; ready: boolean }) => {
       this.emit('player:ready', data);
       this.emit('state:updated');
     });
 
-    this.network.on('match:starting', () => {
+    on('match:starting', () => {
       this.emit('match:starting');
     });
 
-    this.network.on('match:started', () => {
+    on('match:started', () => {
       this.emit('match:started');
     });
 
-    this.network.on('lobby:updated', () => {
+    on('lobby:updated', () => {
       this.emit('state:updated');
     });
+  }
+
+  /**
+   * Detach from the shared network manager. Call when the lobby closes.
+   */
+  dispose(): void {
+    for (const [event, handler] of this.forwarded) {
+      this.network.off(event, handler);
+    }
+    this.forwarded = [];
+    this.removeAllListeners();
   }
 
   private convertPlayer(player: PlayerInfo): LobbyPlayerInfo {
@@ -334,7 +361,14 @@ export class LobbyScreen {
     // Convert lobby mode to entry mode
     const entryMode: LobbyEntryMode = mode === 'matchmaking' ? 'matchmaking' : 'custom';
 
-    // Show and return result
-    return await this.lobby.show(entryMode, selectedMode || 'versus_1v1');
+    // Show and return result. Always detach the adapter afterwards: app.ts
+    // loops back into the lobby after every match, building a new adapter
+    // each time, so leaving the old one attached to the shared network
+    // manager leaks a full set of handlers per visit.
+    try {
+      return await this.lobby.show(entryMode, selectedMode || 'versus_1v1');
+    } finally {
+      adapter.dispose();
+    }
   }
 }
