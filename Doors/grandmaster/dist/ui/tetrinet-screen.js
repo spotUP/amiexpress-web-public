@@ -99,13 +99,26 @@ class TetriNetScreen {
             mouse: false,
             clickable: false,
         });
-        // Sudden death timer (shown when active, overlays bottom of board)
+        // Sudden death timer (shown when active, overlays bottom of board).
+        //
+        // Two bugs here, both visible during ordinary play: createBox() draws a
+        // border by DEFAULT, and this box was created visible and never hidden.
+        // Sitting at row 23 with setFront(), its border permanently covered the
+        // board's LAST row - so the playfield looked one row short and pieces
+        // resting on the floor appeared to sit level with, or below, the bottom
+        // border. Borderless, and hidden until sudden death actually starts.
         this.suddenDeathBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
-            top: 23, // Overlays bottom of board during sudden death
+            // Row 0, ABOVE the board (which starts at row 1), not on top of it.
+            // Sudden death is armed from the start of a game and shows a running
+            // countdown, so an overlay parked on the board's last row hid a
+            // playable row for the entire match rather than just at the end.
+            top: 0,
             left: 0,
             width: 26, // Match board width
             height: 1,
+            border: { type: 'none' },
+            hidden: true,
             content: '',
             style: { bg: 'red', fg: 'white' }, // High visibility during sudden death
             focusable: false,
@@ -399,6 +412,13 @@ class TetriNetScreen {
         const suddenDeath = this.engine.getSuddenDeath();
         if (suddenDeath && suddenDeath.isEnabled()) {
             this.suddenDeathBox.setContent(suddenDeath.getDisplay());
+            this.suddenDeathBox.hidden = false;
+            this.suddenDeathBox.setFront();
+        }
+        else if (!this.suddenDeathBox.hidden) {
+            // Give the board's bottom row back when sudden death is not running.
+            this.suddenDeathBox.setContent('');
+            this.suddenDeathBox.hidden = true;
         }
         this.screen.render();
     }

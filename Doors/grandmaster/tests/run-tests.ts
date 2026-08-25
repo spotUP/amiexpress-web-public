@@ -19,6 +19,7 @@ const TEST_MODULES = [
   './board-clear.test',
   './lockout.test',
   './tetrinet-bots.test',
+  './tetrinet-layout.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.
