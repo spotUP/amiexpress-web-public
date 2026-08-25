@@ -64,6 +64,14 @@ export declare class TetriNetScreen {
     private sawRemote;
     /** Hard-drop motion blur, drawn by the same code as the main modes. */
     private hardDropTrails;
+    /**
+     * Who has died, in order. The reference server hands out winlist points
+     * by finishing place - 3 to the winner, 2 to whoever died last before
+     * them, 1 to the one before that - so the order matters, not just the
+     * survivor.
+     */
+    private deathOrder;
+    private knownAlive;
     /** TGM key layout, restored when the TetriNET game ends. */
     private previousKeys;
     constructor(options: TetriNetScreenOptions);
@@ -136,6 +144,17 @@ export declare class TetriNetScreen {
      * this node owns and the players on other nodes.
      */
     private refreshOpponents;
+    /** Note anyone who has just died, keeping the order they died in. */
+    private trackDeaths;
+    /**
+     * Finishing order for the winlist: the survivor first, then the others
+     * from the last death backwards. Empty when the match ended without a
+     * single survivor - the reference server records nothing then either.
+     */
+    getFinishOrder(): Array<{
+        name: string;
+        team?: string;
+    }>;
     /** Publish this node's fields: the human, plus any bots it owns. */
     private publishFields;
     /**

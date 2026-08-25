@@ -36,6 +36,14 @@ class TetriNetScreen {
         this.sawRemote = false;
         /** Hard-drop motion blur, drawn by the same code as the main modes. */
         this.hardDropTrails = [];
+        /**
+         * Who has died, in order. The reference server hands out winlist points
+         * by finishing place - 3 to the winner, 2 to whoever died last before
+         * them, 1 to the one before that - so the order matters, not just the
+         * survivor.
+         */
+        this.deathOrder = [];
+        this.knownAlive = new Set();
         /** TGM key layout, restored when the TetriNET game ends. */
         this.previousKeys = null;
         this.screen = options.screen;
@@ -279,6 +287,7 @@ class TetriNetScreen {
      * this node owns and the players on other nodes.
      */
     refreshOpponents() {
+        this.trackDeaths();
         const bots = this.aiOpponents().map((bot) => ({
             id: bot.id,
             name: bot.name,
@@ -298,6 +307,48 @@ class TetriNetScreen {
         this.updateOpponents([...bots, ...remotes]);
         // Bots aim at everyone in the match, not just the people on this node.
         this.aiController?.setExternalTargets?.([this.localId(), ...this.remotes.keys()]);
+    }
+    /** Note anyone who has just died, keeping the order they died in. */
+    trackDeaths() {
+        const living = new Map();
+        for (const bot of this.aiOpponents()) {
+            if (bot.alive)
+                living.set(bot.id, bot.name);
+        }
+        for (const [id, remote] of this.remotes) {
+            if (remote.alive)
+                living.set(id, remote.name);
+        }
+        for (const id of this.knownAlive) {
+            if (!living.has(id) && !this.deathOrder.includes(id)) {
+                this.deathOrder.push(id);
+            }
+        }
+        this.knownAlive = new Set(living.keys());
+    }
+    /**
+     * Finishing order for the winlist: the survivor first, then the others
+     * from the last death backwards. Empty when the match ended without a
+     * single survivor - the reference server records nothing then either.
+     */
+    getFinishOrder() {
+        const status = this.engine.getState().status;
+        const survivors = [];
+        if (status !== 'gameover')
+            survivors.push(this.localId());
+        for (const bot of this.aiOpponents())
+            if (bot.alive)
+                survivors.push(bot.id);
+        for (const [id, remote] of this.remotes)
+            if (remote.alive)
+                survivors.push(id);
+        if (survivors.length !== 1)
+            return [];
+        const order = [survivors[0], ...[...this.deathOrder].reverse()];
+        if (status === 'gameover' && !order.includes(this.localId())) {
+            order.push(this.localId());
+        }
+        return order.map(id => ({ name: this.participantName(id) }));
     }
     /** Publish this node's fields: the human, plus any bots it owns. */
     publishFields() {
@@ -589,6 +640,9 @@ class TetriNetScreen {
                 const gameState = this.engine.getState();
                 if (gameState.status === 'gameover' || gameState.status === 'won') {
                     this.running = false;
+                    if (gameState.status === 'gameover' && !this.deathOrder.includes(this.localId())) {
+                        this.deathOrder.push(this.localId());
+                    }
                     clearInterval(updateInterval);
                     // Tell the other nodes we are out. Field updates stop with the
                     // loop, so without this last publish the survivors keep seeing a

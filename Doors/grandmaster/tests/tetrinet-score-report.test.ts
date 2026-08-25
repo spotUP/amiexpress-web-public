@@ -103,6 +103,8 @@ export async function theNetworkedPathAnnouncesTheMatchResult(): Promise<void> {
   const source = readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
   const body = methodBody(source, 'private async startTetriNetNetworkGame(');
 
-  assert.ok(body.includes('{ networked: true }'),
+  assert.ok(/networked:\s*true/.test(body),
     'a multiplayer match must also broadcast who beat whom');
+  assert.ok(/finishOrder:/.test(body),
+    'and report the finishing order for the winlist');
 }

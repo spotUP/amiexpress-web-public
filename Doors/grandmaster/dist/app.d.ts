@@ -103,6 +103,8 @@ export declare class GrandmasterApp {
     /**
      * Show TetriNET lobby for classic TetriNET gameplay
      */
+    /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
+    private tetrinetWinList;
     private showTetriNetLobby;
     /**
      * Start a BBS-internal networked TetriNET match.

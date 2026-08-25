@@ -55,6 +55,7 @@ import { TetriNetEngine } from './core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from './ui/tetrinet-screen';
 import { optionsFromLobbySettings, type TetriNetRule, type TetriNetGameOptions } from './core/tetrinet/game-rules';
 import { buildTetriNetResult } from './core/tetrinet/score-report';
+import { WinList } from './core/tetrinet/winlist';
 import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
@@ -876,6 +877,9 @@ export class GrandmasterApp {
   /**
    * Show TetriNET lobby for classic TetriNET gameplay
    */
+  /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
+  private tetrinetWinList = new WinList();
+
   private async showTetriNetLobby(): Promise<void> {
     this.currentScreen = 'lobby';
 
@@ -1008,11 +1012,14 @@ export class GrandmasterApp {
     // Seed the Winlist tab from this BBS's own TetriNET high scores. Without
     // this the tab is fed only by an external server's winlist message, so a
     // local lobby always showed an empty board.
+    // TetriNET's winlist is a table of WINS, not of scores - see
+    // core/tetrinet/winlist.ts. Filling it from the door's high scores made
+    // a big solo score outrank somebody who actually won matches.
     adapter.setLocalWinlist(
-      this.highScores.getTopScores('tetrinet', 10).map((entry, index) => ({
+      this.tetrinetWinList.getEntries(10).map((entry, index) => ({
         rank: index + 1,
-        name: entry.playerName,
-        score: entry.score,
+        name: entry.team ? `${entry.name} [${entry.team}]` : entry.name,
+        score: entry.points,
         isTeam: false,
       }))
     );
@@ -1246,7 +1253,10 @@ export class GrandmasterApp {
 
     await gameScreen.run();
 
-    await this.reportTetriNetScore(gameEngine, { networked: true });
+    await this.reportTetriNetScore(gameEngine, {
+      networked: true,
+      finishOrder: gameScreen.getFinishOrder(),
+    });
 
     aiController?.destroy();
     transport.dispose();
@@ -1323,7 +1333,7 @@ export class GrandmasterApp {
     // Run the game until completion
     await gameScreen.run();
 
-    await this.reportTetriNetScore(gameEngine);
+    await this.reportTetriNetScore(gameEngine, { finishOrder: gameScreen.getFinishOrder() });
 
     // Cleanup AI
     aiController.destroy();
@@ -1345,8 +1355,16 @@ export class GrandmasterApp {
    */
   private async reportTetriNetScore(
     engine: TetriNetEngine,
-    opts?: { networked?: boolean }
+    opts?: { networked?: boolean; finishOrder?: Array<{ name: string; team?: string }> }
   ): Promise<void> {
+    // TetriNET ranks by wins, not by score: the reference server gives the
+    // winner 3 points, the player who died last before them 2, the one
+    // before that 1. Nothing recorded when the match ended without a single
+    // survivor, which is what the reference does too.
+    if (opts?.finishOrder && opts.finishOrder.length > 0) {
+      this.tetrinetWinList.recordGame(opts.finishOrder);
+    }
+
     const result = buildTetriNetResult(engine.getState());
 
     this.highScores.addScore(this.state.playerName, result);

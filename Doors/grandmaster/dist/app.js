@@ -69,6 +69,7 @@ const tetrinet_engine_1 = require("./core/tetrinet/tetrinet-engine");
 const tetrinet_screen_1 = require("./ui/tetrinet-screen");
 const game_rules_1 = require("./core/tetrinet/game-rules");
 const score_report_1 = require("./core/tetrinet/score-report");
+const winlist_1 = require("./core/tetrinet/winlist");
 const tetrinet_board_1 = require("./core/tetrinet/tetrinet-board");
 const multiplayer_server_1 = require("./server/multiplayer-server");
 const manual_1 = require("./ui/manual");
@@ -177,6 +178,11 @@ class GrandmasterApp {
         this.currentScreen = 'menu';
         this._voiceRoom = null;
         this._voiceSocketHandlers = [];
+        /**
+         * Show TetriNET lobby for classic TetriNET gameplay
+         */
+        /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
+        this.tetrinetWinList = new winlist_1.WinList();
         this.session = session;
         this.state = this.createInitialState();
         this.loadSettings(); // Load per-user settings from disk
@@ -784,9 +790,6 @@ class GrandmasterApp {
             }
         }
     }
-    /**
-     * Show TetriNET lobby for classic TetriNET gameplay
-     */
     async showTetriNetLobby() {
         this.currentScreen = 'lobby';
         // Disable game mode so textboxes can receive input
@@ -903,10 +906,13 @@ class GrandmasterApp {
         // Seed the Winlist tab from this BBS's own TetriNET high scores. Without
         // this the tab is fed only by an external server's winlist message, so a
         // local lobby always showed an empty board.
-        adapter.setLocalWinlist(this.highScores.getTopScores('tetrinet', 10).map((entry, index) => ({
+        // TetriNET's winlist is a table of WINS, not of scores - see
+        // core/tetrinet/winlist.ts. Filling it from the door's high scores made
+        // a big solo score outrank somebody who actually won matches.
+        adapter.setLocalWinlist(this.tetrinetWinList.getEntries(10).map((entry, index) => ({
             rank: index + 1,
-            name: entry.playerName,
-            score: entry.score,
+            name: entry.team ? `${entry.name} [${entry.team}]` : entry.name,
+            score: entry.points,
             isTeam: false,
         })));
         // Add local player
@@ -1108,7 +1114,10 @@ class GrandmasterApp {
             aiController,
         });
         await gameScreen.run();
-        await this.reportTetriNetScore(gameEngine, { networked: true });
+        await this.reportTetriNetScore(gameEngine, {
+            networked: true,
+            finishOrder: gameScreen.getFinishOrder(),
+        });
         aiController?.destroy();
         transport.dispose();
         gameScreen.cleanup();
@@ -1165,7 +1174,7 @@ class GrandmasterApp {
         gameScreen.updateOpponents(opponents);
         // Run the game until completion
         await gameScreen.run();
-        await this.reportTetriNetScore(gameEngine);
+        await this.reportTetriNetScore(gameEngine, { finishOrder: gameScreen.getFinishOrder() });
         // Cleanup AI
         aiController.destroy();
         gameScreen.cleanup();
@@ -1183,6 +1192,13 @@ class GrandmasterApp {
      * again.
      */
     async reportTetriNetScore(engine, opts) {
+        // TetriNET ranks by wins, not by score: the reference server gives the
+        // winner 3 points, the player who died last before them 2, the one
+        // before that 1. Nothing recorded when the match ended without a single
+        // survivor, which is what the reference does too.
+        if (opts?.finishOrder && opts.finishOrder.length > 0) {
+            this.tetrinetWinList.recordGame(opts.finishOrder);
+        }
         const result = (0, score_report_1.buildTetriNetResult)(engine.getState());
         this.highScores.addScore(this.state.playerName, result);
         const userId = this.session.user?.id || 'guest';
