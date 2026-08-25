@@ -70,3 +70,60 @@ describe('a question that is waiting for an answer', () => {
     expect((screen as any).focusTrap).toBeNull();
   });
 });
+
+describe('choosing an answer', () => {
+  let screen: any;
+
+  afterEach(() => screen?.destroy());
+
+  function ask(): any {
+    screen = makeScreen();
+    const question: any = new Question({ parent: screen, width: 40 } as any);
+    question.ask('Quit?');
+    return question;
+  }
+
+  /** Press a key the way Screen dispatches it to the focused element. */
+  function press(element: any, name: string): boolean {
+    const key = { name, full: name, shift: false, ctrl: false, meta: false };
+    return element.emit(`keypress ${name}`, '', key) === true;
+  }
+
+  it('shows which button is active', () => {
+    // "It's hard to see which button is active" - a background colour alone
+    // was not enough.
+    const question = ask();
+
+    expect(question.yesButton.getContent()).toContain('>');
+    expect(question.noButton.getContent()).not.toContain('>');
+  });
+
+  it('moves the marker with the selection', () => {
+    const question = ask();
+
+    press(question, 'right');
+
+    expect(question.noButton.getContent()).toContain('>');
+    expect(question.yesButton.getContent()).not.toContain('>');
+  });
+
+  it('accepts up and down as well as left and right', () => {
+    // The buttons sit side by side, but players reach for either pair.
+    const question = ask();
+
+    press(question, 'down');
+    expect((screen as any)._focused).toBe(question.noButton);
+
+    press(question, 'up');
+    expect((screen as any)._focused).toBe(question.yesButton);
+  });
+
+  it('claims the arrow keys, so focus does not move twice', () => {
+    // Unhandled arrows fall through to Screen's own focus navigation, which
+    // would move the selection a second time.
+    const question = ask();
+
+    expect(press(question, 'right')).toBe(true);
+    expect(press(question, 'left')).toBe(true);
+  });
+});

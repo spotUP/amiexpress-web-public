@@ -47,6 +47,19 @@ export class Question extends Box {
    * modal has since taken the trap, so a dialog closing behind a newer one
    * cannot strand it.
    */
+  /**
+   * Show which button is active.
+   *
+   * The focus style is a background colour, which was reported as hard to
+   * see: "it's hard to see which button is active". Arrows around the label
+   * read clearly whatever the terminal's palette does.
+   */
+  private markFocusedButton(): void {
+    const focused = this.screen?.getFocused?.();
+    this.yesButton.setContent(focused === this.yesButton ? '> Yes <' : '[ Yes ]');
+    this.noButton.setContent(focused === this.noButton ? '> No <' : '[ No ]');
+  }
+
   private releaseTrap(): void {
     (this.screen as any)?.releaseFocusTrap?.(this);
     if (this._trapCleanup) {
@@ -222,26 +235,29 @@ export class Question extends Box {
     });
 
     // Tab between buttons
+    // Moving between the two buttons.
+    //
+    // All four arrows, because the buttons sit side by side but players
+    // reach for up/down as readily as left/right - and up/down USED to work
+    // only by accident, through Screen's generic focus navigation, while
+    // left/right did the job twice (the handler moved focus AND the
+    // unhandled key moved it again). Returning true stops the second move.
+    const select = (button: any) => {
+      button.focus();
+      this.markFocusedButton();
+      this.screen?.render();
+      return true;
+    };
+
     this.key(['tab'], () => {
       const focused = this.screen?.getFocused?.();
-      if (focused === this.yesButton) {
-        this.noButton.focus();
-      } else {
-        this.yesButton.focus();
-      }
-      this.screen?.render();
+      return select(focused === this.yesButton ? this.noButton : this.yesButton);
     });
 
-    // Arrow left/right navigation between buttons
-    this.key(['left'], () => {
-      this.yesButton.focus();
-      this.screen?.render();
-    });
-
-    this.key(['right'], () => {
-      this.noButton.focus();
-      this.screen?.render();
-    });
+    this.key(['left'], () => select(this.yesButton));
+    this.key(['up'], () => select(this.yesButton));
+    this.key(['right'], () => select(this.noButton));
+    this.key(['down'], () => select(this.noButton));
 
     // Store desktop dimensions for responsive toggling
     this._desktopWidth = options.width || 40;
@@ -286,6 +302,7 @@ export class Question extends Box {
     this.show();
     this.setFront();
     this.yesButton.focus();
+    this.markFocusedButton();
     this.screen?.render();
 
     if (callback) {

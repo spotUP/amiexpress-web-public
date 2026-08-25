@@ -259,6 +259,22 @@ export class MenuBar extends Element {
   }
 
   /**
+   * Open the first menu.
+   *
+   * For a host whose focus cycle has just landed on the bar: tabbing to the
+   * menus and seeing nothing until another key is pressed reads as broken
+   * ("the menus don't open until I press arrow down"). Deliberately NOT done
+   * from a focus event - opening a menu closes the others, and each close
+   * hands focus back to its own button, which would open that menu again in
+   * a loop.
+   */
+  openFirst(): void {
+    if (DropdownMenu.isAnyOpen()) return;
+    this.menuButtons[0]?.focus();
+    this.openMenu(0);
+  }
+
+  /**
    * The element a host should put in its Tab cycle.
    *
    * Doors that drive their own focus cycling need one way in to the menu

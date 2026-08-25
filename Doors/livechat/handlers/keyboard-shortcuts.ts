@@ -88,8 +88,23 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: (
   const fpi = (ps: any[], f: any): number => ps.findIndex(p => p === f || ((p as any).rows && (p as any).rows === f));
 
   // Exported focus cycling functions for use by inputBox tab handler
-  const cycleFocusForward = () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const ni = (ci + 1) % ps.length; ps[ni].focus(); s.render(); return true; };
-  const cycleFocusBackward = () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const pi = (ci - 1 + ps.length) % ps.length; ps[pi].focus(); s.render(); return true; };
+  /**
+   * Landing on the menu bar should SHOW the menus.
+   *
+   * Tabbing there and seeing nothing until another key was pressed was
+   * reported as broken more than once ("the menus don't open until I press
+   * arrow down"). The menu bar opens its first menu on request; it cannot do
+   * this from a focus event without looping, so the cycle asks.
+   */
+  const arrivedAt = (target: any) => {
+    target.focus();
+    if (menuBar?.getTabStop?.() === target) menuBar.openFirst?.();
+    s.render();
+    return true;
+  };
+
+  const cycleFocusForward = () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const ni = (ci + 1) % ps.length; return arrivedAt(ps[ni]); };
+  const cycleFocusBackward = () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const pi = (ci - 1 + ps.length) % ps.length; return arrivedAt(ps[pi]); };
 
   s.key(['tab'], cycleFocusForward);
   s.key(['S-tab'], cycleFocusBackward);

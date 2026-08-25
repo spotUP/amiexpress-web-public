@@ -298,3 +298,52 @@ describe('the FIRST menu opened on a screen that has already rendered', () => {
     expect(menuPos.yi).toBe(buttonPos.yl);
   });
 });
+
+describe('arriving at the menu bar', () => {
+  let screen: any;
+
+  afterEach(() => {
+    DropdownMenu.closeAll();
+    screen?.destroy();
+  });
+
+  it('opens its first menu when the host says the player has arrived', () => {
+    // Reported repeatedly as "the menus don't open until I press arrow
+    // down". The host calls this when its focus cycle lands on the bar.
+    //
+    // Done here rather than from a focus EVENT on purpose: opening a menu
+    // closes the others, and each close hands focus back to its own button,
+    // which would open that menu again - an infinite loop that hung the
+    // test suite when tried.
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+
+    menuBar.openFirst();
+
+    expect(DropdownMenu.isAnyOpen()).toBe(true);
+  });
+
+  it('does not disturb a menu that is already open', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+
+    menuBar.openFirst();
+    const openedFirst = (menuBar as any).dropdowns[0];
+    menuBar.openFirst();
+
+    expect(openedFirst.hidden).toBe(false);
+  });
+
+  it('still leaves on one Escape', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const onExit = jest.fn();
+    menuBar.on('exit', onExit);
+
+    menuBar.openFirst();
+    press((menuBar as any).dropdowns[0], 'escape');
+
+    expect(DropdownMenu.isAnyOpen()).toBe(false);
+    expect(onExit).toHaveBeenCalled();
+  });
+});
