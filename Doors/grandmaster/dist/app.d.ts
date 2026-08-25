@@ -117,6 +117,16 @@ export declare class GrandmasterApp {
      */
     private startTetriNetGame;
     /**
+     * Report a finished TetriNET game.
+     *
+     * High score table, BBS score server, livechat feed and the door_score
+     * Discord webhook - a TetriNET game reached none of them, because all
+     * four are fed from a GameResult and the TetriNET paths never built one.
+     * Every TetriNET path funnels through here so they cannot drift apart
+     * again.
+     */
+    private reportTetriNetScore;
+    /**
      * Show TetriNET external server connection dialog
      */
     private showTetriNetServerConnect;

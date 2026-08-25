@@ -441,13 +441,10 @@ class TetriNetScreen {
             if (state.combo > 1) {
                 this.sounds.playSfx('combo');
             }
-            // Notify network of outgoing garbage
-            if (this.network) {
-                const target = this.targetSelector.getSelectedTarget();
-                if (target) {
-                    // TODO: Send garbage to target via network
-                }
-            }
+            // Outgoing garbage is the router's job (setupAttackRouting) - this
+            // used to be an `if (this.network)` branch whose body was the comment
+            // "TODO: Send garbage to target via network", which is precisely why
+            // no garbage ever left this screen.
         });
         // Game over
         this.engine.onGameOver(() => {

@@ -54,6 +54,7 @@ import { TetriNetExternalAdapter } from './network/tetrinet-external-adapter';
 import { TetriNetEngine } from './core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from './ui/tetrinet-screen';
 import { optionsFromLobbySettings, type TetriNetRule, type TetriNetGameOptions } from './core/tetrinet/game-rules';
+import { buildTetriNetResult } from './core/tetrinet/score-report';
 import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
@@ -992,6 +993,11 @@ export class GrandmasterApp {
     if (!this.network) {
       this.network = new GrandmasterNetworkManager(this.session.bbsSession);
     }
+    // Voice for the lobby and the match that follows, same as the versus
+    // lobby - TetriNET players sat in a silent room while versus players
+    // could talk.
+    this.startVoice(`tnet-${this.session.user?.id ?? Date.now()}`);
+
     const localPlayerId = this.session.user?.id || this.state.playerName;
     const adapter = new TetriNetLobbyAdapter(
       this.network,
@@ -1155,6 +1161,7 @@ export class GrandmasterApp {
     }
 
     adapter.dispose();
+    this.stopVoice();
   }
 
   /**
@@ -1171,6 +1178,7 @@ export class GrandmasterApp {
   ): Promise<void> {
     if (!this.network) return;
 
+    this.state.currentMode = 'tetrinet';
     this.screen.program.disableMouse();
 
     const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
@@ -1207,28 +1215,12 @@ export class GrandmasterApp {
 
     await gameScreen.run();
 
-    const finalState = gameEngine.getState();
-    const won = finalState.status === 'won';
-    this.highScores.addScore(this.state.playerName, {
-      mode: 'tetrinet',
-      score: finalState.score,
-      level: finalState.level,
-      lines: finalState.lines,
-      linesCleared: finalState.lines,
-      grade: won ? 'WIN' : '-',
-      time: finalState.startTime && finalState.endTime
-        ? finalState.endTime - finalState.startTime
-        : null,
-      combo: finalState.combo,
-      tetrisCount: 0,
-      tSpinCount: 0,
-      perfectClears: 0,
-      completed: won,
-    });
+    await this.reportTetriNetScore(gameEngine, { networked: true });
 
     aiController?.destroy();
     transport.dispose();
     gameScreen.cleanup();
+    this.state.currentMode = null;
     this.screen.program.enableMouse();
   }
 
@@ -1236,6 +1228,10 @@ export class GrandmasterApp {
    * Start a TetriNET game (local, single-player with TetriNET rules)
    */
   private async startTetriNetGame(mode: string, settings: Record<string, unknown>): Promise<void> {
+    // broadcastScore() labels the post from currentMode; it has always had a
+    // 'tetrinet' branch that nothing set.
+    this.state.currentMode = 'tetrinet';
+
     // Disable mouse control during gameplay
     this.screen.program.disableMouse();
 
@@ -1280,34 +1276,41 @@ export class GrandmasterApp {
     // Run the game until completion
     await gameScreen.run();
 
-    // Record the result. A TetriNET game used to save nothing at all - no
-    // high score, no stats - so the mode's leaderboard and the lobby's
-    // Winlist had no source of entries even in principle.
-    const finalState = gameEngine.getState();
-    const won = finalState.status === 'won';
-    this.highScores.addScore(this.state.playerName, {
-      mode: 'tetrinet',
-      score: finalState.score,
-      level: finalState.level,
-      lines: finalState.lines,
-      linesCleared: finalState.lines,
-      grade: won ? 'WIN' : '-',
-      time: finalState.startTime && finalState.endTime
-        ? finalState.endTime - finalState.startTime
-        : null,
-      combo: finalState.combo,
-      tetrisCount: 0,
-      tSpinCount: 0,
-      perfectClears: 0,
-      completed: won,
-    });
+    await this.reportTetriNetScore(gameEngine);
 
     // Cleanup AI
     aiController.destroy();
     gameScreen.cleanup();
+    this.state.currentMode = null;
 
     // Re-enable mouse control for menus
     this.screen.program.enableMouse();
+  }
+
+  /**
+   * Report a finished TetriNET game.
+   *
+   * High score table, BBS score server, livechat feed and the door_score
+   * Discord webhook - a TetriNET game reached none of them, because all
+   * four are fed from a GameResult and the TetriNET paths never built one.
+   * Every TetriNET path funnels through here so they cannot drift apart
+   * again.
+   */
+  private async reportTetriNetScore(
+    engine: TetriNetEngine,
+    opts?: { networked?: boolean }
+  ): Promise<void> {
+    const result = buildTetriNetResult(engine.getState());
+
+    this.highScores.addScore(this.state.playerName, result);
+
+    const userId = this.session.user?.id || 'guest';
+    const username = this.session.user?.username || this.state.playerName;
+    await this.submitScore(String(userId), username, result);
+
+    if (opts?.networked) {
+      this.broadcastMatchResult(username, { result, won: result.completed });
+    }
   }
 
   /**
@@ -2248,11 +2251,17 @@ export class GrandmasterApp {
       });
 
       refreshOpponents();
+      this.state.currentMode = 'tetrinet';
       await gameScreen.run();
 
       unsubSpecial();
       unsubLines();
       unsubOver();
+
+      // A game on a real TetriNET server counted for nothing locally: no
+      // high score, no score submission, no Discord post.
+      await this.reportTetriNetScore(gameEngine);
+      this.state.currentMode = null;
 
       gameScreen = null;
       gameEngine = null;
@@ -2666,14 +2675,15 @@ export class GrandmasterApp {
   /**
    * Submit score to multiplayer server
    */
-  private async submitScore(userId: string, username: string): Promise<void> {
-    if (!this.gameEngine) return;
+  private async submitScore(userId: string, username: string, override?: GameResult): Promise<void> {
+    // TetriNET runs on its own engine, so it supplies the result directly.
+    // Gating this on `this.gameEngine` is why no TetriNET game ever reached
+    // the score server or the Discord webhook.
+    const result = override ?? this.gameEngine?.getResult();
+    if (!result) return;
 
-    // Get game result
-    const result = this.gameEngine.getResult();
-
-    // Finalize replay
-    const replay = this.gameEngine.finalizeRecording();
+    // Only the TGM engine records replays.
+    const replay = override ? null : this.gameEngine?.finalizeRecording() ?? null;
 
     // Submit to server
     try {
@@ -2748,14 +2758,16 @@ export class GrandmasterApp {
   /**
    * Broadcast multiplayer match result (winner/loser) to livechat and Discord
    */
-  private broadcastMatchResult(localUsername: string): void {
+  private broadcastMatchResult(localUsername: string, override?: { result: GameResult; won: boolean }): void {
     if (!this.session.bbs?.emitCustomEvent) return;
     if (!this.network) return;
 
     const matchState = this.network.getMatchState();
     if (!matchState || matchState.players.length < 2) return;
 
-    const result = this.gameEngine?.getResult();
+    // TetriNET has its own engine and knows its own outcome, so it passes
+    // both in; the versus path keeps reading the TGM engine.
+    const result = override?.result ?? this.gameEngine?.getResult();
     if (!result) return;
 
     const isGameOver = result.completed || (result.score > 0);
@@ -2768,15 +2780,19 @@ export class GrandmasterApp {
 
     // Check if local player won (survived) or lost (game over first)
     const gameState = this.gameEngine?.getState();
-    const localWon = gameState?.status === 'complete' || gameState?.status !== 'gameover';
+    const localWon = override
+      ? override.won
+      : (gameState?.status === 'complete' || gameState?.status !== 'gameover');
+
+    const modeLabel = this.state.currentMode === 'tetrinet' ? 'TetriNET' : 'Versus';
 
     let message: string;
     if (matchState.players.length === 2) {
       // 1v1
       if (localWon) {
-        message = `defeated ${opponentNames} in Versus!`;
+        message = `defeated ${opponentNames} in ${modeLabel}!`;
       } else {
-        message = `was defeated by ${opponentNames} in Versus`;
+        message = `was defeated by ${opponentNames} in ${modeLabel}`;
       }
     } else {
       // Battle royale / team

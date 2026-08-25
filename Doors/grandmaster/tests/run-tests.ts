@@ -22,6 +22,7 @@ const TEST_MODULES = [
   './tetrinet-routing.test',
   './tetrinet-lobby.test',
   './tetrinet-netplay.test',
+  './tetrinet-score-report.test',
   './tetrinet-layout.test',
 ];
 
