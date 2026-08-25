@@ -286,17 +286,40 @@ class TetriNetScreen {
      * Setup input handlers
      */
     setupInput() {
-        // Movement - confusion reversal is handled by engine
-        this.inputHandler.on('left', () => this.engine.move(-1));
-        this.inputHandler.on('right', () => this.engine.move(1));
+        // Movement - confusion reversal is handled by engine.
+        // Sound effects match game-screen/versus-screen: these bindings used to
+        // be bare engine calls, so movement, rotation, hard drop and hold were
+        // all SILENT in TetriNET mode while the same actions were audible in
+        // single player. (No IRS/IHS cues here - the TetriNET engine has no
+        // initial-rotation/hold system.)
+        this.inputHandler.on('left', () => {
+            if (this.engine.move(-1))
+                this.sounds.playSfx('move');
+        });
+        this.inputHandler.on('right', () => {
+            if (this.engine.move(1))
+                this.sounds.playSfx('move');
+        });
         // Rotation
-        this.inputHandler.on('rotate_cw', () => this.engine.rotate(1));
-        this.inputHandler.on('rotate_ccw', () => this.engine.rotate(-1));
+        this.inputHandler.on('rotate_cw', () => {
+            if (this.engine.rotate(1))
+                this.sounds.playSfx('rotate');
+        });
+        this.inputHandler.on('rotate_ccw', () => {
+            if (this.engine.rotate(-1))
+                this.sounds.playSfx('rotate');
+        });
         // Drop
         this.inputHandler.on('soft_drop', () => this.engine.softDrop());
-        this.inputHandler.on('hard_drop', () => this.engine.hardDrop());
+        this.inputHandler.on('hard_drop', () => {
+            this.engine.hardDrop();
+            this.sounds.playSfx('hard_drop');
+        });
         // Hold
-        this.inputHandler.on('hold', () => this.engine.hold());
+        this.inputHandler.on('hold', () => {
+            if (this.engine.hold())
+                this.sounds.playSfx('hold');
+        });
         // Pause
         this.inputHandler.on('pause', () => this.togglePause());
         // Special usage (spacebar) - use screen.key since it's TetriNET-specific

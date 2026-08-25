@@ -85,6 +85,10 @@ describe("border: 'none' rendering", () => {
         top: 10, left: 2, width: 10, height: 3,
         border: 'none' as any,
         content: ' Start ',
+        // Button defaults to valign:'middle', which (correctly) centres a
+        // single line in a 3-row box. Pin it to the top so this test
+        // isolates the BORDER question it exists to answer.
+        valign: 'top',
         style: { bg: 'yellow', fg: 'black' },
       } as any);
 
@@ -92,6 +96,26 @@ describe("border: 'none' rendering", () => {
 
       expect(paintedRow(screen, 10)).toContain('Start');
       expect(paintedRow(screen, 11)).not.toContain('Start');
+    });
+
+    it('vertically centres content when valign is middle', () => {
+      // valign was accepted as an option and silently ignored: content
+      // always started at the top of the box, so dialogs asking to be
+      // centred rendered top-aligned.
+      new Box({
+        parent: screen,
+        top: 2, left: 2, width: 20, height: 7,
+        border: 'line' as any,
+        align: 'center',
+        valign: 'middle',
+        content: 'MID',
+      } as any);
+
+      screen.render();
+
+      // Interior rows are 3..7; a single line centres on row 5.
+      expect(paintedRow(screen, 5)).toContain('MID');
+      expect(paintedRow(screen, 3)).not.toContain('MID');
     });
 
     it('still insets content by one row for an element that really has a border', () => {

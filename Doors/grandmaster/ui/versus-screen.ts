@@ -645,9 +645,11 @@ export class VersusScreen {
         height: 5,
         border: { type: 'line' },
         style: { border: { fg: won ? 'green' : 'red' } },
+        align: 'center',
+        valign: 'middle',
         content: won
-          ? '{center}{bold}{green-fg}YOU WIN!{/green-fg}{/bold}{/center}\n{center}All opponents eliminated{/center}'
-          : '{center}{bold}{red-fg}GAME OVER{/red-fg}{/bold}{/center}\n{center}Better luck next time{/center}',
+          ? '{bold}{green-fg}YOU WIN!{/green-fg}{/bold}\nAll opponents eliminated'
+          : '{bold}{red-fg}GAME OVER{/red-fg}{/bold}\nBetter luck next time',
       });
       this.screen.render();
       await new Promise(r => setTimeout(r, 2500));
@@ -663,14 +665,52 @@ export class VersusScreen {
   private setupInput(): void {
     // Render immediately after every input-driven engine change - waiting
     // for the next render tick added 0-50 ms between keypress and pixels.
+    //
+    // Sound effects mirror game-screen.ts: versus previously bound bare
+    // engine calls with NO audio at all, so moving, rotating, hard-dropping
+    // and holding were silent in 1v1 and CPU battle while the same actions
+    // were audible in single player. Initial-rotation (IRS) and
+    // initial-hold (IHS) get their own cues, same as single player.
     const act = (fn: () => void) => () => { fn(); this.renderNow(); };
-    this.inputHandler.on('left', act(() => this.engine.move(-1)));
-    this.inputHandler.on('right', act(() => this.engine.move(1)));
-    this.inputHandler.on('rotate_cw', act(() => this.engine.rotate(1)));
-    this.inputHandler.on('rotate_ccw', act(() => this.engine.rotate(-1)));
+
+    this.inputHandler.on('left', act(() => {
+      if (this.engine.move(-1)) this.sounds.playSfx('move');
+    }));
+    this.inputHandler.on('right', act(() => {
+      if (this.engine.move(1)) this.sounds.playSfx('move');
+    }));
+    this.inputHandler.on('rotate_cw', act(() => {
+      if (this.engine.rotate(1)) {
+        this.sounds.playSfx('rotate');
+      } else if (this.engine.setIRS(1)) {
+        this.sounds.playSfx('pre_rotate');
+      }
+    }));
+    this.inputHandler.on('rotate_ccw', act(() => {
+      if (this.engine.rotate(-1)) {
+        this.sounds.playSfx('rotate');
+      } else if (this.engine.setIRS(-1)) {
+        this.sounds.playSfx('pre_rotate');
+      }
+    }));
+    // rotate_180 was not bound at all in versus - the key did nothing.
+    this.inputHandler.on('rotate_180', act(() => {
+      const r1 = this.engine.rotate(1);
+      const r2 = this.engine.rotate(1);
+      if (r1 || r2) this.sounds.playSfx('rotate');
+    }));
     this.inputHandler.on('soft_drop', act(() => this.engine.softDrop()));
-    this.inputHandler.on('hard_drop', act(() => this.engine.hardDrop()));
-    this.inputHandler.on('hold', act(() => this.engine.hold()));
+    this.inputHandler.on('hard_drop', act(() => {
+      this.engine.hardDrop();
+      this.sounds.playSfx('hard_drop');
+    }));
+    this.inputHandler.on('hold', act(() => {
+      if (this.engine.hold()) {
+        this.sounds.playSfx('hold');
+      } else if (this.engine.setIHS()) {
+        this.sounds.playSfx('pre_hold');
+      }
+    }));
     this.inputHandler.on('pause', () => this.togglePause());
   }
 

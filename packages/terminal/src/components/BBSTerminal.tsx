@@ -238,11 +238,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   const getStoredSharedToken = useCallback(() => {
     if (typeof window === 'undefined') return null;
-    // Prefer sessionStorage — each tab keeps its own token so two tabs logged in
-    // as different users don't overwrite each other's token in localStorage.
-    return (
+
+    // sessionStorage is per TAB, so each tab keeps its own identity.
+    const own =
       sessionStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
-      sessionStorage.getItem(BBS_AUTH_TOKEN_KEY) ||
+      sessionStorage.getItem(BBS_AUTH_TOKEN_KEY);
+    if (own) return own;
+
+    // localStorage is shared by every tab and window of this origin, so
+    // falling back to it unconditionally meant logging in ANYWHERE logged
+    // you in EVERYWHERE - a fresh tab silently adopted the last user's
+    // token, making it impossible to be two different users at once (and
+    // surprising for anyone who opens the BBS in a second window).
+    //
+    // That cross-tab convenience is exactly what the existing "auto-login"
+    // preference describes, so it is now gated on it: opt in and new tabs
+    // resume your session, leave it off and every tab is independent.
+    const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+    if (!autoLoginEnabled) return null;
+
+    return (
       localStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
       localStorage.getItem(BBS_AUTH_TOKEN_KEY)
     );
@@ -1945,16 +1960,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // even if another tab logs in as someone else and overwrites localStorage.
         sessionStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
         sessionStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
-        // Also write to localStorage for initial auto-login on new tabs.
-        localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
-        localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
-        window.dispatchEvent(
-          new StorageEvent('storage', {
-            key: SHARED_AUTH_TOKEN_KEY,
-            newValue: data.token,
-            oldValue: null,
-          })
-        );
+
+        // Only publish the token to the shared (cross-tab) store when the
+        // user asked for auto-login. Writing it unconditionally is what let
+        // one login leak into every other tab and window; when the
+        // preference is off we actively clear any token a previous session
+        // left behind, so stale credentials cannot resurrect it.
+        const shareAcrossTabs = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+        if (shareAcrossTabs) {
+          localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
+          localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
+          window.dispatchEvent(
+            new StorageEvent('storage', {
+              key: SHARED_AUTH_TOKEN_KEY,
+              newValue: data.token,
+              oldValue: null,
+            })
+          );
+        } else {
+          localStorage.removeItem(BBS_AUTH_TOKEN_KEY);
+          localStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
+        }
       }
 
       // Save session state for reconnection persistence

@@ -1527,7 +1527,8 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: gameOverColor } },
             align: 'center',
-            content: `\n${gameOverTitle}\n\n` +
+            valign: 'middle',
+            content: `${gameOverTitle}\n\n` +
                 `Grade:  {yellow-fg}${result.grade}{/yellow-fg}\n` +
                 `Level:  ${result.level}\n` +
                 `Lines:  ${result.lines}\n` +

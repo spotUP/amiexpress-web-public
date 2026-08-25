@@ -1128,10 +1128,25 @@ export class Screen extends Element {
     const padBottom = typeof padding === 'number' ? padding : (padding as any).bottom || 0;
     const padRight = typeof padding === 'number' ? padding : (padding as any).right || 0;
 
-    const startY = pos.yi + border + padTop;
+    const contentTop = pos.yi + border + padTop;
     const startX = pos.xi + border + padLeft;
     const maxY = pos.yl - border - padBottom;
     const maxX = pos.xl - border - padRight;
+
+    // Vertical alignment. `align` (horizontal) was already honoured, via
+    // Element.parseContent -> _alignLine, but `valign` was accepted as an
+    // option and then ignored everywhere: content always started at the top
+    // of the box. Dialogs that set valign:'middle' silently rendered
+    // top-aligned.
+    const valign = (element.options as any)?.valign;
+    let startY = contentTop;
+    if (valign === 'middle' || valign === 'bottom') {
+      const available = maxY - contentTop;
+      const slack = available - lines.length;
+      if (slack > 0) {
+        startY = contentTop + (valign === 'middle' ? Math.floor(slack / 2) : slack);
+      }
+    }
 
     // Mark element content area as dirty so _diff() outputs the changes
     // This is critical for scrolling to work - content changes need to be in dirty region

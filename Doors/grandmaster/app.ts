@@ -2692,6 +2692,8 @@ export class GrandmasterApp {
       height: 10,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'yellow' } },
+      align: 'center',
+      valign: 'middle',
       content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +
         `{white-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/white-fg}\n` +
         `{white-fg}Score: {bold}${score.toLocaleString()}{/bold}{/white-fg}\n\n` +
