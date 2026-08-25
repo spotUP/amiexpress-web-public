@@ -144,7 +144,17 @@ export function keyToAction(key: string, config: KeyConfig = DEFAULT_KEYS): Game
  * DAS/ARR timing constants (in milliseconds)
  */
 export const TIMING = {
-  DAS_DELAY: 133,        // Delayed Auto-Shift (ms before repeat starts)
-  ARR_RATE: 10,          // Auto-Repeat Rate (ms between repeats)
+  // TGM3 - the reference this door follows - charges DAS over 16 frames and
+  // then slides ONE CELL PER FRAME. At the arcade's 60fps that is 267ms and
+  // 16.7ms; this door renders at 20fps (game-screen RENDER_FPS), so one cell
+  // per VISIBLE frame is 50ms.
+  //
+  // These were 133 and 10. Ten milliseconds is a hundred cells a second:
+  // the piece sat still through DAS and then crossed the board instantly,
+  // which reads as accelerating (reported live 2026-08-26). They are only
+  // the DEFAULT now - the player's own settings override them, which they
+  // could not do before because this handler never read them.
+  DAS_DELAY: 267,        // Delayed Auto-Shift (ms before repeat starts)
+  ARR_RATE: 50,          // Auto-Repeat Rate (ms between repeats)
   SOFT_DROP_RATE: 50,    // Soft drop repeat rate (ms)
 };

@@ -47,6 +47,9 @@ class InputHandler {
          * press/release edges, DAS/ARR runs exactly as configured.
          */
         this.keyStateMode = false;
+        /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
+        this.dasDelay = config_1.TIMING.DAS_DELAY;
+        this.arrRate = config_1.TIMING.ARR_RATE;
         this.config = config;
         this.state = {
             heldKeys: new Set(),
@@ -110,6 +113,20 @@ class InputHandler {
                 this.downPressed = false;
             }
         });
+    }
+    /**
+     * Apply the player's movement timing.
+     *
+     * The settings screen has always offered DAS and ARR, and this handler
+     * ignored both - it read the module-level constants, so a player who
+     * turned the repeat down saw no change at all (found 2026-08-26 while
+     * chasing "the sideways scrolling accelerates and goes too quick").
+     */
+    setTiming(dasDelay, arrRate) {
+        if (typeof dasDelay === 'number' && dasDelay > 0)
+            this.dasDelay = dasDelay;
+        if (typeof arrRate === 'number' && arrRate > 0)
+            this.arrRate = arrRate;
     }
     /** Shared press-edge logic for both input paths. */
     handleKeyEdge(keyName) {
@@ -249,10 +266,10 @@ class InputHandler {
         // Update DAS/ARR for held directional keys
         if (this.leftPressed || this.rightPressed) {
             this.dasTimer += dt;
-            if (this.dasTimer >= config_1.TIMING.DAS_DELAY) {
+            if (this.dasTimer >= this.dasDelay) {
                 // DAS has expired, start ARR
                 this.arrTimer += dt;
-                if (this.arrTimer >= config_1.TIMING.ARR_RATE) {
+                if (this.arrTimer >= this.arrRate) {
                     this.arrTimer = 0;
                     // Trigger repeat
                     if (this.leftPressed) {

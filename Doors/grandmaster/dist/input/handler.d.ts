@@ -51,10 +51,22 @@ export declare class InputHandler {
      * press/release edges, DAS/ARR runs exactly as configured.
      */
     private keyStateMode;
+    /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
+    private dasDelay;
+    private arrRate;
     constructor(screen: Screen, session: DoorSession, config?: KeyConfig);
     /** Map browser KeyboardEvent.key names onto blessed-style config names. */
     private static browserKeyName;
     private setupKeyStateHandlers;
+    /**
+     * Apply the player's movement timing.
+     *
+     * The settings screen has always offered DAS and ARR, and this handler
+     * ignored both - it read the module-level constants, so a player who
+     * turned the repeat down saw no change at all (found 2026-08-26 while
+     * chasing "the sideways scrolling accelerates and goes too quick").
+     */
+    setTiming(dasDelay?: number, arrRate?: number): void;
     /** Shared press-edge logic for both input paths. */
     private handleKeyEdge;
     /**

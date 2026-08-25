@@ -22,6 +22,7 @@ const TEST_MODULES = [
   './gamepad-menu-bindings.test',
   './tetrinet-line-clear.test',
   './tetrinet-cell-width.test',
+  './das-arr-timing.test',
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',

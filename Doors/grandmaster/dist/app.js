@@ -295,6 +295,9 @@ class GrandmasterApp {
         });
         // Create input handler with user's key bindings
         this.inputHandler = new handler_1.InputHandler(this.screen, session, this.state.settings.keyBindings);
+        // The player's movement timing. Applied here AND after loadSettings,
+        // because the handler is built before their saved settings are read.
+        this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr);
         // Initialize network manager if session has socket
         if (session.bbsSession?.socket) {
             this.network = new network_manager_1.GrandmasterNetworkManager(session.bbsSession);
@@ -392,6 +395,9 @@ class GrandmasterApp {
                     console.log(`[GRANDMASTER] Raising saved ARR ${this.state.settings.arr}ms to ${MIN_SANE_ARR_MS}ms (one cell per rendered frame)`);
                     this.state.settings.arr = MIN_SANE_ARR_MS;
                 }
+                // Settings are loaded AFTER the input handler is built, so hand it
+                // the timing again - otherwise the saved DAS/ARR never reach it.
+                this.inputHandler?.setTiming(this.state.settings.das, this.state.settings.arr);
                 console.log(`[GRANDMASTER] Loaded settings for ${this.session.user?.username}`);
             }
         }
@@ -2569,6 +2575,9 @@ class GrandmasterApp {
         this.inputManager.resume();
         // Update input handler with any changed key bindings
         this.inputHandler.updateConfig(this.state.settings.keyBindings);
+        // ...and the movement timing, which the settings screen has always
+        // offered and which never reached the handler before.
+        this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr);
         // Persist settings to disk for this user
         this.saveSettings();
     }
