@@ -49,6 +49,14 @@
       "types": "./dist/engines/graphics/braille-graphics.d.ts",
       "default": "./dist/engines/graphics/braille-graphics.js"
     },
+    "./engines/graphics/subcell": {
+      "types": "./dist/engines/graphics/subcell.d.ts",
+      "default": "./dist/engines/graphics/subcell.js"
+    },
+    "./engines/graphics/motion-trail": {
+      "types": "./dist/engines/graphics/motion-trail.d.ts",
+      "default": "./dist/engines/graphics/motion-trail.js"
+    },
     "./engines/ui/blessed": {
       "types": "./dist/engines/ui/blessed/index.d.ts",
       "import": "./dist-esm/engines/ui/blessed/index.js",

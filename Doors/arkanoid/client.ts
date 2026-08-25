@@ -24,8 +24,16 @@ import {
 } from '@amiexpress/bbs-door-sdk/client';
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 import { stepBall } from './ball-physics';
+import { easePaddle } from './paddle-motion';
 import { trackForState, MusicGameState } from './music-select';
 import { GamepadButton, GamepadAxis } from '@amiexpress/bbs-door-sdk/types/gamepad';
+import { horizontalBar, subcellPoint, dominantAxis } from '@amiexpress/bbs-door-sdk/engines/graphics/subcell';
+import {
+  expireTrails,
+  trailIntensity,
+  trailTier,
+  type TrailCell,
+} from '@amiexpress/bbs-door-sdk/engines/graphics/motion-trail';
 
 // =============================================================================
 // ANSI Escape Codes and Colors
@@ -86,15 +94,29 @@ const ANSI = {
   blink: `${CSI}5m`,
 };
 
-const BLOCK = {
-  full: '\u2588',
-  upper: '\u2580',
-  lower: '\u2584',
+/**
+ * Shade characters for the motion trail, thinning as the streak fades.
+ * The solid blocks come from the SDK's subcell module - this door used to
+ * carry its own unused copy of that table.
+ */
+const SHADE = {
   light: '\u2591',
   medium: '\u2592',
   dark: '\u2593',
-  space: ' ',
 };
+
+/**
+ * Foreground SGR for each background SGR. A half block is a GLYPH, so an
+ * object drawn as a background colour has to be re-expressed as a foreground
+ * one when it sits on a half-cell boundary. Derived from the ANSI table so
+ * the two cannot drift apart.
+ */
+const FG_FOR_BG: Record<string, string> = Object.fromEntries(
+  Object.keys(ANSI.bg).map(name => [
+    (ANSI.bg as Record<string, string>)[name],
+    (ANSI.fg as Record<string, string>)[name],
+  ])
+);
 
 // =============================================================================
 // Game Constants
@@ -171,6 +193,13 @@ interface PowerUp {
 
 interface Paddle {
   x: number;
+  /**
+   * Where the paddle is heading. The pointer reports WHOLE columns, so the
+   * paddle eases toward the target instead of teleporting - that is what
+   * puts it on half-cell positions along the way, and what gives the motion
+   * trail something to trail.
+   */
+  targetX: number;
   y: number;
   width: number;
   color: string;
@@ -290,6 +319,25 @@ class Renderer {
     this.buffer.drawText(x, y, text, fg, bg);
   }
 
+  /**
+   * Draw an object at a FRACTIONAL position, using half blocks so it can sit
+   * between two cells. Whole cells are drawn exactly as before (a background
+   * block); only the half-covered end cells become glyphs.
+   */
+  drawSubcell(
+    spans: { x: number; y: number; char: string; partial: boolean }[],
+    bgColor: string
+  ): void {
+    const fg = FG_FOR_BG[bgColor] || ANSI.fg.white;
+    for (const span of spans) {
+      if (span.partial) {
+        this.buffer.drawText(span.x, span.y, span.char, fg, ANSI.bg.black);
+      } else {
+        this.buffer.drawBlock(span.x, span.y, bgColor, 1);
+      }
+    }
+  }
+
   drawBox(x: number, y: number, width: number, height: number, bgColor: string): void {
     this.buffer.drawBox(x, y, width, height, bgColor);
   }
@@ -386,6 +434,7 @@ class ArkanoidGame {
   private createPaddle(): Paddle {
     return {
       x: GAME_LEFT + Math.floor(GAME_WIDTH / 2) - Math.floor(PADDLE_WIDTH_DEFAULT / 2),
+      targetX: GAME_LEFT + Math.floor(GAME_WIDTH / 2) - Math.floor(PADDLE_WIDTH_DEFAULT / 2),
       y: PADDLE_Y,
       width: PADDLE_WIDTH_DEFAULT,
       color: ANSI.fg.white,
@@ -718,12 +767,7 @@ class ArkanoidGame {
     const newX = paddle.x + direction * PADDLE_SPEED;
 
     if (newX >= GAME_LEFT && newX + paddle.width <= GAME_RIGHT) {
-      paddle.x = newX;
-      for (const ball of this.data.balls) {
-        if (!ball.active) {
-          ball.x = paddle.x + Math.floor(paddle.width / 2);
-        }
-      }
+      paddle.targetX = newX;
     }
   }
 
@@ -737,7 +781,72 @@ class ArkanoidGame {
     }
   }
 
+  /** Live trail cells for the paddle and the balls. */
+  private paddleTrail: TrailCell[] = [];
+  private ballTrail: TrailCell[] = [];
+
+  /** A paddle sliding slower than this leaves no streak - only a dash does. */
+  private static readonly PADDLE_TRAIL_MIN_SPEED = 0.8;
+
+  /** Trails are shorter here than GRANDMASTER's: the paddle moves constantly. */
+  private static readonly ARKANOID_TRAIL_MS = 110;
+
+  private recordPaddleTrail(fromX: number, toX: number): void {
+    const travelled = Math.abs(toX - fromX);
+    if (travelled < ArkanoidGame.PADDLE_TRAIL_MIN_SPEED) return;
+
+    const paddle = this.data.paddle;
+    const now = Date.now();
+    // The streak sits where the paddle WAS, so it reads as the paddle
+    // smearing behind itself rather than a second paddle.
+    this.paddleTrail.push({
+      x: fromX,
+      y: paddle.y,
+      strength: Math.min(1, travelled / 3),
+      createdAt: now,
+    });
+  }
+
+  private recordBallTrail(x: number, y: number): void {
+    this.ballTrail.push({ x, y, strength: 1, createdAt: Date.now() });
+  }
+
+  private updatePaddle(): void {
+    const paddle = this.data.paddle;
+    const previousX = paddle.x;
+    paddle.x = easePaddle(paddle.x, paddle.targetX);
+
+    // A ball waiting to launch rides the paddle, at the same fractional
+    // position - otherwise it would jitter against a paddle that glides.
+    for (const ball of this.data.balls) {
+      if (!ball.active) {
+        ball.x = paddle.x + paddle.width / 2;
+      }
+    }
+
+    this.recordPaddleTrail(previousX, paddle.x);
+  }
+
+  /**
+   * Draw a fading streak. The tier comes from the shared model; the
+   * characters are this door's, because Arkanoid writes ANSI cells while
+   * GRANDMASTER writes blessed tags.
+   */
+  private drawTrail(cells: TrailCell[], now: number, fg: string, width: number): void {
+    for (const cell of cells) {
+      const tier = trailTier(trailIntensity(cell, now, ArkanoidGame.ARKANOID_TRAIL_MS));
+      if (!tier) continue;
+
+      const char = tier === 'solid' ? SHADE.dark : tier === 'mid' ? SHADE.medium : SHADE.light;
+      const spans = horizontalBar(cell.x, Math.round(cell.y), width);
+      for (const span of spans) {
+        this.renderer.drawText(span.x, span.y, char, fg, ANSI.bg.black);
+      }
+    }
+  }
+
   private update(deltaTime: number): void {
+    this.updatePaddle();
     this.updateBalls(deltaTime);
     this.updatePowerUps();
     this.updateShineEffect();
@@ -755,7 +864,8 @@ class ArkanoidGame {
       const ball = this.data.balls[i];
 
       if (!ball.active) {
-        ball.x = paddle.x + Math.floor(paddle.width / 2);
+        // updatePaddle() already rides it along at fractional precision;
+        // only the row needs setting here.
         ball.y = paddle.y - 1;
         continue;
       }
@@ -763,6 +873,9 @@ class ArkanoidGame {
       // Movement and collision live in ball-physics.ts (substepped so the
       // ball cannot tunnel through 1-cell bricks); this loop owns the game
       // consequences - sound, score, combo, power-ups.
+      // Where the ball was, for the streak it leaves behind.
+      this.recordBallTrail(ball.x, ball.y);
+
       const events = stepBall(ball, paddle, this.data.bricks, {
         left: GAME_LEFT,
         right: GAME_RIGHT,
@@ -1166,10 +1279,23 @@ class ArkanoidGame {
     let paddleBg = paddle.bgColor;
     if (paddle.sticky) paddleBg = ANSI.bg.brightGreen;
     if (paddle.laser) paddleBg = ANSI.bg.brightRed;
-    this.renderer.drawBlock(paddle.x, paddle.y, paddleBg, paddle.width);
+
+    // Streaks first, so the objects themselves draw over them.
+    const now = Date.now();
+    this.paddleTrail = expireTrails(this.paddleTrail, now, ArkanoidGame.ARKANOID_TRAIL_MS);
+    this.ballTrail = expireTrails(this.ballTrail, now, ArkanoidGame.ARKANOID_TRAIL_MS);
+    this.drawTrail(this.paddleTrail, now, FG_FOR_BG[paddleBg] || ANSI.fg.brightBlue, paddle.width);
+    this.drawTrail(this.ballTrail, now, ANSI.fg.brightWhite, 1);
+
+    // Half blocks let the paddle sit between two columns, so it glides
+    // instead of stepping a whole character at a time.
+    this.renderer.drawSubcell(horizontalBar(paddle.x, paddle.y, paddle.width), paddleBg);
 
     for (const ball of this.data.balls) {
-      this.renderer.drawBlock(Math.floor(ball.x), Math.floor(ball.y), ANSI.bg.brightWhite, 1);
+      // Only ONE axis can take the half step - the quadrant glyphs are not
+      // CP437 - so it goes on whichever way the ball is mostly travelling.
+      const axis = dominantAxis(ball.vx ?? 0, ball.vy ?? 0);
+      this.renderer.drawSubcell(subcellPoint(ball.x, ball.y, axis), ANSI.bg.brightWhite);
     }
 
     this.renderer.drawText(2, 1, `SCORE: ${this.data.score.toString().padStart(8, '0')}`, ANSI.fg.brightYellow);
@@ -1386,14 +1512,7 @@ class ArkanoidGame {
       // Clamp to game boundaries
       newPaddleX = Math.max(GAME_LEFT, Math.min(GAME_RIGHT - paddle.width + 1, newPaddleX));
 
-      paddle.x = newPaddleX;
-
-      // Move attached ball with paddle
-      for (const ball of this.data.balls) {
-        if (!ball.active) {
-          ball.x = paddle.x + Math.floor(paddle.width / 2);
-        }
-      }
+      paddle.targetX = newPaddleX;
 
       // Click to launch ball
       if (event.type === 'mouse-click') {

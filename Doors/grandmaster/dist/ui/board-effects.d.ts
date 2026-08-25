@@ -1,15 +1,3 @@
-/**
- * Shared playfield effects
- *
- * The landing shadow and the hard-drop motion blur belong to GRANDMASTER's
- * look, not to one screen: the main modes had them, TetriNET grew a
- * lookalike ghost of its own ('::' in grey) and no blur at all. Both screens
- * now draw them from here, so they cannot drift apart again.
- *
- * Kept deliberately free of engine types - it takes a shape and a colour and
- * returns characters, so the TGM engine and the TetriNET engine can both
- * feed it.
- */
 /** One cell of the fading streak a hard drop leaves behind. */
 export interface HardDropTrail {
     x: number;
@@ -19,7 +7,7 @@ export interface HardDropTrail {
     strength: number;
     createdAt: number;
 }
-/** How long a trail cell stays on screen. */
+/** How long a trail cell stays on screen. Shared with every other door. */
 export declare const TRAIL_LIFETIME_MS = 160;
 /** The landing shadow. */
 export declare const GHOST_CHAR = "{gray-fg}\u2591\u2591{/gray-fg}";

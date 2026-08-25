@@ -1,4 +1,11 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.GHOST_CHAR = exports.TRAIL_LIFETIME_MS = void 0;
+exports.brightColor = brightColor;
+exports.hardDropTrailChar = hardDropTrailChar;
+exports.buildHardDropTrail = buildHardDropTrail;
+exports.expireTrails = expireTrails;
+exports.trailCharAt = trailCharAt;
 /**
  * Shared playfield effects
  *
@@ -10,16 +17,16 @@
  * Kept deliberately free of engine types - it takes a shape and a colour and
  * returns characters, so the TGM engine and the TetriNET engine can both
  * feed it.
+ *
+ * The FADE MODEL - lifetime, intensity, the tiers a terminal can draw - now
+ * lives in the SDK, because ARKANOID wanted the same streak for its paddle
+ * and ball. What stays here is the mapping from a tier to GRANDMASTER's
+ * blessed tags; Arkanoid maps the same tiers to raw ANSI. Only the drawing
+ * differs, so only the drawing is duplicated.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.GHOST_CHAR = exports.TRAIL_LIFETIME_MS = void 0;
-exports.brightColor = brightColor;
-exports.hardDropTrailChar = hardDropTrailChar;
-exports.buildHardDropTrail = buildHardDropTrail;
-exports.expireTrails = expireTrails;
-exports.trailCharAt = trailCharAt;
-/** How long a trail cell stays on screen. */
-exports.TRAIL_LIFETIME_MS = 160;
+const motion_trail_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/motion-trail");
+/** How long a trail cell stays on screen. Shared with every other door. */
+exports.TRAIL_LIFETIME_MS = motion_trail_1.TRAIL_LIFETIME_MS;
 /** The landing shadow. */
 exports.GHOST_CHAR = '{gray-fg}░░{/gray-fg}';
 const BRIGHT = {
@@ -39,14 +46,16 @@ function brightColor(color) {
  * A trail cell, solid while fresh and thinning as it fades.
  */
 function hardDropTrailChar(color, strength) {
-    if (strength > 0.66) {
-        const bright = brightColor(color);
-        return `{${bright}-bg}  {/${bright}-bg}`;
+    switch ((0, motion_trail_1.trailTier)(strength)) {
+        case 'solid': {
+            const bright = brightColor(color);
+            return `{${bright}-bg}  {/${bright}-bg}`;
+        }
+        case 'mid':
+            return `{${color}-bg}  {/${color}-bg}`;
+        default:
+            return `{${color}-fg}░░{/${color}-fg}`;
     }
-    if (strength > 0.33) {
-        return `{${color}-bg}  {/${color}-bg}`;
-    }
-    return `{${color}-fg}░░{/${color}-fg}`;
 }
 /**
  * The streak a piece leaves when it is slammed down.
@@ -88,9 +97,9 @@ function trailCharAt(trails, x, y, now) {
     const trail = trails.find(t => t.x === x && t.y === y);
     if (!trail)
         return null;
-    const fade = Math.max(0, 1 - (now - trail.createdAt) / exports.TRAIL_LIFETIME_MS);
-    if (fade <= 0)
+    const intensity = (0, motion_trail_1.trailIntensity)(trail, now, exports.TRAIL_LIFETIME_MS);
+    if (intensity <= 0)
         return null;
-    return hardDropTrailChar(trail.color, trail.strength * fade);
+    return hardDropTrailChar(trail.color, intensity);
 }
 //# sourceMappingURL=board-effects.js.map

@@ -9,7 +9,18 @@
  * Kept deliberately free of engine types - it takes a shape and a colour and
  * returns characters, so the TGM engine and the TetriNET engine can both
  * feed it.
+ *
+ * The FADE MODEL - lifetime, intensity, the tiers a terminal can draw - now
+ * lives in the SDK, because ARKANOID wanted the same streak for its paddle
+ * and ball. What stays here is the mapping from a tier to GRANDMASTER's
+ * blessed tags; Arkanoid maps the same tiers to raw ANSI. Only the drawing
+ * differs, so only the drawing is duplicated.
  */
+import {
+  TRAIL_LIFETIME_MS as SDK_TRAIL_LIFETIME_MS,
+  trailIntensity,
+  trailTier,
+} from '@amiexpress/bbs-door-sdk/engines/graphics/motion-trail';
 
 /** One cell of the fading streak a hard drop leaves behind. */
 export interface HardDropTrail {
@@ -21,8 +32,8 @@ export interface HardDropTrail {
   createdAt: number;
 }
 
-/** How long a trail cell stays on screen. */
-export const TRAIL_LIFETIME_MS = 160;
+/** How long a trail cell stays on screen. Shared with every other door. */
+export const TRAIL_LIFETIME_MS = SDK_TRAIL_LIFETIME_MS;
 
 /** The landing shadow. */
 export const GHOST_CHAR = '{gray-fg}░░{/gray-fg}';
@@ -46,14 +57,16 @@ export function brightColor(color: string): string {
  * A trail cell, solid while fresh and thinning as it fades.
  */
 export function hardDropTrailChar(color: string, strength: number): string {
-  if (strength > 0.66) {
-    const bright = brightColor(color);
-    return `{${bright}-bg}  {/${bright}-bg}`;
+  switch (trailTier(strength)) {
+    case 'solid': {
+      const bright = brightColor(color);
+      return `{${bright}-bg}  {/${bright}-bg}`;
+    }
+    case 'mid':
+      return `{${color}-bg}  {/${color}-bg}`;
+    default:
+      return `{${color}-fg}░░{/${color}-fg}`;
   }
-  if (strength > 0.33) {
-    return `{${color}-bg}  {/${color}-bg}`;
-  }
-  return `{${color}-fg}░░{/${color}-fg}`;
 }
 
 /**
@@ -111,8 +124,8 @@ export function trailCharAt(
   const trail = trails.find(t => t.x === x && t.y === y);
   if (!trail) return null;
 
-  const fade = Math.max(0, 1 - (now - trail.createdAt) / TRAIL_LIFETIME_MS);
-  if (fade <= 0) return null;
+  const intensity = trailIntensity(trail, now, TRAIL_LIFETIME_MS);
+  if (intensity <= 0) return null;
 
-  return hardDropTrailChar(trail.color, trail.strength * fade);
+  return hardDropTrailChar(trail.color, intensity);
 }
