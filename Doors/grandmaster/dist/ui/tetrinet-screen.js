@@ -496,6 +496,21 @@ class TetriNetScreen {
             mouse: false,
             clickable: false,
         });
+        // One-line readout for incoming specials and garbage. They used to be
+        // announced with a box across the middle of the playfield.
+        this.noticeBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 21,
+            left: 26,
+            width: 26,
+            height: 1,
+            border: { type: 'none' },
+            content: '',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
         // Sudden death countdown.
         //
         // Twice bitten here: createBox() draws a border BY DEFAULT (this box used
@@ -504,10 +519,10 @@ class TetriNetScreen {
         // death is actually running.
         this.suddenDeathBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
-            top: 21,
+            top: 22,
             left: 26,
             width: 26,
-            height: 3,
+            height: 2,
             border: { type: 'none' },
             content: '',
             hidden: true,
@@ -555,6 +570,7 @@ class TetriNetScreen {
             boardWidth: 26,
             boardHeight: 24,
         });
+        this.effectOverlay.setNoticeBox(this.noticeBox);
         // The board must stay above any dockable panel.
         this.boardBox.setFront();
         this.statsBox.setFront();

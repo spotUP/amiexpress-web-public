@@ -58,6 +58,7 @@ export declare class TetriNetScreen {
     private previewBox;
     private footerBox;
     private holdBox;
+    private noticeBox;
     private statsBox;
     private suddenDeathBox;
     private inventoryPanel;

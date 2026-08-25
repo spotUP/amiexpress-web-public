@@ -55,6 +55,16 @@ function rendered(): { rows: string[]; destroy: () => void; height: number } {
   return { rows, destroy: () => screen.destroy(), height: screen.height };
 }
 
+/** Every painted row of a screen, as strings. */
+function rowsOf(screen: any): string[] {
+  const rows: string[] = [];
+  for (let y = 0; y < screen.height; y++) {
+    const row = screen.buffer[y];
+    rows.push(row ? row.map((c: [number, string]) => c[1]).join('') : '');
+  }
+  return rows;
+}
+
 /** A row whose first 26 columns are the board's bottom frame. */
 function isBottomBorder(row: string): boolean {
   return /^`-{24}'/.test(row);
@@ -312,5 +322,59 @@ export async function noBlackBandOnATwentyFiveRowTerminal(): Promise<void> {
       assert.notStrictEqual(rows[y], '',
         `row ${y} of ${screen.height} is blank - that is the black band`);
     }
+  } finally { screen.destroy(); }
+}
+
+export async function anIncomingHitNeverCoversTheField(): Promise<void> {
+  // Reported live: "a black band in the middle of the playfield, as if a
+  // line was cleared". showIncomingWarning built a 30x5 black box in the
+  // CENTRE of the screen - wider than the 26-column board - for a second at
+  // a time, and once specials and garbage were actually routed it fired on
+  // every hit. Against three bots it was on screen almost permanently.
+  const screen: any = new Screen({ title: 'tnet-notice', width: 80, height: 25 });
+  const engine: any = new TetriNetEngine({} as any, { nextPieceDelayMs: 0, delayBeforeSuddenDeath: 0 } as any);
+  const scr: any = new TetriNetScreen({
+    screen, engine, inputHandler: { on() {}, off() {}, setEnabled() {} } as any,
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} } as any,
+    state: { settings: {} } as any, network: null, playerName: 'sysop', aiController: null,
+  } as any);
+
+  try {
+    engine.start();
+    scr.render();
+    const boardBefore = rowsOf(screen).slice(1, 23).map(r => r.slice(0, 26));
+
+    scr.effectOverlay.showIncomingWarning('Nuke Field');
+    scr.render();
+
+    const boardAfter = rowsOf(screen).slice(1, 23).map(r => r.slice(0, 26));
+    assert.deepStrictEqual(boardAfter, boardBefore,
+      'announcing a hit must not paint over the playfield');
+
+    const right = rowsOf(screen).map(r => r.slice(26)).join('\n');
+    assert.ok(/Nuke Field/.test(right), 'it is announced beside the board instead');
+  } finally { screen.destroy(); }
+}
+
+export async function aBlockedSpecialIsAnnouncedTheSameWay(): Promise<void> {
+  const screen: any = new Screen({ title: 'tnet-blocked', width: 80, height: 25 });
+  const engine: any = new TetriNetEngine({} as any, { nextPieceDelayMs: 0, delayBeforeSuddenDeath: 0 } as any);
+  const scr: any = new TetriNetScreen({
+    screen, engine, inputHandler: { on() {}, off() {}, setEnabled() {} } as any,
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} } as any,
+    state: { settings: {} } as any, network: null, playerName: 'sysop', aiController: null,
+  } as any);
+
+  try {
+    engine.start();
+    scr.render();
+    const before = rowsOf(screen).slice(1, 23).map(r => r.slice(0, 26));
+
+    scr.effectOverlay.showImmunityBlocked();
+    scr.render();
+
+    assert.deepStrictEqual(
+      rowsOf(screen).slice(1, 23).map(r => r.slice(0, 26)), before,
+      'a blocked special must not cover the field either');
   } finally { screen.destroy(); }
 }

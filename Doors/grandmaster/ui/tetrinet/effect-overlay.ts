@@ -26,6 +26,8 @@ export interface EffectOverlayOptions {
  * Effect Overlay component
  */
 export class EffectOverlay {
+  private noticeBox: { setContent: (text: string) => void } | null = null;
+  private noticeTimer: ReturnType<typeof setTimeout> | null = null;
   private parent: Screen;
   private darknessOverlay!: Box;
   private confusionIndicator!: Box;
@@ -205,44 +207,47 @@ export class EffectOverlay {
   /**
    * Show incoming attack warning
    */
+  /**
+   * Announce an incoming hit.
+   *
+   * This used to build a 30x5 black box in the CENTRE of the screen - wider
+   * than the 26-column board - for one second. That was survivable when
+   * nothing called it; once specials and garbage were actually routed it
+   * fired on every hit, and against three bots it sat across the middle of
+   * the playfield almost permanently: reported as "a black band, as if a
+   * line was cleared".
+   *
+   * Notices now go to a one-line readout beside the board when the screen
+   * gives us one, and are dropped otherwise. A real TetriNET client logs
+   * incoming specials; it does not cover your field with them.
+   */
   showIncomingWarning(attackType: string): void {
-    const warningBox = new Box({
-      parent: this.parent,
-      top: 'center',
-      left: 'center',
-      width: 30,
-      height: 5,
-      border: { type: 'line' },
-      style: { border: { fg: 'red' }, bg: 'black' },
-      content: `{red-fg}{bold}INCOMING ATTACK!\n\n${attackType.toUpperCase()}{/bold}{/red-fg}`,
-      tags: true
-    });
+    this.showNotice(`{red-fg}${attackType}{/red-fg}`);
+  }
 
-    // Remove after animation
-    setTimeout(() => {
-      warningBox.destroy();
-    }, 1000);
+  /** Where notices are printed. Set by the screen; without it they vanish. */
+  setNoticeBox(box: unknown): void {
+    this.noticeBox = box as { setContent: (text: string) => void } | null;
+  }
+
+  private showNotice(text: string): void {
+    if (!this.noticeBox) return;
+
+    this.noticeBox.setContent(text);
+    if (this.noticeTimer) clearTimeout(this.noticeTimer);
+    this.noticeTimer = setTimeout(() => {
+      this.noticeBox?.setContent('');
+      this.noticeTimer = null;
+    }, 1500);
   }
 
   /**
    * Show immunity blocked message
    */
   showImmunityBlocked(): void {
-    const messageBox = new Box({
-      parent: this.parent,
-      top: 'center',
-      left: 'center',
-      width: 20,
-      height: 3,
-      border: { type: 'line' },
-      style: { border: { fg: 'cyan' }, bg: 'black' },
-      content: '{cyan-fg}{bold}BLOCKED!{/bold}{/cyan-fg}',
-      tags: true
-    });
-
-    setTimeout(() => {
-      messageBox.destroy();
-    }, 500);
+    // Same reasoning as showIncomingWarning: a box over the field for every
+    // blocked special is worse than a word beside it.
+    this.showNotice('{cyan-fg}BLOCKED{/cyan-fg}');
   }
 
   /**
