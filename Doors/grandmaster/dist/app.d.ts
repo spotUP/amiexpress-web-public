@@ -129,6 +129,15 @@ export declare class GrandmasterApp {
      */
     private reportTetriNetScore;
     /**
+     * Pick a running match and watch it.
+     *
+     * Mode-agnostic on purpose: the broker lists every lobby regardless of
+     * what it is playing, and the spectator screen renders both channels, so
+     * versus, CPU battle and TetriNET are all watchable through this one
+     * entry.
+     */
+    private showSpectate;
+    /**
      * Show TetriNET external server connection dialog
      */
     private showTetriNetServerConnect;

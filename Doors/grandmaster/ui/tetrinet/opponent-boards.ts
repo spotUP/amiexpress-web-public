@@ -34,6 +34,13 @@ export interface OpponentBoardsOptions {
   width?: number;
   height?: number;
   maxOpponents?: number;
+  /** Panel label. Defaults to the in-game one. */
+  label?: string;
+  /** Tile size. Defaults suit the in-game side panel. */
+  boardWidth?: number;
+  boardHeight?: number;
+  /** Tiles per row. Defaults to three, as the side panel uses. */
+  perRow?: number;
 }
 
 /**
@@ -57,12 +64,18 @@ export class OpponentBoards {
   // plus the last board's own width) and two down.
   private boardWidth: number = 8;
   private boardHeight: number = 11;
+  private perRow: number = 3;
 
   constructor(options: OpponentBoardsOptions) {
     this.maxOpponents = options.maxOpponents || 5;
+    // The spectator view has the whole screen and lays six fields out in a
+    // single row; the in-game panel is a narrow column and keeps its 3x2.
+    if (options.boardWidth) this.boardWidth = options.boardWidth;
+    if (options.boardHeight) this.boardHeight = options.boardHeight;
+    if (options.perRow) this.perRow = options.perRow;
 
     // Calculate container size
-    const width = options.width || (this.boardWidth * 3 + 4);  // 3 boards per row
+    const width = options.width || (this.boardWidth * this.perRow + 4);
     const height = options.height || (this.boardHeight * 2 + 2); // 2 rows
 
     this.container = createBox({
@@ -73,7 +86,7 @@ export class OpponentBoards {
       height,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
-      label: ' Opponents ',
+      label: options.label ?? ' Opponents ',
       content: '',
       fixed: true,  // Fixed during gameplay, not dockable
       focusable: false,
@@ -126,8 +139,8 @@ export class OpponentBoards {
     // Tile inside the panel's border: 3 across, 2 down, no gap at the bottom.
     // The old +1 offsets pushed the second row to top 13, so with a 24-row
     // panel the bottom board hung off the end.
-    const col = index % 3;
-    const row = Math.floor(index / 3);
+    const col = index % this.perRow;
+    const row = Math.floor(index / this.perRow);
     const left = col * (this.boardWidth + 1);
     const top = row * this.boardHeight;
 

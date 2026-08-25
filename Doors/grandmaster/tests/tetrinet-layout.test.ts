@@ -268,3 +268,19 @@ export async function aHardDropLeavesAStreak(): Promise<void> {
     assert.ok(/░░|██/.test(painted), 'and the field still paints blocks');
   } finally { screen.destroy(); }
 }
+
+export async function theScreenDoesNotRepaintOnEveryTick(): Promise<void> {
+  // Reported live: the motion blur stuttered. The loop repainted a 12x22
+  // field on every 16ms tick - 60 full repaints a second, three times what
+  // the versus screen sends - and the per-cell shadow and blur work pushed
+  // it over what a BBS connection absorbs. Versus solved this long ago with
+  // a 20fps background rate plus render-on-input.
+  const source = readFileSync(join(__dirname, '..', 'ui', 'tetrinet-screen.ts'), 'utf8');
+
+  assert.ok(/RENDER_INTERVAL\s*=\s*50/.test(source),
+    'the background repaint rate must be throttled like the versus screen');
+  assert.ok(/now - this\.lastRender >= TetriNetScreen\.RENDER_INTERVAL/.test(source),
+    'and the loop must respect it');
+  assert.ok(/private renderNow\(\)/.test(source) && /const act = /.test(source),
+    'with input actions repainting immediately, so the throttle is invisible');
+}

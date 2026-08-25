@@ -213,21 +213,30 @@ export class LobbyBroker {
     this.deliverSafe(clientId, 'lobby:created', lobby);
   }
 
-  private handleJoinLobby(clientId: string, data: { lobbyId: string; password?: string }, callback?: Function): void {
+  private handleJoinLobby(
+    clientId: string,
+    data: { lobbyId: string; password?: string; spectator?: boolean },
+    callback?: Function
+  ): void {
     const client = this.clients.get(clientId)!;
     const lobby = this.lobbies.get(data.lobbyId);
+    // Spectators watch rather than play: they take no seat, so a full table
+    // does not shut them out, and they may arrive mid-game - which is the
+    // only time watching is interesting. The LobbyPlayer type has carried a
+    // `spectator` flag since the broker was written and nothing ever set it.
+    const asSpectator = data.spectator === true;
 
     if (!lobby) {
       callback?.({ success: false, error: 'Lobby not found' });
       return;
     }
 
-    if (lobby.players.length >= lobby.maxPlayers) {
+    if (!asSpectator && lobby.players.filter(p => !p.spectator).length >= lobby.maxPlayers) {
       callback?.({ success: false, error: 'Lobby is full' });
       return;
     }
 
-    if (lobby.state !== 'waiting') {
+    if (!asSpectator && lobby.state !== 'waiting') {
       callback?.({ success: false, error: 'Game already in progress' });
       return;
     }
@@ -243,8 +252,8 @@ export class LobbyBroker {
       username: client.playerName,
       node: client.nodeId,
       latency: 0,
-      ready: false,
-      spectator: false,
+      ready: asSpectator,   // a spectator never blocks a start
+      spectator: asSpectator,
       isHost: false,
       joinedAt: new Date(),
       data: {},
@@ -275,9 +284,23 @@ export class LobbyBroker {
     callback?.({ success: false, error: 'Invalid invite code' });
   }
 
-  private handleListLobbies(clientId: string, _options: any, callback?: Function): void {
-    const publicLobbies = Array.from(this.lobbies.values())
-      .filter(l => !l.isPrivate && l.state === 'waiting' && l.players.length < l.maxPlayers);
+  private handleListLobbies(
+    clientId: string,
+    options: { includeInProgress?: boolean } | undefined,
+    callback?: Function
+  ): void {
+    // Joinable lobbies by default. A spectator browser asks for the ones
+    // already playing as well - those are the games worth watching, and the
+    // old filter hid every one of them.
+    const includeInProgress = options?.includeInProgress === true;
+
+    const publicLobbies = Array.from(this.lobbies.values()).filter(lobby => {
+      if (lobby.isPrivate) return false;
+      if (includeInProgress) return true;
+      return lobby.state === 'waiting'
+        && lobby.players.filter(p => !p.spectator).length < lobby.maxPlayers;
+    });
+
     callback?.({ success: true, lobbies: publicLobbies });
   }
 

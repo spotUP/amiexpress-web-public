@@ -28,6 +28,7 @@ const TEST_MODULES = [
   './tetrinet-ai.test',
   './tetrinet-protocol.test',
   './tetrinet-winlist.test',
+  './spectator.test',
   './tetrinet-layout.test',
 ];
 

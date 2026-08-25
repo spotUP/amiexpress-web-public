@@ -252,8 +252,8 @@ export class NetworkEngine extends EventEmitter {
   /**
    * Join a lobby
    */
-  async joinLobby(lobbyId: string, password?: string): Promise<Lobby> {
-    return this.lobby.join(lobbyId, password);
+  async joinLobby(lobbyId: string, password?: string, options?: { spectator?: boolean }): Promise<Lobby> {
+    return this.lobby.join(lobbyId, password, options);
   }
 
   /**

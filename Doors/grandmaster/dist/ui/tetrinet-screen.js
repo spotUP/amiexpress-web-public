@@ -30,6 +30,7 @@ class TetriNetScreen {
     constructor(options) {
         this.running = false;
         this.unsubscribers = [];
+        this.lastRender = 0;
         /** Participants on other BBS nodes, keyed by the id their packets carry. */
         this.remotes = new Map();
         /** Whether any remote participant has ever been seen (victory needs this). */
@@ -666,8 +667,16 @@ class TetriNetScreen {
                     this.publishFields();
                 }
                 this.checkVictory();
-                // Render
-                this.render();
+                // Render at 20 fps in the background. This was an UNCONDITIONAL
+                // render on every 16 ms tick - 60 full repaints a second of a 12x22
+                // field, three times what the versus screen sends, and with the
+                // landing shadow and the motion blur now drawn per cell it was
+                // enough to make the blur stutter over a BBS connection. Input
+                // still feels immediate: every action calls renderNow().
+                if (now - this.lastRender >= TetriNetScreen.RENDER_INTERVAL) {
+                    this.render();
+                    this.lastRender = now;
+                }
                 // Check for game over
                 const gameState = this.engine.getState();
                 if (gameState.status === 'gameover' || gameState.status === 'won') {
@@ -701,35 +710,36 @@ class TetriNetScreen {
         // all SILENT in TetriNET mode while the same actions were audible in
         // single player. (No IRS/IHS cues here - the TetriNET engine has no
         // initial-rotation/hold system.)
-        this.inputHandler.on('left', () => {
+        const act = (fn) => () => { fn(); this.renderNow(); };
+        this.inputHandler.on('left', act(() => {
             if (this.engine.move(-1))
                 this.sounds.playSfx('move');
-        });
-        this.inputHandler.on('right', () => {
+        }));
+        this.inputHandler.on('right', act(() => {
             if (this.engine.move(1))
                 this.sounds.playSfx('move');
-        });
+        }));
         // Rotation
-        this.inputHandler.on('rotate_cw', () => {
+        this.inputHandler.on('rotate_cw', act(() => {
             if (this.engine.rotate(1))
                 this.sounds.playSfx('rotate');
-        });
-        this.inputHandler.on('rotate_ccw', () => {
+        }));
+        this.inputHandler.on('rotate_ccw', act(() => {
             if (this.engine.rotate(-1))
                 this.sounds.playSfx('rotate');
-        });
+        }));
         // Drop
-        this.inputHandler.on('soft_drop', () => this.engine.softDrop());
-        this.inputHandler.on('hard_drop', () => {
+        this.inputHandler.on('soft_drop', act(() => { this.engine.softDrop(); }));
+        this.inputHandler.on('hard_drop', act(() => {
             this.recordHardDropTrail();
             this.engine.hardDrop();
             this.sounds.playSfx('hard_drop');
-        });
+        }));
         // Hold
-        this.inputHandler.on('hold', () => {
+        this.inputHandler.on('hold', act(() => {
             if (this.engine.hold())
                 this.sounds.playSfx('hold');
-        });
+        }));
         // Pause
         this.inputHandler.on('pause', () => this.togglePause());
         // TetriNET's special keys, through the SAME input path as movement.
@@ -760,6 +770,11 @@ class TetriNetScreen {
                 this.inventoryPanel.showUseAnimation();
             }
         });
+    }
+    /** Repaint now - used by input handlers so the throttle is invisible. */
+    renderNow() {
+        this.render();
+        this.lastRender = Date.now();
     }
     /** Ids of everyone still playing, this node's human excluded. */
     livingTargets() {
@@ -1104,4 +1119,6 @@ class TetriNetScreen {
     }
 }
 exports.TetriNetScreen = TetriNetScreen;
+/** Background repaint rate, matching the versus screen. */
+TetriNetScreen.RENDER_INTERVAL = 50;
 //# sourceMappingURL=tetrinet-screen.js.map

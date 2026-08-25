@@ -119,18 +119,31 @@ export declare class GrandmasterNetworkManager extends EventEmitter {
      */
     joinLobby(lobbyId: string): Promise<void>;
     /**
+     * Join a lobby to WATCH it.
+     *
+     * A spectator takes no seat, so a full table does not shut them out, and
+     * they may arrive mid-game - which is the only time watching is
+     * interesting. They still receive every game event broadcast to the
+     * lobby, which is what the spectator screen renders.
+     */
+    spectateLobby(lobbyId: string): Promise<void>;
+    /**
      * Leave current lobby
      */
     leaveLobby(): Promise<void>;
     /**
      * List available lobbies
      */
-    listLobbies(): Promise<Array<{
+    listLobbies(options?: {
+        includeInProgress?: boolean;
+    }): Promise<Array<{
         id: string;
         name: string;
         players: number;
         maxPlayers: number;
         mode: string;
+        state: string;
+        playerNames: string[];
     }>>;
     /**
      * Set ready status in lobby

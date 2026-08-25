@@ -30,6 +30,13 @@ export interface OpponentBoardsOptions {
     width?: number;
     height?: number;
     maxOpponents?: number;
+    /** Panel label. Defaults to the in-game one. */
+    label?: string;
+    /** Tile size. Defaults suit the in-game side panel. */
+    boardWidth?: number;
+    boardHeight?: number;
+    /** Tiles per row. Defaults to three, as the side panel uses. */
+    perRow?: number;
 }
 /**
  * Opponent Boards component
@@ -40,6 +47,7 @@ export declare class OpponentBoards {
     private maxOpponents;
     private boardWidth;
     private boardHeight;
+    private perRow;
     constructor(options: OpponentBoardsOptions);
     /**
      * Update all opponent boards

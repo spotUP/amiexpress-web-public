@@ -21,6 +21,7 @@ export type MenuSelection =
   | 'ultra'
   | 'dig'
   | 'zone'
+  | 'spectate'
   | 'settings'
   | 'stats'
   | 'manual'
@@ -144,6 +145,7 @@ export class MenuScreen {
           '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
           '{red-fg}DIG MODE{/red-fg}',
           '{cyan-fg}ZONE MODE{/cyan-fg}',
+          '{magenta-fg}WATCH A GAME{/magenta-fg}',
           '',
           'Settings',
           'High Scores',
@@ -217,6 +219,7 @@ export class MenuScreen {
           'ultra',
           'dig',
           'zone',
+          'spectate',
           'master',  // Separator line, default to master
           'settings',
           'stats',
@@ -353,6 +356,13 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|{/yellow-
       'with Rotate180\n' +
       'for a bonus!\n\n' +
       '{gray-fg}Min 20% to fire{/gray-fg}',
+
+      // WATCH A GAME
+      '{bold}{magenta-fg}WATCH A GAME{/magenta-fg}{/bold}\n\n' +
+      'Spectate a match\n' +
+      'already running on\n' +
+      'this BBS.\n\n' +
+      '{gray-fg}Versus, CPU battle\nand TetriNET{/gray-fg}',
 
       // Empty separator
       '',

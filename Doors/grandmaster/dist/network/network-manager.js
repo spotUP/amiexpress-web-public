@@ -278,6 +278,17 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         // matchState will be synced via lobby:joined event handler
     }
     /**
+     * Join a lobby to WATCH it.
+     *
+     * A spectator takes no seat, so a full table does not shut them out, and
+     * they may arrive mid-game - which is the only time watching is
+     * interesting. They still receive every game event broadcast to the
+     * lobby, which is what the spectator screen renders.
+     */
+    async spectateLobby(lobbyId) {
+        await this.network.joinLobby(lobbyId, undefined, { spectator: true });
+    }
+    /**
      * Leave current lobby
      */
     async leaveLobby() {
@@ -289,15 +300,22 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
     /**
      * List available lobbies
      */
-    async listLobbies() {
-        const lobbies = await this.network.lobby.listLobbies();
-        return lobbies.map(l => ({
-            id: l.id,
-            name: l.name,
-            players: l.players.length,
-            maxPlayers: l.maxPlayers,
-            mode: l.settings?.mode || 'unknown',
-        }));
+    async listLobbies(options) {
+        const lobbies = await this.network.lobby.listLobbies(options);
+        return lobbies.map(l => {
+            const seated = l.players.filter((p) => !p.spectator);
+            return {
+                id: l.id,
+                name: l.name,
+                players: seated.length,
+                maxPlayers: l.maxPlayers,
+                mode: l.settings?.mode || 'unknown',
+                // A watcher needs to know which games are actually running, and who
+                // is in them.
+                state: l.state || 'waiting',
+                playerNames: seated.map((p) => p.username),
+            };
+        });
     }
     /**
      * Set ready status in lobby

@@ -36,6 +36,7 @@ import { GameScreen } from './ui/game-screen';
 import { SettingsScreen } from './ui/settings-screen';
 import { LobbyScreen } from './ui/lobby-screen';
 import { VersusScreen } from './ui/versus-screen';
+import { SpectatorScreen } from './ui/spectator-screen';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
@@ -560,6 +561,9 @@ export class GrandmasterApp {
         break;
       case 'training':
         await this.startTraining();
+        break;
+      case 'spectate':
+        await this.showSpectate();
         break;
       case 'settings':
         await this.showSettings();
@@ -1399,6 +1403,109 @@ export class GrandmasterApp {
     if (opts?.networked) {
       this.broadcastMatchResult(username, { result, won: result.completed });
     }
+  }
+
+  /**
+   * Pick a running match and watch it.
+   *
+   * Mode-agnostic on purpose: the broker lists every lobby regardless of
+   * what it is playing, and the spectator screen renders both channels, so
+   * versus, CPU battle and TetriNET are all watchable through this one
+   * entry.
+   */
+  private async showSpectate(): Promise<void> {
+    this.currentScreen = 'lobby';
+    this.inputManager.suspend();
+    const nav = createMenuNav(this.session.bbsSession, this.screen);
+
+    if (!this.network) {
+      this.network = new GrandmasterNetworkManager(this.session.bbsSession);
+    }
+
+    let games: Array<{ id: string; name: string; players: number; maxPlayers: number; mode: string; state: string; playerNames: string[] }> = [];
+    try {
+      games = await this.network.listLobbies({ includeInProgress: true });
+    } catch (error) {
+      console.error('[GRANDMASTER] Failed to list games to watch:', error);
+    }
+
+    const running = games.filter(game => game.players > 0);
+
+    const panel = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 60,
+      height: 16,
+      border: { type: 'line' },
+      label: ' WATCH A GAME ',
+      style: { border: { fg: 'magenta' } },
+      fixed: true,
+    });
+
+    const items = running.length > 0
+      ? running.map(game =>
+          `${game.mode.padEnd(14)} ${String(game.players).padStart(2)}/${game.maxPlayers}  ` +
+          `${game.state === 'waiting' ? 'in lobby' : 'playing '}  ${game.playerNames.join(', ').slice(0, 20)}`)
+      : ['{gray-fg}No games running right now{/gray-fg}'];
+
+    const list = createList({
+      parent: panel,
+      top: 1,
+      left: 1,
+      width: 56,
+      height: 12,
+      items: [...items, '{gray-fg}Back{/gray-fg}'],
+      keys: true,
+      vi: true,
+      mouse: true,
+      style: { selected: { bg: 'magenta', fg: 'black' }, item: { fg: 'white' } },
+    });
+    list.focus();
+    this.screen.render();
+
+    const choice = await new Promise<number>((resolve) => {
+      const onSelect = (_item: any, index: number) => {
+        this.screen.unkey(['escape'], onEscape);
+        resolve(index);
+      };
+      const onEscape = () => {
+        list.removeListener('select', onSelect);
+        this.screen.unkey(['escape'], onEscape);
+        resolve(-1);
+      };
+      list.on('select', onSelect);
+      this.screen.key(['escape'], onEscape);
+    });
+
+    panel.destroy();
+    nav.destroy();
+
+    const target = choice >= 0 && choice < running.length ? running[choice] : null;
+    if (!target) {
+      this.inputManager.resume();
+      return;
+    }
+
+    try {
+      await this.network.spectateLobby(target.id);
+    } catch (error) {
+      console.error('[GRANDMASTER] Failed to start watching:', error);
+      this.inputManager.resume();
+      return;
+    }
+
+    const spectator = new SpectatorScreen({
+      screen: this.screen,
+      network: this.network,
+      sounds: this.sounds,
+      title: `${target.mode} - ${target.playerNames.join(', ')}`,
+    });
+
+    await spectator.run();
+    spectator.cleanup();
+    await this.network.leaveLobby();
+    this.inputManager.resume();
   }
 
   /**

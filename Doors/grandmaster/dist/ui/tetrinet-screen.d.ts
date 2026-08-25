@@ -65,6 +65,9 @@ export declare class TetriNetScreen {
     private effectOverlay;
     private running;
     private unsubscribers;
+    private lastRender;
+    /** Background repaint rate, matching the versus screen. */
+    private static readonly RENDER_INTERVAL;
     /** Participants on other BBS nodes, keyed by the id their packets carry. */
     private remotes;
     /** Whether any remote participant has ever been seen (victory needs this). */
@@ -214,6 +217,8 @@ export declare class TetriNetScreen {
      * Setup input handlers
      */
     private setupInput;
+    /** Repaint now - used by input handlers so the throttle is invisible. */
+    private renderNow;
     /** Ids of everyone still playing, this node's human excluded. */
     private livingTargets;
     /**

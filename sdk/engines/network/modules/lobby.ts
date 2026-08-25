@@ -282,7 +282,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
   /**
    * Join an existing lobby
    */
-  async join(lobbyId: string, password?: string): Promise<Lobby> {
+  async join(lobbyId: string, password?: string, options?: { spectator?: boolean }): Promise<Lobby> {
     return new Promise((resolve, reject) => {
       const socket = this.connection.getSocket();
       if (!socket?.connected) {
@@ -290,7 +290,8 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
         return;
       }
 
-      socket.emit('lobby:join', { lobbyId, password }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
+      // A spectator takes no seat and may arrive mid-game.
+      socket.emit('lobby:join', { lobbyId, password, spectator: options?.spectator === true }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
           this.localPlayerId = ((socket as any).playerId ?? (socket as any).userId) ?? null;
@@ -657,7 +658,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
   /**
    * List available lobbies
    */
-  async listLobbies(options?: { gameMode?: string; notFull?: boolean; notStarted?: boolean }): Promise<Lobby[]> {
+  async listLobbies(options?: { gameMode?: string; notFull?: boolean; notStarted?: boolean; includeInProgress?: boolean }): Promise<Lobby[]> {
     return new Promise((resolve, reject) => {
       const socket = this.connection.getSocket();
       if (!socket?.connected) {
