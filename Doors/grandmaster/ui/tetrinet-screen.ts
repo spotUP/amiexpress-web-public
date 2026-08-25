@@ -18,6 +18,7 @@ import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction } from '../core/types';
 import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
+import { tetrinetHints, type InputSource } from './input-hints';
 import type {
   TetriNetTransport,
   TetriNetFieldUpdate,
@@ -85,6 +86,8 @@ export class TetriNetScreen {
   private state: AppState;
   private network: TetriNetTransport | null;
   private gamepadMapper: GamepadActionMapper<GameAction> | null;
+  /** Whichever device the player last touched; the hints follow it. */
+  private inputSource: InputSource = 'keyboard';
   private playerName: string;
   private aiController: any | null;  // AI controller for local mode
   private teams: Record<string, string>;
@@ -699,7 +702,7 @@ export class TetriNetScreen {
         width: 80,
         height: rows - 24,
         border: { type: 'none' },
-        content: '{gray-fg} 1-6 special on player   0 self   TAB random   BS discard   P pause{/gray-fg}',
+        content: this.hintLine(),
         fixed: true,
         focusable: false,
         mouse: false,
@@ -925,8 +928,10 @@ export class TetriNetScreen {
       return wrapped;
     };
     const on = (action: GameAction, handler: () => void) => {
-      this.inputHandler.on(action as any, handler);
-      this.gamepadMapper?.on(action, handler);
+      // Each device announces itself, so the hint bar can name the controls
+      // the player is actually holding.
+      this.inputHandler.on(action as any, () => { this.useSource('keyboard'); handler(); });
+      this.gamepadMapper?.on(action, () => { this.useSource('gamepad'); handler(); });
     };
 
     on('left', act(() => {
@@ -987,6 +992,28 @@ export class TetriNetScreen {
         this.inventoryPanel.showUseAnimation();
       }
     });
+  }
+
+  /**
+   * The hint line for the controls as they are bound RIGHT NOW.
+   *
+   * Was a hardcoded string, so it lied to anyone who rebound a key and to
+   * everyone on a joypad (reported 2026-08-26).
+   */
+  private hintLine(): string {
+    const keys = (this.state.settings.keyBindings ?? {}) as any;
+    const pad = (this.state.settings.gamepadBindings ?? {}) as any;
+    return `{gray-fg} ${tetrinetHints(this.inputSource, keys, pad)}{/gray-fg}`;
+  }
+
+  /** Note which device is in use and refresh the hints if it changed. */
+  private useSource(source: InputSource): void {
+    if (this.inputSource === source) return;
+    this.inputSource = source;
+    if (this.footerBox) {
+      this.footerBox.setContent(this.hintLine());
+      this.screen.render();
+    }
   }
 
   /** Repaint now - used by input handlers so the throttle is invisible. */

@@ -61,6 +61,8 @@ export declare class TetriNetScreen {
     private state;
     private network;
     private gamepadMapper;
+    /** Whichever device the player last touched; the hints follow it. */
+    private inputSource;
     private playerName;
     private aiController;
     private teams;
@@ -227,6 +229,15 @@ export declare class TetriNetScreen {
      * Setup input handlers
      */
     private setupInput;
+    /**
+     * The hint line for the controls as they are bound RIGHT NOW.
+     *
+     * Was a hardcoded string, so it lied to anyone who rebound a key and to
+     * everyone on a joypad (reported 2026-08-26).
+     */
+    private hintLine;
+    /** Note which device is in use and refresh the hints if it changed. */
+    private useSource;
     /** Repaint now - used by input handlers so the throttle is invisible. */
     private renderNow;
     /** Ids of everyone still playing, this node's human excluded. */

@@ -25,6 +25,7 @@ const TEST_MODULES = [
   './das-arr-timing.test',
   './gamepad-every-mode.test',
   './saved-settings-merge.test',
+  './input-hints.test',
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',

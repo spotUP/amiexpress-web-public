@@ -47,8 +47,11 @@ export async function everyTetrinetLaunchGetsTheJoypad(): Promise<void> {
 export async function tetrinetBindsThePadToTheSameActions(): Promise<void> {
   // Same callbacks for keyboard and pad, through one helper - not a second
   // set of bindings that can drift from the first.
+  // The shared binder registers the SAME callback on both devices; it also
+  // notes which device was used, so the hint bar can name the right
+  // controls. Match the call, not its exact argument list.
   assert.ok(
-    tetrinetScreen.includes('this.gamepadMapper?.on(action, handler)'),
+    /this\.gamepadMapper\?\.on\(action,/.test(tetrinetScreen),
     'TetriNET should bind the pad through its shared on() helper'
   );
 
