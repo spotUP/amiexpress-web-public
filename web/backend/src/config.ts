@@ -164,6 +164,7 @@ export class ConfigManager {
            'http://localhost:3000', // SDK preview Vite dev server
            'http://localhost:8080', // SDK preview production server
            'https://bbs.uprough.net',
+           'https://uptown.uprough.net', // second BBS hostname (same site)
            'https://hippoplayer.se', // iframe embed
            'https://www.hippoplayer.se']
     };
