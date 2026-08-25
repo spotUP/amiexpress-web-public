@@ -82,6 +82,7 @@ export class TetriNetScreen {
   // UI Elements
   private boardBox: any;
   private previewBox: any;
+  private footerBox: any;
   private holdBox: any;
   private statsBox: any;
   private suddenDeathBox: any;
@@ -654,6 +655,29 @@ export class TetriNetScreen {
       height: 24,
       maxOpponents: 5,
     });
+
+    // A BBS terminal is 24 OR 25 rows (Screen clamps to 25). The layout is
+    // built for 24, so on a 25-row terminal the last row was left unpainted
+    // and showed as a black band under everything - reported live. Rather
+    // than padding the board out, which is what put a gap between the last
+    // playable row and the frame once before, the spare row carries the
+    // key legend.
+    const rows = Math.max(24, (this.screen as any).height ?? 24);
+    if (rows > 24) {
+      this.footerBox = createBox({
+        parent: this.screen,
+        top: 24,
+        left: 0,
+        width: 80,
+        height: rows - 24,
+        border: { type: 'none' },
+        content: '{gray-fg} 1-6 special on player   0 self   TAB random   BS discard   P pause{/gray-fg}',
+        fixed: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
+      });
+    }
 
     // Effect overlay (attack animations, incoming warnings)
     this.effectOverlay = new EffectOverlay({

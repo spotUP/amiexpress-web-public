@@ -29,7 +29,7 @@ const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
 const inputStub: any = { on() {}, off() {}, setEnabled() {} };
 const appState: any = { settings: { blockGlow: false, glowIntensity: 0, clearStyle: 'instant' } };
 
-function rendered(): { rows: string[]; destroy: () => void } {
+function rendered(): { rows: string[]; destroy: () => void; height: number } {
   const screen: any = new Screen({ title: 'tnet-layout', width: 80, height: 30 });
   const engine: any = new TetriNetEngine({});
   const scr: any = new TetriNetScreen({
@@ -50,7 +50,9 @@ function rendered(): { rows: string[]; destroy: () => void } {
     const row = screen.buffer[y];
     rows.push(row ? row.map((c: [number, string]) => c[1]).join('').replace(/\s+$/, '') : '');
   }
-  return { rows, destroy: () => screen.destroy() };
+  // Screen clamps a BBS terminal to at most 25 rows, so the harness gets
+  // 25 whatever it asks for.
+  return { rows, destroy: () => screen.destroy(), height: screen.height };
 }
 
 /** A row whose first 26 columns are the board's bottom frame. */
@@ -103,13 +105,13 @@ export async function suddenDeathReadoutDoesNotSitOnTheBoard(): Promise<void> {
 
 export async function nothingIsPaintedBelowTheTerminal(): Promise<void> {
   // The old layout put the board at top 1 with height 24 (bottom border on
-  // row 25) and the stats bar at row 25 - so on a 24-row BBS terminal the
-  // field looked bottomless and score/level/lines were nowhere at all.
-  const { rows, destroy } = rendered();
+  // row 25) and the stats bar at row 25 - so on a BBS terminal the field
+  // looked bottomless and score/level/lines were nowhere at all.
+  const { rows, destroy, height } = rendered();
   try {
-    for (let y = 24; y < rows.length; y++) {
+    for (let y = height; y < rows.length; y++) {
       assert.strictEqual(rows[y], '',
-        `row ${y} is off a 24-row terminal but something painted there: ${JSON.stringify(rows[y])}`);
+        `row ${y} is off a ${height}-row terminal but something painted there: ${JSON.stringify(rows[y])}`);
     }
   } finally { destroy(); }
 }
@@ -283,4 +285,32 @@ export async function theScreenDoesNotRepaintOnEveryTick(): Promise<void> {
     'and the loop must respect it');
   assert.ok(/private renderNow\(\)/.test(source) && /const act = /.test(source),
     'with input actions repainting immediately, so the throttle is invisible');
+}
+
+export async function noBlackBandOnATwentyFiveRowTerminal(): Promise<void> {
+  // A BBS terminal is 24 or 25 rows. The layout is built for 24, so on a
+  // 25-row terminal the last row was left unpainted and showed as a black
+  // band under everything - reported live.
+  const screen: any = new Screen({ title: 'tnet-25', width: 80, height: 25 });
+  const engine: any = new TetriNetEngine({} as any, { nextPieceDelayMs: 0 } as any);
+  const scr: any = new TetriNetScreen({
+    screen, engine, inputHandler: { on() {}, off() {}, setEnabled() {} } as any,
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} } as any,
+    state: { settings: {} } as any, network: null, playerName: 'sysop', aiController: null,
+  } as any);
+
+  try {
+    engine.start();
+    scr.render();
+
+    const rows: string[] = [];
+    for (let y = 0; y < screen.height; y++) {
+      rows.push((screen.buffer[y] || []).map((c: [number, string]) => c[1]).join('').trim());
+    }
+
+    for (let y = 0; y < screen.height; y++) {
+      assert.notStrictEqual(rows[y], '',
+        `row ${y} of ${screen.height} is blank - that is the black band`);
+    }
+  } finally { screen.destroy(); }
 }
