@@ -52,6 +52,7 @@ class TetriNetScreen {
         this.network = options.network || null;
         this.playerName = options.playerName;
         this.aiController = options.aiController || null;
+        this.gamepadMapper = options.gamepadMapper || null;
         this.teams = options.teams || {};
         this.setupUI();
         this.setupEngineCallbacks();
@@ -746,38 +747,47 @@ class TetriNetScreen {
         // all SILENT in TetriNET mode while the same actions were audible in
         // single player. (No IRS/IHS cues here - the TetriNET engine has no
         // initial-rotation/hold system.)
-        const act = (fn) => () => { fn(); this.renderNow(); };
-        this.inputHandler.on('left', act(() => {
+        // Register on BOTH the keyboard and the joypad. Same actions, same
+        // callbacks - the pad is not a separate feature per screen.
+        const act = (fn) => {
+            const wrapped = () => { fn(); this.renderNow(); };
+            return wrapped;
+        };
+        const on = (action, handler) => {
+            this.inputHandler.on(action, handler);
+            this.gamepadMapper?.on(action, handler);
+        };
+        on('left', act(() => {
             if (this.engine.move(-1))
                 this.sounds.playSfx('move');
         }));
-        this.inputHandler.on('right', act(() => {
+        on('right', act(() => {
             if (this.engine.move(1))
                 this.sounds.playSfx('move');
         }));
         // Rotation
-        this.inputHandler.on('rotate_cw', act(() => {
+        on('rotate_cw', act(() => {
             if (this.engine.rotate(1))
                 this.sounds.playSfx('rotate');
         }));
-        this.inputHandler.on('rotate_ccw', act(() => {
+        on('rotate_ccw', act(() => {
             if (this.engine.rotate(-1))
                 this.sounds.playSfx('rotate');
         }));
         // Drop
-        this.inputHandler.on('soft_drop', act(() => { this.engine.softDrop(); }));
-        this.inputHandler.on('hard_drop', act(() => {
+        on('soft_drop', act(() => { this.engine.softDrop(); }));
+        on('hard_drop', act(() => {
             this.recordHardDropTrail();
             this.engine.hardDrop();
             this.sounds.playSfx('hard_drop');
         }));
         // Hold
-        this.inputHandler.on('hold', act(() => {
+        on('hold', act(() => {
             if (this.engine.hold())
                 this.sounds.playSfx('hold');
         }));
         // Pause
-        this.inputHandler.on('pause', () => this.togglePause());
+        on('pause', () => this.togglePause());
         // TetriNET's special keys, through the SAME input path as movement.
         //
         // These used to be screen.key() bindings, and in game mode the door

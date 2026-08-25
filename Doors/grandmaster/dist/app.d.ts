@@ -197,6 +197,18 @@ export declare class GrandmasterApp {
     /**
      * Show settings screen
      */
+    /**
+     * The player's joypad, mapped to game actions.
+     *
+     * ONE builder for every mode. This was inline in the single-player launch
+     * only, which is why TetriNET had no joypad support at all while the main
+     * modes did - the pad was a per-screen feature instead of a shared one
+     * (reported 2026-08-26, and fairly: "why don't they use the same
+     * codebase").
+     *
+     * Timing comes from the player's settings, with TGM3's values underneath.
+     */
+    private createGamepadMapper;
     private showSettings;
     /**
      * Show statistics/leaderboard screen

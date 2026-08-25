@@ -16,7 +16,8 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
-import type { AppState } from '../core/types';
+import type { AppState, GameAction } from '../core/types';
+import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
 import type {
   TetriNetTransport,
   TetriNetFieldUpdate,
@@ -56,6 +57,14 @@ export interface TetriNetScreenOptions {
    */
   network?: TetriNetTransport;
   playerName: string;
+  /**
+   * The player's joypad, bound to the SAME actions as the keyboard.
+   *
+   * Wiring the pad per screen is how TetriNET ended up with no joypad at
+   * all while the main modes had one (reported 2026-08-26). Every screen
+   * takes the mapper and binds through one helper.
+   */
+  gamepadMapper?: GamepadActionMapper<GameAction> | null;
   aiController?: any;  // TetriNetAI controller - local bots this node owns
   /**
    * Team per participant id, from the lobby. TetriNET treats teams as
@@ -75,6 +84,7 @@ export class TetriNetScreen {
   private sounds: SoundEngine;
   private state: AppState;
   private network: TetriNetTransport | null;
+  private gamepadMapper: GamepadActionMapper<GameAction> | null;
   private playerName: string;
   private aiController: any | null;  // AI controller for local mode
   private teams: Record<string, string>;
@@ -130,6 +140,7 @@ export class TetriNetScreen {
     this.network = options.network || null;
     this.playerName = options.playerName;
     this.aiController = options.aiController || null;
+    this.gamepadMapper = options.gamepadMapper || null;
     this.teams = options.teams || {};
 
     this.setupUI();
@@ -907,38 +918,47 @@ export class TetriNetScreen {
     // all SILENT in TetriNET mode while the same actions were audible in
     // single player. (No IRS/IHS cues here - the TetriNET engine has no
     // initial-rotation/hold system.)
-    const act = (fn: () => void) => () => { fn(); this.renderNow(); };
+    // Register on BOTH the keyboard and the joypad. Same actions, same
+    // callbacks - the pad is not a separate feature per screen.
+    const act = (fn: () => void) => {
+      const wrapped = () => { fn(); this.renderNow(); };
+      return wrapped;
+    };
+    const on = (action: GameAction, handler: () => void) => {
+      this.inputHandler.on(action as any, handler);
+      this.gamepadMapper?.on(action, handler);
+    };
 
-    this.inputHandler.on('left', act(() => {
+    on('left', act(() => {
       if (this.engine.move(-1)) this.sounds.playSfx('move');
     }));
-    this.inputHandler.on('right', act(() => {
+    on('right', act(() => {
       if (this.engine.move(1)) this.sounds.playSfx('move');
     }));
 
     // Rotation
-    this.inputHandler.on('rotate_cw', act(() => {
+    on('rotate_cw', act(() => {
       if (this.engine.rotate(1)) this.sounds.playSfx('rotate');
     }));
-    this.inputHandler.on('rotate_ccw', act(() => {
+    on('rotate_ccw', act(() => {
       if (this.engine.rotate(-1)) this.sounds.playSfx('rotate');
     }));
 
     // Drop
-    this.inputHandler.on('soft_drop', act(() => { this.engine.softDrop(); }));
-    this.inputHandler.on('hard_drop', act(() => {
+    on('soft_drop', act(() => { this.engine.softDrop(); }));
+    on('hard_drop', act(() => {
       this.recordHardDropTrail();
       this.engine.hardDrop();
       this.sounds.playSfx('hard_drop');
     }));
 
     // Hold
-    this.inputHandler.on('hold', act(() => {
+    on('hold', act(() => {
       if (this.engine.hold()) this.sounds.playSfx('hold');
     }));
 
     // Pause
-    this.inputHandler.on('pause', () => this.togglePause());
+    on('pause', () => this.togglePause());
 
     // TetriNET's special keys, through the SAME input path as movement.
     //

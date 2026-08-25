@@ -683,13 +683,7 @@ class GrandmasterApp {
         const username = this.session.user?.username || this.state.playerName;
         this.gameEngine.startRecording(userId, username);
         // Create gamepad mapper — merge user's saved bindings over the defaults
-        const gamepadMapper = new bbs_door_sdk_1.GamepadActionMapper({
-            bbsSession: this.session.bbsSession,
-            mapping: buildGamepadMapping(GAMEPAD_MAPPING, this.state.settings.gamepadBindings ?? {}),
-            repeatActions: ['left', 'right', 'soft_drop'],
-            dasDelay: this.state.settings.das ?? 133,
-            arrRate: this.state.settings.arr ?? 10,
-        });
+        const gamepadMapper = this.createGamepadMapper();
         // Create game screen
         const gameScreen = new game_screen_1.GameScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, gamepadMapper);
         // Run game loop
@@ -1240,6 +1234,8 @@ class GrandmasterApp {
             aiController = new TetriNetAI();
             aiController.createOpponents(bots.botCount, bots.botDifficulty, this.state.settings, gameOptions);
         }
+        // The same joypad the main modes use - one builder, every screen.
+        const tetrinetPad = this.createGamepadMapper();
         const gameScreen = new tetrinet_screen_1.TetriNetScreen({
             screen: this.screen,
             engine: gameEngine,
@@ -1248,6 +1244,7 @@ class GrandmasterApp {
             state: this.state,
             network: transport,
             playerName: this.state.playerName,
+            gamepadMapper: tetrinetPad,
             aiController,
             teams,
         });
@@ -1290,6 +1287,8 @@ class GrandmasterApp {
         const aiController = new TetriNetAI();
         const aiOpponents = aiController.createOpponents(Math.max(1, bots.botCount), bots.botDifficulty, this.state.settings, gameOptions);
         // Create TetriNET screen with AI opponents
+        // The same joypad the main modes use - one builder, every screen.
+        const tetrinetPad = this.createGamepadMapper();
         const gameScreen = new tetrinet_screen_1.TetriNetScreen({
             screen: this.screen,
             engine: gameEngine,
@@ -1297,6 +1296,7 @@ class GrandmasterApp {
             sounds: this.sounds,
             state: this.state,
             playerName: this.state.playerName,
+            gamepadMapper: tetrinetPad,
             aiController, // Pass AI controller to screen
             teams,
         });
@@ -2285,6 +2285,8 @@ class GrandmasterApp {
             // clients have no hold, so switching it on locally would be an
             // advantage the rest of the table does not share.
             gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, data.options || {});
+            // The same joypad the main modes use - one builder, every screen.
+            const tetrinetPad = this.createGamepadMapper();
             gameScreen = new tetrinet_screen_1.TetriNetScreen({
                 screen: this.screen,
                 engine: gameEngine,
@@ -2293,6 +2295,7 @@ class GrandmasterApp {
                 state: this.state,
                 network: externalAdapter,
                 playerName: this.state.playerName,
+                gamepadMapper: tetrinetPad,
             });
             const unsubSpecial = gameEngine.onSpecialUsed((special, targetId) => {
                 const targetSlot = targetId ? externalAdapter.getSlotForPlayerId(targetId) : client.getSlot();
@@ -2565,6 +2568,26 @@ class GrandmasterApp {
     /**
      * Show settings screen
      */
+    /**
+     * The player's joypad, mapped to game actions.
+     *
+     * ONE builder for every mode. This was inline in the single-player launch
+     * only, which is why TetriNET had no joypad support at all while the main
+     * modes did - the pad was a per-screen feature instead of a shared one
+     * (reported 2026-08-26, and fairly: "why don't they use the same
+     * codebase").
+     *
+     * Timing comes from the player's settings, with TGM3's values underneath.
+     */
+    createGamepadMapper() {
+        return new bbs_door_sdk_1.GamepadActionMapper({
+            bbsSession: this.session.bbsSession,
+            mapping: buildGamepadMapping(GAMEPAD_MAPPING, this.state.settings.gamepadBindings ?? {}),
+            repeatActions: ['left', 'right', 'soft_drop'],
+            dasDelay: this.state.settings.das ?? config_1.TIMING.DAS_DELAY,
+            arrRate: this.state.settings.arr ?? config_1.TIMING.ARR_RATE,
+        });
+    }
     async showSettings() {
         this.currentScreen = 'settings';
         this.inputManager.suspend();

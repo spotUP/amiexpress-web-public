@@ -23,6 +23,7 @@ const TEST_MODULES = [
   './tetrinet-line-clear.test',
   './tetrinet-cell-width.test',
   './das-arr-timing.test',
+  './gamepad-every-mode.test',
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',

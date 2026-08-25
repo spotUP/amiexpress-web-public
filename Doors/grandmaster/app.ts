@@ -40,7 +40,7 @@ import { SpectatorScreen } from './ui/spectator-screen';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
-import { DEFAULT_KEYS } from './input/config';
+import { DEFAULT_KEYS, TIMING } from './input/config';
 import { GamepadActionMapper, GamepadButton, GamepadAxis, GamepadInputManager } from '@amiexpress/bbs-door-sdk';
 import type { GamepadTrigger } from '@amiexpress/bbs-door-sdk';
 import type { GameAction } from './core/types';
@@ -738,13 +738,7 @@ export class GrandmasterApp {
     this.gameEngine.startRecording(userId, username);
 
     // Create gamepad mapper — merge user's saved bindings over the defaults
-    const gamepadMapper = new GamepadActionMapper<GameAction>({
-      bbsSession: this.session.bbsSession,
-      mapping: buildGamepadMapping(GAMEPAD_MAPPING, this.state.settings.gamepadBindings ?? {}),
-      repeatActions: ['left', 'right', 'soft_drop'],
-      dasDelay: this.state.settings.das ?? 133,
-      arrRate: this.state.settings.arr ?? 10,
-    });
+    const gamepadMapper = this.createGamepadMapper();
 
     // Create game screen
     const gameScreen = new GameScreen(
@@ -1391,6 +1385,8 @@ export class GrandmasterApp {
       );
     }
 
+    // The same joypad the main modes use - one builder, every screen.
+    const tetrinetPad = this.createGamepadMapper();
     const gameScreen = new TetriNetScreen({
       screen: this.screen,
       engine: gameEngine,
@@ -1399,6 +1395,7 @@ export class GrandmasterApp {
       state: this.state,
       network: transport,
       playerName: this.state.playerName,
+      gamepadMapper: tetrinetPad,
       aiController,
       teams,
     });
@@ -1460,6 +1457,8 @@ export class GrandmasterApp {
     );
 
     // Create TetriNET screen with AI opponents
+    // The same joypad the main modes use - one builder, every screen.
+    const tetrinetPad = this.createGamepadMapper();
     const gameScreen = new TetriNetScreen({
       screen: this.screen,
       engine: gameEngine,
@@ -1467,6 +1466,7 @@ export class GrandmasterApp {
       sounds: this.sounds,
       state: this.state,
       playerName: this.state.playerName,
+      gamepadMapper: tetrinetPad,
       aiController,  // Pass AI controller to screen
       teams,
     });
@@ -2575,6 +2575,8 @@ export class GrandmasterApp {
       // clients have no hold, so switching it on locally would be an
       // advantage the rest of the table does not share.
       gameEngine = new TetriNetEngine(this.state.settings, data.options || {});
+      // The same joypad the main modes use - one builder, every screen.
+      const tetrinetPad = this.createGamepadMapper();
       gameScreen = new TetriNetScreen({
         screen: this.screen,
         engine: gameEngine,
@@ -2583,6 +2585,7 @@ export class GrandmasterApp {
         state: this.state,
         network: externalAdapter as any,
         playerName: this.state.playerName,
+        gamepadMapper: tetrinetPad,
       });
 
       const unsubSpecial = gameEngine.onSpecialUsed((special, targetId) => {
@@ -2931,6 +2934,27 @@ export class GrandmasterApp {
   /**
    * Show settings screen
    */
+  /**
+   * The player's joypad, mapped to game actions.
+   *
+   * ONE builder for every mode. This was inline in the single-player launch
+   * only, which is why TetriNET had no joypad support at all while the main
+   * modes did - the pad was a per-screen feature instead of a shared one
+   * (reported 2026-08-26, and fairly: "why don't they use the same
+   * codebase").
+   *
+   * Timing comes from the player's settings, with TGM3's values underneath.
+   */
+  private createGamepadMapper(): GamepadActionMapper<GameAction> {
+    return new GamepadActionMapper<GameAction>({
+      bbsSession: this.session.bbsSession,
+      mapping: buildGamepadMapping(GAMEPAD_MAPPING, this.state.settings.gamepadBindings ?? {}),
+      repeatActions: ['left', 'right', 'soft_drop'],
+      dasDelay: this.state.settings.das ?? TIMING.DAS_DELAY,
+      arrRate: this.state.settings.arr ?? TIMING.ARR_RATE,
+    });
+  }
+
   private async showSettings(): Promise<void> {
     this.currentScreen = 'settings';
 

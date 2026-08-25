@@ -14,7 +14,8 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
-import type { AppState } from '../core/types';
+import type { AppState, GameAction } from '../core/types';
+import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
 import type { TetriNetTransport } from '../network/tetrinet-transport';
 import { type OpponentBoardData } from './tetrinet/opponent-boards';
 /**
@@ -33,6 +34,14 @@ export interface TetriNetScreenOptions {
      */
     network?: TetriNetTransport;
     playerName: string;
+    /**
+     * The player's joypad, bound to the SAME actions as the keyboard.
+     *
+     * Wiring the pad per screen is how TetriNET ended up with no joypad at
+     * all while the main modes had one (reported 2026-08-26). Every screen
+     * takes the mapper and binds through one helper.
+     */
+    gamepadMapper?: GamepadActionMapper<GameAction> | null;
     aiController?: any;
     /**
      * Team per participant id, from the lobby. TetriNET treats teams as
@@ -51,6 +60,7 @@ export declare class TetriNetScreen {
     private sounds;
     private state;
     private network;
+    private gamepadMapper;
     private playerName;
     private aiController;
     private teams;
