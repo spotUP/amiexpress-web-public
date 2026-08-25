@@ -677,6 +677,21 @@ class GameEngine {
         this.placePieceWithTimestamp(shape, piece.x, piece.y, piece.type, lockTime);
         // Get locked cells for visual effects
         const lockedCells = shape.map(([dx, dy]) => ({ x: piece.x + dx, y: piece.y + dy }));
+        // LOCK OUT: the board (24 rows) is taller than the rendered playfield
+        // (20 rows); rows above getVisibleTop() are a spawn buffer that nothing
+        // draws. The only game-over condition used to be BLOCK OUT - a new piece
+        // failing to spawn - so the stack could keep growing through those
+        // hidden rows and the player carried on playing in space they could not
+        // see, well past the visible ceiling. A piece that comes to rest even
+        // partly above the visible top now ends the game, which makes the
+        // playable field exactly the field on screen.
+        const visibleTop = (0, board_1.getVisibleTop)(this.state.board);
+        if (lockedCells.some(c => c.y < visibleTop)) {
+            this.state.status = 'gameover';
+            this.state.endTime = Date.now();
+            this.sounds.playSfx('game_over');
+            return;
+        }
         // Trigger placement effect (before particles/shake)
         const pieceColor = this.getPieceColorName(piece.type);
         if (this.settings.placementEffects) {

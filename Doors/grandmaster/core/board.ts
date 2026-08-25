@@ -174,8 +174,10 @@ export function clearLines(board: Board, lines: number[]): void {
  * Check if board is topped out (game over)
  */
 export function isTopOut(board: Board): boolean {
-  // Check top 4 rows for any locked cells
-  for (let y = 0; y < 4; y++) {
+  // Any locked cell above the visible field means the stack has grown past
+  // the ceiling the player can actually see.
+  const top = getVisibleTop(board);
+  for (let y = 0; y < top; y++) {
     for (let x = 0; x < board.width; x++) {
       if (board.grid[y][x].filled && board.grid[y][x].locked) {
         return true;
@@ -183,6 +185,20 @@ export function isTopOut(board: Board): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Number of board rows the player can actually see.
+ *
+ * The board is taller than the rendered playfield: the extra rows at the top
+ * are a spawn buffer that no screen draws (game-screen renders y=4..23 of a
+ * 24-row board). They are scenery for spawning, NOT extra playing space.
+ */
+export const VISIBLE_ROWS = 20;
+
+/** First board row the player can see; everything above it is spawn buffer. */
+export function getVisibleTop(board: Board): number {
+  return Math.max(0, board.height - VISIBLE_ROWS);
 }
 
 /**

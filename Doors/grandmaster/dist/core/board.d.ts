@@ -37,6 +37,16 @@ export declare function clearLines(board: Board, lines: number[]): void;
  */
 export declare function isTopOut(board: Board): boolean;
 /**
+ * Number of board rows the player can actually see.
+ *
+ * The board is taller than the rendered playfield: the extra rows at the top
+ * are a spawn buffer that no screen draws (game-screen renders y=4..23 of a
+ * 24-row board). They are scenery for spawning, NOT extra playing space.
+ */
+export declare const VISIBLE_ROWS = 20;
+/** First board row the player can see; everything above it is spawn buffer. */
+export declare function getVisibleTop(board: Board): number;
+/**
  * Check if perfect clear (all cells empty)
  */
 export declare function isPerfectClear(board: Board): boolean;

@@ -9,6 +9,7 @@
  * - Ghost piece calculation
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.VISIBLE_ROWS = void 0;
 exports.createBoard = createBoard;
 exports.checkCollision = checkCollision;
 exports.placePiece = placePiece;
@@ -16,6 +17,7 @@ exports.getGhostY = getGhostY;
 exports.getCompleteLines = getCompleteLines;
 exports.clearLines = clearLines;
 exports.isTopOut = isTopOut;
+exports.getVisibleTop = getVisibleTop;
 exports.isPerfectClear = isPerfectClear;
 exports.getBoardHeight = getBoardHeight;
 exports.getColumnHeight = getColumnHeight;
@@ -152,8 +154,10 @@ function clearLines(board, lines) {
  * Check if board is topped out (game over)
  */
 function isTopOut(board) {
-    // Check top 4 rows for any locked cells
-    for (let y = 0; y < 4; y++) {
+    // Any locked cell above the visible field means the stack has grown past
+    // the ceiling the player can actually see.
+    const top = getVisibleTop(board);
+    for (let y = 0; y < top; y++) {
         for (let x = 0; x < board.width; x++) {
             if (board.grid[y][x].filled && board.grid[y][x].locked) {
                 return true;
@@ -161,6 +165,18 @@ function isTopOut(board) {
         }
     }
     return false;
+}
+/**
+ * Number of board rows the player can actually see.
+ *
+ * The board is taller than the rendered playfield: the extra rows at the top
+ * are a spawn buffer that no screen draws (game-screen renders y=4..23 of a
+ * 24-row board). They are scenery for spawning, NOT extra playing space.
+ */
+exports.VISIBLE_ROWS = 20;
+/** First board row the player can see; everything above it is spawn buffer. */
+function getVisibleTop(board) {
+    return Math.max(0, board.height - exports.VISIBLE_ROWS);
 }
 /**
  * Check if perfect clear (all cells empty)
