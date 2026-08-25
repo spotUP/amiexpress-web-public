@@ -21,6 +21,7 @@ const TEST_MODULES = [
   './hard-drop-blur.test',
   './gamepad-menu-bindings.test',
   './tetrinet-line-clear.test',
+  './tetrinet-cell-width.test',
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',

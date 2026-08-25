@@ -266,6 +266,16 @@ export declare class TetriNetScreen {
     /**
      * Get colored block character for special type
      */
+    /**
+     * A special block, in EXACTLY two columns.
+     *
+     * These used to render as `[A]` - three characters against every other
+     * cell's two. Each special on a row therefore pushed everything to its
+     * right one column further and overran the board's edge, which is what
+     * "it offsets pieces sideways" and the odd band near the floor actually
+     * were (reported with a screenshot, 2026-08-25). The letter is what
+     * matters; the brackets were what broke the grid.
+     */
     private getSpecialBlockChar;
     /**
      * Toggle pause

@@ -860,6 +860,9 @@ class TetriNetScreen {
                 focusable: false,
                 mouse: false,
                 clickable: false,
+                // Dialogs must be opaque. Without a background the board or menu behind
+                // them showed through and the text was hard to read (reported 2026-08-25).
+                style: { bg: 'black' },
             });
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1069,26 +1072,39 @@ class TetriNetScreen {
     /**
      * Get colored block character for special type
      */
+    /**
+     * A special block, in EXACTLY two columns.
+     *
+     * These used to render as `[A]` - three characters against every other
+     * cell's two. Each special on a row therefore pushed everything to its
+     * right one column further and overran the board's edge, which is what
+     * "it offsets pieces sideways" and the odd band near the floor actually
+     * were (reported with a screenshot, 2026-08-25). The letter is what
+     * matters; the brackets were what broke the grid.
+     */
     getSpecialBlockChar(special) {
-        const chars = {
-            add_line: '{red-fg}[A]{/red-fg}',
-            clear_line: '{cyan-fg}[C]{/cyan-fg}',
-            nuke: '{yellow-fg}[N]{/yellow-fg}',
-            random_clear: '{green-fg}[R]{/green-fg}',
-            switch: '{magenta-fg}[S]{/magenta-fg}',
-            clear_specials: '{blue-fg}[B]{/blue-fg}',
-            gravity: '{white-fg}[G]{/white-fg}',
-            quake: '{yellow-fg}[Q]{/yellow-fg}',
-            block_bomb: '{red-fg}[O]{/red-fg}',
-            clear_column: '{cyan-fg}[V]{/cyan-fg}',
-            immunity: '{white-fg}[I]{/white-fg}',
-            darkness: '{gray-fg}[D]{/gray-fg}',
-            confusion: '{magenta-fg}[F]{/magenta-fg}',
-            mutation: '{green-fg}[M]{/green-fg}',
-            zebra: '{white-fg}[Z]{/white-fg}',
-            left_gravity: '{blue-fg}[L]{/blue-fg}',
+        const letters = {
+            add_line: { letter: 'A', color: 'red' },
+            clear_line: { letter: 'C', color: 'cyan' },
+            nuke: { letter: 'N', color: 'yellow' },
+            random_clear: { letter: 'R', color: 'green' },
+            switch: { letter: 'S', color: 'magenta' },
+            clear_specials: { letter: 'B', color: 'blue' },
+            gravity: { letter: 'G', color: 'white' },
+            quake: { letter: 'Q', color: 'yellow' },
+            block_bomb: { letter: 'O', color: 'red' },
+            clear_column: { letter: 'V', color: 'cyan' },
+            immunity: { letter: 'I', color: 'white' },
+            darkness: { letter: 'D', color: 'gray' },
+            confusion: { letter: 'F', color: 'magenta' },
+            mutation: { letter: 'M', color: 'green' },
+            zebra: { letter: 'Z', color: 'white' },
+            left_gravity: { letter: 'L', color: 'blue' },
         };
-        return chars[special] || '{gray-fg}[?]{/gray-fg}';
+        const spec = letters[special] ?? { letter: '?', color: 'gray' };
+        // Two visible columns: the letter on a block, so it still reads as a
+        // filled cell rather than a hole in the stack.
+        return `{black-fg}{${spec.color}-bg}${spec.letter} {/${spec.color}-bg}{/black-fg}`;
     }
     /**
      * Toggle pause

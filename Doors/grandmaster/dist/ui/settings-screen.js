@@ -359,7 +359,7 @@ class SettingsScreen {
             width: 50,
             height: 8,
             border: { type: 'line' },
-            style: { border: { fg: 'yellow' } },
+            style: { bg: 'black', border: { fg: 'yellow' } },
             content: `{bold}${key.toUpperCase()}{/bold}\n\n` +
                 `Current: {yellow-fg}${current}{/yellow-fg}\n` +
                 `Range: ${min} - ${max}\n\n` +
@@ -427,7 +427,7 @@ class SettingsScreen {
             width: 50,
             height: 7,
             border: { type: 'line' },
-            style: { border: { fg: 'yellow' } },
+            style: { bg: 'black', border: { fg: 'yellow' } },
             content: '',
             fixed: true,
             focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
@@ -490,7 +490,7 @@ class SettingsScreen {
             width: 55,
             height: 12,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             content: '',
             fixed: true,
             focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
@@ -614,7 +614,7 @@ class SettingsScreen {
             width: 57,
             height: 14,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             content: '',
             fixed: true,
             focusable: true,
@@ -833,7 +833,7 @@ class SettingsScreen {
             width: 57,
             height: 14,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             content: '',
             fixed: true,
             focusable: true,
@@ -950,7 +950,7 @@ class SettingsScreen {
             width: 55,
             height: 12,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             content: '',
             fixed: true,
             focusable: true,

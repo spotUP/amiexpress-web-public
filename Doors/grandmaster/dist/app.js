@@ -150,7 +150,22 @@ exports.MENU_ACTION_KEYS = {
 // Destroy the returned object when leaving the screen to restore the previous handler.
 function createMenuNav(bbsSession, screen, savedBindings = {}) {
     const gim = new bbs_door_sdk_1.GamepadInputManager(bbsSession);
-    const emit = (name, sequence) => screen.emit('keypress', sequence, { name, full: name, sequence });
+    // Feed the key through Screen's REAL dispatch, not screen.emit().
+    //
+    // screen.emit('keypress') only runs listeners attached to the Screen
+    // object; it never reaches the FOCUSED element, which is where a menu's
+    // List widget reads its keys. So a bound pad drove the game (whose action
+    // mapper presses keys directly) and did nothing in the menus - reported
+    // exactly that way, 2026-08-25.
+    const emit = (name, sequence) => {
+        const key = { name, full: name, sequence, shift: false, ctrl: false, meta: false };
+        if (typeof screen._handleKey === 'function') {
+            screen._handleKey(sequence, key);
+        }
+        else {
+            screen.emit('keypress', sequence, key);
+        }
+    };
     const mapping = buildGamepadMapping(GAMEPAD_MAPPING, savedBindings);
     /** Every trigger that should produce a given menu key. */
     const triggersFor = (key) => {
@@ -692,7 +707,7 @@ class GrandmasterApp {
                 width: 60,
                 height: 8,
                 border: { type: 'line' },
-                style: { border: { fg: 'red' } },
+                style: { bg: 'black', border: { fg: 'red' } },
                 // A notice, so centre it on both axes - reported as uncentred 2026-08-25.
                 align: 'center',
                 valign: 'middle',
@@ -718,7 +733,7 @@ class GrandmasterApp {
             height: 12,
             border: { type: 'line' },
             label: ' Select Mode ',
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             fixed: true,
         });
         const modeBox = (0, blessed_helpers_1.createList)({
@@ -782,7 +797,7 @@ class GrandmasterApp {
                     height: 12,
                     border: { type: 'line' },
                     label: ' Change Mode ',
-                    style: { border: { fg: 'cyan' } },
+                    style: { bg: 'black', border: { fg: 'cyan' } },
                     fixed: true,
                 });
                 const reList = (0, blessed_helpers_1.createList)({
@@ -898,7 +913,7 @@ class GrandmasterApp {
             height: 12,
             border: { type: 'line' },
             label: ' TetriNET Mode ',
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             fixed: true,
         });
         const modeBox = (0, blessed_helpers_1.createList)({
@@ -1339,7 +1354,7 @@ class GrandmasterApp {
             height: 16,
             border: { type: 'line' },
             label: ' WATCH A GAME ',
-            style: { border: { fg: 'magenta' } },
+            style: { bg: 'black', border: { fg: 'magenta' } },
             fixed: true,
         });
         const items = running.length > 0
@@ -1435,7 +1450,7 @@ class GrandmasterApp {
             height: Math.min(predefinedServers.length + 10, 20),
             border: { type: 'line' },
             label: ' Select TetriNET Server ',
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             fixed: true,
         });
         const serverSelectBox = (0, blessed_helpers_1.createList)({
@@ -1512,6 +1527,7 @@ class GrandmasterApp {
                 border: { type: 'line' },
                 label: ' Enter Server Address ',
                 style: {
+                    bg: 'black',
                     border: { fg: 'cyan' },
                 },
                 fixed: true,
@@ -1639,7 +1655,7 @@ class GrandmasterApp {
             height: 7,
             border: { type: 'line' },
             label: ' Mode ',
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             fixed: true,
         });
         const modeSelectBox = (0, blessed_helpers_1.createList)({
@@ -1691,6 +1707,7 @@ class GrandmasterApp {
             border: { type: 'line' },
             label: ` Connecting to ${selectedServer} `,
             style: {
+                bg: 'black',
                 border: { fg: 'cyan' },
             },
             fixed: true,
@@ -1766,6 +1783,7 @@ class GrandmasterApp {
                 border: { type: 'line' },
                 label: ' TSpec Password ',
                 style: {
+                    bg: 'black',
                     border: { fg: 'cyan' },
                 },
                 fixed: true,
@@ -1846,7 +1864,7 @@ class GrandmasterApp {
             width: 50,
             height: 7,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             // A notice, so centre it on both axes.
             align: 'center',
             valign: 'middle',
@@ -2350,7 +2368,7 @@ class GrandmasterApp {
             height: 15,
             border: { type: 'line' },
             label: ' Select Bot Difficulty ',
-            style: { border: { fg: 'magenta' } },
+            style: { bg: 'black', border: { fg: 'magenta' } },
             fixed: true,
         });
         const difficultyBox = (0, blessed_helpers_1.createList)({
@@ -2474,7 +2492,7 @@ class GrandmasterApp {
             width: 50,
             height: 7,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { bg: 'black', border: { fg: 'cyan' } },
             // A notice, so centre it on both axes.
             align: 'center',
             valign: 'middle',

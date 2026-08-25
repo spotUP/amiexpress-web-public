@@ -766,6 +766,9 @@ export class VersusScreen {
         focusable: false,
         mouse: false,
         clickable: false,
+        // Dialogs must be opaque. Without a background the board or menu behind
+        // them showed through and the text was hard to read (reported 2026-08-25).
+        style: { bg: 'black' },
       });
       this.screen.render();
       await new Promise(resolve => setTimeout(resolve, 1000));

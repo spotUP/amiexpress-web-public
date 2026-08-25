@@ -16,6 +16,8 @@
  */
 
 import assert from 'assert';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { buildGamepadMapping, MENU_ACTION_KEYS, parseTriggerStr } from '../app';
 
 /** The triggers a menu key would fire on, given the player's bindings. */
@@ -94,4 +96,23 @@ export async function anEmptyBindingDisablesTheAction(): Promise<void> {
   );
 
   assert.strictEqual(mapping.left, undefined);
+}
+
+export async function menuKeysReachTheFocusedWidget(): Promise<void> {
+  // Reported live 2026-08-25: "I can bind the joypad properly now and it
+  // works in game but not in the menus."
+  //
+  // The menu nav announced its keys with screen.emit('keypress'), which only
+  // runs listeners on the Screen OBJECT. A menu's List reads keys through
+  // Screen's dispatch to the FOCUSED element, so nothing arrived. Asserted
+  // against the source because createMenuNav is not exported.
+  const src = readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
+  const start = src.indexOf('function createMenuNav(');
+  assert.ok(start > 0, 'createMenuNav should exist');
+  const body = src.slice(start, src.indexOf('\nconst GAMEPAD_MAPPING', start));
+
+  assert.ok(
+    body.includes('_handleKey('),
+    'menu navigation must feed keys through Screen dispatch, not screen.emit'
+  );
 }
