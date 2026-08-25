@@ -2407,6 +2407,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         term.write('\r\n\x1b[31mError loading door bundle\x1b[0m\r\n');
         doorActive.current = false;
         setActiveClientDoor(null);
+        // A door that failed to load must not leave the pointer captured.
+        capturePointer.current = false;
+        applyPointerCapture(false);
         delete (window as any).__BBS__;
         const failedScript = document.getElementById(scriptId);
         if (failedScript && failedScript.parentNode) {
@@ -2437,6 +2440,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
       doorActive.current = false;
       setActiveClientDoor(null);
+      // Give the pointer back. A game declares capturePointer and hides the
+      // cursor; if it unloads without game mode being switched off first,
+      // the hidden cursor outlived it and every later door inherited it -
+      // which is why LiveChat, which never asks for the pointer, still had
+      // no mouse (reported repeatedly, 2026-08-25).
+      capturePointer.current = false;
+      lockedPointer.current = null;
+      applyPointerCapture(false);
+      if (document.pointerLockElement) {
+        document.exitPointerLock?.();
+      }
       term.write(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
     });
 

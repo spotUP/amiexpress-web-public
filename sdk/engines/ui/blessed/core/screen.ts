@@ -2179,10 +2179,17 @@ export class Screen extends Element {
     }
     const suppressGlobalKeys = !!focusTrap;
     const focused = this._focused as any;
-    if (focusTrap && focused && focused !== focusTrap && !focused.hasAncestor?.(focusTrap)) {
+    // A focus trap has to reassert itself whenever focus is outside it - and
+    // that includes NOTHING being focused, which the old `focused &&` guard
+    // skipped. A modal whose focus was stolen (by a menu closing behind it,
+    // say) then swallowed nothing and closed on nothing: the LiveChat help
+    // screen would not close on Escape (reported live 2026-08-25).
+    if (focusTrap && (!focused || (focused !== focusTrap && !focused.hasAncestor?.(focusTrap)))) {
       const focusable = this._getFocusable();
       if (focusable.length > 0) {
         focusable[0].focus();
+      } else if (typeof (focusTrap as any).focus === 'function') {
+        (focusTrap as any).focus();
       }
     }
 

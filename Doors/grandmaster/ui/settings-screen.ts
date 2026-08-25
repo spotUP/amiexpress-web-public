@@ -60,8 +60,11 @@ function formatTriggerStr(t: string): string {
   }
   if (t.startsWith('axis:')) {
     const parts = t.split(':');
+    // Legacy named sticks keep their labels; a raw axis number is shown as
+    // itself rather than being dressed up as a stick it may not be.
     const axisDisplay: Record<string, string> = { 'left-x': 'LS-X', 'left-y': 'LS-Y', 'right-x': 'RS-X', 'right-y': 'RS-Y' };
-    return `${axisDisplay[parts[1]] ?? parts[1]}${parts[2] === 'negative' ? '-' : '+'}`;
+    const label = axisDisplay[parts[1]] ?? (/^\d+$/.test(parts[1]) ? `Axis ${parts[1]}` : parts[1]);
+    return `${label}${parts[2] === 'negative' ? '-' : '+'}`;
   }
   return t;
 }
@@ -1084,12 +1087,12 @@ export class SettingsScreen {
       };
       gim.on('axis', (axis: GamepadAxis, value: number) => {
         if (Math.abs(value) < 0.85) return;
-        // Fall back to the raw axis number for anything past the two sticks.
-        // Pads the browser cannot fit to the standard layout put their D-pad
-        // on a hat axis, and refusing to name it meant it could not be bound
-        // at all (8BitDo NES30 Pro, reported 2026-08-25).
-        const name = axisNames[axis] ?? String(axis);
-        addTrigger(`axis:${name}:${value > 0 ? 'positive' : 'negative'}`);
+        // Always the RAW axis number. Stick names are a standard-layout idea
+        // and are fiction on a pad the browser reports as "mapping: n/a" -
+        // an 8BitDo NES30 Pro puts D-pad directions on axes 3 and 4, so a
+        // bound D-pad read back as "RS-Y+" (reported 2026-08-25). Older
+        // saved bindings that use names still parse.
+        addTrigger(`axis:${axis}:${value > 0 ? 'positive' : 'negative'}`);
       });
     });
   }

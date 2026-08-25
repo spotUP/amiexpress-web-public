@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readHatAxis } from '../../../../packages/terminal/src/utils/gamepad-manager';
+import { readHatAxis, normalizeAxis, isHatAxis } from '../../../../packages/terminal/src/utils/gamepad-manager';
 
 /** The eight hat positions, as the browser reports them. */
 const UP = -1;
@@ -75,5 +75,39 @@ describe('reading a hat-switch D-pad', () => {
     const restingAxes = [0, 0, 0, 0, 0, 0, 0, 0, 0, CENTRED];
 
     expect(readHatAxis(restingAxes)).toBeNull();
+  });
+});
+
+describe('axes that do not rest at zero', () => {
+  // From the reporter's 8BitDo NES30 Pro dump: AXIS 3 and AXIS 4 read
+  // -1.00000 untouched, and AXIS 9 (the hat) reads 3.28571. Reported raw,
+  // axis 3 looked permanently pushed - anything bound to it fired forever,
+  // and the binder captured the resting axis instead of the pressed one.
+  it('reports an untouched axis as centred, wherever it rests', () => {
+    expect(normalizeAxis(-1, -1)).toBe(0);
+    expect(normalizeAxis(0, 0)).toBe(0);
+  });
+
+  it('reports a pressed axis as deflected', () => {
+    // -1 at rest going to +1 pressed is a full deflection.
+    expect(normalizeAxis(1, -1)).toBe(1);
+    expect(normalizeAxis(0, -1)).toBe(1);
+  });
+
+  it('leaves ordinary sticks exactly as they were', () => {
+    expect(normalizeAxis(0.5, 0)).toBe(0.5);
+    expect(normalizeAxis(-0.5, 0)).toBe(-0.5);
+  });
+
+  it('never reports more than a full deflection', () => {
+    expect(normalizeAxis(1, -1)).toBeLessThanOrEqual(1);
+    expect(normalizeAxis(-1, 1)).toBeGreaterThanOrEqual(-1);
+  });
+
+  it('knows a hat from a stick by where it rests', () => {
+    expect(isHatAxis(3.28571)).toBe(true);
+    expect(isHatAxis(1.28571)).toBe(true);
+    expect(isHatAxis(0)).toBe(false);
+    expect(isHatAxis(-1)).toBe(false);
   });
 });

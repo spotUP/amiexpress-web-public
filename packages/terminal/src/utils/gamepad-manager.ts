@@ -25,6 +25,32 @@ interface GamepadManagerOptions {
  * Manages gamepad input and generates events
  */
 /**
+ * Where an axis sits when the player is not touching it.
+ *
+ * Sticks rest at 0, but plenty of pads rest elsewhere: a real 8BitDo NES30
+ * Pro reports AXIS 3 and AXIS 4 at -1.00000 untouched, and its hat sits at
+ * 3.28571. Reporting those raw made an axis look permanently deflected -
+ * anything bound to "axis 3 negative" fired forever, and the binder captured
+ * whichever axis was resting rather than the one being pressed. Values are
+ * reported relative to rest instead.
+ */
+export function normalizeAxis(value: number, rest: number): number {
+  const relative = value - rest;
+  return Math.max(-1, Math.min(1, relative));
+}
+
+/**
+ * True for an axis that is a hat switch rather than a stick.
+ *
+ * A hat rests OUTSIDE the -1..1 range (commonly 1.28 or 3.28) and carries
+ * D-pad directions, which are already reported as dpad events - so it must
+ * not also masquerade as an analogue axis.
+ */
+export function isHatAxis(rest: number): boolean {
+  return Math.abs(rest) > 1;
+}
+
+/**
  * Decode a hat-switch axis into D-pad directions.
  *
  * A pad the browser cannot fit to the standard layout reports its D-pad as a
@@ -81,6 +107,8 @@ export class GamepadManager {
   private pollInterval: number | null = null;
   private previousStates: Map<number, GamepadState> = new Map();
   private dpadStates: Map<number, { horizontal: DPadDirection; vertical: DPadDirection }> = new Map();
+  /** Resting axis positions per controller, captured on the first poll. */
+  private restAxes: Map<number, number[]> = new Map();
 
   constructor(options: GamepadManagerOptions) {
     this.options = options;
@@ -122,6 +150,7 @@ export class GamepadManager {
 
     this.previousStates.clear();
     this.dpadStates.clear();
+    this.restAxes.clear();
   }
 
   /**
@@ -156,9 +185,12 @@ export class GamepadManager {
       timestamp: gamepad.timestamp,
     };
 
-    // If no previous state, initialize and skip event generation
+    // If no previous state, initialize and skip event generation. The first
+    // reading is also the CALIBRATION: whatever the axes read now is what
+    // "untouched" means for this pad.
     if (!previousState) {
       this.previousStates.set(controllerId, currentState);
+      this.restAxes.set(controllerId, [...currentState.axes]);
       return;
     }
 
@@ -187,9 +219,16 @@ export class GamepadManager {
 
     // Generate axis events (if enabled)
     if (this.config.enableAnalogSticks) {
+      const rest = this.restAxes.get(controllerId) ?? [];
+
       for (let i = 0; i < gamepad.axes.length; i++) {
-        const value = currentState.axes[i];
-        const previousValue = previousState.axes[i];
+        const restValue = rest[i] ?? 0;
+        // A hat carries the D-pad and is reported as dpad events; reporting
+        // it here too would bind the D-pad as an analogue stick.
+        if (isHatAxis(restValue)) continue;
+
+        const value = normalizeAxis(currentState.axes[i], restValue);
+        const previousValue = normalizeAxis(previousState.axes[i], restValue);
 
         // Apply deadzone
         const deadzone = this.config.deadzone ?? 0.15;
