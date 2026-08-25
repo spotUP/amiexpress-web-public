@@ -12,6 +12,8 @@ export type BotDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
  * AI Bot Player
  */
 export declare class BotPlayer {
+    /** Shared board evaluator - see ai/placement-search.ts. */
+    private search;
     private difficulty;
     private thinkDelay;
     private errorRate;
@@ -37,11 +39,6 @@ export declare class BotPlayer {
      * candidate removes the allocation entirely; only occupancy matters for
      * the heuristics, never cell colour.
      */
-    private scratch;
-    private scratchW;
-    private scratchH;
-    /** Column heights, recomputed per candidate into a reused array. */
-    private colHeights;
     constructor(difficulty?: BotDifficulty);
     /**
      * Update bot AI (called every frame)
@@ -55,10 +52,6 @@ export declare class BotPlayer {
      * Find best move for a specific piece type
      */
     private findBestMove;
-    /**
-     * Evaluate a specific piece placement by simulating it
-     */
-    private evaluatePosition;
     /**
      * Execute moves to reach target placement
      */

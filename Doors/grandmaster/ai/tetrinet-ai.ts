@@ -8,6 +8,9 @@
 import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import type { PieceType } from '../core/types';
 import type { SpecialType } from '../core/tetrinet/specials';
+import { getTetriNetShape, getRotationCount } from '../core/tetrinet/tetrinet-pieces';
+import { PlacementSearch, type PlacementGrid, type PlacementEvaluation } from './placement-search';
+import { canTargetOthers } from '../core/tetrinet/specials';
 
 /**
  * AI difficulty levels
@@ -31,6 +34,10 @@ export interface AIOpponent {
   thinkTime: number;  // ms between moves
   nextMoveTime: number;
   alive: boolean;
+  /** Where this bot has decided to put the piece it is holding. */
+  target?: PlacementEvaluation | null;
+  /** Which piece the plan was made for, so it is redone on a new one. */
+  plannedFor?: string | null;
 }
 
 /**
@@ -79,6 +86,8 @@ export function getAIName(difficulty: AIDifficulty): string {
  */
 export class TetriNetAI {
   private opponents: AIOpponent[] = [];
+  /** Shared with the TGM bot - see ai/placement-search.ts. */
+  private search = new PlacementSearch();
   /**
    * Ids the bots may attack besides each other. Defaults to the local human;
    * in a networked match the screen adds the players on other BBS nodes, so
@@ -106,6 +115,8 @@ export class TetriNetAI {
     for (let i = 0; i < count; i++) {
       const engine = new TetriNetEngine(settings, gameOptions);
       const opponent: AIOpponent = {
+        target: null,
+        plannedFor: null,
         id: `ai-${i + 1}`,
         name: getAIName(difficulty),
         engine,
@@ -156,7 +167,15 @@ export class TetriNetAI {
   }
 
   /**
-   * Make a move for AI opponent
+   * Make a move for AI opponent.
+   *
+   * The bot plans a placement once per piece with the SAME evaluator the
+   * TGM bot uses (ai/placement-search.ts), then walks the piece there one
+   * step per think-tick. Before this, decideAction() picked randomly from
+   * ['left','right','rotate-cw','soft-drop','hard-drop'] and findBestMove()
+   * returned another random action with the comment "In a real
+   * implementation, this would evaluate multiple positions" - so TetriNET
+   * opponents just shuffled pieces around and topped out.
    */
   private makeMove(opponent: AIOpponent): void {
     const engine = opponent.engine;
@@ -166,86 +185,57 @@ export class TetriNetAI {
       return;
     }
 
-    // AI decision logic based on difficulty
-    const action = this.decideAction(opponent);
-
-    switch (action) {
-      case 'left':
-        engine.move(-1);
-        break;
-      case 'right':
-        engine.move(1);
-        break;
-      case 'rotate-cw':
-        engine.rotate(1);
-        break;
-      case 'rotate-ccw':
-        engine.rotate(-1);
-        break;
-      case 'soft-drop':
-        engine.softDrop();
-        break;
-      case 'hard-drop':
-        engine.hardDrop();
-        break;
-      case 'use-special':
-        this.useSpecial(opponent);
-        break;
+    // Use a special first when holding one - a bot that never attacks is
+    // not an opponent.
+    if (state.inventory.length > 0 && Math.random() < this.specialChance(opponent.difficulty)) {
+      this.useSpecial(opponent);
+      return;
     }
+
+    const piece = state.currentPiece;
+    const pieceKey = `${piece.type}@${state.lines}:${state.score}`;
+
+    if (!opponent.target || opponent.plannedFor !== piece.type) {
+      this.search.setDifficulty(opponent.difficulty);
+      opponent.target = this.search.findBest(
+        engine.getBoard() as unknown as PlacementGrid,
+        (rotation: number) => getTetriNetShape(piece.type, rotation),
+        getRotationCount(piece.type)
+      );
+      opponent.plannedFor = piece.type;
+    }
+
+    const target = opponent.target;
+    if (!target || target.score === -Infinity) {
+      engine.hardDrop();
+      opponent.target = null;
+      opponent.plannedFor = null;
+      return;
+    }
+
+    // Execute the plan in one tick: rotate, slide, drop. Stepping one key
+    // per think-tick looked more human but could not work - at difficulty 5
+    // that is 600ms a step, and gravity landed the piece long before it
+    // reached its column. think time now paces PIECES, not keystrokes.
+    for (let i = 0; i < 4 && engine.getState().currentPiece?.rotation !== target.rotation; i++) {
+      if (!engine.rotate(1)) break;
+    }
+
+    for (let i = 0; i < 16; i++) {
+      const current = engine.getState().currentPiece;
+      if (!current || current.x === target.x) break;
+      if (!engine.move(current.x < target.x ? 1 : -1)) break;
+    }
+
+    engine.hardDrop();
+    opponent.target = null;
+    opponent.plannedFor = null;
+    void pieceKey;
   }
 
-  /**
-   * Decide next action based on difficulty
-   */
-  private decideAction(opponent: AIOpponent): string {
-    const { difficulty, engine } = opponent;
-    const state = engine.getState();
-
-    // Higher difficulty = better decisions
-    const random = Math.random();
-
-    // Low difficulty: mostly random moves
-    if (difficulty <= 3) {
-      const actions = ['left', 'right', 'rotate-cw', 'soft-drop', 'hard-drop'];
-      return actions[Math.floor(random * actions.length)];
-    }
-
-    // Medium difficulty: some strategy
-    if (difficulty <= 6) {
-      // 30% chance to hard drop
-      if (random < 0.3) return 'hard-drop';
-
-      // 20% chance to use special
-      if (state.inventory.length > 0 && random < 0.5) return 'use-special';
-
-      // Otherwise move/rotate
-      const actions = ['left', 'right', 'rotate-cw', 'soft-drop'];
-      return actions[Math.floor(random * actions.length)];
-    }
-
-    // High difficulty: aggressive play
-    // 50% chance to hard drop (fast placement)
-    if (random < 0.5) return 'hard-drop';
-
-    // 30% chance to use special if available
-    if (state.inventory.length > 0 && random < 0.8) return 'use-special';
-
-    // Otherwise optimize placement
-    return this.findBestMove(opponent);
-  }
-
-  /**
-   * Find best move (for high difficulty AI)
-   */
-  private findBestMove(opponent: AIOpponent): string {
-    const state = opponent.engine.getState();
-
-    if (!state.currentPiece) return 'hard-drop';
-
-    // Simple heuristic: try to minimize holes
-    // In a real implementation, this would evaluate multiple positions
-    const actions = ['left', 'right', 'rotate-cw'];
-    return actions[Math.floor(Math.random() * actions.length)];
+  /** How eager a bot is to spend a special, by difficulty. */
+  private specialChance(difficulty: AIDifficulty): number {
+    return Math.min(0.6, 0.05 + difficulty * 0.05);
   }
 
   /**
@@ -254,16 +244,17 @@ export class TetriNetAI {
   private useSpecial(opponent: AIOpponent): void {
     const state = opponent.engine.getState();
 
-    if (state.inventory.length === 0) return;
+    const state2 = opponent.engine.getState();
+    if (state2.inventory.length === 0) return;
 
-    // Pick random special (simple AI)
-    const special = state.inventory[0];
+    // Self-only specials (Clear Line) are used on the bot's own field; the
+    // rest go to somebody else. The old code sent every special to another
+    // player, so a bot holding Clear Line threw it away.
+    const special = state2.inventory[0];
+    const targetId = canTargetOthers(special)
+      ? this.pickTarget(opponent)
+      : opponent.id;
 
-    // Pick random target (in real game, would target strongest opponent)
-    const targetId = this.pickTarget(opponent);
-
-    // Use special (note: useSpecial takes optional targetId)
-    // In local mode, this targets the specified player
     opponent.engine.useSpecial(targetId);
   }
 
