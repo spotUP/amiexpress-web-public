@@ -3,14 +3,22 @@
  *
  * Symptom they lock down: on a phone the only on-screen input was the generic
  * BBS keyboard, which has no way to hold a key, so GRANDMASTER and ARKANOID
- * were unplayable. The pad must (a) appear only for those doors and (b) drive
- * the game-mode key-down/key-up path so held keys work like a real keyboard.
+ * were unplayable. GRANDMASTER gets a button pad that drives the game-mode
+ * key-down/key-up path so held keys work like a real keyboard; ARKANOID is a
+ * spinner game and gets a trackpad instead (see arkanoid-controls.test.tsx).
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { MobileGameControls } from '../MobileGameControls';
-import { findGameControlLayout, layoutControls, GAME_CONTROL_LAYOUTS } from '../game-controls';
+import {
+  findGameControlLayout,
+  layoutControls,
+  trackpadColumn,
+  GAME_CONTROL_LAYOUTS,
+  type GameControlPad,
+  type GameControlSpinner,
+} from '../game-controls';
 
 afterEach(cleanup);
 
@@ -27,6 +35,9 @@ function fireTouch(type: 'touchstart' | 'touchend' | 'touchcancel', touches: { i
 function button(label: string): HTMLElement {
   return screen.getByRole('button', { name: label });
 }
+
+const gmaster = GAME_CONTROL_LAYOUTS.gmaster as GameControlPad;
+const arkanoid = GAME_CONTROL_LAYOUTS.arkanoid as GameControlSpinner;
 
 describe('findGameControlLayout', () => {
   it('matches the door ids the backend sends for GMASTER and ARKANOID', () => {
@@ -46,12 +57,17 @@ describe('findGameControlLayout', () => {
     expect(findGameControlLayout('GMASTER')).toBe(GAME_CONTROL_LAYOUTS.gmaster);
     expect(findGameControlLayout('Arkanoid')).toBe(GAME_CONTROL_LAYOUTS.arkanoid);
   });
+
+  it('gives GRANDMASTER a button pad and ARKANOID a spinner', () => {
+    // Arkanoid steers its paddle from absolute pointer X - buttons would be
+    // the wrong control entirely, so the two doors must not share a shape.
+    expect(gmaster.kind).toBe('pad');
+    expect(arkanoid.kind).toBe('spinner');
+  });
 });
 
 describe('GRANDMASTER key bindings', () => {
-  const byId = Object.fromEntries(
-    layoutControls(GAME_CONTROL_LAYOUTS.gmaster).map(c => [c.id, c]),
-  );
+  const byId = Object.fromEntries(layoutControls(gmaster).map(c => [c.id, c]));
 
   // Names as Doors/grandmaster/input/handler.ts maps them:
   // ArrowLeft -> left, ArrowRight -> right, ArrowDown -> down, ArrowUp -> up,
@@ -76,16 +92,94 @@ describe('GRANDMASTER key bindings', () => {
   });
 });
 
-describe('ARKANOID key bindings', () => {
-  const byId = Object.fromEntries(
-    layoutControls(GAME_CONTROL_LAYOUTS.arkanoid).map(c => [c.id, c]),
-  );
+describe('GRANDMASTER thumb assignment', () => {
+  // Pinned because it is invisible to every other test: the bindings are
+  // identical whichever thumb they sit under, so a silent flip back would
+  // otherwise go unnoticed until someone tried to play.
+  it('puts rotation under the left thumb and movement under the right', () => {
+    expect(gmaster.left.keys.map(c => c.id)).toEqual(['rotate-ccw', 'rotate-cw', 'soft-drop', 'hold']);
+    expect(gmaster.right.keys.map(c => c.id)).toEqual(['left', 'right', 'hard-drop']);
+    expect(gmaster.right.role).toBe('movement');
+  });
 
-  it('sends the keys the door lower-cases into arrowleft/arrowright/space', () => {
-    expect(byId.left.key).toBe('ArrowLeft');
-    expect(byId.right.key).toBe('ArrowRight');
-    expect(byId.launch.key).toBe(' ');
-    expect(byId.launch.code).toBe('Space');
+  it('gives Hard Drop the wide slot and demotes Soft Drop', () => {
+    // Hard Drop is used on nearly every piece; Soft Drop rarely. The wide
+    // slot is the third-and-last key of a cluster (see the CSS).
+    const movement = gmaster.right.keys;
+    expect(movement).toHaveLength(3);
+    expect(movement[2].id).toBe('hard-drop');
+    expect(gmaster.left.keys.map(c => c.id)).toContain('soft-drop');
+  });
+
+  it('renders the left cluster before the right one', () => {
+    const { container } = render(
+      <MobileGameControls layout={gmaster} onPress={vi.fn()} onRelease={vi.fn()} />,
+    );
+
+    const sides = Array.from(container.querySelectorAll('[data-cluster-side]'))
+      .map(el => el.getAttribute('data-cluster-side'));
+    expect(sides).toEqual(['left', 'right']);
+
+    expect(button('Left').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('right');
+    expect(button('Right').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('right');
+    expect(button('Hard Drop').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('right');
+    expect(button('Rotate clockwise').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('left');
+    expect(button('Rotate counter-clockwise').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('left');
+    expect(button('Soft Drop').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('left');
+    expect(button('Hold').closest('[data-cluster-side]')?.getAttribute('data-cluster-side')).toBe('left');
+  });
+});
+
+describe('ARKANOID layout', () => {
+  it('offers Pause on p, not Space', () => {
+    // Space pauses in the door only when no ball is waiting to be launched -
+    // it would launch the ball instead about half the time. 'p' always pauses.
+    const pause = arkanoid.keys.find(c => c.id === 'pause');
+    expect(pause?.key).toBe('p');
+    expect(pause?.code).toBe('KeyP');
+  });
+
+  it('offers no arrow-key paddle buttons', () => {
+    // Arrow keys nudge the paddle a step at a time (movePaddle), which throws
+    // away the spinner feel. The trackpad replaced them.
+    const keys = arkanoid.keys.map(c => c.key);
+    expect(keys).not.toContain('ArrowLeft');
+    expect(keys).not.toContain('ArrowRight');
+  });
+
+  it('reports a row inside the play area, clear of the menu rows', () => {
+    // Doors/arkanoid/client.ts: PADDLE_Y is 20 in the door's 1-indexed space
+    // and the door adds 1 to what the frontend sends; the menu hit-test
+    // covers 1-indexed rows 10..14, which must not be hit by a stray hover.
+    expect(arkanoid.row).toBe(19);
+    expect(arkanoid.row + 1).toBeGreaterThan(14);
+  });
+});
+
+describe('trackpadColumn', () => {
+  it('maps the strip proportionally onto the whole grid', () => {
+    expect(trackpadColumn(0, 80)).toBe(0);
+    expect(trackpadColumn(1, 80)).toBe(79);
+    expect(trackpadColumn(0.25, 80)).toBe(20);
+    expect(trackpadColumn(0.75, 80)).toBe(59);
+  });
+
+  it('increases monotonically across the strip', () => {
+    const columns = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1].map(f => trackpadColumn(f, 80));
+    for (let i = 1; i < columns.length; i++) {
+      expect(columns[i]).toBeGreaterThan(columns[i - 1]);
+    }
+  });
+
+  it('honours a terminal that is not 80 columns wide', () => {
+    expect(trackpadColumn(1, 132)).toBe(131);
+    expect(trackpadColumn(0.5, 40)).toBe(20);
+  });
+
+  it('clamps a thumb that slid off either end of the strip', () => {
+    expect(trackpadColumn(-0.4, 80)).toBe(0);
+    expect(trackpadColumn(1.7, 80)).toBe(79);
+    expect(trackpadColumn(Number.NaN, 80)).toBe(0);
   });
 });
 
@@ -93,9 +187,7 @@ describe('MobileGameControls', () => {
   it('sends key-down on press and key-up on release', () => {
     const onPress = vi.fn();
     const onRelease = vi.fn();
-    render(
-      <MobileGameControls layout={GAME_CONTROL_LAYOUTS.gmaster} onPress={onPress} onRelease={onRelease} />,
-    );
+    render(<MobileGameControls layout={gmaster} onPress={onPress} onRelease={onRelease} />);
 
     const left = button('Left');
     fireTouch('touchstart', [{ identifier: 1, target: left }]);
@@ -111,9 +203,7 @@ describe('MobileGameControls', () => {
   it('holds a key down for the whole press instead of tapping', () => {
     const onPress = vi.fn();
     const onRelease = vi.fn();
-    render(
-      <MobileGameControls layout={GAME_CONTROL_LAYOUTS.arkanoid} onPress={onPress} onRelease={onRelease} />,
-    );
+    render(<MobileGameControls layout={gmaster} onPress={onPress} onRelease={onRelease} />);
 
     const left = button('Left');
     fireTouch('touchstart', [{ identifier: 3, target: left }]);
@@ -127,9 +217,7 @@ describe('MobileGameControls', () => {
   it('supports two controls held at once', () => {
     const onPress = vi.fn();
     const onRelease = vi.fn();
-    render(
-      <MobileGameControls layout={GAME_CONTROL_LAYOUTS.gmaster} onPress={onPress} onRelease={onRelease} />,
-    );
+    render(<MobileGameControls layout={gmaster} onPress={onPress} onRelease={onRelease} />);
 
     fireTouch('touchstart', [{ identifier: 1, target: button('Left') }]);
     fireTouch('touchstart', [{ identifier: 2, target: button('Rotate clockwise') }]);
@@ -146,9 +234,7 @@ describe('MobileGameControls', () => {
   it('releases a still-held key when the pad unmounts with the door', () => {
     const onPress = vi.fn();
     const onRelease = vi.fn();
-    const view = render(
-      <MobileGameControls layout={GAME_CONTROL_LAYOUTS.arkanoid} onPress={onPress} onRelease={onRelease} />,
-    );
+    const view = render(<MobileGameControls layout={gmaster} onPress={onPress} onRelease={onRelease} />);
 
     fireTouch('touchstart', [{ identifier: 7, target: button('Right') }]);
     expect(onRelease).not.toHaveBeenCalled();
@@ -159,9 +245,7 @@ describe('MobileGameControls', () => {
   });
 
   it('names every control in full words for screen readers', () => {
-    render(
-      <MobileGameControls layout={GAME_CONTROL_LAYOUTS.gmaster} onPress={vi.fn()} onRelease={vi.fn()} />,
-    );
+    render(<MobileGameControls layout={gmaster} onPress={vi.fn()} onRelease={vi.fn()} />);
 
     expect(button('Rotate clockwise')).toBeTruthy();
     expect(button('Rotate counter-clockwise')).toBeTruthy();

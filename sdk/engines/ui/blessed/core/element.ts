@@ -418,7 +418,13 @@ export class Element extends EventEmitter {
    * Kept for API compatibility with existing code that calls it
    */
   _invalidateCoords(): void {
-    // No-op: coordinate caching removed, calculations are always fresh
+    // No-op: coordinate caching removed, calculations are always fresh.
+    //
+    // Do NOT hang a forceFullRedraw() here to chase repaint artefacts: the
+    // differential renderer already repaints cells a moved or resized
+    // element vacates (measured 2026-08-25 - a 20x5 panel moving from row 0
+    // to row 10 writes 252 bytes AND repositions to row 1). Forcing a full
+    // redraw on every geometry change cost 2336 bytes for the same move.
   }
 
   _getCoords(get?: boolean, noscroll?: boolean): Position | undefined {

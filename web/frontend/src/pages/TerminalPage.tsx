@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { BBSTerminal, type BBSTerminalRef } from '@amiexpress/terminal';
+import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
-import { findGameControlLayout } from '../components/mobile/game-controls';
+import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
+import { findGameControlLayout, trackpadColumn } from '../components/mobile/game-controls';
 import { fitFontSize } from '../components/mobile/terminal-fit';
 import './TerminalPage.css';
 
@@ -53,6 +54,14 @@ export function TerminalPage(): JSX.Element {
   const gridObserver = useRef<ResizeObserver | null>(null);
 
   const gameControls = findGameControlLayout(activeDoorId);
+
+  /**
+   * Terminal row the trackpad reports its Y at, or null when the running door
+   * has no trackpad. Kept in a ref so the pointer callbacks stay stable while
+   * still seeing the current door.
+   */
+  const spinnerRow = useRef<number | null>(null);
+  spinnerRow.current = gameControls?.kind === 'spinner' ? gameControls.row : null;
 
   /**
    * Scale the 80x25 grid to the space the page can give it.
@@ -185,6 +194,41 @@ export function TerminalPage(): JSX.Element {
     terminalRef.current?.releaseGameKey(key, code);
   }, []);
 
+  /**
+   * Where the trackpad last put the paddle, so the Launch button clicks there
+   * instead of teleporting the paddle back to the middle.
+   */
+  const spinnerColumn = useRef<number | null>(null);
+
+  /** Live column count - a door may have taken the terminal off 80 columns. */
+  const terminalColumns = useCallback(
+    (): number => terminalRef.current?.getTerminal()?.cols ?? BBS_COLS,
+    [],
+  );
+
+  /**
+   * Trackpad stroke -> the terminal's own mouse path. Mirrors the desktop
+   * mouse exactly: press emits mouse-click (which both places the paddle and
+   * launches a waiting ball), movement emits mouse-drag, release emits
+   * mouse-up. The door treats all three the same for paddle position.
+   */
+  const handleSpinner = useCallback((phase: TrackpadPhase, fraction: number) => {
+    const y = spinnerRow.current;
+    if (y === null) return;
+    const x = trackpadColumn(fraction, terminalColumns());
+    spinnerColumn.current = x;
+    const type: TerminalMouseEventType =
+      phase === 'start' ? 'mouse-click' : phase === 'move' ? 'mouse-drag' : 'mouse-up';
+    terminalRef.current?.sendMouse(type, { x, y });
+  }, [terminalColumns]);
+
+  const handleLaunch = useCallback(() => {
+    const y = spinnerRow.current;
+    if (y === null) return;
+    const x = spinnerColumn.current ?? trackpadColumn(0.5, terminalColumns());
+    terminalRef.current?.sendMouse('mouse-click', { x, y });
+  }, [terminalColumns]);
+
   const showOnscreenInput = isMobile;
 
   return (
@@ -198,15 +242,25 @@ export function TerminalPage(): JSX.Element {
         onDoorChange={setActiveDoorId}
       />
       {showOnscreenInput && (
-        gameControls
-          ? (
-            <MobileGameControls
-              layout={gameControls}
-              onPress={handleGamePress}
-              onRelease={handleGameRelease}
-            />
-          )
-          : <MobileBBSKeyboard onKey={handleKey} />
+        gameControls === null
+          ? <MobileBBSKeyboard onKey={handleKey} />
+          : gameControls.kind === 'spinner'
+            ? (
+              <MobileArkanoidControls
+                layout={gameControls}
+                onSpinner={handleSpinner}
+                onLaunch={handleLaunch}
+                onPress={handleGamePress}
+                onRelease={handleGameRelease}
+              />
+            )
+            : (
+              <MobileGameControls
+                layout={gameControls}
+                onPress={handleGamePress}
+                onRelease={handleGameRelease}
+              />
+            )
       )}
     </div>
   );

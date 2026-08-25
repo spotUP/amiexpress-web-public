@@ -72,12 +72,13 @@
   border-color: #666;
 }
 
-/* Soft Drop / any odd last movement key spans the row under Left and Right. */
-.mobile-game-controls__cluster--movement .mobile-game-controls__key:nth-child(3) {
+/* An odd third-and-last key spans the row under the pair above it - that wide
+   slot is the easiest one to hit, which is why Hard Drop sits there. */
+.mobile-game-controls__cluster .mobile-game-controls__key:nth-child(3):last-child {
   grid-column: 1 / -1;
 }
 
-.mobile-game-controls__cluster--actions .mobile-game-controls__key:only-child {
+.mobile-game-controls__cluster .mobile-game-controls__key:only-child {
   grid-column: 1 / -1;
 }
 

@@ -5,7 +5,13 @@
  */
 
 // Export terminal components
-export { BBSTerminal, type BBSTerminalRef } from './components/BBSTerminal';
+export {
+  BBSTerminal,
+  type BBSTerminalRef,
+  type TerminalCell,
+  type TerminalMouseEventType,
+  type TerminalMouseModifiers,
+} from './components/BBSTerminal';
 
 // Export terminal utilities and configuration
 export {

@@ -63,6 +63,26 @@ interface BBSTerminalProps {
   onDoorChange?: (doorId: string | null) => void;
 }
 
+/**
+ * Pointer events the doors listen for. The names are the socket event names -
+ * see the door SDK's mouse handling and Doors/arkanoid/client.ts, which steers
+ * its paddle from mouse-hover, mouse-drag and mouse-up alike.
+ */
+export type TerminalMouseEventType = 'mouse-hover' | 'mouse-drag' | 'mouse-click' | 'mouse-up';
+
+export interface TerminalMouseModifiers {
+  button?: number;
+  shift?: boolean;
+  ctrl?: boolean;
+  alt?: boolean;
+}
+
+/** A position on the terminal grid, 0-indexed - the doors add 1 themselves. */
+export interface TerminalCell {
+  x: number;
+  y: number;
+}
+
 export interface BBSTerminalRef {
   focus: () => void;
   sendCommand: (command: string) => void;
@@ -80,6 +100,13 @@ export interface BBSTerminalRef {
   pressGameKey: (key: string, code: string) => void;
   /** Release a key pressed via pressGameKey. Emits the matching key-up. */
   releaseGameKey: (key: string, code: string) => void;
+  /**
+   * Send a pointer event on behalf of an on-screen control, in terminal cell
+   * coordinates. Runs the exact same emitter as the desktop mouse, so a thumb
+   * dragged across the mobile trackpad and a mouse moved across the grid are
+   * indistinguishable to the door. No-op unless a door or game mode is active.
+   */
+  sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) => void;
   startDownload: (amigaPath: string) => Promise<void>;
   startUpload: (amigaPath: string, file: File) => Promise<void>;
 }
@@ -535,6 +562,48 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   };
 
+  /**
+   * The single place a pointer event reaches the socket, in terminal CELL
+   * coordinates.
+   *
+   * Every pointer path funnels through here - the container's React mouse
+   * handlers, the game-mode window listener, and the imperative `sendMouse`
+   * the mobile on-screen controls use. One implementation means the mobile
+   * trackpad cannot drift from the desktop mouse: the door sees the same
+   * event names and the same payload shape from both.
+   *
+   * Coordinates are clamped into the live grid rather than a hardcoded 80x25,
+   * so a door that resized the terminal still gets in-range cells.
+   */
+  const emitMouseCell = (
+    type: TerminalMouseEventType,
+    cell: TerminalCell,
+    modifiers: TerminalMouseModifiers = {}
+  ): void => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+    if (!doorActive.current && !gameMode.current) return;
+
+    const term = terminalInstance.current;
+    const maxX = (term?.cols ?? 80) - 1;
+    const maxY = (term?.rows ?? 25) - 1;
+
+    const payload = {
+      x: Math.max(0, Math.min(maxX, Math.round(cell.x))),
+      y: Math.max(0, Math.min(maxY, Math.round(cell.y))),
+      shift: modifiers.shift ?? false,
+      ctrl: modifiers.ctrl ?? false,
+      alt: modifiers.alt ?? false,
+    };
+
+    // mouse-hover is the one event with no button - keep the payload shape
+    // exactly as the doors have always received it.
+    socket.emit(
+      type,
+      type === 'mouse-hover' ? payload : { ...payload, button: modifiers.button ?? 0 }
+    );
+  };
+
   // Expose methods to parent components
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -648,6 +717,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     getTerminal: () => terminalInstance.current,
     pressGameKey: (key: string, code: string) => gameKeyPressRef.current?.(key, code),
     releaseGameKey: (key: string, code: string) => gameKeyReleaseRef.current?.(key, code),
+    sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) =>
+      emitMouseCell(type, cell, modifiers),
     startDownload: async (_amigaPath: string) => {
       console.warn('[Terminal] Downloads start from the BBS. Awaiting transfer-raw:init.');
     },
@@ -2669,8 +2740,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Only send mouse events when door is active or in game mode
     if (!doorActive.current && !gameMode.current) return;
 
-    const socket = socketRef.current;
-    if (!socket?.connected) return;
+    if (!socketRef.current?.connected) return;
 
     // With the pointer lock held the event's clientX/Y are frozen at the
     // lock point - the virtual pointer is where the player actually is.
@@ -2687,9 +2757,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // throw synchronously (permissions policy, unsupported) or reject as a
     // promise; when it sat above this emit, a failed lock swallowed every
     // menu click.
-    socket.emit('mouse-click', {
-      x: coords.x,
-      y: coords.y,
+    emitMouseCell('mouse-click', coords, {
       button: event.button,
       shift: event.shiftKey,
       ctrl: event.ctrlKey,
@@ -2720,8 +2788,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     mouseButtonDown.current = false;
 
-    const socket = socketRef.current;
-    if (!socket?.connected) return;
+    if (!socketRef.current?.connected) return;
 
     // Same substitution as handleMouseDown: locked events carry clientX/Y
     // frozen at the lock origin. Doors move on mouse-up too (arkanoid
@@ -2733,9 +2800,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const coords = getTerminalCoordsFromPoint(point.x, point.y);
     if (!coords) return;
 
-    socket.emit('mouse-up', {
-      x: coords.x,
-      y: coords.y,
+    emitMouseCell('mouse-up', coords, {
       button: event.button,
       shift: event.shiftKey,
       ctrl: event.ctrlKey,
@@ -2753,9 +2818,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     clientY: number,
     modifiers: { buttons: number; shift: boolean; ctrl: boolean; alt: boolean }
   ) => {
-    const socket = socketRef.current;
-    if (!socket?.connected) return;
-
     const coords = getTerminalCoordsFromPoint(clientX, clientY);
     if (!coords) return;
 
@@ -2763,9 +2825,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if ((window as any).__MOUSE_DEBUG__) {
         console.log('[BBSTerminal] Emitting mouse-drag');
       }
-      socket.emit('mouse-drag', {
-        x: coords.x,
-        y: coords.y,
+      emitMouseCell('mouse-drag', coords, {
         button: modifiers.buttons === 1 ? 0 : modifiers.buttons === 2 ? 2 : modifiers.buttons === 4 ? 1 : 0,
         shift: modifiers.shift,
         ctrl: modifiers.ctrl,
@@ -2777,9 +2837,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (now - lastMouseHoverTime.current < 16) return;
       lastMouseHoverTime.current = now;
 
-      socket.emit('mouse-hover', {
-        x: coords.x,
-        y: coords.y,
+      emitMouseCell('mouse-hover', coords, {
         shift: modifiers.shift,
         ctrl: modifiers.ctrl,
         alt: modifiers.alt
