@@ -199,8 +199,6 @@ export declare class GameScreen {
      * Get color for piece type
      */
     private getPieceGlowColor;
-    private getHardDropTrailChar;
-    private getBrightColor;
     /**
      * Get color name for piece type (for visual effects)
      */

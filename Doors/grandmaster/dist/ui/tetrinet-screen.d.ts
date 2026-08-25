@@ -62,6 +62,10 @@ export declare class TetriNetScreen {
     private remotes;
     /** Whether any remote participant has ever been seen (victory needs this). */
     private sawRemote;
+    /** Hard-drop motion blur, drawn by the same code as the main modes. */
+    private hardDropTrails;
+    /** TGM key layout, restored when the TetriNET game ends. */
+    private previousKeys;
     constructor(options: TetriNetScreenOptions);
     /**
      * The special/garbage ROUTER - the layer TetriNET never had.
@@ -177,6 +181,15 @@ export declare class TetriNetScreen {
      * Setup input handlers
      */
     private setupInput;
+    /** Ids of everyone still playing, this node's human excluded. */
+    private livingTargets;
+    /**
+     * Use the first special on the player shown at that slot number. The
+     * panel numbers opponents from 1, which is what the key refers to.
+     */
+    private useSpecialOnSlot;
+    /** Use the first special in the inventory on one participant. */
+    private fireSpecial;
     /**
      * Show countdown
      */
@@ -189,6 +202,11 @@ export declare class TetriNetScreen {
      * Render the game board
      */
     private renderBoard;
+    /**
+     * Remember the streak a hard drop is about to leave. Must run BEFORE the
+     * drop, while the piece is still at the top of its fall.
+     */
+    private recordHardDropTrail;
     /**
      * Render the held piece, greyed out until it can be swapped again.
      */
@@ -205,6 +223,8 @@ export declare class TetriNetScreen {
      * Get colored block character for piece type
      */
     private getBlockChar;
+    /** Colour name for a piece type - also what the motion blur fades out. */
+    private getPieceColor;
     /**
      * Get colored block character for special type
      */

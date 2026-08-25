@@ -66,6 +66,11 @@ export declare class TargetSelector {
      */
     selectByNumber(num: number): void;
     /**
+     * The opponent shown at this position in the list, which is what the
+     * 1-6 keys refer to.
+     */
+    getOpponentAt(index: number): TargetInfo | null;
+    /**
      * Get currently selected target
      */
     getSelectedTarget(): TargetInfo | null;

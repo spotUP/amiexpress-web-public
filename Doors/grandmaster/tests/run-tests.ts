@@ -24,6 +24,7 @@ const TEST_MODULES = [
   './tetrinet-netplay.test',
   './tetrinet-score-report.test',
   './tetrinet-hold.test',
+  './tetrinet-specials-input.test',
   './tetrinet-layout.test',
 ];
 

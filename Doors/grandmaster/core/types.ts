@@ -230,7 +230,20 @@ export type GameAction =
   | 'hard_drop'
   | 'sonic_drop'
   | 'hold'
-  | 'pause';
+  | 'pause'
+  // TetriNET specials. The reference client binds 1-6 to "use the first
+  // special in your inventory on the player in that slot", Enter to self,
+  // Tab to a random opponent and D to discard - the special is used on the
+  // key press, there is no separate target-then-fire step.
+  | 'use_special_1'
+  | 'use_special_2'
+  | 'use_special_3'
+  | 'use_special_4'
+  | 'use_special_5'
+  | 'use_special_6'
+  | 'use_special_self'
+  | 'use_special_random'
+  | 'discard_special';
 
 export interface InputState {
   heldKeys: Set<string>;

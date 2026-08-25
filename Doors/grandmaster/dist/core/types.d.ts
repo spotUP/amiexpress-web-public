@@ -135,7 +135,7 @@ export interface AppState {
     settings: PlayerSettings;
     stats: PlayerStats;
 }
-export type GameAction = 'left' | 'right' | 'rotate_cw' | 'rotate_ccw' | 'rotate_180' | 'soft_drop' | 'hard_drop' | 'sonic_drop' | 'hold' | 'pause';
+export type GameAction = 'left' | 'right' | 'rotate_cw' | 'rotate_ccw' | 'rotate_180' | 'soft_drop' | 'hard_drop' | 'sonic_drop' | 'hold' | 'pause' | 'use_special_1' | 'use_special_2' | 'use_special_3' | 'use_special_4' | 'use_special_5' | 'use_special_6' | 'use_special_self' | 'use_special_random' | 'discard_special';
 export interface InputState {
     heldKeys: Set<string>;
     dasTimer: number;

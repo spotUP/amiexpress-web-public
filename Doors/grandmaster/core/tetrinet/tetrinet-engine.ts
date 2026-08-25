@@ -534,6 +534,17 @@ export class TetriNetEngine {
   }
 
   /**
+   * Throw the first special away without using it.
+   *
+   * The reference client binds this to D; TetriNET inventories are small
+   * (10 by default) and a useless special blocks the ones behind it.
+   */
+  discardSpecial(): SpecialType | null {
+    if (this.status !== 'playing') return null;
+    return this.inventory.use();
+  }
+
+  /**
    * Apply incoming special from opponent
    */
   applyIncomingSpecial(special: SpecialType, senderId: string, sourceBoard?: TetriNetBoard): void {

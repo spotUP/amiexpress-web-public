@@ -122,6 +122,14 @@ class TargetSelector {
         }
     }
     /**
+     * The opponent shown at this position in the list, which is what the
+     * 1-6 keys refer to.
+     */
+    getOpponentAt(index) {
+        const target = this.opponents[index];
+        return target && target.alive ? target : null;
+    }
+    /**
      * Get currently selected target
      */
     getSelectedTarget() {
@@ -186,7 +194,7 @@ class TargetSelector {
             }
         }
         // Instructions
-        content += '\n{gray-fg}TAB: Next  1-5: Select{/gray-fg}';
+        content += '\n{gray-fg}1-6 use  ENTER self  TAB random  D drop{/gray-fg}';
         this.box.setContent(content.trim());
     }
     /**

@@ -15,6 +15,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import type { InputHandler } from '../input/handler';
+import { TETRINET_KEYS } from '../input/config';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState } from '../core/types';
 import type {
@@ -32,6 +33,13 @@ import { SPECIALS } from '../core/tetrinet/specials';
 import { HUMAN_TARGET_ID } from '../ai/tetrinet-ai';
 import type { TetriNetBoard } from '../core/tetrinet/tetrinet-board';
 import { cloneTetriNetBoard } from '../core/tetrinet/tetrinet-board';
+import {
+  GHOST_CHAR,
+  buildHardDropTrail,
+  expireTrails,
+  trailCharAt,
+  type HardDropTrail,
+} from './board-effects';
 
 /**
  * TetriNET Screen options
@@ -91,6 +99,10 @@ export class TetriNetScreen {
   }> = new Map();
   /** Whether any remote participant has ever been seen (victory needs this). */
   private sawRemote: boolean = false;
+  /** Hard-drop motion blur, drawn by the same code as the main modes. */
+  private hardDropTrails: HardDropTrail[] = [];
+  /** TGM key layout, restored when the TetriNET game ends. */
+  private previousKeys: any = null;
 
   constructor(options: TetriNetScreenOptions) {
     this.screen = options.screen;
@@ -221,7 +233,10 @@ export class TetriNetScreen {
     // fallback is whatever the target selector currently points at.
     const resolvedId = targetId
       ?? (sourceId === this.localId() ? this.targetSelector.getSelectedTarget()?.id ?? null : null);
-    if (!resolvedId || resolvedId === sourceId) return;
+    // Self is a legal target: TetriNET lets you use Clear Line, Nuke or
+    // anything else on your own field, which is what Enter does in the
+    // reference client.
+    if (!resolvedId) return;
 
     const target = this.participantEngine(resolvedId);
     if (target) {
@@ -723,6 +738,13 @@ export class TetriNetScreen {
    * Setup input handlers
    */
   private setupInput(): void {
+    // TetriNET's own key layout for the duration of the game. The TGM
+    // layout collides with it head-on - Space is rotate-180 there, Enter is
+    // hard drop and D is move-right - so the reference client's special
+    // keys had nowhere to live.
+    this.previousKeys = this.inputHandler.getConfig();
+    this.inputHandler.updateConfig(TETRINET_KEYS);
+
     // Movement - confusion reversal is handled by engine.
     // Sound effects match game-screen/versus-screen: these bindings used to
     // be bare engine calls, so movement, rotation, hard drop and hold were
@@ -747,6 +769,7 @@ export class TetriNetScreen {
     // Drop
     this.inputHandler.on('soft_drop', () => this.engine.softDrop());
     this.inputHandler.on('hard_drop', () => {
+      this.recordHardDropTrail();
       this.engine.hardDrop();
       this.sounds.playSfx('hard_drop');
     });
@@ -759,25 +782,63 @@ export class TetriNetScreen {
     // Pause
     this.inputHandler.on('pause', () => this.togglePause());
 
-    // Special usage (spacebar) - use screen.key since it's TetriNET-specific
-    this.screen.key(['space', 'enter'], () => {
-      const target = this.targetSelector.getSelectedTarget();
-      if (target) {
-        this.engine.useSpecial(target.id);
-      } else {
-        // Self-targeting specials
-        this.engine.useSpecial();
+    // TetriNET's special keys, through the SAME input path as movement.
+    //
+    // These used to be screen.key() bindings, and in game mode the door
+    // receives keys through bbs.onKeyDown/onKeyUp - not through blessed
+    // keypress events - so none of them ever fired: specials could not be
+    // used at all, and the panel's "TAB: Next 1-5: Select" hint described
+    // something that did not work.
+    //
+    // The model is the reference client's: the number key USES the first
+    // special on that slot, there is no separate select-then-fire step.
+    for (let slot = 1; slot <= 6; slot++) {
+      this.inputHandler.on(`use_special_${slot}` as any, () => this.useSpecialOnSlot(slot));
+    }
+    this.inputHandler.on('use_special_self' as any, () => {
+      this.fireSpecial(this.localId());
+    });
+    this.inputHandler.on('use_special_random' as any, () => {
+      const living = this.livingTargets();
+      if (living.length === 0) return;
+      this.fireSpecial(living[Math.floor(Math.random() * living.length)]);
+    });
+    this.inputHandler.on('discard_special' as any, () => {
+      if (this.engine.discardSpecial()) {
+        this.sounds.playSfx('menu_select');
+        this.inventoryPanel.showUseAnimation();
       }
     });
+  }
 
-    // Target selection with tab
-    this.screen.key(['tab'], () => this.targetSelector.selectNext());
-    this.screen.key(['S-tab'], () => this.targetSelector.selectPrevious());
+  /** Ids of everyone still playing, this node's human excluded. */
+  private livingTargets(): string[] {
+    return [
+      ...this.aiOpponents().filter((o: any) => o.alive).map((o: any) => o.id),
+      ...Array.from(this.remotes.entries()).filter(([, r]) => r.alive).map(([id]) => id),
+    ];
+  }
 
-    // Number keys for quick target selection
-    for (let i = 1; i <= 5; i++) {
-      this.screen.key([`${i}`], () => this.targetSelector.selectByNumber(i));
+  /**
+   * Use the first special on the player shown at that slot number. The
+   * panel numbers opponents from 1, which is what the key refers to.
+   */
+  private useSpecialOnSlot(slot: number): void {
+    const target = this.targetSelector.getOpponentAt(slot - 1);
+    if (!target) {
+      this.sounds.playSfx('error');
+      return;
     }
+    this.fireSpecial(target.id);
+  }
+
+  /** Use the first special in the inventory on one participant. */
+  private fireSpecial(targetId: string): void {
+    if (this.engine.getState().inventory.length === 0) {
+      this.sounds.playSfx('error');
+      return;
+    }
+    this.engine.useSpecial(targetId);
   }
 
   /**
@@ -878,13 +939,14 @@ export class TetriNetScreen {
       pieceShape = this.engine.getPieceShape(currentPiece.type, currentPiece.rotation);
     }
 
-    // Landing shadow. The engine has exposed getGhostY() all along (hardDrop
-    // uses it), but the TetriNET screen never drew one, so on a 12-wide
-    // field you had to eyeball the column - reported as "hard to aim".
-    // Darkness hides it, like the preview.
+    // Landing shadow and motion blur, from ui/board-effects.ts - the same
+    // code the main modes draw, rather than a TetriNET-only lookalike.
+    // Darkness hides the shadow, like the preview.
     const ghostY = this.engine.getEffectManager().hasDarkness()
       ? null
       : this.engine.getGhostY();
+    const now = Date.now();
+    this.hardDropTrails = expireTrails(this.hardDropTrails, now);
 
     // Render each row (TetriNET 12x22 board)
     for (let y = 0; y < board.height; y++) {
@@ -923,8 +985,13 @@ export class TetriNetScreen {
           if (gy >= 0 && gy < pieceShape.length &&
               gx >= 0 && gx < pieceShape[gy].length &&
               pieceShape[gy][gx]) {
-            char = '{gray-fg}::{/gray-fg}';
+            char = GHOST_CHAR;
           }
+        }
+
+        // Hard-drop streak, over empty cells only.
+        if (char === '  ' && !cell?.filled) {
+          char = trailCharAt(this.hardDropTrails, x, y, now) ?? char;
         }
 
         content += char;
@@ -932,6 +999,32 @@ export class TetriNetScreen {
     }
 
     this.boardBox.setContent(content);
+  }
+
+  /**
+   * Remember the streak a hard drop is about to leave. Must run BEFORE the
+   * drop, while the piece is still at the top of its fall.
+   */
+  private recordHardDropTrail(): void {
+    const piece = this.engine.getState().currentPiece;
+    if (!piece) return;
+
+    const ghostY = this.engine.getGhostY();
+    if (ghostY === null) return;
+
+    const shape = this.engine.getPieceShape(piece.type, piece.rotation);
+    if (!shape) return;
+
+    this.hardDropTrails.push(...buildHardDropTrail(
+      shape,
+      piece.x,
+      piece.y,
+      ghostY - piece.y,
+      this.getPieceColor(piece.type),
+      // The TetriNET field has no hidden spawn rows: all 22 are drawn.
+      { minY: 0, maxY: this.engine.getBoard().height },
+      Date.now()
+    ));
   }
 
   /**
@@ -1000,16 +1093,21 @@ export class TetriNetScreen {
    * Get colored block character for piece type
    */
   private getBlockChar(type: string): string {
+    return `{${this.getPieceColor(type)}-fg}██{/${this.getPieceColor(type)}-fg}`;
+  }
+
+  /** Colour name for a piece type - also what the motion blur fades out. */
+  private getPieceColor(type: string): string {
     const colors: Record<string, string> = {
-      I: '{cyan-fg}██{/cyan-fg}',
-      O: '{yellow-fg}██{/yellow-fg}',
-      T: '{magenta-fg}██{/magenta-fg}',
-      S: '{green-fg}██{/green-fg}',
-      Z: '{red-fg}██{/red-fg}',
-      J: '{blue-fg}██{/blue-fg}',
-      L: '{white-fg}██{/white-fg}',
+      I: 'cyan',
+      O: 'yellow',
+      T: 'magenta',
+      S: 'green',
+      Z: 'red',
+      J: 'blue',
+      L: 'white',
     };
-    return colors[type] || '{gray-fg}██{/gray-fg}';
+    return colors[type] || 'gray';
   }
 
   /**
@@ -1061,6 +1159,12 @@ export class TetriNetScreen {
    */
   cleanup(): void {
     this.running = false;
+
+    // Hand the TGM key layout back to the rest of the door.
+    if (this.previousKeys) {
+      this.inputHandler.updateConfig(this.previousKeys);
+      this.previousKeys = null;
+    }
 
     // Disable mouse tracking
     this.screen.program.disableMouse();

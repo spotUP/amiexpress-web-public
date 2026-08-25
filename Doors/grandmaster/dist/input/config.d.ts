@@ -18,6 +18,14 @@ export interface KeyConfig {
     sonicDrop: string[];
     hold: string[];
     pause: string[];
+    /** TetriNET only: use the first special on the player in slot 1-6. */
+    useSpecialOn?: string[][];
+    /** TetriNET only: use the first special on yourself. */
+    useSpecialSelf?: string[];
+    /** TetriNET only: use the first special on a random opponent. */
+    useSpecialRandom?: string[];
+    /** TetriNET only: throw the first special away. */
+    discardSpecial?: string[];
 }
 /**
  * Default key bindings (Modern Tetris style)
@@ -26,6 +34,17 @@ export interface KeyConfig {
  * - Z/X for rotation (CCW/CW)
  */
 export declare const DEFAULT_KEYS: KeyConfig;
+/**
+ * TetriNET layout, copied from the reference client
+ * (TetriNET2.Client.ConsoleApp): arrows to move, Up to rotate, Space to
+ * drop, H to hold, D to discard a special, 1-6 to use one on that slot,
+ * Enter on yourself, Tab on a random opponent.
+ *
+ * It replaces the TGM layout while a TetriNET game is running, because the
+ * two collide: TGM binds Space to rotate-180, Enter to hard drop and D to
+ * move right, so the reference's special keys had nowhere to live.
+ */
+export declare const TETRINET_KEYS: KeyConfig;
 /**
  * Key binding presets — named layouts the player can pick in settings.
  * Each preset resets ALL bindings so the player starts clean.

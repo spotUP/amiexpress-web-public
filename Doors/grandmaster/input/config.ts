@@ -20,6 +20,14 @@ export interface KeyConfig {
   sonicDrop: string[];
   hold: string[];
   pause: string[];
+  /** TetriNET only: use the first special on the player in slot 1-6. */
+  useSpecialOn?: string[][];
+  /** TetriNET only: use the first special on yourself. */
+  useSpecialSelf?: string[];
+  /** TetriNET only: use the first special on a random opponent. */
+  useSpecialRandom?: string[];
+  /** TetriNET only: throw the first special away. */
+  discardSpecial?: string[];
 }
 
 /**
@@ -44,6 +52,33 @@ export const DEFAULT_KEYS: KeyConfig = {
   sonicDrop: [],
   hold:      ['c', 'lshift', 'rshift'],
   pause:     ['p'],
+};
+
+/**
+ * TetriNET layout, copied from the reference client
+ * (TetriNET2.Client.ConsoleApp): arrows to move, Up to rotate, Space to
+ * drop, H to hold, D to discard a special, 1-6 to use one on that slot,
+ * Enter on yourself, Tab on a random opponent.
+ *
+ * It replaces the TGM layout while a TetriNET game is running, because the
+ * two collide: TGM binds Space to rotate-180, Enter to hard drop and D to
+ * move right, so the reference's special keys had nowhere to live.
+ */
+export const TETRINET_KEYS: KeyConfig = {
+  left:      ['left'],
+  right:     ['right'],
+  rotateCW:  ['up', 'x'],
+  rotateCCW: ['z', 'lcontrol', 'rcontrol'],
+  rotate180: [],
+  softDrop:  ['down'],
+  hardDrop:  ['space'],
+  sonicDrop: [],
+  hold:      ['h', 'c'],
+  pause:     ['p'],
+  useSpecialOn: [['1'], ['2'], ['3'], ['4'], ['5'], ['6']],
+  useSpecialSelf: ['return', 'enter'],
+  useSpecialRandom: ['tab'],
+  discardSpecial: ['d'],
 };
 
 /**
@@ -98,6 +133,19 @@ export const KEY_PRESETS: Record<string, { name: string } & KeyConfig> = {
  * Map key name to game action
  */
 export function keyToAction(key: string, config: KeyConfig = DEFAULT_KEYS): GameAction | null {
+  // TetriNET's special keys first: in that profile 1-6 must beat any other
+  // meaning a digit might have.
+  if (config.useSpecialOn) {
+    for (let slot = 0; slot < config.useSpecialOn.length && slot < 6; slot++) {
+      if (config.useSpecialOn[slot]?.includes(key)) {
+        return `use_special_${slot + 1}` as GameAction;
+      }
+    }
+  }
+  if (config.useSpecialSelf?.includes(key)) return 'use_special_self';
+  if (config.useSpecialRandom?.includes(key)) return 'use_special_random';
+  if (config.discardSpecial?.includes(key)) return 'discard_special';
+
   if (config.left.includes(key)) return 'left';
   if (config.right.includes(key)) return 'right';
   if (config.rotateCW.includes(key)) return 'rotate_cw';

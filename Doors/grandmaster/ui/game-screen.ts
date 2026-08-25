@@ -1,4 +1,12 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import {
+  GHOST_CHAR,
+  brightColor as brightColorFor,
+  buildHardDropTrail,
+  expireTrails,
+  trailCharAt,
+  type HardDropTrail,
+} from './board-effects';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
 import type { GameEngine } from '../core/game';
@@ -76,13 +84,8 @@ export class GameScreen {
   private shineTimer: number = 0;
   private readonly SHINE_INTERVAL = 300;  // Frames between shine sweeps
   private shineCells: Map<string, number> = new Map();  // "x,y" -> frames remaining
-  private hardDropTrails: Array<{
-    x: number;
-    y: number;
-    color: string;
-    strength: number;
-    createdAt: number;
-  }> = [];
+  // Shared with the TetriNET screen - see ui/board-effects.ts.
+  private hardDropTrails: HardDropTrail[] = [];
 
   constructor(
     private screen: Screen,
@@ -1228,7 +1231,7 @@ export class GameScreen {
     
     let content = '';
     const now = Date.now();
-    this.hardDropTrails = this.hardDropTrails.filter(trail => now - trail.createdAt < 160);
+    this.hardDropTrails = expireTrails(this.hardDropTrails, now);
 
     let pieceShape: number[][] | null = null;
     let ghostY: number | null = null;
@@ -1285,18 +1288,12 @@ export class GameScreen {
               pieceShape[py][px] &&
               ghostBlockY >= 4 && ghostBlockY < 24 &&  // Ghost block must be in visible board area
               x >= 0 && x < board.width) {  // Within board width
-            char = '{gray-fg}░░{/gray-fg}';
+            char = GHOST_CHAR;
           }
         }
 
         if (char === '  ' && !cell.filled && !isMasterRoll) {
-          const trail = this.hardDropTrails.find(t => t.x === x && t.y === y);
-          if (trail) {
-            const age = now - trail.createdAt;
-            const fade = Math.max(0, 1 - (age / 160));
-            const strength = trail.strength * fade;
-            char = this.getHardDropTrailChar(trail.color, strength);
-          }
+          char = trailCharAt(this.hardDropTrails, x, y, now) ?? char;
         }
 
         if (char === '  ' && cell.filled) {
@@ -1449,27 +1446,12 @@ export class GameScreen {
     }
 
     const color = this.getPieceGlowColor(currentPiece.type, this.state.settings.rotationSystem);
-    const now = Date.now();
-    const maxSteps = Math.max(1, dropDistance);
 
-    for (let py = 0; py < shape.length; py++) {
-      for (let px = 0; px < shape[py].length; px++) {
-        if (!shape[py][px]) continue;
-        const startX = currentPiece.x + px;
-        for (let step = 0; step < dropDistance; step++) {
-          const y = currentPiece.y + step + py;
-          if (y < 4 || y >= 24) continue;
-          const strength = (step + 1) / maxSteps;
-          this.hardDropTrails.push({
-            x: startX,
-            y,
-            color,
-            strength,
-            createdAt: now,
-          });
-        }
-      }
-    }
+    // The TGM board hides its four spawn rows, so the streak starts at row 4.
+    this.hardDropTrails.push(...buildHardDropTrail(
+      shape, currentPiece.x, currentPiece.y, dropDistance, color,
+      { minY: 4, maxY: 24 }, Date.now()
+    ));
   }
 
   /**
@@ -1534,25 +1516,6 @@ export class GameScreen {
     return colors[type];
   }
 
-  private getHardDropTrailChar(color: string, strength: number): string {
-    if (strength > 0.66) {
-      const bright = this.getBrightColor(color);
-      return `{${bright}-bg}  {/${bright}-bg}`;
-    }
-    if (strength > 0.33) {
-      return `{${color}-bg}  {/${color}-bg}`;
-    }
-    return `{${color}-fg}░░{/${color}-fg}`;
-  }
-
-  private getBrightColor(color: string): string {
-    const map: Record<string, string> = {
-      red: 'lightred', green: 'lightgreen', yellow: 'lightyellow', blue: 'lightblue',
-      magenta: 'lightmagenta', cyan: 'lightcyan', white: 'lightwhite', orange: 'yellow'
-    };
-    return map[color] || color;
-  }
-
   /**
    * Get color name for piece type (for visual effects)
    */
@@ -1567,11 +1530,11 @@ export class GameScreen {
    */
   private applyGlow(baseChar: string, glowColor: string, intensity: number): string {
     // intensity 1.0 = full glow, 0.0 = no glow
-    const brightColor = this.getBrightColor(glowColor);
+    const bright = brightColorFor(glowColor);
 
     if (intensity > 0.7) {
       // Strong glow - bright background
-      return `{${brightColor}-bg}${baseChar}{/${brightColor}-bg}`;
+      return `{${bright}-bg}${baseChar}{/${bright}-bg}`;
     } else if (intensity > 0.3) {
       // Medium glow - normal background
       return `{${glowColor}-bg}${baseChar}{/${glowColor}-bg}`;

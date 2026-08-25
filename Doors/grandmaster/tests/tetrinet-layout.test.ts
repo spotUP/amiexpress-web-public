@@ -17,6 +17,8 @@
  */
 
 import assert from 'assert';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from '../ui/tetrinet-screen';
@@ -197,7 +199,7 @@ export async function theLandingShadowIsDrawn(): Promise<void> {
       .map((row: any) => row.map((c: [number, string]) => c[1]).join(''))
       .join('\n');
 
-    assert.ok(painted.includes('::'),
+    assert.ok(painted.includes('░░'),
       'the resting position of the falling piece must be shown on the field');
   } finally { screen.destroy(); }
 }
@@ -220,4 +222,49 @@ export async function theShadowSitsWhereThePieceWillLand(): Promise<void> {
 
   assert.ok(filledRows.includes(ghostY),
     `a hard drop must lock where the shadow was (row ${ghostY}), got rows ${JSON.stringify(filledRows)}`);
+}
+
+export async function bothScreensDrawTheSameEffects(): Promise<void> {
+  // The TetriNET ghost started life as a lookalike ('::' in grey) with no
+  // motion blur at all, while the main modes had both. They now draw from
+  // ui/board-effects.ts; this guards against a second private copy.
+  const dir = join(__dirname, '..', 'ui');
+  const main = readFileSync(join(dir, 'game-screen.ts'), 'utf8');
+  const tnet = readFileSync(join(dir, 'tetrinet-screen.ts'), 'utf8');
+
+  for (const [name, src] of [['game-screen', main], ['tetrinet-screen', tnet]] as const) {
+    assert.ok(/from '\.\/board-effects'/.test(src),
+      `${name} must draw its shadow and blur from the shared module`);
+    assert.ok(src.includes('GHOST_CHAR'),
+      `${name} must use the shared landing-shadow character`);
+    assert.ok(!/\{gray-fg\}(::|░░)\{\/gray-fg\}/.test(src),
+      `${name} must not hardcode its own landing shadow`);
+    assert.ok(src.includes('trailCharAt('),
+      `${name} must draw the shared hard-drop blur`);
+  }
+}
+
+export async function aHardDropLeavesAStreak(): Promise<void> {
+  const screen: any = new Screen({ title: 'tnet-blur', width: 80, height: 30 });
+  const engine: any = new TetriNetEngine({} as any, { nextPieceDelayMs: 0, delayBeforeSuddenDeath: 0 } as any);
+  const scr: any = new TetriNetScreen({
+    screen, engine, inputHandler: { on() {}, off() {}, setEnabled() {} } as any,
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} } as any,
+    state: { settings: {} } as any, network: null, playerName: 'sysop', aiController: null,
+  } as any);
+  try {
+    engine.start();
+    scr.recordHardDropTrail();
+
+    assert.ok(scr.hardDropTrails.length > 0,
+      'slamming a piece down must leave a streak behind it');
+
+    engine.hardDrop();
+    scr.render();
+    const painted = screen.buffer.slice(0, 24)
+      .map((row: any) => row.map((c: [number, string]) => c[1]).join(''))
+      .join('\n');
+
+    assert.ok(/░░|██/.test(painted), 'and the field still paints blocks');
+  } finally { screen.destroy(); }
 }

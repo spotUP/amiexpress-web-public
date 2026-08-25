@@ -133,6 +133,13 @@ export declare class TetriNetEngine {
      */
     useSpecial(targetId?: string): SpecialType | null;
     /**
+     * Throw the first special away without using it.
+     *
+     * The reference client binds this to D; TetriNET inventories are small
+     * (10 by default) and a useless special blocks the ones behind it.
+     */
+    discardSpecial(): SpecialType | null;
+    /**
      * Apply incoming special from opponent
      */
     applyIncomingSpecial(special: SpecialType, senderId: string, sourceBoard?: TetriNetBoard): void;
