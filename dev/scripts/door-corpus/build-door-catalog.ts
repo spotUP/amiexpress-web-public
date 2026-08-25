@@ -755,26 +755,32 @@ async function indexArchives(
     // Make a stable ID from the archive name (strip extension, lowercase, replace non-alnum)
     const baseId = archiveName.replace(/\.(lha|lzx|lzh)$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    // Same normalized id already claimed by a *different* archive_name —
-    // either earlier in this same run (e.g. D_NEW310.LHA / D!NEW310.LHA both
-    // normalize to "d_new310") or by a previous run indexing a different
-    // source directory (e.g. the same archive name shipped in both
-    // AmiExpress/ and FAME/): never clobber that row — skip and log instead.
-    // A re-run over the *same* archive (identical archive_name) is expected
-    // to update its own row, so that case falls through normally.
-    const queuedAs = seenThisRun.get(baseId);
-    if (queuedAs && queuedAs !== archiveName) {
-      log(`  SKIP (id collision with ${queuedAs}, already queued this run): ${archiveName}`);
-      collisions++;
-      continue;
+    // The id is that normalisation, and the normalisation is lossy: every
+    // non-alphanumeric collapses to "_", so D_NEW310.LHA and D!NEW310.LHA -
+    // two different archives - both want "d_new310". So does the same
+    // archive name shipped in two source directories, and so does a
+    // second corpus indexed later.
+    //
+    // Those are distinct files, and a distinct file is entitled to a row:
+    // a taken id gets a numbered suffix rather than costing the corpus a
+    // door. What must never happen is one archive overwriting another's
+    // row, which is what an unqualified id would do through ON CONFLICT.
+    //
+    // Re-running over the SAME archive_name keeps whichever id that
+    // archive already holds - including a suffixed one - so a second run
+    // updates its own row instead of laying down another.
+    let catalogId = baseId;
+    for (let suffix = 2; ; suffix++) {
+      const queuedAs = seenThisRun.get(catalogId);
+      const holder = queuedAs ?? (existingRow.get(catalogId) as { archive_name: string } | undefined)?.archive_name;
+      if (!holder || holder === archiveName) break;
+      catalogId = `${baseId}_${suffix}`;
     }
-    const existing = existingRow.get(baseId) as { archive_name: string } | undefined;
-    if (existing && existing.archive_name !== archiveName) {
-      log(`  SKIP (id collision, already indexed as ${existing.archive_name}): ${archiveName}`);
+    if (catalogId !== baseId) {
+      log(`  id taken by another archive, indexing ${archiveName} as ${catalogId}`);
       collisions++;
-      continue;
     }
-    seenThisRun.set(baseId, archiveName);
+    seenThisRun.set(catalogId, archiveName);
 
     const { entries, extract } = await openArchive(archivePath);
     if (entries.length === 0) {
@@ -888,7 +894,7 @@ async function indexArchives(
     }
 
     batch.push({
-      id: baseId,
+      id: catalogId,
       archive_name: archiveName,
       archive_path: archiveRelPath,
       binary_name: binaryName,
@@ -915,7 +921,7 @@ async function indexArchives(
     });
 
     // Store file listing immediately (outside batch, each archive individually)
-    insertFiles(baseId, fileRows);
+    insertFiles(catalogId, fileRows);
 
     processed++;
 
@@ -931,7 +937,7 @@ async function indexArchives(
 
   if (batch.length > 0) insertMany(batch);
   process.stdout.write('\r' + ' '.repeat(60) + '\r');
-  log(`  Indexed ${processed} archives (skipped LZX: ${skippedLzx}, collisions: ${collisions})`);
+  log(`  Indexed ${processed} archives (skipped LZX: ${skippedLzx}, id suffixed: ${collisions})`);
 
   const count = (db.prepare('SELECT COUNT(*) as n FROM door_catalog').get() as { n: number }).n;
   log(`  door_catalog rows: ${count}`);
