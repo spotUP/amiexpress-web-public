@@ -34,6 +34,12 @@ export interface TetriNetScreenOptions {
     network?: TetriNetTransport;
     playerName: string;
     aiController?: any;
+    /**
+     * Team per participant id, from the lobby. TetriNET treats teams as
+     * metadata - the reference server does not filter attacks by team - but
+     * the winlist is keyed by player AND team, so it has to reach the match.
+     */
+    teams?: Record<string, string>;
 }
 /**
  * TetriNET Game Screen
@@ -47,6 +53,7 @@ export declare class TetriNetScreen {
     private network;
     private playerName;
     private aiController;
+    private teams;
     private boardBox;
     private previewBox;
     private holdBox;
@@ -108,6 +115,8 @@ export declare class TetriNetScreen {
      * on the wire instead.
      */
     private participantEngine;
+    /** Team of a participant, or '' when teams are not in use. */
+    private participantTeam;
     private participantName;
     /** Every id currently in the match, local and remote. */
     private participantIds;
@@ -251,7 +260,15 @@ export declare class TetriNetScreen {
     /**
      * Toggle pause
      */
+    /**
+     * Pause is MATCH-wide in TetriNET (`pause <on|off> <slot>` in the
+     * protocol): one player pausing stops the game for everybody, and any
+     * player can resume it. It used to pause this node's engine only, so in a
+     * networked match the other players kept playing against a frozen board.
+     */
     private togglePause;
+    /** Apply a pause state locally - to this node's bots as well. */
+    private applyPause;
     /**
      * Stop the game
      */

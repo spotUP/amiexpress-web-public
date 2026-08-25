@@ -21,6 +21,7 @@ import type {
   TetriNetFieldUpdate,
   TetriNetSpecialPacket,
   TetriNetGarbagePacket,
+  TetriNetPausePacket,
   TetriNetUpdateListener,
 } from './tetrinet-transport';
 
@@ -31,6 +32,7 @@ import type {
 const FIELD_EVENT = 'game:tnet_field';
 const SPECIAL_EVENT = 'game:tnet_special';
 const GARBAGE_EVENT = 'game:tnet_garbage';
+const PAUSE_EVENT = 'game:tnet_pause';
 
 export class TetriNetBrokerTransport implements TetriNetTransport {
   private network: GrandmasterNetworkManager;
@@ -85,6 +87,14 @@ export class TetriNetBrokerTransport implements TetriNetTransport {
 
   onGarbage(listener: (packet: TetriNetGarbagePacket) => void): () => void {
     return this.subscribe(GARBAGE_EVENT, listener);
+  }
+
+  sendPause(packet: TetriNetPausePacket): void {
+    this.network.sendGameEvent(PAUSE_EVENT, packet);
+  }
+
+  onPause(listener: (packet: TetriNetPausePacket) => void): () => void {
+    return this.subscribe(PAUSE_EVENT, listener);
   }
 
   /** Drop every broker subscription. Call when the match screen closes. */

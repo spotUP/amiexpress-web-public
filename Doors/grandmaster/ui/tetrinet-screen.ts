@@ -58,6 +58,12 @@ export interface TetriNetScreenOptions {
   network?: TetriNetTransport;
   playerName: string;
   aiController?: any;  // TetriNetAI controller - local bots this node owns
+  /**
+   * Team per participant id, from the lobby. TetriNET treats teams as
+   * metadata - the reference server does not filter attacks by team - but
+   * the winlist is keyed by player AND team, so it has to reach the match.
+   */
+  teams?: Record<string, string>;
 }
 
 /**
@@ -72,6 +78,7 @@ export class TetriNetScreen {
   private network: TetriNetTransport | null;
   private playerName: string;
   private aiController: any | null;  // AI controller for local mode
+  private teams: Record<string, string>;
 
   // UI Elements
   private boardBox: any;
@@ -121,6 +128,7 @@ export class TetriNetScreen {
     this.network = options.network || null;
     this.playerName = options.playerName;
     this.aiController = options.aiController || null;
+    this.teams = options.teams || {};
 
     this.setupUI();
     this.setupEngineCallbacks();
@@ -175,6 +183,15 @@ export class TetriNetScreen {
       this.unsubscribers.push(this.network!.onSpecial!((packet) => this.receiveSpecial(packet)));
       this.unsubscribers.push(this.network!.onGarbage!((packet) => this.receiveGarbage(packet)));
     }
+
+    if (this.network?.onPause) {
+      this.unsubscribers.push(this.network.onPause((packet) => {
+        this.applyPause(packet.paused);
+        this.effectOverlay.showIncomingWarning(
+          packet.paused ? `${packet.fromName} paused` : `${packet.fromName} resumed`
+        );
+      }));
+    }
   }
 
   /** Id this node's human player answers to. */
@@ -203,6 +220,11 @@ export class TetriNetScreen {
     }
     const opponent = this.aiOpponents().find(o => o.id === id);
     return opponent && opponent.alive ? opponent.engine : null;
+  }
+
+  /** Team of a participant, or '' when teams are not in use. */
+  private participantTeam(id: string): string {
+    return this.teams[id] ?? '';
   }
 
   private participantName(id: string): string {
@@ -450,7 +472,10 @@ export class TetriNetScreen {
       order.push(this.localId());
     }
 
-    return order.map(id => ({ name: this.participantName(id) }));
+    return order.map(id => ({
+      name: this.participantName(id),
+      team: this.participantTeam(id),
+    }));
   }
 
   /** Publish this node's fields: the human, plus any bots it owns. */
@@ -1193,12 +1218,33 @@ export class TetriNetScreen {
   /**
    * Toggle pause
    */
+  /**
+   * Pause is MATCH-wide in TetriNET (`pause <on|off> <slot>` in the
+   * protocol): one player pausing stops the game for everybody, and any
+   * player can resume it. It used to pause this node's engine only, so in a
+   * networked match the other players kept playing against a frozen board.
+   */
   private togglePause(): void {
-    const gameState = this.engine.getState();
-    if (gameState.status === 'playing') {
+    const status = this.engine.getState().status;
+    if (status !== 'playing' && status !== 'paused') return;
+
+    const paused = status === 'playing';
+    this.applyPause(paused);
+    this.network?.sendPause?.({
+      from: this.localId(),
+      fromName: this.playerName,
+      paused,
+    });
+  }
+
+  /** Apply a pause state locally - to this node's bots as well. */
+  private applyPause(paused: boolean): void {
+    if (paused) {
       this.engine.pause();
-    } else if (gameState.status === 'paused') {
+      for (const bot of this.aiOpponents()) bot.engine.pause();
+    } else {
       this.engine.resume();
+      for (const bot of this.aiOpponents()) bot.engine.resume();
     }
   }
 

@@ -55,6 +55,7 @@ import { TetriNetEngine } from './core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from './ui/tetrinet-screen';
 import { optionsFromLobbySettings, type TetriNetRule, type TetriNetGameOptions } from './core/tetrinet/game-rules';
 import { buildTetriNetResult } from './core/tetrinet/score-report';
+import { HUMAN_TARGET_ID } from './ai/tetrinet-ai';
 import { WinList } from './core/tetrinet/winlist';
 import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
@@ -1174,11 +1175,28 @@ export class GrandmasterApp {
 
       const botDifficulty = (bots[0]?.botDifficulty ?? 5) as number;
 
+      // Teams are lobby metadata that the winlist is keyed by, so they have
+      // to travel with the match. Bots are matched by position: the Nth bot
+      // in the lobby becomes ai-N in the game.
+      const teams: Record<string, string> = {};
+      for (const player of players) {
+        if (!player.team) continue;
+        teams[String(player.id)] = player.team;
+      }
+      bots.forEach((bot, index) => {
+        if (bot.team) teams[`ai-${index + 1}`] = bot.team;
+      });
+      // A local game has no transport, so the human answers to 'player'
+      // there rather than to their BBS id - see TetriNetScreen.localId().
+      const localTeam = players.find(p => String(p.id) === String(localPlayerId))?.team;
+      if (localTeam) teams[HUMAN_TARGET_ID] = localTeam;
+
       if (humans.length > 1) {
         await this.startTetriNetNetworkGame(
           result.mode || 'standard',
           result.settings || {},
-          { botCount: isHost ? bots.length : 0, botDifficulty }
+          { botCount: isHost ? bots.length : 0, botDifficulty },
+          teams
         );
       } else {
         // The lobby's bots decide the opposition. This used to discard them
@@ -1188,7 +1206,8 @@ export class GrandmasterApp {
         await this.startTetriNetGame(
           result.mode || 'standard',
           result.settings || {},
-          { botCount: bots.length, botDifficulty }
+          { botCount: bots.length, botDifficulty },
+          teams
         );
       }
     }
@@ -1207,7 +1226,8 @@ export class GrandmasterApp {
   private async startTetriNetNetworkGame(
     mode: string,
     settings: Record<string, unknown>,
-    bots: { botCount: number; botDifficulty: number }
+    bots: { botCount: number; botDifficulty: number },
+    teams: Record<string, string> = {}
   ): Promise<void> {
     if (!this.network) return;
 
@@ -1249,6 +1269,7 @@ export class GrandmasterApp {
       network: transport,
       playerName: this.state.playerName,
       aiController,
+      teams,
     });
 
     await gameScreen.run();
@@ -1271,7 +1292,8 @@ export class GrandmasterApp {
   private async startTetriNetGame(
     mode: string,
     settings: Record<string, unknown>,
-    bots: { botCount: number; botDifficulty: number } = { botCount: 3, botDifficulty: 5 }
+    bots: { botCount: number; botDifficulty: number } = { botCount: 3, botDifficulty: 5 },
+    teams: Record<string, string> = {}
   ): Promise<void> {
     // broadcastScore() labels the post from currentMode; it has always had a
     // 'tetrinet' branch that nothing set.
@@ -1315,6 +1337,7 @@ export class GrandmasterApp {
       state: this.state,
       playerName: this.state.playerName,
       aiController,  // Pass AI controller to screen
+      teams,
     });
 
     // Convert AI opponents to OpponentBoardData format

@@ -54,6 +54,7 @@ class TetriNetScreen {
         this.network = options.network || null;
         this.playerName = options.playerName;
         this.aiController = options.aiController || null;
+        this.teams = options.teams || {};
         this.setupUI();
         this.setupEngineCallbacks();
         this.setupAttackRouting();
@@ -105,6 +106,12 @@ class TetriNetScreen {
             this.unsubscribers.push(this.network.onSpecial((packet) => this.receiveSpecial(packet)));
             this.unsubscribers.push(this.network.onGarbage((packet) => this.receiveGarbage(packet)));
         }
+        if (this.network?.onPause) {
+            this.unsubscribers.push(this.network.onPause((packet) => {
+                this.applyPause(packet.paused);
+                this.effectOverlay.showIncomingWarning(packet.paused ? `${packet.fromName} paused` : `${packet.fromName} resumed`);
+            }));
+        }
     }
     /** Id this node's human player answers to. */
     localId() {
@@ -129,6 +136,10 @@ class TetriNetScreen {
         }
         const opponent = this.aiOpponents().find(o => o.id === id);
         return opponent && opponent.alive ? opponent.engine : null;
+    }
+    /** Team of a participant, or '' when teams are not in use. */
+    participantTeam(id) {
+        return this.teams[id] ?? '';
     }
     participantName(id) {
         if (id === this.localId() || id === tetrinet_ai_1.HUMAN_TARGET_ID)
@@ -348,7 +359,10 @@ class TetriNetScreen {
         if (status === 'gameover' && !order.includes(this.localId())) {
             order.push(this.localId());
         }
-        return order.map(id => ({ name: this.participantName(id) }));
+        return order.map(id => ({
+            name: this.participantName(id),
+            team: this.participantTeam(id),
+        }));
     }
     /** Publish this node's fields: the human, plus any bots it owns. */
     publishFields() {
@@ -1014,13 +1028,35 @@ class TetriNetScreen {
     /**
      * Toggle pause
      */
+    /**
+     * Pause is MATCH-wide in TetriNET (`pause <on|off> <slot>` in the
+     * protocol): one player pausing stops the game for everybody, and any
+     * player can resume it. It used to pause this node's engine only, so in a
+     * networked match the other players kept playing against a frozen board.
+     */
     togglePause() {
-        const gameState = this.engine.getState();
-        if (gameState.status === 'playing') {
+        const status = this.engine.getState().status;
+        if (status !== 'playing' && status !== 'paused')
+            return;
+        const paused = status === 'playing';
+        this.applyPause(paused);
+        this.network?.sendPause?.({
+            from: this.localId(),
+            fromName: this.playerName,
+            paused,
+        });
+    }
+    /** Apply a pause state locally - to this node's bots as well. */
+    applyPause(paused) {
+        if (paused) {
             this.engine.pause();
+            for (const bot of this.aiOpponents())
+                bot.engine.pause();
         }
-        else if (gameState.status === 'paused') {
+        else {
             this.engine.resume();
+            for (const bot of this.aiOpponents())
+                bot.engine.resume();
         }
     }
     /**

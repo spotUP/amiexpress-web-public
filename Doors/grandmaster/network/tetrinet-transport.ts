@@ -55,6 +55,13 @@ export interface TetriNetGarbagePacket {
   lines: number;
 }
 
+/** Somebody paused or resumed the match. */
+export interface TetriNetPausePacket {
+  from: string;
+  fromName: string;
+  paused: boolean;
+}
+
 export type TetriNetUpdateListener = (update: TetriNetFieldUpdate) => void;
 
 export interface TetriNetTransport {
@@ -72,4 +79,11 @@ export interface TetriNetTransport {
   onSpecial?(listener: (packet: TetriNetSpecialPacket) => void): () => void;
   sendGarbage?(packet: TetriNetGarbagePacket): void;
   onGarbage?(listener: (packet: TetriNetGarbagePacket) => void): () => void;
+
+  /**
+   * Pause is a MATCH-wide state in TetriNET (`pause <on|off> <slot>`), not a
+   * private one: one player pausing stops the game for everybody.
+   */
+  sendPause?(packet: TetriNetPausePacket): void;
+  onPause?(listener: (packet: TetriNetPausePacket) => void): () => void;
 }

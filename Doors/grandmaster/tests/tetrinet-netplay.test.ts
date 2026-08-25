@@ -236,3 +236,51 @@ export async function everyLobbyPlayerGetsASlot(): Promise<void> {
     adapter.dispose();
   }
 }
+
+export async function pauseStopsTheMatchForEverybody(): Promise<void> {
+  // TetriNET's `pause <on|off> <slot>` is match-wide: one player pausing
+  // stops the game for the whole table. Ours paused this node's engine
+  // only, so the other players kept playing against a frozen board.
+  const m = await match(1);
+  try {
+    m.a.scr.togglePause();
+    await settle(150);
+
+    assert.strictEqual(m.a.engine.getState().status, 'paused', 'the player who pressed it');
+    assert.strictEqual(m.b.engine.getState().status, 'paused', 'and everybody else');
+    assert.strictEqual(m.a.ai.getOpponents()[0].engine.getState().status, 'paused',
+      'including the bots the host is simulating');
+
+    m.b.scr.togglePause();
+    await settle(150);
+
+    assert.strictEqual(m.a.engine.getState().status, 'playing', 'any player can resume it');
+    assert.strictEqual(m.b.engine.getState().status, 'playing');
+  } finally { m.done(); }
+}
+
+export async function teamsTravelWithTheMatch(): Promise<void> {
+  // The winlist is keyed by player AND team, so the lobby's teams have to
+  // reach the game. They stopped at the lobby.
+  const screen: any = new Screen({ title: 'tnet-teams', width: 80, height: 30 });
+  const engine: any = new TetriNetEngine({} as any, options);
+  const ai: any = new TetriNetAI();
+  const bots = ai.createOpponents(2, 5, {} as any, options);
+  const scr: any = new TetriNetScreen({
+    screen, engine, inputHandler: inputStub, sounds, state: appState,
+    network: null, playerName: 'sysop', aiController: ai,
+    teams: { player: 'red', 'ai-1': 'blue', 'ai-2': 'blue' },
+  } as any);
+  try {
+    engine.start();
+    scr.refreshOpponents();
+    bots[0].alive = false;
+    scr.refreshOpponents();
+    bots[1].alive = false;
+    scr.refreshOpponents();
+
+    const order = scr.getFinishOrder();
+    assert.strictEqual(order[0].team, 'red', 'the winner carries their team');
+    assert.strictEqual(order[1].team, 'blue', 'and so do the losers');
+  } finally { screen.destroy(); }
+}

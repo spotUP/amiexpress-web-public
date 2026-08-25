@@ -23,6 +23,7 @@ exports.TetriNetBrokerTransport = void 0;
 const FIELD_EVENT = 'game:tnet_field';
 const SPECIAL_EVENT = 'game:tnet_special';
 const GARBAGE_EVENT = 'game:tnet_garbage';
+const PAUSE_EVENT = 'game:tnet_pause';
 class TetriNetBrokerTransport {
     constructor(network, playerName) {
         this.unsubscribers = [];
@@ -65,6 +66,12 @@ class TetriNetBrokerTransport {
     }
     onGarbage(listener) {
         return this.subscribe(GARBAGE_EVENT, listener);
+    }
+    sendPause(packet) {
+        this.network.sendGameEvent(PAUSE_EVENT, packet);
+    }
+    onPause(listener) {
+        return this.subscribe(PAUSE_EVENT, listener);
     }
     /** Drop every broker subscription. Call when the match screen closes. */
     dispose() {

@@ -69,6 +69,7 @@ const tetrinet_engine_1 = require("./core/tetrinet/tetrinet-engine");
 const tetrinet_screen_1 = require("./ui/tetrinet-screen");
 const game_rules_1 = require("./core/tetrinet/game-rules");
 const score_report_1 = require("./core/tetrinet/score-report");
+const tetrinet_ai_1 = require("./ai/tetrinet-ai");
 const winlist_1 = require("./core/tetrinet/winlist");
 const tetrinet_board_1 = require("./core/tetrinet/tetrinet-board");
 const multiplayer_server_1 = require("./server/multiplayer-server");
@@ -1059,15 +1060,33 @@ class GrandmasterApp {
             // raw BBS user id for the local one; compare as strings.
             const isHost = String(humans[0]?.id ?? '') === String(localPlayerId);
             const botDifficulty = (bots[0]?.botDifficulty ?? 5);
+            // Teams are lobby metadata that the winlist is keyed by, so they have
+            // to travel with the match. Bots are matched by position: the Nth bot
+            // in the lobby becomes ai-N in the game.
+            const teams = {};
+            for (const player of players) {
+                if (!player.team)
+                    continue;
+                teams[String(player.id)] = player.team;
+            }
+            bots.forEach((bot, index) => {
+                if (bot.team)
+                    teams[`ai-${index + 1}`] = bot.team;
+            });
+            // A local game has no transport, so the human answers to 'player'
+            // there rather than to their BBS id - see TetriNetScreen.localId().
+            const localTeam = players.find(p => String(p.id) === String(localPlayerId))?.team;
+            if (localTeam)
+                teams[tetrinet_ai_1.HUMAN_TARGET_ID] = localTeam;
             if (humans.length > 1) {
-                await this.startTetriNetNetworkGame(result.mode || 'standard', result.settings || {}, { botCount: isHost ? bots.length : 0, botDifficulty });
+                await this.startTetriNetNetworkGame(result.mode || 'standard', result.settings || {}, { botCount: isHost ? bots.length : 0, botDifficulty }, teams);
             }
             else {
                 // The lobby's bots decide the opposition. This used to discard them
                 // and start a hardcoded three-bot game at difficulty 5, so adding
                 // one bot still produced three, and the difficulty picker did
                 // nothing.
-                await this.startTetriNetGame(result.mode || 'standard', result.settings || {}, { botCount: bots.length, botDifficulty });
+                await this.startTetriNetGame(result.mode || 'standard', result.settings || {}, { botCount: bots.length, botDifficulty }, teams);
             }
         }
         adapter.dispose();
@@ -1080,7 +1099,7 @@ class GrandmasterApp {
      * participants, so every node sees the same field for them and no bot is
      * ever driven twice.
      */
-    async startTetriNetNetworkGame(mode, settings, bots) {
+    async startTetriNetNetworkGame(mode, settings, bots, teams = {}) {
         if (!this.network)
             return;
         this.state.currentMode = 'tetrinet';
@@ -1112,6 +1131,7 @@ class GrandmasterApp {
             network: transport,
             playerName: this.state.playerName,
             aiController,
+            teams,
         });
         await gameScreen.run();
         await this.reportTetriNetScore(gameEngine, {
@@ -1127,7 +1147,7 @@ class GrandmasterApp {
     /**
      * Start a TetriNET game (local, single-player with TetriNET rules)
      */
-    async startTetriNetGame(mode, settings, bots = { botCount: 3, botDifficulty: 5 }) {
+    async startTetriNetGame(mode, settings, bots = { botCount: 3, botDifficulty: 5 }, teams = {}) {
         // broadcastScore() labels the post from currentMode; it has always had a
         // 'tetrinet' branch that nothing set.
         this.state.currentMode = 'tetrinet';
@@ -1160,6 +1180,7 @@ class GrandmasterApp {
             state: this.state,
             playerName: this.state.playerName,
             aiController, // Pass AI controller to screen
+            teams,
         });
         // Convert AI opponents to OpponentBoardData format
         const opponents = aiOpponents.map(ai => ({
