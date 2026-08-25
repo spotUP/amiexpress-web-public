@@ -134,7 +134,23 @@ export declare class TetriNetScreen {
     /** Publish this node's fields: the human, plus any bots it owns. */
     private publishFields;
     /**
-     * Setup UI layout
+     * Setup UI layout - 80x24, the same budget the versus screen fits into.
+     *
+     * Col  0-25 : playfield        (26w, 24h, top 0) - 12x22 field, 2 chars a
+     *                               cell, plus its border. A TetriNET field is
+     *                               two rows TALLER than a TGM one, so it uses
+     *                               the full height and the readouts that sit
+     *                               under the board in versus live to the
+     *                               right of it here.
+     * Col 26-51 : Next (rows 0-5), Inventory (6-8), Target (9-16),
+     *             Stats (17-20), Sudden Death (21-23)
+     * Col 52-79 : Opponents        (28w, 24h, top 0)
+     *   26 + 26 + 28 = 80, and nothing is painted below row 23.
+     *
+     * The previous layout put the board at top 1 with height 24 (so its bottom
+     * border fell on row 25, off a 24-row terminal) and the stats bar at row
+     * 25, off-screen entirely - which is why the field looked bottomless and
+     * score/level/lines were nowhere to be seen.
      */
     private setupUI;
     /**

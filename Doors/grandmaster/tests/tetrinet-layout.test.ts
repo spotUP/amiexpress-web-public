@@ -20,6 +20,8 @@ import assert from 'assert';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from '../ui/tetrinet-screen';
+import { OpponentBoards } from '../ui/tetrinet/opponent-boards';
+import { createTetriNetBoard } from '../core/tetrinet/tetrinet-board';
 
 const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
 const inputStub: any = { on() {}, off() {}, setEnabled() {} };
@@ -44,14 +46,14 @@ function rendered(): { rows: string[]; destroy: () => void } {
   const rows: string[] = [];
   for (let y = 0; y < 28; y++) {
     const row = screen.buffer[y];
-    rows.push(row ? row.slice(0, 30).map((c: [number, string]) => c[1]).join('').replace(/\s+$/, '') : '');
+    rows.push(row ? row.map((c: [number, string]) => c[1]).join('').replace(/\s+$/, '') : '');
   }
   return { rows, destroy: () => screen.destroy() };
 }
 
-/** A row that is just the board's bottom frame. */
+/** A row whose first 26 columns are the board's bottom frame. */
 function isBottomBorder(row: string): boolean {
-  return /^`-+'$/.test(row.trim());
+  return /^`-{24}'/.test(row);
 }
 
 export async function boardHasExactlyOneBottomBorder(): Promise<void> {
@@ -69,22 +71,109 @@ export async function theLastPlayableRowIsVisible(): Promise<void> {
     const bottomIdx = rows.findIndex(isBottomBorder);
     assert.ok(bottomIdx > 0, 'bottom border must be found');
 
-    // The board is 22 rows tall and its top border sits at row 1, so the
-    // last playable row must be the row immediately above the bottom frame,
-    // and it must be board content (side walls), not another widget.
+    // The board is 22 interior rows with a frame around it, occupying rows
+    // 0..23 of a 24-row terminal, so the last playable row is the one
+    // immediately above the bottom frame and must be board content.
     const lastPlayable = rows[bottomIdx - 1];
-    assert.ok(/^\|.*\|$/.test(lastPlayable.trim()),
-      `row above the bottom border should be board content, got ${JSON.stringify(lastPlayable)}`);
-    assert.strictEqual(bottomIdx, 24, 'board occupies rows 1..24 (22 interior rows)');
+    assert.ok(/^\|.{24}\|/.test(lastPlayable),
+      `row above the bottom border should be board content, got ${JSON.stringify(lastPlayable.slice(0, 26))}`);
+    assert.strictEqual(bottomIdx, 23, 'board occupies rows 0..23 (22 interior rows)');
   } finally { destroy(); }
 }
 
 export async function suddenDeathReadoutDoesNotSitOnTheBoard(): Promise<void> {
+  // The original bug: this readout was parked ON the board's last interior
+  // row with a default border, hiding a playable row for the whole match.
+  // The invariant is about overlap, not about one specific row - it now
+  // lives in the right-hand column.
   const { rows, destroy } = rendered();
   try {
     const sdIdx = rows.findIndex(r => /Sudden Death/i.test(r));
     if (sdIdx === -1) return; // not armed in this configuration
-    assert.strictEqual(sdIdx, 0,
-      `sudden-death readout must sit above the board (row 0), found at row ${sdIdx}`);
+
+    const column = rows[sdIdx].search(/Sudden Death/i);
+    assert.ok(column >= 26,
+      `sudden-death readout must start right of the board (column >= 26), found at column ${column}`);
+    assert.ok(/^\|.{24}\|/.test(rows[sdIdx]),
+      'and the board frame on that row must be intact');
   } finally { destroy(); }
+}
+
+export async function nothingIsPaintedBelowTheTerminal(): Promise<void> {
+  // The old layout put the board at top 1 with height 24 (bottom border on
+  // row 25) and the stats bar at row 25 - so on a 24-row BBS terminal the
+  // field looked bottomless and score/level/lines were nowhere at all.
+  const { rows, destroy } = rendered();
+  try {
+    for (let y = 24; y < rows.length; y++) {
+      assert.strictEqual(rows[y], '',
+        `row ${y} is off a 24-row terminal but something painted there: ${JSON.stringify(rows[y])}`);
+    }
+  } finally { destroy(); }
+}
+
+export async function theScoreReadoutIsOnScreen(): Promise<void> {
+  const { rows, destroy } = rendered();
+  try {
+    const visible = rows.slice(0, 24).join('\n');
+    assert.ok(/Score:/.test(visible), 'the score readout must be visible');
+    assert.ok(/Level:/.test(visible) && /Lines:/.test(visible), 'so must level and lines');
+  } finally { destroy(); }
+}
+
+export async function everyPanelFitsInEightyColumns(): Promise<void> {
+  const { rows, destroy } = rendered();
+  try {
+    for (let y = 0; y < 24; y++) {
+      assert.ok(rows[y].length <= 80,
+        `row ${y} is ${rows[y].length} columns wide, past the 80-column terminal`);
+    }
+  } finally { destroy(); }
+}
+
+/** Visible characters of a tagged line. */
+function visible(line: string): string {
+  return line.replace(/\{[^}]*\}/g, '');
+}
+
+function miniBoardLines(fill: (board: any) => void): string[] {
+  const screen: any = new Screen({ title: 'tnet-mini', width: 80, height: 30 });
+  const boards: any = new OpponentBoards({ parent: screen, top: 0, left: 52, width: 28, height: 24 });
+  const board: any = createTetriNetBoard(12, 22);
+  fill(board);
+  try {
+    return boards.renderScaledBoard(board, true).split('\n');
+  } finally {
+    screen.destroy();
+  }
+}
+
+export async function theMiniBoardFitsItsBox(): Promise<void> {
+  // The scaler wrote board.width (12) characters into a SIX column box.
+  const lines = miniBoardLines((b: any) => { b.grid[21][0].filled = true; });
+
+  assert.strictEqual(lines.length, 8, 'eight scaled rows');
+  for (const line of lines) {
+    assert.strictEqual(visible(line).length, 6,
+      `each scaled row must be six columns wide, got ${JSON.stringify(visible(line))}`);
+  }
+}
+
+export async function theBottomOfTheStackIsVisible(): Promise<void> {
+  // The old sampler started at row 4 and stepped 3 rows eight times, reading
+  // rows 5..28 of a 22-row field: the bottom of the stack - the part that
+  // says how close an opponent is to dying - was never drawn.
+  const lines = miniBoardLines((b: any) => {
+    for (let x = 0; x < 12; x++) b.grid[21][x].filled = true;
+  });
+
+  assert.ok(visible(lines[lines.length - 1]).includes('#'),
+    'a filled bottom row must appear in the last scaled row');
+}
+
+export async function anEmptyFieldScalesToBlanks(): Promise<void> {
+  const lines = miniBoardLines(() => {});
+
+  assert.ok(lines.every(line => visible(line).trim() === ''),
+    'an untouched field must scale to blanks, not noise');
 }

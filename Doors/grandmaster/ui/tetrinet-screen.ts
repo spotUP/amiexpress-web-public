@@ -404,18 +404,32 @@ export class TetriNetScreen {
   }
 
   /**
-   * Setup UI layout
+   * Setup UI layout - 80x24, the same budget the versus screen fits into.
+   *
+   * Col  0-25 : playfield        (26w, 24h, top 0) - 12x22 field, 2 chars a
+   *                               cell, plus its border. A TetriNET field is
+   *                               two rows TALLER than a TGM one, so it uses
+   *                               the full height and the readouts that sit
+   *                               under the board in versus live to the
+   *                               right of it here.
+   * Col 26-51 : Next (rows 0-5), Inventory (6-8), Target (9-16),
+   *             Stats (17-20), Sudden Death (21-23)
+   * Col 52-79 : Opponents        (28w, 24h, top 0)
+   *   26 + 26 + 28 = 80, and nothing is painted below row 23.
+   *
+   * The previous layout put the board at top 1 with height 24 (so its bottom
+   * border fell on row 25, off a 24-row terminal) and the stats bar at row
+   * 25, off-screen entirely - which is why the field looked bottomless and
+   * score/level/lines were nowhere to be seen.
    */
   private setupUI(): void {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
 
-    // Main board (left side)
-    // Board: 12 columns x 2 chars = 24, plus 2 for borders = 26 width
-    // Height: 22 rows + 2 for borders = 24
+    // Playfield
     this.boardBox = createBox({
       parent: this.screen,
-      top: 1,
+      top: 0,
       left: 0,
       width: 26,
       height: 24,
@@ -424,12 +438,12 @@ export class TetriNetScreen {
       fixed: true,
     });
 
-    // Preview box (right of board) - FIXED during gameplay, not dockable
+    // Next piece
     this.previewBox = createBox({
       parent: this.screen,
-      top: 1,
+      top: 0,
       left: 26,
-      width: 12,
+      width: 26,
       height: 6,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
@@ -440,83 +454,84 @@ export class TetriNetScreen {
       clickable: false,
     });
 
-    // Inventory panel (below preview)
+    // Special inventory
     this.inventoryPanel = new InventoryPanel({
       parent: this.screen,
-      top: 7,
+      top: 6,
       left: 26,
+      width: 26,
       maxSlots: 10,
     });
 
-    // Target selector (below inventory)
+    // Attack target
     this.targetSelector = new TargetSelector({
       parent: this.screen,
-      top: 10,
+      top: 9,
       left: 26,
-      width: 26,  // Fill columns 26-51 exactly (26 columns)
+      width: 26,
+      height: 8,
     });
 
-    // Stats box (below board)
+    // Score / level / lines. In versus this is a bar under the board; the
+    // TetriNET field is too tall for that, so it sits in the right column.
     this.statsBox = createBox({
       parent: this.screen,
-      top: 25,  // Board ends at line 24, stats starts at 25
-      left: 0,
-      width: 38,
-      height: 2,  // Reduced from 3 to fit in terminal
+      top: 17,
+      left: 26,
+      width: 26,
+      height: 4,
+      border: { type: 'line' },
+      style: { border: { fg: 'green' } },
+      label: ' Stats ',
       content: '',
+      fixed: true,
       focusable: false,
       mouse: false,
       clickable: false,
     });
 
-    // Sudden death timer (shown when active, overlays bottom of board).
+    // Sudden death countdown.
     //
-    // Two bugs here, both visible during ordinary play: createBox() draws a
-    // border by DEFAULT, and this box was created visible and never hidden.
-    // Sitting at row 23 with setFront(), its border permanently covered the
-    // board's LAST row - so the playfield looked one row short and pieces
-    // resting on the floor appeared to sit level with, or below, the bottom
-    // border. Borderless, and hidden until sudden death actually starts.
+    // Twice bitten here: createBox() draws a border BY DEFAULT (this box used
+    // to paint one across the board's last playable row), and it was created
+    // visible and never hidden. Borderless, and shown only while sudden
+    // death is actually running.
     this.suddenDeathBox = createBox({
       parent: this.screen,
-      // Row 0, ABOVE the board (which starts at row 1), not on top of it.
-      // Sudden death is armed from the start of a game and shows a running
-      // countdown, so an overlay parked on the board's last row hid a
-      // playable row for the entire match rather than just at the end.
-      top: 0,
-      left: 0,
-      width: 26,  // Match board width
-      height: 1,
+      top: 21,
+      left: 26,
+      width: 26,
+      height: 3,
       border: { type: 'none' },
-      hidden: true,
       content: '',
-      style: { bg: 'red', fg: 'white' },  // High visibility during sudden death
+      hidden: true,
+      fixed: true,
       focusable: false,
       mouse: false,
       clickable: false,
     });
 
-    // Opponent boards (right side) - Fits 80 columns exactly
+    // Opponent fields
     this.opponentBoards = new OpponentBoards({
       parent: this.screen,
-      top: 1,
+      top: 0,
       left: 52,
-      width: 28,  // Columns 52-79 (28 cols) fits in 80 total
+      width: 28,
+      height: 24,
       maxOpponents: 5,
     });
 
-    // Effect overlay
+    // Effect overlay (attack animations, incoming warnings)
     this.effectOverlay = new EffectOverlay({
       parent: this.screen,
-      boardTop: 1,
+      boardTop: 0,
       boardLeft: 0,
       boardWidth: 26,
       boardHeight: 24,
     });
 
-    // Ensure game board is always on top (can't be covered by dockable panels)
+    // The board must stay above any dockable panel.
     this.boardBox.setFront();
-    // Stats and sudden death should also be above dockable panels
     this.statsBox.setFront();
     this.suddenDeathBox.setFront();
   }
@@ -803,9 +818,10 @@ export class TetriNetScreen {
     // Update effects overlay
     this.effectOverlay.update(effects);
 
-    // Render stats
+    // Render stats. Two lines, because the panel is 24 columns wide inside
+    // its border - one long line wrapped and lost the tail.
     this.statsBox.setContent(
-      `Score: {yellow-fg}${gameState.score}{/yellow-fg}  ` +
+      `Score: {yellow-fg}${gameState.score}{/yellow-fg}\n` +
       `Level: {cyan-fg}${gameState.level}{/cyan-fg}  ` +
       `Lines: {green-fg}${gameState.lines}{/green-fg}`
     );

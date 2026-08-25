@@ -17,8 +17,11 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 class OpponentBoards {
     constructor(options) {
         this.miniBoards = new Map();
-        this.boardWidth = 8; // 6 cols * 1 char + 2 borders (compact for 80-column terminals)
-        this.boardHeight = 12; // 10 visible rows + name + status
+        // 6 scaled columns + 2 borders, and 8 scaled rows + name + 2 borders.
+        // Five of these tile a 28x24 panel: three across (3 * 9 = 27 <= 26 inner
+        // plus the last board's own width) and two down.
+        this.boardWidth = 8;
+        this.boardHeight = 11;
         this.maxOpponents = options.maxOpponents || 5;
         // Calculate container size
         const width = options.width || (this.boardWidth * 3 + 4); // 3 boards per row
@@ -75,10 +78,13 @@ class OpponentBoards {
      */
     createMiniBoard(id, index) {
         // Calculate position (3 columns, 2 rows layout)
+        // Tile inside the panel's border: 3 across, 2 down, no gap at the bottom.
+        // The old +1 offsets pushed the second row to top 13, so with a 24-row
+        // panel the bottom board hung off the end.
         const col = index % 3;
         const row = Math.floor(index / 3);
-        const left = 1 + col * (this.boardWidth + 1);
-        const top = 1 + row * this.boardHeight;
+        const left = col * (this.boardWidth + 1);
+        const top = row * this.boardHeight;
         const container = (0, blessed_helpers_1.createBox)({
             parent: this.container,
             top,
@@ -98,6 +104,10 @@ class OpponentBoards {
             width: this.boardWidth - 2,
             height: 1,
             content: '',
+            // createBox() draws a border BY DEFAULT. Without this the name strip
+            // and the field below drew their own frames inside the mini board's
+            // frame - the stack of nested rectangles seen live on 2026-08-25.
+            border: { type: 'none' },
             focusable: false,
             mouse: false,
             clickable: false,
@@ -109,6 +119,7 @@ class OpponentBoards {
             width: this.boardWidth - 2,
             height: this.boardHeight - 3,
             content: '',
+            border: { type: 'none' },
             focusable: false,
             mouse: false,
             clickable: false,
@@ -145,30 +156,46 @@ class OpponentBoards {
      */
     renderScaledBoard(board, alive) {
         if (!alive) {
-            // Show dead indicator
-            return '\n\n{red-fg}  DEAD{/red-fg}';
+            return '\n\n{red-fg} DEAD{/red-fg}';
         }
-        let content = '';
-        const scaleY = 3; // Every 3 rows becomes 1
-        const visibleRows = 8;
-        for (let miniY = 0; miniY < visibleRows; miniY++) {
-            if (miniY > 0)
-                content += '\n';
-            for (let x = 0; x < board.width; x++) {
-                // Sample from the middle of each 3-row chunk
-                const actualY = 4 + (miniY * scaleY) + 1; // Start from row 4, sample middle
-                const cell = board.grid[actualY]?.[x];
-                if (cell?.filled) {
-                    // Show filled cells with color
-                    const color = this.getCellColor(cell);
-                    content += `{${color}-fg}#{/${color}-fg}`;
+        // Area scaler: every mini cell covers a rectangle of the real field and
+        // lights up if ANY cell in it is filled, so a one-cell tower still shows.
+        //
+        // The old version wrote board.width (12) characters into a SIX column
+        // box, and sampled rows 4 + n*3 - reading past the end of a 22-row field
+        // and never showing the bottom of the stack, which is the part that
+        // matters. Both dimensions now derive from the box.
+        const miniRows = this.boardHeight - 3;
+        const miniCols = this.boardWidth - 2;
+        const lines = [];
+        for (let my = 0; my < miniRows; my++) {
+            const y0 = Math.floor((my * board.height) / miniRows);
+            const y1 = Math.max(y0 + 1, Math.floor(((my + 1) * board.height) / miniRows));
+            let line = '';
+            for (let mx = 0; mx < miniCols; mx++) {
+                const x0 = Math.floor((mx * board.width) / miniCols);
+                const x1 = Math.max(x0 + 1, Math.floor(((mx + 1) * board.width) / miniCols));
+                let hit = null;
+                for (let y = y0; y < y1 && !hit; y++) {
+                    for (let x = x0; x < x1; x++) {
+                        const cell = board.grid[y]?.[x];
+                        if (cell?.filled) {
+                            hit = cell;
+                            break;
+                        }
+                    }
+                }
+                if (hit) {
+                    const color = this.getCellColor(hit);
+                    line += `{${color}-fg}#{/${color}-fg}`;
                 }
                 else {
-                    content += ' ';
+                    line += ' ';
                 }
             }
+            lines.push(line);
         }
-        return content;
+        return lines.join('\n');
     }
     /**
      * Get color for cell based on special or piece color
