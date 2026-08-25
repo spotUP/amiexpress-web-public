@@ -765,6 +765,9 @@ export class GrandmasterApp {
         height: 8,
         border: { type: 'line' },
         style: { border: { fg: 'red' } },
+        // A notice, so centre it on both axes - reported as uncentred 2026-08-25.
+        align: 'center',
+        valign: 'middle',
         content: '{bold}{red-fg}ERROR{/red-fg}{/bold}\n\n' +
           '{white-fg}Multiplayer not available\n' +
           'Network connection required{/white-fg}\n\n' +
@@ -2100,6 +2103,9 @@ export class GrandmasterApp {
       height: 7,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
+      // A notice, so centre it on both axes.
+      align: 'center',
+      valign: 'middle',
       content: `{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
         `Server: ${result.server}:${result.port}\n` +
         `Mode: ${result.mode}\n` +
@@ -2811,6 +2817,9 @@ export class GrandmasterApp {
       height: 7,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
+      // A notice, so centre it on both axes.
+      align: 'center',
+      valign: 'middle',
       content: `{bold}Initializing CPU Battle{/bold}\n\n` +
         `{gray-fg}Opponent Difficulty: ${botDifficulty}/10{/gray-fg}\n` +
         `{gray-fg}Loading AI...{/gray-fg}`,

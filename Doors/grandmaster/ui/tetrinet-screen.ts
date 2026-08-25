@@ -1020,6 +1020,9 @@ export class TetriNetScreen {
         left: 'center',
         width: 20,
         height: 5,
+        // A notice, so centre it on both axes.
+        align: 'center',
+        valign: 'middle',
         content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
         focusable: false,
         mouse: false,
