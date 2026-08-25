@@ -127,6 +127,15 @@ export declare class GrandmasterApp {
     /**
      * Start CPU Battle (local versus with bots)
      */
+    /**
+     * @param opponentCount How many AI opponents to create. Defaults to 3 for
+     *   the standalone "CPU Battle" menu entry. The lobby path passes the
+     *   number of bots ACTUALLY in the lobby - this used to be hardcoded to 3,
+     *   so a 1v1 against one bot spawned three CPUs, and because VersusScreen
+     *   only shows the full opponent board when there is exactly one opponent
+     *   (and a minimap grid otherwise) the player also got minimaps instead of
+     *   the opponent's playfield.
+     */
     private startCpuBattle;
     /**
      * Show settings screen

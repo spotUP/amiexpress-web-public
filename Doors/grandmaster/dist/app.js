@@ -753,8 +753,9 @@ class GrandmasterApp {
                 const matchState = this.network?.getMatchState();
                 const hasBots = matchState?.players.some(p => p.isBot) ?? false;
                 if (hasBots) {
-                    const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
-                    await this.startCpuBattle(botDifficulty);
+                    const bots = matchState?.players.filter(p => p.isBot) ?? [];
+                    const botDifficulty = bots[0]?.botDifficulty ?? 5;
+                    await this.startCpuBattle(botDifficulty, Math.max(1, bots.length));
                 }
                 else {
                     await this.startVersusGame(result.mode);
@@ -2080,7 +2081,16 @@ class GrandmasterApp {
     /**
      * Start CPU Battle (local versus with bots)
      */
-    async startCpuBattle(botDifficulty) {
+    /**
+     * @param opponentCount How many AI opponents to create. Defaults to 3 for
+     *   the standalone "CPU Battle" menu entry. The lobby path passes the
+     *   number of bots ACTUALLY in the lobby - this used to be hardcoded to 3,
+     *   so a 1v1 against one bot spawned three CPUs, and because VersusScreen
+     *   only shows the full opponent board when there is exactly one opponent
+     *   (and a minimap grid otherwise) the player also got minimaps instead of
+     *   the opponent's playfield.
+     */
+    async startCpuBattle(botDifficulty, opponentCount = 3) {
         this.currentScreen = 'game';
         this.state.currentMode = 'versus';
         // Disable mouse control during gameplay
@@ -2109,8 +2119,7 @@ class GrandmasterApp {
         // Create AI opponents (3 opponents at selected difficulty)
         const { VersusAI } = await Promise.resolve().then(() => __importStar(require('./ai/versus-ai')));
         const versusAI = new VersusAI();
-        const aiOpponents = versusAI.createOpponents(3, // 3 AI opponents
-        botDifficulty, this.state.settings, this.sounds);
+        const aiOpponents = versusAI.createOpponents(opponentCount, botDifficulty, this.state.settings, this.sounds);
         // Create versus screen with AI opponents
         const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, null, // No network for CPU battle
         this.attackManager, versusAI, // Pass AI controller instead of botDifficulty

@@ -19,6 +19,12 @@ export declare class BotPlayer {
     private targetPlacement;
     private lastEngine;
     private targetHold;
+    /**
+     * Identity of the piece the current targetPlacement was computed for.
+     * The plan used to be cleared only by hardDrop(); now that the bot lets
+     * the piece fall, it needs to notice a new piece spawning instead.
+     */
+    private plannedPieceKey;
     constructor(difficulty?: BotDifficulty);
     /**
      * Update bot AI (called every frame)

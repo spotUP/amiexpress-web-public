@@ -33,6 +33,12 @@ export class BotPlayer {
   private targetPlacement: PlacementEvaluation | null = null;
   private lastEngine: GameEngine | null = null;
   private targetHold: boolean = false;
+  /**
+   * Identity of the piece the current targetPlacement was computed for.
+   * The plan used to be cleared only by hardDrop(); now that the bot lets
+   * the piece fall, it needs to notice a new piece spawning instead.
+   */
+  private plannedPieceKey: string | null = null;
 
   constructor(difficulty: BotDifficulty = 5) {
     this.difficulty = difficulty;
@@ -60,6 +66,16 @@ export class BotPlayer {
     const gameState = engine.getState();
     if (!gameState.currentPiece || gameState.status !== 'playing') {
       return;
+    }
+
+    // Drop the plan as soon as a new piece spawns. Previously the only thing
+    // that cleared targetPlacement was the hard drop at the end of
+    // executeMoves(); with the piece now falling under gravity, that no
+    // longer fires on every placement.
+    const pieceKey = `${gameState.piecesPlaced}:${gameState.currentPiece.type}`;
+    if (pieceKey !== this.plannedPieceKey) {
+      this.targetPlacement = null;
+      this.plannedPieceKey = pieceKey;
     }
 
     // Calculate best placement if we don't have one
@@ -284,10 +300,23 @@ export class BotPlayer {
         }
     }
 
-    // 3. Final placement - hard drop
+    // 3. Final placement.
+    //
+    // Only the top difficulties slam the piece down. Everyone else soft-drops
+    // it one row at a time so the opponent's board actually ANIMATES: this
+    // used to call hardDrop() unconditionally, so from the player's side a
+    // piece simply materialised at the bottom of the AI's field with nothing
+    // visible in between (reported live 2026-08-25).
     if (piece.x === target.x && piece.rotation === target.rotation) {
-        engine.hardDrop();
-        this.targetPlacement = null;
+        if (instantMove) {
+            engine.hardDrop();
+            this.targetPlacement = null;
+        } else {
+            // Returns false once the piece can fall no further; the engine's
+            // own gravity/lock handling then locks it, which also spawns the
+            // next piece and invalidates the plan above.
+            engine.softDrop();
+        }
     }
   }
 
