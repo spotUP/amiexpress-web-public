@@ -68,6 +68,9 @@ class AudioEngine {
   /** SFX volume control */
   private sfxGain: Tone.Gain;
 
+  /** Reverb on the effects bus, when the game asked for one. */
+  private sfxReverb: any = null;
+
   /** Sound library (pre-defined effects) */
   private soundLibrary: Map<string, SoundLibraryEntry> = new Map();
 
@@ -83,6 +86,10 @@ class AudioEngine {
       musicVolume: config.musicVolume ?? 0.5,
       sfxVolume: config.sfxVolume ?? 0.8,
       enabled: config.enabled ?? true,
+      // Carried through, not defaulted: no reverb unless one is asked for.
+      // Dropping it here meant a game could request reverb and silently get
+      // none, since initialise() reads it back off this config.
+      sfxReverb: config.sfxReverb,
     };
 
     this.socket = socket;
@@ -143,7 +150,21 @@ class AudioEngine {
       if (!this.masterGain || !this.masterGain.gain) {
         this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
         this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
-        this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);
+
+        // Effects can run through a reverb; music must not, or a tracker
+        // module turns to mush. The wet mix is the caller's choice, so a
+        // game can sound like a small room or like open space.
+        const reverb = this.config.sfxReverb;
+        if (reverb && reverb.wet > 0) {
+          this.sfxReverb = new Tone.Reverb({
+            decay: reverb.decay ?? 3,
+            preDelay: reverb.preDelay ?? 0.02,
+            wet: reverb.wet,
+          }).connect(this.masterGain);
+          this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.sfxReverb);
+        } else {
+          this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);
+        }
 
         // Build sound library after gains are created
         this.buildSoundLibrary();
@@ -1364,6 +1385,33 @@ class AudioEngine {
    *
    * @returns Current audio config
    */
+  /**
+   * The raw AudioContext this engine's graph lives in.
+   *
+   * Web Audio forbids connecting nodes across contexts, so anything that
+   * wants to play into getMusicBus() has to be built on THIS context. Null
+   * until a user gesture has started the engine.
+   */
+  public getAudioContext(): AudioContext | null {
+    if (typeof Tone === 'undefined' || !Tone?.getContext) return null;
+    const ctx = Tone.getContext();
+    return (ctx?.rawContext ?? null) as AudioContext | null;
+  }
+
+  /**
+   * The music bus, for another engine that produces music of its own.
+   *
+   * A tracker connected straight to the audio destination is OUTSIDE this
+   * mix entirely: master and music volume do nothing to it, and balancing it
+   * against the effects is guesswork. Connect it here instead and one set of
+   * volumes governs everything.
+   *
+   * Null until the engine has been initialised by a user gesture.
+   */
+  public getMusicBus(): any {
+    return this.musicGain ?? null;
+  }
+
   public getConfig(): AudioConfig {
     return { ...this.config };
   }

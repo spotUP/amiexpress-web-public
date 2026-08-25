@@ -305,6 +305,20 @@ export interface AudioConfig {
   sfxVolume: number;
   /** Enable audio? */
   enabled: boolean;
+  /**
+   * Reverb on the EFFECTS bus only.
+   *
+   * Music is left dry deliberately: a tracker module through a long reverb
+   * turns to mush. Omit for no reverb at all.
+   */
+  sfxReverb?: {
+    /** How much of the signal is reverberated, 0..1. */
+    wet: number;
+    /** Tail length in seconds. Big rooms and space are 3+. */
+    decay?: number;
+    /** Gap before the tail starts, in seconds. */
+    preDelay?: number;
+  };
 }
 
 /**

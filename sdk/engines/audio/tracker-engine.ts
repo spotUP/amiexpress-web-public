@@ -100,6 +100,12 @@ export interface TrackerConfig {
   audioContext?: AudioContext;
   /** Initial volume (0.0 - 1.0, default 1.0) */
   volume?: number;
+  /**
+   * Where the music should go. A Web Audio node, or a Tone.js node (its
+   * `input` is used). Defaults to the audio context's destination, which
+   * bypasses any mix the game has set up.
+   */
+  outputNode?: any;
   /** Auto-play when loading (default false) */
   autoPlay?: boolean;
 }
@@ -249,6 +255,7 @@ export class TrackerEngine {
       stereoSeparation: config.stereoSeparation ?? 100,
       interpolationFilter: config.interpolationFilter ?? InterpolationFilter.Linear,
       audioContext: config.audioContext,
+      outputNode: config.outputNode ?? null,
       volume: config.volume ?? 1.0,
       autoPlay: config.autoPlay ?? false,
     };
@@ -290,7 +297,16 @@ export class TrackerEngine {
       // 2026-08-24). With no supplied context chiptune3 wires itself to
       // the speakers and this must not double-connect.
       if (this.config.audioContext && this.player.gain) {
-        this.player.gain.connect(this.config.audioContext.destination);
+        // Prefer the caller's bus, so tracker music sits in the same mix as
+        // everything else: master and music volume then govern it, and it
+        // can be balanced against the sound effects instead of guessed at.
+        // Falls back to the speakers when no bus was given.
+        const bus = this.config.outputNode;
+        if (bus) {
+          this.player.gain.connect(bus.input ?? bus);
+        } else {
+          this.player.gain.connect(this.config.audioContext.destination);
+        }
       }
 
       // Set initial volume

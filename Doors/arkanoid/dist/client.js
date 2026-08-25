@@ -259,8 +259,20 @@ class ArkanoidGame {
         });
         this.audio = new AudioEngine({
             masterVolume: 0.7,
-            musicVolume: 0.4,
-            sfxVolume: 0.8,
+            // The effects used to sit at 0.8 against music the player could barely
+            // hear, because the music ran on its own audio context outside this
+            // mix entirely (reported live 2026-08-25: "the sound effects are much
+            // louder than the music"). Both now share this graph, so these two
+            // numbers are a real balance rather than a guess.
+            musicVolume: 0.85,
+            sfxVolume: 0.45,
+            // "Hall reverb so it sounds like it echoes in outer space." On the
+            // EFFECTS bus only - the tracker music stays dry, or it turns to mush.
+            sfxReverb: {
+                wet: 0.35,
+                decay: 4.5,
+                preDelay: 0.03,
+            },
         });
         this.renderer = new Renderer();
         this.data = this.createInitialGameData();
@@ -967,11 +979,20 @@ class ArkanoidGame {
             // Own the AudioContext so we can resume it: chiptune3 never resumes a
             // context the autoplay policy suspended. By door time the user has
             // long since typed at the BBS, so sticky activation lets resume() win.
-            this.trackerContext = new AudioContext();
+            // Share the AudioEngine's context when it has one. Web Audio refuses
+            // to connect nodes across contexts, so the tracker can only join the
+            // music bus if it is built on the same context; a private context
+            // would play to the speakers outside the mix, which is how the music
+            // ended up drowned by the effects in the first place.
+            this.trackerContext = this.audio.getAudioContext?.() ?? new AudioContext();
             this.tracker = new TrackerEngine({
                 audioContext: this.trackerContext,
                 repeatCount: -1, // loop the module until the state changes it
-                volume: 0.6, // under the sound effects
+                // Into the AudioEngine's music bus when it is up, so one set of
+                // volumes governs music and effects together. Before this the
+                // tracker played straight to the speakers and no mix existed.
+                outputNode: this.audio.getMusicBus?.() ?? null,
+                volume: 1.0, // the balance lives on the music bus now
             });
         }
         if (this.trackerContext && this.trackerContext.state === 'suspended') {
@@ -1391,7 +1412,11 @@ class ArkanoidGame {
         this.stopMusic();
         try {
             this.tracker?.dispose();
-            void this.trackerContext?.close();
+            // Only close a context this door created. The AudioEngine's context is
+            // shared and closing it would silence every sound effect too.
+            if (this.trackerContext && this.trackerContext !== this.audio.getAudioContext?.()) {
+                void this.trackerContext.close();
+            }
         }
         catch (e) {
             // Ignore - the page is leaving the door either way.
