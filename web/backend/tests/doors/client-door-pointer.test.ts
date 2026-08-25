@@ -84,17 +84,20 @@ describe('the pointer follows the RUNNING door, not the last one', () => {
     expect(body).toMatch(/applyPointerCapture\(false\)/);
   });
 
-  it('leaves a clean screen behind a door, so nothing shows through', () => {
-    // A TetriNET piece appeared over LiveChat's UI after running the two in
-    // sequence. Whatever wrote it, a door that clears up after itself cannot
-    // leave anything to show through.
+  it('does NOT blanket-clear the screen when a door exits', () => {
+    // Tried on 2026-08-26 to contain a stray TetriNET block appearing over
+    // LiveChat, and it broke the BBS outright: the welcome and login screen
+    // is itself drawn by a door (telnet-front), so clearing on every door
+    // exit wiped it the instant it was drawn - "there is just a blinking
+    // cursor". Containment that breaks the front door is not containment.
     const handler = readFileSync(
       join(repoRoot, 'web', 'backend', 'src', 'handlers', 'door.handler.ts'),
       'utf8'
     );
-    const exitPoint = handler.indexOf('A door leaves a CLEAN screen behind it');
+    const exitRegion = handler.indexOf('Clean up drop files after door exit');
+    expect(exitRegion).toBeGreaterThan(0);
 
-    expect(exitPoint).toBeGreaterThan(0);
-    expect(handler.slice(exitPoint, exitPoint + 800)).toMatch(/emitText\(socket, '\\x1b\[r\\x1b\[2J\\x1b\[H'\)/);
+    const before = handler.slice(Math.max(0, exitRegion - 600), exitRegion);
+    expect(before).not.toMatch(/emitText\(socket, '\\x1b\[r\\x1b\[2J\\x1b\[H'\)/);
   });
 });
