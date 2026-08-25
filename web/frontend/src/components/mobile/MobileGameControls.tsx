@@ -9,6 +9,8 @@ interface MobileGameControlsProps {
   onPress: (key: string, code: string) => void;
   /** Release: must emit the matching key-up. */
   onRelease: (key: string, code: string) => void;
+  /** Switch to the thumb-gesture scheme. Omitted where there is no choice. */
+  onUseGestures?: () => void;
 }
 
 const ACTIVE_CLASS = 'mobile-game-controls__key--active';
@@ -21,7 +23,7 @@ const ACTIVE_CLASS = 'mobile-game-controls__key--active';
  * it renders `layout.left` first and `layout.right` second and never assumes
  * movement is on either particular side.
  */
-export function MobileGameControls({ layout, onPress, onRelease }: MobileGameControlsProps): JSX.Element {
+export function MobileGameControls({ layout, onPress, onRelease, onUseGestures }: MobileGameControlsProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<GameControlDef[]>(layoutControls(layout));
   controlsRef.current = layoutControls(layout);
@@ -71,7 +73,18 @@ export function MobileGameControls({ layout, onPress, onRelease }: MobileGameCon
 
   return (
     <div className="mobile-game-controls" ref={containerRef}>
-      <div className="mobile-game-controls__title">{layout.title}</div>
+      <div className="mobile-game-controls__title">
+        {layout.title}
+        {onUseGestures && (
+          <button
+            type="button"
+            className="mobile-game-controls__scheme"
+            onClick={onUseGestures}
+          >
+            Gestures
+          </button>
+        )}
+      </div>
       <div className="mobile-game-controls__pads">
         {renderCluster(layout.left, 'left')}
         {renderCluster(layout.right, 'right')}

@@ -88,3 +88,20 @@
   color: #fff;
   box-shadow: inset 0 -2px 0 #003a80;
 }
+
+/* Scheme switch, sitting on the title strip. */
+.mobile-game-controls__scheme {
+  float: right;
+  font: inherit;
+  font-size: 0.7rem;
+  color: #d0d0d0;
+  background: #1c1c1c;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
+.mobile-game-controls__scheme:active {
+  background: #2c2c2c;
+}

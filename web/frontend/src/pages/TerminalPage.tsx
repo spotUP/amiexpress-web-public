@@ -2,6 +2,12 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
+import { MobileGameGestures } from '../components/mobile/MobileGameGestures';
+import {
+  readTouchScheme,
+  writeTouchScheme,
+  type TouchScheme,
+} from '../components/mobile/gesture-scheme';
 import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
 import { findGameControlLayout, trackpadColumn } from '../components/mobile/game-controls';
 import { fitFontSize } from '../components/mobile/terminal-fit';
@@ -229,6 +235,27 @@ export function TerminalPage(): JSX.Element {
     terminalRef.current?.sendMouse('mouse-click', { x, y });
   }, [terminalColumns]);
 
+  /**
+   * Which control scheme a pad-style game uses. Gestures are opt-in and
+   * remembered: the pad stays the default because it is discoverable, and a
+   * player who prefers the thumb-only scheme should not have to re-choose it
+   * every session.
+   */
+  const [touchScheme, setTouchScheme] = useState<TouchScheme>(
+    () => readTouchScheme(window.localStorage),
+  );
+
+  const chooseScheme = useCallback((scheme: TouchScheme) => {
+    writeTouchScheme(window.localStorage, scheme);
+    setTouchScheme(scheme);
+  }, []);
+
+  /** A gesture fires as a press immediately followed by a release. */
+  const handleGestureKey = useCallback((key: string, code: string) => {
+    handleGamePress(key, code);
+    handleGameRelease(key, code);
+  }, [handleGamePress, handleGameRelease]);
+
   const showOnscreenInput = isMobile;
 
   return (
@@ -254,13 +281,22 @@ export function TerminalPage(): JSX.Element {
                 onRelease={handleGameRelease}
               />
             )
-            : (
-              <MobileGameControls
-                layout={gameControls}
-                onPress={handleGamePress}
-                onRelease={handleGameRelease}
-              />
-            )
+            : touchScheme === 'gestures'
+              ? (
+                <MobileGameGestures
+                  title={gameControls.title}
+                  onKey={handleGestureKey}
+                  onUseButtons={() => chooseScheme('buttons')}
+                />
+              )
+              : (
+                <MobileGameControls
+                  layout={gameControls}
+                  onPress={handleGamePress}
+                  onRelease={handleGameRelease}
+                  onUseGestures={() => chooseScheme('gestures')}
+                />
+              )
       )}
     </div>
   );
