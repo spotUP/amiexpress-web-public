@@ -9,7 +9,7 @@ import {
   type TouchScheme,
 } from '../components/mobile/gesture-scheme';
 import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
-import { findGameControlLayout, trackpadColumn } from '../components/mobile/game-controls';
+import { findGameControlLayout, trackpadColumn, trackpadStep } from '../components/mobile/game-controls';
 import { fitFontSize } from '../components/mobile/terminal-fit';
 import './TerminalPage.css';
 
@@ -218,11 +218,35 @@ export function TerminalPage(): JSX.Element {
    * launches a waiting ball), movement emits mouse-drag, release emits
    * mouse-up. The door treats all three the same for paddle position.
    */
+  /** Where on the strip the thumb was when it last moved the paddle. */
+  const spinnerFraction = useRef<number>(0.5);
+
   const handleSpinner = useCallback((phase: TrackpadPhase, fraction: number) => {
     const y = spinnerRow.current;
     if (y === null) return;
-    const x = trackpadColumn(fraction, terminalColumns());
-    spinnerColumn.current = x;
+
+    const cols = terminalColumns();
+
+    // Relative and geared, like a spinner. Planting the thumb does NOT move
+    // the paddle - it only marks where the stroke starts - so the paddle
+    // never teleports, and a short sweep crosses the board (the absolute
+    // mapping needed a full-width sweep, which is a long reach on a phone).
+    if (phase === 'start') {
+      spinnerFraction.current = fraction;
+      if (spinnerColumn.current === null) {
+        spinnerColumn.current = trackpadColumn(0.5, cols);
+      }
+    } else {
+      spinnerColumn.current = trackpadStep(
+        spinnerColumn.current ?? trackpadColumn(0.5, cols),
+        spinnerFraction.current,
+        fraction,
+        cols,
+      );
+      spinnerFraction.current = fraction;
+    }
+
+    const x = spinnerColumn.current ?? trackpadColumn(0.5, cols);
     const type: TerminalMouseEventType =
       phase === 'start' ? 'mouse-click' : phase === 'move' ? 'mouse-drag' : 'mouse-up';
     terminalRef.current?.sendMouse(type, { x, y });

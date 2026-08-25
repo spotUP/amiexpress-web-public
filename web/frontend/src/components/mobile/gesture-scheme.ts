@@ -39,18 +39,25 @@ export interface GestureTuning {
   rowPx: number;
   /** Travel below this (px) still counts as a tap, not a drag. */
   tapSlopPx: number;
+  /** Travel that decides whether a stroke is horizontal or vertical. */
+  axisLockPx: number;
   /** A flick must cover at least this much (px) to be a swipe. */
   swipeDistancePx: number;
-  /** ...and be no slower than this (px per millisecond). */
+  /** ...and be no slower than this (px per millisecond), measured over
+   *  the END of the stroke rather than the whole of it. */
   swipeVelocityPxPerMs: number;
+  /** How far back the flick is measured, in milliseconds. */
+  flickWindowMs: number;
 }
 
 export const DEFAULT_TUNING: GestureTuning = {
   columnPx: 24,
   rowPx: 28,
   tapSlopPx: 10,
-  swipeDistancePx: 60,
-  swipeVelocityPxPerMs: 0.5,
+  axisLockPx: 12,
+  swipeDistancePx: 45,
+  swipeVelocityPxPerMs: 0.35,
+  flickWindowMs: 120,
 };
 
 export interface GesturePoint {
@@ -59,12 +66,27 @@ export interface GesturePoint {
   t: number;
 }
 
+/** Which way a stroke has committed. */
+export type GestureAxis = 'none' | 'horizontal' | 'vertical';
+
 /** Live state of one thumb stroke. */
 export interface GestureStroke {
   start: GesturePoint;
   /** Where the last emitted step left the thumb - movement is incremental. */
   anchor: GesturePoint;
   last: GesturePoint;
+  /**
+   * The last few samples, newest last, for measuring the flick at the END
+   * of a stroke. Judging speed over the whole stroke meant a slow drag down
+   * followed by a flick never registered as a hard drop.
+   */
+  recent: GesturePoint[];
+  /**
+   * Locked once the stroke commits to a direction. Nobody swipes perfectly
+   * straight, and without this a downward swipe slid the piece sideways on
+   * the way (reported live 2026-08-25).
+   */
+  axis: GestureAxis;
   /** Set once the stroke has moved far enough to stop being a tap. */
   moved: boolean;
   /** Set once a swipe has fired, so the rest of the stroke is inert. */
@@ -72,7 +94,15 @@ export interface GestureStroke {
 }
 
 export function beginStroke(point: GesturePoint): GestureStroke {
-  return { start: point, anchor: point, last: point, moved: false, consumed: false };
+  return {
+    start: point,
+    anchor: point,
+    last: point,
+    recent: [point],
+    axis: 'none',
+    moved: false,
+    consumed: false,
+  };
 }
 
 /**
@@ -87,6 +117,12 @@ export function trackMove(
   point: GesturePoint,
   tuning: GestureTuning = DEFAULT_TUNING
 ): GestureKey[] {
+  stroke.recent.push(point);
+  // Keep only what the flick window can use, plus one sample either side.
+  while (stroke.recent.length > 2 && point.t - stroke.recent[1].t > tuning.flickWindowMs) {
+    stroke.recent.shift();
+  }
+
   if (stroke.consumed) {
     stroke.last = point;
     return [];
@@ -100,20 +136,31 @@ export function trackMove(
     stroke.moved = true;
   }
 
-  const dx = point.x - stroke.anchor.x;
-  const columns = Math.trunc(dx / tuning.columnPx);
-  if (columns !== 0) {
-    const key = columns > 0 ? GESTURE_KEYS.right : GESTURE_KEYS.left;
-    for (let i = 0; i < Math.abs(columns); i++) keys.push(key);
-    stroke.anchor = { ...stroke.anchor, x: stroke.anchor.x + columns * tuning.columnPx };
+  // Commit to one axis as soon as the stroke is clearly going somewhere,
+  // then ignore the other. Thumbs do not travel in straight lines.
+  if (stroke.axis === 'none' && Math.max(Math.abs(dxTotal), Math.abs(dyTotal)) >= tuning.axisLockPx) {
+    stroke.axis = Math.abs(dxTotal) > Math.abs(dyTotal) ? 'horizontal' : 'vertical';
+    // Deliberately NOT re-anchored: the travel that decided the axis is
+    // real movement on it, and swallowing the first 12px made the piece
+    // lag the thumb by half a cell on every stroke.
   }
 
-  // Downward travel only: dragging up is reserved for the hold swipe.
-  const dy = point.y - stroke.anchor.y;
-  const rows = Math.trunc(dy / tuning.rowPx);
-  if (rows > 0) {
-    for (let i = 0; i < rows; i++) keys.push(GESTURE_KEYS.down);
-    stroke.anchor = { ...stroke.anchor, y: stroke.anchor.y + rows * tuning.rowPx };
+  if (stroke.axis === 'horizontal') {
+    const dx = point.x - stroke.anchor.x;
+    const columns = Math.trunc(dx / tuning.columnPx);
+    if (columns !== 0) {
+      const key = columns > 0 ? GESTURE_KEYS.right : GESTURE_KEYS.left;
+      for (let i = 0; i < Math.abs(columns); i++) keys.push(key);
+      stroke.anchor = { ...stroke.anchor, x: stroke.anchor.x + columns * tuning.columnPx };
+    }
+  } else if (stroke.axis === 'vertical') {
+    // Downward travel only: dragging up is reserved for the hold swipe.
+    const dy = point.y - stroke.anchor.y;
+    const rows = Math.trunc(dy / tuning.rowPx);
+    if (rows > 0) {
+      for (let i = 0; i < rows; i++) keys.push(GESTURE_KEYS.down);
+      stroke.anchor = { ...stroke.anchor, y: stroke.anchor.y + rows * tuning.rowPx };
+    }
   }
 
   stroke.last = point;
@@ -134,17 +181,30 @@ export function endStroke(
   const dx = point.x - stroke.start.x;
   const dy = point.y - stroke.start.y;
   const distance = Math.hypot(dx, dy);
-  const elapsed = Math.max(1, point.t - stroke.start.t);
 
   if (!stroke.moved && distance <= tuning.tapSlopPx) {
     return GESTURE_KEYS.rotate;
   }
 
-  // A swipe is mostly vertical, long enough and fast enough.
-  const vertical = Math.abs(dy) > Math.abs(dx);
-  const fast = Math.abs(dy) / elapsed >= tuning.swipeVelocityPxPerMs;
-  if (vertical && fast && Math.abs(dy) >= tuning.swipeDistancePx) {
-    return dy < 0 ? GESTURE_KEYS.hold : GESTURE_KEYS.hardDrop;
+  // Measure the flick over the END of the stroke, not the whole of it. A
+  // slow drag down followed by a flick is the common way to hard drop, and
+  // judging it on total elapsed time meant it almost never registered
+  // (reported live 2026-08-25: "I never managed to do a hard drop").
+  const samples = [...stroke.recent, point];
+  const window = samples.filter(s => point.t - s.t <= tuning.flickWindowMs);
+  const from = window.length >= 2 ? window[0] : samples[Math.max(0, samples.length - 2)];
+
+  const flickDy = point.y - from.y;
+  const flickDx = point.x - from.x;
+  const flickMs = Math.max(1, point.t - from.t);
+  const flickSpeed = Math.abs(flickDy) / flickMs;
+
+  const verticalFlick = Math.abs(flickDy) > Math.abs(flickDx);
+  const farEnough = Math.abs(flickDy) >= tuning.swipeDistancePx
+    || (stroke.axis === 'vertical' && Math.abs(dy) >= tuning.swipeDistancePx);
+
+  if (verticalFlick && farEnough && flickSpeed >= tuning.swipeVelocityPxPerMs) {
+    return flickDy < 0 ? GESTURE_KEYS.hold : GESTURE_KEYS.hardDrop;
   }
 
   return null;

@@ -11,14 +11,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { MobileGameControls } from '../MobileGameControls';
-import {
-  findGameControlLayout,
-  layoutControls,
-  trackpadColumn,
-  GAME_CONTROL_LAYOUTS,
-  type GameControlPad,
-  type GameControlSpinner,
-} from '../game-controls';
+import { findGameControlLayout, layoutControls, trackpadColumn, GAME_CONTROL_LAYOUTS, type GameControlPad, type GameControlSpinner, trackpadStep } from '../game-controls';
 
 afterEach(cleanup);
 
@@ -251,5 +244,48 @@ describe('MobileGameControls', () => {
     expect(button('Rotate counter-clockwise')).toBeTruthy();
     expect(button('Hard Drop')).toBeTruthy();
     expect(button('Hold')).toBeTruthy();
+  });
+});
+
+describe('trackpad gearing', () => {
+  // Reported live: the trackpad worked but was full-width and absolute, so
+  // crossing the board meant sweeping the whole strip - a long reach on a
+  // phone. A spinner is relative and geared instead.
+  it('crosses the board in well under a full sweep', () => {
+    const cols = 80;
+    const middle = trackpadColumn(0.5, cols);
+
+    // A third of the strip, from the middle.
+    const moved = trackpadStep(middle, 0.5, 0.5 + 1 / 3, cols);
+
+    expect(moved - middle).toBeGreaterThan((cols - 1) / 3);
+  });
+
+  it('continues from where the paddle was, rather than teleporting', () => {
+    // Thumb lands at the far left while the paddle sits at the right: the
+    // paddle must not jump to the thumb.
+    const from = trackpadStep(70, 0.1, 0.12, 80);
+
+    expect(from).toBeGreaterThan(60);
+  });
+
+  it('never runs off either end', () => {
+    expect(trackpadStep(2, 0.5, 0, 80)).toBe(0);
+    expect(trackpadStep(78, 0.5, 1, 80)).toBe(79);
+  });
+
+  it('stays put when the thumb does', () => {
+    expect(trackpadStep(40, 0.42, 0.42, 80)).toBe(40);
+  });
+
+  it('is symmetric', () => {
+    const right = trackpadStep(40, 0.4, 0.5, 80) - 40;
+    const left = 40 - trackpadStep(40, 0.4, 0.3, 80);
+
+    expect(right).toBe(left);
+  });
+
+  it('survives a nonsense fraction without moving the paddle', () => {
+    expect(trackpadStep(40, 0.5, Number.NaN, 80)).toBe(40);
   });
 });

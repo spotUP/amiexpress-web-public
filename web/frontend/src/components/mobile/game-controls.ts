@@ -192,3 +192,37 @@ export function trackpadColumn(fraction: number, columns: number): number {
   const clamped = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
   return Math.round(clamped * (cols - 1));
 }
+
+/**
+ * How far the paddle travels for a given thumb travel.
+ *
+ * A real spinner is relative and geared: a small twist crosses the whole
+ * playfield. Mapping the strip absolutely meant a full-width sweep of the
+ * thumb for a full-width sweep of the paddle, which is a long way to reach
+ * on a phone (reported live 2026-08-25). Above 1 the paddle outruns the
+ * thumb; 2 crosses the board in half a strip.
+ */
+export const TRACKPAD_GAIN = 2.2;
+
+/**
+ * Next paddle column for a thumb that moved from `fromFraction` to
+ * `toFraction` across the strip.
+ *
+ * Relative, like a mouse: the paddle continues from where it was rather
+ * than teleporting under the thumb, so putting a finger down never moves
+ * it, and lifting and re-planting the thumb mid-sweep keeps going instead
+ * of snapping.
+ */
+export function trackpadStep(
+  currentColumn: number,
+  fromFraction: number,
+  toFraction: number,
+  columns: number,
+  gain: number = TRACKPAD_GAIN,
+): number {
+  const cols = Math.max(1, Math.floor(columns));
+  const delta = (toFraction - fromFraction) * (cols - 1) * gain;
+  if (!Number.isFinite(delta)) return currentColumn;
+
+  return Math.max(0, Math.min(cols - 1, Math.round(currentColumn + delta)));
+}

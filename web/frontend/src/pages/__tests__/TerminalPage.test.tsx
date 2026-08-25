@@ -162,28 +162,47 @@ describe('TerminalPage on a phone', () => {
 });
 
 describe('TerminalPage ARKANOID trackpad', () => {
-  it('turns a thumb stroke into proportional terminal columns on the mouse path', () => {
+  it('moves the paddle relative to the thumb, geared so a short sweep crosses the board', () => {
+    // Changed deliberately on 2026-08-25: the mapping used to be absolute
+    // across a full-width strip, so crossing the board meant sweeping the
+    // whole phone. A spinner is relative and geared.
     render(<TerminalPage />);
     startDoor('arkanoid');
     const pad = strip();
 
-    // Left edge -> lowest column; the door reads it as column 1.
+    // Planting the thumb does NOT move the paddle - it clicks where the
+    // paddle already is, which is what launches a waiting ball.
     fireTouch(pad, 'touchstart', [{ identifier: 1, clientX: STRIP_LEFT }]);
-    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-click', { x: 0, y: PADDLE_ROW });
+    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-click', { x: 40, y: PADDLE_ROW });
 
-    // Right edge -> highest column; column 80 on the standard grid.
+    // A quarter of the strip to the right moves further than a quarter of
+    // the board, because of the gearing.
+    fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 4 }]);
+    const afterQuarter = harness.sendMouse.mock.calls.at(-1)?.[1] as { x: number };
+    expect(afterQuarter.x).toBeGreaterThan(40 + 79 / 4);
+
+    // ...and it never runs off the end.
     fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH }]);
     expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-drag', { x: 79, y: PADDLE_ROW });
 
-    // Middle -> middle. Absolute, not a nudge.
-    fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 2 }]);
-    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-drag', { x: 40, y: PADDLE_ROW });
-
-    fireTouch(pad, 'touchend', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 4 }]);
-    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-up', { x: 20, y: PADDLE_ROW });
-
     // Never the key path: arrow keys would nudge the paddle stepwise.
     expect(harness.pressGameKey).not.toHaveBeenCalled();
+  });
+
+  it('does not teleport the paddle when the thumb is re-planted', () => {
+    render(<TerminalPage />);
+    startDoor('arkanoid');
+    const pad = strip();
+
+    fireTouch(pad, 'touchstart', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 2 }]);
+    fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH * 0.75 }]);
+    const moved = harness.sendMouse.mock.calls.at(-1)?.[1] as { x: number };
+    fireTouch(pad, 'touchend', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH * 0.75 }]);
+
+    // Thumb comes down again at the far LEFT: the paddle stays put.
+    fireTouch(pad, 'touchstart', [{ identifier: 2, clientX: STRIP_LEFT }]);
+
+    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-click', { x: moved.x, y: PADDLE_ROW });
   });
 
   it('sends a click when the thumb lands, so a waiting ball launches', () => {
@@ -194,7 +213,7 @@ describe('TerminalPage ARKANOID trackpad', () => {
     fireTouch(pad, 'touchstart', [{ identifier: 2, clientX: STRIP_LEFT + STRIP_WIDTH / 2 }]);
 
     expect(harness.sendMouse).toHaveBeenCalledTimes(1);
-    expect(harness.sendMouse).toHaveBeenCalledWith('mouse-click', { x: 40, y: PADDLE_ROW });
+    expect(harness.sendMouse.mock.calls[0][0]).toBe('mouse-click');
   });
 
   it('clicks at the paddle instead of the middle when Launch is tapped mid-stroke', () => {
