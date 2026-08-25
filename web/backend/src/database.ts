@@ -624,7 +624,7 @@ console.log('✓ Added new_user_sec_level column');
       }
 
       if (!systemConfigColumns.includes('new_user_time_limit')) {
-        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_time_limit INTEGER DEFAULT 60 CHECK (new_user_time_limit >= 1 AND new_user_time_limit <= 1440)');
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_time_limit INTEGER DEFAULT 1440 CHECK (new_user_time_limit >= 1 AND new_user_time_limit <= 1440)');
 console.log('✓ Added new_user_time_limit column');
       }
 

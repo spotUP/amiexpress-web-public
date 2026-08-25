@@ -605,7 +605,10 @@ async function applyBulkChanges(socket: any, session: BBSSession, db: Database, 
       if (s[7]) updates.bytesDownload = parseInt(s[7], 10);
       if (s[8]) updates.dailyBytesLimit = parseInt(s[8], 10);
       if (s[9]) updates.timeTotal = parseInt(s[9], 10);
-      if (s[10]) updates.timeLimit = parseInt(s[10], 10);
+      // The editor shows and accepts MINUTES (see the "mins" label below);
+      // the column is SECONDS. Without this a sysop typing 60 gave the user
+      // sixty seconds.
+      if (s[10]) updates.timeLimit = parseInt(s[10], 10) * 60;
       if (s[11]) updates.chatLimit = parseInt(s[11], 10);
       if (s[12]) updates.calls = parseInt(s[12], 10);
       if (s[13]) updates.location = s[13];  // Area Name
@@ -756,7 +759,7 @@ async function displayAccount(socket: any, user: User, page: number): Promise<vo
     socket.emit('ansi-output', ` \x1b[0;32mTime_Total\x1b[0;36m:\x1b[0m [${String(Math.floor(user.timeTotal / 60)).padStart(8)}] mins\r\n`);
 
     socket.emit('ansi-output', AnsiUtil.colorize('F>', 'yellow'));
-    socket.emit('ansi-output', ` \x1b[0;32mTime_Limit\x1b[0;36m:\x1b[0m [${String(user.timeLimit).padStart(8)}] mins\r\n`);
+    socket.emit('ansi-output', ` \x1b[0;32mTime_Limit\x1b[0;36m:\x1b[0m [${String(Math.floor((user.timeLimit || 0) / 60)).padStart(8)}] mins\r\n`);
 
     socket.emit('ansi-output', AnsiUtil.colorize('G>', 'yellow'));
     socket.emit('ansi-output', ` \x1b[0;32mTime_Used\x1b[0;36m:\x1b[0m [${String(Math.floor(user.timeUsed / 60)).padStart(8)}] mins\r\n`);

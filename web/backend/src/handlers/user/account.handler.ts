@@ -320,7 +320,9 @@ export function handleViewUserStats(socket: any, session: BBSSession, username: 
     socket.emit('ansi-output', `Calls Today: ${user.callsToday}\r\n`);
     socket.emit('ansi-output', `Time Total: ${user.timeTotal} minutes\r\n`);
     socket.emit('ansi-output', `Time Used: ${user.timeUsed} minutes\r\n`);
-    socket.emit('ansi-output', `Time Limit: ${user.timeLimit} minutes\r\n\r\n`);
+    // timeLimit is stored in SECONDS; this line printed the raw value and
+    // called it minutes, so a 24 hour limit read as "86400 minutes".
+    socket.emit('ansi-output', `Time Limit: ${Math.floor((user.timeLimit || 0) / 60)} minutes\r\n\r\n`);
 
     socket.emit('ansi-output', `\x1b[32mFile Statistics:\x1b[0m\r\n`);
     socket.emit('ansi-output', `Files Uploaded: ${user.uploads}\r\n`);

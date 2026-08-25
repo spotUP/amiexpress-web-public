@@ -154,6 +154,20 @@ console.error('Me error:', error);
         // Best-effort — keep 'XXX' default if system_config query fails.
       }
 
+      // Same story for the time limit, which was hardcoded here: the sysop's
+      // configured value never reached anyone who signed up through the BBS.
+      // new_user_time_limit is MINUTES; users.timelimit is SECONDS.
+      let newUserTimeLimitSeconds = 1440 * 60;
+      try {
+        const cfg = this.db.getConfigRepository?.()?.getSystemConfig?.();
+        const minutes = Number(cfg?.new_user_time_limit);
+        if (Number.isFinite(minutes) && minutes > 0) {
+          newUserTimeLimitSeconds = Math.floor(minutes) * 60;
+        }
+      } catch (_) {
+        // Best-effort — keep the default if system_config query fails.
+      }
+
       // Create new user with default settings
       const userId = await this.db.createUser({
         username: normalizedRegName,
@@ -169,7 +183,10 @@ console.error('Me error:', error);
         ratio: 0,
         ratioType: 0,
         timeTotal: 0,
-        timeLimit: 3600, // 3600 seconds = 60 minutes default (express.e:7684)
+        // Seconds. Was hardcoded to 3600 regardless of what the sysop had
+        // configured, so raising the new-user time limit had no effect on
+        // anyone who signed up through the BBS itself - which is everyone.
+        timeLimit: newUserTimeLimitSeconds,
         timeUsed: 0,
         chatLimit: 0,
         chatUsed: 0,

@@ -1291,7 +1291,11 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         ratio: 0,
         ratioType: 0,
         timeTotal: 0,
-        timeLimit: userData.timeLimit ?? defaults.timeLimit ?? 60,
+        // new_user_time_limit is stored in MINUTES (schema CHECK 1..1440) but
+        // users.timelimit is read everywhere as SECONDS - see
+        // utils/time-tracking.util.ts. Writing the config value straight
+        // through gave a "60 minute" default that expired after 60 SECONDS.
+        timeLimit: userData.timeLimit ?? ((defaults.timeLimit ?? 1440) * 60),
         timeUsed: 0,
         chatLimit: userData.chatLimit ?? defaults.chatLimit ?? 0,
         chatUsed: 0,

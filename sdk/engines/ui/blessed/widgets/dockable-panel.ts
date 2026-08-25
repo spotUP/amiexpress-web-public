@@ -2509,28 +2509,42 @@ export class DockablePanel extends Panel {
       const sw = this.screen.width;
       const sh = this.screen.height;
 
+      // WHERE the panel will sit has to be settled before HOW WIDE it may be:
+      // a width clamped only against the screen still runs off the right edge
+      // when the panel does not start at column 0. Restoring an 80-wide panel
+      // saved on a wide terminal onto a left of 22 put its right border at
+      // column 102 - off screen, so the border vanished while the top and
+      // bottom edges still filled to the screen edge, which is exactly how
+      // this was reported ("the chat log is too wide", 2026-08-25).
+      const left = state.x !== undefined
+        ? Math.max(0, Math.min(state.x, Math.max(0, sw - 5)))
+        : ((this.position.left as number) || 0);
+      const top = state.y !== undefined
+        ? Math.max(this.topConstraint, state.y)
+        : ((this.position.top as number) || 0);
+
       if (state.width !== undefined) {
-        const newWidth = Math.max(5, Math.min(state.width, sw));
+        const newWidth = Math.max(5, Math.min(state.width, sw - left));
         this.position.width = newWidth;
         this.panelState.width = newWidth;
       }
-      
+
       if (state.height !== undefined) {
-        const newHeight = Math.max(3, Math.min(state.height, sh));
+        const newHeight = Math.max(3, Math.min(state.height, sh - top));
         this.position.height = newHeight;
         this.panelState.height = newHeight;
       }
 
       if (state.x !== undefined) {
         const pw = (this.position.width as number) || 40;
-        const newLeft = Math.max(0, Math.min(state.x, sw - pw));
+        const newLeft = Math.max(0, Math.min(left, sw - pw));
         this.position.left = newLeft;
         this.panelState.x = newLeft;
       }
-      
+
       if (state.y !== undefined) {
         const ph = (this.position.height as number) || 20;
-        const newTop = Math.max(this.topConstraint, Math.min(state.y, sh - ph));
+        const newTop = Math.max(this.topConstraint, Math.min(top, sh - ph));
         this.position.top = newTop;
         this.panelState.y = newTop;
       }
