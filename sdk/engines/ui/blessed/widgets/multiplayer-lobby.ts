@@ -116,9 +116,28 @@ export interface LobbyModeConfig {
   maxPlayers: number;
   minPlayers?: number;
   maxSlots?: number;      // For slot-based games
+  /**
+   * How many players "Add Bots" should fill the table to. Defaults to
+   * minPlayers, which is only the number that makes a match STARTABLE - for
+   * a six-seat game like TetriNET that means one bot and an empty table, so
+   * games that want a full house say so here.
+   */
+  botFillTarget?: number;
   teamBased?: boolean;    // Enable team selection
   teams?: string[];       // Available team names
   description?: string;
+}
+
+/**
+ * How many players "Add Bots" fills a table to.
+ *
+ * minPlayers alone is only the number that makes a match STARTABLE: in a
+ * six-seat game that is one bot against a human and four empty chairs, and
+ * in a 99-seat battle royale maxPlayers would ask for 98 opponents. Games
+ * that want a specific house size set botFillTarget.
+ */
+export function botFillCount(mode?: LobbyModeConfig): number {
+  return mode?.botFillTarget ?? mode?.minPlayers ?? mode?.maxPlayers ?? 2;
 }
 
 /**
@@ -2295,7 +2314,7 @@ export class MultiplayerLobby extends EventEmitter {
         // never what someone testing a lobby wants. minPlayers is exactly
         // what makes the match startable, and matches what launchMatch()
         // bot-fills to.
-        const targetCount = modeConfig?.minPlayers ?? modeConfig?.maxPlayers ?? 2;
+        const targetCount = botFillCount(modeConfig);
         await this.adapter.fillWithBots(targetCount, this.botDifficulty);
         this.hasBots = true;
         this.fillBotsButton?.setContent(' Remove ');

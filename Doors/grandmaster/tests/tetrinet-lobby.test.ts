@@ -14,6 +14,8 @@
  */
 
 import assert from 'assert';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { optionsFromLobbySettings, getDefaultOptions } from '../core/tetrinet/game-rules';
 import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import { TetriNetLobbyAdapter } from '../network/tetrinet-lobby-adapter';
@@ -87,4 +89,55 @@ export async function localWinlistShowsInTheLobbyState(): Promise<void> {
   assert.strictEqual(state.leaderboard.length, 2,
     'a local lobby must show the door\'s own TetriNET winners, not an empty tab');
   assert.strictEqual(state.leaderboard[0].name, 'sysop');
+}
+
+/** Body of an app.ts method, from its signature to the next member. */
+function appSource(): string {
+  return readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
+}
+
+export async function theLobbyIsToldTheIdTheAdapterActuallyReports(): Promise<void> {
+  // Reported live 2026-08-25: "not all players are ready" with only a human
+  // and bots in the lobby. The widget exempts the local player from the
+  // ready check with `p.id === this.localPlayerId`, and app.ts handed it the
+  // literal 'slot-1' - an id left over from the slot-based adapter that the
+  // broker-backed one never produces. The human therefore counted as
+  // not-ready and could never start.
+  const source = appSource();
+
+  assert.ok(!/localPlayerId: 'slot-\d'/.test(source),
+    'the lobby must not be handed a slot literal as the local player id');
+
+  const network: any = new GrandmasterNetworkManager({
+    user: { id: `id-${Date.now()}`, username: 'sysop' },
+    bbsSession: { nodeNumber: 1 },
+    nodeNumber: 1,
+  } as any);
+  const adapter: any = new TetriNetLobbyAdapter(network, network.getLocalPlayerId(), 'standard');
+  try {
+    await adapter.createLobby('standard');
+    const state = adapter.getState();
+    const local = state.players.find((p: any) => String(p.id) === String(network.getLocalPlayerId()));
+
+    assert.ok(local, 'the adapter must report the local player under the id the widget is given');
+    assert.strictEqual(String(state.hostId), String(network.getLocalPlayerId()),
+      'and that same id must be the host, or the widget hides Start');
+  } finally {
+    adapter.dispose();
+  }
+}
+
+export async function theLobbysBotsDecideTheOpposition(): Promise<void> {
+  // The lobby counted its bots and then threw them away: the local path
+  // hardcoded createOpponents(3, 5), so adding one bot still produced three
+  // and the difficulty picker did nothing.
+  const source = appSource();
+  const start = source.indexOf('private async startTetriNetGame(');
+  assert.ok(start >= 0, 'startTetriNetGame not found');
+  const body = source.slice(start, source.indexOf('\n  private ', start + 10));
+
+  assert.ok(!/createOpponents\(\s*3\s*,\s*5\s*,/.test(body),
+    'the bot count and difficulty must not be hardcoded');
+  assert.ok(body.includes('bots.botCount') && body.includes('bots.botDifficulty'),
+    'they come from the lobby');
 }

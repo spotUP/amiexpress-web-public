@@ -916,7 +916,11 @@ class GrandmasterApp {
         const lobby = new blessed_1.MultiplayerLobby({
             parent: this.screen,
             adapter,
-            localPlayerId: 'slot-1',
+            // Must be the id the adapter actually reports for this player. It was
+            // 'slot-1', a leftover from the slot-based adapter, so the widget's
+            // "is this me?" checks never matched: the human was counted as
+            // not-ready and Start answered "Not all players are ready".
+            localPlayerId: String(localPlayerId),
             title: 'TETRINET LOBBY',
             features: {
                 slotBased: true, // Slots 1-6
@@ -932,6 +936,10 @@ class GrandmasterApp {
                     maxPlayers: 6,
                     maxSlots: 6,
                     minPlayers: 2,
+                    // "Add Bots" fills to this. minPlayers is 2, which in a six-seat
+                    // game means ONE bot; the local game gives three opponents, so
+                    // match that.
+                    botFillTarget: 4,
                     teamBased: true,
                     teams: ['Red', 'Blue'],
                 },
@@ -940,6 +948,10 @@ class GrandmasterApp {
                     maxPlayers: 6,
                     maxSlots: 6,
                     minPlayers: 2,
+                    // "Add Bots" fills to this. minPlayers is 2, which in a six-seat
+                    // game means ONE bot; the local game gives three opponents, so
+                    // match that.
+                    botFillTarget: 4,
                     teamBased: true,
                     teams: ['Red', 'Blue'],
                 },
@@ -948,6 +960,10 @@ class GrandmasterApp {
                     maxPlayers: 6,
                     maxSlots: 6,
                     minPlayers: 2,
+                    // "Add Bots" fills to this. minPlayers is 2, which in a six-seat
+                    // game means ONE bot; the local game gives three opponents, so
+                    // match that.
+                    botFillTarget: 4,
                     teamBased: true,
                     teams: ['Red', 'Blue'],
                 },
@@ -1036,11 +1052,16 @@ class GrandmasterApp {
             // Ids arrive as numbers from the broker for remote players and as the
             // raw BBS user id for the local one; compare as strings.
             const isHost = String(humans[0]?.id ?? '') === String(localPlayerId);
+            const botDifficulty = (bots[0]?.botDifficulty ?? 5);
             if (humans.length > 1) {
-                await this.startTetriNetNetworkGame(result.mode || 'standard', result.settings || {}, { botCount: isHost ? bots.length : 0, botDifficulty: (bots[0]?.botDifficulty ?? 5) });
+                await this.startTetriNetNetworkGame(result.mode || 'standard', result.settings || {}, { botCount: isHost ? bots.length : 0, botDifficulty });
             }
             else {
-                await this.startTetriNetGame(result.mode || 'standard', result.settings || {});
+                // The lobby's bots decide the opposition. This used to discard them
+                // and start a hardcoded three-bot game at difficulty 5, so adding
+                // one bot still produced three, and the difficulty picker did
+                // nothing.
+                await this.startTetriNetGame(result.mode || 'standard', result.settings || {}, { botCount: bots.length, botDifficulty });
             }
         }
         adapter.dispose();
@@ -1092,7 +1113,7 @@ class GrandmasterApp {
     /**
      * Start a TetriNET game (local, single-player with TetriNET rules)
      */
-    async startTetriNetGame(mode, settings) {
+    async startTetriNetGame(mode, settings, bots = { botCount: 3, botDifficulty: 5 }) {
         // broadcastScore() labels the post from currentMode; it has always had a
         // 'tetrinet' branch that nothing set.
         this.state.currentMode = 'tetrinet';
@@ -1105,10 +1126,11 @@ class GrandmasterApp {
         const gameOptions = (0, game_rules_1.optionsFromLobbySettings)(rule, settings);
         // Create TetriNET engine for human player
         const gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, gameOptions);
-        // Create AI opponents for local mode (3 opponents, difficulty 5)
+        // Create AI opponents. Count and difficulty come from the lobby; the
+        // defaults are what the direct "TetriNET" menu entry (no lobby) uses.
         const { TetriNetAI } = await Promise.resolve().then(() => __importStar(require('./ai/tetrinet-ai')));
         const aiController = new TetriNetAI();
-        const aiOpponents = aiController.createOpponents(3, 5, this.state.settings, gameOptions);
+        const aiOpponents = aiController.createOpponents(Math.max(1, bots.botCount), bots.botDifficulty, this.state.settings, gameOptions);
         // Create TetriNET screen with AI opponents
         const gameScreen = new tetrinet_screen_1.TetriNetScreen({
             screen: this.screen,

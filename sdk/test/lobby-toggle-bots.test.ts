@@ -18,8 +18,9 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import { botFillCount } from '../engines/ui/blessed/widgets/multiplayer-lobby';
 
-interface ModeConfig { name: string; maxPlayers: number; minPlayers: number }
+interface ModeConfig { name: string; maxPlayers: number; minPlayers: number; botFillTarget?: number }
 
 /** Mirrors the fixed toggleBots() sequencing. */
 async function toggleBots(
@@ -40,7 +41,7 @@ async function toggleBots(
     ctx.hasBots = false;
     ctx.label = ' Add Bots ';
   } else {
-    const targetCount = modeConfig.minPlayers ?? modeConfig.maxPlayers ?? 2;
+    const targetCount = botFillCount(modeConfig);
     await adapter.fillWithBots(targetCount, difficulty);
     ctx.hasBots = true;
     ctx.label = ' Remove ';
@@ -113,5 +114,27 @@ describe('lobby Add Bots toggle', () => {
     expect(adapter.calls).toEqual(['fill:2', 'remove']);
     expect(ctx.hasBots).toBe(false);
     expect(ctx.label).toBe(' Add Bots ');
+  });
+});
+
+describe('bot fill target', () => {
+  // Reported live 2026-08-25: "only one bot is added" in TetriNET. The table
+  // seats six; filling to minPlayers (2) means exactly one bot.
+  const TETRINET: ModeConfig = { name: 'Standard', maxPlayers: 6, minPlayers: 2, botFillTarget: 4 };
+
+  it('fills a six-seat table to its stated house size, not its minimum', () => {
+    expect(botFillCount(TETRINET)).toBe(4);
+  });
+
+  it('still falls back to minPlayers for modes that state no target', () => {
+    expect(botFillCount({ name: 'Battle Royale (99)', maxPlayers: 99, minPlayers: 2 })).toBe(2);
+  });
+
+  it('never reaches for maxPlayers when a minimum exists', () => {
+    expect(botFillCount({ name: 'BR', maxPlayers: 99, minPlayers: 2 })).not.toBe(99);
+  });
+
+  it('defaults to two when the mode is unknown', () => {
+    expect(botFillCount(undefined)).toBe(2);
   });
 });
