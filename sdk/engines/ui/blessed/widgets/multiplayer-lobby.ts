@@ -227,8 +227,12 @@ export interface LobbyNetworkAdapter extends EventEmitter {
   updateSettings?(settings: Record<string, unknown>): Promise<void>;
 
   // Optional: Bot management
-  fillWithBots?(count: number, difficulty?: number): void;
-  removeBots?(): void;
+  // May be async: the widget awaits both before repainting the player list.
+  // Declaring them plain `void` hid the fact that real adapters mutate state
+  // asynchronously, which is how the unawaited calls in toggleBots() went
+  // unnoticed.
+  fillWithBots?(count: number, difficulty?: number): void | Promise<void>;
+  removeBots?(): void | Promise<void>;
 
   // Optional: Browser mode - table list management
   getTables?(): LobbyTableEntry[];
@@ -338,6 +342,8 @@ export class MultiplayerLobby extends EventEmitter {
   private autoStartTimer: NodeJS.Timeout | null = null;
   private autoStartCountdown: number = 60;
   private forceStartButton: Button | null = null;
+  /** Always-visible one-line status mirror; see updateStatus(). */
+  private statusLine: Box | null = null;
 
   // Browser mode state
   private browserMode: boolean = false;
@@ -943,7 +949,7 @@ export class MultiplayerLobby extends EventEmitter {
         tags: true,
       } as any);
 
-      this.fillBotsButton.on('press', () => this.toggleBots());
+      this.fillBotsButton.on('press', () => void this.toggleBots());
     }
 
     // Force Start button (readyFlow:false, host only, shown after host presses
@@ -993,6 +999,19 @@ export class MultiplayerLobby extends EventEmitter {
       tags: true,
     });
 
+    // One-line status, always on screen regardless of which tab is showing.
+    // Below the footer: buttonTop-1 is the panels' bottom border row and
+    // writing there erased it.
+    this.statusLine = new Box({
+      parent: this.container,
+      top: buttonTop + 2,
+      left: 2,
+      width: screenWidth - 4,
+      height: 1,
+      content: '',
+      tags: true,
+    });
+
     // Log ALL screen-level keypresses for debugging
     this.parent.on('keypress', (ch: any, key: any) => {
       console.log('[MultiplayerLobby] SCREEN keypress:', {
@@ -1018,8 +1037,15 @@ export class MultiplayerLobby extends EventEmitter {
       if (!this.widgetHasFocus()) void this.startMatch();
     });
     this.parent.key(['escape', 'q'], () => {
+      // Guarded like every other shortcut here. This was the ONLY unguarded
+      // one, so a literal "q" typed into the lobby chat - or ESC pressed to
+      // dismiss the chat box - called leaveLobby() and dropped the player
+      // back to the main menu. That is the most likely cause of a remote
+      // player reporting they "got thrown out" mid-lobby (2026-08-25).
+      if (this.widgetHasFocus()) return;
       console.log('[MultiplayerLobby] ESC/Q key handler triggered');
       void this.leaveLobby();
+      return true;
     });
     if (hasChat) {
       this.parent.key(['t'], () => {
@@ -1078,8 +1104,17 @@ export class MultiplayerLobby extends EventEmitter {
       focusTargets[nextIndex]?.focus();
       this.parent.render();
     };
-    this.parent.key(['tab'], () => cycleFocus(1));
-    this.parent.key(['S-tab'], () => cycleFocus(-1));
+    // Return TRUE so Screen treats Tab as consumed. A screen key handler
+    // only counts as handled when it returns true (screen.ts _handleKey);
+    // returning undefined let Screen ALSO run its own default Tab
+    // navigation (focusNext), so every Tab press moved focus twice, along
+    // two different orderings - the widget's cycle here, and Screen's
+    // tree order, which additionally includes the DockablePanels and the
+    // tab buttons. The two disagreed, indexOf() then returned -1 and reset
+    // to the start, and focus collapsed into a two-element loop with the
+    // buttons unreachable ("tab navigation gets stuck", 2026-08-25).
+    this.parent.key(['tab'], () => { cycleFocus(1); return true; });
+    this.parent.key(['S-tab'], () => { cycleFocus(-1); return true; });
 
     // P key to focus player list
     this.parent.key(['p'], () => {
@@ -2185,13 +2220,39 @@ export class MultiplayerLobby extends EventEmitter {
       this.playSound('countdown');
     } catch (err) {
       this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      this.resetStartState();
     }
+  }
+
+  /**
+   * Put the Start button back into a pressable state after a failed launch.
+   *
+   * Without this a single failed start deadlocked the host permanently:
+   * `localReady` stayed true so startMatch() returned immediately on every
+   * later press, and launchMatch() had already cleared `autoStartTimer`,
+   * which all three auto-launch triggers require. The lobby then showed
+   * "Ready!" forever and could never be started again - not even once a
+   * second human joined.
+   */
+  private resetStartState(): void {
+    if (this.features.readyFlow !== false) return;
+
+    this.localReady = false;
+    try {
+      void this.adapter.setReady(false);
+    } catch {
+      // Best-effort: the button must become pressable again regardless.
+    }
+    this.startButton.setContent(' Start ');
+    this.startButton.style.bg = 'yellow';
+    if (this.forceStartButton) this.forceStartButton.hidden = true;
+    this.parent.render();
   }
 
   /**
    * Toggle bots (fill/remove)
    */
-  private toggleBots(): void {
+  private async toggleBots(): Promise<void> {
     if (!this.isHost || !this.adapter.fillWithBots || !this.adapter.removeBots) {
       this.updateStatus('Bot management not available');
       return;
@@ -2202,21 +2263,38 @@ export class MultiplayerLobby extends EventEmitter {
 
     const modeConfig = this.modes[state.mode];
 
-    if (this.hasBots) {
-      this.adapter.removeBots();
-      this.hasBots = false;
-      if (this.fillBotsButton) {
-        this.fillBotsButton.setContent(' Add Bots ');
+    // Everything below AWAITS the adapter. fillWithBots/removeBots are
+    // declared to return void but real adapters implement them async, and
+    // this used to fire them off unawaited and then immediately
+    // updatePlayerList() - repainting from state the adapter had not
+    // finished mutating, so the first press looked like it did nothing.
+    // Worse, `hasBots` flipped regardless, so the NEXT press took the
+    // remove branch: pressing Add Bots repeatedly alternated add/remove
+    // instead of adding, which is why bots only appeared after "a couple
+    // of times" (reported live 2026-08-25).
+    try {
+      if (this.hasBots) {
+        await this.adapter.removeBots();
+        this.hasBots = false;
+        this.fillBotsButton?.setContent(' Add Bots ');
+        this.updateStatus('Bots removed');
+      } else {
+        // Fill to the mode's MINIMUM, not its maximum. maxPlayers is 99 for
+        // a battle royale, so "Add Bots" asked for 98 opponents - slow, and
+        // never what someone testing a lobby wants. minPlayers is exactly
+        // what makes the match startable, and matches what launchMatch()
+        // bot-fills to.
+        const targetCount = modeConfig?.minPlayers ?? modeConfig?.maxPlayers ?? 2;
+        await this.adapter.fillWithBots(targetCount, this.botDifficulty);
+        this.hasBots = true;
+        this.fillBotsButton?.setContent(' Remove ');
+        this.updateStatus(`Added bots (difficulty ${this.botDifficulty})`);
       }
-      this.updateStatus('Bots removed');
-    } else {
-      const targetCount = modeConfig?.maxPlayers ?? 4;
-      this.adapter.fillWithBots(targetCount, this.botDifficulty);
-      this.hasBots = true;
-      if (this.fillBotsButton) {
-        this.fillBotsButton.setContent(' Remove ');
-      }
-      this.updateStatus(`Added bots (difficulty ${this.botDifficulty})`);
+    } catch (err) {
+      // Leave hasBots/label untouched so the button still reflects reality.
+      this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      this.playSound('error');
+      return;
     }
 
     this.updatePlayerList();
@@ -2605,6 +2683,12 @@ export class MultiplayerLobby extends EventEmitter {
       // Fall back to status box
       this.statusBox.setContent(`  {gray-fg}[${timestamp}]{/gray-fg}\n  ${message}`);
     }
+    // ALWAYS mirror onto the always-visible line as well. Routing status
+    // solely into the chat log put every diagnostic - "Starting match...",
+    // "Need at least N players", and every caught error - on the Social tab,
+    // which is hidden by default. A user sitting on the Game tab watching a
+    // match fail to start saw nothing at all explaining why (2026-08-25).
+    this.statusLine?.setContent(`{gray-fg}${message}{/gray-fg}`);
     this.parent.render();
   }
 

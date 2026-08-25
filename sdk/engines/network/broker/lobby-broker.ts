@@ -498,8 +498,15 @@ export class LobbyBroker {
     const { lobby, player } = this.getPlayerInLobby(clientId);
     if (!lobby || !player || !player.isHost) return;
 
+    // One real participant is enough. Bots live in each door's OWN match
+    // state and are never registered with the broker, so a host playing
+    // against bots always looks like a single player here. This returned
+    // silently - no callback, no error event - and since lobby:game_started
+    // is the only thing that ever produces match:started, the door's lobby
+    // sat there forever with no indication why. Whether a mode is playable
+    // with this many humans is the door's decision; the broker only relays.
     const nonSpectators = lobby.players.filter(p => !p.spectator);
-    if (nonSpectators.length < 2) return;
+    if (nonSpectators.length < 1) return;
 
     this.clearCountdown(lobby.id);
     lobby.state = 'countdown';
@@ -544,8 +551,15 @@ export class LobbyBroker {
     const { lobby, player } = this.getPlayerInLobby(clientId);
     if (!lobby || !player || !player.isHost) return;
 
+    // One real participant is enough. Bots live in each door's OWN match
+    // state and are never registered with the broker, so a host playing
+    // against bots always looks like a single player here. This returned
+    // silently - no callback, no error event - and since lobby:game_started
+    // is the only thing that ever produces match:started, the door's lobby
+    // sat there forever with no indication why. Whether a mode is playable
+    // with this many humans is the door's decision; the broker only relays.
     const nonSpectators = lobby.players.filter(p => !p.spectator);
-    if (nonSpectators.length < 2) return;
+    if (nonSpectators.length < 1) return;
 
     this.clearCountdown(lobby.id);
     lobby.state = 'playing';
