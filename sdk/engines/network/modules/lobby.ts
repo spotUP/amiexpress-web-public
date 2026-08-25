@@ -56,7 +56,22 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
 
   private connection: ConnectionManager;
   private _current: Lobby | null = null;
-  private localPlayer: LobbyPlayer | null = null;
+  /**
+   * Id of the local player. The player OBJECT is looked up live from
+   * `_current` rather than stored, because every `lobby:updated` replaces
+   * `_current` wholesale with a fresh (broker-deep-cloned) lobby. A stored
+   * reference detaches on the first update, so isHost() kept reporting the
+   * value captured at join time - a player promoted to host by
+   * `lobby:host_changed` (which only ever mutates the object inside
+   * `_current.players`) could never start the match, and setReady() wrote
+   * `ready` to an object nothing else could see.
+   */
+  private localPlayerId: number | null = null;
+
+  private get localPlayer(): LobbyPlayer | null {
+    if (this.localPlayerId === null) return null;
+    return this._current?.players.find(p => p.id === this.localPlayerId) ?? null;
+  }
   private readyTimeout?: NodeJS.Timeout;
   private countdownInterval?: NodeJS.Timeout;
 
@@ -255,7 +270,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
       socket.emit('lobby:create', fullConfig, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
-          this.localPlayer = response.lobby.host;
+          this.localPlayerId = response.lobby.host?.id ?? null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Failed to create lobby'));
@@ -278,7 +293,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
       socket.emit('lobby:join', { lobbyId, password }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
-          this.localPlayer = response.lobby.players.find(p => p.id === ((socket as any).playerId ?? (socket as any).userId)) || null;
+          this.localPlayerId = ((socket as any).playerId ?? (socket as any).userId) ?? null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Failed to join lobby'));
@@ -301,7 +316,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
       socket.emit('lobby:join_by_code', { inviteCode }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
-          this.localPlayer = response.lobby.players.find(p => p.id === ((socket as any).playerId ?? (socket as any).userId)) || null;
+          this.localPlayerId = ((socket as any).playerId ?? (socket as any).userId) ?? null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Invalid invite code'));
@@ -323,7 +338,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
 
     this.cleanup();
     this._current = null;
-    this.localPlayer = null;
+    this.localPlayerId = null;
     this.emit('lobby:left');
   }
 
@@ -678,7 +693,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
           // BrokerClient exposes playerId (number); Socket.IO exposes userId.
           // Try both so matchmake works with either transport.
           const myId = (socket as any).playerId ?? (socket as any).userId;
-          this.localPlayer = response.lobby.players.find(p => p.id === myId) || null;
+          this.localPlayerId = myId ?? null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Matchmaking failed'));

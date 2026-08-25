@@ -842,8 +842,9 @@ export class GrandmasterApp {
         const hasBots = matchState?.players.some(p => p.isBot) ?? false;
 
         if (hasBots) {
-          const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
-          await this.startCpuBattle(botDifficulty as number);
+          const bots = matchState?.players.filter(p => p.isBot) ?? [];
+          const botDifficulty = bots[0]?.botDifficulty ?? 5;
+          await this.startCpuBattle(botDifficulty as number, Math.max(1, bots.length));
         } else {
           await this.startVersusGame(result.mode);
         }
@@ -2336,7 +2337,16 @@ export class GrandmasterApp {
   /**
    * Start CPU Battle (local versus with bots)
    */
-  private async startCpuBattle(botDifficulty: number): Promise<void> {
+  /**
+   * @param opponentCount How many AI opponents to create. Defaults to 3 for
+   *   the standalone "CPU Battle" menu entry. The lobby path passes the
+   *   number of bots ACTUALLY in the lobby - this used to be hardcoded to 3,
+   *   so a 1v1 against one bot spawned three CPUs, and because VersusScreen
+   *   only shows the full opponent board when there is exactly one opponent
+   *   (and a minimap grid otherwise) the player also got minimaps instead of
+   *   the opponent's playfield.
+   */
+  private async startCpuBattle(botDifficulty: number, opponentCount: number = 3): Promise<void> {
     this.currentScreen = 'game';
     this.state.currentMode = 'versus';
 
@@ -2371,7 +2381,7 @@ export class GrandmasterApp {
     const { VersusAI } = await import('./ai/versus-ai');
     const versusAI = new VersusAI();
     const aiOpponents = versusAI.createOpponents(
-      3,  // 3 AI opponents
+      opponentCount,
       botDifficulty as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10,
       this.state.settings,
       this.sounds
