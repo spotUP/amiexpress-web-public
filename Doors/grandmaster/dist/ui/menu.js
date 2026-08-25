@@ -47,12 +47,17 @@ class MenuScreen {
             });
             // Title box - centered, wide enough for ASCII art
             // Offset top:1 to avoid overlapping any parent border
+            // No border of its own: createBox() draws one by default, and that
+            // outline sat directly above the logo, duplicating the full-screen
+            // background frame right outside it. Dropping it removes that line and
+            // hands the two rows it occupied to the panels below.
             const title = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 1,
                 left: 2,
                 width: 76,
-                height: 6,
+                height: 4,
+                border: { type: 'none' },
                 content: this.getTitleArt(),
                 style: {
                     fg: 'yellow',
@@ -61,10 +66,11 @@ class MenuScreen {
             });
             // Layout: 2 char margin on each side, panels fill 76 chars
             // menuPanel: 26, descBox: 30, info: 20 = 76 total
-            // Panels start at row 7, end at row 22 (row 23 = outer border) = 16 rows
+            // Title art is rows 1-4; panels run row 5 to row 22 (row 23 is the
+            // background frame's bottom edge) = 18 rows.
             const leftMargin = 2;
-            const panelTop = 7;
-            const panelHeight = 16;
+            const panelTop = 5;
+            const panelHeight = 18;
             // Mode selection list - left panel
             const menuPanel = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
@@ -219,9 +225,7 @@ class MenuScreen {
         return `{bold}{yellow-fg}${p} _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____
 ${p}|   __|  _  |  _  |   | |    \\|     |  _  |   __|_   _|   __| __  |
 ${p}|  |  |     |     |\\    |  |  | | | |     |__   | | | |   __|    -|
-${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
-
-{/yellow-fg}{gray-fg}${p}            TGM3-Inspired Multiplayer Tetris{/gray-fg}{/bold}`;
+${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|{/yellow-fg}{/bold}`;
     }
     /**
      * Get mode description for selected index
