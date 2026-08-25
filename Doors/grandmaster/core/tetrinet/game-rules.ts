@@ -54,6 +54,14 @@ export interface TetriNetGameOptions {
   useSameBlocks?: boolean;              // TetriNET 1.14 shared block sequence
   randomSeed?: number;                  // Seed for 1.14 RNG (32-bit)
 
+  /**
+   * LOCAL house rule, not part of the TetriNET protocol: allow holding a
+   * piece. Off by default, and deliberately never enabled when playing on a
+   * real TetriNET server - no other client there has it, so it would be an
+   * advantage the rest of the table does not share.
+   */
+  allowHold?: boolean;
+
   // Sudden death settings
   delayBeforeSuddenDeath: number;       // 0-15 minutes (0 = disabled)
   suddenDeathTick: number;              // 1-30 seconds between line additions

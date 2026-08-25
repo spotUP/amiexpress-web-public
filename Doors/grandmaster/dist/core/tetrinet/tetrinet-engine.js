@@ -167,7 +167,10 @@ class TetriNetEngine {
             this.gameOver();
             return;
         }
-        this.canHold = false;
+        // A freshly spawned piece may be held; the flag only blocks a SECOND
+        // hold of the same piece. This used to be set false here, which alone
+        // made hold impossible.
+        this.canHold = true;
         this.downCount = 0;
     }
     /**
@@ -243,10 +246,43 @@ class TetriNetEngine {
         this.lockPiece();
     }
     /**
-     * Hold piece
+     * Hold the current piece, swapping in whatever was held before.
+     *
+     * This was a stub that returned false, and spawnPiece() set canHold to
+     * FALSE on every spawn, so the bound key did nothing under any
+     * circumstances. Hold is a local house rule (options.allowHold): a real
+     * TetriNET server's other clients do not have it.
+     *
+     * One hold per piece, as everywhere else in the genre - otherwise a
+     * player can swap back and forth for ever and never place anything.
      */
     hold() {
-        return false;
+        if (!this.options.allowHold)
+            return false;
+        if (!this.currentPiece || this.status !== 'playing')
+            return false;
+        if (!this.canHold)
+            return false;
+        const incoming = this.holdPiece;
+        this.holdPiece = this.currentPiece.type;
+        if (incoming === null) {
+            // Nothing held yet: take the next piece, then re-lock hold for it.
+            this.spawnPiece();
+        }
+        else {
+            const rotation = this.getRandomRotation(incoming);
+            const spawnX = Math.floor(this.board.width / 2) - 2;
+            const shape = (0, tetrinet_pieces_1.getTetriNetShape)(incoming, rotation);
+            if ((0, board_1.checkCollision)(this.board, shape, spawnX, 0)) {
+                this.currentPiece = { type: incoming, rotation, x: spawnX, y: 0 };
+                this.gameOver();
+                return true;
+            }
+            this.currentPiece = { type: incoming, rotation, x: spawnX, y: 0 };
+            this.downCount = 0;
+        }
+        this.canHold = false;
+        return true;
     }
     /**
      * Move piece down one row
@@ -573,6 +609,10 @@ class TetriNetEngine {
     }
     getPieceShape(type, rotation) {
         return (0, tetrinet_pieces_1.getTetriNetShape)(type, rotation);
+    }
+    /** Whether the local hold house rule is on (see options.allowHold). */
+    isHoldEnabled() {
+        return this.options.allowHold === true;
     }
     getGhostY() {
         if (!this.currentPiece) {

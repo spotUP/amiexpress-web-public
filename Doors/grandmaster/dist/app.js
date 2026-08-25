@@ -1082,7 +1082,12 @@ class GrandmasterApp {
         const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
             ? mode
             : 'standard';
-        const gameOptions = (0, game_rules_1.optionsFromLobbySettings)(rule, settings);
+        // Hold is on for BBS-internal matches: every player in them is running
+        // this door, so nobody is at a disadvantage.
+        const gameOptions = {
+            ...(0, game_rules_1.optionsFromLobbySettings)(rule, settings),
+            allowHold: true,
+        };
         const gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, gameOptions);
         const { TetriNetBrokerTransport } = await Promise.resolve().then(() => __importStar(require('./network/tetrinet-broker-transport')));
         const transport = new TetriNetBrokerTransport(this.network, this.state.playerName);
@@ -1123,7 +1128,13 @@ class GrandmasterApp {
         const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
             ? mode
             : 'standard';
-        const gameOptions = (0, game_rules_1.optionsFromLobbySettings)(rule, settings);
+        // allowHold is a LOCAL house rule - hold makes the game far more
+        // playable, and every player on this BBS has it. It stays off against
+        // real TetriNET servers, where no other client has it.
+        const gameOptions = {
+            ...(0, game_rules_1.optionsFromLobbySettings)(rule, settings),
+            allowHold: true,
+        };
         // Create TetriNET engine for human player
         const gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, gameOptions);
         // Create AI opponents. Count and difficulty come from the lobby; the
@@ -1299,6 +1310,9 @@ class GrandmasterApp {
                 fixed: true,
             });
             const serverLabel = (0, blessed_helpers_1.createBox)({
+                // createBox() draws a border BY DEFAULT; a one-row box that frames
+                // itself has nowhere left to print.
+                border: { type: 'none' },
                 parent: customDialog,
                 top: 1,
                 left: 2,
@@ -1321,6 +1335,9 @@ class GrandmasterApp {
                 mouse: true,
             });
             const portLabel = (0, blessed_helpers_1.createBox)({
+                // createBox() draws a border BY DEFAULT; a one-row box that frames
+                // itself has nowhere left to print.
+                border: { type: 'none' },
                 parent: customDialog,
                 top: 4,
                 left: 2,
@@ -1344,6 +1361,9 @@ class GrandmasterApp {
             });
             portInput.setValue('31457');
             const customInstructions = (0, blessed_helpers_1.createBox)({
+                // createBox() draws a border BY DEFAULT; a one-row box that frames
+                // itself has nowhere left to print.
+                border: { type: 'none' },
                 parent: customDialog,
                 top: 7,
                 left: 2,
@@ -1468,12 +1488,17 @@ class GrandmasterApp {
             },
             fixed: true,
         });
+        // createBox() draws a border BY DEFAULT: without this these one-row
+        // boxes framed themselves, and a 1-row box whose border eats both rows
+        // has nowhere left to print its text - the two empty rules seen in the
+        // dialog on 2026-08-25, with the label and the help line invisible.
         const nickLabel = (0, blessed_helpers_1.createBox)({
             parent: nickDialog,
             top: 1,
             left: 2,
             width: 20,
             height: 1,
+            border: { type: 'none' },
             content: '{bold}Nickname:{/bold}',
         });
         const nickInput = createTextbox({
@@ -1497,6 +1522,7 @@ class GrandmasterApp {
             left: 2,
             width: 45,
             height: 1,
+            border: { type: 'none' },
             content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
         });
         this.screen.render();
@@ -1538,6 +1564,9 @@ class GrandmasterApp {
                 fixed: true,
             });
             (0, blessed_helpers_1.createBox)({
+                // createBox() draws a border BY DEFAULT; a one-row box that frames
+                // itself has nowhere left to print.
+                border: { type: 'none' },
                 parent: passwordDialog,
                 top: 1,
                 left: 2,
@@ -1560,6 +1589,9 @@ class GrandmasterApp {
                 mouse: true,
             });
             (0, blessed_helpers_1.createBox)({
+                // createBox() draws a border BY DEFAULT; a one-row box that frames
+                // itself has nowhere left to print.
+                border: { type: 'none' },
                 parent: passwordDialog,
                 top: 4,
                 left: 2,
@@ -1997,6 +2029,9 @@ class GrandmasterApp {
             unregisterLobbyEscape();
             this.inputHandler.setEnabled(true);
             this.inputManager.resume(); // Re-enable grabKeys for game controls
+            // No allowHold here on purpose: on a real TetriNET server the other
+            // clients have no hold, so switching it on locally would be an
+            // advantage the rest of the table does not share.
             gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, data.options || {});
             gameScreen = new tetrinet_screen_1.TetriNetScreen({
                 screen: this.screen,

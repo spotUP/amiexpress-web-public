@@ -238,7 +238,10 @@ export class TetriNetEngine {
       return;
     }
 
-    this.canHold = false;
+    // A freshly spawned piece may be held; the flag only blocks a SECOND
+    // hold of the same piece. This used to be set false here, which alone
+    // made hold impossible.
+    this.canHold = true;
     this.downCount = 0;
   }
 
@@ -339,10 +342,44 @@ export class TetriNetEngine {
   }
 
   /**
-   * Hold piece
+   * Hold the current piece, swapping in whatever was held before.
+   *
+   * This was a stub that returned false, and spawnPiece() set canHold to
+   * FALSE on every spawn, so the bound key did nothing under any
+   * circumstances. Hold is a local house rule (options.allowHold): a real
+   * TetriNET server's other clients do not have it.
+   *
+   * One hold per piece, as everywhere else in the genre - otherwise a
+   * player can swap back and forth for ever and never place anything.
    */
   hold(): boolean {
-    return false;
+    if (!this.options.allowHold) return false;
+    if (!this.currentPiece || this.status !== 'playing') return false;
+    if (!this.canHold) return false;
+
+    const incoming = this.holdPiece;
+    this.holdPiece = this.currentPiece.type;
+
+    if (incoming === null) {
+      // Nothing held yet: take the next piece, then re-lock hold for it.
+      this.spawnPiece();
+    } else {
+      const rotation = this.getRandomRotation(incoming) as 0 | 1 | 2 | 3;
+      const spawnX = Math.floor(this.board.width / 2) - 2;
+      const shape = getTetriNetShape(incoming, rotation);
+
+      if (checkCollision(this.board, shape, spawnX, 0)) {
+        this.currentPiece = { type: incoming, rotation, x: spawnX, y: 0 };
+        this.gameOver();
+        return true;
+      }
+
+      this.currentPiece = { type: incoming, rotation, x: spawnX, y: 0 };
+      this.downCount = 0;
+    }
+
+    this.canHold = false;
+    return true;
   }
 
   /**
@@ -723,6 +760,11 @@ export class TetriNetEngine {
 
   getPieceShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][] {
     return getTetriNetShape(type, rotation);
+  }
+
+  /** Whether the local hold house rule is on (see options.allowHold). */
+  isHoldEnabled(): boolean {
+    return this.options.allowHold === true;
   }
 
   getGhostY(): number | null {

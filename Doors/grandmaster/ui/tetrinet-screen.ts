@@ -68,6 +68,7 @@ export class TetriNetScreen {
   // UI Elements
   private boardBox: any;
   private previewBox: any;
+  private holdBox: any;
   private statsBox: any;
   private suddenDeathBox: any;
 
@@ -438,12 +439,13 @@ export class TetriNetScreen {
       fixed: true,
     });
 
-    // Next piece
+    // Next piece, and - when the house rule is on - Hold beside it.
+    const holdEnabled = this.engine.isHoldEnabled();
     this.previewBox = createBox({
       parent: this.screen,
       top: 0,
       left: 26,
-      width: 26,
+      width: holdEnabled ? 13 : 26,
       height: 6,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
@@ -453,6 +455,23 @@ export class TetriNetScreen {
       mouse: false,
       clickable: false,
     });
+
+    if (holdEnabled) {
+      this.holdBox = createBox({
+        parent: this.screen,
+        top: 0,
+        left: 39,
+        width: 13,
+        height: 6,
+        border: { type: 'line' },
+        style: { border: { fg: 'cyan' } },
+        label: ' Hold ',
+        fixed: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
+      });
+    }
 
     // Special inventory
     this.inventoryPanel = new InventoryPanel({
@@ -812,6 +831,11 @@ export class TetriNetScreen {
       this.previewBox.setContent('{gray-fg}  ???{/gray-fg}');
     }
 
+    // Held piece
+    if (this.holdBox) {
+      this.renderHold(gameState);
+    }
+
     // Update inventory
     this.inventoryPanel.updateFromArray(gameState.inventory || []);
 
@@ -854,6 +878,14 @@ export class TetriNetScreen {
       pieceShape = this.engine.getPieceShape(currentPiece.type, currentPiece.rotation);
     }
 
+    // Landing shadow. The engine has exposed getGhostY() all along (hardDrop
+    // uses it), but the TetriNET screen never drew one, so on a 12-wide
+    // field you had to eyeball the column - reported as "hard to aim".
+    // Darkness hides it, like the preview.
+    const ghostY = this.engine.getEffectManager().hasDarkness()
+      ? null
+      : this.engine.getGhostY();
+
     // Render each row (TetriNET 12x22 board)
     for (let y = 0; y < board.height; y++) {
       if (y > 0) content += '\n';
@@ -883,11 +915,47 @@ export class TetriNetScreen {
           }
         }
 
+        // Landing shadow, over empty cells only - the piece itself and any
+        // locked block take precedence.
+        if (char === '  ' && currentPiece && pieceShape && ghostY !== null && ghostY !== currentPiece.y) {
+          const gx = x - currentPiece.x;
+          const gy = y - ghostY;
+          if (gy >= 0 && gy < pieceShape.length &&
+              gx >= 0 && gx < pieceShape[gy].length &&
+              pieceShape[gy][gx]) {
+            char = '{gray-fg}::{/gray-fg}';
+          }
+        }
+
         content += char;
       }
     }
 
     this.boardBox.setContent(content);
+  }
+
+  /**
+   * Render the held piece, greyed out until it can be swapped again.
+   */
+  private renderHold(state: any): void {
+    if (!state.holdPiece) {
+      this.holdBox.setContent('');
+      return;
+    }
+
+    const shape = this.engine.getPieceShape(state.holdPiece, 0);
+    const block = state.canHold
+      ? this.getBlockChar(state.holdPiece)
+      : '{gray-fg}||{/gray-fg}';
+
+    let content = '';
+    for (const row of shape) {
+      for (const cell of row) {
+        content += cell ? block : '  ';
+      }
+      content += '\n';
+    }
+    this.holdBox.setContent(content);
   }
 
   /**

@@ -49,6 +49,7 @@ export declare class TetriNetScreen {
     private aiController;
     private boardBox;
     private previewBox;
+    private holdBox;
     private statsBox;
     private suddenDeathBox;
     private inventoryPanel;
@@ -188,6 +189,10 @@ export declare class TetriNetScreen {
      * Render the game board
      */
     private renderBoard;
+    /**
+     * Render the held piece, greyed out until it can be swapped again.
+     */
+    private renderHold;
     /**
      * Render piece preview
      */

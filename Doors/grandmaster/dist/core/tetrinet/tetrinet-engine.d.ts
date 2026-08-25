@@ -105,7 +105,15 @@ export declare class TetriNetEngine {
      */
     hardDrop(): void;
     /**
-     * Hold piece
+     * Hold the current piece, swapping in whatever was held before.
+     *
+     * This was a stub that returned false, and spawnPiece() set canHold to
+     * FALSE on every spawn, so the bound key did nothing under any
+     * circumstances. Hold is a local house rule (options.allowHold): a real
+     * TetriNET server's other clients do not have it.
+     *
+     * One hold per piece, as everywhere else in the genre - otherwise a
+     * player can swap back and forth for ever and never place anything.
      */
     hold(): boolean;
     /**
@@ -160,6 +168,8 @@ export declare class TetriNetEngine {
     getScore(): number;
     getStatus(): string;
     getPieceShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][];
+    /** Whether the local hold house rule is on (see options.allowHold). */
+    isHoldEnabled(): boolean;
     getGhostY(): number | null;
     getVisibleNextQueue(): PieceType[];
     onSpecialUsed(callback: (special: SpecialType, targetId: string | null) => void): () => void;

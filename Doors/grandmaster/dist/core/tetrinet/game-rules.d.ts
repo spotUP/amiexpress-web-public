@@ -41,6 +41,13 @@ export interface TetriNetGameOptions {
     nextPieceDelayMs: number;
     useSameBlocks?: boolean;
     randomSeed?: number;
+    /**
+     * LOCAL house rule, not part of the TetriNET protocol: allow holding a
+     * piece. Off by default, and deliberately never enabled when playing on a
+     * real TetriNET server - no other client there has it, so it would be an
+     * advantage the rest of the table does not share.
+     */
+    allowHold?: boolean;
     delayBeforeSuddenDeath: number;
     suddenDeathTick: number;
 }

@@ -141,6 +141,33 @@ export function botFillCount(mode?: LobbyModeConfig): number {
 }
 
 /**
+ * Lay settings out in columns.
+ *
+ * Labels vary in length ("Starting Level" vs "Lines for Special"), so an
+ * unpadded `label: < value >` staggered every value and every closing arrow
+ * down the list. Padding the label to the longest and the value to the
+ * widest gives labels, values and arrows a column each.
+ *
+ * Exported so the alignment can be asserted without building a whole lobby.
+ */
+export function formatSettingsRows(
+  rows: Array<{ label: string; value: string; canEdit: boolean }>
+): string[] {
+  if (rows.length === 0) return [];
+
+  const labelWidth = Math.max(...rows.map(r => r.label.length));
+  const valueWidth = Math.max(...rows.map(r => r.value.length));
+
+  return rows.map(({ label, value, canEdit }) => {
+    const arrows = canEdit ? '{gray-fg}<{/gray-fg} ' : '  ';
+    const arrowsEnd = canEdit ? ' {gray-fg}>{/gray-fg}' : '';
+    const paddedLabel = `${label}:`.padEnd(labelWidth + 1);
+    const paddedValue = value.padEnd(valueWidth);
+    return `${paddedLabel} ${arrows}{cyan-fg}${paddedValue}{/cyan-fg}${arrowsEnd}`;
+  });
+}
+
+/**
  * Table/Lobby entry for browser mode
  */
 export interface LobbyTableEntry {
@@ -2564,7 +2591,12 @@ export class MultiplayerLobby extends EventEmitter {
     // overwrite selectedSettingIndex with 0 (or last item).
     const savedIndex = this.selectedSettingIndex;
 
-    const items = this.gameSettings.map(setting => {
+    // Two columns. Labels vary in length ("Starting Level" vs "Lines for
+    // Special"), so an unpadded `label: < value >` staggered every value and
+    // every closing arrow down the list. Pad the label to the longest one
+    // and the value to the widest one, so labels, values and arrows each
+    // line up in their own column.
+    const rows = this.gameSettings.map(setting => {
       const value = this.currentSettings[setting.key] ?? setting.default;
       let displayValue: string;
 
@@ -2579,12 +2611,15 @@ export class MultiplayerLobby extends EventEmitter {
         displayValue = String(value);
       }
 
-      // Show arrows for editable settings (host only, or not hostOnly)
-      const canEdit = this.isHost || !setting.hostOnly;
-      const arrows = canEdit ? '{gray-fg}<{/gray-fg} ' : '  ';
-      const arrowsEnd = canEdit ? ' {gray-fg}>{/gray-fg}' : '';
-      return `${setting.label}: ${arrows}{cyan-fg}${displayValue}{/cyan-fg}${arrowsEnd}`;
+      return { setting, displayValue };
     });
+
+    const items = formatSettingsRows(rows.map(({ setting, displayValue }) => ({
+      label: setting.label,
+      value: displayValue,
+      // Show arrows for editable settings (host only, or not hostOnly)
+      canEdit: this.isHost || !setting.hostOnly,
+    })));
 
     this.settingsEditorList.setItems(items);
     // Restore index — setItems() may have fired 'select item' with 0/last

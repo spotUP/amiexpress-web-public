@@ -177,3 +177,47 @@ export async function anEmptyFieldScalesToBlanks(): Promise<void> {
   assert.ok(lines.every(line => visible(line).trim() === ''),
     'an untouched field must scale to blanks, not noise');
 }
+
+export async function theLandingShadowIsDrawn(): Promise<void> {
+  // Reported live: "there are no ghost blocks in tetrinet, it makes it hard
+  // to aim". The engine has exposed getGhostY() all along - hardDrop uses
+  // it - but the screen never drew one.
+  const screen: any = new Screen({ title: 'tnet-ghost', width: 80, height: 30 });
+  const engine: any = new TetriNetEngine({} as any, { delayBeforeSuddenDeath: 0 } as any);
+  const scr: any = new TetriNetScreen({
+    screen, engine, inputHandler: { on() {}, off() {}, setEnabled() {} } as any,
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} } as any,
+    state: { settings: {} } as any, network: null, playerName: 'sysop', aiController: null,
+  } as any);
+  try {
+    engine.start();
+    scr.render();
+
+    const painted = screen.buffer.slice(0, 24)
+      .map((row: any) => row.map((c: [number, string]) => c[1]).join(''))
+      .join('\n');
+
+    assert.ok(painted.includes('::'),
+      'the resting position of the falling piece must be shown on the field');
+  } finally { screen.destroy(); }
+}
+
+export async function theShadowSitsWhereThePieceWillLand(): Promise<void> {
+  const engine: any = new TetriNetEngine({} as any, { delayBeforeSuddenDeath: 0 } as any);
+  engine.start();
+
+  const piece = engine.getState().currentPiece;
+  const ghostY = engine.getGhostY();
+
+  assert.ok(ghostY !== null, 'a falling piece has a landing row');
+  assert.ok(ghostY > piece.y, 'which is below the piece on an empty field');
+
+  engine.hardDrop();
+  const filledRows = engine.getBoard().grid
+    .map((row: any, y: number) => ({ y, n: row.filter((c: any) => c.filled).length }))
+    .filter((r: any) => r.n > 0)
+    .map((r: any) => r.y);
+
+  assert.ok(filledRows.includes(ghostY),
+    `a hard drop must lock where the shadow was (row ${ghostY}), got rows ${JSON.stringify(filledRows)}`);
+}
