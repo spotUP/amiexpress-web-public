@@ -179,6 +179,17 @@ export interface LobbyFeatures {
   /** Enable observe mode (watch without playing) */
   observe?: boolean;
   /**
+   * Show a "Force Start" button alongside Start while the auto-start
+   * countdown is running. Default: true.
+   *
+   * It only ever means "don't wait out the countdown", and that countdown
+   * only runs when another HUMAN is in the lobby and has not started yet -
+   * a situation that already resolves itself when the timer expires. For a
+   * game where Start bot-fills and launches on its own, it is a second
+   * button doing what Start does, so such doors should set this false.
+   */
+  forceStart?: boolean;
+  /**
    * Disable the ready/start split — shows a single "Start" button for all
    * players and skips the "all players ready" gate. Default: true (ready flow on).
    * Set to false for single-player-vs-bot scenarios where the ready dance is noise.
@@ -954,7 +965,7 @@ export class MultiplayerLobby extends EventEmitter {
 
     // Force Start button (readyFlow:false, host only, shown after host presses
     // Start) — pure action, safe to ghost.
-    if (!hasReadyFlow) {
+    if (!hasReadyFlow && this.features.forceStart !== false) {
       this.forceStartButton = new Button({
         parent: this.container,
         top: buttonTop,

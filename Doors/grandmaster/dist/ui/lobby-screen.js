@@ -225,6 +225,11 @@ class LobbyScreen {
                 chat: true,
                 leaderboard: true,
                 readyFlow: false,
+                // Start already bot-fills and launches on its own, and the
+                // "waiting for other players" countdown auto-launches when it
+                // expires - so a Force Start button would just be a second button
+                // doing what Start does.
+                forceStart: false,
             },
             autoStartTimeout: 60,
             gameSettings: [
