@@ -2729,9 +2729,14 @@ export class DockablePanel extends Panel {
       }
       // Apply max constraint
       if (this.maxWidth) newWidth = Math.min(newWidth, this.maxWidth);
-      // Constrain to screen
+      // Constrain to what fits FROM WHERE THE PANEL SITS. Clamping to the
+      // screen width alone let a panel at column 22 grow to 80 and run to
+      // column 102, so its right border was painted off-screen: reported as
+      // "the chat log is cut off on the right side" (2026-08-25), and traced
+      // here from a stack trace rather than guessed.
       if (this.screen) {
-        newWidth = Math.min(newWidth, this.screen.width);
+        const left = typeof this.position.left === 'number' ? this.position.left : 0;
+        newWidth = Math.min(newWidth, Math.max(5, this.screen.width - left));
       }
     }
 
@@ -2743,9 +2748,10 @@ export class DockablePanel extends Panel {
       }
       // Apply max constraint
       if (this.maxHeight) newHeight = Math.min(newHeight, this.maxHeight);
-      // Constrain to screen
+      // Same invariant vertically: what fits from where the panel sits.
       if (this.screen) {
-        const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
+        const top = typeof this.position.top === 'number' ? this.position.top : this.topConstraint;
+        const maxScreenHeight = Math.max(3, this.screen.height - top - this.bottomConstraint);
         newHeight = Math.min(newHeight, maxScreenHeight);
       }
     }

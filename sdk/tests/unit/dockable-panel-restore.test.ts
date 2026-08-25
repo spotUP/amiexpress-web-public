@@ -92,3 +92,61 @@ describe('restoring a layout saved on a bigger screen', () => {
     expect(panel.position.width as number).toBeGreaterThanOrEqual(5);
   });
 });
+
+describe('growing a panel to fit its content', () => {
+  let screen: any;
+
+  afterEach(() => screen?.destroy());
+
+  it('never grows past the right edge of the screen', () => {
+    // Traced from a live stack trace 2026-08-25: fit-to-content clamped the
+    // new width to the SCREEN width while ignoring where the panel starts,
+    // so a 58-wide panel at column 22 grew to 80 and ran to column 102 -
+    // its right border painted off-screen. "The chat log is cut off on the
+    // right side."
+    screen = makeScreen(80, 24);
+    const panel = makePanel(screen, 22, 58);
+
+    // Content far wider than the panel, the way a long chat line is.
+    (panel as any).fitContentSettings = { width: true, height: false };
+    (panel as any).calculateContentSize = () => ({ width: 200, height: 10 });
+    (panel as any).fitToContent();
+
+    expect(rightEdge(panel)).toBeLessThanOrEqual(79);
+    expect(panel.position.width as number).toBeLessThanOrEqual(58);
+  });
+
+  it('never grows past the bottom of the screen', () => {
+    screen = makeScreen(80, 24);
+    const panel = makePanel(screen, 0, 40);
+    panel.position.top = 10;
+
+    (panel as any).fitContentSettings = { width: false, height: true };
+    (panel as any).calculateContentSize = () => ({ width: 10, height: 100 });
+    (panel as any).fitToContent();
+
+    const bottom = (panel.position.top as number) + (panel.position.height as number) - 1;
+    expect(bottom).toBeLessThanOrEqual(23);
+  });
+
+  it('leaves a panel alone when the door has switched fitting off', () => {
+    // A layout-managed panel must keep the size the layout gave it.
+    screen = makeScreen(80, 24);
+    const panel = new DockablePanel({
+      parent: screen,
+      title: ' Chat ',
+      top: 1,
+      left: 22,
+      width: 58,
+      height: 20,
+      dockPosition: 'float',
+      fitContent: false,
+      border: { type: 'line' },
+    } as any);
+
+    (panel as any).calculateContentSize = () => ({ width: 200, height: 100 });
+    (panel as any).fitToContent();
+
+    expect(panel.position.width).toBe(58);
+  });
+});

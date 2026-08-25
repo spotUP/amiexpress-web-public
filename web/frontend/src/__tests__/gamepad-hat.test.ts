@@ -57,10 +57,18 @@ describe('reading a hat-switch D-pad', () => {
     expect(readHatAxis([0.5, -0.5, 0, 0])).toBeNull();
   });
 
-  it('finds the hat wherever the pad puts it', () => {
-    // Axis 9 is the usual home, but the layout is the device's choice.
+  it('finds the hat at the end of the axis list', () => {
     expect(readHatAxis([0, 0, 0, 0, UP])).toMatchObject({ up: true });
     expect(readHatAxis([0, 0, 0, 0, 0, 0, DOWN])).toMatchObject({ down: true });
+  });
+
+  it('ignores a trigger-style axis resting at -1', () => {
+    // From a real 8BitDo NES30 Pro dump: AXIS 3 and AXIS 4 rest at -1.00000
+    // while the hat is AXIS 9. Treating -1 on an early axis as a hat would
+    // read as a D-pad permanently held UP.
+    const nes30 = [0.00392, -0.00392, 0, -1, -1, 0, 0, 0, 0, CENTRED];
+
+    expect(readHatAxis(nes30)).toBeNull();
   });
 
   it('ignores a resting stick sitting on a later axis', () => {

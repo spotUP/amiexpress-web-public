@@ -2238,8 +2238,18 @@ export class Screen extends Element {
         return;
       }
       
-      // Arrow keys for focus navigation (only if not handled by widget)
-      if (!key.shift && (keyName === 'up' || keyName === 'left')) {
+      // Arrow keys for focus navigation (only if not handled by widget).
+      //
+      // NEVER from a text field: in an input the arrows move the caret, and
+      // stealing them sends focus somewhere else mid-sentence. LiveChat's
+      // command menu showed this plainly - the first arrow picked a
+      // suggestion AND moved focus to the sidebar, so the second arrow
+      // scrolled the sidebar instead ("it loses focus on the second arrow
+      // key I press", 2026-08-25). A door declares a text field by asking
+      // for inputOnFocus.
+      const focusedTakesText = (this._focused as any)?.options?.inputOnFocus === true;
+
+      if (!key.shift && !focusedTakesText && (keyName === 'up' || keyName === 'left')) {
         const prev = this._focused;
         this.focusPrevious();
         if (this._focused !== prev) {
@@ -2247,7 +2257,7 @@ export class Screen extends Element {
           return;
         }
       }
-      if (!key.shift && (keyName === 'down' || keyName === 'right')) {
+      if (!key.shift && !focusedTakesText && (keyName === 'down' || keyName === 'right')) {
         const prev = this._focused;
         this.focusNext();
         if (this._focused !== prev) {

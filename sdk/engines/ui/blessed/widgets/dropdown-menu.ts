@@ -224,7 +224,13 @@ export class DropdownMenu extends Element {
     // menu and then swallowed every subsequent key - reported live as "when I
     // tab to the menus I can't exit them" (2026-08-25). An outside click is
     // the exception: the click has already put focus where the user pointed.
-    if (!fromOutsideClick && this.anchor && !this.anchor.destroyed) {
+    // ...but ONLY if this menu still holds focus. Choosing an item runs its
+    // action BEFORE the menu closes, and that action often opens something
+    // that takes focus itself - a help modal, a dialog. Restoring blindly
+    // stole focus back to the menu bar, so Escape then went to the menu
+    // instead of closing what had just opened (reported live 2026-08-25).
+    const stillOurs = this.screen.getFocused?.() === this || this.screen.getFocused?.() == null;
+    if (!fromOutsideClick && stillOurs && this.anchor && !this.anchor.destroyed) {
       this.anchor.focus();
     }
 

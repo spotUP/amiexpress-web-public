@@ -156,9 +156,16 @@ export class MenuBar extends Element {
         this.openMenu(index);
       });
 
-      // Keyboard activation
+      // Keyboard activation.
+      //
+      // Returning true means HANDLED. Without it Screen carries on and
+      // re-emits the SAME key to whatever is focused now - which openMenu
+      // has just made the dropdown - so a single Enter opened the menu and
+      // immediately chose its first item ("Enter opened the help screen",
+      // reported live 2026-08-25).
       button.key(['enter', 'space', 'down'], () => {
         this.openMenu(index);
+        return true;
       });
 
       // Left/Right walk the menu bar. If a menu is already open the
@@ -173,6 +180,7 @@ export class MenuBar extends Element {
         this.menuButtons[next].focus();
         if (wasOpen) this.openMenu(next);
         this.screen?.render();
+        return true;
       });
 
       // Escape leaves the menu bar. With a menu open the dropdown handles it
@@ -186,6 +194,7 @@ export class MenuBar extends Element {
           this.emit('exit');
         }
         this.screen?.render();
+        return true;
       });
 
       // Dropdown navigation
@@ -236,6 +245,17 @@ export class MenuBar extends Element {
     } else {
       console.log('[MenuBar] ERROR: No dropdown at index:', index);
     }
+  }
+
+  /**
+   * The element a host should put in its Tab cycle.
+   *
+   * Doors that drive their own focus cycling need one way in to the menu
+   * bar; Left/Right then walk between menus and Escape leaves. Returns null
+   * before any menus exist.
+   */
+  getTabStop(): Box | null {
+    return this.menuButtons[0] ?? null;
   }
 
   /**

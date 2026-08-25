@@ -165,3 +165,43 @@ describe('leaving the menus', () => {
     expect(focusedElement(screen).hidden).toBe(false);
   });
 });
+
+describe('opening a menu from the keyboard', () => {
+  let screen: any;
+
+  afterEach(() => {
+    DropdownMenu.closeAll();
+    screen?.destroy();
+  });
+
+  it('opens the menu WITHOUT also choosing its first item', () => {
+    // Reported live 2026-08-25: "Enter opened the help screen" - the first
+    // item of the first menu. The button's handler did not claim the key, so
+    // Screen re-emitted the same Enter to what was now focused: the dropdown
+    // it had just opened, which selected item one.
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const chosen: string[] = [];
+    (menuBar as any).dropdowns[0].on('select', (item: any) => chosen.push(item.label));
+
+    const first = buttons(menuBar)[0];
+    first.focus();
+    press(first, 'enter');
+
+    expect(DropdownMenu.isAnyOpen()).toBe(true);
+    expect(chosen).toEqual([]);
+  });
+
+  it('reports the key as handled, so nothing downstream sees it', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const first = buttons(menuBar)[0];
+    first.focus();
+
+    const key = { name: 'enter', full: 'enter', shift: false, ctrl: false, meta: false };
+    const handled = first.emit('keypress enter', '', key);
+
+    expect(handled).toBe(true);
+  });
+
+});

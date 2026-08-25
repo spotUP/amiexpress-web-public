@@ -10,7 +10,7 @@ function invalidateCache(element) {
         }
     }
 }
-function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, sfs, sso, scon, cu, SW, chatLog, typingBar) {
+function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, sfs, sso, scon, cu, SW, chatLog, typingBar, menuBar) {
     let sv = true;
     function ucl() {
         // CRITICAL: Use actual sidebar panel width, not static constant
@@ -64,11 +64,23 @@ function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, s
     s.key(['f3'], () => { const currentTab = sbt(); ssb(currentTab === 'channels' ? 'users' : 'channels'); asm(`Switched to ${currentTab === 'channels' ? 'users' : 'channels'} view`); });
     s.key(['f4', 'C-e'], () => { if (!ep.isVisible())
         ep.show(s, (e) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
+    /**
+     * The Tab cycle: where typing happens, the sidebar list, and the menu bar.
+     *
+     * This list - not the SDK's focusable flags - is what Tab actually walks,
+     * so marking a widget focusable elsewhere has no effect here. Two things
+     * were reported live (2026-08-25): the chat PANEL was a stop even though
+     * there is nothing to do in it, and the menus could not be reached at all.
+     * The menu bar's first button is the way in; Left/Right walk between menus
+     * once you are there, and Escape leaves.
+     */
     const fp = () => {
         const ps = [ib];
         if (sv)
             ps.push(sbt() === 'channels' ? chl : ul);
-        ps.push(cl);
+        const menuButton = menuBar?.getTabStop?.();
+        if (menuButton && !menuButton.destroyed)
+            ps.push(menuButton);
         return ps;
     };
     const fpi = (ps, f) => ps.findIndex(p => p === f || (p.rows && p.rows === f));

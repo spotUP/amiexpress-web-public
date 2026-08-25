@@ -41,6 +41,12 @@ export function createChatLog(
     minHeight: 10,
     zIndex: 1,
     persistenceKey: 'chat-main',
+    // The layout owns this panel's size (updateLayout gives it exactly the
+    // room left over beside the sidebar). Fit-to-content defaults to ON and
+    // GROWS a panel to match its widest line, so long chat messages pushed
+    // the panel from 58 columns to the full 80 - straight through the
+    // sidebar and off the right of the screen, taking its border with it.
+    fitContent: false,
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
     border: {

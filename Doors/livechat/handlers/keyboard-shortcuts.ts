@@ -8,7 +8,7 @@ function invalidateCache(element: any) {
   }
 }
 
-export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: () => string, chl: any, ul: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any) {
+export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: () => string, chl: any, ul: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any, menuBar?: any) {
   let sv = true;
 
   function ucl() {
@@ -67,10 +67,21 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: (
   s.key(['f3'], () => { const currentTab = sbt(); ssb(currentTab === 'channels' ? 'users' : 'channels'); asm(`Switched to ${currentTab === 'channels' ? 'users' : 'channels'} view`); });
   s.key(['f4', 'C-e'], () => { if (!ep.isVisible()) ep.show(s, (e: any) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
 
+  /**
+   * The Tab cycle: where typing happens, the sidebar list, and the menu bar.
+   *
+   * This list - not the SDK's focusable flags - is what Tab actually walks,
+   * so marking a widget focusable elsewhere has no effect here. Two things
+   * were reported live (2026-08-25): the chat PANEL was a stop even though
+   * there is nothing to do in it, and the menus could not be reached at all.
+   * The menu bar's first button is the way in; Left/Right walk between menus
+   * once you are there, and Escape leaves.
+   */
   const fp = () => {
     const ps: any[] = [ib];
     if (sv) ps.push(sbt() === 'channels' ? chl : ul);
-    ps.push(cl);
+    const menuButton = menuBar?.getTabStop?.();
+    if (menuButton && !menuButton.destroyed) ps.push(menuButton);
     return ps;
   };
 

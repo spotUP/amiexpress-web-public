@@ -36,9 +36,12 @@ interface GamepadManagerOptions {
  * left alone.
  */
 export function readHatAxis(axes: number[]): { up: boolean; down: boolean; left: boolean; right: boolean } | null {
-  // Hats live past the sticks; axis 9 is the usual home, but scan any axis
-  // beyond the first four rather than hard-coding one device's layout.
-  for (let i = 4; i < axes.length; i++) {
+  // Hats sit at the END of the axis list - axis 9 on the 8BitDo NES30 Pro,
+  // whose dump shows `AXIS 9: 3.28571` (centred). Scanning from axis 4
+  // instead was wrong on that very pad: its AXIS 4 rests at -1.00000, which
+  // decodes as the hat position for UP and would have pinned the D-pad up
+  // forever. Only the last two axes are considered.
+  for (let i = Math.max(4, axes.length - 2); i < axes.length; i++) {
     const value = axes[i];
     if (typeof value !== 'number') continue;
     // Centred hats sit outside [-1, 1] (commonly 1.28 or 3.28).

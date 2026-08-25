@@ -2309,18 +2309,22 @@ export async function createApp(session: DoorSession) {
         inputBox.focus();
         hideCommandSuggestions();
         screen.render();
-        return;
+        return true;
       } else if (key.name === 'down' && !key.shift) {
         (commandSuggestions as any).down(1);
         screen.render();
-        return;
+        // `true` means HANDLED. Returning undefined let the key fall through
+        // to Screen's default arrow-key focus navigation, which moved focus
+        // to the sidebar - so the next arrow scrolled the sidebar instead of
+        // the suggestions.
+        return true;
       } else if (key.name === 'up' && !key.shift) {
         (commandSuggestions as any).up(1);
         screen.render();
-        return;
+        return true;
       } else if (key.name === 'escape') {
         hideCommandSuggestions();
-        return;
+        return true;
       }
     }
 
@@ -2368,7 +2372,7 @@ export async function createApp(session: DoorSession) {
   };
   // Getter function for current sidebar tab value (prevents stale references)
   const getSidebarTab = () => sidebarTab;
-  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, getSidebarTab, channelList, userList, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar);
+  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, getSidebarTab, channelList, userList, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar, menuBar.element);
 
   // F5 / Ctrl+Shift+F: Format picker (requires text selection)
   const showFormatPicker = () => {
