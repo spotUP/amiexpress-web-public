@@ -1,453 +1,120 @@
 "use strict";
 /**
- * TetriNET Lobby Adapter
+ * TetriNET lobby adapter (BBS-internal multiplayer)
  *
- * Implements LobbyNetworkAdapter for TetriNET games.
- * Supports both BBS-local and external TetriNET server connections.
+ * Rewritten 2026-08-25. The previous version kept its own private lobby
+ * state and pushed every action through `network.emitNetwork('tetrinet:*')`,
+ * which goes to the NetworkEngine's local EventEmitter and never leaves the
+ * process - it then listened for those same events coming back. Nothing
+ * crossed a node boundary, so two BBS users each sat in their own private
+ * lobby and a "multiplayer" match was always one human plus bots.
+ *
+ * It now extends BrokerLobbyAdapter - the same broker plumbing Grandmaster's
+ * versus lobby uses (players, ready, chat, host-only start, bot fill) - and
+ * adds only what TetriNET needs on top: six numbered slots, teams, the game
+ * options editor and the winlist. Team and settings changes travel over the
+ * broker's game channel so every node's lobby agrees.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TetriNetLobbyAdapter = void 0;
-const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
-/**
- * TetriNET Lobby Adapter
- */
-class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
-    constructor(network) {
-        super();
-        this.state = null;
-        this.messageIdCounter = 0;
-        this.pendingLocalPlayer = null;
-        this.localWinlist = [];
-        this.network = network;
-        this.setupEventListeners();
-    }
-    /**
-     * Setup network event forwarding
-     */
-    setupEventListeners() {
-        // Player joined (from TetriNET protocol)
-        this.network.onNetwork('tetrinet:player_joined', (data) => {
-            if (!this.state)
-                return;
-            const player = {
-                slot: data.slot,
-                name: data.name,
-                team: data.team || '',
-                ready: false,
-            };
-            // Remove any existing player in this slot
-            this.state.players = this.state.players.filter(p => p.slot !== data.slot);
-            this.state.players.push(player);
-            this.state.players.sort((a, b) => a.slot - b.slot);
-            this.emit('player:joined', this.convertPlayer(player));
-            this.emit('state:updated');
-        });
-        // Player left
-        this.network.onNetwork('tetrinet:player_left', (data) => {
-            if (!this.state)
-                return;
-            this.state.players = this.state.players.filter(p => p.slot !== data.slot);
-            this.emit('player:left', `slot-${data.slot}`);
-            this.emit('state:updated');
-        });
-        // Team changed
-        this.network.onNetwork('tetrinet:team', (data) => {
-            if (!this.state)
-                return;
-            const player = this.state.players.find(p => p.slot === data.slot);
-            if (player) {
-                player.team = data.team;
-                this.emit('player:team', { playerId: `slot-${data.slot}`, team: data.team });
-                this.emit('state:updated');
-            }
-        });
-        // Chat message (partyline)
-        this.network.onNetwork('tetrinet:chat', (data) => {
-            if (!this.state)
-                return;
-            const player = this.state.players.find(p => p.slot === data.slot);
-            const message = {
-                id: `msg-${++this.messageIdCounter}`,
-                playerId: `slot-${data.slot}`,
-                playerName: player?.name || `Player ${data.slot}`,
-                text: data.text,
-                timestamp: Date.now(),
-                isAction: data.isAction,
-            };
-            this.state.chatMessages.push(message);
-            this.emit('chat:message', message);
-        });
-        // Game message (server announcement)
-        this.network.onNetwork('tetrinet:gmsg', (data) => {
-            if (!this.state)
-                return;
-            const message = {
-                id: `msg-${++this.messageIdCounter}`,
-                playerId: 'server',
-                playerName: 'Server',
-                text: data.text,
-                timestamp: Date.now(),
-                isSystem: true,
-            };
-            this.state.chatMessages.push(message);
-            this.emit('chat:message', message);
-        });
-        // Winlist updated
-        this.network.onNetwork('tetrinet:winlist', (data) => {
-            if (!this.state)
-                return;
-            this.state.winlist = data.entries.map((entry, index) => ({
-                rank: index + 1,
-                name: entry.name,
-                score: entry.score,
-                isTeam: entry.type === 't',
-            }));
-            this.emit('leaderboard:updated', this.state.winlist);
-        });
-        // Game options updated (newgame command)
-        this.network.onNetwork('tetrinet:options', (options) => {
-            if (!this.state)
-                return;
-            this.state.gameOptions = { ...this.state.gameOptions, ...options };
-            this.emit('settings:updated', this.state.gameOptions);
-        });
-        // Match starting
-        this.network.onNetwork('tetrinet:newgame', () => {
-            this.emit('match:starting');
-            // Short delay then match:started
-            setTimeout(() => {
-                this.emit('match:started');
-            }, 1000);
-        });
-        // Game ended
-        this.network.onNetwork('tetrinet:endgame', () => {
-            // Back to waiting state
-            if (this.state) {
-                this.state.players.forEach(p => p.ready = false);
-                this.emit('state:updated');
-            }
+const broker_lobby_adapter_1 = require("./broker-lobby-adapter");
+const game_rules_1 = require("../core/tetrinet/game-rules");
+// Must sit in a broker protocol namespace or it never leaves this node -
+// see TetriNetBrokerTransport for the same constraint.
+const LOBBY_EVENT = 'game:tnet_lobby';
+const MAX_SLOTS = 6;
+class TetriNetLobbyAdapter extends broker_lobby_adapter_1.BrokerLobbyAdapter {
+    constructor(network, localPlayerId, rule = 'standard') {
+        super(network, localPlayerId ?? network.getLocalPlayerId() ?? 'local');
+        this.winlist = [];
+        this.teams = new Map();
+        this.unsubscribeSync = null;
+        this.rule = rule;
+        this.options = (0, game_rules_1.getDefaultOptions)(rule);
+        this.unsubscribeSync = network.onGameEvent(LOBBY_EVENT, (packet) => {
+            this.applySync(packet);
         });
     }
-    /**
-     * Convert TetriNET player to lobby player info
-     */
-    convertPlayer(player) {
-        return {
-            id: `slot-${player.slot}`,
-            name: player.name,
-            slot: player.slot,
-            team: player.team || undefined,
-            ready: player.ready,
-            isBot: player.isBot || false,
-        };
+    /** TetriNET seats six players. */
+    lobbySize() {
+        return MAX_SLOTS;
+    }
+    /** Rule set the lobby was opened with. */
+    getRule() {
+        return this.rule;
+    }
+    /** Options the match should start with, after any host edits. */
+    getGameOptions() {
+        return this.options;
     }
     /**
-     * Fill empty slots with bots up to a target player count.
+     * Seed the Winlist tab.
      *
-     * Signature follows the SDK's LobbyNetworkAdapter contract - (count,
-     * difficulty). It previously took (difficulty) alone, so the lobby's Bots
-     * button, which correctly passes (count, difficulty), handed the target
-     * player count in as a difficulty level.
-     *
-     * @param count Target number of players (defaults to TetriNET's minimum)
-     * @param difficulty Bot difficulty level (0-3)
-     */
-    async fillWithBots(count, difficulty = 1) {
-        if (!this.state)
-            return;
-        const minPlayers = Math.max(2, count ?? 2); // TetriNET needs at least 2 players
-        const maxSlots = 6;
-        const botNames = ['TetriBot', 'BlockMaster', 'LineKiller', 'StackAttack', 'GridGuru'];
-        const difficultyNames = ['Easy', 'Normal', 'Hard', 'Expert'];
-        const diffName = difficultyNames[Math.min(difficulty, 3)] || 'Normal';
-        // Find occupied slots
-        const occupiedSlots = new Set(this.state.players.map(p => p.slot));
-        // Add bots until we have minimum players
-        let botIndex = 0;
-        for (let slot = 1; slot <= maxSlots && this.state.players.length < minPlayers; slot++) {
-            if (!occupiedSlots.has(slot)) {
-                const botName = `${botNames[botIndex % botNames.length]} (${diffName})`;
-                const botPlayer = {
-                    slot: slot,
-                    name: botName,
-                    team: '',
-                    ready: true, // Bots are always ready
-                    isBot: true,
-                };
-                this.state.players.push(botPlayer);
-                this.state.players.sort((a, b) => a.slot - b.slot);
-                console.log(`[TetriNetLobbyAdapter] Added bot: ${botName} in slot ${slot}`);
-                this.emit('player:joined', this.convertPlayer(botPlayer));
-                botIndex++;
-            }
-        }
-        this.emit('state:updated');
-        console.log(`[TetriNetLobbyAdapter] After fillWithBots: ${this.state.players.length} players`);
-    }
-    /**
-     * Remove every bot from the lobby.
-     *
-     * Without this the lobby refused bot management entirely: its guard is
-     * `!adapter.fillWithBots || !adapter.removeBots`, so having only half the
-     * pair reported "Bot management not available" and no bots could be added
-     * to a local TetriNET game at all.
-     */
-    removeBots() {
-        if (!this.state)
-            return;
-        const bots = this.state.players.filter(p => p.isBot);
-        if (bots.length === 0)
-            return;
-        this.state.players = this.state.players.filter(p => !p.isBot);
-        for (const bot of bots) {
-            this.emit('player:left', String(bot.slot));
-        }
-        console.log(`[TetriNetLobbyAdapter] Removed ${bots.length} bot(s)`);
-        this.emit('state:updated');
-    }
-    /**
-     * Get current lobby state
-     */
-    getState() {
-        if (!this.state)
-            return null;
-        return {
-            lobbyId: this.state.lobbyId,
-            mode: this.state.mode,
-            players: this.state.players.map(p => this.convertPlayer(p)),
-            status: 'waiting',
-            hostId: this.state.isHost ? `slot-${this.state.localSlot}` : undefined,
-            settings: this.state.gameOptions,
-            chatMessages: this.state.chatMessages,
-            leaderboard: this.state.winlist,
-        };
-    }
-    /**
-     * Join matchmaking queue (creates BBS-local game)
-     */
-    async joinQueue(mode) {
-        // For TetriNET, matchmaking creates a local game
-        await this.createLobby(mode);
-    }
-    /**
-     * Create a new lobby (BBS-local TetriNET game)
-     */
-    async createLobby(mode, _isPrivate) {
-        const lobbyId = `tnet-${Date.now().toString(36)}`;
-        console.log(`[TetriNetLobbyAdapter] createLobby called, mode=${mode}, pendingLocalPlayer=`, this.pendingLocalPlayer);
-        // Initialize state
-        this.state = {
-            lobbyId,
-            mode,
-            players: [],
-            localSlot: 1, // Host gets slot 1
-            isHost: true,
-            gameOptions: this.getDefaultOptions(mode),
-            winlist: this.localWinlist,
-            chatMessages: [],
-        };
-        // Add pending local player if set before createLobby was called
-        if (this.pendingLocalPlayer) {
-            const { name, slot } = this.pendingLocalPlayer;
-            this.pendingLocalPlayer = null;
-            this.state.localSlot = slot;
-            const player = {
-                slot,
-                name,
-                team: '',
-                ready: true, // Host is always ready
-            };
-            this.state.players.push(player);
-            console.log(`[TetriNetLobbyAdapter] Added local player:`, player);
-            this.emit('player:joined', this.convertPlayer(player));
-        }
-        else {
-            console.log(`[TetriNetLobbyAdapter] No pending local player to add!`);
-        }
-        this.emit('state:updated');
-        console.log(`[TetriNetLobbyAdapter] state after createLobby:`, this.state);
-        return lobbyId;
-    }
-    /**
-     * Join existing lobby
-     */
-    async joinLobby(lobbyId) {
-        // Initialize state for joining
-        this.state = {
-            lobbyId,
-            mode: 'standard',
-            players: [],
-            localSlot: null, // Will be assigned by server
-            isHost: false,
-            gameOptions: this.getDefaultOptions('standard'),
-            winlist: this.localWinlist,
-            chatMessages: [],
-        };
-        // In real implementation, would send join request to server
-        this.emit('state:updated');
-    }
-    /**
-     * Leave lobby
-     */
-    async leaveLobby() {
-        if (this.state?.localSlot) {
-            // Send leave message
-            this.network.emitNetwork('tetrinet:leave', { slot: this.state.localSlot });
-        }
-        this.state = null;
-    }
-    /**
-     * Set ready state
-     */
-    async setReady(ready) {
-        if (!this.state?.localSlot)
-            return;
-        const player = this.state.players.find(p => p.slot === this.state?.localSlot);
-        if (player) {
-            player.ready = ready;
-            this.emit('player:ready', { playerId: `slot-${this.state.localSlot}`, ready });
-            this.emit('state:updated');
-        }
-    }
-    /**
-     * Start match (host only)
-     */
-    async startMatch() {
-        if (!this.state?.isHost)
-            return;
-        // Send newgame command with current options
-        this.network.emitNetwork('tetrinet:startgame', this.state.gameOptions);
-        // Local fallback: start immediately when no server echoes newgame
-        this.emit('match:starting');
-        setTimeout(() => {
-            this.emit('match:started');
-        }, 1000);
-    }
-    /**
-     * Send chat message
-     */
-    sendChat(message, isAction) {
-        if (!this.state?.localSlot)
-            return;
-        // Send to network
-        this.network.emitNetwork('tetrinet:chat', {
-            slot: this.state.localSlot,
-            text: message,
-            isAction,
-        });
-        // Also add locally (for immediate feedback)
-        const player = this.state.players.find(p => p.slot === this.state?.localSlot);
-        const chatMessage = {
-            id: `msg-${++this.messageIdCounter}`,
-            playerId: `slot-${this.state.localSlot}`,
-            playerName: player?.name || 'You',
-            text: message,
-            timestamp: Date.now(),
-            isAction,
-        };
-        this.state.chatMessages.push(chatMessage);
-        this.emit('chat:message', chatMessage);
-    }
-    /**
-     * Set team
-     */
-    async setTeam(team) {
-        if (!this.state?.localSlot)
-            return;
-        const player = this.state.players.find(p => p.slot === this.state?.localSlot);
-        if (player) {
-            player.team = team;
-            // Send to network
-            this.network.emitNetwork('tetrinet:team', {
-                slot: this.state.localSlot,
-                team,
-            });
-            this.emit('player:team', { playerId: `slot-${this.state.localSlot}`, team });
-            this.emit('state:updated');
-        }
-    }
-    /**
-     * Update game settings (host only)
-     */
-    async updateSettings(settings) {
-        if (!this.state?.isHost)
-            return;
-        this.state.gameOptions = {
-            ...this.state.gameOptions,
-            ...settings,
-        };
-        // Broadcast to other players
-        this.network.emitNetwork('tetrinet:options', this.state.gameOptions);
-        this.emit('settings:updated', settings);
-    }
-    /**
-     * Get default game options for a mode
-     */
-    getDefaultOptions(mode) {
-        const ruleMap = {
-            classic: 'classic',
-            standard: 'standard',
-            extended: 'extended',
-        };
-        return {
-            rule: ruleMap[mode] || 'standard',
-            noSpecials: mode === 'classic',
-            inventorySize: 10,
-            linesToMakeForSpecials: 1,
-            specialsAddedEachTime: 1,
-            specialOccurancies: [], // Use default rates from rule set
-            startingHeight: 0,
-            linesPerLevel: 2,
-            levelIncrement: 1,
-            pieceFrequency: [14, 28, 42, 56, 70, 84, 100],
-            specialFrequency: [11, 22, 33, 44, 55, 66, 77, 88, 100],
-            levelAverage: false,
-            classicMode: mode === 'classic',
-            startingLevel: 1,
-            classicStyleMultiplayer: false,
-            nextPieceDelayMs: 1000,
-            delayBeforeSuddenDeath: 2,
-            suddenDeathTick: 10,
-        };
-    }
-    /**
-     * Seed the Winlist tab for BBS-local games.
-     *
-     * state.winlist is written in exactly one place - the handler for the
-     * external server's 'tetrinet:winlist' message. Nothing emits that on the
-     * in-process bus, so a local lobby advertised a Winlist tab that was
-     * empty for ever. Local games fill it from the door's own TetriNET high
-     * scores instead.
+     * The old adapter wrote state.winlist in exactly one place: the handler
+     * for an external server's 'tetrinet:winlist' message, which nothing on
+     * the in-process bus ever emits. Local lobbies showed an empty tab for
+     * ever. app.ts now seeds it from the door's own TetriNET high scores.
      */
     setLocalWinlist(entries) {
-        this.localWinlist = entries;
-        if (this.state) {
-            this.state.winlist = entries;
-            this.emit('leaderboard:updated', entries);
-        }
+        this.winlist = entries;
+        this.emit('state:updated');
     }
     /**
-     * Add local player to lobby (called after connection established)
+     * Kept for callers that announced the local player before the lobby
+     * existed. The broker seats the local player itself when the lobby is
+     * created or joined, so this only refreshes the widget.
      */
-    addLocalPlayer(name, slot) {
-        console.log(`[TetriNetLobbyAdapter] addLocalPlayer called: name=${name}, slot=${slot}, stateExists=${!!this.state}`);
-        // If state doesn't exist yet, store for later (will be added in createLobby)
-        if (!this.state) {
-            this.pendingLocalPlayer = { name, slot };
-            console.log(`[TetriNetLobbyAdapter] Stored pending player for later`);
+    addLocalPlayer(_name, _slot) {
+        this.emit('state:updated');
+    }
+    getState() {
+        const base = super.getState();
+        if (!base)
+            return null;
+        return {
+            ...base,
+            players: base.players.map((player, index) => this.decorate(player, index)),
+            settings: this.options,
+            leaderboard: this.winlist,
+        };
+    }
+    async setTeam(team) {
+        this.teams.set(this.localPlayerId, team);
+        const packet = { kind: 'team', playerId: this.localPlayerId, team };
+        this.network.sendGameEvent(LOBBY_EVENT, packet);
+        this.emit('state:updated');
+    }
+    async updateSettings(settings) {
+        this.options = (0, game_rules_1.optionsFromLobbySettings)(this.rule, settings);
+        const packet = { kind: 'settings', settings };
+        this.network.sendGameEvent(LOBBY_EVENT, packet);
+        this.emit('settings:updated', this.options);
+        this.emit('state:updated');
+    }
+    dispose() {
+        this.unsubscribeSync?.();
+        this.unsubscribeSync = null;
+        super.dispose();
+    }
+    /** Slot numbers and team names are TetriNET's, not the broker's. */
+    decorate(player, index) {
+        return {
+            ...player,
+            slot: (index + 1),
+            team: this.teams.get(player.id) ?? '',
+        };
+    }
+    applySync(packet) {
+        if (packet.kind === 'team' && packet.playerId) {
+            this.teams.set(packet.playerId, packet.team ?? '');
+            this.emit('state:updated');
             return;
         }
-        this.state.localSlot = slot;
-        const player = {
-            slot,
-            name,
-            team: '',
-            ready: this.state.isHost, // Host is always ready
-        };
-        this.state.players.push(player);
-        this.state.players.sort((a, b) => a.slot - b.slot);
-        this.emit('player:joined', this.convertPlayer(player));
-        this.emit('state:updated');
+        if (packet.kind === 'settings' && packet.settings) {
+            this.options = (0, game_rules_1.optionsFromLobbySettings)(this.rule, packet.settings);
+            this.emit('settings:updated', this.options);
+            this.emit('state:updated');
+        }
     }
 }
 exports.TetriNetLobbyAdapter = TetriNetLobbyAdapter;

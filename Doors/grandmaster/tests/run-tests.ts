@@ -21,6 +21,7 @@ const TEST_MODULES = [
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',
+  './tetrinet-netplay.test',
   './tetrinet-layout.test',
 ];
 

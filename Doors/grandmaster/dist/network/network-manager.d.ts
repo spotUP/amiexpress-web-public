@@ -105,7 +105,7 @@ export declare class GrandmasterNetworkManager extends EventEmitter {
      * Join matchmaking queue
      * Uses atomic broker matchmaking to find or create a lobby
      */
-    joinQueue(mode: MultiplayerMode): Promise<void>;
+    joinQueue(mode: MultiplayerMode, maxPlayers?: number): Promise<void>;
     /**
      * Leave matchmaking queue
      */
@@ -113,7 +113,7 @@ export declare class GrandmasterNetworkManager extends EventEmitter {
     /**
      * Create custom lobby via SDK broker
      */
-    createLobby(mode: MultiplayerMode, isPrivate?: boolean): Promise<string>;
+    createLobby(mode: MultiplayerMode, isPrivate?: boolean, maxPlayers?: number): Promise<string>;
     /**
      * Join lobby by ID
      */
@@ -155,6 +155,20 @@ export declare class GrandmasterNetworkManager extends EventEmitter {
      * Send attack to opponent(s)
      */
     sendAttack(attack: AttackPacket): void;
+    /**
+     * Send a custom game-channel event to the other members of the lobby.
+     *
+     * The broker's default case broadcasts any unrecognised event to the
+     * lobby (excluding the sender), which is how TetriNET's specials and
+     * garbage travel. Two constraints, both of which silently drop packets:
+     * the event name MUST start with one of the broker client's protocol
+     * namespaces (lobby:, game:, match:, state:, input:) or it never leaves
+     * this process, and emitNetwork() cannot be used at all - it goes through
+     * the NetworkEngine EventEmitter, which is local-only.
+     */
+    sendGameEvent(event: string, payload: unknown): void;
+    /** Subscribe to a custom game-channel event from other lobby members. */
+    onGameEvent(event: string, callback: (payload: any) => void): () => void;
     /** Local player's id, as used in game:update/game:attack packets. */
     getLocalPlayerId(): string | null;
     /**

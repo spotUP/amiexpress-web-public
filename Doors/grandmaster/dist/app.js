@@ -893,7 +893,8 @@ class GrandmasterApp {
         if (!this.network) {
             this.network = new network_manager_1.GrandmasterNetworkManager(this.session.bbsSession);
         }
-        const adapter = new tetrinet_lobby_adapter_1.TetriNetLobbyAdapter(this.network);
+        const localPlayerId = this.session.user?.id || this.state.playerName;
+        const adapter = new tetrinet_lobby_adapter_1.TetriNetLobbyAdapter(this.network, String(localPlayerId), selectedMode);
         // Seed the Winlist tab from this BBS's own TetriNET high scores. Without
         // this the tab is fed only by an external server's winlist message, so a
         // local lobby always showed an empty board.
@@ -1021,9 +1022,81 @@ class GrandmasterApp {
             console.log('[GRANDMASTER] Game mode re-enabled after TetriNET lobby');
         }
         if (result.action === 'start') {
-            // Start TetriNET game with the settings from lobby
-            await this.startTetriNetGame(result.mode || 'standard', result.settings || {});
+            // Who is actually in this match? Every lobby result used to route to a
+            // purely local game against three bots, so the other BBS users sitting
+            // in the lobby were simply not in it.
+            const players = adapter.getState()?.players ?? [];
+            const humans = players.filter(p => !p.isBot);
+            const bots = players.filter(p => p.isBot);
+            // Ids arrive as numbers from the broker for remote players and as the
+            // raw BBS user id for the local one; compare as strings.
+            const isHost = String(humans[0]?.id ?? '') === String(localPlayerId);
+            if (humans.length > 1) {
+                await this.startTetriNetNetworkGame(result.mode || 'standard', result.settings || {}, { botCount: isHost ? bots.length : 0, botDifficulty: (bots[0]?.botDifficulty ?? 5) });
+            }
+            else {
+                await this.startTetriNetGame(result.mode || 'standard', result.settings || {});
+            }
         }
+        adapter.dispose();
+    }
+    /**
+     * Start a BBS-internal networked TetriNET match.
+     *
+     * Bots are simulated by the HOST only and published as ordinary
+     * participants, so every node sees the same field for them and no bot is
+     * ever driven twice.
+     */
+    async startTetriNetNetworkGame(mode, settings, bots) {
+        if (!this.network)
+            return;
+        this.screen.program.disableMouse();
+        const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
+            ? mode
+            : 'standard';
+        const gameOptions = (0, game_rules_1.optionsFromLobbySettings)(rule, settings);
+        const gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, gameOptions);
+        const { TetriNetBrokerTransport } = await Promise.resolve().then(() => __importStar(require('./network/tetrinet-broker-transport')));
+        const transport = new TetriNetBrokerTransport(this.network, this.state.playerName);
+        let aiController = null;
+        if (bots.botCount > 0) {
+            const { TetriNetAI } = await Promise.resolve().then(() => __importStar(require('./ai/tetrinet-ai')));
+            aiController = new TetriNetAI();
+            aiController.createOpponents(bots.botCount, bots.botDifficulty, this.state.settings, gameOptions);
+        }
+        const gameScreen = new tetrinet_screen_1.TetriNetScreen({
+            screen: this.screen,
+            engine: gameEngine,
+            inputHandler: this.inputHandler,
+            sounds: this.sounds,
+            state: this.state,
+            network: transport,
+            playerName: this.state.playerName,
+            aiController,
+        });
+        await gameScreen.run();
+        const finalState = gameEngine.getState();
+        const won = finalState.status === 'won';
+        this.highScores.addScore(this.state.playerName, {
+            mode: 'tetrinet',
+            score: finalState.score,
+            level: finalState.level,
+            lines: finalState.lines,
+            linesCleared: finalState.lines,
+            grade: won ? 'WIN' : '-',
+            time: finalState.startTime && finalState.endTime
+                ? finalState.endTime - finalState.startTime
+                : null,
+            combo: finalState.combo,
+            tetrisCount: 0,
+            tSpinCount: 0,
+            perfectClears: 0,
+            completed: won,
+        });
+        aiController?.destroy();
+        transport.dispose();
+        gameScreen.cleanup();
+        this.screen.program.enableMouse();
     }
     /**
      * Start a TetriNET game (local, single-player with TetriNET rules)

@@ -227,7 +227,7 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
      * Join matchmaking queue
      * Uses atomic broker matchmaking to find or create a lobby
      */
-    async joinQueue(mode) {
+    async joinQueue(mode, maxPlayers) {
         console.log(`[GrandmasterNetworkManager] joinQueue called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
         const modeMaxPlayers = {
             versus_1v1: 2,
@@ -236,7 +236,7 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         };
         const lobby = await this.network.lobby.matchmake({
             name: 'GRANDMASTER Match',
-            maxPlayers: modeMaxPlayers[mode] || 2,
+            maxPlayers: maxPlayers ?? modeMaxPlayers[mode] ?? 2,
             isPrivate: false,
             settings: { mode, customRules: {} },
         }, mode);
@@ -253,11 +253,14 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
     /**
      * Create custom lobby via SDK broker
      */
-    async createLobby(mode, isPrivate = false) {
+    async createLobby(mode, isPrivate = false, maxPlayers) {
         console.log(`[GrandmasterNetworkManager] createLobby called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
         const lobby = await this.network.createLobby({
             name: 'GRANDMASTER Match',
-            maxPlayers: mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2,
+            // TetriNET seats six; the versus modes are sized by their rules. A
+            // caller-supplied size wins, otherwise fall back to the mode map -
+            // without this every TetriNET lobby was capped at TWO players.
+            maxPlayers: maxPlayers ?? (mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2),
             isPrivate,
             settings: { mode, customRules: {} },
         });
@@ -350,6 +353,28 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
      */
     sendAttack(attack) {
         this.network.connection.getSocket()?.emit('game:attack', attack);
+    }
+    /**
+     * Send a custom game-channel event to the other members of the lobby.
+     *
+     * The broker's default case broadcasts any unrecognised event to the
+     * lobby (excluding the sender), which is how TetriNET's specials and
+     * garbage travel. Two constraints, both of which silently drop packets:
+     * the event name MUST start with one of the broker client's protocol
+     * namespaces (lobby:, game:, match:, state:, input:) or it never leaves
+     * this process, and emitNetwork() cannot be used at all - it goes through
+     * the NetworkEngine EventEmitter, which is local-only.
+     */
+    sendGameEvent(event, payload) {
+        this.network.connection.getSocket()?.emit(event, payload);
+    }
+    /** Subscribe to a custom game-channel event from other lobby members. */
+    onGameEvent(event, callback) {
+        const socket = this.network.connection.getSocket();
+        if (!socket)
+            return () => { };
+        socket.on(event, callback);
+        return () => socket.off?.(event, callback);
     }
     /** Local player's id, as used in game:update/game:attack packets. */
     getLocalPlayerId() {

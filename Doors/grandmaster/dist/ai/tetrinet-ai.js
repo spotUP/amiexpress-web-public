@@ -58,6 +58,17 @@ function getAIName(difficulty) {
 class TetriNetAI {
     constructor() {
         this.opponents = [];
+        /**
+         * Ids the bots may attack besides each other. Defaults to the local human;
+         * in a networked match the screen adds the players on other BBS nodes, so
+         * bots treat everyone in the game as a target rather than only the people
+         * sitting on this node.
+         */
+        this.externalTargets = [exports.HUMAN_TARGET_ID];
+    }
+    /** Replace the non-bot target pool. Empty falls back to the local human. */
+    setExternalTargets(ids) {
+        this.externalTargets = ids.length > 0 ? [...ids] : [exports.HUMAN_TARGET_ID];
     }
     /**
      * Create AI opponents
@@ -214,7 +225,7 @@ class TetriNetAI {
         const candidates = this.opponents
             .filter(o => o.alive && o.id !== opponent.id)
             .map(o => o.id);
-        candidates.push(exports.HUMAN_TARGET_ID);
+        candidates.push(...this.externalTargets.filter(id => id !== opponent.id));
         return candidates[Math.floor(Math.random() * candidates.length)];
     }
     /**

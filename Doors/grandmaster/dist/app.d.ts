@@ -105,6 +105,14 @@ export declare class GrandmasterApp {
      */
     private showTetriNetLobby;
     /**
+     * Start a BBS-internal networked TetriNET match.
+     *
+     * Bots are simulated by the HOST only and published as ordinary
+     * participants, so every node sees the same field for them and no bot is
+     * ever driven twice.
+     */
+    private startTetriNetNetworkGame;
+    /**
      * Start a TetriNET game (local, single-player with TetriNET rules)
      */
     private startTetriNetGame;

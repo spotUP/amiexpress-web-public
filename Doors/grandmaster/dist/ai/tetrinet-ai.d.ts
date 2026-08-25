@@ -36,6 +36,15 @@ export declare function getAIName(difficulty: AIDifficulty): string;
 export declare class TetriNetAI {
     private opponents;
     /**
+     * Ids the bots may attack besides each other. Defaults to the local human;
+     * in a networked match the screen adds the players on other BBS nodes, so
+     * bots treat everyone in the game as a target rather than only the people
+     * sitting on this node.
+     */
+    private externalTargets;
+    /** Replace the non-bot target pool. Empty falls back to the local human. */
+    setExternalTargets(ids: string[]): void;
+    /**
      * Create AI opponents
      */
     createOpponents(count: number, difficulty: AIDifficulty, settings: any, gameOptions: any): AIOpponent[];
