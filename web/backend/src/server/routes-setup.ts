@@ -161,9 +161,19 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   app.use('/api/nodes', authenticateToken(db), requireSysop(), nodeControlRouter);
 
   // ===== Static File Serving for Unified Deployment =====
-  // Note: Using process.cwd() instead of __dirname for tsx compatibility
-  // process.cwd() = ~/Code/amiexpress-web/web/backend
-  const projectRoot = join(process.cwd(), '..', '..');
+  //
+  // Derived from THIS FILE's location, not from the working directory. The
+  // old `join(process.cwd(), '..', '..')` assumed the backend was always
+  // launched from web/backend - but the BBS data paths are relative to the
+  // repo root, so launching from there (which the dev notes tell you to do)
+  // resolved the project root to the parent of the repo and served nothing:
+  // the terminal answered 404 at / and every asset.
+  //
+  // __dirname is web/backend/src/server in both dev and the container,
+  // which run the TypeScript directly. BBS_ROOT overrides it if set.
+  const projectRoot = process.env.BBS_ROOT
+    ? path.resolve(process.env.BBS_ROOT)
+    : path.resolve(__dirname, '../../../..');
 
   // Helper: Serve SPA with fallback to index.html
   function serveSPA(prefix: string, distPath: string, name: string) {
