@@ -63,7 +63,7 @@ describe('thumb tracking', () => {
     expect(trackMove(s, { x: 100 + columnPx - 1, y: 100, t: 10 })).toEqual([]);
   });
 
-  it('drags downwards instead of offering a soft drop button', () => {
+  it('soft drops by following the thumb down, one row per cell', () => {
     const s = stroke();
 
     const keys = trackMove(s, { x: 100, y: 100 + rowPx * 2, t: 40 });

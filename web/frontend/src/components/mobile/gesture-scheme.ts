@@ -7,13 +7,14 @@
  * tuned against tests instead of against a phone.
  *
  *   drag left / right   piece follows, one column per cell crossed
- *   drag down           piece follows downwards (this replaces soft drop)
+ *   drag down           piece follows downwards, one row per cell crossed
  *   swipe down (fast)   hard drop
  *   tap                 rotate clockwise - one direction is enough
  *   swipe up            hold
  *
- * Soft drop has no gesture on purpose, and there is no counter-clockwise
- * rotation: both were explicitly dropped from the design.
+ * There is no soft-drop BUTTON and no counter-clockwise rotation. Dragging
+ * down IS the soft drop - the piece follows the thumb exactly as it does
+ * sideways - and a fast flick down is the hard drop.
  */
 
 /** A key the terminal should be told about, as a browser name/code pair. */
