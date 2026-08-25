@@ -1958,8 +1958,20 @@ export class Screen extends Element {
   /**
    * Disable focus trapping and restore previous focus
    */
-  releaseFocusTrap(): void {
+  /**
+   * Release a focus trap.
+   *
+   * Pass the element that installed it. A trap released by anything else is
+   * how a modal lost its grip: choosing a menu item opened a dialog (which
+   * trapped focus), then the menu closed behind it and released the DIALOG's
+   * trap - so Escape went to the menu bar instead of closing the dialog, and
+   * arrow keys walked out of a confirmation box (both reported 2026-08-25).
+   *
+   * Called with no owner it still releases, for callers that predate this.
+   */
+  releaseFocusTrap(owner?: Element): void {
     if (!this.focusTrap) return;
+    if (owner && this.focusTrap !== owner) return;
 
     this.focusTrap = null;
 

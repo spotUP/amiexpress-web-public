@@ -77,7 +77,7 @@ export class Overlay extends Box {
     // Emit hide event for web transparency and release focus trap
     this.on('hide', () => {
       if (this.screen && this.options.trapFocus) {
-        (this.screen as any).releaseFocusTrap();
+        (this.screen as any).releaseFocusTrap(this);
       }
       this._emitOverlayWidgetEvent(false);
     });

@@ -319,6 +319,20 @@ export interface AudioConfig {
     /** Gap before the tail starts, in seconds. */
     preDelay?: number;
   };
+  /**
+   * A repeating echo on the EFFECTS bus, in front of any reverb.
+   *
+   * This is the "bounce" - discrete repeats - where reverb is the wash
+   * around them. Music stays dry for the same reason as above.
+   */
+  sfxEcho?: {
+    /** Seconds between repeats. */
+    delayTime: number;
+    /** How much of each repeat feeds the next, 0..1. Above ~0.7 rings on. */
+    feedback: number;
+    /** How much echo is mixed in, 0..1. */
+    wet: number;
+  };
 }
 
 /**

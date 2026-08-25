@@ -30,7 +30,7 @@ function createDialogs(s, ib) {
         s.render();
     }
     function hideModal(w) {
-        s.releaseFocusTrap(); // Release focus trap before hiding
+        s.releaseFocusTrap(w); // Ours only - see Screen.releaseFocusTrap
         mo.hide();
         w.hide();
         ib.focus();

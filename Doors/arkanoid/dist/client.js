@@ -259,19 +259,25 @@ class ArkanoidGame {
         });
         this.audio = new AudioEngine({
             masterVolume: 0.7,
-            // The effects used to sit at 0.8 against music the player could barely
-            // hear, because the music ran on its own audio context outside this
-            // mix entirely (reported live 2026-08-25: "the sound effects are much
-            // louder than the music"). Both now share this graph, so these two
-            // numbers are a real balance rather than a guess.
+            // The tracker plays on its own context (see ensureTracker), so this
+            // musicVolume governs only the AudioEngine's own music. What balances
+            // the mix against the tracker is sfxVolume: the effects sat at 0.8
+            // against music the player could barely hear.
             musicVolume: 0.85,
-            sfxVolume: 0.45,
+            sfxVolume: 0.35,
             // "Hall reverb so it sounds like it echoes in outer space." On the
             // EFFECTS bus only - the tracker music stays dry, or it turns to mush.
+            // "Way more wet, with a bouncing echo." A long tail for the space, and
+            // a feedback delay in front of it for the bounce.
             sfxReverb: {
-                wet: 0.35,
-                decay: 4.5,
-                preDelay: 0.03,
+                wet: 0.6,
+                decay: 6,
+                preDelay: 0.04,
+            },
+            sfxEcho: {
+                delayTime: 0.18,
+                feedback: 0.45,
+                wet: 0.4,
             },
         });
         this.renderer = new Renderer();
@@ -979,20 +985,18 @@ class ArkanoidGame {
             // Own the AudioContext so we can resume it: chiptune3 never resumes a
             // context the autoplay policy suspended. By door time the user has
             // long since typed at the BBS, so sticky activation lets resume() win.
-            // Share the AudioEngine's context when it has one. Web Audio refuses
-            // to connect nodes across contexts, so the tracker can only join the
-            // music bus if it is built on the same context; a private context
-            // would play to the speakers outside the mix, which is how the music
-            // ended up drowned by the effects in the first place.
-            this.trackerContext = this.audio.getAudioContext?.() ?? new AudioContext();
+            //
+            // A PRIVATE context, deliberately. Sharing the AudioEngine's context so
+            // the tracker could join its music bus made the music silent outright
+            // (reported 2026-08-25) - chiptune3 does not cope with the context Tone
+            // hands out. Music that plays and is balanced by volume beats an
+            // elegant mix that plays nothing, so the balance lives in the two
+            // volumes instead: the tracker near full, the effects turned down.
+            this.trackerContext = new AudioContext();
             this.tracker = new TrackerEngine({
-                audioContext: this.trackerContext ?? undefined,
+                audioContext: this.trackerContext,
                 repeatCount: -1, // loop the module until the state changes it
-                // Into the AudioEngine's music bus when it is up, so one set of
-                // volumes governs music and effects together. Before this the
-                // tracker played straight to the speakers and no mix existed.
-                outputNode: this.audio.getMusicBus?.() ?? null,
-                volume: 1.0, // the balance lives on the music bus now
+                volume: 0.95, // was 0.6 "under the sound effects" - it was buried
             });
         }
         if (this.trackerContext && this.trackerContext.state === 'suspended') {
@@ -1412,11 +1416,7 @@ class ArkanoidGame {
         this.stopMusic();
         try {
             this.tracker?.dispose();
-            // Only close a context this door created. The AudioEngine's context is
-            // shared and closing it would silence every sound effect too.
-            if (this.trackerContext && this.trackerContext !== this.audio.getAudioContext?.()) {
-                void this.trackerContext.close();
-            }
+            void this.trackerContext?.close();
         }
         catch (e) {
             // Ignore - the page is leaving the door either way.

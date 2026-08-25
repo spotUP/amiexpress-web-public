@@ -177,6 +177,15 @@ export class DropdownMenu extends Element {
 
     this.screen.trapFocus(this);
     this.attachOutsideClick();
+
+    // A newly shown menu must be painted in full. Opened from the KEYBOARD
+    // the menu stayed invisible until the next key moved the selection -
+    // the differential renderer had nothing marked dirty where the menu had
+    // just appeared, so it drew nothing (reported 2026-08-25: "if I tab to
+    // the menus they don't show, but if I press arrow down they draw").
+    // Opening with the mouse hid the bug because the mouse event itself
+    // dirtied the screen.
+    (this.screen as any).forceFullRedraw?.();
     this.screen.render();
   }
 
@@ -217,7 +226,8 @@ export class DropdownMenu extends Element {
 
     this.hide();
     this.detachOutsideClick();
-    this.screen.releaseFocusTrap();
+    // Only ours - a dialog opened by the chosen item may have trapped focus.
+    this.screen.releaseFocusTrap(this);
 
     // Hand focus back to the button that opened this menu. Releasing the trap
     // alone left focus sitting on a now-hidden dropdown, so Escape closed the

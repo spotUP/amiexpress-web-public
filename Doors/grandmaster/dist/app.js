@@ -309,8 +309,16 @@ class GrandmasterApp {
             playerName: this.session.user?.username || 'Player',
             settings: {
                 rotationSystem: 'SRS',
-                das: 133, // Delayed Auto-Shift (ms)
-                arr: 10, // Auto-Repeat Rate (ms)
+                // TGM3 is the reference this door is built on: DAS is 16 frames and
+                // a charged DAS then slides the piece ONE CELL PER FRAME. At the
+                // arcade's 60fps that is 267ms and 16.7ms.
+                //
+                // This door renders at 20fps (game-screen RENDER_FPS), so one cell
+                // per VISIBLE frame is 50ms. The old 10ms moved five cells between
+                // rendered frames, which is why holding left or right teleported the
+                // piece across the board (reported live 2026-08-25: "WAY too fast").
+                das: 267, // Delayed Auto-Shift (ms) - TGM3's 16 frames
+                arr: 50, // Auto-Repeat Rate (ms) - one cell per rendered frame
                 softDropSpeed: 20, // Multiplier
                 ghostPiece: true,
                 lockDelay: 500, // ms
@@ -374,6 +382,16 @@ class GrandmasterApp {
                 const saved = JSON.parse(json);
                 // Merge saved settings over defaults (preserves new fields)
                 Object.assign(this.state.settings, saved);
+                // Anyone who played before 2026-08-25 has an ARR of 10ms saved -
+                // five cells per rendered frame, which reads as the piece
+                // teleporting. Nobody chose that; it was the old default. Raise it
+                // to one cell per frame, and leave any deliberately slower value
+                // alone.
+                const MIN_SANE_ARR_MS = 50;
+                if (typeof this.state.settings.arr === 'number' && this.state.settings.arr < MIN_SANE_ARR_MS) {
+                    console.log(`[GRANDMASTER] Raising saved ARR ${this.state.settings.arr}ms to ${MIN_SANE_ARR_MS}ms (one cell per rendered frame)`);
+                    this.state.settings.arr = MIN_SANE_ARR_MS;
+                }
                 console.log(`[GRANDMASTER] Loaded settings for ${this.session.user?.username}`);
             }
         }

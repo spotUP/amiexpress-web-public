@@ -205,3 +205,33 @@ describe('opening a menu from the keyboard', () => {
   });
 
 });
+
+describe('a menu that has just opened', () => {
+  let screen: any;
+
+  afterEach(() => {
+    DropdownMenu.closeAll();
+    screen?.destroy();
+  });
+
+  it('is painted at once, not on the next keystroke', () => {
+    // Reported live 2026-08-25: "if I tab to the menus they don't show, but
+    // if I press arrow down to go to the next entry they draw." The
+    // differential renderer had nothing marked dirty where the menu had
+    // appeared. Opening with the mouse hid it, because the mouse event
+    // dirtied the screen by itself.
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const first = buttons(menuBar)[0];
+
+    let fullRedraws = 0;
+    const original = (screen as any).forceFullRedraw.bind(screen);
+    (screen as any).forceFullRedraw = () => { fullRedraws += 1; return original(); };
+
+    first.focus();
+    press(first, 'enter');
+
+    expect(DropdownMenu.isAnyOpen()).toBe(true);
+    expect(fullRedraws).toBeGreaterThan(0);
+  });
+});

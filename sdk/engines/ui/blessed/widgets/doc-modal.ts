@@ -194,7 +194,7 @@ export class DocModal extends Box {
       // Restore focus
       if (this.screen) {
         if ((this.screen as any).releaseFocusTrap) {
-          (this.screen as any).releaseFocusTrap();
+          (this.screen as any).releaseFocusTrap(this);
         } else if ((this.screen as any).focusPop) {
           (this.screen as any).focusPop();
         }
