@@ -138,3 +138,48 @@ export async function unseededGamesStillGetBlocks(): Promise<void> {
     if (engine.getState().status !== 'playing') break;
   }
 }
+
+export async function averageLevelsMakesTheTableClimbTogether(): Promise<void> {
+  // TetriNET's "average levels" option was parsed off the newgame message,
+  // stored in the options, and then read by nothing at all - a server that
+  // asked for averaged levels got per-player levels anyway.
+  const { Screen } = await import('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+  const { TetriNetScreen } = await import('../ui/tetrinet-screen');
+  const { TetriNetAI } = await import('../ai/tetrinet-ai');
+
+  const options: any = { levelAverage: true, nextPieceDelayMs: 0, delayBeforeSuddenDeath: 0 };
+  const screen: any = new (Screen as any)({ title: 'tnet-avg', width: 80, height: 30 });
+  const engine: any = new TetriNetEngine({} as any, options);
+  const ai: any = new (TetriNetAI as any)();
+  const bots = ai.createOpponents(2, 5, {} as any, options);
+  const scr: any = new (TetriNetScreen as any)({
+    screen, engine,
+    inputHandler: { on() {}, off() {}, setEnabled() {}, getConfig() { return {}; }, updateConfig() {} } as any,
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} } as any,
+    state: { settings: {} } as any, network: null, playerName: 'sysop', aiController: ai,
+  } as any);
+
+  try {
+    engine.start();
+    // Levels 12, 0, 0 -> everyone should sit at the average, 4.
+    (engine as any).level = 12;
+    (bots[0].engine as any).level = 0;
+    (bots[1].engine as any).level = 0;
+
+    scr.refreshOpponents();
+
+    assert.strictEqual(engine.getState().level, 4, 'the fast player is pulled back');
+    assert.strictEqual(bots[0].engine.getState().level, 4, 'and the slow ones are pulled up');
+  } finally { screen.destroy(); }
+}
+
+export async function perPlayerLevelsAreUntouchedByDefault(): Promise<void> {
+  const engine: any = new TetriNetEngine({} as any, { nextPieceDelayMs: 0 } as any);
+  engine.start();
+  (engine as any).level = 7;
+
+  engine.applyAverageLevel(2);
+
+  assert.strictEqual(engine.getState().level, 7,
+    'without the option a player keeps their own level');
+}

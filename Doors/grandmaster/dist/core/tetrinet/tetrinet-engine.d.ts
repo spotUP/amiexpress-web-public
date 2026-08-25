@@ -175,6 +175,17 @@ export declare class TetriNetEngine {
     getScore(): number;
     getStatus(): string;
     getPieceShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][];
+    /** Whether this game shares one averaged level across the table. */
+    usesAverageLevels(): boolean;
+    /**
+     * Adopt the table's average level.
+     *
+     * TetriNET's "average levels" option makes every player climb together
+     * rather than at their own pace. The option was parsed off the `newgame`
+     * message and stored, and then nothing ever read it - so a server that
+     * asked for averaged levels got per-player levels anyway.
+     */
+    applyAverageLevel(average: number): void;
     /** Whether the local hold house rule is on (see options.allowHold). */
     isHoldEnabled(): boolean;
     getGhostY(): number | null;

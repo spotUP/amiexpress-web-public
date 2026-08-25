@@ -153,6 +153,11 @@ export declare class TetriNetScreen {
      * this node owns and the players on other nodes.
      */
     private refreshOpponents;
+    /**
+     * TetriNET's "average levels" option: everyone at the table climbs
+     * together at the average of all levels, rather than at their own pace.
+     */
+    private shareAverageLevel;
     /** Note anyone who has just died, keeping the order they died in. */
     private trackDeaths;
     /**

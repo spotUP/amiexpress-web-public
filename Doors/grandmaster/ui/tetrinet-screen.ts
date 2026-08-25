@@ -429,8 +429,31 @@ export class TetriNetScreen {
 
     this.updateOpponents([...bots, ...remotes]);
 
+    this.shareAverageLevel(bots, remotes);
+
     // Bots aim at everyone in the match, not just the people on this node.
     this.aiController?.setExternalTargets?.([this.localId(), ...this.remotes.keys()]);
+  }
+
+  /**
+   * TetriNET's "average levels" option: everyone at the table climbs
+   * together at the average of all levels, rather than at their own pace.
+   */
+  private shareAverageLevel(
+    bots: Array<{ level: number }>,
+    remotes: Array<{ level: number }>
+  ): void {
+    if (!this.engine.usesAverageLevels()) return;
+
+    const levels = [
+      this.engine.getState().level,
+      ...bots.map(b => b.level),
+      ...remotes.map(r => r.level),
+    ];
+    const average = levels.reduce((sum, level) => sum + level, 0) / levels.length;
+
+    this.engine.applyAverageLevel(average);
+    for (const bot of this.aiOpponents()) bot.engine.applyAverageLevel(average);
   }
 
   /** Note anyone who has just died, keeping the order they died in. */

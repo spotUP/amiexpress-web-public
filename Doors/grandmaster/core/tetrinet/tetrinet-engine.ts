@@ -780,6 +780,29 @@ export class TetriNetEngine {
     return getTetriNetShape(type, rotation);
   }
 
+  /** Whether this game shares one averaged level across the table. */
+  usesAverageLevels(): boolean {
+    return this.options.levelAverage === true;
+  }
+
+  /**
+   * Adopt the table's average level.
+   *
+   * TetriNET's "average levels" option makes every player climb together
+   * rather than at their own pace. The option was parsed off the `newgame`
+   * message and stored, and then nothing ever read it - so a server that
+   * asked for averaged levels got per-player levels anyway.
+   */
+  applyAverageLevel(average: number): void {
+    if (!this.usesAverageLevels()) return;
+    if (!Number.isFinite(average)) return;
+
+    const level = Math.max(0, Math.round(average));
+    if (level !== this.level) {
+      this.level = level;
+    }
+  }
+
   /** Whether the local hold house rule is on (see options.allowHold). */
   isHoldEnabled(): boolean {
     return this.options.allowHold === true;
