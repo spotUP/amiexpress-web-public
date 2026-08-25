@@ -223,7 +223,7 @@ export class GrandmasterNetworkManager extends EventEmitter {
     // Use localPlayerId (BBS user ID) for the local player so the lobby widget's
     // host-check (state.players[0].id === localPlayerId) resolves correctly.
     // SDK assigns numeric hashed IDs; translating back here keeps IDs consistent.
-    const players: PlayerInfo[] = lobby.players.map(p => ({
+    const humans: PlayerInfo[] = lobby.players.map(p => ({
       id: p.id === this.localPlayerNumericId && this.localPlayerId
         ? this.localPlayerId
         : String(p.id),
@@ -234,7 +234,19 @@ export class GrandmasterNetworkManager extends EventEmitter {
       isBot: false,
     }));
 
-    const prevPlayerCount = this.matchState?.players.length ?? 0;
+    // Carry locally-added bots across the sync. Bots are never registered
+    // with the broker, so `lobby.players` only ever contains humans -
+    // rebuilding the array purely from it silently deleted every bot the
+    // host had added. Pressing Start emits lobby:ready, the broker answers
+    // with lobby:updated, and the bots disappeared mid-start; app.ts then
+    // read `players.some(p => p.isBot)` as false and launched
+    // startVersusGame() instead of startCpuBattle(), so the match came up
+    // waiting on a human opponent that did not exist and the AI playfield
+    // just sat there empty (reported live 2026-08-25).
+    const existingBots: PlayerInfo[] = (this.matchState?.players ?? []).filter(p => p.isBot);
+    const players: PlayerInfo[] = [...humans, ...existingBots];
+
+    const prevPlayerIds = new Set((this.matchState?.players ?? []).map(p => p.id));
 
     if (this.matchState) {
       this.matchState.players = players;
@@ -269,10 +281,12 @@ export class GrandmasterNetworkManager extends EventEmitter {
       }
     }
 
-    // Emit events so the lobby adapter can update the UI
-    if (players.length > prevPlayerCount) {
-      const newPlayers = players.slice(prevPlayerCount);
-      for (const p of newPlayers) {
+    // Emit events so the lobby adapter can update the UI. Compare by id
+    // rather than by array length: bots are appended after the humans, so a
+    // positional slice re-announced an existing bot as "joined" whenever a
+    // human arrived.
+    for (const p of players) {
+      if (!prevPlayerIds.has(p.id)) {
         this.emit('player:joined', p);
       }
     }
