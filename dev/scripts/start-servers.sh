@@ -112,10 +112,20 @@ launch_tmux_session() {
     exec tmux attach -t "$session"
   fi
 
-  # Build the console app if it hasn't been built yet
+  # Prepare the console app. It has its own package.json (ink + react) and
+  # is NOT covered by the root install, so a checkout that never ran an
+  # install there has no node_modules at all. This used to jump straight to
+  # `npm run build` with its output discarded, so the failure was invisible
+  # and the pane then ran node against a dist whose imports could not
+  # resolve: "Cannot find package 'react'" with a bare stack trace.
   local console_dir
   console_dir="$(cd "$(dirname "$0")/../.." && pwd)/dev/console"
   if [ -d "$console_dir" ] && [ -f "$console_dir/package.json" ]; then
+    if [ ! -d "$console_dir/node_modules" ]; then
+      echo "[start-servers] Installing dev console dependencies (first run)..."
+      (cd "$console_dir" && npm install --silent) \
+        || echo "[start-servers] WARNING: dev console install failed - its pane will show a hint instead"
+    fi
     (cd "$console_dir" && npm run build --silent 2>/dev/null) || true
   fi
 
@@ -140,8 +150,10 @@ launch_tmux_session() {
     "cd '$root' && bash '$0' --bbs-only; bash"
 
   # Pane 1: console TUI (right side, waits for backend)
+  # Guarded: an unbuilt or uninstalled console prints what to run rather than
+  # a module-resolution stack trace.
   tmux split-window -h -p 45 -t "${session}:amiexpress.0" \
-    "cd '$root' && sleep 8 && node dev/console/dist/src/index.js; bash"
+    "cd '$root' && sleep 8 && if [ -f dev/console/dist/src/index.js ] && [ -d dev/console/node_modules ]; then node dev/console/dist/src/index.js; else echo '[console] unavailable - run: (cd dev/console && npm install && npm run build)'; fi; bash"
 
   # Pane 2: live backend log tail (bottom-left). `tail -F` follows the file
   # across rotation; we wait for the file to appear so tail doesn't error
