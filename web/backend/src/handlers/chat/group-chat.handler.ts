@@ -20,6 +20,32 @@ import { getSystemTime } from '../../utils/date-time.util';
 import type { BBSSession } from '../../index';
 // Session type
 
+/**
+ * Whether a door currently owns this session's terminal.
+ *
+ * These handlers paint an ANSI chat room - clear screen, header box, message
+ * lines - straight at the user. That is right when the BBS itself is running
+ * the chat, and wrong when the LiveChat door is: the door draws its own UI on
+ * the same terminal, and both ended up on screen at once (reported live
+ * 2026-08-25 with a paste showing the two layouts stacked). The room work
+ * itself - joining, broadcasting to everyone else, history - still has to
+ * happen; only this session's terminal output is suppressed, because the door
+ * renders that itself from its own room events.
+ */
+function doorOwnsTerminal(session: BBSSession): boolean {
+  return Boolean(
+    (session as any).clientDoorActive
+    || (session as any).currentDoorName
+    || (session as any).doorInputHandler
+  );
+}
+
+/** Terminal output for this session, suppressed while a door owns the screen. */
+function emitToTerminal(socket: Socket, session: BBSSession, data: string): void {
+  if (doorOwnsTerminal(session)) return;
+  emitToTerminal(socket, session, data);
+}
+
 // Dependencies (injected via setter)
 let db: any;
 let sessions: Map<string, BBSSession>;
@@ -64,17 +90,45 @@ function sendRoomError(socket: Socket, message: string): void {
 }
 
 /**
+ * Paint a line into every room member's terminal, EXCEPT those whose screen
+ * a door is driving.
+ *
+ * Room broadcasts went out with io.to(room), which reaches everyone -
+ * including anyone sitting in the LiveChat door, whose UI then had chat
+ * lines painted across it. Those clients already receive the structured
+ * chat:message event and render it themselves.
+ */
+function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: string): void {
+  const socketRoom = 'room:' + roomId;
+  const members: Set<string> | undefined = io?.sockets?.adapter?.rooms?.get(socketRoom);
+
+  if (!members) {
+    // No adapter (tests, or a transport without rooms): fall back to the
+    // broad emit rather than dropping the message entirely.
+    if (excludeSocketId) {
+      io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
+    } else {
+      io.to(socketRoom).emit('ansi-output', output);
+    }
+    return;
+  }
+
+  for (const socketId of members) {
+    if (excludeSocketId && socketId === excludeSocketId) continue;
+
+    const memberSession = sessions.get(socketId);
+    if (memberSession && doorOwnsTerminal(memberSession)) continue;
+
+    io.to(socketId).emit('ansi-output', output);
+  }
+}
+
+/**
  * Broadcast a system message to all room members
  */
 function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: string) {
-  const socketRoom = 'room:' + roomId;
   const output = AnsiUtil.warning('*** ' + message + ' ***') + '\r\n';
-
-  if (excludeSocketId) {
-    io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
-  } else {
-    io.to(socketRoom).emit('ansi-output', output);
-  }
+  broadcastAnsiToRoom(roomId, output, excludeSocketId);
 }
 
 /**
@@ -96,14 +150,9 @@ console.log('📡 [BROADCAST] Starting broadcast:', {
 
 console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
 
-  // Emit raw ANSI output for simple terminal clients
-  if (excludeSocketId) {
-    io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
-console.log('📡 [BROADCAST] Sent ansi-output (excluding:', excludeSocketId + ')');
-  } else {
-    io.to(socketRoom).emit('ansi-output', output);
-console.log('📡 [BROADCAST] Sent ansi-output to all in room');
-  }
+  // Raw ANSI for plain terminal clients only - a door renders the
+  // structured chat:message event below itself.
+  broadcastAnsiToRoom(roomId, output, excludeSocketId);
 
   // Also emit structured chat:message event for advanced clients (LiveChat door)
   // This allows UI-based chat clients to parse and display messages properly
@@ -203,9 +252,9 @@ console.log('✅ Room created:', roomId, roomName);
     }
 
     // Send success message
-    socket.emit('ansi-output', AnsiUtil.successLine('Room "' + roomName + '" created successfully!'));
-    socket.emit('ansi-output', AnsiUtil.line('Room ID: ' + roomId));
-    socket.emit('ansi-output', AnsiUtil.line('Use ROOM JOIN ' + roomName + ' to enter the room'));
+    emitToTerminal(socket, session, AnsiUtil.successLine('Room "' + roomName + '" created successfully!'));
+    emitToTerminal(socket, session, AnsiUtil.line('Room ID: ' + roomId));
+    emitToTerminal(socket, session, AnsiUtil.line('Use ROOM JOIN ' + roomName + ' to enter the room'));
 
     // Emit room created event
     socket.emit('room:created', {
@@ -352,49 +401,54 @@ console.log('ℹ️ User already in room, rejoining:', session.user?.username, r
     // Update session state
     session.currentRoomId = room.room_id;
     session.currentRoomName = room.room_name;
-    session.previousState = session.state;
-    session.previousSubState = session.subState;
-    session.subState = LoggedOnSubState.CHAT_ROOM;
+    // Only take over the session's input state when the BBS is the thing
+    // showing the chat. A door has its own input handling, and leaving it
+    // used to drop the user into CHAT_ROOM state with no chat on screen.
+    if (!doorOwnsTerminal(session)) {
+      session.previousState = session.state;
+      session.previousSubState = session.subState;
+      session.subState = LoggedOnSubState.CHAT_ROOM;
+    }
 
 console.log('✅ User joined room:', session.user?.username, room.room_name);
 
     // Send room info to user
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
-    socket.emit('ansi-output', AnsiUtil.headerBox('Chat Room: ' + room.room_name));
+    emitToTerminal(socket, session, AnsiUtil.clearScreen());
+    emitToTerminal(socket, session, AnsiUtil.headerBox('Chat Room: ' + room.room_name));
 
     if (room.topic && room.topic.length > 0) {
-      socket.emit('ansi-output', AnsiUtil.line('Topic: ' + room.topic));
+      emitToTerminal(socket, session, AnsiUtil.line('Topic: ' + room.topic));
     }
 
     if (room.motd && room.motd.length > 0) {
-      socket.emit('ansi-output', AnsiUtil.line('MOTD: ' + room.motd));
+      emitToTerminal(socket, session, AnsiUtil.line('MOTD: ' + room.motd));
     }
 
     // Get room members
     const members = await db.getRoomMembers(room.room_id);
-    socket.emit('ansi-output', AnsiUtil.line(''));
-    socket.emit('ansi-output', AnsiUtil.line('Users in room (' + members.length + '):'));
+    emitToTerminal(socket, session, AnsiUtil.line(''));
+    emitToTerminal(socket, session, AnsiUtil.line('Users in room (' + members.length + '):'));
     for (const member of members) {
       const modBadge = member.is_moderator ? ' [MOD]' : '';
       const muteBadge = member.is_muted ? ' [MUTED]' : '';
-      socket.emit('ansi-output', AnsiUtil.line('  - ' + member.username + modBadge + muteBadge));
+      emitToTerminal(socket, session, AnsiUtil.line('  - ' + member.username + modBadge + muteBadge));
     }
 
-    socket.emit('ansi-output', AnsiUtil.line(''));
-    socket.emit('ansi-output', AnsiUtil.line('Commands: /LEAVE /WHO /HELP'));
-    socket.emit('ansi-output', AnsiUtil.line('Type your message and press ENTER to chat'));
-    socket.emit('ansi-output', AnsiUtil.line('─'.repeat(78)));
+    emitToTerminal(socket, session, AnsiUtil.line(''));
+    emitToTerminal(socket, session, AnsiUtil.line('Commands: /LEAVE /WHO /HELP'));
+    emitToTerminal(socket, session, AnsiUtil.line('Type your message and press ENTER to chat'));
+    emitToTerminal(socket, session, AnsiUtil.line('─'.repeat(78)));
 
     // Get recent room history
     const history = await db.getChatRoomHistory(room.room_id, 10);
     if (history.length > 0) {
-      socket.emit('ansi-output', AnsiUtil.line('Recent messages:'));
+      emitToTerminal(socket, session, AnsiUtil.line('Recent messages:'));
       for (const msg of history) {
         const timestamp = new Date(msg.created_at).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
         const msgLine = '[' + timestamp + '] ' + AnsiUtil.colorize(msg.sender_username, 'cyan') + ': ' + msg.message;
-        socket.emit('ansi-output', AnsiUtil.line(msgLine));
+        emitToTerminal(socket, session, AnsiUtil.line(msgLine));
       }
-      socket.emit('ansi-output', AnsiUtil.line('─'.repeat(78)));
+      emitToTerminal(socket, session, AnsiUtil.line('─'.repeat(78)));
     }
 
     // Broadcast join to other room members
@@ -491,7 +545,7 @@ console.log('📢 Broadcast room:user-left:', username, 'to room:', socketRoom);
 console.log('✅ User left room:', username, roomName);
 
     // Send confirmation to user
-    socket.emit('ansi-output', AnsiUtil.successLine('You left ' + roomName));
+    emitToTerminal(socket, session, AnsiUtil.successLine('You left ' + roomName));
 
     // Emit room left event
     socket.emit('room:left', { roomName });
@@ -580,12 +634,12 @@ console.log('📋 Room list request:', session.user?.id);
 console.log('📋 Sent room:list event with', rooms.length, 'rooms');
 
     // Also send ANSI output for terminal display
-    socket.emit('ansi-output', AnsiUtil.headerBox('Available Chat Rooms'));
-    socket.emit('ansi-output', AnsiUtil.line(''));
+    emitToTerminal(socket, session, AnsiUtil.headerBox('Available Chat Rooms'));
+    emitToTerminal(socket, session, AnsiUtil.line(''));
 
     if (rooms.length === 0) {
-      socket.emit('ansi-output', AnsiUtil.warning('No rooms available'));
-      socket.emit('ansi-output', AnsiUtil.line('Use ROOM CREATE <name> to create a new room'));
+      emitToTerminal(socket, session, AnsiUtil.warning('No rooms available'));
+      emitToTerminal(socket, session, AnsiUtil.line('Use ROOM CREATE <name> to create a new room'));
       return;
     }
 
@@ -595,17 +649,17 @@ console.log('📋 Sent room:list event with', rooms.length, 'rooms');
       const privacy = room.is_public ? '' : '[PRIVATE]';
       const locked = room.password ? '[LOCKED]' : '';
 
-      socket.emit('ansi-output', AnsiUtil.colorize(room.room_name, 'cyan') + ' ' + status + ' ' + privacy + ' ' + locked);
+      emitToTerminal(socket, session, AnsiUtil.colorize(room.room_name, 'cyan') + ' ' + status + ' ' + privacy + ' ' + locked);
 
       if (room.topic && room.topic.length > 0) {
-        socket.emit('ansi-output', AnsiUtil.line('  Topic: ' + room.topic));
+        emitToTerminal(socket, session, AnsiUtil.line('  Topic: ' + room.topic));
       }
 
-      socket.emit('ansi-output', AnsiUtil.line('  Created by: ' + room.created_by_username));
-      socket.emit('ansi-output', AnsiUtil.line(''));
+      emitToTerminal(socket, session, AnsiUtil.line('  Created by: ' + room.created_by_username));
+      emitToTerminal(socket, session, AnsiUtil.line(''));
     }
 
-    socket.emit('ansi-output', AnsiUtil.line('Use ROOM JOIN <name> to join a room'));
+    emitToTerminal(socket, session, AnsiUtil.line('Use ROOM JOIN <name> to join a room'));
 
   } catch (error) {
 console.error('❌ Error listing rooms:', error);
