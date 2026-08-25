@@ -58,6 +58,7 @@ export class LoginModal extends Box {
   private _errorBox: Box;
   private _responsiveCleanup?: () => void;
   private _trapCleanup?: () => void;
+  private _tabCleanup?: () => void;
   private _onSubmit?: (credentials: LoginCredentials) => void;
   private _onCancel?: () => void;
   private _isMobileMode: boolean = false;
@@ -230,17 +231,19 @@ export class LoginModal extends Box {
       this._handleSubmit();
     });
 
-    // Enter in username moves to password
-    this._usernameInput.key(['enter', 'return'], () => {
+    // Enter is handled by the TEXTBOX, which consumes it and emits 'submit'
+    // (see Textbox._onKeypress, case 'enter'). Binding .key(['enter']) here
+    // looked right and did nothing at all: measured, Enter in the username
+    // did not move focus, and Enter in the password did not submit - the
+    // form simply swallowed both, which is what "Enter clears the form"
+    // looked like from the outside.
+    this._usernameInput.on('submit', () => {
       this._passwordInput.focus();
       this.screen?.render();
-      return true;
     });
 
-    // Enter in password submits
-    this._passwordInput.key(['enter', 'return'], () => {
+    this._passwordInput.on('submit', () => {
       this._handleSubmit();
-      return true;
     });
 
     // Enter on button submits
@@ -249,24 +252,13 @@ export class LoginModal extends Box {
       return true;
     });
 
-    // Tab navigation
-    this._usernameInput.key(['tab'], () => {
-      this._passwordInput.focus();
-      this.screen?.render();
-      return true;
-    });
-
-    this._passwordInput.key(['tab'], () => {
-      this._loginButton.focus();
-      this.screen?.render();
-      return true;
-    });
-
-    this._loginButton.key(['tab'], () => {
-      this._usernameInput.focus();
-      this.screen?.render();
-      return true;
-    });
+    // Tab is owned by the SCREEN, which runs focusNext() over every
+    // focusable child unless a widget marks the key handled - and these
+    // per-element .key(['tab']) bindings never did. So Tab walked whatever
+    // happened to be next in the screen's focus list rather than the three
+    // fields, which is why "username tab password tab enter" ended up
+    // somewhere that did nothing. The modal claims Tab for itself while it
+    // is displayed instead; see _installTabOrder().
 
     // Escape to cancel/clear
     this.key(['escape'], () => {
@@ -275,6 +267,41 @@ export class LoginModal extends Box {
       }
       this.emit('cancel');
     });
+  }
+
+  /**
+   * Claim Tab and Shift+Tab while the modal is up, so focus walks
+   * username -> password -> Login and back, and nothing outside the modal
+   * can be reached by keyboard.
+   */
+  private _installTabOrder(): void {
+    if (this._tabCleanup || !this.screen) return;
+
+    const order = [this._usernameInput, this._passwordInput, this._loginButton];
+
+    const onKey = (_ch: unknown, key: { name?: string; shift?: boolean }) => {
+      if (key?.name !== 'tab') return;
+      if (this.hidden) return;
+
+      const current = order.findIndex(el => el.focused);
+      const step = key.shift ? -1 : 1;
+      const next = order[(Math.max(0, current) + step + order.length) % order.length];
+
+      next.focus();
+      this.screen?.render();
+    };
+
+    const screen = this.screen as unknown as {
+      on: (event: string, handler: typeof onKey) => void;
+      off?: (event: string, handler: typeof onKey) => void;
+      removeListener?: (event: string, handler: typeof onKey) => void;
+    };
+
+    screen.on('keypress', onKey);
+    this._tabCleanup = () => {
+      screen.off?.('keypress', onKey);
+      screen.removeListener?.('keypress', onKey);
+    };
   }
 
   private _handleSubmit(): void {
@@ -323,6 +350,7 @@ export class LoginModal extends Box {
       if (!this._trapCleanup) {
         this._trapCleanup = trapModalInput(this);
       }
+      this._installTabOrder();
     }
 
     this.show();
@@ -431,6 +459,10 @@ export class LoginModal extends Box {
     if (this._trapCleanup) {
       this._trapCleanup();
       this._trapCleanup = undefined;
+    }
+    if (this._tabCleanup) {
+      this._tabCleanup();
+      this._tabCleanup = undefined;
     }
     super.destroy();
   }
