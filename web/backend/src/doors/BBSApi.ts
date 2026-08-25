@@ -1459,6 +1459,14 @@ console.error('[BBSApi.deleteDoor] Error:', error);
 
       emitCustomDoorEvent({
         username: this.session.user?.username || 'Unknown',
+        // Identity for the webhook PII policy. Without these two, every door
+        // event was anonymised to the bare string "anon": applyPiiPolicy()
+        // strips the username unless the user consented (or the board opts
+        // in system-wide), and with no userId it cannot even fall back to
+        // "User #12". Door score posts therefore never named the scorer.
+        // Same shape the file/chat/message emitters already use.
+        userId: (this.session.user as any)?.id,
+        gdprConsented: !!(this.session.user as any)?.gdprConsentAt,
         nodeId: this.session.nodeId || 0,
         doorName: this.session.commandText || 'Door',
         eventType,

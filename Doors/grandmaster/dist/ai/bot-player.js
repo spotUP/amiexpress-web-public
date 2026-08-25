@@ -141,30 +141,31 @@ class BotPlayer {
         const lineCount = clearedLines.length;
         if (lineCount > 0)
             (0, board_1.clearLines)(testBoard, clearedLines);
-        // Heuristic Weights (Dellacherie-inspired)
+        // Heuristic weights, in El-Tetris proportions (a well-known, strong set:
+        // aggregate height -0.51, lines +0.76, holes -0.36, bumpiness -0.18,
+        // scaled by 1000 here) plus small landing-height and well terms.
+        //
+        // The previous weights had holes at -400 but AGGREGATE HEIGHT at only -2.
+        // A full 10x20 board maxes aggregate height out at 200, i.e. a -400
+        // penalty - the exact cost of a single hole. Stacking straight up to the
+        // ceiling therefore always scored better than accepting one hole, so the
+        // bot built a tower and topped out (reported live 2026-08-25).
         let score = 0;
-        // 1. Landing Height (lower is better)
-        // The height of the piece's bottom after placement
+        // 1. Landing height (prefer placing low).
         const landingHeight = board.height - ghostY;
-        score -= landingHeight * 4;
-        // 2. Rows Eliminated
+        score -= landingHeight * 45;
+        // 2. Rows eliminated. Linear, with a modest extra bias toward tetrises so
+        //    the bot still favours them without hoarding for one.
+        score += lineCount * 760;
         if (lineCount === 4)
-            score += 800;
-        else if (lineCount === 3)
-            score += 400;
-        else if (lineCount === 2)
-            score += 200;
-        else if (lineCount === 1)
-            score += 50;
-        // 3. Holes (extremely bad)
+            score += 300;
+        // 3. Holes.
         const holes = (0, board_1.countHoles)(testBoard);
-        score -= holes * 400;
-        // 4. Blocked Holes (holes with blocks above them)
-        // Already partially covered by countHoles, but we can double down
-        // 5. Bumpiness
+        score -= holes * 357;
+        // 4. Bumpiness (proxy for column transitions).
         const bumpiness = (0, board_1.getBumpiness)(testBoard);
-        score -= bumpiness * 15;
-        // 6. Aggregate Height (sum of all column heights)
+        score -= bumpiness * 184;
+        // 5. Aggregate height - the term that was effectively disabled before.
         let aggregateHeight = 0;
         const colHeights = [];
         for (let cx = 0; cx < testBoard.width; cx++) {
@@ -172,9 +173,8 @@ class BotPlayer {
             colHeights.push(h);
             aggregateHeight += h;
         }
-        score -= aggregateHeight * 2;
-        // 7. Well Penalty (Avoid deep wells unless they are for Tetrises)
-        // A well is an empty column surrounded by higher columns
+        score -= aggregateHeight * 510;
+        // 6. Well penalty: avoid deep wells beyond the single one a tetris needs.
         let wells = 0;
         for (let cx = 0; cx < testBoard.width; cx++) {
             const leftH = cx > 0 ? colHeights[cx - 1] : testBoard.height;
@@ -182,15 +182,15 @@ class BotPlayer {
             const h = colHeights[cx];
             const depth = Math.min(leftH, rightH) - h;
             if (depth > 2) {
-                // Only allow one deep well (usually for Tetris)
                 wells += (depth - 2);
             }
         }
-        score -= wells * 10;
+        score -= wells * 120;
         // Difficulty scaling
         if (this.difficulty < 10) {
             // Add random noise based on difficulty
-            score += (Math.random() - 0.5) * (11 - this.difficulty) * 50;
+            // Scaled with the weights above; at ~50 it was noise the bot never felt.
+            score += (Math.random() - 0.5) * (11 - this.difficulty) * 600;
         }
         return score;
     }
@@ -205,58 +205,53 @@ class BotPlayer {
             this.targetPlacement = null;
             return;
         }
-        // High difficulty bots move instantly
-        const instantMove = this.difficulty >= 8;
-        // 1. Handle rotation
-        if (piece.rotation !== target.rotation) {
-            const rotationDiff = (target.rotation - piece.rotation + 4) % 4;
-            if (rotationDiff === 1) {
-                engine.rotate(1); // CW
-            }
-            else if (rotationDiff === 3) {
-                engine.rotate(-1); // CCW
-            }
-            else if (rotationDiff === 2) {
-                engine.rotate(1); // CW twice
-                if (instantMove)
-                    engine.rotate(1);
-            }
-            if (!instantMove)
-                return; // Wait for next frame for realism on lower difficulties
-        }
-        // 2. Handle horizontal movement
-        if (piece.x !== target.x) {
-            const diff = target.x - piece.x;
-            const dir = diff > 0 ? 1 : -1;
-            if (instantMove) {
-                // Move all the way to target
-                for (let i = 0; i < Math.abs(diff); i++) {
-                    engine.move(dir);
-                }
-            }
-            else {
-                engine.move(dir);
-                return;
-            }
-        }
-        // 3. Final placement.
+        // Alignment speed and drop style are SEPARATE concerns.
         //
-        // Only the top difficulties slam the piece down. Everyone else soft-drops
-        // it one row at a time so the opponent's board actually ANIMATES: this
-        // used to call hardDrop() unconditionally, so from the player's side a
-        // piece simply materialised at the bottom of the AI's field with nothing
-        // visible in between (reported live 2026-08-25).
-        if (piece.x === target.x && piece.rotation === target.rotation) {
-            if (instantMove) {
-                engine.hardDrop();
-                this.targetPlacement = null;
+        // They used to be conflated under one `instantMove` flag: below
+        // difficulty 8 the bot applied a single rotation OR a single one-column
+        // move per think tick (~275ms at difficulty 5) and returned. That was
+        // survivable only because it finished with a hard drop, which lands the
+        // piece in the aligned column however long the shuffle took. Once the
+        // piece was left to fall under gravity instead, that slow shuffle became
+        // a race the bot lost - gravity locked the piece before it reached
+        // target.x, so it played into the wrong column and buried itself in
+        // holes (reported live 2026-08-25).
+        //
+        // So: always finish rotating and moving in one tick (the piece is at the
+        // top of the board with room to spare), and let difficulty decide only
+        // how the piece DESCENDS.
+        const slamDown = this.difficulty >= 8;
+        // 1. Rotate all the way to the target orientation.
+        let guard = 4;
+        while (piece.rotation !== target.rotation && guard-- > 0) {
+            const rotationDiff = (target.rotation - piece.rotation + 4) % 4;
+            const rotated = rotationDiff === 3 ? engine.rotate(-1) : engine.rotate(1);
+            // A rotation the engine rejects (wall kick failure) would otherwise
+            // spin this loop forever against an unchanged piece.
+            if (!rotated)
+                break;
+        }
+        // 2. Move all the way to the target column.
+        if (piece.x !== target.x) {
+            const dir = target.x > piece.x ? 1 : -1;
+            let steps = Math.abs(target.x - piece.x);
+            while (steps-- > 0) {
+                if (!engine.move(dir))
+                    break; // blocked - take what we got
             }
-            else {
-                // Returns false once the piece can fall no further; the engine's
-                // own gravity/lock handling then locks it, which also spawns the
-                // next piece and invalidates the plan above.
-                engine.softDrop();
-            }
+        }
+        // 3. Descend. Only the top difficulties slam it down; everyone else
+        // soft-drops a row at a time so the opponent's board actually ANIMATES
+        // instead of the piece materialising at the bottom.
+        if (slamDown) {
+            engine.hardDrop();
+            this.targetPlacement = null;
+        }
+        else {
+            // The engine's own gravity and lock handling finish the placement,
+            // which spawns the next piece and invalidates the plan via the
+            // piece-key check in update().
+            engine.softDrop();
         }
     }
     /**
