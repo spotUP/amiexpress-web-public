@@ -1176,7 +1176,7 @@ class ArkanoidGame {
       // ended up drowned by the effects in the first place.
       this.trackerContext = this.audio.getAudioContext?.() ?? new AudioContext();
       this.tracker = new TrackerEngine({
-        audioContext: this.trackerContext,
+        audioContext: this.trackerContext ?? undefined,
         repeatCount: -1, // loop the module until the state changes it
         // Into the AudioEngine's music bus when it is up, so one set of
         // volumes governs music and effects together. Before this the

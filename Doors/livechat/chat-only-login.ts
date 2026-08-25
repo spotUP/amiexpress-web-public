@@ -39,6 +39,13 @@ async function verifyCredentials(credentials: LoginCredentials): Promise<{ succe
       }
     };
   } catch (error) {
+    // Say WHAT failed. This catch swallowing the real reason has now cost two
+    // debugging sessions: once when the module path was a hardcoded developer
+    // path missing in Docker, and again when the backend was started from the
+    // repo root so `process.cwd()/src/database` did not resolve. The user only
+    // ever saw a red "server error" flash.
+    console.error('[chat-only-login] verifyCredentials failed:', error);
+    console.error('[chat-only-login] cwd was:', process.cwd());
     return { success: false, error: 'Login failed - server error' };
   }
 }

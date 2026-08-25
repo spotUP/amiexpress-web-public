@@ -1392,10 +1392,12 @@ class AudioEngine {
    * wants to play into getMusicBus() has to be built on THIS context. Null
    * until a user gesture has started the engine.
    */
-  public getAudioContext(): AudioContext | null {
+  // Deliberately untyped: doors compile without the DOM lib (LiveChat is
+  // server-rendered), and naming AudioContext here broke their builds.
+  public getAudioContext(): any {
     if (typeof Tone === 'undefined' || !Tone?.getContext) return null;
     const ctx = Tone.getContext();
-    return (ctx?.rawContext ?? null) as AudioContext | null;
+    return (ctx as any)?.rawContext ?? null;
   }
 
   /**
