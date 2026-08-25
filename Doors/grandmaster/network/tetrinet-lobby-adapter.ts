@@ -197,13 +197,20 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
   }
 
   /**
-   * Fill empty slots with bots up to minimum player count
+   * Fill empty slots with bots up to a target player count.
+   *
+   * Signature follows the SDK's LobbyNetworkAdapter contract - (count,
+   * difficulty). It previously took (difficulty) alone, so the lobby's Bots
+   * button, which correctly passes (count, difficulty), handed the target
+   * player count in as a difficulty level.
+   *
+   * @param count Target number of players (defaults to TetriNET's minimum)
    * @param difficulty Bot difficulty level (0-3)
    */
-  async fillWithBots(difficulty: number = 1): Promise<void> {
+  async fillWithBots(count?: number, difficulty: number = 1): Promise<void> {
     if (!this.state) return;
 
-    const minPlayers = 2; // TetriNET needs at least 2 players
+    const minPlayers = Math.max(2, count ?? 2); // TetriNET needs at least 2 players
     const maxSlots = 6;
     const botNames = ['TetriBot', 'BlockMaster', 'LineKiller', 'StackAttack', 'GridGuru'];
     const difficultyNames = ['Easy', 'Normal', 'Hard', 'Expert'];
@@ -236,6 +243,28 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
 
     this.emit('state:updated');
     console.log(`[TetriNetLobbyAdapter] After fillWithBots: ${this.state.players.length} players`);
+  }
+
+  /**
+   * Remove every bot from the lobby.
+   *
+   * Without this the lobby refused bot management entirely: its guard is
+   * `!adapter.fillWithBots || !adapter.removeBots`, so having only half the
+   * pair reported "Bot management not available" and no bots could be added
+   * to a local TetriNET game at all.
+   */
+  removeBots(): void {
+    if (!this.state) return;
+
+    const bots = this.state.players.filter(p => p.isBot);
+    if (bots.length === 0) return;
+
+    this.state.players = this.state.players.filter(p => !p.isBot);
+    for (const bot of bots) {
+      this.emit('player:left', String(bot.slot));
+    }
+    console.log(`[TetriNetLobbyAdapter] Removed ${bots.length} bot(s)`);
+    this.emit('state:updated');
   }
 
   /**

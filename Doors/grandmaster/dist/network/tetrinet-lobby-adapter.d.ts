@@ -29,10 +29,26 @@ export declare class TetriNetLobbyAdapter extends EventEmitter implements LobbyN
      */
     private convertPlayer;
     /**
-     * Fill empty slots with bots up to minimum player count
+     * Fill empty slots with bots up to a target player count.
+     *
+     * Signature follows the SDK's LobbyNetworkAdapter contract - (count,
+     * difficulty). It previously took (difficulty) alone, so the lobby's Bots
+     * button, which correctly passes (count, difficulty), handed the target
+     * player count in as a difficulty level.
+     *
+     * @param count Target number of players (defaults to TetriNET's minimum)
      * @param difficulty Bot difficulty level (0-3)
      */
-    fillWithBots(difficulty?: number): Promise<void>;
+    fillWithBots(count?: number, difficulty?: number): Promise<void>;
+    /**
+     * Remove every bot from the lobby.
+     *
+     * Without this the lobby refused bot management entirely: its guard is
+     * `!adapter.fillWithBots || !adapter.removeBots`, so having only half the
+     * pair reported "Bot management not available" and no bots could be added
+     * to a local TetriNET game at all.
+     */
+    removeBots(): void;
     /**
      * Get current lobby state
      */

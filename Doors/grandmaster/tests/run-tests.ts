@@ -18,6 +18,7 @@ const TEST_MODULES = [
   './network-wiring.test',
   './board-clear.test',
   './lockout.test',
+  './tetrinet-bots.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.
