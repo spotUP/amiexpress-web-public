@@ -269,6 +269,28 @@ export function TerminalPage(): JSX.Element {
     () => readTouchScheme(window.localStorage),
   );
 
+  /**
+   * Whether the running door is showing a menu or a playfield. Only the door
+   * knows, so it says so: client doors run in this same page and dispatch
+   * `bbs:input-mode` (see sdk/client/input-mode.ts). Without it a tap cannot
+   * mean "rotate" in play and "Enter" on a menu, and a phone player cannot
+   * get past a door's title screen.
+   */
+  const [inputMode, setInputMode] = useState<'game' | 'menu'>('game');
+
+  useEffect(() => {
+    const onMode = (event: Event) => {
+      const mode = (event as CustomEvent).detail;
+      if (mode === 'menu' || mode === 'game') setInputMode(mode);
+    };
+    window.addEventListener('bbs:input-mode', onMode);
+    return () => window.removeEventListener('bbs:input-mode', onMode);
+  }, []);
+
+  // A door that never declares a mode gets the game scheme, and every door
+  // starts fresh rather than inheriting the last one's menu state.
+  useEffect(() => { setInputMode('game'); }, [activeDoorId]);
+
   const chooseScheme = useCallback((scheme: TouchScheme) => {
     writeTouchScheme(window.localStorage, scheme);
     setTouchScheme(scheme);
@@ -299,6 +321,8 @@ export function TerminalPage(): JSX.Element {
             ? (
               <MobileArkanoidControls
                 layout={gameControls}
+                menuMode={inputMode === 'menu'}
+                onMenuKey={handleGestureKey}
                 onSpinner={handleSpinner}
                 onLaunch={handleLaunch}
                 onPress={handleGamePress}
@@ -309,6 +333,7 @@ export function TerminalPage(): JSX.Element {
               ? (
                 <MobileGameGestures
                   title={gameControls.title}
+                  mode={inputMode}
                   onKey={handleGestureKey}
                   onUseButtons={() => chooseScheme('buttons')}
                 />

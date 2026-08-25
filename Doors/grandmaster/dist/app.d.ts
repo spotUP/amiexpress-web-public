@@ -33,7 +33,18 @@ export declare class GrandmasterApp {
     private network;
     private attackManager;
     private multiplayerServer;
-    private currentScreen;
+    private _currentScreen;
+    /**
+     * Which screen the player is on.
+     *
+     * A property rather than a field so the touch scheme cannot drift out of
+     * sync with it: there are ten places that change screen, and a phone player
+     * who lands on a menu still holding piece controls cannot choose anything
+     * (reported live 2026-08-25). Only 'game' is play; a lobby is a list, and
+     * so are settings and stats.
+     */
+    private get currentScreen();
+    private set currentScreen(value);
     private _voiceRoom;
     private _voiceSocketHandlers;
     constructor(session: DoorSession);

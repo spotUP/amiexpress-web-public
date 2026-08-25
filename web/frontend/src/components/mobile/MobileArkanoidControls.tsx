@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { GameControlSpinner } from './game-controls';
+import { beginStroke, menuGesture } from './gesture-scheme';
 import { useHeldButtons } from './use-held-buttons';
 import './MobileArkanoidControls.css';
 
@@ -19,6 +20,14 @@ interface MobileArkanoidControlsProps {
   onPress: (key: string, code: string) => void;
   /** Release: must emit the matching key-up. */
   onRelease: (key: string, code: string) => void;
+  /**
+   * True while the door is showing a menu. A spinner cannot work a menu -
+   * there are no arrow keys on this pad at all - so the strip becomes a
+   * swipe/tap surface until play resumes.
+   */
+  menuMode?: boolean;
+  /** Fires a menu key as a press and release. */
+  onMenuKey?: (key: string, code: string) => void;
 }
 
 const ACTIVE_CLASS = 'mobile-arkanoid-controls__button--active';
@@ -56,9 +65,12 @@ export function MobileArkanoidControls({
   onLaunch,
   onPress,
   onRelease,
+  menuMode = false,
+  onMenuKey,
 }: MobileArkanoidControlsProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const menuSurfaceRef = useRef<HTMLDivElement>(null);
 
   const buttons: ArkanoidButton[] = [LAUNCH_BUTTON, ...layout.keys];
   const buttonsRef = useRef<ArkanoidButton[]>(buttons);
@@ -181,18 +193,61 @@ export function MobileArkanoidControls({
     };
   }, []);
 
+  useEffect(() => {
+    const el = menuSurfaceRef.current;
+    if (!menuMode || !el || !onMenuKey) return;
+
+    let stroke: ReturnType<typeof beginStroke> | null = null;
+
+    const start = (event: TouchEvent) => {
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      event.preventDefault();
+      stroke = beginStroke({ x: touch.clientX, y: touch.clientY, t: event.timeStamp });
+    };
+
+    const end = (event: TouchEvent) => {
+      const touch = event.changedTouches[0];
+      if (!touch || !stroke) return;
+      event.preventDefault();
+      const key = menuGesture(stroke, { x: touch.clientX, y: touch.clientY, t: event.timeStamp });
+      if (key) onMenuKey(key.key, key.code);
+      stroke = null;
+    };
+
+    el.addEventListener('touchstart', start, { passive: false });
+    el.addEventListener('touchend', end, { passive: false });
+    el.addEventListener('touchcancel', end, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', start);
+      el.removeEventListener('touchend', end);
+      el.removeEventListener('touchcancel', end);
+    };
+  }, [menuMode, onMenuKey]);
+
   return (
     <div className="mobile-arkanoid-controls" ref={containerRef}>
       <div className="mobile-arkanoid-controls__title">{layout.title}</div>
-      <div
-        className="mobile-arkanoid-controls__strip"
-        ref={stripRef}
-        role="slider"
-        aria-label="Paddle"
-        aria-orientation="horizontal"
-      >
-        <span className="mobile-arkanoid-controls__hint">Slide to move the paddle</span>
-      </div>
+      {menuMode ? (
+        <div
+          className="mobile-arkanoid-controls__strip"
+          ref={menuSurfaceRef}
+          role="application"
+          aria-label="Menu"
+        >
+          <span className="mobile-arkanoid-controls__hint">Swipe to move, tap to choose</span>
+        </div>
+      ) : (
+        <div
+          className="mobile-arkanoid-controls__strip"
+          ref={stripRef}
+          role="slider"
+          aria-label="Paddle"
+          aria-orientation="horizontal"
+        >
+          <span className="mobile-arkanoid-controls__hint">Slide to move the paddle</span>
+        </div>
+      )}
       <div className="mobile-arkanoid-controls__buttons">
         {buttons.map(control => (
           <button

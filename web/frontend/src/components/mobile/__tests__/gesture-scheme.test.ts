@@ -14,6 +14,8 @@ import {
   beginStroke,
   trackMove,
   endStroke,
+  menuGesture,
+  MENU_KEYS,
   readTouchScheme,
   writeTouchScheme,
   GESTURE_KEYS,
@@ -218,5 +220,103 @@ describe('hard drop reliability', () => {
     trackMove(s, { x: 100, y: 180, t: 300 });
 
     expect(endStroke(s, { x: 100, y: 120, t: 360 })).toEqual(GESTURE_KEYS.hold);
+  });
+});
+
+describe('guards reported live on 2026-08-25', () => {
+  // "it often rotates when I swipe down to hard drop, and it still moves
+  // sideways easily when swiping down - we need better guards for this."
+
+  it('a diagonal flick down does not lock sideways', () => {
+    // 13 across and 11 down used to lock HORIZONTAL on the first sample and
+    // the rest of the swipe then slid the piece across the board.
+    const s = stroke();
+
+    trackMove(s, { x: 113, y: 111, t: 16 });
+
+    expect(s.axis).not.toBe('horizontal');
+  });
+
+  it('holds off until the stroke says which way it is going', () => {
+    const s = stroke();
+
+    trackMove(s, { x: 112, y: 112, t: 16 });
+    expect(s.axis).toBe('none');
+
+    trackMove(s, { x: 114, y: 150, t: 40 });
+    expect(s.axis).toBe('vertical');
+  });
+
+  it('emits nothing sideways while the stroke is still undecided', () => {
+    const s = stroke();
+
+    const keys = trackMove(s, { x: 113, y: 111, t: 16 });
+
+    expect(keys).toEqual([]);
+  });
+
+  it('hard drops a fast diagonal flick instead of rotating', () => {
+    const s = stroke();
+    trackMove(s, { x: 108, y: 160, t: 40 });
+
+    expect(endStroke(s, { x: 118, y: 205, t: 70 })).toEqual(GESTURE_KEYS.hardDrop);
+  });
+
+  it('does not rotate on a slow press that never moved', () => {
+    // A thumb resting on the board and lifting is not a rotate request.
+    const s = stroke();
+
+    expect(endStroke(s, { x: 103, y: 104, t: 600 })).toBeNull();
+  });
+
+  it('still rotates on a real tap', () => {
+    const s = stroke();
+
+    expect(endStroke(s, { x: 102, y: 101, t: 90 })).toEqual(GESTURE_KEYS.rotate);
+  });
+
+  it('does not rotate once the stroke has committed to a direction', () => {
+    const s = stroke();
+    trackMove(s, { x: 100, y: 140, t: 40 });
+
+    // Thumb wanders back to where it started and lifts.
+    expect(endStroke(s, { x: 100, y: 100, t: 700 })).toBeNull();
+  });
+});
+
+describe('menu gestures', () => {
+  // Reported live: "I can't navigate the menu in Arkanoid with the phone -
+  // make the swipes control the menus and tap as enter."
+  it('moves the selection down on a downward swipe', () => {
+    const s = stroke();
+
+    expect(menuGesture(s, { x: 100, y: 180, t: 120 })).toEqual(MENU_KEYS.down);
+  });
+
+  it('moves the selection up on an upward swipe', () => {
+    const s = stroke();
+
+    expect(menuGesture(s, { x: 100, y: 20, t: 120 })).toEqual(MENU_KEYS.up);
+  });
+
+  it('moves sideways for horizontal swipes, for menus that use them', () => {
+    expect(menuGesture(stroke(), { x: 200, y: 100, t: 120 })).toEqual(MENU_KEYS.right);
+    expect(menuGesture(stroke(), { x: 20, y: 100, t: 120 })).toEqual(MENU_KEYS.left);
+  });
+
+  it('confirms on a tap', () => {
+    expect(menuGesture(stroke(), { x: 102, y: 103, t: 90 })).toEqual(MENU_KEYS.enter);
+  });
+
+  it('takes one step per swipe rather than scrolling away', () => {
+    // A long swipe is still ONE menu step: List widgets move one item per key
+    // and a flick that jumped ten items would be unusable.
+    const long = menuGesture(stroke(), { x: 100, y: 600, t: 200 });
+
+    expect(long).toEqual(MENU_KEYS.down);
+  });
+
+  it('ignores a rested thumb, so nothing is chosen by accident', () => {
+    expect(menuGesture(stroke(), { x: 101, y: 101, t: 900 })).toBeNull();
   });
 });

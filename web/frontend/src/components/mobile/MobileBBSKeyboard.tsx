@@ -6,6 +6,7 @@ interface MobileBBSKeyboardProps {
 }
 
 const SHIFT_KEY = '__SHIFT__';
+const MODE_KEY = '__MODE__';
 
 interface KeyDef {
   label: string;
@@ -14,18 +15,27 @@ interface KeyDef {
   cls?: string;
 }
 
-const ROWS: KeyDef[][] = [
-  // BBS navigation row
-  [
-    { label: '←', data: '\x1b[D', cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: '↑', data: '\x1b[A', cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: '↓', data: '\x1b[B', cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: '→', data: '\x1b[C', cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: 'ESC',   data: '\x1b',  cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: 'Ret',   data: '\r',    wide: true, cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: '⌫',     data: '\x7f', cls: 'mobile-bbs-keyboard__key--nav' },
-    { label: 'Spc',   data: ' ',    cls: 'mobile-bbs-keyboard__key--nav' },
-  ],
+/**
+ * Which set of keys is showing. Letters cannot reach '!' or '#', and a BBS
+ * password commonly has both, so there has to be a way to get at the symbols
+ * - the same letters/symbols toggle a phone keyboard has.
+ */
+type KeyboardMode = 'letters' | 'symbols';
+
+/** The row every layout keeps: arrows, Escape, Return, Backspace, Space. */
+const NAV_ROW: KeyDef[] = [
+  { label: '←', data: '\x1b[D', cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: '↑', data: '\x1b[A', cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: '↓', data: '\x1b[B', cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: '→', data: '\x1b[C', cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: 'ESC',   data: '\x1b',  cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: 'Ret',   data: '\r',    wide: true, cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: '⌫',     data: '\x7f', cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: 'Spc',   data: ' ',    cls: 'mobile-bbs-keyboard__key--nav' },
+];
+
+const LETTER_ROWS: KeyDef[][] = [
+  NAV_ROW,
   // Number row
   [
     { label: '1', data: '1' }, { label: '2', data: '2' }, { label: '3', data: '3' },
@@ -58,18 +68,65 @@ const ROWS: KeyDef[][] = [
     { label: 'Z', data: 'z' }, { label: 'X', data: 'x' }, { label: 'C', data: 'c' },
     { label: 'V', data: 'v' }, { label: 'B', data: 'b' }, { label: 'N', data: 'n' },
     { label: 'M', data: 'm' }, { label: '.', data: '.' }, { label: ',', data: ',' },
+    { label: '!#1', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' },
   ],
 ];
+
+/**
+ * Everything a password can contain that the letter layout cannot reach.
+ *
+ * This is the printable ASCII set minus the letters, digits and the handful
+ * already on the letter layout, so any password a user can type on a real
+ * keyboard can be typed here too.
+ */
+const SYMBOL_ROWS: KeyDef[][] = [
+  NAV_ROW,
+  [
+    { label: '!', data: '!' }, { label: '"', data: '"' }, { label: '#', data: '#' },
+    { label: '$', data: '$' }, { label: '%', data: '%' }, { label: '&', data: '&' },
+    { label: "'", data: "'" }, { label: '(', data: '(' }, { label: ')', data: ')' },
+    { label: '*', data: '*' },
+  ],
+  [
+    { label: '+', data: '+' }, { label: ',', data: ',' }, { label: '-', data: '-' },
+    { label: '.', data: '.' }, { label: '/', data: '/' }, { label: ':', data: ':' },
+    { label: ';', data: ';' }, { label: '<', data: '<' }, { label: '=', data: '=' },
+    { label: '>', data: '>' },
+  ],
+  [
+    { label: '?', data: '?' }, { label: '@', data: '@' }, { label: '[', data: '[' },
+    { label: '\\', data: '\\' }, { label: ']', data: ']' }, { label: '^', data: '^' },
+    { label: '_', data: '_' }, { label: '`', data: '`' }, { label: '{', data: '{' },
+    { label: '|', data: '|' },
+  ],
+  [
+    { label: '}', data: '}' }, { label: '~', data: '~' },
+    { label: 'ABC', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' },
+  ],
+];
+
+const LAYOUTS: Record<KeyboardMode, KeyDef[][]> = {
+  letters: LETTER_ROWS,
+  symbols: SYMBOL_ROWS,
+};
 
 export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const [shift, setShift] = useState(false);
+  const [mode, setMode] = useState<KeyboardMode>('letters');
   const shiftRef = useRef(shift);
   shiftRef.current = shift;
 
   const handleKey = useCallback((raw: string) => {
     if (raw === SHIFT_KEY) {
       setShift(s => !s);
+      return;
+    }
+    if (raw === MODE_KEY) {
+      // Shift is a letters-only idea; leaving it armed across the switch
+      // would upper-case nothing and confuse the indicator.
+      setShift(false);
+      setMode(m => (m === 'letters' ? 'symbols' : 'letters'));
       return;
     }
     const data = shiftRef.current && raw.length === 1 ? raw.toUpperCase() : raw;
@@ -113,17 +170,18 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
 
   return (
     <div className="mobile-bbs-keyboard" ref={containerRef}>
-      {ROWS.map((row, ri) => (
+      {LAYOUTS[mode].map((row, ri) => (
         <div key={ri} className="mobile-bbs-keyboard__row">
           {row.map((key, ki) => {
             const isShiftKey = key.data === SHIFT_KEY;
+            const isModeKey = key.data === MODE_KEY;
             const cls = [
               'mobile-bbs-keyboard__key',
               key.cls ?? '',
               key.wide ? 'mobile-bbs-keyboard__key--wide' : '',
               isShiftKey && shift ? 'mobile-bbs-keyboard__key--shift-active' : '',
             ].filter(Boolean).join(' ');
-            const label = !isShiftKey && shift && key.data.length === 1
+            const label = !isShiftKey && !isModeKey && shift && key.data.length === 1
               ? key.label.toUpperCase()
               : key.label;
             return (

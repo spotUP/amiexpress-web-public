@@ -2011,6 +2011,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     // Cursor style for mouse hover feedback (CSS cursor property)
+    // A server-rendered door telling us which touch scheme the player needs.
+    // Re-dispatched as the same DOM event client doors use, so the page has
+    // one listener regardless of where the door runs.
+    socket.on('door:input-mode', (mode: string) => {
+      if (mode !== 'menu' && mode !== 'game') return;
+      window.dispatchEvent(new CustomEvent('bbs:input-mode', { detail: mode }));
+    });
+
     socket.on('cursor-style', (style: string) => {
       if (terminalRef.current) {
         terminalRef.current.style.cursor = style;

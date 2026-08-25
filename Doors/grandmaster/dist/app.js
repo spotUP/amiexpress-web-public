@@ -173,11 +173,34 @@ const GAMEPAD_MAPPING = {
  * Main application class
  */
 class GrandmasterApp {
+    /**
+     * Which screen the player is on.
+     *
+     * A property rather than a field so the touch scheme cannot drift out of
+     * sync with it: there are ten places that change screen, and a phone player
+     * who lands on a menu still holding piece controls cannot choose anything
+     * (reported live 2026-08-25). Only 'game' is play; a lobby is a list, and
+     * so are settings and stats.
+     */
+    get currentScreen() {
+        return this._currentScreen;
+    }
+    set currentScreen(screen) {
+        if (this._currentScreen === screen)
+            return;
+        this._currentScreen = screen;
+        try {
+            this.session?.bbs?.setInputMode?.(screen === 'game' ? 'game' : 'menu');
+        }
+        catch {
+            // A door must never die because the terminal could not be told.
+        }
+    }
     constructor(session) {
         this.gameEngine = null;
         this.network = null;
         this.attackManager = null;
-        this.currentScreen = 'menu';
+        this._currentScreen = 'menu';
         this._voiceRoom = null;
         this._voiceSocketHandlers = [];
         /**

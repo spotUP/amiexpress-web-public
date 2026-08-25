@@ -470,6 +470,20 @@ console.log('[BBSApi] Mouse events disabled');
     this.socket.emit('cursor-style', style);
   }
 
+  /**
+   * Declare which touch control scheme the player needs.
+   *
+   * 'menu' means swipes should move a selection and a tap should confirm;
+   * 'game' means the door's own pad or gestures. Only the door knows which it
+   * is showing, and a phone player cannot get past a menu that expects arrow
+   * keys without being told (reported live 2026-08-25). Server-rendered doors
+   * reach the terminal UI through this; client doors dispatch the same event
+   * directly (sdk/client/input-mode.ts).
+   */
+  setInputMode(mode: 'game' | 'menu'): void {
+    this.socket.emit('door:input-mode', mode);
+  }
+
   // ===== Modem Emulation =====
 
   /**

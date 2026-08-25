@@ -25,6 +25,7 @@ import {
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 import { stepBall } from './ball-physics';
 import { easePaddle } from './paddle-motion';
+import { setInputMode } from '@amiexpress/bbs-door-sdk/client';
 import { trackForState, MusicGameState } from './music-select';
 import { GamepadButton, GamepadAxis } from '@amiexpress/bbs-door-sdk/types/gamepad';
 import { horizontalBar, subcellPoint, dominantAxis } from '@amiexpress/bbs-door-sdk/engines/graphics/subcell';
@@ -634,6 +635,10 @@ class ArkanoidGame {
     });
 
     this.door.onUpdate((delta) => {
+      // OUTSIDE the playing guard on purpose: update() only runs during play,
+      // so syncing in there could announce 'game' and never 'menu'.
+      this.syncInputMode();
+
       if (this.data.state === 'playing') {
         // Process held keys for smooth paddle movement (no key repeat delay!)
         if (this.heldKeys.has('arrowleft') || this.heldKeys.has('a')) {
@@ -843,6 +848,25 @@ class ArkanoidGame {
         this.renderer.drawText(span.x, span.y, char, fg, ANSI.bg.black);
       }
     }
+  }
+
+  /** Last mode announced, so the door only speaks up when it changes. */
+  private lastInputMode: 'game' | 'menu' | null = null;
+
+  /**
+   * Tell the terminal UI which touch scheme the player needs.
+   *
+   * DERIVED from the game state on every frame rather than announced at each
+   * of the dozen places that assign it - one missed assignment would strand a
+   * phone player on a menu with paddle controls, which is the bug this fixes.
+   * Paused counts as play: the overlay wants the pad's own Pause button, not
+   * a menu selection.
+   */
+  private syncInputMode(): void {
+    const mode = this.data.state === 'playing' || this.data.state === 'paused' ? 'game' : 'menu';
+    if (mode === this.lastInputMode) return;
+    this.lastInputMode = mode;
+    setInputMode(mode);
   }
 
   private update(deltaTime: number): void {

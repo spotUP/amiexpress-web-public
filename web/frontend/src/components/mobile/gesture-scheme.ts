@@ -32,6 +32,48 @@ export const GESTURE_KEYS = {
   hold: { key: 'c', code: 'KeyC' },
 } as const;
 
+/** Keys a menu needs: the four arrows, Enter to choose, Escape to back out. */
+export const MENU_KEYS = {
+  up: { key: 'ArrowUp', code: 'ArrowUp' },
+  down: { key: 'ArrowDown', code: 'ArrowDown' },
+  left: { key: 'ArrowLeft', code: 'ArrowLeft' },
+  right: { key: 'ArrowRight', code: 'ArrowRight' },
+  enter: { key: 'Enter', code: 'Enter' },
+} as const;
+
+/**
+ * A whole stroke, read as a menu action.
+ *
+ * Menus are List widgets: one key per gesture, no tracking. A swipe moves the
+ * selection one step whichever way the thumb went, and a tap confirms - so a
+ * phone player can work a door's menus without any buttons at all.
+ *
+ * Returns null when the stroke was too small to mean anything, so a stray
+ * graze does not pick a menu item.
+ */
+export function menuGesture(
+  stroke: GestureStroke,
+  point: GesturePoint,
+  tuning: GestureTuning = DEFAULT_TUNING
+): GestureKey | null {
+  const dx = point.x - stroke.start.x;
+  const dy = point.y - stroke.start.y;
+  const distance = Math.hypot(dx, dy);
+  const duration = point.t - stroke.start.t;
+
+  if (distance <= tuning.tapSlopPx) {
+    // Same rule as the playfield tap: small AND quick, so a rested thumb
+    // does not confirm a menu item on lift-off.
+    return duration <= tuning.tapMaxMs ? MENU_KEYS.enter : null;
+  }
+
+  // One step per swipe, along whichever axis actually won.
+  if (Math.abs(dy) > Math.abs(dx)) {
+    return dy > 0 ? MENU_KEYS.down : MENU_KEYS.up;
+  }
+  return dx > 0 ? MENU_KEYS.right : MENU_KEYS.left;
+}
+
 export interface GestureTuning {
   /** Horizontal travel that moves the piece one column, in px. */
   columnPx: number;
@@ -48,16 +90,31 @@ export interface GestureTuning {
   swipeVelocityPxPerMs: number;
   /** How far back the flick is measured, in milliseconds. */
   flickWindowMs: number;
+  /**
+   * The winning axis must beat the other by this much before the stroke
+   * commits. Nobody swipes straight, and a stroke that locked on the first
+   * 12px of a slightly diagonal flick locked the WRONG way about as often as
+   * the right one.
+   */
+  axisDominance: number;
+  /** A tap must also be over this quickly. A slow press is not a tap. */
+  tapMaxMs: number;
 }
 
 export const DEFAULT_TUNING: GestureTuning = {
   columnPx: 24,
   rowPx: 28,
   tapSlopPx: 10,
-  axisLockPx: 12,
-  swipeDistancePx: 45,
-  swipeVelocityPxPerMs: 0.35,
+  // Was 12 with no dominance requirement, which is what let a downward swipe
+  // drift sideways: 13px across and 11px down locked HORIZONTAL and the
+  // whole swipe then moved the piece ("it still moves sideways easily when
+  // swiping down", 2026-08-25).
+  axisLockPx: 14,
+  axisDominance: 1.5,
+  swipeDistancePx: 38,
+  swipeVelocityPxPerMs: 0.28,
   flickWindowMs: 120,
+  tapMaxMs: 250,
 };
 
 export interface GesturePoint {
@@ -137,9 +194,19 @@ export function trackMove(
   }
 
   // Commit to one axis as soon as the stroke is clearly going somewhere,
-  // then ignore the other. Thumbs do not travel in straight lines.
+  // then ignore the other. Thumbs do not travel in straight lines, so the
+  // winner also has to be a CLEAR winner - otherwise the lock is a coin toss
+  // decided by the first few pixels of a diagonal flick.
   if (stroke.axis === 'none' && Math.max(Math.abs(dxTotal), Math.abs(dyTotal)) >= tuning.axisLockPx) {
-    stroke.axis = Math.abs(dxTotal) > Math.abs(dyTotal) ? 'horizontal' : 'vertical';
+    const ax = Math.abs(dxTotal);
+    const ay = Math.abs(dyTotal);
+    const dominant = Math.max(ax, ay);
+    const other = Math.min(ax, ay);
+    // Undecided strokes stay unlocked and emit nothing until they commit,
+    // which is why a wobbly start no longer slides the piece.
+    if (dominant >= other * tuning.axisDominance) {
+      stroke.axis = ax > ay ? 'horizontal' : 'vertical';
+    }
     // Deliberately NOT re-anchored: the travel that decided the axis is
     // real movement on it, and swallowing the first 12px made the piece
     // lag the thumb by half a cell on every stroke.
@@ -182,7 +249,14 @@ export function endStroke(
   const dy = point.y - stroke.start.y;
   const distance = Math.hypot(dx, dy);
 
-  if (!stroke.moved && distance <= tuning.tapSlopPx) {
+  // A tap is small, QUICK, and never committed to a direction. Distance alone
+  // was letting swipes rotate the piece: a fast flick whose touchmove events
+  // were coalesced away arrives as a start and an end, and if the thumb rolled
+  // back on lift-off the two points are close together - indistinguishable
+  // from a tap without the time and axis checks ("it often rotates when I
+  // swipe down to hard drop", 2026-08-25).
+  const duration = point.t - stroke.start.t;
+  if (!stroke.moved && stroke.axis === 'none' && distance <= tuning.tapSlopPx && duration <= tuning.tapMaxMs) {
     return GESTURE_KEYS.rotate;
   }
 

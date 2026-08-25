@@ -171,7 +171,30 @@ export class GrandmasterApp {
   private network: GrandmasterNetworkManager | null = null;
   private attackManager: AttackManager | null = null;
   private multiplayerServer: MultiplayerServer;
-  private currentScreen: 'menu' | 'game' | 'lobby' | 'settings' | 'stats' = 'menu';
+  private _currentScreen: 'menu' | 'game' | 'lobby' | 'settings' | 'stats' = 'menu';
+
+  /**
+   * Which screen the player is on.
+   *
+   * A property rather than a field so the touch scheme cannot drift out of
+   * sync with it: there are ten places that change screen, and a phone player
+   * who lands on a menu still holding piece controls cannot choose anything
+   * (reported live 2026-08-25). Only 'game' is play; a lobby is a list, and
+   * so are settings and stats.
+   */
+  private get currentScreen(): 'menu' | 'game' | 'lobby' | 'settings' | 'stats' {
+    return this._currentScreen;
+  }
+
+  private set currentScreen(screen: 'menu' | 'game' | 'lobby' | 'settings' | 'stats') {
+    if (this._currentScreen === screen) return;
+    this._currentScreen = screen;
+    try {
+      (this.session?.bbs as any)?.setInputMode?.(screen === 'game' ? 'game' : 'menu');
+    } catch {
+      // A door must never die because the terminal could not be told.
+    }
+  }
   private _voiceRoom: string | null = null;
   private _voiceSocketHandlers: Array<[string, (...args: any[]) => void]> = [];
 

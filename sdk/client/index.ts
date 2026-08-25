@@ -709,6 +709,12 @@ export { ClientDoor as Door };
 export { ScreenBuffer, type ScreenBufferOptions } from './screen-buffer';
 
 /**
+ * Touch control scheme. A door declares whether the player is on a menu or in
+ * play so the on-screen gestures can mean the right thing.
+ */
+export { setInputMode, INPUT_MODE_EVENT, type DoorInputMode } from './input-mode';
+
+/**
  * Export UIEngine for client doors
  */
 export { UIEngine } from '../engines/ui/ui-engine';

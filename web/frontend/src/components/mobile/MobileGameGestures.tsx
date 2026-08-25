@@ -15,6 +15,7 @@ import {
   beginStroke,
   trackMove,
   endStroke,
+  menuGesture,
   type GestureKey,
   type GestureStroke,
 } from './gesture-scheme';
@@ -27,11 +28,20 @@ export interface MobileGameGesturesProps {
   onUseButtons: () => void;
   /** Door name, shown on the hint strip. */
   title: string;
+  /**
+   * What the door is showing. On a menu the same surface has to speak arrows
+   * and Enter instead of piece movement, or the player cannot get past the
+   * title screen.
+   */
+  mode?: 'game' | 'menu';
 }
 
-export function MobileGameGestures({ onKey, onUseButtons, title }: MobileGameGesturesProps) {
+export function MobileGameGestures({ onKey, onUseButtons, title, mode = 'game' }: MobileGameGesturesProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const strokeRef = useRef<GestureStroke | null>(null);
+  /** Read inside listeners that are bound once; a ref avoids rebinding them. */
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   /** Identifier of the thumb that owns the stroke; a second finger is ignored. */
   const touchIdRef = useRef<number | null>(null);
 
@@ -66,6 +76,9 @@ export function MobileGameGestures({ onKey, onUseButtons, title }: MobileGameGes
       const stroke = strokeRef.current;
       if (!touch || !stroke) return;
       event.preventDefault();
+      // A menu acts on the completed stroke, not on the way through: one
+      // swipe is one step, so tracking the thumb would scroll the list away.
+      if (modeRef.current === 'menu') return;
       fire(trackMove(stroke, { x: touch.clientX, y: touch.clientY, t: event.timeStamp }));
     };
 
@@ -75,7 +88,10 @@ export function MobileGameGestures({ onKey, onUseButtons, title }: MobileGameGes
       if (!touch || !stroke) return;
       event.preventDefault();
 
-      const key = endStroke(stroke, { x: touch.clientX, y: touch.clientY, t: event.timeStamp });
+      const point = { x: touch.clientX, y: touch.clientY, t: event.timeStamp };
+      const key = modeRef.current === 'menu'
+        ? menuGesture(stroke, point)
+        : endStroke(stroke, point);
       if (key) onKey(key.key, key.code);
 
       strokeRef.current = null;
@@ -109,10 +125,19 @@ export function MobileGameGestures({ onKey, onUseButtons, title }: MobileGameGes
         aria-label={`${title} gesture controls`}
       />
       <div className="mobile-game-gestures__hint">
-        <span>Drag to move</span>
-        <span>Tap to rotate</span>
-        <span>Flick down to drop</span>
-        <span>Flick up to hold</span>
+        {mode === 'menu' ? (
+          <>
+            <span>Swipe to move</span>
+            <span>Tap to choose</span>
+          </>
+        ) : (
+          <>
+            <span>Drag to move</span>
+            <span>Tap to rotate</span>
+            <span>Flick down to drop</span>
+            <span>Flick up to hold</span>
+          </>
+        )}
         <button
           type="button"
           className="mobile-game-gestures__switch"
