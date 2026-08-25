@@ -76,6 +76,17 @@ describe('the pointer follows the RUNNING door, not the last one', () => {
     expect(body).toMatch(/capturePointer\.current\s*=\s*false/);
   });
 
+  it('locks the pointer only for a door that asked for it', () => {
+    // The missing mouse pointer in LiveChat was POINTER LOCK, not the CSS
+    // cursor: clicking the terminal locked the pointer whenever game mode
+    // was on - which is every client door - and the browser then announced
+    // "press Esc to show your cursor". Three fixes aimed at `cursor: none`
+    // changed nothing because they were aimed at the wrong mechanism.
+    // The condition guarding the lock request, wherever it sits.
+    expect(terminal).toMatch(/if \(capturePointer\.current && !document\.pointerLockElement/);
+    expect(terminal).not.toMatch(/if \(gameMode\.current && !document\.pointerLockElement/);
+  });
+
   it('gives the pointer back when a door unloads', () => {
     const start = terminal.indexOf("socket.on('door:unload-client'");
     expect(start).toBeGreaterThan(0);

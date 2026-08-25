@@ -39,6 +39,21 @@ export class Question extends Box {
   private _overlay?: Overlay;
   private _responsiveCleanup?: () => void;
   private _trapCleanup?: () => void;
+
+  /**
+   * Give back the focus trap this dialog installed.
+   *
+   * Only ours: Screen.releaseFocusTrap(owner) ignores the call when another
+   * modal has since taken the trap, so a dialog closing behind a newer one
+   * cannot strand it.
+   */
+  private releaseTrap(): void {
+    (this.screen as any)?.releaseFocusTrap?.(this);
+    if (this._trapCleanup) {
+      this._trapCleanup();
+      this._trapCleanup = undefined;
+    }
+  }
   private _desktopWidth: number | string | undefined;
   private _mobileWidth: number | string | undefined;
   private _desktopButtonWidth: number = 10;
@@ -164,6 +179,7 @@ export class Question extends Box {
     });
 
     this.yesButton.on('press', () => {
+      this.releaseTrap();
       this.hide();
       this.emit('yes');
       this.emit('answer', true);
@@ -171,6 +187,7 @@ export class Question extends Box {
     });
 
     this.noButton.on('press', () => {
+      this.releaseTrap();
       this.hide();
       this.emit('no');
       this.emit('answer', false);
@@ -179,6 +196,7 @@ export class Question extends Box {
 
     // Close on escape (same as No)
     this.key(['escape'], () => {
+      this.releaseTrap();
       this.hide();
       this.emit('no');
       this.emit('answer', false);
@@ -187,6 +205,7 @@ export class Question extends Box {
 
     // Yes on enter/y
     this.key(['enter', 'y'], () => {
+      this.releaseTrap();
       this.hide();
       this.emit('yes');
       this.emit('answer', true);
@@ -195,6 +214,7 @@ export class Question extends Box {
 
     // No on n
     this.key(['n'], () => {
+      this.releaseTrap();
       this.hide();
       this.emit('no');
       this.emit('answer', false);
@@ -250,6 +270,13 @@ export class Question extends Box {
     if (this.screen) {
       this.screen.saveFocus?.();
       this.screen.focusPush?.(this);
+      // A REAL focus trap, not just a key filter. Screen consults
+      // screen.focusTrap when it decides where an arrow key may move focus;
+      // without it the arrows walked straight out of the dialog and into the
+      // menu bar behind it while a confirmation was still waiting for an
+      // answer ("I can still navigate to the menu with arrow keys when the
+      // LiveChat quit dialog is showing", 2026-08-26).
+      (this.screen as any).trapFocus?.(this);
       // Also trap navigation keys to prevent them from leaking to elements behind
       if (!this._trapCleanup) {
         this._trapCleanup = trapModalInput(this);

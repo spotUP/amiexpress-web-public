@@ -121,10 +121,16 @@ describe('leaving the menus', () => {
     screen?.destroy();
   });
 
-  it('closes an open menu on Escape and puts focus back on its button', () => {
+  it('leaves the menus entirely on ONE Escape', () => {
+    // Desktop menu bars take two presses - one to close the menu, one to
+    // leave the bar - and that was reported as a nuisance here: "the first
+    // Esc closes the menu but focus stays on the menu, I have to press Esc
+    // again to get out" (2026-08-26).
     screen = makeScreen();
     const menuBar = makeMenuBar(screen);
     const first = buttons(menuBar)[0];
+    const onExit = jest.fn();
+    menuBar.on('exit', onExit);
 
     first.focus();
     press(first, 'down');   // open the menu
@@ -133,7 +139,7 @@ describe('leaving the menus', () => {
     press((menuBar as any).dropdowns[0], 'escape');
 
     expect(DropdownMenu.isAnyOpen()).toBe(false);
-    expect(focusedElement(screen)).toBe(first);
+    expect(onExit).toHaveBeenCalled();
   });
 
   it('emits exit on Escape when no menu is open, so the host can move focus', () => {
@@ -233,5 +239,62 @@ describe('a menu that has just opened', () => {
 
     expect(DropdownMenu.isAnyOpen()).toBe(true);
     expect(fullRedraws).toBeGreaterThan(0);
+  });
+});
+
+describe('the FIRST menu opened on a screen that has already rendered', () => {
+  let screen: any;
+
+  afterEach(() => {
+    DropdownMenu.closeAll();
+    screen?.destroy();
+  });
+
+  /** The characters painted where the menu should be. */
+  function paintedAt(scr: any, dropdown: any): string {
+    const pos = dropdown._getCoords();
+    const row = scr.buffer[pos.yi];
+    return row ? row.slice(pos.xi, pos.xl).map((c: [number, string]) => c[1]).join('') : '';
+  }
+
+  it('is painted the moment it opens', () => {
+    // The real sequence: the door draws its UI, THEN the player opens a
+    // menu. A menu built at one position and moved to its anchor only when
+    // opened kept the coords it was built with, so the first open painted
+    // nothing and the player had to press a key to shake it loose.
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    screen.render();                    // the door's UI is on screen already
+
+    // The menu has been laid out at least once at its BUILD position, which
+    // is what leaves a stale entry in the coords cache.
+    const built = (menuBar as any).dropdowns[0];
+    built._getCoords();
+
+    const first = buttons(menuBar)[0];
+    first.focus();
+    press(first, 'enter');
+
+    const dropdown = (menuBar as any).dropdowns[0];
+    expect(dropdown.hidden).toBe(false);
+    expect(paintedAt(screen, dropdown).trim().length).toBeGreaterThan(0);
+  });
+
+  it('sits where its button is, not where it was built', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    screen.render();
+    (menuBar as any).dropdowns[1]._getCoords();
+
+    const second = buttons(menuBar)[1];
+    second.focus();
+    press(second, 'enter');
+
+    const dropdown = (menuBar as any).dropdowns[1];
+    const menuPos = dropdown._getCoords();
+    const buttonPos = second._getCoords();
+
+    expect(menuPos.xi).toBe(buttonPos.xi);
+    expect(menuPos.yi).toBe(buttonPos.yl);
   });
 });

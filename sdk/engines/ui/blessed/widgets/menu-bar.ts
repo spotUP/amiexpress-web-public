@@ -187,14 +187,25 @@ export class MenuBar extends Element {
       // and hands focus back to this button; a second Escape gives focus up
       // to the host, so the user is never stranded on the bar.
       button.key(['escape'], () => {
+        // ONE Escape leaves the menus entirely - close whatever is open and
+        // hand focus back to the host. The two-step version (first Escape
+        // closes the menu but keeps focus on the bar, second Escape leaves)
+        // is what desktop menu bars do, and it was reported as a nuisance
+        // here: "the first Esc closes the menu but focus stays on the menu,
+        // I have to press Esc again to get out" (2026-08-26). In a chat
+        // window the player wants to be back at the message box.
         if (DropdownMenu.isAnyOpen()) {
           this.closeAll();
-          button.focus();
-        } else {
-          this.emit('exit');
         }
+        this.emit('exit');
         this.screen?.render();
         return true;
+      });
+
+      // Escape inside an open menu leaves the bar altogether - see the
+      // button's own escape handler for why one press rather than two.
+      dropdown.on('closed-by-escape', () => {
+        this.emit('exit');
       });
 
       // Dropdown navigation

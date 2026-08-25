@@ -105,7 +105,11 @@ export class DropdownMenu extends Element {
       } else if (key.name === 'enter' || key.name === 'space') {
         this.selectItem();
       } else if (key.name === 'escape') {
+        // Tell the host it was ESCAPE that closed this, so a menu bar can
+        // hand focus back where the player wants it in ONE press rather
+        // than leaving them parked on the bar.
         this.close();
+        this.emit('closed-by-escape');
       } else if (key.name === 'tab') {
         this.emit(key.shift ? 'tab-prev' : 'tab-next');
         this.close();
@@ -166,6 +170,14 @@ export class DropdownMenu extends Element {
 
     this.left = clampedLeft;
     this.top = clampedTop;
+    // Moving an element does not invalidate its CACHED coords, and this menu
+    // is positioned only now - at its anchor - having been built somewhere
+    // else. Without this the first paint used the coords from construction,
+    // so the first menu opened invisibly and only appeared once a keystroke
+    // forced the cache to be rebuilt: "I need to press arrow down", and
+    // "once one menu is showing I can tab between menus and they show"
+    // (reported 2026-08-26).
+    this._invalidateCoords();
     console.log('[DropdownMenu] Calling show()');
     this.show();
     console.log('[DropdownMenu] Calling focus()');
@@ -187,6 +199,7 @@ export class DropdownMenu extends Element {
     // dirtied the screen.
     (this.screen as any).forceFullRedraw?.();
     this.screen.render();
+
   }
 
   openFor(anchor: Element, align: 'left' | 'right' = 'left'): void {

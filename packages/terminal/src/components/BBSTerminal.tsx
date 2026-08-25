@@ -2810,12 +2810,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       alt: event.altKey
     });
 
-    // Game mode: lock the pointer to the terminal on the first click.
-    // Locked, the mouse cannot stray off the playfield mid-game - the OS
-    // pointer is captured and movement arrives as deltas that the window
-    // listener below steers with. Esc releases the lock (browser UI);
-    // the next click re-arms it.
-    if (gameMode.current && !document.pointerLockElement && terminalRef.current) {
+    // Lock the pointer to the terminal on the first click - but ONLY for a
+    // door that asked for the pointer.
+    //
+    // This was gated on game mode, which is on for EVERY client door, so
+    // clicking LiveChat locked the pointer: the cursor vanished and the
+    // browser announced "press Esc to show your cursor". THAT is what the
+    // missing mouse pointer has been all along - not the CSS cursor at all,
+    // which is why three fixes aimed at `cursor: none` changed nothing
+    // (reported 2026-08-26, finally with the browser's own dialog quoted).
+    //
+    // Locked, the mouse cannot stray off the playfield mid-game; that is
+    // worth it for Arkanoid and worthless for a chat window.
+    if (capturePointer.current && !document.pointerLockElement && terminalRef.current) {
       lockedPointer.current = { x: event.clientX, y: event.clientY };
       try {
         const result: any = terminalRef.current.requestPointerLock?.();
