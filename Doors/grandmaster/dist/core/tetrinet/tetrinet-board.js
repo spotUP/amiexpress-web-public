@@ -124,24 +124,29 @@ function clearLinesWithSpecials(board, lines) {
             }
         }
     }
-    // Remove cleared lines (shift down)
-    const sortedLines = [...lines].sort((a, b) => b - a); // Sort descending
-    for (const lineY of sortedLines) {
-        // Move all rows above down by one
-        for (let y = lineY; y > 0; y--) {
-            board.grid[y] = board.grid[y - 1];
-        }
-        // Create new empty row at top
-        board.grid[0] = [];
+    // Remove the cleared rows and drop everything above them.
+    //
+    // This used to shift rows down one cleared line at a time, DESCENDING -
+    // which is exactly backwards: removing row 21 first slides row 20 down
+    // into 21, so removing "20" next took the untouched row 19 and left a
+    // completed row on the board. Clearing two or more lines at once was
+    // wrong every time (reported live 2026-08-25). The main modes had the
+    // same family of bug in core/board.ts.
+    //
+    // Filtering is order-independent, so there is no order to get wrong.
+    const doomed = new Set(lines);
+    const survivors = board.grid.filter((_row, y) => !doomed.has(y));
+    const emptyRow = () => {
+        const row = [];
         for (let x = 0; x < board.width; x++) {
-            board.grid[0][x] = {
-                filled: false,
-                color: null,
-                locked: false,
-                special: undefined,
-            };
+            row.push({ filled: false, color: null, locked: false, special: undefined });
         }
-    }
+        return row;
+    };
+    const fresh = [];
+    for (let i = 0; i < lines.length; i++)
+        fresh.push(emptyRow());
+    board.grid = [...fresh, ...survivors];
     return collectedSpecials;
 }
 /**

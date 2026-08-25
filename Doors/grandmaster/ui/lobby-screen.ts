@@ -91,7 +91,11 @@ export class LobbyScreen {
         },
         {
           key: 'garbage',
-          label: 'Garbage Lines',
+          // "Garbage Lines" read as "start the boards with garbage in them",
+          // which is not what it does - it decides whether clearing lines
+          // SENDS garbage to opponents. Reported as a bug on that reading
+          // (2026-08-25); the behaviour is right, the name was not.
+          label: 'Garbage Attacks',
           type: 'checkbox',
           default: true,
           hostOnly: true,
