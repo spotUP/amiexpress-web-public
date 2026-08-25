@@ -1357,6 +1357,12 @@ class ArkanoidGame {
       } else {
         this.data.state = 'paused';
       }
+    } else if (k === 'p') {
+      // Explicit pause. Space already pauses, but ONLY when no ball is
+      // waiting to be launched - so it cannot be offered as a pause
+      // control (an on-screen Pause button would launch the ball instead
+      // half the time). P always pauses.
+      this.data.state = 'paused';
     } else if (k === 'q') {
       this.data.state = 'menu';
     }
