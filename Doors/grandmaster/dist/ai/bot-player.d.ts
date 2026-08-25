@@ -25,6 +25,23 @@ export declare class BotPlayer {
      * the piece fall, it needs to notice a new piece spawning instead.
      */
     private plannedPieceKey;
+    /**
+     * Reusable occupancy grid for placement evaluation.
+     *
+     * Evaluation used to cloneBoard() for EVERY candidate placement - ~80 per
+     * think (2 pieces x 4 rotations x ~10 columns), each allocating 240 fresh
+     * Cell objects, i.e. ~19,000 allocations per think. With three bots
+     * thinking 20x/second that is roughly a million allocations per second on
+     * the same event loop that renders the game, and the resulting GC pauses
+     * surface as frame hitches. A single Uint8Array reused across every
+     * candidate removes the allocation entirely; only occupancy matters for
+     * the heuristics, never cell colour.
+     */
+    private scratch;
+    private scratchW;
+    private scratchH;
+    /** Column heights, recomputed per candidate into a reused array. */
+    private colHeights;
     constructor(difficulty?: BotDifficulty);
     /**
      * Update bot AI (called every frame)

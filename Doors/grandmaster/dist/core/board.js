@@ -122,8 +122,14 @@ function getCompleteLines(board) {
  * Clear completed lines from board
  */
 function clearLines(board, lines) {
-    // Sort lines from top to bottom
-    const sorted = [...lines].sort((a, b) => a - b);
+    // Remove from the BOTTOM up. Splicing in ascending order shifted every
+    // later index down by one, so the second and subsequent removals deleted
+    // the wrong rows: clearing rows 20+21 spliced 20, which moved 21 up into
+    // slot 20, and then spliced slot 21 - i.e. the original row 22. A double
+    // therefore left one completed row sitting on the board and destroyed an
+    // untouched partial row instead. Descending order cannot disturb the
+    // indices still to be removed.
+    const sorted = [...lines].sort((a, b) => b - a);
     // Remove lines
     for (const lineY of sorted) {
         board.grid.splice(lineY, 1);

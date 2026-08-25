@@ -1173,10 +1173,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Connect to BBS backend
-    // In production, start with polling to wake up sleeping servers (Render free tier),
-    // then upgrade to WebSocket. In development, prefer WebSocket directly.
+    // WebSocket first everywhere, with polling kept as an automatic
+    // fallback. Production used to START on long-polling to wake sleeping
+    // free-tier servers, which meant every keystroke rode an HTTP request
+    // until the upgrade completed - unusable for an action game. socket.io
+    // falls back on its own if the WebSocket handshake fails.
     const socket = io(finalBackendUrl, {
-      transports: isDevelopment ? ['websocket', 'polling'] : ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       timeout: 20000,
       upgrade: true,
       rememberUpgrade: true,

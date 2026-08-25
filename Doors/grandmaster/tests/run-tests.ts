@@ -16,6 +16,7 @@
 const TEST_MODULES = [
   './attack-routing.test',
   './network-wiring.test',
+  './board-clear.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.

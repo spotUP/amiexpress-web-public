@@ -409,6 +409,11 @@ export class Screen extends Element {
    * Get all elements at screen coordinates
    */
   private getElementsAt(x: number, y: number): Element[] {
+    // Build the spatial index lazily, on the first mouse query after a
+    // render, instead of eagerly after every render.
+    if (!this._mouseIndexValid && y >= 0 && y < this.height && x >= 0 && x < this.width) {
+      this._rebuildMouseIndex();
+    }
     // Opt #7: Use spatial index if valid
     if (this._mouseIndexValid && y >= 0 && y < this.height && x >= 0 && x < this.width) {
       // CRITICAL: Return a copy to prevent caller from mutating internal index with .reverse()
@@ -999,8 +1004,12 @@ export class Screen extends Element {
     this._fullRedrawNeeded = false;
     this._dirtyElements.clear();
 
-    // Opt #7: Rebuild mouse index after rendering
-    this._rebuildMouseIndex();
+    // Opt #7: invalidate the mouse index rather than REBUILDING it here.
+    // Rebuilding allocated a fresh 24x80 grid of arrays and walked the whole
+    // element tree on every single render - pure waste during gameplay,
+    // when the mouse is disabled and nothing ever queries the index.
+    // getElementsAt() rebuilds on demand (and has a tree-walk fallback).
+    this._mouseIndexValid = false;
 
     this.emit('render');
   }

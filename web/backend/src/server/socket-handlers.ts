@@ -480,7 +480,9 @@ console.log('[socket-handlers] keys:state received:', data);
 
     // If door is active and has a key state handler, call it
     if (session.inDoorManager && session.doorKeyStateHandler) {
-console.log('[socket-handlers] Calling doorKeyStateHandler');
+      // No logging here: this fires on EVERY key event of every game-mode
+      // door. Synchronous stdout writes in the input path are the
+      // documented DOORMAN-freeze mechanism.
       session.doorKeyStateHandler(data);
     }
   });
@@ -551,10 +553,9 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
   });
 
   socket.on('command', (data: string) => {
-console.error('[COMMAND-HANDLER-ENTRY] COMMAND EVENT FIRED!', socket.id);
-console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
-console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
-
+    // Three synchronous stdout writes used to run here per KEYSTROKE
+    // (including a JSON.stringify of the payload). In a door that streams
+    // input during gameplay this is pure added latency on every key.
     const session = getSession(socket.id);
     if (!session) {
 console.error('No session found for socket:', socket.id);
