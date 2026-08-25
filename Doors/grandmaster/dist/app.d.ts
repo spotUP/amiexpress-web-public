@@ -18,6 +18,23 @@ interface DoorSession {
     params?: string[];
     args?: string[];
 }
+import type { GamepadTrigger } from '@amiexpress/bbs-door-sdk';
+import type { GameAction } from './core/types';
+export declare function parseTriggerStr(t: string): GamepadTrigger | null;
+export declare function buildGamepadMapping(defaults: Partial<Record<GameAction, GamepadTrigger[]>>, saved: Partial<Record<string, string[]>>): Partial<Record<GameAction, GamepadTrigger[]>>;
+/**
+ * Which game action drives which menu key.
+ *
+ * A player binds their pad ONCE, for the game, and those bindings have to
+ * work the menus too - otherwise every button can be bound and the menu is
+ * still dead, which is exactly how this was reported (8BitDo NES30 Pro,
+ * 2026-08-25). The menu used a hardcoded D-pad/A/B/Start scheme and never
+ * looked at the saved bindings at all.
+ */
+export declare const MENU_ACTION_KEYS: Partial<Record<GameAction, {
+    name: string;
+    sequence: string;
+}>>;
 /**
  * Main application class
  */

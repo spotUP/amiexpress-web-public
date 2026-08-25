@@ -19,6 +19,7 @@ const TEST_MODULES = [
   './board-clear.test',
   './lockout.test',
   './hard-drop-blur.test',
+  './gamepad-menu-bindings.test',
   './tetrinet-bots.test',
   './tetrinet-routing.test',
   './tetrinet-lobby.test',

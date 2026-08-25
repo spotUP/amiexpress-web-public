@@ -24,6 +24,54 @@ interface GamepadManagerOptions {
 /**
  * Manages gamepad input and generates events
  */
+/**
+ * Decode a hat-switch axis into D-pad directions.
+ *
+ * A pad the browser cannot fit to the standard layout reports its D-pad as a
+ * single axis holding one of eight positions, spaced 2/7 apart from -1 (up)
+ * going clockwise, with anything outside that range meaning "centred". This
+ * is the convention Chrome exposes for non-standard HID pads.
+ *
+ * Returns null when no axis looks like a hat, so a pad with only sticks is
+ * left alone.
+ */
+export function readHatAxis(axes: number[]): { up: boolean; down: boolean; left: boolean; right: boolean } | null {
+  // Hats live past the sticks; axis 9 is the usual home, but scan any axis
+  // beyond the first four rather than hard-coding one device's layout.
+  for (let i = 4; i < axes.length; i++) {
+    const value = axes[i];
+    if (typeof value !== 'number') continue;
+    // Centred hats sit outside [-1, 1] (commonly 1.28 or 3.28).
+    if (value < -1.1 || value > 1.1) continue;
+
+    const direction = hatDirection(value);
+    if (direction) return direction;
+  }
+  return null;
+}
+
+/** The eight hat positions, as a fraction of the way round from "up". */
+function hatDirection(value: number): { up: boolean; down: boolean; left: boolean; right: boolean } | null {
+  // -1 is up; each further step of 2/7 turns 45 degrees clockwise.
+  const step = 2 / 7;
+  const exact = (value + 1) / step;
+  const position = Math.round(exact);
+  if (position < 0 || position > 7) return null;
+
+  // The value has to land ON one of the eight positions. Unused axes rest at
+  // exactly 0, which is half a step from any real hat position - without this
+  // check a pad with a spare axis read as a permanent D-pad DOWN and a menu
+  // scrolled forever.
+  if (Math.abs(exact - position) > 0.2) return null;
+
+  const up = position === 0 || position === 1 || position === 7;
+  const right = position === 1 || position === 2 || position === 3;
+  const down = position === 3 || position === 4 || position === 5;
+  const left = position === 5 || position === 6 || position === 7;
+
+  return { up, down, left, right };
+}
+
 export class GamepadManager {
   private options: GamepadManagerOptions;
   private config: GamepadConfig;
@@ -166,10 +214,25 @@ export class GamepadManager {
    */
   private checkDPad(controllerId: number, state: GamepadState): void {
     // D-pad buttons are indices 12-15 in standard mapping
-    const up = state.buttons[12] || false;
-    const down = state.buttons[13] || false;
-    const left = state.buttons[14] || false;
-    const right = state.buttons[15] || false;
+    let up = state.buttons[12] || false;
+    let down = state.buttons[13] || false;
+    let left = state.buttons[14] || false;
+    let right = state.buttons[15] || false;
+
+    // Pads the browser cannot map to the standard layout report their D-pad
+    // as a HAT AXIS instead, and then buttons 12-15 do not exist at all - so
+    // the D-pad produced no events, could not be bound, and could not drive a
+    // menu. Reported with an 8BitDo NES30 Pro over USB (2026-08-25), which
+    // works in a pad tester precisely because a tester shows raw axes.
+    if (state.buttons.length < 16) {
+      const hat = readHatAxis(state.axes);
+      if (hat) {
+        up = up || hat.up;
+        down = down || hat.down;
+        left = left || hat.left;
+        right = right || hat.right;
+      }
+    }
 
     // Determine directions
     const horizontal: DPadDirection = left ? 'left' : right ? 'right' : 'neutral';

@@ -1083,8 +1083,12 @@ export class SettingsScreen {
         [GamepadAxis.RIGHT_STICK_Y]: 'right-y',
       };
       gim.on('axis', (axis: GamepadAxis, value: number) => {
-        const name = axisNames[axis];
-        if (!name || Math.abs(value) < 0.85) return;
+        if (Math.abs(value) < 0.85) return;
+        // Fall back to the raw axis number for anything past the two sticks.
+        // Pads the browser cannot fit to the standard layout put their D-pad
+        // on a hat axis, and refusing to name it meant it could not be bound
+        // at all (8BitDo NES30 Pro, reported 2026-08-25).
+        const name = axisNames[axis] ?? String(axis);
         addTrigger(`axis:${name}:${value > 0 ? 'positive' : 'negative'}`);
       });
     });

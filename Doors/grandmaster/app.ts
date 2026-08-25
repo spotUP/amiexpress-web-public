@@ -67,16 +67,17 @@ import { showTrainingConfig } from './ui/training-config';
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
 // into a GamepadTrigger object. Returns null for unknown formats.
-function parseTriggerStr(t: string): GamepadTrigger | null {
+const BUTTON_BY_NAME: Record<string, GamepadButton> = {
+  a: GamepadButton.A, b: GamepadButton.B, x: GamepadButton.X, y: GamepadButton.Y,
+  l1: GamepadButton.L1, r1: GamepadButton.R1, l2: GamepadButton.L2, r2: GamepadButton.R2,
+  select: GamepadButton.SELECT, start: GamepadButton.START,
+  l3: GamepadButton.L3, r3: GamepadButton.R3, home: GamepadButton.HOME,
+};
+
+export function parseTriggerStr(t: string): GamepadTrigger | null {
   if (t.startsWith('button:')) {
     const btn = t.slice(7);
-    const btnMap: Record<string, GamepadButton> = {
-      a: GamepadButton.A, b: GamepadButton.B, x: GamepadButton.X, y: GamepadButton.Y,
-      l1: GamepadButton.L1, r1: GamepadButton.R1, l2: GamepadButton.L2, r2: GamepadButton.R2,
-      select: GamepadButton.SELECT, start: GamepadButton.START,
-      l3: GamepadButton.L3, r3: GamepadButton.R3, home: GamepadButton.HOME,
-    };
-    const button = btnMap[btn];
+    const button = BUTTON_BY_NAME[btn];
     return button !== undefined ? { type: 'button', button } : null;
   }
   if (t.startsWith('dpad:')) {
@@ -89,7 +90,8 @@ function parseTriggerStr(t: string): GamepadTrigger | null {
       'left-x': GamepadAxis.LEFT_STICK_X, 'left-y': GamepadAxis.LEFT_STICK_Y,
       'right-x': GamepadAxis.RIGHT_STICK_X, 'right-y': GamepadAxis.RIGHT_STICK_Y,
     };
-    const axis = axisMap[axisName];
+    // Named sticks, or a bare axis number for anything else the pad exposes.
+    const axis = axisMap[axisName] ?? (/^\d+$/.test(axisName) ? Number(axisName) as GamepadAxis : undefined);
     if (axis === undefined) return null;
     return { type: 'axis', axis, direction: dirStr as 'positive' | 'negative' };
   }
@@ -98,7 +100,7 @@ function parseTriggerStr(t: string): GamepadTrigger | null {
 
 // Merge user's saved gamepad bindings on top of the default mapping.
 // Actions with user-defined triggers override the default; empty arrays disable.
-function buildGamepadMapping(
+export function buildGamepadMapping(
   defaults: Partial<Record<GameAction, GamepadTrigger[]>>,
   saved: Partial<Record<string, string[]>>
 ): Partial<Record<GameAction, GamepadTrigger[]>> {
@@ -114,27 +116,87 @@ function buildGamepadMapping(
   return result;
 }
 
+/**
+ * Which game action drives which menu key.
+ *
+ * A player binds their pad ONCE, for the game, and those bindings have to
+ * work the menus too - otherwise every button can be bound and the menu is
+ * still dead, which is exactly how this was reported (8BitDo NES30 Pro,
+ * 2026-08-25). The menu used a hardcoded D-pad/A/B/Start scheme and never
+ * looked at the saved bindings at all.
+ */
+export const MENU_ACTION_KEYS: Partial<Record<GameAction, { name: string; sequence: string }>> = {
+  left:       { name: 'left',   sequence: '\x1b[D' },
+  right:      { name: 'right',  sequence: '\x1b[C' },
+  soft_drop:  { name: 'down',   sequence: '\x1b[B' },
+  hard_drop:  { name: 'up',     sequence: '\x1b[A' },
+  rotate_cw:  { name: 'enter',  sequence: '\r' },
+  rotate_ccw: { name: 'escape', sequence: '\x1b' },
+  pause:      { name: 'escape', sequence: '\x1b' },
+};
+
 // Creates a menu-navigation GIM for non-game screens (menus, settings, etc.).
-// Dpad/stick → arrow keys; A/Start → Enter; B/Select → Escape.
+// The player's own bindings drive it, with the defaults underneath, plus
+// A/Start = Enter and B/Select = Escape so a pad works before it is bound.
 // Destroy the returned object when leaving the screen to restore the previous handler.
-function createMenuNav(bbsSession: any, screen: any): { destroy: () => void } {
+function createMenuNav(
+  bbsSession: any,
+  screen: any,
+  savedBindings: Partial<Record<string, string[]>> = {}
+): { destroy: () => void } {
   const gim = new GamepadInputManager(bbsSession);
 
   const emit = (name: string, sequence: string) =>
     screen.emit('keypress', sequence, { name, full: name, sequence });
 
+  const mapping = buildGamepadMapping(GAMEPAD_MAPPING, savedBindings);
+
+  /** Every trigger that should produce a given menu key. */
+  const triggersFor = (key: { name: string; sequence: string }): GamepadTrigger[] => {
+    const found: GamepadTrigger[] = [];
+    for (const [action, menuKey] of Object.entries(MENU_ACTION_KEYS)) {
+      if (menuKey?.name !== key.name) continue;
+      found.push(...(mapping[action as GameAction] ?? []));
+    }
+    return found;
+  };
+
+  const menuKeys = Object.values(MENU_ACTION_KEYS).filter(Boolean) as { name: string; sequence: string }[];
+
   gim.on('dpad', (dir: string) => {
-    if (dir === 'up')    emit('up',    '\x1b[A');
-    if (dir === 'down')  emit('down',  '\x1b[B');
-    if (dir === 'left')  emit('left',  '\x1b[D');
-    if (dir === 'right') emit('right', '\x1b[C');
-  });
-  gim.on('axis', (axis: number, value: number) => {
-    if (axis === 1 /* left-y */) {
-      if (value < -0.7) emit('up',   '\x1b[A');
-      if (value >  0.7) emit('down', '\x1b[B');
+    for (const key of menuKeys) {
+      if (triggersFor(key).some(t => t.type === 'dpad' && t.direction === dir)) {
+        emit(key.name, key.sequence);
+        return;
+      }
     }
   });
+
+  gim.on('axis', (axis: number, value: number) => {
+    if (Math.abs(value) < 0.7) return;
+    const direction = value > 0 ? 'positive' : 'negative';
+    for (const key of menuKeys) {
+      if (triggersFor(key).some(t => t.type === 'axis' && t.axis === axis && t.direction === direction)) {
+        emit(key.name, key.sequence);
+        return;
+      }
+    }
+  });
+
+  for (const btn of ['a', 'b', 'x', 'y', 'l1', 'r1', 'l2', 'r2', 'select', 'start', 'l3', 'r3', 'home'] as const) {
+    gim.on(`button:${btn}`, (pressed: boolean) => {
+      if (!pressed) return;
+      const button = BUTTON_BY_NAME[btn];
+      for (const key of menuKeys) {
+        if (triggersFor(key).some(t => t.type === 'button' && t.button === button)) {
+          emit(key.name, key.sequence);
+          return;
+        }
+      }
+    });
+  }
+
+  // Universal fallbacks, so an unbound pad still works a menu.
   gim.on('button:a',      (p: boolean) => { if (p) emit('enter',  '\r');    });
   gim.on('button:start',  (p: boolean) => { if (p) emit('enter',  '\r');    });
   gim.on('button:b',      (p: boolean) => { if (p) emit('escape', '\x1b'); });
@@ -543,7 +605,7 @@ export class GrandmasterApp {
     this.inputManager.suspend();  // Disable grabKeys so List widget receives input
 
     const menuScreen = new MenuScreen(this.screen, this.state, this.sounds);
-    const nav = createMenuNav(this.session.bbsSession, this.screen);
+    const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
 
     const selection = await menuScreen.show();
     nav.destroy();
@@ -686,7 +748,7 @@ export class GrandmasterApp {
     }
     this.inputHandler.setEnabled(false);
     this.inputManager.suspend();  // Disable grabKeys so List widgets can receive input
-    const nav = createMenuNav(this.session.bbsSession, this.screen);
+    const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
 
     // Start voice for the lobby + any subsequent VS game in this session
     const voiceMatchId = this.network?.getMatchState()?.matchId
@@ -1439,7 +1501,7 @@ export class GrandmasterApp {
   private async showSpectate(): Promise<void> {
     this.currentScreen = 'lobby';
     this.inputManager.suspend();
-    const nav = createMenuNav(this.session.bbsSession, this.screen);
+    const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
 
     if (!this.network) {
       this.network = new GrandmasterNetworkManager(this.session.bbsSession);
@@ -2582,7 +2644,7 @@ export class GrandmasterApp {
 
     // Disable grabKeys so List widgets can receive keyboard input
     this.inputManager.suspend();
-    const nav = createMenuNav(this.session.bbsSession, this.screen);
+    const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
 
     // Show difficulty selection
     const difficultyPanel = createBox({
@@ -2822,7 +2884,7 @@ export class GrandmasterApp {
     this.currentScreen = 'settings';
 
     this.inputManager.suspend();
-    const nav = createMenuNav(this.session.bbsSession, this.screen);
+    const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
     const settingsScreen = new SettingsScreen(this.screen, this.state, this.sounds, this.session.bbsSession);
     await settingsScreen.show();
     nav.destroy();
@@ -2842,7 +2904,7 @@ export class GrandmasterApp {
     this.currentScreen = 'stats';
 
     this.inputManager.suspend();
-    const nav = createMenuNav(this.session.bbsSession, this.screen);
+    const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
     const leaderboardScreen = new LeaderboardScreen(
       this.screen,
       this.highScores,
