@@ -178,7 +178,7 @@ describe('TerminalPage ARKANOID trackpad', () => {
     // A quarter of the strip to the right moves further than a quarter of
     // the board, because of the gearing.
     fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 4 }]);
-    const afterQuarter = harness.sendMouse.mock.calls.at(-1)?.[1] as { x: number };
+    const afterQuarter = harness.sendMouse.mock.calls[harness.sendMouse.mock.calls.length - 1]?.[1] as { x: number };
     expect(afterQuarter.x).toBeGreaterThan(40 + 79 / 4);
 
     // ...and it never runs off the end.
@@ -196,7 +196,7 @@ describe('TerminalPage ARKANOID trackpad', () => {
 
     fireTouch(pad, 'touchstart', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 2 }]);
     fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH * 0.75 }]);
-    const moved = harness.sendMouse.mock.calls.at(-1)?.[1] as { x: number };
+    const moved = harness.sendMouse.mock.calls[harness.sendMouse.mock.calls.length - 1]?.[1] as { x: number };
     fireTouch(pad, 'touchend', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH * 0.75 }]);
 
     // Thumb comes down again at the far LEFT: the paddle stays put.

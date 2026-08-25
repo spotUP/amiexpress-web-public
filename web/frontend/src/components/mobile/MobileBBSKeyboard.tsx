@@ -32,6 +32,8 @@ const ROWS: KeyDef[][] = [
     { label: '4', data: '4' }, { label: '5', data: '5' }, { label: '6', data: '6' },
     { label: '7', data: '7' }, { label: '8', data: '8' }, { label: '9', data: '9' },
     { label: '0', data: '0' },
+    // Also part of everyday email addresses (my-mail.com, first_last@...).
+    { label: '-', data: '-' }, { label: '_', data: '_' },
   ],
   // QWERTY row 1
   [
@@ -45,6 +47,10 @@ const ROWS: KeyDef[][] = [
     { label: 'A', data: 'a' }, { label: 'S', data: 's' }, { label: 'D', data: 'd' },
     { label: 'F', data: 'f' }, { label: 'G', data: 'g' }, { label: 'H', data: 'h' },
     { label: 'J', data: 'j' }, { label: 'K', data: 'k' }, { label: 'L', data: 'l' },
+    // Registration asks for an email address, which is unreachable without
+    // these. Sitting at the end of the short row keeps every other key where
+    // muscle memory left it.
+    { label: '@', data: '@' },
   ],
   // QWERTY row 3
   [
