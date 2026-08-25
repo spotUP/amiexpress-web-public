@@ -928,6 +928,17 @@ async function createApp(session) {
         invalidateCache(typingBar);
         screen.render();
     }
+    // Lay the panels out ONCE, now.
+    //
+    // updateLayout() was only ever reached from a panel event or from the
+    // resize handler, so the door depended on a resize arriving after it
+    // started. When the terminal settles its size before the door opens -
+    // which is what it does now - that event never comes, the panels keep the
+    // positions they were constructed with, and the whole UI renders on top of
+    // itself (reported live 2026-08-25 with screenshots, in both the in-BBS
+    // door and the standalone /chat page). A door has to lay itself out
+    // without waiting to be told the size changed.
+    updateLayout();
     // Bind layout updates to sidebar events
     sidebarPanel.on('drag', updateLayout);
     sidebarPanel.on('resize', updateLayout);
@@ -973,6 +984,7 @@ async function createApp(session) {
     function enterMobileMode() {
         if (mobileMode)
             return;
+        console.log(`[LiveChat/layout] enterMobileMode at ${screen.width}x${screen.height}`);
         mobileMode = true;
         // Save current panel parents and positions
         savedSidebarParent = sidebarPanel.parent;
@@ -1014,6 +1026,7 @@ async function createApp(session) {
     function exitMobileMode() {
         if (!mobileMode)
             return;
+        console.log(`[LiveChat/layout] exitMobileMode at ${screen.width}x${screen.height}`);
         mobileMode = false;
         // Hide carousel
         mobileCarousel.hide();
