@@ -397,6 +397,16 @@ class VideoTile {
         // no-video avatar.
         this.hasFrame = true;
         this.videoError = null;
+        // TEMPORARY: "every second frame in some render modes is broken". The
+        // ENCODERS are proven rectangular by
+        // web/backend/tests/doors/livechat-video-encoders.test.ts, so compare
+        // what arrives against the box it has to fit.
+        {
+            const rows = frame.split('\n');
+            const visible = rows.map(r => [...r.replace(/\{[^}]*\}/g, '')].length);
+            const box = this.videoBox;
+            console.log(`[VideoTile/diag] rows=${rows.length} widths=${JSON.stringify([...new Set(visible)])} box=${box.width}x${box.height} inner=${box.iwidth}x${box.iheight}`);
+        }
         this.videoBox.setContent(frame);
         // Also flip our copy of hasVideo so updateVideoDisplay won't rewrite
         // the avatar back over the frame on the next state tick.

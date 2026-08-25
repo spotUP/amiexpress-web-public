@@ -1259,12 +1259,10 @@ export async function createApp(session: DoorSession) {
     );
   }
 
-  // Escape on the menu bar (with no dropdown open) returns to where typing
-  // happens, so the menus are enterable AND leavable from the keyboard.
-  menuBar.element.on('exit', () => {
-    inputBox.focus();
-    screen.render();
-  });
+  // Leaving the menu bar is handled by the focus cycle in
+  // handlers/keyboard-shortcuts.ts, which knows which DIRECTION the player
+  // was moving. Escape emits the same event with no direction and lands on
+  // the message box, because that is the next stop after the bar.
 
   // ========== FOCUS BORDERS ==========
   // NOTE: Active panel borders (white on focus) are now handled automatically by SDK!

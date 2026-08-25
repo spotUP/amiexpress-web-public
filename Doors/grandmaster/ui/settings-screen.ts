@@ -501,9 +501,20 @@ export class SettingsScreen {
   /**
    * Edit a key binding
    */
-  private async editKeyBinding(bindingKey: keyof KeyBindings, displayName: string): Promise<void> {
+  /**
+   * Edit one key binding.
+   *
+   * Every binding is a list of key names EXCEPT useSpecialOn, which is a
+   * list per opponent slot - it is bound by position, not through this
+   * editor, so it is excluded from the type rather than special-cased in
+   * the body.
+   */
+  private async editKeyBinding(
+    bindingKey: Exclude<keyof KeyBindings, 'useSpecialOn'>,
+    displayName: string
+  ): Promise<void> {
     const kb = this.state.settings.keyBindings;
-    const currentKeys = kb[bindingKey];
+    const currentKeys: string[] | undefined = kb[bindingKey];
 
     // Show key binding dialog
     const bindingBox = createBox({
@@ -635,6 +646,14 @@ export class SettingsScreen {
       { key: 'hardDrop',  name: 'Hard Drop' },
       { key: 'hold',      name: 'Hold' },
       { key: 'pause',     name: 'Pause' },
+      // TetriNET specials. Absent from this wizard until 2026-08-26, which
+      // is how they disappeared from saved settings: the wizard writes the
+      // actions it lists, so anything it did not list was dropped. The
+      // number keys 1-6 target opponent slots and stay fixed, as in the
+      // reference client.
+      { key: 'useSpecialSelf',   name: 'Special On Self' },
+      { key: 'useSpecialRandom', name: 'Special On Random' },
+      { key: 'discardSpecial',   name: 'Discard Special' },
     ];
 
     const kb = this.state.settings.keyBindings;
@@ -667,7 +686,7 @@ export class SettingsScreen {
         (feedback
           ? `{green-fg}${feedback}{/green-fg}\n\n`
           : `{gray-fg}Press a key to bind{/gray-fg}\n` +
-            `{gray-fg}Enter=skip  Escape=done{/gray-fg}\n\n`) +
+            `{gray-fg}Enter = skip (leave unbound)   Escape = done{/gray-fg}\n\n`) +
         `{gray-fg}[${bar}] ${n}/${total}{/gray-fg}`
       );
       this.screen.render();
@@ -865,6 +884,9 @@ export class SettingsScreen {
       { key: 'hard_drop',  name: 'Hard Drop' },
       { key: 'hold',       name: 'Hold' },
       { key: 'pause',      name: 'Pause' },
+      { key: 'use_special_self',   name: 'Special On Self' },
+      { key: 'use_special_random', name: 'Special On Random' },
+      { key: 'discard_special',    name: 'Discard Special' },
     ];
 
     // Reorder so the chosen action is first; wrap around at the end
@@ -898,7 +920,7 @@ export class SettingsScreen {
         (feedback
           ? `{green-fg}${feedback}{/green-fg}\n\n`
           : `{gray-fg}Press a button/stick to bind{/gray-fg}\n` +
-            `{gray-fg}Enter=skip  Escape=done{/gray-fg}\n\n`) +
+            `{gray-fg}Enter = skip (leave unbound)   Escape = done{/gray-fg}\n\n`) +
         `{gray-fg}[${bar}] ${n}/${total}{/gray-fg}`
       );
       this.screen.render();

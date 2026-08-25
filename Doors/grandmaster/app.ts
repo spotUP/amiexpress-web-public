@@ -399,6 +399,20 @@ export class GrandmasterApp {
         // Merge saved settings over defaults (preserves new fields)
         Object.assign(this.state.settings, saved);
 
+        // ...but keyBindings is an OBJECT, and Object.assign replaces it
+        // whole. A file written before an action existed therefore deletes
+        // that action's keys outright: every player who had ever saved
+        // settings had no TetriNET special keys at all, because 1-6, 0, TAB
+        // and Backspace were added after their file was written. The keys
+        // arrived at the door and matched nothing ("the specials still
+        // don't fire on tab or number", four reports, 2026-08-26).
+        if (saved.keyBindings) {
+          this.state.settings.keyBindings = {
+            ...DEFAULT_KEYS,
+            ...saved.keyBindings,
+          } as typeof this.state.settings.keyBindings;
+        }
+
         // Anyone who played before 2026-08-25 has an ARR of 10ms saved -
         // five cells per rendered frame, which reads as the piece
         // teleporting. Nobody chose that; it was the old default. Raise it

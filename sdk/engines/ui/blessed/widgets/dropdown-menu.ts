@@ -113,6 +113,16 @@ export class DropdownMenu extends Element {
       } else if (key.name === 'tab') {
         this.emit(key.shift ? 'tab-prev' : 'tab-next');
         this.close();
+      } else if (key.name === 'left' || key.name === 'right') {
+        // Walk to the neighbouring menu with the OPEN menu following along,
+        // the way every desktop menu bar behaves. Left/Right already moved
+        // between buttons on the bar itself; with a menu open, focus is on
+        // this dropdown and they did nothing at all (asked for 2026-08-26).
+        //
+        // A DIFFERENT event from Tab on purpose: arrows wrap around the bar
+        // because they are menu navigation, while Tab walks off the end and
+        // hands focus back to the host's own cycle.
+        this.emit(key.name === 'left' ? 'menu-prev' : 'menu-next');
       }
       return true;
     });

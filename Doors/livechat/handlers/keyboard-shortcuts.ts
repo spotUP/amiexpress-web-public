@@ -109,6 +109,14 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: (
   s.key(['tab'], cycleFocusForward);
   s.key(['S-tab'], cycleFocusBackward);
 
+  // Tabbing off either end of the menu bar rejoins THIS cycle, in the
+  // direction the player was going - rather than the bar looping its own
+  // menus for ever, or dumping everyone back at the message box.
+  menuBar?.on?.('exit', (direction?: string) => {
+    if (direction === 'backward') cycleFocusBackward();
+    else cycleFocusForward();
+  });
+
   // Expose on screen for inputBox to call
   (s as any)._cycleFocusForward = cycleFocusForward;
   (s as any)._cycleFocusBackward = cycleFocusBackward;

@@ -46,6 +46,14 @@ export declare class SettingsScreen {
     /**
      * Edit a key binding
      */
+    /**
+     * Edit one key binding.
+     *
+     * Every binding is a list of key names EXCEPT useSpecialOn, which is a
+     * list per opponent slot - it is bound by position, not through this
+     * editor, so it is excluded from the type rather than special-cased in
+     * the body.
+     */
     private editKeyBinding;
     /**
      * Adjust glow intensity

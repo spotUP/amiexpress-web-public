@@ -50,18 +50,26 @@ export class Button extends Element {
 
   constructor(options: ExtendedButtonOptions = {}) {
     const baseStyle = options.style ?? {};
+    // One button look across the SDK: dark blue at rest, light blue with
+    // white text when it is the active one. Asked for on 2026-08-26; before
+    // this every dialog picked its own colours and the active button was
+    // whatever yellow-on-black the widget happened to default to, which was
+    // reported as hard to read.
+    //
+    // A caller's own style still wins - these are only the defaults.
     const focusStyle = {
-      fg: 'black',
-      bg: 'yellow',
+      fg: 'white',
+      bg: 'lightblue',
+      bold: true,
       ...(baseStyle.focus ?? {}),
     };
     const hoverStyle = {
-      fg: 'black',
-      bg: 'cyan',
+      fg: 'white',
+      bg: 'lightblue',
       ...(baseStyle.hover ?? {}),
     };
 
-    // Inline mode: no borders, no padding, compact 1-row buttons
+    // Inline mode: no padding, compact 1-row buttons
     const isInline = options.inline === true;
     const isGhosted = options.ghostWhenIdle === true;
 
@@ -69,7 +77,12 @@ export class Button extends Element {
       focusable: true,
       clickable: true,
       keys: true,
-      border: isInline ? undefined : 'line',
+      // NO frame by default. A box drawn around every button made dialogs
+      // look like a stack of nested windows - "the LiveChat quit dialog
+      // looks really strange" - and the button is already legible from its
+      // label and its focus colours. A caller that genuinely wants a frame
+      // can still pass `border` through the options spread below.
+      border: undefined,
       align: 'center',
       valign: 'middle',
       padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
@@ -77,7 +90,7 @@ export class Button extends Element {
       ...options,
       style: {
         fg: baseStyle.fg ?? 'white',
-        bg: baseStyle.bg ?? 'black',
+        bg: baseStyle.bg ?? 'blue',
         ...baseStyle,
         // Override AFTER the baseStyle spread so ghosting wins over
         // whatever fg/bg the caller asked for as this button's idle look.

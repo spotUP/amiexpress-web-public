@@ -262,11 +262,13 @@ export class DocModal extends Box {
 
     // Close keys on content area (since it has focus)
     this._contentArea.key(this._closeKeys, () => {
+      console.log('[DocModal/diag] close key hit the CONTENT AREA');
       closeModal();
     });
 
     // Also handle close keys on modal itself (fallback)
     this.key(this._closeKeys, () => {
+      console.log('[DocModal/diag] close key hit the MODAL');
       closeModal();
     });
 
@@ -368,6 +370,12 @@ export class DocModal extends Box {
     this.setFront();
     this._contentArea?.focus();
     this.screen?.render();
+
+    // TEMPORARY: the help screen reportedly does not close on Escape.
+    // Report who holds the trap and what has focus, so the next Escape can
+    // be traced instead of guessed at.
+    const scr: any = this.screen;
+    console.log(`[DocModal/diag] trapIsMe=${scr?.focusTrap === this} trap=${scr?.focusTrap?.constructor?.name} focused=${scr?._focused?.constructor?.name} closeKeys=${JSON.stringify(this._closeKeys)}`);
   }
 
   /**

@@ -160,6 +160,18 @@ export interface KeyBindings {
   sonicDrop?: string[];
   hold: string[];
   pause: string[];
+  /**
+   * TetriNET specials.
+   *
+   * These existed in input/config.ts's KeyConfig but not here, so the
+   * settings screen - which is typed against THIS interface - could not
+   * offer them, and its binding wizard silently dropped them from saved
+   * settings. Two names for one concept is how that happened.
+   */
+  useSpecialOn?: string[][];
+  useSpecialSelf?: string[];
+  useSpecialRandom?: string[];
+  discardSpecial?: string[];
 }
 
 export interface PlayerSettings {

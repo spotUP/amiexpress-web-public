@@ -208,12 +208,36 @@ export class MenuBar extends Element {
         this.emit('exit');
       });
 
-      // Dropdown navigation
+      // Walking off either END of the bar leaves it, so Tab keeps moving
+      // through the host's own focus cycle instead of looping around the
+      // menus for ever ("when I tab away from the last menu to the right it
+      // should also exit the menus and cycle to the next panel, shift+tab
+      // should change direction", 2026-08-26). Left/Right still wrap, which
+      // is what a menu bar does when you are working the menus themselves.
       dropdown.on('tab-next', () => {
-        this.openMenu((index + 1) % this.dropdowns.length);
+        if (index === this.dropdowns.length - 1) {
+          this.closeAll();
+          this.emit('exit', 'forward');
+          return;
+        }
+        this.openMenu(index + 1);
       });
 
       dropdown.on('tab-prev', () => {
+        if (index === 0) {
+          this.closeAll();
+          this.emit('exit', 'backward');
+          return;
+        }
+        this.openMenu(index - 1);
+      });
+
+      // Arrows wrap: working the menus should never dump you out of them.
+      dropdown.on('menu-next', () => {
+        this.openMenu((index + 1) % this.dropdowns.length);
+      });
+
+      dropdown.on('menu-prev', () => {
         this.openMenu((index - 1 + this.dropdowns.length) % this.dropdowns.length);
       });
     });

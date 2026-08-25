@@ -347,3 +347,69 @@ describe('arriving at the menu bar', () => {
     expect(onExit).toHaveBeenCalled();
   });
 });
+
+describe('walking off the ends of the bar', () => {
+  let screen: any;
+
+  afterEach(() => {
+    DropdownMenu.closeAll();
+    screen?.destroy();
+  });
+
+  it('Tab past the LAST menu leaves the bar, going forwards', () => {
+    // "When I tab away from the last menu to the right it should also exit
+    // the menus and cycle to the next panel" (2026-08-26).
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const exits: string[] = [];
+    menuBar.on('exit', (direction: string) => exits.push(direction));
+
+    const last = (menuBar as any).dropdowns.length - 1;
+    menuBar.openFirst();
+    (menuBar as any).dropdowns[last] ? (menuBar as any).openMenu(last) : null;
+    press((menuBar as any).dropdowns[last], 'tab');
+
+    expect(exits).toEqual(['forward']);
+    expect(DropdownMenu.isAnyOpen()).toBe(false);
+  });
+
+  it('Shift+Tab past the FIRST menu leaves the bar, going backwards', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const exits: string[] = [];
+    menuBar.on('exit', (direction: string) => exits.push(direction));
+
+    menuBar.openFirst();
+    const key = { name: 'tab', full: 'S-tab', shift: true, ctrl: false, meta: false };
+    (menuBar as any).dropdowns[0].emit('keypress', '', key);
+
+    expect(exits).toEqual(['backward']);
+  });
+
+  it('Tab BETWEEN menus stays on the bar', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const exits: string[] = [];
+    menuBar.on('exit', () => exits.push('exit'));
+
+    menuBar.openFirst();
+    press((menuBar as any).dropdowns[0], 'tab');
+
+    expect(exits).toEqual([]);
+    expect(DropdownMenu.isAnyOpen()).toBe(true);
+  });
+
+  it('arrows WRAP rather than leaving, because they work the menus', () => {
+    screen = makeScreen();
+    const menuBar = makeMenuBar(screen);
+    const exits: string[] = [];
+    menuBar.on('exit', () => exits.push('exit'));
+
+    const last = (menuBar as any).dropdowns.length - 1;
+    (menuBar as any).openMenu(last);
+    press((menuBar as any).dropdowns[last], 'right');
+
+    expect(exits).toEqual([]);
+    expect(DropdownMenu.isAnyOpen()).toBe(true);
+  });
+});

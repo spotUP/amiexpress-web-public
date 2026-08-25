@@ -138,12 +138,15 @@ export class Question extends Box {
     });
 
     // Button container for centering both buttons
+    // One row, not three: the buttons no longer draw a frame around
+    // themselves, so the row that holds them does not need the height a
+    // border used to occupy.
     this.buttonBox = new Box({
       parent: this,
       bottom: 0,
       left: 'center',
       width: 22,
-      height: 3,
+      height: 1,
       style: {
         bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
       },
@@ -155,7 +158,7 @@ export class Question extends Box {
       top: 0,
       left: 0,
       width: 10,
-      height: 3,
+      height: 1,
       content: '[ Yes ]',
       align: 'center',
       valign: 'middle',
@@ -176,7 +179,7 @@ export class Question extends Box {
       top: 0,
       left: 12,
       width: 10,
-      height: 3,
+      height: 1,
       content: '[ No ]',
       align: 'center',
       valign: 'middle',
