@@ -52,6 +52,8 @@ export interface GameUpdate {
   playerName?: string;
   /** false = this player topped out; receivers drop them from the tracker. */
   alive?: boolean;
+  /** Absolute cells of the falling piece, so opponents see it in flight. */
+  pieceCells?: Array<{ x: number; y: number; type: string }>;
   timestamp: number;
   board: Board;
   level: number;
@@ -421,13 +423,14 @@ export class GrandmasterNetworkManager extends EventEmitter {
   /**
    * Send game state update
    */
-  sendUpdate(gameState: GameState, alive: boolean = true): void {
+  sendUpdate(gameState: GameState, alive: boolean = true, pieceCells?: Array<{ x: number; y: number; type: string }>): void {
     if (!this.localPlayerId) return;
 
     const update: GameUpdate = {
       playerId: this.localPlayerId,
       playerName: this.localPlayerName,
       alive,
+      pieceCells,
       timestamp: Date.now(),
       board: gameState.board,
       level: gameState.level,

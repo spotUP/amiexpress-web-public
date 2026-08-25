@@ -40,6 +40,7 @@ export declare class GameScreen {
     private lastGrade;
     private lastLines;
     private lastLevel;
+    private lastSectionInfoRender;
     private lastSection;
     private lastPieceExists;
     private lastScore;
@@ -106,6 +107,8 @@ export declare class GameScreen {
      * Render game state
      */
     private render;
+    /** Render immediately (used for input feedback), floored at 8 ms. */
+    private renderNow;
     private getBoardHash;
     private getPPS;
     private getDigHud;

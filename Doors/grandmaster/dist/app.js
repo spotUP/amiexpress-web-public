@@ -191,7 +191,10 @@ class GrandmasterApp {
             enableGrabKeys: true, // REQUIRED - blessed needs grabKeys to receive keyboard events
             enableMouse: true,
             enableAutoSuspend: true, // Auto-suspend when List/widgets gain focus
-            debug: true, // Enable debug logging to troubleshoot auto-suspend
+            // debug:true made blessed-helpers HEX-DUMP every keystroke
+            // (Buffer→hex + console.log per key) - synchronous stdout writes in
+            // the input path, the same back-pressure class that froze DOORMAN.
+            debug: false,
             debugName: 'GRANDMASTER'
         });
         // Create input handler with user's key bindings

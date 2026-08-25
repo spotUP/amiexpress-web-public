@@ -51,6 +51,7 @@ export class GameScreen {
   private lastGrade: string = '9';
   private lastLines: number = 0;
   private lastLevel: number = 0;
+  private lastSectionInfoRender: number = 0;
   private lastSection: number = 0;
   private lastPieceExists: boolean = false;
   private lastScore: number = -1;
@@ -574,10 +575,15 @@ export class GameScreen {
     // Skip input setup for attract mode (AI-controlled)
     if (!this.input) return;
 
-    // Helper: register a callback on both keyboard and gamepad inputs
+    // Helper: register a callback on both keyboard and gamepad inputs.
+    // Every input-driven engine change renders IMMEDIATELY instead of
+    // waiting for the next 50 ms render tick - that wait (0-50 ms, avg 25)
+    // was the single largest guaranteed input latency in the whole path.
+    // renderNow() has its own 8 ms floor, so DAS/ARR repeats cannot flood.
     const on = (action: GameAction, cb: () => void) => {
-      this.input!.on(action, cb);
-      this.gamepadMapper?.on(action, cb);
+      const wrapped = () => { cb(); this.renderNow(); };
+      this.input!.on(action, wrapped);
+      this.gamepadMapper?.on(action, wrapped);
     };
 
     on('left', () => {
@@ -726,9 +732,13 @@ export class GameScreen {
       needsRender = true;
     }
 
-    if (state.section !== this.lastSection || state.sectionTime !== 0) {
+    // sectionTime is nonzero for the entire game, so the old
+    // `sectionTime !== 0` made this branch (and needsRender) true on every
+    // pass. The timer readout only needs ~4 Hz.
+    if (state.section !== this.lastSection || Date.now() - this.lastSectionInfoRender >= 250) {
       this.renderSectionInfo(state);
       this.lastSection = state.section;
+      this.lastSectionInfoRender = Date.now();
       needsRender = true;
     }
 
@@ -747,10 +757,23 @@ export class GameScreen {
     }
   }
 
+  /** Render immediately (used for input feedback), floored at 8 ms. */
+  private renderNow(): void {
+    const now = Date.now();
+    if (now - this.lastRender >= 8) {
+      this.render();
+      this.lastRender = now;
+    }
+  }
+
   private getBoardHash(state: any): string {
     const piece = state.currentPiece ? `${state.currentPiece.x},${state.currentPiece.y},${state.currentPiece.rotation}` : 'null';
-    // Simplified hash for board
-    return `${piece}-${state.lines}-${this.shineTimer}`;
+    // The shine animation only affects pixels while sweep cells are live.
+    // Including the raw shineTimer here made the hash change EVERY 16 ms
+    // tick, which defeated the render gate permanently - the board
+    // repainted at full rate even with nothing moving.
+    const shine = this.shineCells.size > 0 ? this.shineTimer : 0;
+    return `${piece}-${state.lines}-${shine}`;
   }
 
   private getPPS(state: any): string {

@@ -40,7 +40,23 @@ export declare class InputHandler {
     private lastActionTime;
     private readonly ACTION_DEBOUNCE;
     private keypressHandler;
+    /**
+     * True key-state mode: driven by real browser key-down/key-up events via
+     * BBSApi.onKeyDown/onKeyUp (game mode). This is the designed-for input
+     * model - blessed emits no key releases, so the old path had to SIMULATE
+     * "held" with a 100 ms timeout that expired before the first auto-repeat
+     * ever arrived (~400-500 ms), and every repeat keypress reset dasTimer.
+     * Net effect: the configured DAS 133 ms / ARR 10 ms never ran and
+     * movement was whatever the client repeat produced (~400/30). With real
+     * press/release edges, DAS/ARR runs exactly as configured.
+     */
+    private keyStateMode;
     constructor(screen: Screen, session: DoorSession, config?: KeyConfig);
+    /** Map browser KeyboardEvent.key names onto blessed-style config names. */
+    private static browserKeyName;
+    private setupKeyStateHandlers;
+    /** Shared press-edge logic for both input paths. */
+    private handleKeyEdge;
     /**
      * Setup keyboard event handlers
      */

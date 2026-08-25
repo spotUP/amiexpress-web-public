@@ -825,9 +825,7 @@ export class GameEngine {
 
     // Trigger placement effect (before particles/shake)
     const pieceColor = this.getPieceColorName(piece.type);
-    console.log(`[GAME] Settings check - placementEffects: ${this.settings.placementEffects}, blockGlow: ${this.settings.blockGlow}, floatTextMode: ${this.settings.floatTextMode}`);
     if (this.settings.placementEffects) {
-      console.log(`[GAME] Triggering placement effect for ${piece.type} at ${lockedCells.length} cells`);
       this.animations.placementEffect(piece.type, lockedCells, piece.rotation, pieceColor);
     }
 
@@ -973,7 +971,6 @@ export class GameEngine {
 
       if (clearMessage) {
         const avgY = clearedLines.reduce((sum, y) => sum + y, 0) / clearedLines.length;
-        console.log(`[GAME] Triggering floating text: "${clearMessage}" at (${centerX}, ${avgY}) color:${clearColor} mode:${this.settings.floatTextMode}`);
         this.animations.floatingText(clearMessage, centerX, avgY, clearColor, this.settings.floatTextMode);
       }
 

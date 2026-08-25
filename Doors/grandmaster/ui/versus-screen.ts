@@ -70,6 +70,8 @@ export class VersusScreen {
   private garbageEnabled: boolean = true;
   /** True once at least one networked opponent has been seen (win detection). */
   private sawNetworkOpponent: boolean = false;
+  private lastRender: number = 0;
+  private static readonly RENDER_INTERVAL = 50; // 20 fps background rate
 
   // Board overlay compositor for inline effects (same as game-screen)
   private boardOverlay: (string | null)[][] = [];
@@ -426,7 +428,10 @@ export class VersusScreen {
         level: update.level,
         grade: update.grade,
         alive: true,
+        pieceCells: (update as any).pieceCells,
       });
+      // Repaint on receipt instead of waiting for the next loop tick.
+      this.renderNow();
     });
     this.unsubscribers.push(unsubUpdate);
 
@@ -551,9 +556,13 @@ export class VersusScreen {
           this.botPlayer.update(deltaTime, this.engine);
         }
 
-        // Send state to opponents (online multiplayer only)
-        if (this.network && now % 100 < deltaTime) {
-          this.network.sendUpdate(this.engine.getState());
+        // Send state to opponents (online multiplayer only). 20 Hz instead
+        // of 10 (halves the mean 50 ms send-gate delay), and includes the
+        // falling piece's cells so the opponent actually sees it in flight
+        // (updates used to carry locked cells only - the piece popped into
+        // existence at lock).
+        if (this.network && now % 50 < deltaTime) {
+          this.network.sendUpdate(this.engine.getState(), true, this.localPieceCells());
         }
 
         // Get current state once for all subsystem updates
@@ -577,8 +586,14 @@ export class VersusScreen {
         // Check for game events and trigger effects
         this.checkGameEvents();
 
-        // Render
-        this.render();
+        // Render at 20 fps background rate. This was an UNCONDITIONAL
+        // this.render() on every 16 ms tick - 60 full blessed renders per
+        // second, 3x the single-player screen, for no visual gain. Input
+        // still feels immediate because input callbacks call renderNow().
+        if (now - this.lastRender >= VersusScreen.RENDER_INTERVAL) {
+          this.render();
+          this.lastRender = now;
+        }
 
         // Victory: every AI opponent topped out (CPU battle)...
         const cpuVictory = this.versusAI
@@ -646,14 +661,42 @@ export class VersusScreen {
    * Setup input handlers
    */
   private setupInput(): void {
-    this.inputHandler.on('left', () => this.engine.move(-1));
-    this.inputHandler.on('right', () => this.engine.move(1));
-    this.inputHandler.on('rotate_cw', () => this.engine.rotate(1));
-    this.inputHandler.on('rotate_ccw', () => this.engine.rotate(-1));
-    this.inputHandler.on('soft_drop', () => this.engine.softDrop());
-    this.inputHandler.on('hard_drop', () => this.engine.hardDrop());
-    this.inputHandler.on('hold', () => this.engine.hold());
+    // Render immediately after every input-driven engine change - waiting
+    // for the next render tick added 0-50 ms between keypress and pixels.
+    const act = (fn: () => void) => () => { fn(); this.renderNow(); };
+    this.inputHandler.on('left', act(() => this.engine.move(-1)));
+    this.inputHandler.on('right', act(() => this.engine.move(1)));
+    this.inputHandler.on('rotate_cw', act(() => this.engine.rotate(1)));
+    this.inputHandler.on('rotate_ccw', act(() => this.engine.rotate(-1)));
+    this.inputHandler.on('soft_drop', act(() => this.engine.softDrop()));
+    this.inputHandler.on('hard_drop', act(() => this.engine.hardDrop()));
+    this.inputHandler.on('hold', act(() => this.engine.hold()));
     this.inputHandler.on('pause', () => this.togglePause());
+  }
+
+  /** Absolute cells of the local falling piece, for network updates. */
+  private localPieceCells(): Array<{ x: number; y: number; type: string }> | undefined {
+    const st = this.engine.getState();
+    const cp = st.currentPiece;
+    if (!cp) return undefined;
+    const shape = (this.engine as any).pieceManager?.getShape?.(cp.type, cp.rotation);
+    if (!shape) return undefined;
+    const cells: Array<{ x: number; y: number; type: string }> = [];
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) cells.push({ x: cp.x + c, y: cp.y + r, type: cp.type });
+      }
+    }
+    return cells;
+  }
+
+  /** Render immediately (input feedback / network receipt), floored at 8 ms. */
+  private renderNow(): void {
+    const now = Date.now();
+    if (now - this.lastRender >= 8) {
+      this.render();
+      this.lastRender = now;
+    }
   }
 
   /**

@@ -321,13 +321,14 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
     /**
      * Send game state update
      */
-    sendUpdate(gameState, alive = true) {
+    sendUpdate(gameState, alive = true, pieceCells) {
         if (!this.localPlayerId)
             return;
         const update = {
             playerId: this.localPlayerId,
             playerName: this.localPlayerName,
             alive,
+            pieceCells,
             timestamp: Date.now(),
             board: gameState.board,
             level: gameState.level,

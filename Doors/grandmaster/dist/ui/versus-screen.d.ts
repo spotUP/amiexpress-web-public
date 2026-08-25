@@ -50,6 +50,8 @@ export declare class VersusScreen {
     private garbageEnabled;
     /** True once at least one networked opponent has been seen (win detection). */
     private sawNetworkOpponent;
+    private lastRender;
+    private static readonly RENDER_INTERVAL;
     private boardOverlay;
     private running;
     private unsubscribers;
@@ -120,6 +122,10 @@ export declare class VersusScreen {
      * Setup input handlers
      */
     private setupInput;
+    /** Absolute cells of the local falling piece, for network updates. */
+    private localPieceCells;
+    /** Render immediately (input feedback / network receipt), floored at 8 ms. */
+    private renderNow;
     /**
      * Show countdown (3, 2, 1, GO!)
      */

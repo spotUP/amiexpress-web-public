@@ -31,9 +31,22 @@ class InputHandler {
         this.actionHandlers = new Map();
         // Debounce for non-directional keys (rotation, hold, hard drop)
         this.lastActionTime = new Map();
-        this.ACTION_DEBOUNCE = 100; // ms
+        // 33 ms: just enough to absorb duplicate delivery of one physical press,
+        // without eating deliberate fast double-taps the way 100 ms did.
+        this.ACTION_DEBOUNCE = 33; // ms
         // Store handler reference for proper cleanup
         this.keypressHandler = null;
+        /**
+         * True key-state mode: driven by real browser key-down/key-up events via
+         * BBSApi.onKeyDown/onKeyUp (game mode). This is the designed-for input
+         * model - blessed emits no key releases, so the old path had to SIMULATE
+         * "held" with a 100 ms timeout that expired before the first auto-repeat
+         * ever arrived (~400-500 ms), and every repeat keypress reset dasTimer.
+         * Net effect: the configured DAS 133 ms / ARR 10 ms never ran and
+         * movement was whatever the client repeat produced (~400/30). With real
+         * press/release edges, DAS/ARR runs exactly as configured.
+         */
+        this.keyStateMode = false;
         this.config = config;
         this.state = {
             heldKeys: new Set(),
@@ -42,58 +55,145 @@ class InputHandler {
             lastAction: null,
         };
         this.setupEventHandlers();
+        this.setupKeyStateHandlers();
+    }
+    /** Map browser KeyboardEvent.key names onto blessed-style config names. */
+    static browserKeyName(key) {
+        switch (key) {
+            case 'ArrowLeft': return 'left';
+            case 'ArrowRight': return 'right';
+            case 'ArrowDown': return 'down';
+            case 'ArrowUp': return 'up';
+            case ' ':
+            case 'Spacebar': return 'space';
+            case 'Enter': return 'enter';
+            case 'Escape': return 'escape';
+            case 'Shift': return 'lshift';
+            case 'Control': return 'lcontrol';
+            case 'PageUp': return 'pageup';
+            case 'PageDown': return 'pagedown';
+            default: return key.length === 1 ? key.toLowerCase() : key.toLowerCase();
+        }
+    }
+    setupKeyStateHandlers() {
+        const bbs = this.session?.bbs;
+        if (!bbs?.onKeyDown || !bbs?.onKeyUp)
+            return;
+        this.keyStateMode = true;
+        // Register down FIRST, then up - BBSApi.onKeyUp wraps the existing
+        // handler, producing one combined doorKeyStateHandler.
+        bbs.onKeyDown((key) => {
+            if (!this.enabled)
+                return;
+            const name = InputHandler.browserKeyName(key);
+            // The client emits repeats as extra key-down events; only a genuine
+            // edge (not already held) starts DAS or fires a tap action.
+            if (this.state.heldKeys.has(name))
+                return;
+            this.state.heldKeys.add(name);
+            this.handleKeyEdge(name);
+        });
+        bbs.onKeyUp((key) => {
+            const name = InputHandler.browserKeyName(key);
+            this.state.heldKeys.delete(name);
+            if (this.config.left.includes(name)) {
+                this.leftPressed = false;
+                this.dasTimer = 0;
+                this.arrTimer = 0;
+            }
+            else if (this.config.right.includes(name)) {
+                this.rightPressed = false;
+                this.dasTimer = 0;
+                this.arrTimer = 0;
+            }
+            else if (this.config.softDrop.includes(name)) {
+                this.downPressed = false;
+            }
+        });
+    }
+    /** Shared press-edge logic for both input paths. */
+    handleKeyEdge(keyName) {
+        const now = Date.now();
+        if (this.config.left.includes(keyName)) {
+            this.rightPressed = false;
+            this.leftPressed = true;
+            this.lastLeftPress = now;
+            this.dasTimer = 0;
+            this.arrTimer = 0;
+            this.triggerAction('left');
+        }
+        else if (this.config.right.includes(keyName)) {
+            this.leftPressed = false;
+            this.rightPressed = true;
+            this.lastRightPress = now;
+            this.dasTimer = 0;
+            this.arrTimer = 0;
+            this.triggerAction('right');
+        }
+        else if (this.config.softDrop.includes(keyName)) {
+            this.downPressed = true;
+            this.lastDownPress = now;
+            this.triggerAction('soft_drop');
+        }
+        else {
+            const action = (0, config_1.keyToAction)(keyName, this.config);
+            if (action && action !== 'left' && action !== 'right' && action !== 'soft_drop') {
+                const lastTime = this.lastActionTime.get(action) || 0;
+                if (now - lastTime >= this.ACTION_DEBOUNCE) {
+                    this.lastActionTime.set(action, now);
+                    this.triggerAction(action);
+                }
+            }
+        }
     }
     /**
      * Setup keyboard event handlers
      */
     setupEventHandlers() {
-        console.log('[InputHandler] Setting up keypress handler on screen');
         this.keypressHandler = (ch, key) => {
             if (!this.enabled)
                 return;
-            console.log('[InputHandler] keypress event:', { ch, key });
+            // Real key-state mode owns gameplay input: every client repeat also
+            // arrives here as a char, so acting on keypresses too would
+            // double-trigger every move.
+            if (this.keyStateMode)
+                return;
             if (!key)
                 return;
             const keyName = key.full || key.name;
-            console.log('[InputHandler] keyName:', keyName);
             if (!keyName)
                 return;
-            // Add to held keys
             this.state.heldKeys.add(keyName);
-            // Handle directional keys (for DAS/ARR)
-            const now = Date.now();
+            // FALLBACK path (no game-mode key events available): repeats arrive
+            // as fresh keypresses. Only treat a direction as a new edge if it is
+            // not already held - the old code reset dasTimer on EVERY repeat,
+            // which is one of the two reasons DAS never fired.
             if (this.config.left.includes(keyName)) {
-                this.rightPressed = false; // Cancel opposite direction
-                this.leftPressed = true;
-                this.lastLeftPress = now;
-                this.dasTimer = 0;
-                this.arrTimer = 0;
-                this.triggerAction('left');
+                if (!this.leftPressed) {
+                    this.handleKeyEdge(keyName);
+                }
+                else {
+                    this.lastLeftPress = Date.now(); // keep-alive for release timeout
+                }
             }
             else if (this.config.right.includes(keyName)) {
-                this.leftPressed = false; // Cancel opposite direction
-                this.rightPressed = true;
-                this.lastRightPress = now;
-                this.dasTimer = 0;
-                this.arrTimer = 0;
-                this.triggerAction('right');
+                if (!this.rightPressed) {
+                    this.handleKeyEdge(keyName);
+                }
+                else {
+                    this.lastRightPress = Date.now();
+                }
             }
             else if (this.config.softDrop.includes(keyName)) {
-                this.downPressed = true;
-                this.lastDownPress = now;
-                this.triggerAction('soft_drop');
+                if (!this.downPressed) {
+                    this.handleKeyEdge(keyName);
+                }
+                else {
+                    this.lastDownPress = Date.now();
+                }
             }
             else {
-                // Non-directional actions (trigger once on press with debounce)
-                const action = (0, config_1.keyToAction)(keyName, this.config);
-                if (action && action !== 'left' && action !== 'right' && action !== 'soft_drop') {
-                    const now = Date.now();
-                    const lastTime = this.lastActionTime.get(action) || 0;
-                    if (now - lastTime >= this.ACTION_DEBOUNCE) {
-                        this.lastActionTime.set(action, now);
-                        this.triggerAction(action);
-                    }
-                }
+                this.handleKeyEdge(keyName);
             }
         };
         this.screen.on('keypress', this.keypressHandler);
@@ -131,18 +231,19 @@ class InputHandler {
         }
         const dt = now - this.lastUpdate;
         this.lastUpdate = now;
-        // Simulate key release after timeout (blessed doesn't emit keyrelease)
-        if (this.leftPressed && now - this.lastLeftPress > this.KEY_RELEASE_TIMEOUT) {
+        // Simulate key release after timeout - FALLBACK path only; in key-state
+        // mode real key-up events clear the flags.
+        if (!this.keyStateMode && this.leftPressed && now - this.lastLeftPress > this.KEY_RELEASE_TIMEOUT) {
             this.leftPressed = false;
             this.dasTimer = 0;
             this.arrTimer = 0;
         }
-        if (this.rightPressed && now - this.lastRightPress > this.KEY_RELEASE_TIMEOUT) {
+        if (!this.keyStateMode && this.rightPressed && now - this.lastRightPress > this.KEY_RELEASE_TIMEOUT) {
             this.rightPressed = false;
             this.dasTimer = 0;
             this.arrTimer = 0;
         }
-        if (this.downPressed && now - this.lastDownPress > this.KEY_RELEASE_TIMEOUT) {
+        if (!this.keyStateMode && this.downPressed && now - this.lastDownPress > this.KEY_RELEASE_TIMEOUT) {
             this.downPressed = false;
         }
         // Update DAS/ARR for held directional keys

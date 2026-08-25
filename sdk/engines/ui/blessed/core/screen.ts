@@ -563,6 +563,26 @@ export class Screen extends Element {
    *
    * Call this before render() when transitioning between dialogs/overlays.
    */
+  /**
+   * True differential output (default ON). When enabled, lastBuffer is kept
+   * between renders so _diff() emits only the cells that actually changed.
+   * Until 2026-08-25 this behaviour existed but was gated behind modem
+   * emulation (_slowConnectionMode) - normal web play invalidated lastBuffer
+   * cell-by-cell on EVERY render, so every frame diffed as "all 1920 cells
+   * changed" and shipped the entire 80x24 screen as 10-40 KB of ANSI,
+   * ~0.2-0.8 MB/s per player during gameplay. Full redraws still happen
+   * whenever _fullRedrawNeeded is set (first render, resize, element
+   * destroy, forceFullRedraw()), which is what keeps stale content from
+   * persisting across screen transitions.
+   */
+  private _differentialRendering: boolean = true;
+
+  /** Escape hatch for terminals/doors that bypass the cell buffer. */
+  setDifferentialRendering(enabled: boolean): void {
+    this._differentialRendering = enabled;
+    if (!enabled) this._fullRedrawNeeded = true;
+  }
+
   forceFullRedraw(): void {
     // Mark entire screen as dirty so _diff() processes all cells
     this._markDirty(0, 0, this.width - 1, this.height - 1);
@@ -938,10 +958,11 @@ export class Screen extends Element {
     // invalidate lastBuffer to ensure stale content (borders, text) is properly cleared.
     // In normal mode: Always invalidate lastBuffer to force full redraw (prevents corruption)
     const forceInvalidate = this._fullRedrawNeeded;
+    const keepLastBuffer = (this._differentialRendering || this._slowConnectionMode) && !forceInvalidate;
     for (let y = 0; y < bufHeight; y++) {
       for (let x = 0; x < bufWidth; x++) {
         this.buffer[y][x] = [dattr, ' '];
-        if ((!this._slowConnectionMode || forceInvalidate) && this.lastBuffer[y] && this.lastBuffer[y][x]) {
+        if (!keepLastBuffer && this.lastBuffer[y] && this.lastBuffer[y][x]) {
           this.lastBuffer[y][x] = [-1, '\x00'];
         }
       }
