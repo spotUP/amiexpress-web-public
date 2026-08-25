@@ -121,7 +121,11 @@ export class MenuBar extends Element {
         mouse: true,
         clickable: true,
         focusable: true,
-        tabIndex: -1,  // Exclude from Tab cycling - menu activated by click/hover, not Tab
+        // The menu bar is ONE Tab stop, not one per menu: only the first
+        // button is tabbable, and Left/Right move between menus once you are
+        // there. Every button used to be tabIndex -1, which made the menus
+        // unreachable from the keyboard entirely (reported live 2026-08-25).
+        tabIndex: index === 0 ? 0 : -1,
         keys: true,
       });
 
@@ -155,6 +159,33 @@ export class MenuBar extends Element {
       // Keyboard activation
       button.key(['enter', 'space', 'down'], () => {
         this.openMenu(index);
+      });
+
+      // Left/Right walk the menu bar. If a menu is already open the
+      // neighbour opens too, which is how every desktop menu bar behaves.
+      button.key(['left', 'right'], (_ch: any, key: any) => {
+        const count = this.menuButtons.length;
+        if (count < 2) return;
+        const next = key.name === 'right'
+          ? (index + 1) % count
+          : (index - 1 + count) % count;
+        const wasOpen = DropdownMenu.isAnyOpen();
+        this.menuButtons[next].focus();
+        if (wasOpen) this.openMenu(next);
+        this.screen?.render();
+      });
+
+      // Escape leaves the menu bar. With a menu open the dropdown handles it
+      // and hands focus back to this button; a second Escape gives focus up
+      // to the host, so the user is never stranded on the bar.
+      button.key(['escape'], () => {
+        if (DropdownMenu.isAnyOpen()) {
+          this.closeAll();
+          button.focus();
+        } else {
+          this.emit('exit');
+        }
+        this.screen?.render();
       });
 
       // Dropdown navigation

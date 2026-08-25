@@ -945,6 +945,8 @@ export async function createApp(session: DoorSession) {
 
   // ========== RESPONSIVE LAYOUT ==========
   // Dynamic layout engine that handles screen resize, sidebar drag/resize, and docking
+  let lastGeom = '';
+  let geomProbed = false;
   function updateLayout() {
     const width = (screen as any).width;
     const height = (screen as any).height;
@@ -1002,7 +1004,9 @@ export async function createApp(session: DoorSession) {
     chatPanel.position.height = contentHeight;
 
     // 3. Inner Chat Log Layout
-    chatLog.position.width = Math.max(1, chatWidth - 2);
+    // chatWidth - 3, not - 2: the panel's two border columns plus one column
+    // for the scrollbar, which Element draws at the log's own last column.
+    chatLog.position.width = Math.max(1, chatWidth - 3);
     chatLog.position.height = Math.max(1, contentHeight - 2);
 
     // 4. Footer & Overlays
@@ -1024,6 +1028,47 @@ export async function createApp(session: DoorSession) {
     // Typing bar (hidden but updated)
     typingBar.position.left = chatLeft;
     typingBar.position.width = chatWidth;
+
+    // Geometry diagnostics: the chat panel's right border went missing at
+    // 80x25 and the factory geometry reproduces correctly in isolation, so
+    // the live numbers are what differ. This door runs CLIENT-side, so the
+    // only place the numbers are readable is the chat log itself.
+    // The COMPUTED coords decide the border, not position.width: the right
+    // vertical is a single write at xl-1 guarded by `< screen.width`, while
+    // the horizontals loop `x < xl` and skip out-of-range columns - so an xl
+    // one past the screen loses only the right vertical, which is the exact
+    // symptom.
+    const pc = (chatPanel as any)._getCoords?.() ?? (chatPanel as any).lpos;
+    const lc = (chatLog as any)._getCoords?.() ?? (chatLog as any).lpos;
+    const geom = `[geom] scr=${width}x${height} sb(${sidebarDock},vis=${sidebarVisible},w=${sidebarW}) chat(l=${chatLeft},w=${chatWidth},rw=${(chatPanel as any).width},xi=${pc?.xi},xl=${pc?.xl}) log(w=${chatWidth - 3},rw=${(chatLog as any).width},xi=${lc?.xi},xl=${lc?.xl})`;
+    if (geom !== lastGeom) {
+      lastGeom = geom;
+      console.log(`[LiveChat/geom] ${geom}`);
+      try { chatLog.add(`{yellow-fg}${geom}{/yellow-fg}`); } catch { /* log not ready during first layout */ }
+    }
+
+    // One-shot buffer probe: is the panel's right border actually IN the
+    // buffer at column xl-1, or is it lost between buffer and terminal? The
+    // coords say it should be at 79 and nothing overlaps it, so this settles
+    // which half of the pipeline to fix.
+    if (!geomProbed) {
+      geomProbed = true;
+      setTimeout(() => {
+        try {
+          const buf = (screen as any).buffer;
+          const last = (screen as any).lastBuffer;
+          const rows = [3, 6, 10];
+          for (const y of rows) {
+            if (!buf?.[y]) continue;
+            const cells = (b: any) => [76, 77, 78, 79]
+              .map(x => `${x}:${JSON.stringify(b?.[y]?.[x]?.[1] ?? null)}`).join(' ');
+            console.log(`[LiveChat/buf] row=${y} buffer[ ${cells(buf)} ] last[ ${cells(last)} ]`);
+          }
+        } catch (err) {
+          console.log('[LiveChat/buf] probe failed:', err);
+        }
+      }, 2500);
+    }
 
     // 5. Invalidate Caches
     invalidateCache(sidebarPanel);
@@ -1256,6 +1301,13 @@ export async function createApp(session: DoorSession) {
       updateChatHeader
     );
   }
+
+  // Escape on the menu bar (with no dropdown open) returns to where typing
+  // happens, so the menus are enterable AND leavable from the keyboard.
+  menuBar.element.on('exit', () => {
+    inputBox.focus();
+    screen.render();
+  });
 
   // ========== FOCUS BORDERS ==========
   // NOTE: Active panel borders (white on focus) are now handled automatically by SDK!

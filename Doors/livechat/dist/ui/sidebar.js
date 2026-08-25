@@ -6,6 +6,7 @@ exports.renderUsers = renderUsers;
 exports.formatChannel = formatChannel;
 exports.renderChannels = renderChannels;
 const ansi_1 = require("../utils/ansi");
+const theme_1 = require("./theme");
 /** Create sidebar box config */
 function sidebarConfig() {
     return {
@@ -15,7 +16,8 @@ function sidebarConfig() {
         scrollable: true,
         style: {
             fg: 'white',
-            border: { fg: 'magenta' }
+            border: { fg: theme_1.PANEL_BORDER },
+            ...theme_1.PANEL_FOCUS_STYLE,
         }
     };
 }

@@ -9,6 +9,11 @@ export declare function sidebarConfig(): {
     tags: boolean;
     scrollable: boolean;
     style: {
+        focus: {
+            readonly border: {
+                readonly fg: "white";
+            };
+        };
         fg: string;
         border: {
             fg: string;

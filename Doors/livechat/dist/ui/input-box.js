@@ -10,6 +10,7 @@ exports.createEmojiButton = createEmojiButton;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const status_bar_1 = require("./status-bar");
+const theme_1 = require("./theme");
 exports.INPUT_HEIGHT = 3;
 exports.EMOJI_BUTTON_WIDTH = 6; // Wide enough for :D with border and padding
 function createInputBox(screen) {
@@ -35,7 +36,8 @@ function createInputBox(screen) {
         style: {
             fg: 'white',
             bg: 'black',
-            border: { fg: 'yellow' },
+            border: { fg: theme_1.PANEL_BORDER },
+            focus: { border: { fg: theme_1.PANEL_BORDER_FOCUS } },
         },
         // @ts-ignore - zIndex exists but not in types
         zIndex: 5000, // Below command suggestions (10000) but above other elements
@@ -53,7 +55,7 @@ function createEmojiButton(screen) {
         width: exports.EMOJI_BUTTON_WIDTH,
         height: exports.INPUT_HEIGHT,
         content: '{center}{yellow-fg}:D{/yellow-fg}{/center}',
-        border: { type: 'line', fg: 'yellow' },
+        border: { type: 'line', fg: theme_1.PANEL_BORDER },
         tags: true, // Enable tag parsing for content
         mouse: true,
         keys: true,

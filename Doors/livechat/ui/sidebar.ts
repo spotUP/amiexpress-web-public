@@ -1,6 +1,7 @@
 import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { ChannelMember, Channel } from '../types';
 import { color, bold } from '../utils/ansi';
+import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './theme';
 
 /** Create sidebar box config */
 export function sidebarConfig() {
@@ -11,7 +12,8 @@ export function sidebarConfig() {
     scrollable: true,
     style: {
       fg: 'white',
-      border: { fg: 'magenta' }
+      border: { fg: PANEL_BORDER },
+      ...PANEL_FOCUS_STYLE,
     }
   };
 }

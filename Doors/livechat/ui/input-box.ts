@@ -5,6 +5,7 @@
 import { Screen, textarea, Button } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { STATUS_HEIGHT } from './status-bar';
+import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
 
 export const INPUT_HEIGHT = 3;
 export const EMOJI_BUTTON_WIDTH = 6;  // Wide enough for :D with border and padding
@@ -33,7 +34,8 @@ export function createInputBox(screen: Screen) {
     style: {
       fg: 'white',
       bg: 'black',
-      border: { fg: 'yellow' },
+      border: { fg: PANEL_BORDER },
+      focus: { border: { fg: PANEL_BORDER_FOCUS } },
     },
     // @ts-ignore - zIndex exists but not in types
     zIndex: 5000,  // Below command suggestions (10000) but above other elements
@@ -55,7 +57,7 @@ export function createEmojiButton(screen: Screen): Button {
     width: EMOJI_BUTTON_WIDTH,
     height: INPUT_HEIGHT,
     content: '{center}{yellow-fg}:D{/yellow-fg}{/center}',
-    border: { type: 'line', fg: 'yellow' },
+    border: { type: 'line', fg: PANEL_BORDER },
     tags: true,  // Enable tag parsing for content
     mouse: true,
     keys: true,

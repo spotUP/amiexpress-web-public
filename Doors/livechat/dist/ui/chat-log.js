@@ -15,6 +15,7 @@ const status_bar_1 = require("./status-bar");
 const input_box_1 = require("./input-box");
 const typing_preview_1 = require("./typing-preview");
 Object.defineProperty(exports, "TYPING_HEIGHT", { enumerable: true, get: function () { return typing_preview_1.TYPING_HEIGHT; } });
+const theme_1 = require("./theme");
 function createChatLog(screen, sidebarWidth) {
     // Create dockable panel for chat
     const screenWidth = screen.width || 80;
@@ -42,12 +43,13 @@ function createChatLog(screen, sidebarWidth) {
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
         border: {
             type: 'line',
-            fg: 'green',
+            fg: theme_1.PANEL_BORDER,
             labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
         },
         style: {
             fg: 'white',
             bg: 'black',
+            focus: { border: { fg: theme_1.PANEL_BORDER_FOCUS } },
         },
     });
     // Explicitly set position after creation
@@ -62,11 +64,15 @@ function createChatLog(screen, sidebarWidth) {
         parent: chatPanel,
         top: 0,
         left: 0,
-        width: '100%-2',
+        // Matches updateLayout(): borders plus the scrollbar column.
+        width: '100%-3',
         height: '100%-2',
         label: '',
         border: { type: 'none' },
         mouse: true,
+        // Out of the Tab cycle: there is nothing to DO in the log, so a stop here
+        // is a dead end for keyboard users. The mouse still scrolls it.
+        focusable: false,
         scrollable: true,
         alwaysScroll: true,
         scrollOnInput: true,

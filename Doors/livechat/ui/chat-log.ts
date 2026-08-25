@@ -8,6 +8,7 @@ import { MENU_HEIGHT } from './menu-bar';
 import { STATUS_HEIGHT } from './status-bar';
 import { INPUT_HEIGHT } from './input-box';
 import { TYPING_HEIGHT } from './typing-preview';
+import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
 
 // Re-export TYPING_HEIGHT for backward compatibility
 export { TYPING_HEIGHT };
@@ -44,12 +45,13 @@ export function createChatLog(
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
     border: {
       type: 'line',
-      fg: 'green',
+      fg: PANEL_BORDER,
       labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
     },
     style: {
       fg: 'white',
       bg: 'black',
+      focus: { border: { fg: PANEL_BORDER_FOCUS } },
     },
   });
 
@@ -68,11 +70,15 @@ export function createChatLog(
     parent: chatPanel,
     top: 0,
     left: 0,
-    width: '100%-2',
+    // Matches updateLayout(): borders plus the scrollbar column.
+    width: '100%-3',
     height: '100%-2',
     label: '',
     border: { type: 'none' },
     mouse: true,
+    // Out of the Tab cycle: there is nothing to DO in the log, so a stop here
+    // is a dead end for keyboard users. The mouse still scrolls it.
+    focusable: false,
     scrollable: true,
     alwaysScroll: true,
     scrollOnInput: true,

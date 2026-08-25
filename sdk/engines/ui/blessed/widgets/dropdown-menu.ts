@@ -218,6 +218,16 @@ export class DropdownMenu extends Element {
     this.hide();
     this.detachOutsideClick();
     this.screen.releaseFocusTrap();
+
+    // Hand focus back to the button that opened this menu. Releasing the trap
+    // alone left focus sitting on a now-hidden dropdown, so Escape closed the
+    // menu and then swallowed every subsequent key - reported live as "when I
+    // tab to the menus I can't exit them" (2026-08-25). An outside click is
+    // the exception: the click has already put focus where the user pointed.
+    if (!fromOutsideClick && this.anchor && !this.anchor.destroyed) {
+      this.anchor.focus();
+    }
+
     this.screen.render();
   }
 
