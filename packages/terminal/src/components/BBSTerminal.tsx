@@ -47,6 +47,20 @@ interface BBSTerminalProps {
    * Use for full-screen BBS mode where input must always be captured.
    */
   keepFocused?: boolean;
+  /**
+   * When true the root element fills its parent (height: 100%) instead of the
+   * whole viewport (height: 100vh). Set it when the host page reserves space
+   * around the terminal — e.g. the mobile on-screen keyboard — otherwise the
+   * terminal centres its 80x25 grid in the full viewport and the reserved
+   * strip covers the bottom rows.
+   */
+  fillParent?: boolean;
+  /**
+   * Fires with the door id whenever a browser-side (client or hybrid) door
+   * starts, and with null when it ends. Lets the host page swap in
+   * door-specific UI, such as the mobile game controls.
+   */
+  onDoorChange?: (doorId: string | null) => void;
 }
 
 export interface BBSTerminalRef {
@@ -58,6 +72,14 @@ export interface BBSTerminalRef {
   injectInput: (data: string) => void;
   getSocket: () => Socket | null;
   getTerminal: () => Terminal | null;
+  /**
+   * Press a key on behalf of an on-screen control. Runs the exact same
+   * game-mode path as a physical keydown (held-key state + custom key repeat),
+   * so DAS/ARR and held keys behave identically. No-op outside game mode.
+   */
+  pressGameKey: (key: string, code: string) => void;
+  /** Release a key pressed via pressGameKey. Emits the matching key-up. */
+  releaseGameKey: (key: string, code: string) => void;
   startDownload: (amigaPath: string) => Promise<void>;
   startUpload: (amigaPath: string, file: File) => Promise<void>;
 }
@@ -86,6 +108,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   onAnsiOutput,
   forcedMode,
   keepFocused,
+  fillParent,
+  onDoorChange,
 }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
@@ -95,6 +119,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   forcedModeRef.current = forcedMode;
   const keepFocusedRef = useRef(keepFocused);
   keepFocusedRef.current = keepFocused;
+  const onDoorChangeRef = useRef(onDoorChange);
+  onDoorChangeRef.current = onDoorChange;
+  // Id of the browser-side door currently running (null when none). Kept in a
+  // ref so the socket handlers, which are registered once, always see it.
+  const activeClientDoorId = useRef<string | null>(null);
   // Tracks the current calibrated font size so set-font / font-preference events
   // don't override the mobile-calibrated size with the hardcoded desktop 16px value.
   const fontSizeRef = useRef(fontSize);
@@ -128,6 +157,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const keyState = useRef<Record<string, boolean>>({});
   const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
+  // Game-mode press/release, published by the init effect so the imperative
+  // ref (on-screen game controls) drives the SAME code path as the window
+  // keydown/keyup listeners - one input channel, identical DAS/ARR behaviour.
+  const gameKeyPressRef = useRef<((key: string, code: string) => void) | null>(null);
+  const gameKeyReleaseRef = useRef<((key: string, code: string) => void) | null>(null);
   const mouseButtonDown = useRef<boolean>(false);  // Track mouse button state for drag events
   const lastMouseHoverTime = useRef<number>(0);  // Throttle hover events
   // Pointer-lock virtual pointer (game mode): while the lock holds, real
@@ -612,6 +646,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     },
     getSocket: () => socketRef.current,
     getTerminal: () => terminalInstance.current,
+    pressGameKey: (key: string, code: string) => gameKeyPressRef.current?.(key, code),
+    releaseGameKey: (key: string, code: string) => gameKeyReleaseRef.current?.(key, code),
     startDownload: async (_amigaPath: string) => {
       console.warn('[Terminal] Downloads start from the BBS. Awaiting transfer-raw:init.');
     },
@@ -1110,6 +1146,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     };
 
+    // Single entry point for a game-mode key press. Both the window keydown
+    // listener and the on-screen game controls (via the imperative ref) call
+    // this, so a touch press is indistinguishable from a physical one.
+    const pressGameKey = (key: string, code: string) => {
+      if (!gameMode.current || !socketRef.current?.connected) return;
+      // Only send if key wasn't already pressed (prevents duplicate downs)
+      if (keyState.current[key]) return;
+      keyState.current[key] = true;
+      socketRef.current.emit('key-down', { key, code });
+      startKeyRepeat(key, code);
+    };
+
+    const releaseGameKey = (key: string, code: string) => {
+      if (!socketRef.current?.connected) return;
+      if (!keyState.current[key]) return;
+      delete keyState.current[key];
+      stopKeyRepeat(key);
+      socketRef.current.emit('key-up', { key, code });
+    };
+
+    gameKeyPressRef.current = pressGameKey;
+    gameKeyReleaseRef.current = releaseGameKey;
+
     const handleGameKeyDown = (ev: KeyboardEvent) => {
       // Handle transfer cancel
       if (transferState.current.direction && ev.key === 'Escape') {
@@ -1135,14 +1194,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           return;
         }
 
-        const key = ev.key;
-        // Only send if key wasn't already pressed (prevents duplicate downs)
-        if (!keyState.current[key]) {
-          keyState.current[key] = true;
-          socketRef.current.emit('key-down', { key, code: ev.code });
-          // Start custom key repeat for this key
-          startKeyRepeat(key, ev.code);
-        }
+        pressGameKey(ev.key, ev.code);
         ev.preventDefault();
       }
     };
@@ -1150,12 +1202,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const handleGameKeyUp = (ev: KeyboardEvent) => {
       // Game mode: send raw keyup events and stop repeat
       if (gameMode.current && socketRef.current?.connected) {
-        const key = ev.key;
-        if (keyState.current[key]) {
-          delete keyState.current[key];
-          stopKeyRepeat(key);
-          socketRef.current.emit('key-up', { key, code: ev.code });
-        }
+        releaseGameKey(ev.key, ev.code);
         ev.preventDefault();
       }
     };
@@ -1207,6 +1254,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       randomizationFactor: 0.5,
     });
     socketRef.current = socket;
+
+    // Publish which browser-side door is running so the host page can swap in
+    // door-specific UI. The backend never emits door:unload-client, so the
+    // authoritative "door ended" signal is game-mode=false (client-door-bridge
+    // emits it from endSession).
+    const setActiveClientDoor = (doorId: string | null) => {
+      if (activeClientDoorId.current === doorId) return;
+      activeClientDoorId.current = doorId;
+      onDoorChangeRef.current?.(doorId);
+    };
 
     // Initialize media handler for audio/video streaming
     const mediaHandler = new MediaHandler(socket);
@@ -1300,6 +1357,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
+      setActiveClientDoor(null);
       keyState.current = {};
       // Clear key repeat timers
       Object.keys(keyRepeatTimers.current).forEach(key => {
@@ -2171,6 +2229,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('game-mode', (enabled: boolean) => {
       gameMode.current = enabled;
+      if (!enabled) setActiveClientDoor(null);
       // Clear key states and repeat timers when switching modes
       keyState.current = {};
       // Stop all key repeat timers
@@ -2210,6 +2269,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const doorName = data.manifest?.name || data.doorId;
       term.write(`\r\n\x1b[36mLoading ${doorName}...\x1b[0m\r\n`);
       doorActive.current = true;
+      setActiveClientDoor(data.doorId);
       doorReadyMap.current[data.sessionId] = false;
       if (!doorMessageBuffer.current[data.sessionId]) {
         doorMessageBuffer.current[data.sessionId] = [];
@@ -2252,6 +2312,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         console.error(`[ClientDoor] Failed to load bundle:`, error);
         term.write('\r\n\x1b[31mError loading door bundle\x1b[0m\r\n');
         doorActive.current = false;
+        setActiveClientDoor(null);
         delete (window as any).__BBS__;
         const failedScript = document.getElementById(scriptId);
         if (failedScript && failedScript.parentNode) {
@@ -2281,6 +2342,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         delete (window as any).__BBS__;
       }
       doorActive.current = false;
+      setActiveClientDoor(null);
       term.write(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
     });
 
@@ -2805,7 +2867,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       style={{
         backgroundColor: '#000000',
         overflow: 'hidden', // Prevent scrollbars
-        height: '100vh', // Explicit height for flex centering
+        // Explicit height for flex centering. fillParent hosts (the mobile BBS
+        // page, which reserves a strip for the on-screen keyboard) size us from
+        // their own content box instead of the raw viewport.
+        height: fillParent ? '100%' : '100vh',
         // In wide mode: use absolute positioning to break out of parent flex centering
         // In fixed mode: relative positioning for normal layout
         position: terminalMode === 'wide' ? 'absolute' : 'relative',

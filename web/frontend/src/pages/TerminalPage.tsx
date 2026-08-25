@@ -1,46 +1,111 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
+import { MobileGameControls } from '../components/mobile/MobileGameControls';
+import { findGameControlLayout } from '../components/mobile/game-controls';
+import { fitFontSize } from '../components/mobile/terminal-fit';
+import './TerminalPage.css';
 
-// Conservative initial estimate — corrected precisely in onConnect via xterm element width
-const CHAR_ASPECT = 0.75;
+// Seed only — the real size comes from measuring the rendered grid. mOsOul and
+// the Topaz faces are half-width bitmaps, so this lands close and the fit
+// search finishes in a couple of probes.
+const CHAR_ASPECT = 0.5;
 const BBS_COLS = 80;
-const KEYBOARD_HEIGHT = 260;
+const DESKTOP_FONT_SIZE = 16;
+/** Must match --bbs-onscreen-input-height in TerminalPage.css. */
+const ONSCREEN_INPUT_HEIGHT = 260;
 const PORTRAIT_MOBILE_MAX_WIDTH = 600;
 
 function isPortraitMobile(): boolean {
   return window.innerWidth < PORTRAIT_MOBILE_MAX_WIDTH && window.innerHeight > window.innerWidth;
 }
 
-function computeFontSize(containerWidth: number): number {
-  return Math.floor(containerWidth / BBS_COLS / CHAR_ASPECT);
+/**
+ * A phone or tablet in any orientation. Portrait drives the on-screen keyboard;
+ * this drives the font fit, because a landscape phone needs scaling just as
+ * much as a portrait one.
+ */
+function isHandheld(): boolean {
+  if (isPortraitMobile()) return true;
+  // Landscape: a narrow desktop window is not a phone, so require a touch
+  // screen before rescaling the font there.
+  const coarsePointer = typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
+  return coarsePointer && Math.min(window.innerWidth, window.innerHeight) < PORTRAIT_MOBILE_MAX_WIDTH;
+}
+
+function seedFontSize(containerWidth: number): number {
+  return Math.max(4, Math.floor(containerWidth / BBS_COLS / CHAR_ASPECT));
 }
 
 export function TerminalPage(): JSX.Element {
   const terminalRef = useRef<BBSTerminalRef>(null);
   const [isMobile, setIsMobile] = useState<boolean>(isPortraitMobile);
   const [fontSize, setFontSize] = useState<number>(() =>
-    isPortraitMobile() ? computeFontSize(window.innerWidth) : 16
+    isHandheld() ? seedFontSize(window.innerWidth) : DESKTOP_FONT_SIZE
   );
+  const [activeDoorId, setActiveDoorId] = useState<string | null>(null);
 
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
+  const gridObserver = useRef<ResizeObserver | null>(null);
+
+  const gameControls = findGameControlLayout(activeDoorId);
+
+  /**
+   * Scale the 80x25 grid to the space the page can give it.
+   *
+   * xterm's own measurement is authoritative: `.xterm-screen` is exactly
+   * cols * cellWidth wide, so the fit probes real font sizes and keeps the
+   * largest one that still fits instead of guessing a font aspect ratio.
+   * The whole search is synchronous — setting `options.fontSize` re-measures
+   * the char size and restyles the screen element before it returns.
+   */
+  const refit = useCallback(() => {
+    const term = terminalRef.current?.getTerminal();
+    const element = term?.element;
+    if (!term || !element) return;
+
+    if (!isHandheld()) {
+      if (fontSizeRef.current !== DESKTOP_FONT_SIZE) setFontSize(DESKTOP_FONT_SIZE);
+      return;
+    }
+
+    // A door that took the terminal out of the standard 80-column grid (wide
+    // mode, or a server-driven resize) owns its own sizing — leave it alone.
+    if (term.cols !== BBS_COLS) return;
+
+    const screen = element.querySelector('.xterm-screen') as HTMLElement | null;
+    const host = element.parentElement;
+    if (!screen || !host) return;
+
+    // Host width already excludes the safe-area padding the page applies.
+    const availableWidth = host.clientWidth || window.innerWidth;
+    const availableHeight = window.innerHeight - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0);
+
+    const fitted = fitFontSize(
+      fontSizeRef.current,
+      { width: availableWidth, height: availableHeight },
+      (candidate) => {
+        term.options.fontSize = candidate;
+        return { width: screen.offsetWidth, height: screen.offsetHeight };
+      },
+    );
+
+    if (fitted !== fontSizeRef.current) setFontSize(fitted);
+  }, []);
 
   useEffect(() => {
-    const handleOrientationChange = () => {
-      const mobile = isPortraitMobile();
-      setIsMobile(mobile);
-      setFontSize(mobile ? computeFontSize(window.innerWidth) : 16);
+    const handleViewportChange = () => {
+      setIsMobile(isPortraitMobile());
+      refit();
     };
-    const handleResize = () => {
-      // Only update on desktop — mobile portrait width never changes via resize
-      if (!isPortraitMobile()) {
-        setIsMobile(false);
-        setFontSize(16);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleOrientationChange);
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('orientationchange', handleViewportChange);
+    // iOS reports the browser chrome collapsing here and nowhere else.
+    window.visualViewport?.addEventListener('resize', handleViewportChange);
 
     const refocusOnClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -50,11 +115,17 @@ export function TerminalPage(): JSX.Element {
     document.addEventListener('click', refocusOnClick, { capture: true });
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleOrientationChange);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('orientationchange', handleViewportChange);
+      window.visualViewport?.removeEventListener('resize', handleViewportChange);
       document.removeEventListener('click', refocusOnClick, { capture: true });
+      gridObserver.current?.disconnect();
+      gridObserver.current = null;
     };
-  }, []);
+  }, [refit]);
+
+  // Showing or hiding the on-screen input changes how much height the grid has.
+  useEffect(() => { refit(); }, [isMobile, refit]);
 
   // Suppress iOS native keyboard on portrait mobile; restore on landscape.
   useEffect(() => {
@@ -79,49 +150,63 @@ export function TerminalPage(): JSX.Element {
     terminalRef.current?.focus();
   }, [isMobile]);
 
-  // After the terminal connects, measure the actual rendered element width to compute
-  // the exact fontSize that fills the screen. xterm's own measurement is authoritative —
-  // no Canvas API guesswork. fontSize changes via live-update effect (no reinit/reconnect).
+  // The grid only exists once the terminal is up, so the first fit runs here.
   const handleConnect = useCallback(() => {
-    if (!isPortraitMobile()) return;
     requestAnimationFrame(() => {
-      const el = terminalRef.current?.getTerminal()?.element;
-      if (!el) return;
-      // term.element is the outer container (full viewport width in fixed mode).
-      // .xterm-screen is the actual rendered cell area = 80 * charWidth pixels.
-      const screen = el.querySelector('.xterm-screen') as HTMLElement | null;
-      const actualWidth = screen?.offsetWidth ?? 0;
-      if (actualWidth <= 0) return;
-      const corrected = Math.floor(fontSizeRef.current * window.innerWidth / actualWidth);
-      if (corrected > 0 && corrected !== fontSizeRef.current) {
-        setFontSize(corrected);
+      refit();
+
+      // The Amiga bitmap faces decide the cell width, so a fit measured
+      // against a fallback face is wrong. Re-fit once they are in.
+      document.fonts?.ready.then(refit).catch(() => undefined);
+
+      // Anything else that changes the cell size - the font picker in the
+      // settings panel, a container resize - shows up as a size change on the
+      // grid itself. Re-fitting is idempotent, so settling ends the cascade.
+      const screen = terminalRef.current?.getTerminal()?.element
+        ?.querySelector('.xterm-screen') as HTMLElement | null;
+      if (screen && typeof ResizeObserver !== 'undefined') {
+        gridObserver.current?.disconnect();
+        gridObserver.current = new ResizeObserver(() => refit());
+        gridObserver.current.observe(screen);
       }
     });
-  }, []);
+  }, [refit]);
 
   const handleKey = useCallback((data: string) => {
     terminalRef.current?.injectInput(data);
     terminalRef.current?.focus();
   }, []);
 
+  const handleGamePress = useCallback((key: string, code: string) => {
+    terminalRef.current?.pressGameKey(key, code);
+  }, []);
+
+  const handleGameRelease = useCallback((key: string, code: string) => {
+    terminalRef.current?.releaseGameKey(key, code);
+  }, []);
+
+  const showOnscreenInput = isMobile;
+
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      paddingBottom: isMobile ? KEYBOARD_HEIGHT : 0,
-      boxSizing: 'border-box',
-      minHeight: 0,
-    }}>
+    <div className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}`}>
       <BBSTerminal
         ref={terminalRef}
         fontSize={fontSize}
         keepFocused
+        fillParent
         onConnect={handleConnect}
+        onDoorChange={setActiveDoorId}
       />
-      {isMobile && (
-        <MobileBBSKeyboard
-          onKey={handleKey}
-        />
+      {showOnscreenInput && (
+        gameControls
+          ? (
+            <MobileGameControls
+              layout={gameControls}
+              onPress={handleGamePress}
+              onRelease={handleGameRelease}
+            />
+          )
+          : <MobileBBSKeyboard onKey={handleKey} />
       )}
     </div>
   );
