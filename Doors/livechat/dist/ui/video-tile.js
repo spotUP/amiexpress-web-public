@@ -277,14 +277,20 @@ class VideoTile {
             style: { bg: 'black' },
             tags: true,
         });
-        // Video/avatar display area — fills the container, leaving one row
-        // at the bottom for the status bar (container is now borderless).
+        // Video/avatar display area — the WHOLE tile.
+        //
+        // This used to stop one row short so the status bar could have its own
+        // line, which spent a row of every tile on a caption and made each tile
+        // look like a little boxed window ("it's the user boxes the videos are
+        // rendered in... they waste space"). The status bar is drawn OVER the
+        // last row instead, so the picture gets the full height and the name is
+        // still there to read.
         this.videoBox = blessed_1.default.box({
             parent: this.container,
             left: 0,
             top: 0,
             width: '100%',
-            height: '100%-1',
+            height: '100%',
             border: undefined,
             style: {
                 bg: 'black',
@@ -311,6 +317,9 @@ class VideoTile {
                 fg: 'white',
             },
             tags: true,
+            // Over the picture, not beside it - see the video box above.
+            // @ts-ignore - zIndex exists but is not in the types
+            zIndex: 5,
         });
     }
     /**
@@ -456,19 +465,22 @@ class VideoTile {
      */
     getVideoDims() {
         // Derive dims from the tile container — reading videoBox directly
-        // can return the layout spec string ('100%-1') instead of a number.
-        // Reserve:
-        //   - 2 columns of width safety — halfblock/color frames emit a
-        //     trailing `\x1b[0m` per row; if a line ends right at the last
-        //     column, blessed wraps it and doubles the row count, which
-        //     looks like the frame "breaks" / overruns the status bar.
-        //   - 2 rows of height safety so the status bar at `bottom: 0` is
-        //     never overwritten by an overflowing final row.
-        // Resolved coords, not the spec - see resolveBoxSize in video-layout.
+        // can return the layout spec string instead of a number.
+        //
+        // One column is held back: a row that ends exactly at the last column
+        // can wrap and double the row count, and halfblock and colour frames
+        // emit a trailing reset per row.
+        //
+        // The two ROWS that used to be held back are not any more. They existed
+        // so an overflowing final row could not overwrite the status bar, and
+        // neither reason survives: the status bar is drawn over the picture on
+        // purpose now, and incoming frames are clipped to the tile (see
+        // ui/frame-fit), so nothing overflows in the first place. That is two
+        // rows and a column of picture back in every tile.
         const resolved = (0, video_layout_1.resolveBoxSize)(this.container, { width: 0, height: 0 });
         const cw = resolved.width;
         const ch = resolved.height;
-        return { width: Math.max(1, cw - 2), height: Math.max(1, ch - 2) };
+        return { width: Math.max(1, cw - 1), height: Math.max(1, ch) };
     }
     /**
      * Get user ID

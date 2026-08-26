@@ -97,3 +97,52 @@ describe('fitting a frame', () => {
     expect(fitFrameToTile(frame, 0, 0)).toBe('');
   });
 });
+
+describe('the tile spends its space on the picture', () => {
+  const { readFileSync } = require('fs');
+  const { join } = require('path');
+  const tile = readFileSync(
+    join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'ui', 'video-tile.ts'),
+    'utf8'
+  );
+
+  it('gives the video the whole tile', () => {
+    // It used to stop a row short so the caption could have its own line,
+    // which spent a row of every tile on chrome and made each one look like
+    // a little boxed window.
+    const videoBox = tile.slice(tile.indexOf('this.videoBox = blessed.box('));
+
+    expect(videoBox.slice(0, 400)).toMatch(/height: '100%',/);
+    expect(videoBox.slice(0, 400)).not.toMatch(/height: '100%-1',/);
+  });
+
+  it('draws the caption over the picture, not beside it', () => {
+    const statusBar = tile.slice(tile.indexOf('this.statusBar = blessed.box('));
+
+    expect(statusBar.slice(0, 500)).toMatch(/zIndex: 5/);
+  });
+
+  it('no longer holds back rows it does not need', () => {
+    // The two reserved rows existed to protect the status bar from an
+    // overflowing frame; the status bar overlays on purpose now and frames
+    // are clipped, so neither reason survives.
+    const dims = tile.slice(tile.indexOf('getVideoDims()'));
+
+    expect(dims.slice(0, 1200)).toMatch(/height: Math\.max\(1, ch\)/);
+    expect(dims.slice(0, 1200)).not.toMatch(/height: Math\.max\(1, ch - 2\)/);
+  });
+
+  it('still holds back one column against wrapping', () => {
+    // A row ending exactly at the last column can wrap and double the row
+    // count - that one is a real hazard, not a leftover.
+    const dims = tile.slice(tile.indexOf('getVideoDims()'));
+
+    expect(dims.slice(0, 1200)).toMatch(/width: Math\.max\(1, cw - 1\)/);
+  });
+
+  it('has no border anywhere in the tile', () => {
+    // Three separate reads of this file went looking for the "boxes" around
+    // the videos; there were never any. The chrome was the reserved row.
+    expect(tile).not.toMatch(/border:\s*\{\s*type:/);
+  });
+});
