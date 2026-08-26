@@ -7,6 +7,9 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+import * as fsSync from 'fs';
+import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
+import { applyDoorFieldsToTooltypes, findDoorInfoFile } from '../services/config-services/door-info-file.service';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
 // which is not a dependency - so every password written through the admin
@@ -452,10 +455,48 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
    */
   router.put('/doors/:id', async (req: any, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
       const context = getRequestContext(req);
-      const door = await configService.updateDoor(id, req.body, context);
-      sendResponse(res, door, 'Door updated');
+
+      // Identify the door by its COMMAND, not by the :id in the URL.
+      //
+      // The door list is loaded from disk and numbered by position
+      // (`id: index + 1` above), so that number is not a `doors` table row and
+      // never was - saving reported "Door 349 not found". Worse, had the table
+      // held a row with that id, this would have edited a different door.
+      //
+      // A command is unique and is the name of the file that defines it.
+      const command = req.body?.door_command;
+      if (!command) {
+        return handleError(res, new Error('door_command is required to identify the door'));
+      }
+
+      // Disk first: the BBS scans Commands/BBSCmd/*.info, so that is what an
+      // edit has to change. The database is a mirror and is updated after.
+      const bbsRoot = config.get('dataDir');
+      const infoPath = findDoorInfoFile(bbsRoot, command);
+      if (!infoPath) {
+        return handleError(res, new Error(`No .info file for command "${command}" in Commands/BBSCmd`));
+      }
+
+      const backupPath = infoPath + '.backup';
+      fsSync.copyFileSync(infoPath, backupPath);
+
+      const info = parseInfoFile(infoPath);
+      info.tooltypes = applyDoorFieldsToTooltypes(info.tooltypes as any, req.body) as any;
+      writeInfoFile(info);
+
+      // Mirror into the database when a row for this command exists. A missing
+      // row is not an error: the door is defined on disk.
+      try {
+        const existing = await configService.getDoorByCommand(command);
+        if (existing) {
+          await configService.updateDoor(existing.id, req.body, context);
+        }
+      } catch (mirrorError) {
+        console.error('[config] door DB mirror failed (disk write succeeded):', mirrorError);
+      }
+
+      sendResponse(res, { command, infoPath, backupPath }, 'Door updated');
     } catch (error) {
       handleError(res, error);
     }
