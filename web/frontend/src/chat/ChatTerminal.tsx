@@ -413,6 +413,16 @@ export default function ChatTerminal() {
 
     // Load hybrid door client bundle (for audio support in LiveChat)
     socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
+      // Stop any copy still running before starting another. Removing a
+      // door's <script> does not stop what the script started, so without
+      // this every re-entry left its timers and its camera behind - which is
+      // how this page ran out of media players ("too many WebMediaPlayers
+      // already in existence"). BBSTerminal does the same; this page has its
+      // own loader and needs its own call.
+      window.dispatchEvent(new CustomEvent('bbs:door-unload', {
+        detail: { doorId: data.doorId },
+      }));
+
       console.log(`[ChatTerminal] Loading client door: ${data.doorId}`);
 
       // Expose BBS connection to client doors
@@ -461,6 +471,11 @@ export default function ChatTerminal() {
 
     // Unload hybrid door client bundle
     socket.on('door:unload-client', (data: { doorId: string; sessionId?: string }) => {
+      // Tell the door before taking its <script> away.
+      window.dispatchEvent(new CustomEvent('bbs:door-unload', {
+        detail: { doorId: data.doorId, sessionId: data.sessionId },
+      }));
+
       console.log(`[ChatTerminal] Unloading client door: ${data.doorId}`);
       const scriptId = `door-${data.doorId}`;
       const script = document.getElementById(scriptId);

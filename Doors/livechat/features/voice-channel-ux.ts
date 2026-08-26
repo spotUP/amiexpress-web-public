@@ -571,22 +571,7 @@ export class EnhancedVoiceChannel {
         // working neoshowcase webcam-demo ordering so no frames between
         // 'startStream returned' and 'onFrame registered' can slip through
         // unhandled.
-        this.ctx.video.onFrame((frame: string, senderId?: string | number) => {
-          if (!this.videoGrid) return;
-
-          // The frame goes to WHOEVER SENT IT. This used to hand every frame
-          // to this.userId regardless, so with two people streaming both
-          // pictures landed in the local tile - it flipped between their two
-          // sizes - while the other person's tile sat on "WAITING FOR
-          // VIDEO" for a frame that had already been spent on the wrong one.
-          const owner = senderId === undefined || senderId === null ? this.userId : String(senderId);
-
-          // Own frames still need video to be on; someone else's do not.
-          const isSelf = String(owner) === String(this.userId);
-          if (isSelf && !this.videoEnabled) return;
-
-          this.videoGrid.updateParticipantVideo(owner, frame);
-        });
+        this.ensureFrameHandler();
 
         // Flip the self-tile's hasVideo BEFORE frames start arriving so
         // updateVideoDisplay() doesn't briefly paint the no-video avatar
@@ -624,8 +609,10 @@ export class EnhancedVoiceChannel {
       try {
         const myStreamId = `video-${this.socket.id}`;
         await this.ctx.video.stopStream(myStreamId);
-        // Remove listener
-        this.ctx.video.onFrame(() => {});
+        // The frame handler STAYS. Turning your own camera off is not a
+        // reason to stop seeing everybody else's - and dropping the handler
+        // here is what left a viewer with no camera on "WAITING FOR VIDEO"
+        // for people who were streaming perfectly well.
         this.currentStreamDims = null;
       } catch (error: any) {
         console.log('[Voice] Stop video failed:', error.message);
@@ -1061,6 +1048,12 @@ export class EnhancedVoiceChannel {
           // Start hidden until someone enables video
           this.videoGrid.hide();
 
+          // Listen for frames from the moment the grid exists, not from the
+          // moment THIS user turns a camera on. Otherwise a viewer without a
+          // camera receives every frame and drops it - which is exactly what
+          // "has handler: false" in the door's log meant.
+          this.ensureFrameHandler();
+
           // Terminal resize → re-encode local stream so it tracks the new
           // chat-panel size. Debounced inside scheduleStreamResize.
           this.screen.on('resize', () => this.scheduleStreamResize());
@@ -1194,6 +1187,36 @@ export class EnhancedVoiceChannel {
       }
     } catch (error: any) {
     }
+  }
+
+
+  /**
+   * Listen for video frames, whether or not this user has a camera on.
+   *
+   * The handler used to be registered only when the local camera STARTED,
+   * and torn down when it stopped - so a viewer who never enabled video
+   * received every frame and dropped every one of them, sitting on "WAITING
+   * FOR VIDEO" while other people streamed. The door's own log said so
+   * plainly: `video:frame received, has handler: false`.
+   *
+   * Registering is idempotent: the SDK keeps one handler, so calling this
+   * again simply replaces it with an identical one.
+   */
+  private ensureFrameHandler(): void {
+    if (!this.ctx?.video) return;
+
+    this.ctx.video.onFrame((frame: string, senderId?: string | number) => {
+      if (!this.videoGrid) return;
+
+      // The frame goes to WHOEVER SENT IT, falling back to this user when a
+      // sender is not given (an older backend, or a local demo).
+      const owner = senderId === undefined || senderId === null ? this.userId : String(senderId);
+
+      // Own frames need the local camera to be on; everyone else's do not.
+      if (String(owner) === String(this.userId) && !this.videoEnabled) return;
+
+      this.videoGrid.updateParticipantVideo(owner, frame);
+    });
   }
 
   private async startAudioStreaming() {

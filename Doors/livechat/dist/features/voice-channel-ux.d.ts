@@ -146,6 +146,19 @@ export declare class EnhancedVoiceChannel {
     private showVoicePermissionsDialog;
     joinVoiceChannel(channelId: string): Promise<void>;
     leaveVoiceChannel(): Promise<void>;
+    /**
+     * Listen for video frames, whether or not this user has a camera on.
+     *
+     * The handler used to be registered only when the local camera STARTED,
+     * and torn down when it stopped - so a viewer who never enabled video
+     * received every frame and dropped every one of them, sitting on "WAITING
+     * FOR VIDEO" while other people streamed. The door's own log said so
+     * plainly: `video:frame received, has handler: false`.
+     *
+     * Registering is idempotent: the SDK keeps one handler, so calling this
+     * again simply replaces it with an identical one.
+     */
+    private ensureFrameHandler;
     private startAudioStreaming;
     showGrid(): void;
     hideGrid(): void;
