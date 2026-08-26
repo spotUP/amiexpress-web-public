@@ -121,7 +121,7 @@ import { createEmojiCommand, createEmojiListCommand, createCustomEmojiCommand } 
 import { FormatPicker } from './ui/format-picker';
 
 // Animation system
-import { createAnimationManager, hasAnimationTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/utils/animations';
+import { createAnimationManager, hasAnimationTags, splitAnimatedLines } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/utils/animations';
 
 // Event filtering
 import { createEventsCommand } from './commands/events';
@@ -1951,13 +1951,26 @@ export async function createApp(session: DoorSession) {
   }
 
   function appendLineToLog(line: string, messageId?: string) {
-    chatMessages.push(line);
-    chatMessageIds.push(messageId ?? null);
-    
-    // Register animated lines
-    const lineIndex = chatMessages.length - 1;
-    if (hasAnimationTags(line)) {
-      animationManager.registerLine(lineIndex, line);
+    // One entry per DISPLAY ROW, never per message.
+    //
+    // animationManager writes frames with chatLog.setLine(index, ...), which
+    // addresses rows, and chat-row-map turns a click row into an index the
+    // same way. A message containing a newline used to occupy two rows under
+    // one index, after which every animated line was painted onto the wrong
+    // row - reported live as an effect applied mid-sentence making "the
+    // entire chatlog go crazy".
+    //
+    // The same messageId is kept on each row, so a click anywhere in a
+    // multi-row message still resolves to that message.
+    for (const row of splitAnimatedLines(line)) {
+      chatMessages.push(row);
+      chatMessageIds.push(messageId ?? null);
+
+      // Register animated lines
+      const lineIndex = chatMessages.length - 1;
+      if (hasAnimationTags(row)) {
+        animationManager.registerLine(lineIndex, row);
+      }
     }
 
     rebuildChatContent();
@@ -2197,10 +2210,19 @@ export async function createApp(session: DoorSession) {
   let currentPinnedPanel: any = null;
   let pinnedMessages: any[] = [];
 
+  // A pin REQUEST and a pin RESPONSE share one event name: getPinnedMessages()
+  // emits `chat:pin:list` carrying `{ roomId }`, and the backend answers on
+  // `chat:pin:list` carrying `{ roomId, pinnedMessages }`. door.handler's
+  // dispatchLocal delivers the door's own outgoing emit to its own listeners,
+  // so this callback also runs on the request - which has no pinnedMessages,
+  // and crashed reading `.length` of undefined (live log, 2026-08-26).
+  const isPinListResponse = (data: any): boolean => Array.isArray(data?.pinnedMessages);
+
   setupPinListeners(
     socket,
     (data) => {
       // Pin updated - store and refresh if panel open
+      if (!isPinListResponse(data)) return;
       pinnedMessages = data.pinnedMessages;
       addSystemMessage(`Pinned messages updated (${pinnedMessages.length} total)`);
       if (currentPinnedPanel) {
@@ -2210,6 +2232,7 @@ export async function createApp(session: DoorSession) {
     },
     (data) => {
       // Pin list received - show panel
+      if (!isPinListResponse(data)) return;
       pinnedMessages = data.pinnedMessages;
       if (currentPinnedPanel) currentPinnedPanel.destroy();
       currentPinnedPanel = createPinnedPanel(screen, pinnedMessages);

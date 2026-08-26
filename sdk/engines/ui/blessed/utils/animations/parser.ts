@@ -106,6 +106,57 @@ export function hasAnimationTags(text: string): boolean {
   return ANIMATION_TAG_REGEX.test(text);
 }
 
+/** Rebuild the opening tag for an animated segment, parameters and all. */
+function openingTag(animation: { name: AnimationType; params?: Record<string, string> }): string {
+  const params = animation.params
+    ? Object.entries(animation.params).map(([k, v]) => `${k}=${v}`).join(' ')
+    : '';
+  return params ? `~${animation.name} ${params}~` : `~${animation.name}~`;
+}
+
+/**
+ * Split text into one string per DISPLAY ROW, keeping every effect balanced
+ * within the row it lands on.
+ *
+ * A log widget addresses rows, and callers that track animated lines by index
+ * are really tracking rows. A message containing a newline occupies more rows
+ * than the one index it was registered under, so every animated line after it
+ * gets its frames written to the wrong row - reported live as an effect
+ * applied mid-sentence making "the entire chatlog go crazy". The effect's
+ * position was incidental; the newline in the same message was the fault.
+ *
+ * Effect content is allowed to run across a line break (see the [\s\S] note on
+ * ANIMATION_TAG_REGEX), so a split cannot simply cut the string: that would
+ * leave an opening tag on one row and its closing tag on the next, and both
+ * would render as literal markup. Each piece is re-wrapped instead.
+ */
+export function splitAnimatedLines(text: string): string[] {
+  // Normalise CRLF first so a line break counts once, not twice.
+  const normalised = text.replace(/\r\n/g, '\n');
+  if (!normalised.includes('\n')) return [normalised];
+
+  const rows: string[] = [''];
+  const append = (s: string) => { rows[rows.length - 1] += s; };
+
+  for (const segment of parseAnimationTags(normalised)) {
+    const pieces = segment.content.split('\n');
+    pieces.forEach((piece, index) => {
+      if (index > 0) rows.push('');
+      if (segment.type === 'animated' && segment.animation) {
+        // An effect wrapping nothing is markup with no content - skip it and
+        // leave the row empty, so the row still exists and still counts.
+        if (piece.length > 0) {
+          append(`${openingTag(segment.animation)}${piece}~/${segment.animation.name}~`);
+        }
+      } else {
+        append(piece);
+      }
+    });
+  }
+
+  return rows;
+}
+
 /**
  * Strip animation tags from text, returning plain text
  */
