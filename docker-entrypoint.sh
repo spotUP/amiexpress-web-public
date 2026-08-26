@@ -308,37 +308,30 @@ else
     for sync_dir in Doors Commands Screens Libs C; do
         [ -d "$DEFAULT_DATA_DIR/$sync_dir" ] || continue
 
-        copied=0
-        failed=0
-        while IFS= read -r rel; do
-            src="$DEFAULT_DATA_DIR/$sync_dir/$rel"
-            dst="$BBS_DATA_DIR/$sync_dir/$rel"
-
-            # Same content already there: nothing to do.
-            if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
-                continue
-            fi
-
-            mkdir -p "$(dirname "$dst")"
-            if cp -p "$src" "$dst"; then
-                copied=$((copied + 1))
-            else
-                echo "[Entrypoint]   ERROR: failed to sync $sync_dir/$rel" >&2
-                failed=$((failed + 1))
-            fi
-        done <<EOF
-$(cd "$DEFAULT_DATA_DIR/$sync_dir" && find . -type f \
-    ! -name '*.db' ! -name '*.db-journal' ! -name '*.db-wal' ! -name '*.db-shm' \
-    ! -name '*.sqlite' ! -name '*.sqlite3' ! -name '*.log' \
-    -printf '%P\n' 2>/dev/null || cd "$DEFAULT_DATA_DIR/$sync_dir" && find . -type f \
-    ! -name '*.db' ! -name '*.sqlite' ! -name '*.log' | sed 's|^\./||')
-EOF
-
-        echo "[Entrypoint]   Synced $sync_dir: $copied file(s) updated, $failed failed"
-        if [ "$failed" -gt 0 ]; then
-            echo "[Entrypoint] ERROR: $failed file(s) failed to sync in $sync_dir" >&2
+        # One tar stream, not a file-by-file loop.
+        #
+        # The loop this replaces reported "143 file(s) updated, 0 failed"
+        # while leaving 94 of the image's TypeScript files absent from the
+        # volume entirely - it stopped part way through and said nothing,
+        # which is the same class of silent failure the loop was written to
+        # prevent. tar copies the whole tree in one operation and returns one
+        # exit code for it.
+        #
+        # Extraction only writes paths the archive contains, so runtime data
+        # the volume has and the image does not - door databases, logs - is
+        # left alone. The excludes keep the image's copies of those from
+        # landing on top of live data.
+        if ! (cd "$DEFAULT_DATA_DIR/$sync_dir" && tar cf - \
+                --exclude='*.db' --exclude='*.db-journal' \
+                --exclude='*.db-wal' --exclude='*.db-shm' \
+                --exclude='*.sqlite' --exclude='*.sqlite3' \
+                --exclude='*.log' .) \
+             | (cd "$BBS_DATA_DIR/$sync_dir" && tar xf -); then
+            echo "[Entrypoint] ERROR: failed to sync $sync_dir from image" >&2
             exit 1
         fi
+
+        echo "[Entrypoint]   Synced $sync_dir from image"
     done
 
     # The rest of the BBS tree gets ADDITIVE repair: a file the image has and
