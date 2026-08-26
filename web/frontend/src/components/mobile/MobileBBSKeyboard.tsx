@@ -7,6 +7,7 @@ interface MobileBBSKeyboardProps {
 
 const SHIFT_KEY = '__SHIFT__';
 const MODE_KEY = '__MODE__';
+const ALT_KEY = '__ALT__';
 
 interface KeyDef {
   label: string;
@@ -16,97 +17,96 @@ interface KeyDef {
 }
 
 /**
- * Which set of keys is showing. Letters cannot reach '!' or '#', and a BBS
- * password commonly has both, so there has to be a way to get at the symbols
- * - the same letters/symbols toggle a phone keyboard has.
+ * Which set of keys is showing, named as the phone names them.
+ *
+ * Three layers, because that is what people already know: letters, then the
+ * 123 layer for digits and common punctuation, then the #+= layer for the
+ * rest. A single letters/symbols toggle put brackets and braces on the same
+ * page as the digits and matched nothing anyone has used before.
  */
-type KeyboardMode = 'letters' | 'symbols';
+type KeyboardMode = 'letters' | 'numbers' | 'symbols';
 
-/** The row every layout keeps: arrows, Escape, Return, Backspace, Space. */
+/**
+ * Arrows and Escape, which a phone keyboard has no reason to carry and a
+ * terminal cannot do without. Kept on its own row above the layout so every
+ * other key sits where muscle memory expects it.
+ */
 const NAV_ROW: KeyDef[] = [
   { label: '←', data: '\x1b[D', cls: 'mobile-bbs-keyboard__key--nav' },
   { label: '↑', data: '\x1b[A', cls: 'mobile-bbs-keyboard__key--nav' },
   { label: '↓', data: '\x1b[B', cls: 'mobile-bbs-keyboard__key--nav' },
   { label: '→', data: '\x1b[C', cls: 'mobile-bbs-keyboard__key--nav' },
-  { label: 'ESC',   data: '\x1b',  cls: 'mobile-bbs-keyboard__key--nav' },
-  { label: 'Ret',   data: '\r',    wide: true, cls: 'mobile-bbs-keyboard__key--nav' },
-  { label: '⌫',     data: '\x7f', cls: 'mobile-bbs-keyboard__key--nav' },
-  { label: 'Spc',   data: ' ',    cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: 'ESC', data: '\x1b', cls: 'mobile-bbs-keyboard__key--nav' },
+  { label: 'Tab', data: '\t', cls: 'mobile-bbs-keyboard__key--nav' },
 ];
+
+/** The bottom row a phone keyboard always has. */
+function bottomRow(left: KeyDef): KeyDef[] {
+  return [
+    left,
+    { label: 'space', data: ' ', wide: true, cls: 'mobile-bbs-keyboard__key--space' },
+    { label: 'return', data: '\r', wide: true, cls: 'mobile-bbs-keyboard__key--return' },
+  ];
+}
+
+/** Letter keys carry LOWERCASE data; the label follows the shift state. */
+function letters(row: string): KeyDef[] {
+  return row.split('').map(ch => ({ label: ch, data: ch }));
+}
+
+function keys(row: string[]): KeyDef[] {
+  return row.map(ch => ({ label: ch, data: ch }));
+}
 
 const LETTER_ROWS: KeyDef[][] = [
   NAV_ROW,
-  // Number row
-  [
-    { label: '1', data: '1' }, { label: '2', data: '2' }, { label: '3', data: '3' },
-    { label: '4', data: '4' }, { label: '5', data: '5' }, { label: '6', data: '6' },
-    { label: '7', data: '7' }, { label: '8', data: '8' }, { label: '9', data: '9' },
-    { label: '0', data: '0' },
-    // Also part of everyday email addresses (my-mail.com, first_last@...).
-    { label: '-', data: '-' }, { label: '_', data: '_' },
-  ],
-  // QWERTY row 1
-  [
-    { label: 'Q', data: 'q' }, { label: 'W', data: 'w' }, { label: 'E', data: 'e' },
-    { label: 'R', data: 'r' }, { label: 'T', data: 't' }, { label: 'Y', data: 'y' },
-    { label: 'U', data: 'u' }, { label: 'I', data: 'i' }, { label: 'O', data: 'o' },
-    { label: 'P', data: 'p' },
-  ],
-  // QWERTY row 2
-  [
-    { label: 'A', data: 'a' }, { label: 'S', data: 's' }, { label: 'D', data: 'd' },
-    { label: 'F', data: 'f' }, { label: 'G', data: 'g' }, { label: 'H', data: 'h' },
-    { label: 'J', data: 'j' }, { label: 'K', data: 'k' }, { label: 'L', data: 'l' },
-    // Registration asks for an email address, which is unreachable without
-    // these. Sitting at the end of the short row keeps every other key where
-    // muscle memory left it.
-    { label: '@', data: '@' },
-  ],
-  // QWERTY row 3
+  letters('qwertyuiop'),
+  letters('asdfghjkl'),
   [
     { label: '⇧', data: SHIFT_KEY, cls: 'mobile-bbs-keyboard__key--shift' },
-    { label: 'Z', data: 'z' }, { label: 'X', data: 'x' }, { label: 'C', data: 'c' },
-    { label: 'V', data: 'v' }, { label: 'B', data: 'b' }, { label: 'N', data: 'n' },
-    { label: 'M', data: 'm' }, { label: '.', data: '.' }, { label: ',', data: ',' },
-    { label: '!#1', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' },
+    ...letters('zxcvbnm'),
+    { label: '⌫', data: '\x7f', cls: 'mobile-bbs-keyboard__key--backspace' },
   ],
+  bottomRow({ label: '123', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' }),
+];
+
+/** The 123 layer, laid out as the phone lays it out. */
+const NUMBER_ROWS: KeyDef[][] = [
+  NAV_ROW,
+  keys(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']),
+  keys(['-', '/', ':', ';', '(', ')', '$', '&', '@', '"']),
+  [
+    { label: '#+=', data: ALT_KEY, cls: 'mobile-bbs-keyboard__key--mode' },
+    ...keys(['.', ',', '?', '!', "'"]),
+    { label: '⌫', data: '\x7f', cls: 'mobile-bbs-keyboard__key--backspace' },
+  ],
+  bottomRow({ label: 'ABC', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' }),
 ];
 
 /**
- * Everything a password can contain that the letter layout cannot reach.
+ * The #+= layer.
  *
- * This is the printable ASCII set minus the letters, digits and the handful
- * already on the letter layout, so any password a user can type on a real
- * keyboard can be typed here too.
+ * Between this and the 123 layer every printable ASCII character is
+ * reachable - a password typed on a real keyboard can be typed here too.
+ * The phone's own layer has a few characters this one does not (£, ¥, •);
+ * they are left out deliberately, because this BBS is ASCII and an Amiga
+ * client cannot render them.
  */
 const SYMBOL_ROWS: KeyDef[][] = [
   NAV_ROW,
+  keys(['[', ']', '{', '}', '#', '%', '^', '*', '+', '=']),
+  keys(['_', '\\', '|', '~', '<', '>', '`', '\'', '"', '$']),
   [
-    { label: '!', data: '!' }, { label: '"', data: '"' }, { label: '#', data: '#' },
-    { label: '$', data: '$' }, { label: '%', data: '%' }, { label: '&', data: '&' },
-    { label: "'", data: "'" }, { label: '(', data: '(' }, { label: ')', data: ')' },
-    { label: '*', data: '*' },
+    { label: '123', data: ALT_KEY, cls: 'mobile-bbs-keyboard__key--mode' },
+    ...keys(['.', ',', '?', '!', '/']),
+    { label: '⌫', data: '\x7f', cls: 'mobile-bbs-keyboard__key--backspace' },
   ],
-  [
-    { label: '+', data: '+' }, { label: ',', data: ',' }, { label: '-', data: '-' },
-    { label: '.', data: '.' }, { label: '/', data: '/' }, { label: ':', data: ':' },
-    { label: ';', data: ';' }, { label: '<', data: '<' }, { label: '=', data: '=' },
-    { label: '>', data: '>' },
-  ],
-  [
-    { label: '?', data: '?' }, { label: '@', data: '@' }, { label: '[', data: '[' },
-    { label: '\\', data: '\\' }, { label: ']', data: ']' }, { label: '^', data: '^' },
-    { label: '_', data: '_' }, { label: '`', data: '`' }, { label: '{', data: '{' },
-    { label: '|', data: '|' },
-  ],
-  [
-    { label: '}', data: '}' }, { label: '~', data: '~' },
-    { label: 'ABC', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' },
-  ],
+  bottomRow({ label: 'ABC', data: MODE_KEY, cls: 'mobile-bbs-keyboard__key--mode' }),
 ];
 
 const LAYOUTS: Record<KeyboardMode, KeyDef[][]> = {
   letters: LETTER_ROWS,
+  numbers: NUMBER_ROWS,
   symbols: SYMBOL_ROWS,
 };
 
@@ -123,10 +123,18 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
       return;
     }
     if (raw === MODE_KEY) {
-      // Shift is a letters-only idea; leaving it armed across the switch
-      // would upper-case nothing and confuse the indicator.
+      // ABC <-> 123, as the phone does it. Shift is a letters-only idea;
+      // leaving it armed across the switch would upper-case nothing and
+      // leave the indicator lit for no reason.
       setShift(false);
-      setMode(m => (m === 'letters' ? 'symbols' : 'letters'));
+      setMode(m => (m === 'letters' ? 'numbers' : 'letters'));
+      return;
+    }
+    if (raw === ALT_KEY) {
+      // The 123 <-> #+= toggle, which never returns to letters - that is
+      // what the ABC key is for.
+      setShift(false);
+      setMode(m => (m === 'numbers' ? 'symbols' : 'numbers'));
       return;
     }
     const data = shiftRef.current && raw.length === 1 ? raw.toUpperCase() : raw;
@@ -174,16 +182,18 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
         <div key={ri} className="mobile-bbs-keyboard__row">
           {row.map((key, ki) => {
             const isShiftKey = key.data === SHIFT_KEY;
-            const isModeKey = key.data === MODE_KEY;
             const cls = [
               'mobile-bbs-keyboard__key',
               key.cls ?? '',
               key.wide ? 'mobile-bbs-keyboard__key--wide' : '',
               isShiftKey && shift ? 'mobile-bbs-keyboard__key--shift-active' : '',
             ].filter(Boolean).join(' ');
-            const label = !isShiftKey && !isModeKey && shift && key.data.length === 1
-              ? key.label.toUpperCase()
-              : key.label;
+            // The key CAP follows the shift state, the way a phone's does.
+            // The caps used to be hardcoded uppercase, so shift changed
+            // nothing you could see - which makes typing a password a
+            // guessing game about which case you are actually in.
+            const isLetter = /^[a-z]$/.test(key.data);
+            const label = isLetter && shift ? key.label.toUpperCase() : key.label;
             return (
               <button
                 key={ki}
