@@ -255,7 +255,7 @@ async function createApp(session) {
         if (!emojiPicker.isVisible()) {
             emojiPicker.show(screen, (emoji) => {
                 const currentText = inputBox.getValue();
-                inputBox.setValue(currentText + emoji.code + ' ');
+                inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
                 inputBox.focus();
                 screen.render();
             }, () => {
@@ -2100,7 +2100,7 @@ async function createApp(session) {
             if (!emojiPicker.isVisible()) {
                 emojiPicker.show(screen, (emoji) => {
                     const currentText = inputBox.getValue();
-                    inputBox.setValue(currentText + emoji.code + ' ');
+                    inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
                     inputBox.focus();
                     screen.render();
                 }, () => {

@@ -67,3 +67,28 @@ describe('fitting the list', () => {
     expect(emojiLabel(tableflip, 8)).toHaveLength(8);
   });
 });
+
+describe('picking an emoji', () => {
+  const { readFileSync } = require('fs');
+  const { join } = require('path');
+  const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+  const shortcuts = readFileSync(join(DOOR, 'handlers', 'keyboard-shortcuts.ts'), 'utf8');
+  const server = readFileSync(join(DOOR, 'server.ts'), 'utf8');
+
+  it('puts the ART in the input, not the shortcode', () => {
+    // Choosing something that looks like `<3` and getting `:heart:` made the
+    // picker a lookup table for codes. The art is plain ASCII that every
+    // terminal on this BBS can already show, so nothing needs converting.
+    expect(shortcuts).toMatch(/\(e\.display \|\| e\.code\)/);
+    expect(shortcuts).not.toMatch(/ib\.setValue\(c \+ e\.code/);
+  });
+
+  it('does the same from every picker in the door', () => {
+    // There are three insertion points; one left behind would be a picker
+    // that behaves differently depending on how it was opened.
+    const insertions = server.split('emoji.display || emoji.code').length - 1;
+
+    expect(insertions).toBe(2);
+    expect(server).not.toMatch(/setValue\(currentText \+ emoji\.code/);
+  });
+});

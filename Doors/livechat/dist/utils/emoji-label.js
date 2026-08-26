@@ -13,6 +13,12 @@
  * other, with the shortcode after it - you still need that to type the emoji
  * from the keyboard.
  *
+ * PICKING one inserts the ART, not the shortcode. Choosing something that
+ * looks like `<3` and getting `:heart:` in the input made the picker feel
+ * like a lookup table for codes you then had to trust would be converted;
+ * the art is plain ASCII that every terminal on this BBS can already show,
+ * so there is nothing to convert.
+ *
  * Pure, so the column arithmetic is testable without a terminal.
  */
 Object.defineProperty(exports, "__esModule", { value: true });

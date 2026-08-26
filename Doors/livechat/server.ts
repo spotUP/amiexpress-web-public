@@ -303,7 +303,7 @@ export async function createApp(session: DoorSession) {
         screen,
         (emoji: any) => {
           const currentText = inputBox.getValue();
-          inputBox.setValue(currentText + emoji.code + ' ');
+          inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
           inputBox.focus();
           screen.render();
         },
@@ -2470,7 +2470,7 @@ export async function createApp(session: DoorSession) {
           screen,
           (emoji: any) => {
             const currentText = inputBox.getValue();
-            inputBox.setValue(currentText + emoji.code + ' ');
+            inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
             inputBox.focus();
             screen.render();
           },

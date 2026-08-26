@@ -111,6 +111,14 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
             return;
         if (m.userId === String(uid))
             return;
+        // Their typing preview is finished with: a delivered message IS the text
+        // that preview was showing. This used to rest entirely on a separate
+        // chat:keystroke-submit signal arriving first, and when it did not, the
+        // preview stayed on screen next to the delivered line - the same message
+        // twice, in two formats, reported live with two users typing at once.
+        // The message itself is the authority, so reconcile against it.
+        pk(st.typingBuffers, m.userId, m.username, 'SUBMIT', '');
+        utp();
         am(st, m);
         mh.addMessage(m);
         const im = mu(m.content, un);
