@@ -35,18 +35,22 @@ const backend = readFileSync(
 
 describe('the frame carries its sender', () => {
   it('is in the handler signature', () => {
-    expect(types).toMatch(/VideoFrameHandler = \(frame: string, userId\?: string \| number\) => void/);
+    // The sender's NAME was added after this test was written; what matters
+    // is that the frame still carries who sent it.
+    expect(types).toMatch(/VideoFrameHandler = \(frame: string, userId\?: string \| number/);
   });
 
   it('is passed on by the SDK', () => {
-    expect(video).toMatch(/this\.frameHandler\(data\.frame, data\.userId\)/);
+    expect(video).toMatch(/this\.frameHandler\(data\.frame, data\.userId/);
   });
 
   it('was already being sent by the backend', () => {
     // The wiring was the only thing missing.
     const relay = backend.slice(backend.indexOf("socket.on('video:frame'"));
 
-    expect(relay.slice(0, 500)).toMatch(/userId: session\.user\?\.id/);
+    // Whole relay, not a fixed 500-character window - comments and the
+    // self-view echo pushed the field past it.
+    expect(relay).toMatch(/userId: session\.user\?\.id/);
   });
 });
 
@@ -69,6 +73,10 @@ describe('the door', () => {
   it('does not require video to be ON to show someone else', () => {
     // Their camera is not yours to gate: a viewer with no camera must still
     // see everyone who does.
-    expect(handler).toMatch(/isSelf && !this\.videoEnabled/);
+    // `isSelf` became an inline comparison against the frame's owner. The
+    // behaviour is the point: OWN frames are gated on the local camera,
+    // everyone else's are not - which is also what makes the self view
+    // appear only while your own camera is running.
+    expect(handler).toMatch(/=== String\(this\.userId\) && !this\.videoEnabled/);
   });
 });

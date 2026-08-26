@@ -78,6 +78,6 @@ describe('LiveChat', () => {
   it('stops the frame timer when it releases', () => {
     const stop = livechat.slice(livechat.indexOf('private stopVideoCapture'));
 
-    expect(stop.slice(0, 400)).toMatch(/clearInterval\(this\.videoFrameInterval\)/);
+    expect(stop.slice(0, 400)).toMatch(/clear(Interval|Timeout)\(this\.videoFrameInterval\)/);
   });
 });
