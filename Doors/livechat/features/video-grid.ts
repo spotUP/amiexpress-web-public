@@ -11,7 +11,7 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { VideoTile, VideoTileOptions } from '../ui/video-tile';
-import { layoutSignature, pickSpeaker, resolveBoxSize } from './video-layout';
+import { layoutSignature, pickSpeaker, resolveBoxSize, autoViewMode } from './video-layout';
 
 export interface VideoParticipant {
   userId: number | string;
@@ -77,6 +77,12 @@ export class VideoGrid {
   private layoutSignature: string | null = null;
 
   /**
+   * True once the user has picked a view mode themselves. Their choice then
+   * stands, whoever joins or leaves.
+   */
+  private viewModeChosen = false;
+
+  /**
    * The last frame each participant sent.
    *
    * A rebuilt tile starts blank and paints the avatar until the next frame
@@ -111,8 +117,22 @@ export class VideoGrid {
       zIndex: 10,
     });
 
-    // Re-layout on container resize
+    // Re-layout when the container is explicitly resized...
     this.container.on('resize', () => {
+      this.updateGrid();
+    });
+
+    // ...and when the WINDOW changes, which is not the same event.
+    //
+    // An Element emits 'resize' only when its own width or height is SET.
+    // This container is sized '100%', so its size changes with its parent
+    // without anything ever being assigned to it - and it stayed silent
+    // through every window resize. The grid therefore never rebuilt its
+    // tiles, the tiles kept reporting the size they were built at, and the
+    // camera was never asked to re-encode: "I started with a wide browser, I
+    // get a wide image", and it never changed afterwards. Only the Screen
+    // knows the window moved.
+    this.screen.on('resize', () => {
       this.updateGrid();
     });
   }
@@ -300,6 +320,10 @@ export class VideoGrid {
       return;
     }
 
+    // One person: fill the panel with them. Two or more: show them all -
+    // a call where you cannot see the other person is not a video call.
+    this.viewMode = autoViewMode(participantCount, this.viewModeChosen, this.viewMode);
+
     const signature = this.computeLayoutSignature(participantArray, containerWidth, containerHeight);
     console.log('[GridDiag] updateGrid sig=%s prev=%s tiles=%d -> %s', signature, this.layoutSignature, this.tiles.size,
       (signature === this.layoutSignature && this.tiles.size > 0) ? 'SKIP' : 'REBUILD');
@@ -434,6 +458,8 @@ export class VideoGrid {
    * Toggle between speaker mode and grid mode
    */
   toggleViewMode(): void {
+    // From here on the mode is the user's, not ours.
+    this.viewModeChosen = true;
     this.viewMode = this.viewMode === 'speaker' ? 'grid' : 'speaker';
     this.updateGrid();
   }

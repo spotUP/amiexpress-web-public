@@ -2039,7 +2039,7 @@ async function createApp(session) {
     };
     // Getter function for current sidebar tab value (prevents stale references)
     const getSidebarTab = () => sidebarTab;
-    const { updateChatLayout } = (0, keyboard_shortcuts_1.setupKeyboardShortcuts)(screen, chatPanel, drawingCanvas, inputBox, getSidebarTab, channelList, userList, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar, menuBar.element);
+    const { updateChatLayout, toggleSidebar } = (0, keyboard_shortcuts_1.setupKeyboardShortcuts)(screen, chatPanel, drawingCanvas, inputBox, getSidebarTab, channelList, userList, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar, menuBar.element, updateLayout);
     // F5 / Ctrl+Shift+F: Format picker (requires text selection)
     const showFormatPicker = () => {
         if (formatPicker.isVisible())
@@ -2177,11 +2177,10 @@ async function createApp(session) {
             addSystemMessage(`View: ${vg.getViewMode() === 'speaker' ? 'Fullscreen (focus)' : 'Grid (split)'}`);
         },
         onToggleSidebar: () => {
-            if (sidebarTab === 'channels')
-                channelList.toggle();
-            else
-                userList.toggle();
-            screen.render();
+            // The same toggle F2 uses - it hides the PANEL and relayouts, rather
+            // than emptying the sidebar and leaving its frame behind.
+            const shown = toggleSidebar();
+            addSystemMessage(shown ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)');
         },
         onClearChat: () => {
             chatLog.setContent('');

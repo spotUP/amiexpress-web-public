@@ -55,6 +55,11 @@ class VideoGrid {
          */
         this.layoutSignature = null;
         /**
+         * True once the user has picked a view mode themselves. Their choice then
+         * stands, whoever joins or leaves.
+         */
+        this.viewModeChosen = false;
+        /**
          * The last frame each participant sent.
          *
          * A rebuilt tile starts blank and paints the avatar until the next frame
@@ -85,8 +90,21 @@ class VideoGrid {
             // @ts-ignore - zIndex exists but not in types
             zIndex: 10,
         });
-        // Re-layout on container resize
+        // Re-layout when the container is explicitly resized...
         this.container.on('resize', () => {
+            this.updateGrid();
+        });
+        // ...and when the WINDOW changes, which is not the same event.
+        //
+        // An Element emits 'resize' only when its own width or height is SET.
+        // This container is sized '100%', so its size changes with its parent
+        // without anything ever being assigned to it - and it stayed silent
+        // through every window resize. The grid therefore never rebuilt its
+        // tiles, the tiles kept reporting the size they were built at, and the
+        // camera was never asked to re-encode: "I started with a wide browser, I
+        // get a wide image", and it never changed afterwards. Only the Screen
+        // knows the window moved.
+        this.screen.on('resize', () => {
             this.updateGrid();
         });
     }
@@ -247,6 +265,9 @@ class VideoGrid {
             this.screen.render();
             return;
         }
+        // One person: fill the panel with them. Two or more: show them all -
+        // a call where you cannot see the other person is not a video call.
+        this.viewMode = (0, video_layout_1.autoViewMode)(participantCount, this.viewModeChosen, this.viewMode);
         const signature = this.computeLayoutSignature(participantArray, containerWidth, containerHeight);
         console.log('[GridDiag] updateGrid sig=%s prev=%s tiles=%d -> %s', signature, this.layoutSignature, this.tiles.size, (signature === this.layoutSignature && this.tiles.size > 0) ? 'SKIP' : 'REBUILD');
         if (signature === this.layoutSignature && this.tiles.size > 0) {
@@ -363,6 +384,8 @@ class VideoGrid {
      * Toggle between speaker mode and grid mode
      */
     toggleViewMode() {
+        // From here on the mode is the user's, not ours.
+        this.viewModeChosen = true;
         this.viewMode = this.viewMode === 'speaker' ? 'grid' : 'speaker';
         this.updateGrid();
     }

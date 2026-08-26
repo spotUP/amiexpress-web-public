@@ -162,3 +162,51 @@ describe('measuring the grid container', () => {
     expect(size.height).toBeGreaterThan(0);
   });
 });
+
+describe('what makes the grid rebuild', () => {
+  const { readFileSync } = require('fs');
+  const { join } = require('path');
+  const grid = readFileSync(
+    join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'features', 'video-grid.ts'),
+    'utf8'
+  );
+
+  it('listens to the SCREEN, not only its own container', () => {
+    // An Element emits 'resize' only when its own width or height is SET.
+    // The grid container is sized '100%', so its size changes with its
+    // parent without anything being assigned to it, and it stays silent
+    // through every window resize. Only the Screen knows the window moved.
+    //
+    // Without this the tiles keep the size they were built at, the camera is
+    // never asked to re-encode, and the picture is stuck at whatever the
+    // window was when the session started.
+    expect(grid).toMatch(/this\.screen\.on\('resize'[\s\S]{0,200}?this\.updateGrid\(\)/);
+  });
+
+  it('still rebuilds when the container itself is resized', () => {
+    expect(grid).toMatch(/this\.container\.on\('resize'[\s\S]{0,120}?this\.updateGrid\(\)/);
+  });
+});
+
+describe('choosing the view mode', () => {
+  const { autoViewMode } = require('../../../../Doors/livechat/features/video-layout');
+
+  it('fills the panel with one person when you are alone', () => {
+    // A grid of one is just a smaller picture.
+    expect(autoViewMode(1, false, 'speaker')).toBe('speaker');
+    expect(autoViewMode(1, false, 'grid')).toBe('speaker');
+  });
+
+  it('shows everyone once somebody else is there', () => {
+    // Two people in a call showed ONE video, in both browsers.
+    expect(autoViewMode(2, false, 'speaker')).toBe('grid');
+    expect(autoViewMode(5, false, 'speaker')).toBe('grid');
+  });
+
+  it('never overrides a mode the user picked', () => {
+    // Someone who asked for fullscreen focus does not want it undone
+    // because a third person joined.
+    expect(autoViewMode(3, true, 'speaker')).toBe('speaker');
+    expect(autoViewMode(1, true, 'grid')).toBe('grid');
+  });
+});

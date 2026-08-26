@@ -10,37 +10,24 @@ function invalidateCache(element) {
         }
     }
 }
-function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, sfs, sso, scon, cu, SW, chatLog, typingBar, menuBar) {
+function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, sfs, sso, scon, cu, SW, chatLog, typingBar, menuBar, relayout) {
     let sv = true;
     function ucl() {
-        // CRITICAL: Use actual sidebar panel width, not static constant
-        // fitToContent can expand sidebar beyond initial SIDEBAR_WIDTH
+        // Hide the PANEL, not just the lists inside it.
+        //
+        // This used to hide the channel and user lists and leave the panel
+        // itself standing, so "toggle sidebar" emptied the sidebar rather than
+        // removing it, and the chat never got the space back (reported
+        // 2026-08-26).
         const sidebarPanel = chl.parent;
-        const actualSidebarWidth = sv ? (sidebarPanel?.width || SW) : 0;
-        const lo = actualSidebarWidth;
-        const sw = s.width || 80;
-        const wd = sw - lo; // Width is full screen minus left offset
-        // Update position and width for chat panel and drawing canvas
-        cl.position.left = lo;
-        cl.position.width = wd;
-        dc.position.left = lo;
-        dc.position.width = wd;
-        // Invalidate coordinate cache for modified elements
-        invalidateCache(cl);
-        invalidateCache(dc);
-        // Update chat log width inside the panel (panel width minus 2 for borders)
-        if (chatLog) {
-            chatLog.position.width = wd - 2;
-            invalidateCache(chatLog);
-        }
-        // Update typing bar
-        if (typingBar) {
-            typingBar.position.left = lo;
-            typingBar.position.width = wd;
-            invalidateCache(typingBar);
+        if (sidebarPanel) {
+            if (sv)
+                sidebarPanel.show();
+            else
+                sidebarPanel.hide();
         }
         if (sv) {
-            // Get current sidebar tab value
+            // Which list belongs on top depends on the current tab.
             const currentTab = sbt();
             if (currentTab === 'channels') {
                 chl.show();
@@ -55,6 +42,11 @@ function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, s
             chl.hide();
             ul.hide();
         }
+        // The door owns the geometry - see updateLayout / ui/layout-solver. This
+        // function used to recompute the chat panel's left and width itself,
+        // which was a second source of truth for the same arithmetic and did not
+        // know about anything the solver decides.
+        relayout?.();
         s.render();
     }
     s.key(['pageup'], () => { cl.scroll(-10); s.render(); });
@@ -194,5 +186,16 @@ function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, s
     s.key(['C-s'], () => { sso(); });
     s.key(['C-c', 'C-q'], () => { scon('Are you sure you want to quit LiveChat?', (c) => { if (c)
         cu(); }); });
-    return { updateChatLayout: ucl };
+    return {
+        updateChatLayout: ucl,
+        /**
+         * Show or hide the sidebar. ONE implementation, because the menu item
+         * used to toggle the lists on its own and left the panel standing.
+         */
+        toggleSidebar: () => {
+            sv = !sv;
+            ucl();
+            return sv;
+        },
+    };
 }

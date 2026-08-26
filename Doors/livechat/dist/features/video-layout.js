@@ -21,6 +21,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.pickSpeaker = pickSpeaker;
 exports.layoutSignature = layoutSignature;
 exports.resolveBoxSize = resolveBoxSize;
+exports.autoViewMode = autoViewMode;
 /**
  * Who fills the tile in speaker mode: the active speaker, else yourself,
  * else whoever is first.
@@ -72,4 +73,20 @@ function resolveBoxSize(element, fallback) {
         width: Number.isFinite(specWidth) && specWidth > 0 ? specWidth : fallback.width,
         height: Number.isFinite(specHeight) && specHeight > 0 ? specHeight : fallback.height,
     };
+}
+/**
+ * Which view mode to use when the user has not picked one.
+ *
+ * Speaker mode fills the panel with a single person, which is right when you
+ * are alone - a grid of one is just a smaller picture. It is wrong the moment
+ * somebody else is there: two people in a call showed ONE video, in both
+ * browsers (reported 2026-08-26).
+ *
+ * An explicit choice always wins. Someone who asked for fullscreen focus does
+ * not want it undone because a third person joined.
+ */
+function autoViewMode(participantCount, userChose, current) {
+    if (userChose)
+        return current;
+    return participantCount > 1 ? 'grid' : 'speaker';
 }

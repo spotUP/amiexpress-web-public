@@ -53,6 +53,11 @@ export declare class VideoGrid {
      */
     private layoutSignature;
     /**
+     * True once the user has picked a view mode themselves. Their choice then
+     * stands, whoever joins or leaves.
+     */
+    private viewModeChosen;
+    /**
      * The last frame each participant sent.
      *
      * A rebuilt tile starts blank and paints the avatar until the next frame

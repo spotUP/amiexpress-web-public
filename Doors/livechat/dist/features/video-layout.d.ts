@@ -65,3 +65,15 @@ export declare function resolveBoxSize(element: {
     width: number;
     height: number;
 };
+/**
+ * Which view mode to use when the user has not picked one.
+ *
+ * Speaker mode fills the panel with a single person, which is right when you
+ * are alone - a grid of one is just a smaller picture. It is wrong the moment
+ * somebody else is there: two people in a call showed ONE video, in both
+ * browsers (reported 2026-08-26).
+ *
+ * An explicit choice always wins. Someone who asked for fullscreen focus does
+ * not want it undone because a third person joined.
+ */
+export declare function autoViewMode(participantCount: number, userChose: boolean, current: ViewMode): ViewMode;
