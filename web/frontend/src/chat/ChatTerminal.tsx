@@ -70,6 +70,14 @@ export default function ChatTerminal() {
       cursorBlink: true,
       cursorStyle: 'block',
       convertEol: false,
+      // Hold Option (macOS) to select text with the mouse.
+      //
+      // The door turns on mouse tracking, which hands every click and drag
+      // to the application - so an ordinary drag moves a blessed widget
+      // instead of selecting, and the chat log cannot be copied out of. This
+      // is the standard escape hatch, and the same one iTerm and Terminal
+      // use: Option forces selection even while an app owns the mouse.
+      macOptionClickForcesSelection: true,
       // No scrollback. The door draws a full-screen UI and scrolls its own
       // chat log, so terminal history buys nothing here and costs a great
       // deal: on resize xterm REFLOWS the old rows into scrollback rather

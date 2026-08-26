@@ -150,6 +150,10 @@ export const XTERM_CONFIG = {
     cursorBlink: true,
     cursorStyle: 'block' as const,
     scrollback: 10000,
+    // Hold Option (macOS) to select text with the mouse. A door with mouse
+    // tracking on takes every drag for itself, so without this the screen
+    // cannot be copied out of.
+    macOptionClickForcesSelection: true,
     fontWeight: 'normal' as const,
     fontWeightBold: 'bold' as const,
     allowProposedApi: true,

@@ -1282,6 +1282,7 @@ async function createApp(session) {
     const hiddenTiles = new Set();
     const { contextMenu, showContextMenu, hideContextMenu } = (0, context_menus_1.createContextMenus)(screen, inputBox, showUserProfile, showDMPrompt, addSystemMessage, socket, {
         isSysop,
+        muteList: state.muteList,
         onFocusTile: (uid) => {
             const vg = voiceChannel.videoGrid;
             if (!vg)

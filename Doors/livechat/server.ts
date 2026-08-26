@@ -1495,6 +1495,7 @@ export async function createApp(session: DoorSession) {
     socket,
     {
       isSysop,
+      muteList: state.muteList,
       onFocusTile: (uid) => {
         const vg = (voiceChannel as any).videoGrid;
         if (!vg) return;

@@ -1,3 +1,4 @@
+import { toggleMute, muteMessage, type MuteList, type MuteLevel } from '../core/mute-list';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -7,6 +8,8 @@ export interface ContextMenuExtras {
   onHideTile?: (userId: string) => void;
   onMuteRemote?: (userId: string) => void;
   onToggleChannelExpand?: (channelName: string) => void;
+  /** The user's mute list, so Mute/Ignore/Block actually do something. */
+  muteList?: MuteList;
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
@@ -98,18 +101,22 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
         case 'View History':
           asm(`Viewing message history for ${cmt} (not implemented yet)`);
           break;
+        // Mute, Ignore and Block all used to print a confirmation and do
+        // NOTHING - "their messages will be hidden" while the messages kept
+        // arriving. Choosing the same level again lifts it, which is the
+        // only obvious way back.
         case 'Mute User':
-          asm(`Muted ${cmt} - their messages will be hidden`);
-          // TODO: Add to local mute list
-          break;
         case 'Ignore':
-          asm(`Ignoring ${cmt} - you won't receive DMs from them`);
-          // TODO: Add to ignore list
+        case 'Block': {
+          if (!extras.muteList) {
+            asm('{red-fg}Muting is unavailable.{/red-fg}');
+            break;
+          }
+          const level: MuteLevel = si === 'Mute User' ? 'mute' : si === 'Ignore' ? 'ignore' : 'block';
+          const now = toggleMute(extras.muteList, cmt, level);
+          asm(muteMessage(cmt, now));
           break;
-        case 'Block':
-          asm(`{red-fg}Blocked ${cmt} - they cannot contact you{/red-fg}`);
-          // TODO: Send block request to server
-          break;
+        }
         case 'Kick User':
           if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
           sock.emit('admin:kick-user', { username: cmt });

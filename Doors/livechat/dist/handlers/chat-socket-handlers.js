@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupChatHandlers = setupChatHandlers;
+const mute_list_1 = require("../core/mute-list");
 const dm_render_1 = require("./dm-render");
 function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
@@ -94,6 +95,10 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         asm(`{yellow-fg}[${d.by || '?'}] set mode ${d.applied}{/yellow-fg}`);
     });
     sock.on('chat:dm', (d) => {
+        // Ignored or blocked: their DMs do not reach the user. Mute alone is
+        // room-only, so a muted person can still message you directly.
+        if ((0, mute_list_1.hidesDirectMessages)(st.muteList, d.from ?? d.username))
+            return;
         if (!d)
             return;
         // Backend now persists DMs and echoes the canonical payload back to
@@ -110,6 +115,10 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         if (m.channelId !== st.currentChannel)
             return;
         if (m.userId === String(uid))
+            return;
+        // Muted, ignored or blocked: drop it before it reaches the log. The menu
+        // used to say "their messages will be hidden" and hide nothing.
+        if ((0, mute_list_1.hidesRoomMessages)(st.muteList, m.username))
             return;
         // Their typing preview is finished with: a delivered message IS the text
         // that preview was showing. This used to rest entirely on a separate

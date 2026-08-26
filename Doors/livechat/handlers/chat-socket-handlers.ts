@@ -1,3 +1,4 @@
+import { hidesRoomMessages, hidesDirectMessages } from '../core/mute-list';
 import { formatDmLine } from './dm-render';
 
 export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
@@ -89,6 +90,10 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:dm', (d: any) => {
+    // Ignored or blocked: their DMs do not reach the user. Mute alone is
+    // room-only, so a muted person can still message you directly.
+    if (hidesDirectMessages(st.muteList, d.from ?? d.username)) return;
+
     if (!d) return;
     // Backend now persists DMs and echoes the canonical payload back to
     // both sender and recipient. `direction` tells us which side we are.
@@ -103,6 +108,10 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   sock.on('chat:message', (m: any) => {
     if (m.channelId !== st.currentChannel) return;
     if (m.userId === String(uid)) return;
+
+    // Muted, ignored or blocked: drop it before it reaches the log. The menu
+    // used to say "their messages will be hidden" and hide nothing.
+    if (hidesRoomMessages(st.muteList, m.username)) return;
 
     // Their typing preview is finished with: a delivered message IS the text
     // that preview was showing. This used to rest entirely on a separate

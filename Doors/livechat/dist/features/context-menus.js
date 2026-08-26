@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createContextMenus = createContextMenus;
+const mute_list_1 = require("../core/mute-list");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
@@ -89,18 +90,22 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                 case 'View History':
                     asm(`Viewing message history for ${cmt} (not implemented yet)`);
                     break;
+                // Mute, Ignore and Block all used to print a confirmation and do
+                // NOTHING - "their messages will be hidden" while the messages kept
+                // arriving. Choosing the same level again lifts it, which is the
+                // only obvious way back.
                 case 'Mute User':
-                    asm(`Muted ${cmt} - their messages will be hidden`);
-                    // TODO: Add to local mute list
-                    break;
                 case 'Ignore':
-                    asm(`Ignoring ${cmt} - you won't receive DMs from them`);
-                    // TODO: Add to ignore list
+                case 'Block': {
+                    if (!extras.muteList) {
+                        asm('{red-fg}Muting is unavailable.{/red-fg}');
+                        break;
+                    }
+                    const level = si === 'Mute User' ? 'mute' : si === 'Ignore' ? 'ignore' : 'block';
+                    const now = (0, mute_list_1.toggleMute)(extras.muteList, cmt, level);
+                    asm((0, mute_list_1.muteMessage)(cmt, now));
                     break;
-                case 'Block':
-                    asm(`{red-fg}Blocked ${cmt} - they cannot contact you{/red-fg}`);
-                    // TODO: Send block request to server
-                    break;
+                }
                 case 'Kick User':
                     if (!extras.isSysop) {
                         asm('{red-fg}Sysop only.{/red-fg}');

@@ -1,4 +1,5 @@
 import type { Channel, Message, ChannelMember, EventPrefs } from '../types';
+import { createMuteList, type MuteList } from './mute-list';
 import type { TypingBuffer } from '../ui/typing-preview';
 
 /**
@@ -36,6 +37,8 @@ export interface AppState {
   dmThreads: DmThreadView[];
   /** Active DM thread when the user has switched into a DM context. */
   currentDmThread: string | null;
+  /** Who the user has muted, ignored or blocked - see core/mute-list. */
+  muteList: MuteList;
 }
 
 /** Create initial state */
@@ -65,7 +68,8 @@ export function createInitialState(): AppState {
     lastMessageId: null,
     currentRoomMotd: null,
     dmThreads: [],
-    currentDmThread: null
+    currentDmThread: null,
+    muteList: createMuteList()
   };
 }
 

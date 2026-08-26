@@ -8,6 +8,7 @@ exports.addMessage = addMessage;
 exports.clearInput = clearInput;
 exports.appendInput = appendInput;
 exports.backspaceInput = backspaceInput;
+const mute_list_1 = require("./mute-list");
 /** Create initial state */
 function createInitialState() {
     return {
@@ -35,7 +36,8 @@ function createInitialState() {
         lastMessageId: null,
         currentRoomMotd: null,
         dmThreads: [],
-        currentDmThread: null
+        currentDmThread: null,
+        muteList: (0, mute_list_1.createMuteList)()
     };
 }
 /** State mutations */

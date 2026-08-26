@@ -1,3 +1,4 @@
+import { type MuteList } from '../core/mute-list';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 export interface ContextMenuExtras {
     isSysop?: boolean;
@@ -5,6 +6,8 @@ export interface ContextMenuExtras {
     onHideTile?: (userId: string) => void;
     onMuteRemote?: (userId: string) => void;
     onToggleChannelExpand?: (channelName: string) => void;
+    /** The user's mute list, so Mute/Ignore/Block actually do something. */
+    muteList?: MuteList;
 }
 export declare function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras?: ContextMenuExtras): {
     contextMenu: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").List;
