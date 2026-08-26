@@ -182,6 +182,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
+  /**
+   * TEMPORARY input-latency probe. When a game key goes out we stamp the
+   * time; the first screen update after it closes the loop. Reported as
+   * "input is laggy on my phone" - and since the send path has no throttle,
+   * this number is what separates the network from the door from the
+   * terminal's own drawing.
+   */
+  const inputSentAt = useRef<number | null>(null);
+  const latencySamples = useRef<number[]>([]);
+  const latencyReportedAt = useRef(0);
   const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -1241,6 +1251,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Only send if key wasn't already pressed (prevents duplicate downs)
       if (keyState.current[key]) return;
       keyState.current[key] = true;
+      // TEMPORARY: measure the round trip a player actually feels - key sent
+      // here, screen back in the ansi-output handler. Reported as "input is
+      // laggy on my phone", and the client send path has no throttle in it,
+      // so this is the number that decides whether the delay is the network,
+      // the door, or the terminal drawing.
+      inputSentAt.current = performance.now();
       socketRef.current.emit('key-down', { key, code });
       startKeyRepeat(key, code);
     };
@@ -1839,6 +1855,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
+      // Close the input-latency loop: first screen update after a key.
+      if (inputSentAt.current !== null) {
+        latencySamples.current.push(performance.now() - inputSentAt.current);
+        inputSentAt.current = null;
+
+        const now = performance.now();
+        if (now - latencyReportedAt.current > 3000 && latencySamples.current.length > 0) {
+          latencyReportedAt.current = now;
+          const s = latencySamples.current;
+          const avg = Math.round(s.reduce((a, b) => a + b, 0) / s.length);
+          const worst = Math.round(Math.max(...s));
+          console.log(`[Latency] key -> screen: avg ${avg}ms, worst ${worst}ms, over ${s.length} inputs (frame ${data.length}B)`);
+          latencySamples.current = [];
+        }
+      }
+
       // DEBUG: Log first 20 chars of any incoming data to help identify why RIP mode isn't triggering
       if (data.includes('[1!') || data.includes('!|')) {
         console.log(`[Terminal] Incoming possible RIP data (len ${data.length}): ${JSON.stringify(data.slice(0, 50))}`);
