@@ -1054,6 +1054,16 @@ export async function createApp(session: DoorSession) {
   // without waiting to be told the size changed.
   updateLayout();
 
+  // And again whenever the terminal changes size.
+  //
+  // Laying out once fixed a door that opened on top of itself, but it left
+  // the panels frozen at the size the door started with: resizing the browser
+  // window resized the screen underneath them and nothing moved (reported
+  // 2026-08-26 against /chat). The one-shot call above and this binding
+  // answer two different questions - "what size am I now" and "what size did
+  // I just become" - and the door needs both.
+  screen.on('resize', updateLayout);
+
   // Bind layout updates to sidebar events
   sidebarPanel.on('drag', updateLayout);
   sidebarPanel.on('resize', updateLayout);
