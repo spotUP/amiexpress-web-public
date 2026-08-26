@@ -5,7 +5,7 @@
  * Isolates chat management logic from handlers
  */
 
-import { injectable } from 'tsyringe';
+import { singleton } from 'tsyringe';
 import { getSystemTime } from '../../utils/date-time.util';
 
 export interface ChatSession {
@@ -37,7 +37,10 @@ export interface ChatState {
   chatToggle: boolean;
 }
 
-@injectable()
+// @singleton, not @injectable. This object OWNS chatState - activeSessions,
+// pagingUsers, sysopAvailable - and an @injectable class is resolved fresh
+// every time, so a session created by one call was invisible to the next.
+@singleton()
 export class ChatSessionUseCase {
   private chatState: ChatState = {
     sysopAvailable: true,

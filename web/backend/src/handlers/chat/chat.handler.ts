@@ -10,7 +10,7 @@
  * - Handler focuses on presentation/routing only
  */
 
-import { injectable } from 'tsyringe';
+import { inject, injectable } from 'tsyringe';
 import type { Socket } from 'socket.io';
 import type { BBSSession } from '../../index';
 import { ChatSessionUseCase, ChatSession, ChatMessage } from '../../services/use-cases/chat-session.use-case';
@@ -45,7 +45,13 @@ console.log('[DEPRECATED] setConstants called - constants now imported directly'
 
 @injectable()
 export class ChatHandler {
-  constructor(private chatSessionUseCase: ChatSessionUseCase) {
+  // The token is explicit because production runs `npx tsx src/index.ts` and
+  // tsx delegates to esbuild, which does not emit design:paramtypes. Without
+  // it tsyringe has no constructor type info, throws "TypeInfo not known for
+  // ChatHandler" on EVERY call (five times in the 2026-08-26 live log), and
+  // the fallback below built a throwaway use case each time - discarding the
+  // sysop chat state with it.
+  constructor(@inject(ChatSessionUseCase) private chatSessionUseCase: ChatSessionUseCase) {
 console.log('[ChatHandler] Initialized with DI');
   }
 
