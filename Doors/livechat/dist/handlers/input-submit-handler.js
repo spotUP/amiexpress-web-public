@@ -4,6 +4,7 @@ exports.createSubmitHandler = createSubmitHandler;
 const command_exec_1 = require("../core/command-exec");
 const emojis_1 = require("../utils/emojis");
 const format_1 = require("../utils/format");
+const markdown_1 = require("../utils/markdown");
 const formatter_1 = require("../core/formatter");
 function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, tryJoinVoiceChannel) {
     return async (value) => {
@@ -221,9 +222,18 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const processedMsg = (0, emojis_1.replaceEmojis)(msg);
                     socket.emit('room:message', { message: processedMsg, messageId });
                     // Add local echo immediately (server skips echoing own messages back)
+                    //
+                    // The CONTENT is parsed here, exactly as it is for a message from
+                    // anyone else - see core/formatter.formatMessage. Without this the
+                    // sender was the one person who never saw their own formatting:
+                    // "**this is bold** just prints **this is bold**", while everyone
+                    // else in the room saw it bold. The line is then passed with
+                    // applyMarkdown false because the tags around it are ours, not the
+                    // user's, and must not be parsed a second time.
                     const time = (0, format_1.formatTime)(new Date());
                     const color = (0, formatter_1.getUserColor)(username);
-                    addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`, false);
+                    const rendered = (0, markdown_1.parseContent)(processedMsg);
+                    addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false);
                     // Clear typing preview
                     updateTypingPreview();
                     // Add to history with ID

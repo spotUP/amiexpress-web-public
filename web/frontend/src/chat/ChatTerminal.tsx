@@ -381,7 +381,8 @@ export default function ChatTerminal() {
       (window as any).__BBS__ = {
         socket,
         sessionId: data.sessionId,
-        backendUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
+        // The SAME origin the socket connected to - see backendUrl above.
+        backendUrl,
       };
 
       // Remove any existing script for this door
@@ -394,7 +395,15 @@ export default function ChatTerminal() {
       // Create and load the client bundle script
       const script = document.createElement('script');
       script.id = scriptId;
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      // backendUrl is the origin this page connected its socket to. It used
+      // to be read from VITE_BACKEND_URL with a localhost:3001 fallback -
+      // and that variable is not set for the production build, so the live
+      // site asked the VIEWER'S OWN machine for the door bundle. If they
+      // happened to be running a backend there it answered and the browser
+      // refused it as cross-origin
+      // (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin); if they were not, it simply
+      // failed. Either way LiveChat's client never loaded, so video could
+      // not start.
       script.src = data.bundleUrl.startsWith('http')
         ? data.bundleUrl
         : `${backendUrl}${data.bundleUrl}`;

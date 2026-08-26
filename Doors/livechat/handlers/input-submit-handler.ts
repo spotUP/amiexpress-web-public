@@ -6,6 +6,7 @@ import type { CommandRegistry } from '../commands/types';
 import { executeCommand } from '../core/command-exec';
 import { replaceEmojis } from '../utils/emojis';
 import { formatTime, escapeContent } from '../utils/format';
+import { parseContent } from '../utils/markdown';
 import { getUserColor } from '../core/formatter';
 
 export function createSubmitHandler(
@@ -270,9 +271,18 @@ export function createSubmitHandler(
           socket.emit('room:message', { message: processedMsg, messageId });
 
           // Add local echo immediately (server skips echoing own messages back)
+          //
+          // The CONTENT is parsed here, exactly as it is for a message from
+          // anyone else - see core/formatter.formatMessage. Without this the
+          // sender was the one person who never saw their own formatting:
+          // "**this is bold** just prints **this is bold**", while everyone
+          // else in the room saw it bold. The line is then passed with
+          // applyMarkdown false because the tags around it are ours, not the
+          // user's, and must not be parsed a second time.
           const time = formatTime(new Date());
           const color = getUserColor(username);
-          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`, false);
+          const rendered = parseContent(processedMsg);
+          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false);
 
           // Clear typing preview
           updateTypingPreview();
