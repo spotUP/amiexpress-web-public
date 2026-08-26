@@ -182,18 +182,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
-  /**
-   * TEMPORARY input-latency probe. When a game key goes out we stamp the
-   * time; the first screen update after it closes the loop. Reported as
-   * "input is laggy on my phone" - and since the send path has no throttle,
-   * this number is what separates the network from the door from the
-   * terminal's own drawing.
-   */
-  const inputSentAt = useRef<number | null>(null);
-  const latencySamples = useRef<number[]>([]);
-  const latencyReportedAt = useRef(0);
-  /** How long xterm takes to draw what arrived - measured to the next frame. */
-  const paintSamples = useRef<number[]>([]);
   const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -732,10 +720,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     pressGameKey: (key: string, code: string) => gameKeyPressRef.current?.(key, code),
     releaseGameKey: (key: string, code: string) => gameKeyReleaseRef.current?.(key, code),
     sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) => {
-      // The latency probe covers the mouse path too - ARKANOID steers with
-      // mouse cells, not keys, so measuring only key-down said nothing about
-      // the game that feels worst.
-      inputSentAt.current = performance.now();
       emitMouseCell(type, cell, modifiers);
     },
     startDownload: async (_amigaPath: string) => {
@@ -1259,11 +1243,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (keyState.current[key]) return;
       keyState.current[key] = true;
       // TEMPORARY: measure the round trip a player actually feels - key sent
-      // here, screen back in the ansi-output handler. Reported as "input is
-      // laggy on my phone", and the client send path has no throttle in it,
-      // so this is the number that decides whether the delay is the network,
-      // the door, or the terminal drawing.
-      inputSentAt.current = performance.now();
       socketRef.current.emit('key-down', { key, code });
       startKeyRepeat(key, code);
     };
@@ -1862,49 +1841,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
-      // Close the input-latency loop: first screen update after a key.
-      if (inputSentAt.current !== null) {
-        latencySamples.current.push(performance.now() - inputSentAt.current);
-        inputSentAt.current = null;
-
-        const now = performance.now();
-        if (now - latencyReportedAt.current > 3000 && latencySamples.current.length > 0) {
-          latencyReportedAt.current = now;
-          const s = latencySamples.current;
-          const avg = Math.round(s.reduce((a, b) => a + b, 0) / s.length);
-          const worst = Math.round(Math.max(...s));
-          const paint = paintSamples.current.length
-            ? Math.round(paintSamples.current.reduce((a, b) => a + b, 0) / paintSamples.current.length)
-            : 0;
-          paintSamples.current = [];
-          // paint = how long the TERMINAL took to put it on the glass after
-          // the bytes arrived. avg is the round trip. If the round trip is
-          // small and paint is large, the phone is the bottleneck and no
-          // amount of server work will help.
-          const line = `avg ${avg}ms  worst ${worst}ms  paint ${paint}ms  n=${s.length}  frame ${data.length}B`;
-          console.log(`[Latency] key -> screen: ${line}`);
-
-          // ON SCREEN as well as in the console. A phone has no console
-          // worth reading, and this number is only useful if the person
-          // holding the phone can see it.
-          let readout = document.getElementById('bbs-latency-readout');
-          if (!readout) {
-            readout = document.createElement('div');
-            readout.id = 'bbs-latency-readout';
-            readout.style.cssText = [
-              'position:fixed', 'top:0', 'left:0', 'z-index:2147483647',
-              'background:rgba(0,0,0,0.75)', 'color:#0f0',
-              'font:11px/1.4 monospace', 'padding:2px 6px',
-              'pointer-events:none', 'white-space:nowrap',
-            ].join(';');
-            document.body.appendChild(readout);
-          }
-          readout.textContent = line;
-
-          latencySamples.current = [];
-        }
-      }
-
       // DEBUG: Log first 20 chars of any incoming data to help identify why RIP mode isn't triggering
       if (data.includes('[1!') || data.includes('!|')) {
         console.log(`[Terminal] Incoming possible RIP data (len ${data.length}): ${JSON.stringify(data.slice(0, 50))}`);
@@ -2025,14 +1961,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
-        {
-          const paintStart = performance.now();
-          modemEmulatorRef.current.write(output);
-          requestAnimationFrame(() => {
-            paintSamples.current.push(performance.now() - paintStart);
-            if (paintSamples.current.length > 120) paintSamples.current.shift();
-          });
-        }
+        modemEmulatorRef.current.write(output);
       } else {
         term.write(output);
       }
