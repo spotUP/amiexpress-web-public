@@ -192,12 +192,31 @@ export default function ChatTerminal() {
         console.log(`[ChatTerminal] Container size: ${container.clientWidth}x${container.clientHeight}px`);
       }
 
+      // A container with no size cannot be fitted to.
+      //
+      // On a phone the on-screen keyboard can collapse the terminal's box to
+      // nothing for a frame, and fitAddon.fit() then computes zero rows -
+      // which xterm refuses, throwing out of the resize handler and leaving
+      // the terminal in whatever state it had reached. Keeping the last good
+      // size until the box comes back costs nothing: the next resize event
+      // fits properly.
+      if (!container || container.clientWidth < 1 || container.clientHeight < 1) {
+        console.log('[ChatTerminal] Container has no size yet - keeping the current fit');
+        return;
+      }
+
       // Get pre-fit dimensions
       const preFitCols = term.cols;
       const preFitRows = term.rows;
 
       // Perform the fit
-      fitAddon.fit();
+      try {
+        fitAddon.fit();
+      } catch (error) {
+        // Never let a bad fit escape into the resize handler.
+        console.warn('[ChatTerminal] fit failed, keeping the current size:', error);
+        return;
+      }
 
       // Get post-fit dimensions
       let cols = term.cols;
@@ -212,6 +231,11 @@ export default function ChatTerminal() {
       }
 
       console.log(`[ChatTerminal] Final size: ${cols}x${rows} (mode: ${terminalMode})`);
+
+      // Never tell the door about a degenerate size - a door asked to lay
+      // itself out in zero rows has nothing sensible to do with that.
+      if (cols < 1 || rows < 1) return;
+
       // Telling the door is DEBOUNCED, not throttled - see announceSize.
       announceSize(cols, rows);
     };

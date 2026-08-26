@@ -77,8 +77,9 @@ export type BallEvent<TBrick extends PhysicsBrick = PhysicsBrick> = {
  * Advance one active ball by one frame's worth of movement, colliding with
  * walls, the paddle, and bricks along the way.
  *
- * Mutates `ball` (position/velocity, `active` on a sticky catch), `paddle`
- * (`sticky` consumed by a catch), and any hit brick (`hits`, `destroyed`).
+ * Mutates `ball` (position/velocity, `active` on a sticky catch) and any hit
+ * brick (`hits`, `destroyed`). The paddle is NOT modified: a sticky paddle
+ * stays sticky until the player loses a life or picks something else up.
  * Returns the events in occurrence order.
  */
 export declare function stepBall<TBrick extends PhysicsBrick>(ball: PhysicsBall, paddle: PhysicsPaddle, bricks: TBrick[], bounds: PlayfieldBounds): BallEvent<TBrick>[];

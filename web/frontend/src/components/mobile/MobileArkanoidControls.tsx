@@ -70,6 +70,16 @@ export function MobileArkanoidControls({
 }: MobileArkanoidControlsProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  /**
+   * The WHOLE screen steers the paddle, not just the strip at the bottom.
+   *
+   * The strip was a 260px bar, which is a small target for a game about
+   * sweeping the paddle across the board - "it's better to let touch
+   * controls work on the entire screen instead of the small area we have
+   * now". This surface covers everything above the button bar; the strip
+   * stays as the visible hint, and both report the same thing.
+   */
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const menuSurfaceRef = useRef<HTMLDivElement>(null);
 
   const buttons: ArkanoidButton[] = [LAUNCH_BUTTON, ...layout.keys];
@@ -106,8 +116,19 @@ export function MobileArkanoidControls({
   });
 
   useEffect(() => {
-    const strip = stripRef.current;
-    if (!strip) return;
+    // The full-screen surface when it is up, the strip otherwise - the
+    // mapping is the element's own width either way.
+    // BOTH surfaces steer: the full-screen layer and the visible strip.
+    // Binding only the big one would leave the strip - the thing that says
+    // "slide here" - doing nothing at all.
+    const surfaces = [surfaceRef.current, stripRef.current].filter(
+      (el): el is HTMLDivElement => el !== null
+    );
+    if (surfaces.length === 0) return;
+
+    // Each surface maps the thumb across ITS OWN width, which is what makes
+    // a sweep of the strip and a sweep of the screen mean the same thing.
+    const strip = surfaces[0];
 
     // Which finger owns the strip. A second finger (reaching for Launch)
     // must not hijack the paddle mid-stroke.
@@ -118,8 +139,12 @@ export function MobileArkanoidControls({
      * The strip's own geometry is the mapping - it sits outside the terminal
      * element, so the terminal's own point-to-cell helper cannot be used here.
      */
-    const fractionFor = (clientX: number): number => {
-      const rect = strip.getBoundingClientRect();
+    const fractionFor = (clientX: number, target?: EventTarget | null): number => {
+      // Measure the surface the finger is actually on. Both span the full
+      // width so in practice they agree, but the element under the touch is
+      // the honest answer - and it is the only one with a size in a test.
+      const on = surfaces.find(el => el === target || (target instanceof Node && el.contains(target)));
+      const rect = (on ?? strip).getBoundingClientRect();
       if (!rect.width) return 0;
       return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     };
@@ -135,7 +160,7 @@ export function MobileArkanoidControls({
       if (!touch) return;
       e.preventDefault();
       activeTouch = touch.identifier;
-      onSpinnerRef.current('start', fractionFor(touch.clientX));
+      onSpinnerRef.current('start', fractionFor(touch.clientX, e.target));
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -143,7 +168,7 @@ export function MobileArkanoidControls({
       const touch = touchById(e.changedTouches, activeTouch);
       if (!touch) return;
       e.preventDefault();
-      onSpinnerRef.current('move', fractionFor(touch.clientX));
+      onSpinnerRef.current('move', fractionFor(touch.clientX, e.target));
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
@@ -152,42 +177,46 @@ export function MobileArkanoidControls({
       if (!touch) return;
       e.preventDefault();
       activeTouch = null;
-      onSpinnerRef.current('end', fractionFor(touch.clientX));
+      onSpinnerRef.current('end', fractionFor(touch.clientX, e.target));
     };
 
     const handleMouseDown = (e: MouseEvent) => {
       e.preventDefault();
       mouseDragging = true;
-      onSpinnerRef.current('start', fractionFor(e.clientX));
+      onSpinnerRef.current('start', fractionFor(e.clientX, e.target));
     };
 
     // On window: a stroke that leaves the strip must keep steering, and must
     // still end when the button comes up somewhere else.
     const handleMouseMove = (e: MouseEvent) => {
       if (!mouseDragging) return;
-      onSpinnerRef.current('move', fractionFor(e.clientX));
+      onSpinnerRef.current('move', fractionFor(e.clientX, e.target));
     };
 
     const handleMouseUp = (e: MouseEvent) => {
       if (!mouseDragging) return;
       mouseDragging = false;
-      onSpinnerRef.current('end', fractionFor(e.clientX));
+      onSpinnerRef.current('end', fractionFor(e.clientX, e.target));
     };
 
-    strip.addEventListener('touchstart', handleTouchStart, { passive: false });
-    strip.addEventListener('touchmove', handleTouchMove, { passive: false });
-    strip.addEventListener('touchend', handleTouchEnd, { passive: false });
-    strip.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-    strip.addEventListener('mousedown', handleMouseDown);
+    for (const el of surfaces) {
+      el.addEventListener('touchstart', handleTouchStart, { passive: false });
+      el.addEventListener('touchmove', handleTouchMove, { passive: false });
+      el.addEventListener('touchend', handleTouchEnd, { passive: false });
+      el.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+      el.addEventListener('mousedown', handleMouseDown);
+    }
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      strip.removeEventListener('touchstart', handleTouchStart);
-      strip.removeEventListener('touchmove', handleTouchMove);
-      strip.removeEventListener('touchend', handleTouchEnd);
-      strip.removeEventListener('touchcancel', handleTouchEnd);
-      strip.removeEventListener('mousedown', handleMouseDown);
+      for (const el of surfaces) {
+        el.removeEventListener('touchstart', handleTouchStart);
+        el.removeEventListener('touchmove', handleTouchMove);
+        el.removeEventListener('touchend', handleTouchEnd);
+        el.removeEventListener('touchcancel', handleTouchEnd);
+        el.removeEventListener('mousedown', handleMouseDown);
+      }
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -226,6 +255,20 @@ export function MobileArkanoidControls({
   }, [menuMode, onMenuKey]);
 
   return (
+    <>
+      {/* Everything above the buttons steers the paddle. Transparent, and
+          under the button bar in z-order so Launch still wins a tap. */}
+      {!menuMode && (
+        <div
+          className="mobile-arkanoid-controls__surface"
+          ref={surfaceRef}
+          // No role and hidden from assistive tech: the labelled Paddle
+          // control is the visible strip. This layer is the same control
+          // with a bigger target, and announcing a second "Paddle" slider
+          // would be a lie to a screen reader.
+          aria-hidden="true"
+        />
+      )}
     <div className="mobile-arkanoid-controls" ref={containerRef}>
       <div className="mobile-arkanoid-controls__title">{layout.title}</div>
       {menuMode ? (
@@ -245,7 +288,7 @@ export function MobileArkanoidControls({
           aria-label="Paddle"
           aria-orientation="horizontal"
         >
-          <span className="mobile-arkanoid-controls__hint">Slide to move the paddle</span>
+          <span className="mobile-arkanoid-controls__hint">Slide anywhere to move the paddle</span>
         </div>
       )}
       <div className="mobile-arkanoid-controls__buttons">
@@ -262,5 +305,6 @@ export function MobileArkanoidControls({
         ))}
       </div>
     </div>
+    </>
   );
 }

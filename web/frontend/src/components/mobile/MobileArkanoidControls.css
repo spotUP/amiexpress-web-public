@@ -100,3 +100,21 @@
   color: #fff;
   box-shadow: inset 0 -2px 0 #003a80;
 }
+
+/* The whole screen steers the paddle.
+ *
+ * ARKANOID is a spinner game and the strip at the bottom was a 260px target
+ * for a sweep that spans the whole board. This layer covers everything above
+ * the button bar; it is transparent and sits UNDER the bar in z-order, so
+ * Launch and the other buttons still take their own taps.
+ */
+.mobile-arkanoid-controls__surface {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--bbs-onscreen-input-height, 260px);
+  z-index: 9998;
+  background: transparent;
+  touch-action: none;
+}

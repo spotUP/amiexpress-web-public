@@ -170,3 +170,57 @@ describe('ARKANOID buttons', () => {
     expect(screen.getByRole('slider', { name: 'Paddle' })).toBeTruthy();
   });
 });
+
+describe('the whole screen steers the paddle', () => {
+  it('puts a full-screen surface above the game', () => {
+    // The strip was a 260px bar, which is a small target for a game about
+    // sweeping the paddle across the board.
+    const { container } = render(
+      <MobileArkanoidControls
+        layout={arkanoid}
+        onSpinner={() => {}}
+        onLaunch={() => {}}
+        onPress={() => {}}
+        onRelease={() => {}}
+      />
+    );
+
+    expect(container.querySelector('.mobile-arkanoid-controls__surface')).not.toBeNull();
+  });
+
+  it('does not announce a second Paddle control', () => {
+    // The visible strip is the labelled one; the layer is the same control
+    // with a bigger target, and two sliders called Paddle is a lie to a
+    // screen reader.
+    const { container } = render(
+      <MobileArkanoidControls
+        layout={arkanoid}
+        onSpinner={() => {}}
+        onLaunch={() => {}}
+        onPress={() => {}}
+        onRelease={() => {}}
+      />
+    );
+
+    const surface = container.querySelector('.mobile-arkanoid-controls__surface');
+    expect(surface?.getAttribute('aria-hidden')).toBe('true');
+    expect(surface?.getAttribute('role')).toBeNull();
+  });
+
+  it('is not there in menu mode', () => {
+    // Menus have their own swipe surface; two would fight.
+    const { container } = render(
+      <MobileArkanoidControls
+        layout={arkanoid}
+        onSpinner={() => {}}
+        onLaunch={() => {}}
+        onPress={() => {}}
+        onRelease={() => {}}
+        menuMode
+        onMenuKey={() => {}}
+      />
+    );
+
+    expect(container.querySelector('.mobile-arkanoid-controls__surface')).toBeNull();
+  });
+});

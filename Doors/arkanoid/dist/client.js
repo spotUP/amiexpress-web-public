@@ -860,10 +860,15 @@ class ArkanoidGame {
             case 'life':
                 this.data.lives = Math.min(this.data.lives + 1, 5);
                 break;
+            // The paddle's two abilities REPLACE each other and last until the
+            // player loses a life - "active until next pickup or death". Neither
+            // is spent by using it.
             case 'sticky':
+                paddle.laser = false;
                 paddle.sticky = true;
                 break;
             case 'laser':
+                paddle.sticky = false;
                 paddle.laser = true;
                 break;
         }

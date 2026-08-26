@@ -32,8 +32,9 @@ const MAX_SUBSTEP = 0.5;
  * Advance one active ball by one frame's worth of movement, colliding with
  * walls, the paddle, and bricks along the way.
  *
- * Mutates `ball` (position/velocity, `active` on a sticky catch), `paddle`
- * (`sticky` consumed by a catch), and any hit brick (`hits`, `destroyed`).
+ * Mutates `ball` (position/velocity, `active` on a sticky catch) and any hit
+ * brick (`hits`, `destroyed`). The paddle is NOT modified: a sticky paddle
+ * stays sticky until the player loses a life or picks something else up.
  * Returns the events in occurrence order.
  */
 export function stepBall(ball, paddle, bricks, bounds) {
@@ -81,7 +82,11 @@ export function stepBall(ball, paddle, bricks, bounds) {
             ball.y = paddle.y - 1;
             if (paddle.sticky) {
                 ball.active = false;
-                paddle.sticky = false;
+                // The paddle STAYS sticky. It used to clear itself on the first
+                // catch, so the pickup was worth exactly one ball - "magnetic ball
+                // only works once, they should be active until the next pickup or
+                // death". Losing a life clears it (see loseLife), and picking up
+                // something else replaces it.
                 events.push({ type: 'paddleCatch' });
                 // A caught ball stops moving; the rest of the frame is void.
                 return events;
