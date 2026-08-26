@@ -4,6 +4,7 @@
 import type { Socket } from 'socket.io-client';
 import type { CommandRegistry } from '../commands/types';
 import { executeCommand } from '../core/command-exec';
+import { looksLikeCommand } from './command';
 import { replaceEmojis } from '../utils/emojis';
 import { formatTime, escapeContent } from '../utils/format';
 import { parseContent } from '../utils/markdown';
@@ -83,7 +84,7 @@ export function createSubmitHandler(
         updateTypingPreview();  // Sync typingPreviewLines with typingBuffers
       }
 
-      if (msg.startsWith('/')) {
+      if (looksLikeCommand(msg)) {
         cmdCtx.currentChannel = state.currentChannel;
         const r = await executeCommand(msg, registry, cmdCtx);
         const cmdName = msg.slice(1).split(' ')[0].toLowerCase();

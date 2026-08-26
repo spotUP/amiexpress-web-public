@@ -1,4 +1,20 @@
 /** Slash command handler */
+/**
+ * Is this input a command, or is it something somebody wants to say?
+ *
+ * A command is a slash followed by a NAME. `startsWith('/')` alone was too
+ * loose: the emoji catalogue contains `/!\`, so picking it into an empty
+ * input and pressing Enter ran the command parser, which reported "Unknown
+ * command" and swallowed the line - the reported "some emojis cannot be sent
+ * because of the characters they start with".
+ *
+ * Deliberately strict about the first character after the slash: no command
+ * begins with a digit or punctuation, and text very well might.
+ */
+export function looksLikeCommand(input: string): boolean {
+  return /^\/[A-Za-z][A-Za-z0-9_-]*(\s|$)/.test(input);
+}
+
 export interface CommandResult {
   handled: boolean;
   message?: string;
@@ -37,7 +53,7 @@ export class CommandHandler {
 
   /** Execute a command */
   execute(input: string): CommandResult {
-    if (!input.startsWith('/')) {
+    if (!looksLikeCommand(input)) {
       return { handled: false };
     }
     const [cmd, ...rest] = input.slice(1).split(' ');
