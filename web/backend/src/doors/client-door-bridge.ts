@@ -4,6 +4,8 @@
  */
 
 import { Socket } from 'socket.io';
+import { debugLog } from '../utils/debug-log';
+import { newMotionThrottle, shouldForwardInput } from './input-motion-throttle';
 import type { BBSSession } from '../index';
 
 // Import SDK protocol types
@@ -197,18 +199,28 @@ console.log(`[ClientDoorBridge] Starting session ${sessionId} for door ${doorId}
     (doorSession as any).clientMessageHandler = clientMessageHandler;
 
     // Listen for user input and forward to door
-    const inputHandler = (data: string) => {
-console.log(`[ClientDoorBridge] inputHandler called with data:`, JSON.stringify(data));
-console.log(`[ClientDoorBridge] doorSession.active:`, doorSession.active);
+    //
+    // Mouse motion is throttled and the per-event logging is gated. Both
+    // used to run flat out: every pointer movement was stringified into the
+    // log, parsed, forwarded and answered with a re-render. On 2026-08-26
+    // that blocked the event loop on live - the container stayed up,
+    // /health stopped answering from inside it, and the whole BBS was down
+    // while one person moved a mouse over /chat.
+    const motionThrottle = newMotionThrottle();
 
+    const inputHandler = (data: string) => {
       if (!doorSession.active) {
-console.log(`[ClientDoorBridge] Session not active, ignoring input`);
+        debugLog(`[ClientDoorBridge] Session not active, ignoring input`);
         return;
       }
 
+      if (!shouldForwardInput(motionThrottle, data, Date.now())) return;
+
+      debugLog(`[ClientDoorBridge] inputHandler called with data:`, JSON.stringify(data));
+
       // Parse key data and create enhanced key event
       const parsedKey = this.parseKeyInput(data);
-console.log(`[ClientDoorBridge] Parsed key:`, parsedKey);
+      debugLog(`[ClientDoorBridge] Parsed key:`, parsedKey);
 
       // Send to door
       this.sendMessage(doorSession, {
@@ -216,7 +228,7 @@ console.log(`[ClientDoorBridge] Parsed key:`, parsedKey);
         data: parsedKey,
         timestamp: Date.now(),
       });
-console.log(`[ClientDoorBridge] Sent INPUT message to door`);
+      debugLog(`[ClientDoorBridge] Sent INPUT message to door`);
     };
 
 console.log(`[ClientDoorBridge] Registering 'command' listener for session ${sessionId}`);
