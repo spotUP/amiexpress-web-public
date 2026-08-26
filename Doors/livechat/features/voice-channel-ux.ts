@@ -1022,7 +1022,7 @@ export class EnhancedVoiceChannel {
           this.controlBar.updateModeButtonLabel(this.renderMode);
         }
 
-        // Create video grid
+        // Create video grid (also created at startup - see ensureVideoGrid)
         if (!this.videoGrid) {
           // Use chatPanel as parent if available, otherwise use screen
           const gridParent = this.chatPanel || this.screen;
@@ -1126,7 +1126,14 @@ export class EnhancedVoiceChannel {
         if (response && response.success) {
           await completeJoin(response.participants);
         } else {
-          // Server responded but denied - still show UI for demo/testing
+          // SAY SO. This used to open the voice UI regardless "for
+          // demo/testing", so a refused join looked exactly like a
+          // successful one: a Voice panel with you in it, a participant
+          // count stuck at 0, and nobody able to hear anybody. The failure
+          // went unnoticed for as long as it did precisely because it was
+          // silent.
+          const reason = response?.error || 'no response from the server';
+          console.log('[voice-channel-ux] voice:join-channel REFUSED:', reason);
           await completeJoin();
         }
       });
@@ -1202,6 +1209,46 @@ export class EnhancedVoiceChannel {
    * Registering is idempotent: the SDK keeps one handler, so calling this
    * again simply replaces it with an identical one.
    */
+
+  /**
+   * Make sure the video grid exists, whether or not this user has anything
+   * to do with a voice channel.
+   *
+   * The grid used to be built only when joining voice, and the frame handler
+   * with it - so a user who never touched voice received every frame and had
+   * nowhere to put it. Video does not depend on voice: the backend falls
+   * back to the chat room when there is no voice channel, so people can see
+   * each other perfectly well without one. The door's own log said which
+   * sessions were deaf: `video:frame received, has handler: false`.
+   */
+  public ensureVideoGrid(): void {
+    if (this.videoGrid) {
+      this.ensureFrameHandler();
+      return;
+    }
+
+    const gridParent = this.chatPanel || this.screen;
+
+    this.videoGrid = new VideoGrid({
+      parent: gridParent,
+      screen: this.screen,
+      left: 0,
+      top: 0,
+      width: '100%',
+      height: '100%',
+      currentUserId: this.userId,
+      currentUsername: this.username,
+      onTileRightClick: (uid, x, y) => {
+        this.onTileRightClick?.(uid, x, y);
+      },
+      onLayoutChanged: () => this.scheduleStreamResize(),
+    });
+
+    // Hidden until somebody actually has video.
+    this.videoGrid.hide();
+    this.ensureFrameHandler();
+  }
+
   private ensureFrameHandler(): void {
     if (!this.ctx?.video) return;
 

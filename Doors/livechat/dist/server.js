@@ -1357,6 +1357,16 @@ async function createApp(session) {
             showContextMenu(x, y, 'video', uid);
         },
     });
+    // Be ready to SHOW video from the start, without joining voice first.
+    //
+    // The video grid used to be built only on joining a voice channel, and the
+    // frame handler with it - so a user who never touched voice received every
+    // frame and dropped it, which the door's log reported as
+    // "video:frame received, has handler: false". Video does not depend on
+    // voice: the backend falls back to the chat room, so people in a text
+    // channel can see each other perfectly well. The grid stays hidden until
+    // somebody actually has a camera on.
+    voiceChannel.ensureVideoGrid?.();
     // ========== MOUSE HANDLING & SCROLL WHEEL ==========
     // Using built-in blessed widget click events instead of custom screen-level handler
     // Input box click to focus

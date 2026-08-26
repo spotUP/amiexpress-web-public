@@ -158,6 +158,18 @@ export declare class EnhancedVoiceChannel {
      * Registering is idempotent: the SDK keeps one handler, so calling this
      * again simply replaces it with an identical one.
      */
+    /**
+     * Make sure the video grid exists, whether or not this user has anything
+     * to do with a voice channel.
+     *
+     * The grid used to be built only when joining voice, and the frame handler
+     * with it - so a user who never touched voice received every frame and had
+     * nowhere to put it. Video does not depend on voice: the backend falls
+     * back to the chat room when there is no voice channel, so people can see
+     * each other perfectly well without one. The door's own log said which
+     * sessions were deaf: `video:frame received, has handler: false`.
+     */
+    ensureVideoGrid(): void;
     private ensureFrameHandler;
     private startAudioStreaming;
     showGrid(): void;
