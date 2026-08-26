@@ -72,7 +72,12 @@ async function runChatOnlyLogin(session) {
         // login modal -- without mouse events reaching the textarea, users
         // couldn't click to focus the username/password fields.
         bbsSession.doorInputHandler = (data) => {
-            console.log('[chat-only-login] input data=%s len=%d focused=%s screen?=%s', JSON.stringify(data.slice(0, 20)), data.length, screen.focused?.type || 'none', !!screen.program);
+            console.log('[chat-only-login] input data=%s len=%d focused=%s screen?=%s', JSON.stringify(data.slice(0, 20)), data.length, 
+            // getFocused() is the focused ELEMENT. `screen.focused` is a boolean
+            // about the Screen itself, so this line could only ever print "none"
+            // - which read as "the login box has no focus" and sent an
+            // investigation after a bug that was not there.
+            screen.getFocused?.()?.type || 'none', !!screen.program);
             if (screen.program) {
                 // Use proper emit API (not private _handleData) to prevent double processing
                 screen.program.emit('data', data);
@@ -83,9 +88,39 @@ async function runChatOnlyLogin(session) {
         loginModal = (0, login_modal_1.createLoginModal)({
             screen,
             onSubmit: async (credentials) => {
+                // Say that a login was attempted and how it went.
+                //
+                // Nothing logged either outcome, so "many people cannot log in" could
+                // not be told apart from "many people typed the wrong password", and
+                // the logs held no answer at all.
+                console.log('[chat-only-login] submit for %s', JSON.stringify(credentials?.username ?? ''));
                 // Verify credentials directly (we're on the server!)
                 const result = await verifyCredentials(credentials);
                 if (result.success && result.user) {
+                    console.log('[chat-only-login] SUCCESS for %s', result.user.username);
+                    // Hand the browser a token so this login survives a reload.
+                    //
+                    // /chat already signs in with a stored `authToken` when it has one,
+                    // and /api/chat/login already mints them - but the modal, which is
+                    // how most people actually sign in, handed back nothing. So there
+                    // was never a token to store and everybody logged in again on every
+                    // reload. Same minting as the REST route, required the same way
+                    // this file already reaches the database.
+                    try {
+                        const path = require('path');
+                        const { mintChatToken } = require(path.resolve(process.cwd(), 'src/services/chat-token.service'));
+                        const token = mintChatToken({
+                            id: result.user.id,
+                            username: result.user.username,
+                            secLevel: result.user.secLevel,
+                        }, true);
+                        socket.emit('chat:auth-token', { token, username: result.user.username });
+                    }
+                    catch (err) {
+                        // A missing token only costs another login next time; it must not
+                        // stop this one from completing.
+                        console.error('[chat-only-login] could not issue a token:', err);
+                    }
                     // Update session with user data
                     session.user = result.user;
                     if (bbsSession) {
@@ -102,6 +137,7 @@ async function runChatOnlyLogin(session) {
                     resolve(true);
                 }
                 else {
+                    console.log('[chat-only-login] FAILED for %s: %s', JSON.stringify(credentials?.username ?? ''), result.error || 'unknown');
                     loginModal.showError(result.error || 'Login failed');
                     loginModal.clearInputs();
                 }

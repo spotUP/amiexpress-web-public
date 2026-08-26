@@ -1883,8 +1883,22 @@ async function createApp(session) {
     // Clear typing preview lines when switching channels
     // setupRoomHandlers already clears state.typingBuffers via setChannel,
     // but typingPreviewLines is a separate Map that also needs clearing
-    socket.on('room:joined', () => {
-        // New room joined
+    socket.on('room:joined', (d) => {
+        // Paint the recent conversation.
+        //
+        // The server has always stored room messages and has always fetched the
+        // recent ones on join - but it wrote them with emitToTerminal, which is
+        // suppressed while a door owns the screen, so LiveChat never saw a single
+        // one. Reloading /chat looked like the history had been thrown away when
+        // it was on disk the whole time.
+        const history = Array.isArray(d?.history) ? d.history : [];
+        if (history.length === 0)
+            return;
+        addSystemMessage(`{gray-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/gray-fg}`);
+        for (const m of history) {
+            const when = m.createdAt ? new Date(m.createdAt) : undefined;
+            addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when);
+        }
     });
     // ========== CHAT SOCKET HANDLERS ==========
     (0, chat_socket_handlers_1.setupChatHandlers)(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentions_1.mentionsUser, formatter_1.getUserColor, formatter_1.formatMessage, typing_preview_1.processKeystroke, updateTypingPreview, screen, socket_typing_1.shouldShowEvent, services_1.getEventMessage, eventBus, state_1.addMessage, messageHandler, format_1.formatTime);

@@ -9,6 +9,7 @@
  */
 
 import express, { Request, Response } from 'express';
+import { mintChatToken } from '../services/chat-token.service';
 import jwt from 'jsonwebtoken';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
@@ -91,18 +92,12 @@ console.log(`[Chat API] Failed login attempt for: ${safeUsername}`);
         return handleError(res, new Error('Invalid username or password'), 401);
       }
 
-      // Generate chat-specific JWT token
-      const secret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
-      const expiresIn = rememberMe ? '30d' : '24h';
-
-      const payload = {
-        userId: user.id,
-        username: user.username,
-        secLevel: user.secLevel,
-        chatOnly: true // Marker to identify chat-only tokens
-      };
-
-      const token = jwt.sign(payload, secret, { expiresIn });
+      // One minting implementation, shared with the door's login modal, so
+      // the two cannot drift into different claims or lifetimes.
+      const token = mintChatToken(
+        { id: user.id, username: user.username, secLevel: user.secLevel },
+        !!rememberMe
+      );
 
 console.log(`[Chat API] Successful login for: ${user.username} (rememberMe: ${!!rememberMe})`);
 

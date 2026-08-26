@@ -415,6 +415,20 @@ export default function ChatTerminal() {
       }
     });
 
+    // A token issued by the door's login modal, so this login survives a
+    // reload. The SSO path above sends it back on the next connection, which
+    // is what stops /chat asking for a password every single time.
+    socket.on('chat:auth-token', (data: { token?: string; username?: string }) => {
+      if (!data?.token) return;
+      try {
+        localStorage.setItem('authToken', data.token);
+        console.log('[ChatTerminal] Stored chat token for', data.username);
+      } catch {
+        // Private mode, or storage disabled: the session still works, it just
+        // will not be remembered.
+      }
+    });
+
     // ANSI output from server (including LiveChat door output)
     socket.on('ansi-output', (data: string) => {
       term.write(data);
