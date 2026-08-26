@@ -459,8 +459,16 @@ console.log('✅ User joined room:', session.user?.username, room.room_name);
     emitToTerminal(socket, session, AnsiUtil.line('Type your message and press ENTER to chat'));
     emitToTerminal(socket, session, AnsiUtil.line('─'.repeat(78)));
 
-    // Get recent room history
-    const history = await db.getChatRoomHistory(room.room_id, 10);
+    // Recent history, for BOTH audiences.
+    //
+    // This was fetched and then written with emitToTerminal, which is
+    // suppressed while a door owns the screen - so it reached plain terminal
+    // users and never LiveChat, and room:joined carried members and topic but
+    // not a single message. Reloading /chat therefore looked like the
+    // conversation had been thrown away, when it had been on disk the whole
+    // time. 50 rather than 10: the repository's own default, and enough that
+    // opening the page shows a conversation rather than a fragment.
+    const history = await db.getChatRoomHistory(room.room_id, 50);
     if (history.length > 0) {
       emitToTerminal(socket, session, AnsiUtil.line('Recent messages:'));
       for (const msg of history) {
@@ -473,12 +481,15 @@ console.log('✅ User joined room:', session.user?.username, room.room_name);
 
     // Broadcast join to other room members
     broadcastRoomSystem(room.room_id, session.user?.username + ' joined the room', socket.id);
-    io.to('room:' + room.room_id).except(socket.id).emit('room:user-joined', {
-      userId: session.user?.id,
-      username: session.user?.username
-    });
 
-    // CRITICAL: Broadcast room:user-joined event to all room members for SDK doors
+    // ONE announcement, to the whole room.
+    //
+    // There were two: this one, and an earlier `.except(socket.id)` copy.
+    // Everybody but the joiner received both, so every join appeared twice in
+    // the chat log - reported with a screenshot showing "*** infant joined
+    // the room ***" and "[21:51] infant joined" each drawn twice. The door
+    // and a plain terminal both need this event, so the surviving emit is the
+    // one that excludes nobody.
     const socketRoom = 'room:' + room.room_id;
     io.to(socketRoom).emit('room:user-joined', {
       userId: session.user?.id,
@@ -493,7 +504,14 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
       memberCount: members.length,
       topic: room.topic || null,
       motd: room.motd || null,
-      members: withPresence(members, userIsOnline)
+      members: withPresence(members, userIsOnline),
+      history: history.map((m: any) => ({
+        id: m.id,
+        userId: m.sender_id,
+        username: m.sender_username,
+        content: m.message,
+        createdAt: m.created_at,
+      })),
     };
 console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));
     socket.emit('room:joined', roomJoinedData);
@@ -530,12 +548,9 @@ console.log('🚪 Room leave request:', session.user?.id, session.currentRoomNam
 
     // Broadcast leave to other room members (before clearing session)
     broadcastRoomSystem(roomId, username + ' left the room');
-    io.to('room:' + roomId).emit('room:user-left', {
-      userId: session.user?.id,
-      username: session.user?.username
-    });
 
-    // CRITICAL: Broadcast room:user-left event to all room members for SDK doors
+    // ONE announcement, for the same reason as the join above: two emits to
+    // the same room drew every leave twice.
     const socketRoom = 'room:' + roomId;
     io.to(socketRoom).emit('room:user-left', {
       userId: session.user?.id,

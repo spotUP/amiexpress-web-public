@@ -58,7 +58,7 @@ function disableShortcuts(session: BBSSession) {
  * those events handled by the server-side handlers directly, rather than being
  * sent to the client (which doesn't re-emit them back).
  */
-function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any): any {
+export function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any): any {
   const rawEmit = socket.emit.bind(socket);
   const localHandlers = new Map<string, Set<(...args: any[]) => void>>();
 
@@ -366,18 +366,19 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
   wrappedSocket.join = socket.join?.bind(socket);
   wrappedSocket.leave = socket.leave?.bind(socket);
 
-  // Bridge server-side BBS events (score, login, etc.) into this door's
-  // socket so doors can use socket.on('bbs:event', ...) to receive them.
-  // io.emit() only reaches browser clients; super.emit() on the EventEmitter
-  // reaches these server-side listeners.
-  const { bbsEventEmitter } = require('../services/bbs-event-emitter');
-  const bbsEventBridge = (payload: any) => dispatchLocal('bbs:event', payload);
-  bbsEventEmitter.on('bbs:event', bbsEventBridge);
+  // No bridge from bbsEventEmitter to this door.
+  //
+  // There used to be one, on the belief that "io.emit() only reaches browser
+  // clients". It does not: onAnyOutgoing above fires for BROADCASTS as well
+  // as direct emits, so bbsEventEmitter.broadcast()'s io.emit already reaches
+  // every door's local handlers. Subscribing here as well delivered each
+  // event twice, and the door drew it twice - reported with a screenshot
+  // where every login, door entry and room join appeared in the chat log in
+  // duplicate, while the server log showed it emitted exactly once.
 
   wrappedSocket._doorCleanup = () => {
     localHandlers.clear();
     cleanupOutgoing?.();
-    bbsEventEmitter.off('bbs:event', bbsEventBridge);
   };
 
   return wrappedSocket;
