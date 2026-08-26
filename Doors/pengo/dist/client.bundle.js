@@ -1302,6 +1302,10 @@ var init_box = __esm({
     init_element();
     init_responsive_constants();
     Box = class extends Element {
+      /** blessed-style widget kind; see Element.type. */
+      get type() {
+        return "box";
+      }
       constructor(options = {}) {
         super(options);
         if (options.responsivePadding) {
@@ -1410,6 +1414,47 @@ var init_element = __esm({
     ESC2 = String.fromCharCode(27);
     Element = class extends EventEmitter2 {
       /**
+       * Widget kind, blessed-style ('list', 'textbox', 'button', ...).
+       *
+       * Subclasses set this in their constructor. Callers use it to ask "is a
+       * text-entry widget focused right now" without importing every widget
+       * class - MultiplayerLobby.widgetHasFocus() has always read
+       * `focused.type`, but nothing ever DEFINED it, so it was permanently
+       * undefined and that guard always returned false. Every single-letter
+       * lobby shortcut therefore fired while the user was typing in the chat
+       * box: 'o' jumped to the Game tab, 's' started the match, and 'q'/ESC
+       * left the lobby outright (reported live 2026-08-25).
+       */
+      get type() {
+        return "element";
+      }
+      /**
+       * Whether this element is hidden.
+       *
+       * Routed through show()/hide() rather than being a plain field because
+       * `visible` is a SEPARATE flag that renderElement() also tests
+       * (`if (!this.visible || this.hidden) return`). hide() clears both, so
+       * any code that later did the obvious `el.hidden = false` un-hid the
+       * element while leaving `visible === false` - the element then reported
+       * `hidden: false`, had correct coords, and still never painted. That
+       * silently ate the Grandmaster lobby's Bots button, which is built with
+       * `hidden: true` and revealed by `setAsHost()` (2026-08-25). Assigning
+       * this property now performs the real show/hide so the two flags cannot
+       * drift apart.
+       */
+      get hidden() {
+        return this._hidden;
+      }
+      set hidden(value) {
+        if (value === this._hidden)
+          return;
+        if (value) {
+          this.hide();
+        } else {
+          this.show();
+        }
+      }
+      /**
        * Check if this element or any of its descendants has focus
        */
       hasFocusedChild() {
@@ -1449,7 +1494,7 @@ var init_element = __esm({
         this._contentDirty = false;
         this._lastParsedWidth = 0;
         this.visible = true;
-        this.hidden = false;
+        this._hidden = false;
         this.focused = false;
         this.destroyed = false;
         this.disabled = false;
@@ -1646,9 +1691,26 @@ var init_element = __esm({
         }
         return { left: 0, right: 0, top: 0, bottom: 0 };
       }
+      /**
+       * Whether this element actually draws a border.
+       *
+       * Public because Screen's own render path needs the SAME predicate -
+       * `border` accepts both a string (`'line'` / `'none'`) and an object
+       * (`{type:'line'}`), and screen.ts used to test only the object form
+       * (`options.border?.type !== 'none'`). For the string `'none'`, `.type`
+       * is undefined, so that test read as "has a border" while this method
+       * said otherwise, and Screen then inset content by 1 row. On a 1-row
+       * element that made startY exceed maxY and the element painted NOTHING
+       * (Grandmaster lobby's whole button row vanished, 2026-08-25); on a
+       * 3-row one it pushed the text a row down into its neighbour.
+       */
       hasBorder() {
         const border = this.options.border;
-        if (!border || border === "none")
+        if (!border)
+          return false;
+        if (border === "none")
+          return false;
+        if (typeof border === "object" && border.type === "none")
           return false;
         return true;
       }
@@ -2403,7 +2465,18 @@ var init_element = __esm({
             "light-cyan": 14,
             "light-white": 15,
             gray: 8,
-            grey: 8
+            grey: 8,
+            // Non-hyphenated aliases - Screen._colorToCode() spells these
+            // 'lightwhite' etc. Both maps must accept both spellings or a name
+            // valid in one renderer silently resolves differently in the other.
+            lightblack: 8,
+            lightred: 9,
+            lightgreen: 10,
+            lightyellow: 11,
+            lightblue: 12,
+            lightmagenta: 13,
+            lightcyan: 14,
+            lightwhite: 15
           };
           const lower = color.toLowerCase();
           if (lower in colorMap) {
@@ -2623,8 +2696,8 @@ var init_element = __esm({
       show() {
         if (this.destroyed)
           return;
-        if (this.hidden) {
-          this.hidden = false;
+        if (this._hidden) {
+          this._hidden = false;
           this.visible = true;
           this._invalidateCoords();
           if (this.screen && this.screen.markDirtyElement) {
@@ -2640,7 +2713,7 @@ var init_element = __esm({
       hide() {
         if (this.destroyed)
           return;
-        if (!this.hidden) {
+        if (!this._hidden) {
           if (this.screen && this.screen.markDirtyElement) {
             this.screen.markDirtyElement(this);
           }
@@ -2648,7 +2721,7 @@ var init_element = __esm({
           if (this.screen && pos) {
             this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
           }
-          this.hidden = true;
+          this._hidden = true;
           this.visible = false;
           this.blur();
           this.emit("hide");
@@ -3605,17 +3678,7 @@ var init_element = __esm({
         const pos = this._getCoords();
         if (!pos)
           return;
-        let style = this.options.style;
-        const focusStyle = this.options.style?.focus;
-        const hoverStyle = this.options.style?.hover;
-        const disabledStyle = this.options.style?.disabled;
-        if (this.disabled && disabledStyle) {
-          style = { ...style, ...disabledStyle };
-        } else if (this.focused && focusStyle) {
-          style = { ...style, ...focusStyle };
-        } else if (this._hovered && hoverStyle) {
-          style = { ...style, ...hoverStyle };
-        }
+        const style = this.getEffectiveContentStyle();
         const attr = this.sattr(style);
         const border = this.hasBorder() ? 1 : 0;
         const padding = this.getPadding();
@@ -3646,6 +3709,34 @@ var init_element = __esm({
       /**
        * Render content text (called by subclasses)
        */
+      /**
+       * Resolve the content style for the element's current state (disabled >
+       * focused > hovered > idle). Focus forces `bold` by default so a focus
+       * change reads as a text-weight change, not just a color swap - a
+       * color-only swap is easy to miss when the element's own idle bg is
+       * already bright/saturated (e.g. a yellow button), or when the same
+       * focus color is reused elsewhere on screen for something unrelated (a
+       * selected list row, a highlighted setting). Bold is a hue-independent
+       * cue that survives both cases, and mirrors the border-focus default a
+       * few hundred lines up. Exposed (not inlined in renderContent) so this
+       * resolution is directly testable.
+       */
+      getEffectiveContentStyle() {
+        const style = this.options.style || {};
+        if (this.disabled && style.disabled) {
+          return { ...style, ...style.disabled };
+        }
+        if (this.disabled) {
+          return { ...style, fg: "gray" };
+        }
+        if (this.focused && style.focus) {
+          return { ...style, bold: true, ...style.focus };
+        }
+        if (this._hovered && style.hover) {
+          return { ...style, ...style.hover };
+        }
+        return style;
+      }
       renderContent() {
         if (!this.screen)
           return;
@@ -3653,16 +3744,7 @@ var init_element = __esm({
         if (!pos)
           return;
         const lines = this.getVisibleLines();
-        let style = this.options.style;
-        if (this.disabled && this.options.style?.disabled) {
-          style = { ...style, ...this.options.style.disabled };
-        } else if (this.disabled) {
-          style = { ...style, fg: "gray" };
-        } else if (this.focused && this.options.style?.focus) {
-          style = { ...style, ...this.options.style.focus };
-        } else if (this._hovered && this.options.style?.hover) {
-          style = { ...style, ...this.options.style.hover };
-        }
+        const style = this.getEffectiveContentStyle();
         const attr = this.sattr(style);
         let y = this.itop;
         for (const line3 of lines) {
@@ -4307,6 +4389,10 @@ var init_button = __esm({
     init_element();
     init_responsive_constants();
     Button = class extends Element {
+      /** blessed-style widget kind; see Element.type. */
+      get type() {
+        return "button";
+      }
       constructor(options = {}) {
         const baseStyle = options.style ?? {};
         const focusStyle = {
@@ -4320,6 +4406,7 @@ var init_button = __esm({
           ...baseStyle.hover ?? {}
         };
         const isInline = options.inline === true;
+        const isGhosted = options.ghostWhenIdle === true;
         super({
           focusable: true,
           clickable: true,
@@ -4335,6 +4422,14 @@ var init_button = __esm({
             fg: baseStyle.fg ?? "white",
             bg: baseStyle.bg ?? "black",
             ...baseStyle,
+            // Override AFTER the baseStyle spread so ghosting wins over
+            // whatever fg/bg the caller asked for as this button's idle look.
+            // Plain white, not 'gray' (#808080 read as invisible against black
+            // in practice - a lobby's whole button row disappeared until
+            // focused, reported live 2026-08-24). White still reads as
+            // quieter than the focused state, which is bold *and* the
+            // button's real saturated color.
+            ...isGhosted ? { fg: "white", bg: "black" } : {},
             focus: focusStyle,
             hover: hoverStyle
           }
@@ -30010,6 +30105,22 @@ var AudioEngine = class {
   }
 };
 
+// ../../sdk/dist-esm/engines/audio/tracker-engine.js
+var InterpolationFilter;
+(function(InterpolationFilter2) {
+  InterpolationFilter2[InterpolationFilter2["None"] = 0] = "None";
+  InterpolationFilter2[InterpolationFilter2["Linear"] = 1] = "Linear";
+  InterpolationFilter2[InterpolationFilter2["Cubic"] = 2] = "Cubic";
+  InterpolationFilter2[InterpolationFilter2["Sinc8"] = 3] = "Sinc8";
+})(InterpolationFilter || (InterpolationFilter = {}));
+var PlaybackState;
+(function(PlaybackState2) {
+  PlaybackState2["Stopped"] = "stopped";
+  PlaybackState2["Playing"] = "playing";
+  PlaybackState2["Paused"] = "paused";
+  PlaybackState2["Loading"] = "loading";
+})(PlaybackState || (PlaybackState = {}));
+
 // ../../sdk/dist-esm/media/VoiceCapture.js
 var import_events6 = __toESM(require_events());
 
@@ -30302,13 +30413,11 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         this.mainLoop();
         break;
       case MessageType.INPUT:
-        console.log("[ClientDoor] ===== INPUT MESSAGE RECEIVED =====");
-        console.log("[ClientDoor] Message data:", JSON.stringify(message.data));
-        console.log("[ClientDoor] User:", this.user ? "exists" : "null");
+        if (globalThis.__DOOR_INPUT_DEBUG__) {
+          console.log("[ClientDoor] INPUT:", JSON.stringify(message.data));
+        }
         if (this.user) {
-          console.log("[ClientDoor] About to emit input event with:", message.data);
           this.emit("input", { user: this.user, key: message.data });
-          console.log("[ClientDoor] Input event emitted");
         } else {
           console.warn("[ClientDoor] No user set, ignoring input");
         }
