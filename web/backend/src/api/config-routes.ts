@@ -9,7 +9,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
-import { applyDoorFieldsToTooltypes, findDoorInfoFile } from '../services/config-services/door-info-file.service';
+import { applyDoorFieldsToTooltypes, findDoorInfoFile, doorDisplayName } from '../services/config-services/door-info-file.service';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
 // which is not a dependency - so every password written through the admin
@@ -394,7 +394,7 @@ console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
       // Frontend expects: id (number), door_name, door_command, door_type, door_path, etc.
       const frontendDoors = backendDoors.map((door: any, index: number) => ({
         id: index + 1,  // Frontend expects numeric ID
-        door_name: door.name,
+        door_name: doorDisplayName(door),
         door_command: door.command,
         description: door.description || '',
         door_type: door.type || 'BBSCMD',

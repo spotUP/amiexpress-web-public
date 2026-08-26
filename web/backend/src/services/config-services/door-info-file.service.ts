@@ -102,3 +102,23 @@ export function findDoorInfoFile(bbsRoot: string, command: string): string | nul
   const match = fs.readdirSync(dir).find(name => name.toLowerCase() === wanted);
   return match ? path.join(dir, match) : null;
 }
+
+/**
+ * The name to SHOW for a door, and therefore the name to write back.
+ *
+ * A command's `name` is its filename (wall.info -> WALL); its title lives in
+ * the NAME tooltype ("dRE!WAll v2.0"). The API served the filename as
+ * `door_name`, so the admin form displayed WALL and saving an unrelated field
+ * wrote WALL into NAME - an access-level edit renamed the door.
+ *
+ * Serving the tooltype makes the round trip lossless: what the form shows is
+ * what gets written back.
+ */
+export function doorDisplayName(
+  door: { name: string; toolTypes?: Record<string, string> }
+): string {
+  const tools = door.toolTypes ?? {};
+  const raw = tools.NAME ?? (tools as any).name;
+  const title = typeof raw === 'string' ? raw.trim() : '';
+  return title || door.name;
+}
