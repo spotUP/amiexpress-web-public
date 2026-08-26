@@ -74,6 +74,9 @@ class AudioEngine {
   /** Echo on the effects bus, when the game asked for one. */
   private sfxEcho: any = null;
 
+  /** Level of the parallel effects send, when there is one. */
+  private sfxSend: any = null;
+
   /** Sound library (pre-defined effects) */
   private soundLibrary: Map<string, SoundLibraryEntry> = new Map();
 
@@ -156,35 +159,56 @@ class AudioEngine {
         this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
 
         // Effects can run through a reverb; music must not, or a tracker
-        // module turns to mush. The wet mix is the caller's choice, so a
-        // game can sound like a small room or like open space.
-        // Effects chain, built back to front: gain -> [echo] -> [reverb] ->
-        // master. The echo gives discrete repeats and the reverb the wash
-        // around them, which together is what "wet, with a bouncing echo"
-        // asks for. Music bypasses both.
-        let sfxDestination: any = this.masterGain;
+        // module turns to mush. Music bypasses both.
+        //
+        // The effects are on a SEND, not an insert - which is the whole
+        // point. An insert chain crossfades: a node's `wet` is the share of
+        // its output that is processed, so the dry signal is what pays for
+        // the reverb. Wet 0.6 into wet 0.4 leaves 0.24 of the original
+        // transient, and a game asking for "very wet" gets a hit it can
+        // barely hear. That is exactly what happened here.
+        //
+        // A send leaves the dry path alone: full-level effects straight to
+        // master, plus a parallel copy through the processors at wet 1,
+        // summed back through a send gain. `wet` in the config therefore
+        // sets HOW MUCH TAIL IS ADDED, not how much dry is given up, so
+        // more reverb makes the sound bigger instead of quieter.
+        this.sfxGain = new Tone.Gain(this.config.sfxVolume);
+        this.sfxGain.connect(this.masterGain);
 
+        // Built back to front: send -> [echo] -> [reverb] -> master. The
+        // echo gives the discrete repeats, the reverb the wash around them,
+        // which together is what "wet, with a bouncing echo" asks for.
         const reverb = this.config.sfxReverb;
-        if (reverb && reverb.wet > 0) {
-          this.sfxReverb = new Tone.Reverb({
-            decay: reverb.decay ?? 3,
-            preDelay: reverb.preDelay ?? 0.02,
-            wet: reverb.wet,
-          }).connect(sfxDestination);
-          sfxDestination = this.sfxReverb;
-        }
-
         const echo = this.config.sfxEcho;
-        if (echo && echo.wet > 0) {
-          this.sfxEcho = new Tone.FeedbackDelay({
-            delayTime: echo.delayTime,
-            feedback: Math.min(0.9, echo.feedback),
-            wet: echo.wet,
-          }).connect(sfxDestination);
-          sfxDestination = this.sfxEcho;
-        }
+        const sendLevel = Math.max(reverb?.wet ?? 0, echo?.wet ?? 0);
 
-        this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(sfxDestination);
+        if (sendLevel > 0) {
+          this.sfxSend = new Tone.Gain(sendLevel).connect(this.masterGain);
+          let sendDestination: any = this.sfxSend;
+
+          if (reverb && reverb.wet > 0) {
+            this.sfxReverb = new Tone.Reverb({
+              decay: reverb.decay ?? 3,
+              preDelay: reverb.preDelay ?? 0.02,
+              // Fully wet: on a send, any dry here would be a second copy
+              // of the dry path, phase-smearing the attack.
+              wet: 1,
+            }).connect(sendDestination);
+            sendDestination = this.sfxReverb;
+          }
+
+          if (echo && echo.wet > 0) {
+            this.sfxEcho = new Tone.FeedbackDelay({
+              delayTime: echo.delayTime,
+              feedback: Math.min(0.9, echo.feedback),
+              wet: 1,
+            }).connect(sendDestination);
+            sendDestination = this.sfxEcho;
+          }
+
+          this.sfxGain.connect(sendDestination);
+        }
 
         // Build sound library after gains are created
         this.buildSoundLibrary();

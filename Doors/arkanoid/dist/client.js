@@ -17,6 +17,7 @@ import { ClientDoor, AudioEngine, KeyStateTracker, ScreenBuffer, TrackerEngine, 
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 import { stepBall } from './ball-physics';
 import { easePaddle } from './paddle-motion';
+import { shineDelayFor, isShining } from './brick-shine';
 import { setInputMode } from '@amiexpress/bbs-door-sdk/client';
 import { trackForState } from './music-select';
 import { horizontalBar, subcellPoint, dominantAxis } from '@amiexpress/bbs-door-sdk/engines/graphics/subcell';
@@ -263,12 +264,19 @@ class ArkanoidGame {
             // musicVolume governs only the AudioEngine's own music. What balances
             // the mix against the tracker is sfxVolume: the effects sat at 0.8
             // against music the player could barely hear.
+            //
+            // 0.35 then went too far the other way ("I can hardly hear the sound
+            // effects now") - but the real culprit was the effects chain eating
+            // three quarters of the dry signal, since a Tone `wet` is a crossfade.
+            // The SDK puts the reverb on a parallel send now, so this number means
+            // what it says and can sit at a normal level.
             musicVolume: 0.85,
-            sfxVolume: 0.35,
+            sfxVolume: 0.6,
             // "Hall reverb so it sounds like it echoes in outer space." On the
-            // EFFECTS bus only - the tracker music stays dry, or it turns to mush.
+            // EFFECTS send only - the tracker music stays dry, or it turns to mush.
             // "Way more wet, with a bouncing echo." A long tail for the space, and
-            // a feedback delay in front of it for the bounce.
+            // a feedback delay in front of it for the bounce. These are SEND
+            // levels: they add tail, they do not take away impact.
             sfxReverb: {
                 wet: 0.6,
                 decay: 6,
@@ -892,11 +900,12 @@ class ArkanoidGame {
         this.data.shineTimer++;
         if (this.data.shineTimer > 300) {
             this.data.shineTimer = 0;
-            let delay = 0;
+            // By ROW, top to bottom - see brick-shine.ts. Handing out the delay
+            // per surviving brick made the highlight crawl one brick at a time,
+            // and go ragged as the wall was cleared.
             for (const brick of this.data.bricks) {
                 if (!brick.destroyed) {
-                    brick.shineFrame = delay;
-                    delay += 2;
+                    brick.shineFrame = shineDelayFor(brick.y, BRICK_START_Y, BRICK_HEIGHT);
                 }
             }
         }
@@ -1093,7 +1102,7 @@ class ArkanoidGame {
             if (brick.destroyed)
                 continue;
             let bg = brick.bgColor;
-            if (brick.shineFrame > 0 && brick.shineFrame < 5) {
+            if (isShining(brick.shineFrame)) {
                 bg = ANSI.bg.brightWhite;
             }
             if (brick.maxHits > 1 && brick.hits < brick.maxHits) {
