@@ -100,6 +100,21 @@
               # (2026-08-26: the video aspect fix was in the image and not in
               # the running door). Compare them and say so.
               echo "== door sync verification =="
+              # Wait for the entrypoint to SAY it has finished, rather than
+              # inferring it from /health. Health answers while the sync is
+              # still copying, so this check used to compare a half-copied
+              # volume and fail a deploy that was seconds from correct.
+              SYNC_WAIT=0
+              until docker exec amiexpress-bbs test -f /app/data/bbs/.sync-complete 2>/dev/null; do
+                SYNC_WAIT=$((SYNC_WAIT + 2))
+                if [ "$SYNC_WAIT" -ge 180 ]; then
+                  echo "ERROR: code sync never completed after ${SYNC_WAIT}s" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              echo "code sync completed at $(docker exec amiexpress-bbs cat /app/data/bbs/.sync-complete 2>/dev/null)"
+
               # NO `| head` on this pipeline. head closes the pipe as soon as
               # it has enough, the producer takes SIGPIPE, and under `set -o
               # pipefail` that fails the whole deploy - which is exactly what

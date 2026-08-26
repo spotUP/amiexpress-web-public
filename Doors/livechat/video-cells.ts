@@ -454,8 +454,117 @@ export function fitRichToTile(
   dstWidth: number,
   dstHeight: number
 ): RichFrame {
+  if (dstWidth <= 0 || dstHeight <= 0) {
+    return { dots: new Uint8Array(0), colors: new Uint8Array(0) };
+  }
+  if (srcWidth <= 0 || srcHeight <= 0) {
+    return { dots: new Uint8Array(dstWidth * dstHeight), colors: new Uint8Array(dstWidth * dstHeight) };
+  }
+
+  // Fit inside the tile, keeping the picture's shape.
+  const scale = Math.min(dstWidth / srcWidth, dstHeight / srcHeight);
+  const drawWidth = Math.max(1, Math.min(dstWidth, Math.floor(srcWidth * scale)));
+  const drawHeight = Math.max(1, Math.min(dstHeight, Math.floor(srcHeight * scale)));
+
+  // SHRINKING averages; enlarging repeats. Point-sampling a dithered
+  // picture down aliases the dither pattern into noise - the difference
+  // between a coarse picture and a distorted one.
+  const resized = (drawWidth < srcWidth || drawHeight < srcHeight)
+    ? shrinkRich(frame, srcWidth, srcHeight, drawWidth, drawHeight)
+    : {
+        dots: fitCellsToTile(frame.dots, srcWidth, srcHeight, drawWidth, drawHeight),
+        colors: fitCellsToTile(frame.colors, srcWidth, srcHeight, drawWidth, drawHeight),
+      };
+
+  // Then centre it in the tile.
   return {
-    dots: fitCellsToTile(frame.dots, srcWidth, srcHeight, dstWidth, dstHeight),
-    colors: fitCellsToTile(frame.colors, srcWidth, srcHeight, dstWidth, dstHeight),
+    dots: fitCellsToTile(resized.dots, drawWidth, drawHeight, dstWidth, dstHeight),
+    colors: fitCellsToTile(resized.colors, drawWidth, drawHeight, dstWidth, dstHeight),
   };
+}
+
+/** Lit dots per byte, for treating a dot pattern as a brightness. */
+const DOT_COUNT = (() => {
+  const table = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    let bits = 0;
+    for (let b = 0; b < 8; b++) if (i & (1 << b)) bits++;
+    table[i] = bits;
+  }
+  return table;
+})();
+
+/**
+ * Shrink a rich frame by averaging, rather than by picking one cell in each
+ * group and throwing the rest away.
+ *
+ * Nearest-neighbour sampling is fine when enlarging - a cell simply repeats
+ * - but destructive when shrinking a DITHERED picture. The dither is a 4x4
+ * pattern, so point-sampling it lands on whichever phase of that pattern
+ * happens to line up and aliases into noise: an 80x25 BBS terminal showing
+ * a frame encoded for a 146x46 window came out distorted rather than
+ * merely coarse (2026-08-26).
+ *
+ * Averaging is what the dither asked for in the first place - it exists to
+ * be blended by eye - so the dots are averaged as brightness and the
+ * colours resolved by majority. The result is a smaller picture that still
+ * looks like the scene.
+ */
+export function shrinkRich(
+  frame: RichFrame,
+  srcWidth: number,
+  srcHeight: number,
+  dstWidth: number,
+  dstHeight: number
+): RichFrame {
+  const dots = new Uint8Array(dstWidth * dstHeight);
+  const colors = new Uint8Array(dstWidth * dstHeight);
+
+  for (let y = 0; y < dstHeight; y++) {
+    const y0 = Math.floor((y * srcHeight) / dstHeight);
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * srcHeight) / dstHeight));
+
+    for (let x = 0; x < dstWidth; x++) {
+      const x0 = Math.floor((x * srcWidth) / dstWidth);
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * srcWidth) / dstWidth));
+
+      let litTotal = 0;
+      let samples = 0;
+      // Sixteen palette entries, counted for the majority vote.
+      const fgVotes = new Uint16Array(16);
+      const bgVotes = new Uint16Array(16);
+
+      for (let sy = y0; sy < y1 && sy < srcHeight; sy++) {
+        for (let sx = x0; sx < x1 && sx < srcWidth; sx++) {
+          const cell = sy * srcWidth + sx;
+          litTotal += DOT_COUNT[frame.dots[cell]];
+          fgVotes[(frame.colors[cell] >> 4) & 0x0f]++;
+          bgVotes[frame.colors[cell] & 0x0f]++;
+          samples++;
+        }
+      }
+
+      if (samples === 0) continue;
+
+      // Brightness back to a dot pattern: fill from the top of the cell, so
+      // a half-bright group reads as a half-filled character.
+      const lit = Math.round(litTotal / samples);
+      let bits = 0;
+      const ORDER = [0x01, 0x08, 0x02, 0x10, 0x04, 0x20, 0x40, 0x80];
+      for (let i = 0; i < lit && i < 8; i++) bits |= ORDER[i];
+
+      let fg = 0;
+      let bg = 0;
+      for (let i = 1; i < 16; i++) {
+        if (fgVotes[i] > fgVotes[fg]) fg = i;
+        if (bgVotes[i] > bgVotes[bg]) bg = i;
+      }
+
+      const out = y * dstWidth + x;
+      dots[out] = bits;
+      colors[out] = (fg << 4) | bg;
+    }
+  }
+
+  return { dots, colors };
 }

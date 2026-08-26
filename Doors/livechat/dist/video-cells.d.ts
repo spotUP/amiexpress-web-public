@@ -111,3 +111,20 @@ export declare function richCells(img: PixelBuffer, w: number, h: number, memory
 export declare function richToTags(frame: RichFrame, w: number, h: number, mode: number): string;
 /** Scale both planes of a rich frame to a tile, keeping shape and centring. */
 export declare function fitRichToTile(frame: RichFrame, srcWidth: number, srcHeight: number, dstWidth: number, dstHeight: number): RichFrame;
+/**
+ * Shrink a rich frame by averaging, rather than by picking one cell in each
+ * group and throwing the rest away.
+ *
+ * Nearest-neighbour sampling is fine when enlarging - a cell simply repeats
+ * - but destructive when shrinking a DITHERED picture. The dither is a 4x4
+ * pattern, so point-sampling it lands on whichever phase of that pattern
+ * happens to line up and aliases into noise: an 80x25 BBS terminal showing
+ * a frame encoded for a 146x46 window came out distorted rather than
+ * merely coarse (2026-08-26).
+ *
+ * Averaging is what the dither asked for in the first place - it exists to
+ * be blended by eye - so the dots are averaged as brightness and the
+ * colours resolved by majority. The result is a smaller picture that still
+ * looks like the scene.
+ */
+export declare function shrinkRich(frame: RichFrame, srcWidth: number, srcHeight: number, dstWidth: number, dstHeight: number): RichFrame;

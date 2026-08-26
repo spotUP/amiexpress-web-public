@@ -15,6 +15,7 @@ import {
   richCells,
   richToTags,
   fitRichToTile,
+  shrinkRich,
   MODE_HALFBLOCK,
   MODE_BRAILLE,
   MODE_ASCII,
@@ -194,6 +195,52 @@ describe('rich frames', () => {
 
       expect(scaled.dots.length).toBe(W * 2 * H * 2);
       expect(scaled.colors.length).toBe(W * 2 * H * 2);
+    });
+
+    it('averages when shrinking, instead of sampling one cell in each group', () => {
+      // A dithered picture point-sampled down lands on whichever phase of
+      // the 4x4 pattern happens to line up, and aliases into noise: an
+      // 80x25 BBS terminal showing a frame encoded for a 146x46 window
+      // came out distorted rather than merely coarse.
+      //
+      // Half the cells lit, half dark: the average must be mid-grey, not
+      // whichever one the sample landed on.
+      const width = 8;
+      const height = 4;
+      const dots = new Uint8Array(width * height);
+      const colors = new Uint8Array(width * height);
+      for (let i = 0; i < dots.length; i++) {
+        dots[i] = i % 2 === 0 ? 0xff : 0x00;
+        colors[i] = i % 2 === 0 ? 0x77 : 0x00;
+      }
+
+      const shrunk = shrinkRich({ dots, colors }, width, height, width / 2, height / 2);
+
+      // Every output cell is a blend of a lit and an unlit neighbour, so
+      // none of them is fully lit or fully dark.
+      expect(Array.from(shrunk.dots).every(v => v !== 0xff && v !== 0x00)).toBe(true);
+    });
+
+    it('keeps a flat area flat when shrinking', () => {
+      const width = 8;
+      const height = 4;
+      const dots = new Uint8Array(width * height).fill(0xff);
+      const colors = new Uint8Array(width * height).fill(0x77);
+
+      const shrunk = shrinkRich({ dots, colors }, width, height, 4, 2);
+
+      expect(Array.from(shrunk.dots).every(v => v === 0xff)).toBe(true);
+      expect(Array.from(shrunk.colors).every(v => v === 0x77)).toBe(true);
+    });
+
+    it('shrinks a chat-sized frame into a BBS terminal tile', () => {
+      // The reported case: 146x46 encoded, shown in an 80x25 terminal.
+      const frame = richCells(picture(11) as any, 60, 20);
+      const fitted = fitRichToTile(frame, 60, 20, 30, 10);
+
+      expect(fitted.dots.length).toBe(300);
+      expect(fitted.colors.length).toBe(300);
+      expect(Array.from(fitted.dots).some(v => v !== 0)).toBe(true);
     });
 
     it('still draws a full tile after scaling', () => {

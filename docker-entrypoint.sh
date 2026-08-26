@@ -334,6 +334,19 @@ else
         echo "[Entrypoint]   Synced $sync_dir from image"
     done
 
+    # Say, on the volume itself, that the sync finished.
+    #
+    # The deploy verifies that the doors on the volume match the image, and
+    # it used to start checking as soon as /health answered - which happens
+    # while this sync is still running. It compared a half-copied volume and
+    # failed a deploy that was about to be correct (2026-08-26: the check
+    # reported missing files at 19:01:42, and the directory's mtime was
+    # 19:02). A marker the checker can wait for is the difference between
+    # asking "is it up?" and "is it done?".
+    rm -f "$BBS_DATA_DIR/.sync-complete"
+    date -u +%Y-%m-%dT%H:%M:%SZ > "$BBS_DATA_DIR/.sync-complete"
+    echo "[Entrypoint] Code sync complete"
+
     # The rest of the BBS tree gets ADDITIVE repair: a file the image has and
     # the volume does not is copied across; a file that already exists is left
     # exactly as it is.
