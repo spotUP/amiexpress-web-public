@@ -11,7 +11,7 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { VideoTile, VideoTileOptions } from '../ui/video-tile';
-import { layoutSignature, pickSpeaker, resolveBoxSize, autoViewMode } from './video-layout';
+import { layoutSignature, pickSpeaker, resolveBoxSize, autoViewMode, bestColumns } from './video-layout';
 
 export interface VideoParticipant {
   userId: number | string;
@@ -195,6 +195,11 @@ export class VideoGrid {
   /**
    * Update participant with a new video frame
    */
+  /** Is this person already in the grid? */
+  hasParticipant(userId: number | string): boolean {
+    return this.participants.has(String(userId));
+  }
+
   updateParticipantVideo(userId: number | string, frame: string): void {
     const id = String(userId);
     this.lastFrames.set(id, frame);
@@ -384,24 +389,14 @@ export class VideoGrid {
       return;
     }
 
-    // GRID MODE: Show all participants in a grid (original behavior)
-    // Calculate optimal grid (cols x rows) to fill the space
-    let bestCols = 1;
-    let bestRows = 1;
-    let maxArea = 0;
-
-    for (let cols = 1; cols <= participantCount; cols++) {
-      const rows = Math.ceil(participantCount / cols);
-      const tileWidth = Math.floor(containerWidth / cols);
-      const tileHeight = Math.floor(containerHeight / rows);
-      const area = tileWidth * tileHeight;
-
-      if (area > maxArea) {
-        maxArea = area;
-        bestCols = cols;
-        bestRows = rows;
-      }
-    }
+    // GRID MODE: show everyone, in tiles SHAPED like the picture.
+    //
+    // This used to maximise tile AREA, which in a wide short chat panel picks
+    // a single column - two people stacked in tiles three and a half times
+    // wider than tall, with the video letterboxed to a strip inside each.
+    // See bestColumns in video-layout.
+    const bestCols = bestColumns(participantCount, containerWidth, containerHeight);
+    const bestRows = Math.ceil(participantCount / bestCols);
 
     const tileWidth = Math.floor(containerWidth / bestCols);
     const tileHeight = Math.floor(containerHeight / bestRows);

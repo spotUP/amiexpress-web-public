@@ -77,3 +77,21 @@ export declare function resolveBoxSize(element: {
  * not want it undone because a third person joined.
  */
 export declare function autoViewMode(participantCount: number, userChose: boolean, current: ViewMode): ViewMode;
+/**
+ * How many columns to arrange N video tiles in.
+ *
+ * NOT the arrangement with the biggest tiles. The grid used to maximise
+ * tile AREA, and in a wide, short chat panel that picks a single column:
+ * two people got tiles 63x9, which is three and a half to one once a
+ * terminal cell's 2:1 shape is counted. A 4:3 camera letterboxes into a thin
+ * strip inside that, leaving the tile's frame showing around it - "there is
+ * still a frame behind the video... are the videos stacked on top of each
+ * other instead of side by side?". They were.
+ *
+ * Video wants tiles SHAPED like the picture. This scores each arrangement by
+ * how far its tile is from the camera's aspect and takes the closest, using
+ * area only to break ties.
+ */
+export declare function bestColumns(participants: number, width: number, height: number, cameraAspect?: number, 
+/** A terminal cell is about twice as tall as it is wide. */
+cellAspect?: number): number;

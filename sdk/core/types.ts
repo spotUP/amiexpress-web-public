@@ -873,7 +873,7 @@ export interface BBSApi {
  * two sizes while the other tile waited for video that had already been
  * spent on the wrong one.
  */
-export type VideoFrameHandler = (frame: string, userId?: string | number) => void;
+export type VideoFrameHandler = (frame: string, userId?: string | number, username?: string) => void;
 
 /**
  * Video API - ASCII Video Streaming

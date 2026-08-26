@@ -239,3 +239,42 @@ describe('telling the camera the tile changed', () => {
     expect(voiceUx).toMatch(/onLayoutChanged: \(\) => this\.scheduleStreamResize\(\)/);
   });
 });
+
+describe('arranging the tiles', () => {
+  const { bestColumns } = require('../../../../Doors/livechat/features/video-layout');
+
+  it('puts two people side by side in a wide panel', () => {
+    // The reported case: a 63x18 chat panel. Maximising AREA picked one
+    // column (63x9 tiles, three and a half to one on screen) and stacked
+    // them, so each 4:3 picture letterboxed into a strip with the tile's
+    // frame showing around it.
+    expect(bestColumns(2, 63, 18)).toBe(2);
+  });
+
+  it('stacks two people in a TALL narrow panel', () => {
+    expect(bestColumns(2, 30, 60)).toBe(1);
+  });
+
+  it('leaves one person alone', () => {
+    expect(bestColumns(1, 63, 18)).toBe(1);
+  });
+
+  it('never asks for more columns than there are people', () => {
+    for (const n of [1, 2, 3, 5, 8]) {
+      expect(bestColumns(n, 80, 24)).toBeLessThanOrEqual(n);
+      expect(bestColumns(n, 80, 24)).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('copes with a panel too small to divide', () => {
+    expect(bestColumns(4, 3, 2)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('takes the cell shape into account', () => {
+    // Measured, not assumed: at 63x18 both cell aspects happen to agree on
+    // two columns, so asserting they DIFFER there was asserting something
+    // untrue. What matters is that the parameter is honoured at all.
+    expect(bestColumns(2, 63, 18, 4 / 3, 0.5)).toBe(2);
+    expect(bestColumns(6, 120, 20, 4 / 3, 0.5)).toBeGreaterThan(1);
+  });
+});

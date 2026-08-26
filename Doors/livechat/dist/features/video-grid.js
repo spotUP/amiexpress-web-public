@@ -152,6 +152,10 @@ class VideoGrid {
     /**
      * Update participant with a new video frame
      */
+    /** Is this person already in the grid? */
+    hasParticipant(userId) {
+        return this.participants.has(String(userId));
+    }
     updateParticipantVideo(userId, frame) {
         const id = String(userId);
         this.lastFrames.set(id, frame);
@@ -311,22 +315,14 @@ class VideoGrid {
             this.onLayoutChanged?.();
             return;
         }
-        // GRID MODE: Show all participants in a grid (original behavior)
-        // Calculate optimal grid (cols x rows) to fill the space
-        let bestCols = 1;
-        let bestRows = 1;
-        let maxArea = 0;
-        for (let cols = 1; cols <= participantCount; cols++) {
-            const rows = Math.ceil(participantCount / cols);
-            const tileWidth = Math.floor(containerWidth / cols);
-            const tileHeight = Math.floor(containerHeight / rows);
-            const area = tileWidth * tileHeight;
-            if (area > maxArea) {
-                maxArea = area;
-                bestCols = cols;
-                bestRows = rows;
-            }
-        }
+        // GRID MODE: show everyone, in tiles SHAPED like the picture.
+        //
+        // This used to maximise tile AREA, which in a wide short chat panel picks
+        // a single column - two people stacked in tiles three and a half times
+        // wider than tall, with the video letterboxed to a strip inside each.
+        // See bestColumns in video-layout.
+        const bestCols = (0, video_layout_1.bestColumns)(participantCount, containerWidth, containerHeight);
+        const bestRows = Math.ceil(participantCount / bestCols);
         const tileWidth = Math.floor(containerWidth / bestCols);
         const tileHeight = Math.floor(containerHeight / bestRows);
         // Create tiles for each participant

@@ -1205,7 +1205,7 @@ export class EnhancedVoiceChannel {
   private ensureFrameHandler(): void {
     if (!this.ctx?.video) return;
 
-    this.ctx.video.onFrame((frame: string, senderId?: string | number) => {
+    this.ctx.video.onFrame((frame: string, senderId?: string | number, senderName?: string) => {
       if (!this.videoGrid) return;
 
       // The frame goes to WHOEVER SENT IT, falling back to this user when a
@@ -1214,6 +1214,29 @@ export class EnhancedVoiceChannel {
 
       // Own frames need the local camera to be on; everyone else's do not.
       if (String(owner) === String(this.userId) && !this.videoEnabled) return;
+
+      // Somebody sending video IS a participant, whether or not a voice
+      // channel ever told us about them.
+      //
+      // The grid only ever learned about people from voice:joined, and
+      // nobody has been able to join a voice channel - so each grid held
+      // just its own tile and Fullscreen/Grid had nothing to split, however
+      // many people were streaming. Video itself works without a voice
+      // channel because the backend falls back to the chat room, so the
+      // frames were arriving with nowhere to go. The frame is the evidence
+      // that somebody is there.
+      if (!this.videoGrid.hasParticipant(owner)) {
+        this.videoGrid.addParticipant({
+          userId: owner,
+          username: senderName || `User ${owner}`,
+          socketId: '',
+          isMuted: false,
+          hasVideo: true,
+          hasScreenShare: false,
+          isSpeaking: false,
+          audioLevel: 0,
+        });
+      }
 
       this.videoGrid.updateParticipantVideo(owner, frame);
     });

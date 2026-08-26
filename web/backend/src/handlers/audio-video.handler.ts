@@ -1037,6 +1037,9 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
     const frameData = {
       userId: session?.user?.id,
+      // The NAME travels too: a door that sees a frame from somebody it has
+      // no tile for can then label the tile it makes for them.
+      username: session?.user?.username,
       streamId: `video-${socket.id}`,
       frame: trimmedFrame
     };
@@ -1066,6 +1069,7 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
     // Broadcast to everyone in the voice room (including sender)
     io.to(voiceRoomId).emit('video:frame', {
       userId: session.user?.id,
+      username: session.user?.username,
       streamId: data.streamId,
       frame: data.frame
     });

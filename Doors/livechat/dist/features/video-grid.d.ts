@@ -93,6 +93,8 @@ export declare class VideoGrid {
     /**
      * Update participant with a new video frame
      */
+    /** Is this person already in the grid? */
+    hasParticipant(userId: number | string): boolean;
     updateParticipantVideo(userId: number | string, frame: string): void;
     /**
      * Update participant with an error message
