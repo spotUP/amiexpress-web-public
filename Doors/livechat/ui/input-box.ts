@@ -57,7 +57,7 @@ export function createEmojiButton(screen: Screen): Button {
     width: EMOJI_BUTTON_WIDTH,
     height: INPUT_HEIGHT,
     content: '{center}{yellow-fg}:D{/yellow-fg}{/center}',
-    border: { type: 'line', fg: PANEL_BORDER },
+    border: { type: 'line' },  // colour lives in style.border - see below
     tags: true,  // Enable tag parsing for content
     mouse: true,
     keys: true,

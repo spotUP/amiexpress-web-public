@@ -496,11 +496,19 @@ async function createApp(session) {
         zIndex: 1,
         topConstraint: menu_bar_1.MENU_HEIGHT,
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
-        border: { type: 'line', fg: theme_1.PANEL_BORDER },
+        border: { type: 'line' },
         fitContent: { width: true, height: false }, // Auto-expand width to fit content dynamically
         style: {
             fg: 'white',
             bg: 'black',
+            // style.border.fg, NOT border.fg. Element reads the border colour from
+            // style.border / border.style / style.fg and ignores a colour sitting
+            // on the border object itself - so `border: { type: 'line', fg: blue }`
+            // looked right in the source and drew grey, which is why the sidebar
+            // and the chat panel stayed grey while the input box (which sets
+            // style.border) was the only blue one.
+            border: { fg: theme_1.PANEL_BORDER },
+            ...theme_1.PANEL_FOCUS_STYLE,
         },
     });
     // ========== CHANNEL LIST (Inside Sidebar) ==========

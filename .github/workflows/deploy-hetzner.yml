@@ -100,16 +100,21 @@
               # (2026-08-26: the video aspect fix was in the image and not in
               # the running door). Compare them and say so.
               echo "== door sync verification =="
+              # NO `| head` on this pipeline. head closes the pipe as soon as
+              # it has enough, the producer takes SIGPIPE, and under `set -o
+              # pipefail` that fails the whole deploy - which is exactly what
+              # happened the first time this check ran (exit 141), AFTER the
+              # container was already live and healthy.
               STALE=$(docker exec amiexpress-bbs sh -c '
                 cd /app/default-data/Doors 2>/dev/null || exit 0
                 find . -type f ! -name "*.db" ! -name "*.sqlite" ! -name "*.log" |
                   while IFS= read -r f; do
                     cmp -s "/app/default-data/Doors/$f" "/app/data/bbs/Doors/$f" || echo "$f"
                   done
-              ' | head -20)
+              ' || true)
               if [ -n "$STALE" ]; then
                 echo "ERROR: doors on the volume differ from the image:" >&2
-                echo "$STALE" >&2
+                printf '%s\n' "$STALE" | sed -n '1,20p' >&2
                 exit 1
               fi
               echo "OK: doors on the volume match the image"

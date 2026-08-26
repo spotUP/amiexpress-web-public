@@ -60,7 +60,7 @@ import { CommandHandler } from './handlers/command';
 import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
-import { PANEL_BORDER } from './ui/theme';
+import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './ui/theme';
 import { messageIndexAtRow } from './ui/chat-row-map';
 import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
@@ -574,11 +574,19 @@ export async function createApp(session: DoorSession) {
     zIndex: 1,
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
-    border: { type: 'line', fg: PANEL_BORDER },
+    border: { type: 'line' },
     fitContent: { width: true, height: false },  // Auto-expand width to fit content dynamically
     style: {
       fg: 'white',
       bg: 'black',
+      // style.border.fg, NOT border.fg. Element reads the border colour from
+      // style.border / border.style / style.fg and ignores a colour sitting
+      // on the border object itself - so `border: { type: 'line', fg: blue }`
+      // looked right in the source and drew grey, which is why the sidebar
+      // and the chat panel stayed grey while the input box (which sets
+      // style.border) was the only blue one.
+      border: { fg: PANEL_BORDER },
+      ...PANEL_FOCUS_STYLE,
     },
   });
 

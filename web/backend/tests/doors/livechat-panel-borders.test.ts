@@ -32,12 +32,15 @@ function sources(dir: string): string[] {
 }
 
 describe('the theme', () => {
-  it('is dark blue when a panel is not active', () => {
-    expect(PANEL_BORDER).toBe('blue');
+  it('is dim when a panel is not active, bright when it is', () => {
+    // The signal that matters is DIM versus BRIGHT - the widest gap the
+    // palette offers. Dark blue on black was close to unreadable.
+    expect(PANEL_BORDER).toBe('gray');
+    expect(PANEL_BORDER_FOCUS).toBe('white');
   });
 
-  it('is cyan when it is', () => {
-    expect(PANEL_BORDER_FOCUS).toBe('cyan');
+  it('never uses the dark blue that could not be seen', () => {
+    expect(PANEL_BORDER).not.toBe('blue');
   });
 });
 
@@ -51,7 +54,15 @@ describe('every panel', () => {
       // its own colours - the panel label is white on blue - so it is taken
       // out before looking for border colours, or every labelled panel reads
       // as an offender.
-      const text = readFileSync(file, 'utf8').replace(/labelStyle:\s*\{[^}]*\}/g, '');
+      // Comments stripped first: this file's own explanations quote the bad
+      // pattern as an example, and a comment is not behaviour. labelStyle
+      // goes too - it lives inside the border object and legitimately has
+      // its own colours, since a panel label is white on blue.
+      const text = readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(line => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+        .join('\n')
+        .replace(/labelStyle:\s*\{[^}]*\}/g, '');
 
       // A literal colour ANYWHERE inside a border object - the first version
       // of this test only matched `border: { fg: ... }` and walked straight
@@ -59,6 +70,21 @@ describe('every panel', () => {
       // main panels kept their old colour while the test said all was well.
       for (const m of text.matchAll(/border:\s*\{[^}]*\bfg:\s*'(\w+)'/g)) {
         offenders.push(`${file.replace(DOOR + '/', '')}: border fg '${m[1]}'`);
+      }
+
+      // A colour on the WIDGET's border object is ignored by the renderer,
+      // theme constant or not: Element reads style.border / border.style /
+      // style.fg. `border: { type: 'line', fg: PANEL_BORDER }` therefore
+      // looked correct in the source and drew grey, which is exactly how the
+      // sidebar and the chat panel stayed grey while everything here passed.
+      //
+      // `type` is what tells the two apart: only the widget-level border
+      // carries it, while the one inside `style` is colours alone.
+      for (const m of text.matchAll(/border:\s*\{([^}]*)\}/g)) {
+        const body = m[1];
+        if (/\btype:/.test(body) && /\bfg:/.test(body)) {
+          offenders.push(`${file.replace(DOOR + '/', '')}: colour on the widget border object (use style.border)`);
+        }
       }
       for (const m of text.matchAll(/borderColor:\s*'(\w+)'/g)) {
         offenders.push(`${file.replace(DOOR + '/', '')}: borderColor '${m[1]}'`);

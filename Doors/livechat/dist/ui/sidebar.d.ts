@@ -11,7 +11,7 @@ export declare function sidebarConfig(): {
     style: {
         focus: {
             readonly border: {
-                readonly fg: "cyan";
+                readonly fg: "white";
             };
         };
         fg: string;

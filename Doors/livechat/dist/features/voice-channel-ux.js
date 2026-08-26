@@ -58,8 +58,7 @@ class VoiceControlBar {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: { fg: theme_1.PANEL_BORDER,
-                },
+                border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
                 type: 'line',

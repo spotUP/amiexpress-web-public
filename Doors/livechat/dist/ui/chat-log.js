@@ -49,12 +49,16 @@ function createChatLog(screen, sidebarWidth) {
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
         border: {
             type: 'line',
-            fg: theme_1.PANEL_BORDER,
             labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
         },
         style: {
             fg: 'white',
             bg: 'black',
+            // style.border.fg, NOT border.fg - Element reads the border colour from
+            // style.border / border.style / style.fg and ignores a colour sitting
+            // on the border object itself. With it in the wrong place this panel
+            // drew grey while the source said otherwise.
+            border: { fg: theme_1.PANEL_BORDER },
             focus: { border: { fg: theme_1.PANEL_BORDER_FOCUS } },
         },
     });

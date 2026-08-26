@@ -93,8 +93,7 @@ export class VoiceControlBar {
       style: {
         fg: 'white',
         bg: 'black',
-        border: { fg: PANEL_BORDER,
-        },
+        border: { fg: PANEL_BORDER },
       },
       border: {
         type: 'line',
