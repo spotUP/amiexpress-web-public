@@ -23,6 +23,7 @@ const user_1 = require("./user");
 const moderation_1 = require("./moderation");
 const utility_1 = require("./utility");
 const prefs_1 = require("./prefs");
+const mic_1 = require("./mic");
 const reactions_1 = require("./reactions");
 const voice_1 = require("./voice");
 const mode_1 = require("./mode");
@@ -41,7 +42,7 @@ function createCommandRegistry() {
     [utility_1.quitCmd, utility_1.clearCmd, utility_1.searchCmd, utility_1.pinCmd, utility_1.pinsCmd].forEach(c => r.register(c));
     r.register((0, utility_1.helpCmd)(r));
     // Prefs
-    [prefs_1.soundsCmd, prefs_1.compactCmd, prefs_1.timestampsCmd].forEach(c => r.register(c));
+    [prefs_1.soundsCmd, prefs_1.compactCmd, prefs_1.timestampsCmd, mic_1.micCmd].forEach(c => r.register(c));
     // Note: eventsCmd is registered in app.ts after dependencies are available
     // Reactions
     [reactions_1.reactCmd, reactions_1.unreactCmd, reactions_1.reactionsCmd, reactions_1.thumbsUpCmd, reactions_1.heartCmd].forEach(c => r.register(c));

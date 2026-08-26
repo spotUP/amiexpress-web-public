@@ -10,23 +10,64 @@
  * - Video grid overlay
  * - Speaking indicators
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedVoiceChannel = exports.VoiceControlBar = void 0;
 exports.createEnhancedVoiceChannel = createEnhancedVoiceChannel;
 exports.createVoiceControlBar = createVoiceControlBar;
-const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const theme_1 = require("../ui/theme");
+const meter_throttle_1 = require("./meter-throttle");
+const voice_roster_1 = require("./voice-roster");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const video_grid_1 = require("./video-grid");
+const video_layout_1 = require("./video-layout");
+const video_codec_1 = require("../video-codec");
+const video_cells_1 = require("../video-cells");
+/** Columns in the microphone meter - also its resolution in distinct values. */
+const VOICE_METER_WIDTH = 12;
+/** Floor on time between meter redraws, whatever the microphone does. */
+const VOICE_METER_MIN_INTERVAL_MS = 100;
 /**
  * Bottom Control Bar (Discord-style)
  * Shows when user is in voice channel
  */
 class VoiceControlBar {
     constructor(options) {
+        /** What the meter last drew, so unchanged readings cost nothing. */
+        this.meterState = (0, meter_throttle_1.newMeterState)();
         this.isMuted = false;
         this.hasVideo = false;
         this.isSpeaking = false;
@@ -47,13 +88,19 @@ class VoiceControlBar {
         // ├────────────────────┤
         // │ [*] username       │  <- status row (speaking indicator)
         // │ [M] [V] [F] [X]    │  <- controls row ([R]ender = keyboard 'r' / View menu)
+        // │ [====------]       │  <- microphone level (proof voice is live)
         // └────────────────────┘
+        //
+        // The level row exists because voice gave no sign of working at all:
+        // you joined, nothing on screen moved, and there was no way to tell a
+        // working channel from a broken one. A meter that twitches when you
+        // speak answers that in one glance.
         this.container = blessed_1.default.box({
             parent,
             bottom: 0,
             left: 0,
             width: '100%',
-            height: 4,
+            height: 5,
             tags: true,
             style: {
                 fg: 'white',
@@ -176,14 +223,50 @@ class VoiceControlBar {
         this.disconnectButton.on('click', () => {
             this.disconnect();
         });
+        // Microphone level (row 2)
+        this.levelBar = new blessed_1.AudioLevelBar({
+            parent: this.container,
+            top: 2,
+            left: 1,
+            width: '100%-4',
+            height: 1,
+            barWidth: VOICE_METER_WIDTH,
+            showPercentage: false,
+            filledChar: '=',
+            emptyChar: '-',
+            label: 'Mic ',
+        });
+        // Draw it empty straight away. A meter that only appears once audio
+        // arrives is indistinguishable from a meter that is not there, which
+        // is no use at all when the question being asked is "is my microphone
+        // working?".
+        this.levelBar.setLevel?.(0);
     }
     setupSocketHandlers() {
-        // Update speaking status from audio stream
+        // Our own speaking status, for the [*] indicator.
         this.socket.on('audio-speaking-status', (data) => {
-            if (data.userId === this.ctx?.user?.id) {
-                this.isSpeaking = data.isSpeaking;
+            if (String(data.userId) === String(this.ctx?.user?.id)) {
+                this.isSpeaking = !!data.isSpeaking;
                 this.updateSpeakingIndicator();
             }
+        });
+        // Microphone level, relayed straight back to us by the backend.
+        //
+        // These arrive continuously from the browser's AnalyserNode. Redrawing
+        // the screen for each one froze every tab that had voice open: a full
+        // render, video tiles and all, dozens of times a second. The meter is
+        // twelve characters wide, so it can only show thirteen distinct values
+        // - redraw when the DRAWN value changes, and no more than ten times a
+        // second even then.
+        this.socket.on('audio:levels', (levels) => {
+            if (!this.levelBar)
+                return;
+            const decision = (0, meter_throttle_1.meterTick)(this.meterState, Number(levels?.input) || 0, VOICE_METER_WIDTH, VOICE_METER_MIN_INTERVAL_MS, Date.now());
+            this.meterState = decision.next;
+            if (!decision.draw)
+                return;
+            this.levelBar.setLevel?.(decision.level);
+            this.screen.render();
         });
     }
     toggleMute() {
@@ -285,6 +368,11 @@ exports.VoiceControlBar = VoiceControlBar;
 class EnhancedVoiceChannel {
     constructor(options) {
         this.voiceChannels = new Map();
+        /** The last decoded frame per sender, for applying their next delta. */
+        this.cellBuffers = new Map();
+        /** The size each sender encoded at, needed to scale their frame. */
+        this.frameSizes = new Map();
+        this.cellHandlerBound = false;
         this.videoEnabled = false;
         this.currentStreamDims = null;
         this.resizeStreamTimer = null;
@@ -302,6 +390,8 @@ class EnhancedVoiceChannel {
         this.showConfirmDialog = options.showConfirmDialog;
         this.onRenderModeChange = options.onRenderModeChange;
         this.onTileRightClick = options.onTileRightClick;
+        this.onRosterChange = options.onRosterChange;
+        this.onVideoVisibility = options.onVideoVisibility;
         this.setupSocketHandlers();
         this.setupAdaptiveQuality();
     }
@@ -314,16 +404,32 @@ class EnhancedVoiceChannel {
             }
             this.updateChannelList();
         });
+        // Who is talking right now. The backend broadcasts this for everybody
+        // in the channel; the door used to ignore it entirely, so a roster could
+        // never show any activity - the single most useful sign that voice works.
+        this.socket.on('audio-speaking-status', (data) => {
+            const speaking = !!data.isSpeaking;
+            // Only on a real flip. The status is broadcast repeatedly while
+            // somebody talks, and redrawing on every repeat is what froze the
+            // tabs once anything was listening to it.
+            if (!(0, voice_roster_1.setSpeaking)(this.voiceChannels.values(), data.userId, speaking))
+                return;
+            this.updateChannelList();
+            // The video tiles already draw a speaking state; nothing had ever set
+            // it, so every tile looked permanently silent.
+            this.videoGrid?.updateParticipant(String(data.userId), { isSpeaking: speaking });
+        });
         this.socket.on('voice:joined', (data) => {
-            const channel = this.voiceChannels.get(data.channelId);
-            if (channel) {
-                channel.participants.push({
-                    userId: String(data.userId),
-                    username: data.username,
-                    isSpeaking: false,
-                });
-                this.updateChannelList();
-            }
+            // The channel may be unknown to us: we are told about a joiner
+            // before ever joining ourselves.
+            const channel = this.voiceChannels.get(data.channelId) ?? {
+                id: data.channelId,
+                name: (0, voice_roster_1.channelDisplayName)(data.channelId),
+                participants: [],
+            };
+            this.voiceChannels.set(data.channelId, channel);
+            (0, voice_roster_1.addParticipant)(channel, { userId: data.userId, username: data.username });
+            this.updateChannelList();
             // Add to video grid. Self is included so the user gets a self-preview
             // tile (the local onFrame() handler at ~line 537 feeds their camera
             // frames into this same grid via updateParticipantVideo). Previously
@@ -347,9 +453,11 @@ class EnhancedVoiceChannel {
             }
         });
         this.socket.on('voice:left', (data) => {
-            const channel = this.voiceChannels.get(data.channelId);
-            if (channel) {
-                channel.participants = channel.participants.filter(p => String(p.userId) !== String(data.userId));
+            // Fall back to the channel we are in: an older backend sends
+            // voice:left without naming one.
+            const channelId = data.channelId ?? this.currentVoiceChannel;
+            const channel = channelId ? this.voiceChannels.get(channelId) : undefined;
+            if (channel && (0, voice_roster_1.removeParticipant)(channel, data.userId)) {
                 this.updateChannelList();
             }
             // Remove from video grid
@@ -418,9 +526,8 @@ class EnhancedVoiceChannel {
         this.networkMonitor.start();
     }
     updateChannelList() {
-        // Update channel list to show voice channels with participants
-        // This would integrate with the existing channel list component
-        // Format: "🔊 Voice Channel (2)" with participant count
+        // Hand the rebuild to whoever owns the sidebar; we only know the roster.
+        this.onRosterChange?.();
         this.screen.render();
     }
     updateVideoGridVisibility() {
@@ -432,9 +539,11 @@ class EnhancedVoiceChannel {
         if (inVoice && hasAnyVideo && !this.videoGrid.isVisible()) {
             this.videoGrid.show();
             this.videoGrid.setFront();
+            this.onVideoVisibility?.(true);
         }
         else if ((!inVoice || !hasAnyVideo) && this.videoGrid.isVisible()) {
             this.videoGrid.hide();
+            this.onVideoVisibility?.(false);
         }
     }
     async toggleVideo() {
@@ -456,6 +565,7 @@ class EnhancedVoiceChannel {
                 // 'startStream returned' and 'onFrame registered' can slip through
                 // unhandled.
                 this.ensureFrameHandler();
+                this.ensureCellHandler();
                 // Flip the self-tile's hasVideo BEFORE frames start arriving so
                 // updateVideoDisplay() doesn't briefly paint the no-video avatar
                 // between startStream() and the first frame (also avoids the
@@ -512,16 +622,48 @@ class EnhancedVoiceChannel {
      * available space (whole chat panel when alone, half when 2 people, etc).
      * Falls back to 80x24 if the tile isn't measurable yet.
      */
+    /** The video area of any tile in the grid, all being the same size. */
+    firstPeerTileDims() {
+        if (!this.videoGrid)
+            return null;
+        for (const participant of this.videoGrid.getParticipants()) {
+            const dims = this.videoGrid.getTileVideoDims(participant.userId);
+            if (dims && dims.width > 0 && dims.height > 0)
+                return dims;
+        }
+        return null;
+    }
     computeStreamDims() {
-        const dims = this.videoGrid?.getTileVideoDims(this.userId) ?? null;
+        // There is no tile of our own to measure any more, and there never was
+        // a right answer from measuring it: one encode is broadcast to every
+        // viewer, and their tiles are all different sizes. A viewer whose tile
+        // is larger gets the picture padded, one whose tile is smaller gets it
+        // clipped - both handled where the frame meets the tile.
+        //
+        // So the size is chosen from the budget instead of from the furniture:
+        // as many cells as a usable frame rate affords.
+        // Measure a tile that actually exists.
+        //
+        // This used to measure our own tile, which no longer exists - there is
+        // no self-view - so it fell back to a fixed 80x24 and the picture was
+        // then upscaled into a much larger tile, banding it. Every tile in the
+        // grid is the same size, so a PEER's tile is the right proxy for what
+        // viewers will display: it is the size this grid gives one video.
+        const dims = this.videoGrid?.getTileVideoDims(this.userId)
+            ?? this.firstPeerTileDims()
+            ?? null;
         if (!dims || !dims.width || !dims.height) {
-            return { width: 80, height: 24 };
+            return (0, video_layout_1.capStreamCells)(80, 24);
         }
         // Floor to whole chars; clamp to a sensible minimum so the SDK doesn't
         // get a 0xN request if the tile is briefly unsized during a relayout.
         const w = Math.max(40, Math.floor(dims.width));
         const h = Math.max(12, Math.floor(dims.height));
-        return { width: w, height: h };
+        // And a MAXIMUM, which there never was. The tile grew to fill the
+        // panel, the frame grew with it, and the client's byte budget turned
+        // that straight into a lower frame rate - 146x46 tiles were being sent
+        // at barely two frames a second.
+        return (0, video_layout_1.capStreamCells)(w, h);
     }
     /**
      * If the self-tile has changed size enough to matter (>20% on either
@@ -591,15 +733,20 @@ class EnhancedVoiceChannel {
             this.videoGrid.setTileRenderMode(this.userId, this.renderMode);
         }
         // System-message feedback so the user sees something changed even when
-        // video is off (no stream to visibly re-encode).
+        // nobody is on camera yet.
         if (this.onRenderModeChange)
             this.onRenderModeChange(this.renderMode);
-        if (!this.videoEnabled || !this.ctx?.video)
-            return;
-        // Force a stream restart by invalidating dims, then run the
-        // resize path (debounced, dedupe-friendly).
-        this.currentStreamDims = { width: 0, height: 0 };
-        this.scheduleStreamResize();
+        // Redraw everybody from the frames already in hand.
+        //
+        // The mode used to be baked into what the camera SENT, so cycling it
+        // restarted the local stream and changed what other people saw of you -
+        // while you, having no self-view, saw nothing change at all. Both
+        // planes now arrive with every frame, so the mode is a local choice and
+        // takes effect immediately, on the picture already on screen.
+        for (const owner of this.cellBuffers.keys()) {
+            this.drawParticipant(owner);
+        }
+        this.screen.render();
     }
     getRenderMode() {
         return this.renderMode;
@@ -837,6 +984,17 @@ class EnhancedVoiceChannel {
             // Helper to complete the join (called on success or timeout)
             const completeJoin = async (participants) => {
                 this.currentVoiceChannel = channelId;
+                // Record who is in here, so the sidebar can say so.
+                //
+                // voice:joined pushed into this.voiceChannels.get(channelId) - and
+                // nothing ever put a channel IN that map, so the lookup missed and
+                // the count stayed at the hardcoded "(0)" even with people in the
+                // channel and the voice panel listing them (screenshot 2026-08-26).
+                this.voiceChannels.set(channelId, (0, voice_roster_1.seedRoster)(channelId, participants, {
+                    userId: this.userId,
+                    username: this.username,
+                }));
+                this.updateChannelList();
                 // Create control bar
                 if (!this.controlBar) {
                     this.controlBar = new VoiceControlBar({
@@ -897,24 +1055,19 @@ class EnhancedVoiceChannel {
                     // camera receives every frame and drops it - which is exactly what
                     // "has handler: false" in the door's log meant.
                     this.ensureFrameHandler();
+                    this.ensureCellHandler();
+                    this.ensureCellHandler();
                     // Terminal resize → re-encode local stream so it tracks the new
                     // chat-panel size. Debounced inside scheduleStreamResize.
                     this.screen.on('resize', () => this.scheduleStreamResize());
                 }
-                // Add current user to video grid
-                this.videoGrid.addParticipant({
-                    userId: this.userId,
-                    username: this.username,
-                    socketId: '',
-                    isMuted: false,
-                    hasVideo: false,
-                    hasScreenShare: false,
-                    isSpeaking: false,
-                    audioLevel: 0,
-                });
-                // Seed the self-tile's render-mode label so it's visible before
-                // the first cycleRenderMode() call.
-                this.videoGrid.setTileRenderMode(this.userId, this.renderMode);
+                // No tile for ourselves.
+                //
+                // A self-tile only ever had anything in it because the server sent
+                // our own frames back to us, which cost exactly as much as anybody
+                // else's picture to show us what a mirror shows for free. Now that
+                // the echo is gone the tile can never fill, so it sat there saying
+                // "waiting for video" beside the picture that was working.
                 // Add existing participants if provided
                 if (participants) {
                     for (const p of participants) {
@@ -1071,6 +1224,88 @@ class EnhancedVoiceChannel {
         // Hidden until somebody actually has video.
         this.videoGrid.hide();
         this.ensureFrameHandler();
+    }
+    /**
+     * Compact binary frames from other people.
+     *
+     * Each sender's frames are deltas against their own previous frame, so
+     * one decoded buffer is kept per sender. A packet that cannot be applied
+     * - a delta that arrived before any full frame, or after a resize - is
+     * DROPPED rather than drawn: the sender sends a full frame whenever the
+     * shape changes, so the picture repairs itself within a frame or two.
+     */
+    ensureCellHandler() {
+        if (this.cellHandlerBound)
+            return;
+        this.cellHandlerBound = true;
+        this.socket.on('video:cells', (data) => {
+            if (!this.videoGrid || !data?.packet)
+                return;
+            const owner = data.userId === undefined || data.userId === null
+                ? String(this.userId)
+                : String(data.userId);
+            // Keep the VIEW, not its backing store: a Node Buffer is a window
+            // onto a shared pool, so its `.buffer` starts at somebody else's
+            // bytes.
+            const packet = data.packet;
+            const buffer = packet instanceof ArrayBuffer ? packet
+                : ArrayBuffer.isView(packet)
+                    ? new Uint8Array(packet.buffer, packet.byteOffset, packet.byteLength)
+                    : null;
+            if (!buffer)
+                return;
+            const decoded = (0, video_codec_1.decodeRichFrame)(buffer, this.cellBuffers.get(owner) ?? null);
+            // A packet that cannot be applied is DROPPED, not drawn: a delta
+            // whose base we never had would paint nonsense. The sender's next
+            // keyframe repairs it within a few frames.
+            if (!decoded)
+                return;
+            this.cellBuffers.set(owner, decoded.frame);
+            this.frameSizes.set(owner, { width: decoded.width, height: decoded.height });
+            if (!this.videoGrid.hasParticipant(owner)) {
+                this.videoGrid.addParticipant({
+                    userId: owner,
+                    username: data.username || `User ${owner}`,
+                    socketId: '',
+                    isMuted: false,
+                    hasVideo: true,
+                    hasScreenShare: false,
+                    isSpeaking: false,
+                    audioLevel: 0,
+                });
+            }
+            // Scale the picture up to whatever THIS tile is, centred.
+            //
+            // The sender sizes its encode from a byte budget, not from anybody's
+            // tile, so without this the picture sat small in the top-left corner
+            // of a larger tile. The delta base stays the DECODED frame above -
+            // scaling is a display step, and the sender's deltas are measured
+            // against what it sent, not against what we drew.
+            const tile = this.videoGrid.getTileVideoDims(owner);
+            const drawWidth = tile?.width && tile.width > 0 ? Math.floor(tile.width) : decoded.width;
+            const drawHeight = tile?.height && tile.height > 0 ? Math.floor(tile.height) : decoded.height;
+            this.drawParticipant(owner, drawWidth, drawHeight);
+        });
+    }
+    /**
+     * Draw somebody's latest frame in the mode THIS user has chosen.
+     *
+     * Kept separate from receiving so that changing the render mode can
+     * redraw the picture already in hand, with no round trip to the sender
+     * and no effect on anybody else's view.
+     */
+    drawParticipant(owner, width, height) {
+        if (!this.videoGrid)
+            return;
+        const frame = this.cellBuffers.get(owner);
+        const size = this.frameSizes.get(owner);
+        if (!frame || !size)
+            return;
+        const tile = this.videoGrid.getTileVideoDims(owner);
+        const drawWidth = width ?? (tile?.width && tile.width > 0 ? Math.floor(tile.width) : size.width);
+        const drawHeight = height ?? (tile?.height && tile.height > 0 ? Math.floor(tile.height) : size.height);
+        const scaled = (0, video_cells_1.fitRichToTile)(frame, size.width, size.height, drawWidth, drawHeight);
+        this.videoGrid.updateParticipantVideo(owner, (0, video_cells_1.richToTags)(scaled, drawWidth, drawHeight, (0, video_cells_1.modeCode)(this.renderMode, this.renderMode === 'color')));
     }
     ensureFrameHandler() {
         if (!this.ctx?.video)

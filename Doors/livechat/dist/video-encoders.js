@@ -14,6 +14,7 @@
  * in a door that has no DOM lib.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.PALETTE = void 0;
 exports.pixelsPerChar = pixelsPerChar;
 exports.rgbToBlessed = rgbToBlessed;
 exports.renderAscii = renderAscii;
@@ -21,6 +22,8 @@ exports.renderHalfblock = renderHalfblock;
 exports.renderBraille = renderBraille;
 exports.pixelAspect = pixelAspect;
 exports.fitPreservingAspect = fitPreservingAspect;
+/** The part of ImageData these encoders use. */
+const video_hysteresis_1 = require("./video-hysteresis");
 /**
  * Source pixels per output char for each render mode.
  *  - ascii / color: 1 char = 1 pixel
@@ -45,7 +48,7 @@ const ASCII_RAMP = ' .:-=+*#%@';
  * for those bytes. Neoshowcase's working webcam demo uses this same
  * approach (rgbToBlessed + {name-fg} tags).
  */
-const PALETTE = [
+exports.PALETTE = [
     ['black', 0, 0, 0],
     ['red', 170, 0, 0],
     ['green', 0, 170, 0],
@@ -64,21 +67,12 @@ const PALETTE = [
     ['lightwhite', 255, 255, 255],
 ];
 function rgbToBlessed(r, g, b) {
-    let best = 'white';
-    let bestDist = Infinity;
-    for (const [name, pr, pg, pb] of PALETTE) {
-        const dr = r - pr, dg = g - pg, db = b - pb;
-        const d = dr * dr + dg * dg + db * db;
-        if (d < bestDist) {
-            bestDist = d;
-            best = name;
-        }
-    }
-    return best;
+    return exports.PALETTE[(0, video_hysteresis_1.pickColor)(exports.PALETTE, r, g, b, [])][0];
 }
-function renderAscii(img, w, h, colored) {
+function renderAscii(img, w, h, colored, memory) {
     let out = '';
-    let lastFg = '';
+    let lastFgIdx = -1;
+    const mem = colored && memory ? (0, video_hysteresis_1.fitColorMemory)(memory, w, h) : undefined;
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const i = (y * w + x) * 4;
@@ -88,19 +82,22 @@ function renderAscii(img, w, h, colored) {
             const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
             const ch = ASCII_RAMP[Math.floor(lum * (ASCII_RAMP.length - 1))] || ' ';
             if (colored) {
-                const fg = rgbToBlessed(r, g, b);
-                if (fg !== lastFg) {
-                    if (lastFg)
+                const cell = y * w + x;
+                const fgIdx = (0, video_hysteresis_1.pickColor)(exports.PALETTE, r, g, b, mem ? [mem.fg[cell], lastFgIdx] : [], mem?.stickiness);
+                if (mem)
+                    mem.fg[cell] = fgIdx;
+                if (fgIdx !== lastFgIdx) {
+                    if (lastFgIdx >= 0)
                         out += '{/}';
-                    out += `{${fg}-fg}`;
-                    lastFg = fg;
+                    out += `{${exports.PALETTE[fgIdx][0]}-fg}`;
+                    lastFgIdx = fgIdx;
                 }
             }
             out += ch;
         }
-        if (lastFg) {
+        if (lastFgIdx >= 0) {
             out += '{/}';
-            lastFg = '';
+            lastFgIdx = -1;
         }
         out += '\n';
     }
@@ -111,29 +108,37 @@ function renderAscii(img, w, h, colored) {
  * vertically-stacked pixels. Uses blessed 16-colour palette tokens via
  * rgbToBlessed() so the output is safe for blessed's cell buffer.
  */
-function renderHalfblock(img, w, h) {
+function renderHalfblock(img, w, h, memory) {
     const sw = w;
     let out = '';
-    let lastFg = '', lastBg = '';
+    let lastFgIdx = -1, lastBgIdx = -1;
+    const mem = memory ? (0, video_hysteresis_1.fitColorMemory)(memory, w, h) : undefined;
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const topI = ((y * 2) * sw + x) * 4;
             const botI = ((y * 2 + 1) * sw + x) * 4;
-            const fg = rgbToBlessed(img.data[topI], img.data[topI + 1], img.data[topI + 2]);
-            const bg = rgbToBlessed(img.data[botI], img.data[botI + 1], img.data[botI + 2]);
-            if (fg !== lastFg || bg !== lastBg) {
-                if (lastFg || lastBg)
+            const cell = y * w + x;
+            // Prefer what this cell showed last frame, then what the current run
+            // is using. Without a memory this is the plain nearest match.
+            const fgIdx = (0, video_hysteresis_1.pickColor)(exports.PALETTE, img.data[topI], img.data[topI + 1], img.data[topI + 2], mem ? [mem.fg[cell], lastFgIdx] : [], mem?.stickiness);
+            const bgIdx = (0, video_hysteresis_1.pickColor)(exports.PALETTE, img.data[botI], img.data[botI + 1], img.data[botI + 2], mem ? [mem.bg[cell], lastBgIdx] : [], mem?.stickiness);
+            if (mem) {
+                mem.fg[cell] = fgIdx;
+                mem.bg[cell] = bgIdx;
+            }
+            if (fgIdx !== lastFgIdx || bgIdx !== lastBgIdx) {
+                if (lastFgIdx >= 0 || lastBgIdx >= 0)
                     out += '{/}';
-                out += `{${fg}-fg}{${bg}-bg}`;
-                lastFg = fg;
-                lastBg = bg;
+                out += `{${exports.PALETTE[fgIdx][0]}-fg}{${exports.PALETTE[bgIdx][0]}-bg}`;
+                lastFgIdx = fgIdx;
+                lastBgIdx = bgIdx;
             }
             out += '▀';
         }
-        if (lastFg || lastBg) {
+        if (lastFgIdx >= 0 || lastBgIdx >= 0) {
             out += '{/}';
-            lastFg = '';
-            lastBg = '';
+            lastFgIdx = -1;
+            lastBgIdx = -1;
         }
         out += '\n';
     }

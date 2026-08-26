@@ -30,6 +30,7 @@ import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
+import { joinVoiceChannel, leaveVoiceChannel, setVoiceMute, setVoiceVideo } from './voice-channel.handler';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -232,6 +233,44 @@ console.log('[DoorSocket] Intercepting chat:keystroke-clear:', data);
           username: session.user?.username
         });
       }
+      return wrappedSocket;
+    }
+
+    // Intercept voice:join-channel / voice:leave-channel.
+    //
+    // A door's emit goes server->CLIENT, so these requests were being
+    // delivered to the browser, which has no handler for them: the backend
+    // saw zero joins and the door's voice roster only ever held the user
+    // themselves. Route them to the real voice operations, the same way
+    // room:join is routed to bbsApi.
+    if (event === 'voice:join-channel') {
+      const data = args[0] || {};
+      const callback = typeof args[1] === 'function' ? args[1] : undefined;
+      const result = joinVoiceChannel(socket, data);
+      if (!result.success) {
+console.log('[DoorSocket] voice:join-channel failed:', result.error);
+      }
+      callback?.(result);
+      return wrappedSocket;
+    }
+
+    if (event === 'voice:leave-channel') {
+      const data = args[0] || {};
+      const callback = typeof args[1] === 'function' ? args[1] : undefined;
+      const result = leaveVoiceChannel(socket, data);
+      callback?.(result);
+      return wrappedSocket;
+    }
+
+    // Same for mute and video state: emitted at the browser, these never
+    // reached the voice handler, so nobody in the channel was ever told.
+    if (event === 'voice:mute') {
+      setVoiceMute(socket, args[0] || { isMuted: false });
+      return wrappedSocket;
+    }
+
+    if (event === 'voice:video-toggle') {
+      setVoiceVideo(socket, args[0] || { hasVideo: false });
       return wrappedSocket;
     }
 

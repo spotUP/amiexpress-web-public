@@ -121,7 +121,12 @@ export function buildSidebarItems(input: BuilderInput): BuilderOutput {
       const count = vc.participants.length;
       const isInVoice = voiceChannelService.getCurrentVoiceChannel() === vc.id;
       const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : count > 0 ? '{cyan-fg}[V]{/cyan-fg}' : '{gray-fg}[V]{/gray-fg}';
-      items.push(icon + ' ' + vc.name + ' {gray-fg}(' + count + '){/gray-fg}');
+      // A talking marker: without it a busy channel and a silent one look
+      // exactly alike, which is how a working voice channel read as broken.
+      const talking = vc.participants.some((p: any) => p.isSpeaking)
+        ? ' {green-fg}[*]{/green-fg}'
+        : '';
+      items.push(icon + ' ' + vc.name + ' {gray-fg}(' + count + '){/gray-fg}' + talking);
       channelItems.push({ id: 'voice-' + vc.id, name: vc.name, type: 'voice' });
     });
   }

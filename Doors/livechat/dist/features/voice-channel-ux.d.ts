@@ -45,6 +45,9 @@ export declare class VoiceControlBar {
     private gridToggleButton;
     private modeButton;
     private disconnectButton;
+    private levelBar?;
+    /** What the meter last drew, so unchanged readings cost nothing. */
+    private meterState;
     private username;
     private isMuted;
     private hasVideo;
@@ -85,6 +88,22 @@ export interface EnhancedVoiceChannelOptions {
     showConfirmDialog?: (title: string, message: string) => Promise<boolean>;
     onRenderModeChange?: (mode: 'ascii' | 'color' | 'halfblock' | 'braille') => void;
     onTileRightClick?: (userId: string, x: number, y: number) => void;
+    /**
+     * Video started or stopped filling the chat panel.
+     *
+     * The panel draws a frame around its contents, which is right for a chat
+     * log and wrong for a picture that reaches every edge - it showed as a
+     * stray rule under the video.
+     */
+    onVideoVisibility?: (visible: boolean) => void;
+    /**
+     * The roster changed - somebody joined or left voice.
+     *
+     * The sidebar is rebuilt by server.ts, not here, so the count next to
+     * "Voice" can only move if we say so. Without this it read (0) for ever,
+     * which is what made a working voice channel look broken.
+     */
+    onRosterChange?: () => void;
 }
 export declare class EnhancedVoiceChannel {
     private parent?;
@@ -106,6 +125,13 @@ export declare class EnhancedVoiceChannel {
     private showConfirmDialog?;
     private onRenderModeChange?;
     private onTileRightClick?;
+    private onRosterChange?;
+    private onVideoVisibility?;
+    /** The last decoded frame per sender, for applying their next delta. */
+    private cellBuffers;
+    /** The size each sender encoded at, needed to scale their frame. */
+    private frameSizes;
+    private cellHandlerBound;
     private videoEnabled;
     private currentStreamDims;
     private resizeStreamTimer;
@@ -123,6 +149,8 @@ export declare class EnhancedVoiceChannel {
      * available space (whole chat panel when alone, half when 2 people, etc).
      * Falls back to 80x24 if the tile isn't measurable yet.
      */
+    /** The video area of any tile in the grid, all being the same size. */
+    private firstPeerTileDims;
     private computeStreamDims;
     /**
      * If the self-tile has changed size enough to matter (>20% on either
@@ -170,6 +198,24 @@ export declare class EnhancedVoiceChannel {
      * sessions were deaf: `video:frame received, has handler: false`.
      */
     ensureVideoGrid(): void;
+    /**
+     * Compact binary frames from other people.
+     *
+     * Each sender's frames are deltas against their own previous frame, so
+     * one decoded buffer is kept per sender. A packet that cannot be applied
+     * - a delta that arrived before any full frame, or after a resize - is
+     * DROPPED rather than drawn: the sender sends a full frame whenever the
+     * shape changes, so the picture repairs itself within a frame or two.
+     */
+    private ensureCellHandler;
+    /**
+     * Draw somebody's latest frame in the mode THIS user has chosen.
+     *
+     * Kept separate from receiving so that changing the render mode can
+     * redraw the picture already in hand, with no round trip to the sender
+     * and no effect on anybody else's view.
+     */
+    private drawParticipant;
     private ensureFrameHandler;
     private startAudioStreaming;
     showGrid(): void;

@@ -18,11 +18,13 @@
  * terminal, a camera or a socket.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.MAX_STREAM_CELLS = void 0;
 exports.pickSpeaker = pickSpeaker;
 exports.layoutSignature = layoutSignature;
 exports.resolveBoxSize = resolveBoxSize;
 exports.autoViewMode = autoViewMode;
 exports.bestColumns = bestColumns;
+exports.capStreamCells = capStreamCells;
 /**
  * Who fills the tile in speaker mode: the active speaker, else yourself,
  * else whoever is first.
@@ -131,4 +133,53 @@ cellAspect = 0.5) {
         }
     }
     return best;
+}
+/**
+ * How many cells one video frame may cost.
+ *
+ * Frame rate is bought with bytes, and the client paces itself against a
+ * byte budget: a frame that costs twice as much is sent half as often. The
+ * tile size therefore sets the frame rate, and nothing was capping it.
+ *
+ * Measured on a live session (2026-08-26): a 146x46 tile - 6,716 cells -
+ * produced 21 KB frames, which against the 48 KB/s budget is one frame
+ * every 442 ms. Two and a bit frames a second, for a picture made of
+ * coloured half-blocks.
+ *
+ * That number was chosen when a frame cost ~3 bytes per cell and every
+ * frame was sent in full. Delta encoding changed the arithmetic entirely:
+ * measured on a live call, 1,771 cells cost 227-371 BYTES a frame, about
+ * a fifth of a byte per cell.
+ *
+ * The old cap then did visible harm. Encoding at 1,771 cells for a tile
+ * four times that size meant upscaling, and duplicating rows of half-block
+ * characters - which already pack two pixels each - produced horizontal
+ * banding across the picture (screenshot 2026-08-26).
+ *
+ * 8,000 cells covers a full-height tile without upscaling and still costs
+ * on the order of a kilobyte a frame, or ten a second at ten frames a
+ * second. The cap remains because SOME limit is needed - a maximised
+ * window should not be able to spend the whole budget on resolution again
+ * - but it now sits well above ordinary use rather than below it.
+ */
+exports.MAX_STREAM_CELLS = 8000;
+/**
+ * Shrink a tile's dimensions to fit the cell budget, keeping its shape.
+ *
+ * Preserving the aspect ratio matters: the encoder fits the camera to
+ * whatever shape it is given, so squaring off a wide tile would letterbox
+ * the picture twice over.
+ */
+function capStreamCells(width, height, maxCells = exports.MAX_STREAM_CELLS) {
+    if (width <= 0 || height <= 0)
+        return { width: 0, height: 0 };
+    const cells = width * height;
+    if (cells <= maxCells)
+        return { width, height };
+    const scale = Math.sqrt(maxCells / cells);
+    return {
+        // Never below a picture worth looking at, whatever the budget says.
+        width: Math.max(20, Math.floor(width * scale)),
+        height: Math.max(8, Math.floor(height * scale)),
+    };
 }

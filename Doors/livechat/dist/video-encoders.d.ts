@@ -13,6 +13,7 @@
  * in a door that has no DOM lib.
  */
 /** The part of ImageData these encoders use. */
+import { type ColorMemory, type PaletteEntry } from './video-hysteresis';
 export interface PixelBuffer {
     data: Uint8ClampedArray | number[];
     width?: number;
@@ -28,14 +29,23 @@ export declare function pixelsPerChar(mode: string): {
     px: number;
     py: number;
 };
+/**
+ * Map an RGB triplet to the nearest blessed 16-colour palette token.
+ * Blessed's tag parser only understands named colours, not 24-bit; every
+ * attempt to pass raw `\x1b[38;2;R;G;B m` through a blessed widget ended
+ * up mis-aligned because blessed's internal cell buffer can't account
+ * for those bytes. Neoshowcase's working webcam demo uses this same
+ * approach (rgbToBlessed + {name-fg} tags).
+ */
+export declare const PALETTE: PaletteEntry[];
 export declare function rgbToBlessed(r: number, g: number, b: number): string;
-export declare function renderAscii(img: PixelBuffer, w: number, h: number, colored: boolean): string;
+export declare function renderAscii(img: PixelBuffer, w: number, h: number, colored: boolean, memory?: ColorMemory): string;
 /**
  * Half-block: U+2580 with fg=top, bg=bottom — each char encodes two
  * vertically-stacked pixels. Uses blessed 16-colour palette tokens via
  * rgbToBlessed() so the output is safe for blessed's cell buffer.
  */
-export declare function renderHalfblock(img: PixelBuffer, w: number, h: number): string;
+export declare function renderHalfblock(img: PixelBuffer, w: number, h: number, memory?: ColorMemory): string;
 /**
  * Braille: 1 char = 2x4 source pixels mapped to 8 braille dots. Mono only
  * (Unicode braille blocks have no fg/bg style by themselves; renderer
