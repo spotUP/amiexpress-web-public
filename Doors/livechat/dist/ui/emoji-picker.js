@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmojiPicker = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const emojis_1 = require("../utils/emojis");
+const emoji_label_1 = require("../utils/emoji-label");
 const CATEGORY_MAP = {
     'Emotions': 'emotions',
     'Actions': 'actions',
@@ -13,13 +14,24 @@ const CATEGORY_MAP = {
     'Special': 'special',
 };
 const CATEGORIES = ['Emotions', 'Actions', 'Symbols', 'Special'];
+const PICKER_WIDTH = 52;
+const CATEGORY_WIDTH = 14;
+/**
+ * Room a label actually gets: the box minus the category column, minus the
+ * two border columns, the leading space renderItem adds and the `>>` marker
+ * the List prepends to the focused row.
+ */
+const ITEM_WIDTH = PICKER_WIDTH - CATEGORY_WIDTH - 2 - 1 - 2;
 class EmojiPicker {
     constructor(screen) {
         this.screen = screen;
         this.picker = new blessed_1.CategoryPicker({
             parent: screen,
             title: 'Emoji Picker [Tab | Enter]',
-            width: 44,
+            // 52, not 44: the list shows the emoji ART now, not just its
+            // shortcode, and both have to fit on one line - a label that wraps
+            // pushes every row below it out of line. See PICKER_WIDTH.
+            width: PICKER_WIDTH,
             height: 14,
             categories: CATEGORIES,
             // categoryWidth was 12 -> 10 chars of content after the box border.
@@ -28,7 +40,7 @@ class EmojiPicker {
             // which made "Emotions"/"Actions"/"Symbols"/"Special" all wrap to
             // a second line. 14 leaves 12 chars of content, comfortably fitting
             // ` Emotions` + `>>`.
-            categoryWidth: 14,
+            categoryWidth: CATEGORY_WIDTH,
             debounceMs: 80,
             borderColor: 'cyan',
             zIndex: 9990,
@@ -47,7 +59,9 @@ class EmojiPicker {
                 const emojis = (0, emojis_1.getEmojisByCategory)(emojiCategory);
                 return emojis.map(e => ({
                     id: e.code,
-                    label: `${e.code}  ${e.keywords[0] || ''}`,
+                    // The ART first - it is the emoji. The shortcode follows so it can
+                    // still be typed from the keyboard.
+                    label: (0, emoji_label_1.emojiLabel)(e, ITEM_WIDTH),
                     emoji: e, // Store the full emoji object
                 }));
             },
@@ -65,7 +79,7 @@ class EmojiPicker {
         const screenWidth = screen.width || 80;
         const screenHeight = screen.height || 24;
         this.picker.display({
-            x: screenWidth - 44,
+            x: screenWidth - PICKER_WIDTH,
             y: screenHeight - 7,
         });
     }

@@ -212,9 +212,17 @@ class LiveChatClient {
       console.log('[LiveChatClient] Connected to server');
     });
 
+    // Leaving the door, or closing the tab, must put the camera light out.
+    // This used to stop the microphone only, so the webcam stayed live after
+    // the chat was gone - reported as "the camera doesn't turn off if I
+    // close or leave the LiveChat". Both teardown paths release BOTH.
     this.door.on('disconnect', () => {
       console.log('[LiveChatClient] Disconnected from server');
-      this.stopCapture();
+      this.releaseLocalMedia();
+    });
+
+    this.door.on('shutdown', () => {
+      this.releaseLocalMedia();
     });
   }
 
@@ -418,6 +426,18 @@ class LiveChatClient {
     this.voiceCapture?.destroy();
     this.voiceCapture = null;
     this.isStreaming = false;
+  }
+
+  /**
+   * Give back every capture device this door holds.
+   *
+   * One place, because "stop the microphone" and "stop the camera" being
+   * separate is exactly how the camera got left running: the disconnect
+   * path called one of them.
+   */
+  private releaseLocalMedia(): void {
+    this.stopCapture();
+    this.stopVideoCapture();
   }
 
   private setMuted(muted: boolean): void {

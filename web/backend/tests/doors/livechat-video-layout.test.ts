@@ -1,0 +1,117 @@
+/**
+ * When the video grid is allowed to rebuild its tiles
+ * (Doors/livechat/features/video-layout.ts).
+ *
+ * Reported as "every second frame in some render modes in the video mode in
+ * LiveChat is broken", and narrowed by the reporter to the 80x25 view only.
+ *
+ * A probe in the video tile gave the decisive evidence: what arrived
+ * alternated between
+ *
+ *   rows=15 widths=[54]      a video frame
+ *   rows=8  widths=[27]      NOT a frame - the avatar
+ *
+ * 27 is `{red-fg}` + a ten-column block letter + `{/red-fg}`, and 8 is two
+ * blank lines plus six glyph rows. The tile was painting the avatar between
+ * every pair of frames, because the grid destroys and rebuilds every tile on
+ * relayout and a new tile holds no picture.
+ *
+ * The relayouts came from setActiveSpeaker(), which voice activity toggles
+ * continuously. It only bit the 80x25 view because that view runs in SPEAKER
+ * mode, where the active speaker decides who is on screen; grid mode answers
+ * the same event by recolouring a border.
+ */
+
+import {
+  layoutSignature,
+  pickSpeaker,
+} from '../../../../Doors/livechat/features/video-layout';
+
+const ME = 'me';
+const OTHER = 'other';
+const ALONE = [{ userId: ME }];
+const PAIR = [{ userId: ME }, { userId: OTHER }];
+
+/** The signature the grid compares against to decide whether to rebuild. */
+function speakerSig(participants: { userId: string }[], activeSpeaker?: string, w = 56, h = 16) {
+  return layoutSignature('speaker', w, h, participants, activeSpeaker, ME);
+}
+
+describe('speaking does not move any tile', () => {
+  it('is the same signature whether or not someone is speaking, when alone', () => {
+    // The exact reported case: one person, a dark room, and the speaker
+    // flag flipping with every sound they make.
+    const quiet = speakerSig(ALONE, undefined);
+    const talking = speakerSig(ALONE, ME);
+
+    expect(talking).toBe(quiet);
+  });
+
+  it('is the same signature when the speaker flag flips repeatedly', () => {
+    const flips = [undefined, ME, undefined, ME, undefined].map(s => speakerSig(ALONE, s));
+
+    expect(new Set(flips).size).toBe(1);
+  });
+
+  it('is the same signature in grid mode no matter who speaks', () => {
+    const a = layoutSignature('grid', 80, 24, PAIR, undefined, ME);
+    const b = layoutSignature('grid', 80, 24, PAIR, OTHER, ME);
+
+    expect(b).toBe(a);
+  });
+});
+
+describe('things that DO move tiles', () => {
+  it('changes when the person on screen changes', () => {
+    // Speaker mode really does swap the tile here - it must rebuild.
+    expect(speakerSig(PAIR, OTHER)).not.toBe(speakerSig(PAIR, ME));
+  });
+
+  it('changes when someone joins a grid', () => {
+    const before = layoutSignature('grid', 80, 24, ALONE, undefined, ME);
+    const after = layoutSignature('grid', 80, 24, PAIR, undefined, ME);
+
+    expect(after).not.toBe(before);
+  });
+
+  it('changes when the container is resized', () => {
+    expect(speakerSig(ALONE, ME, 56, 16)).not.toBe(speakerSig(ALONE, ME, 80, 24));
+    expect(speakerSig(ALONE, ME, 56, 16)).not.toBe(speakerSig(ALONE, ME, 56, 24));
+  });
+
+  it('changes when the view mode is toggled', () => {
+    const speaker = layoutSignature('speaker', 80, 24, ALONE, ME, ME);
+    const grid = layoutSignature('grid', 80, 24, ALONE, ME, ME);
+
+    expect(grid).not.toBe(speaker);
+  });
+
+  it('does not change in speaker mode when someone joins off screen', () => {
+    // Only one tile is on screen; a second participant moves nothing.
+    expect(speakerSig(PAIR, ME)).toBe(speakerSig(ALONE, ME));
+  });
+});
+
+describe('who is on screen in speaker mode', () => {
+  it('is the active speaker', () => {
+    expect(pickSpeaker(PAIR, OTHER, ME)?.userId).toBe(OTHER);
+  });
+
+  it('falls back to yourself when nobody is speaking', () => {
+    expect(pickSpeaker(PAIR, undefined, ME)?.userId).toBe(ME);
+  });
+
+  it('falls back to the first participant when you are not in the call', () => {
+    expect(pickSpeaker(PAIR, undefined, 'nobody')?.userId).toBe(ME);
+  });
+
+  it('matches ids across types', () => {
+    // Ids arrive as numbers from the database and strings from sockets.
+    expect(pickSpeaker([{ userId: 7 }], '7', 'x')?.userId).toBe(7);
+    expect(pickSpeaker([{ userId: '7' }], undefined, 7)?.userId).toBe('7');
+  });
+
+  it('has nobody to show in an empty call', () => {
+    expect(pickSpeaker([], undefined, ME)).toBeUndefined();
+  });
+});

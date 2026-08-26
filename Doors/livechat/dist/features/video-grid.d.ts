@@ -46,6 +46,21 @@ export declare class VideoGrid {
     private lastHeight;
     private viewMode;
     private onTileRightClick?;
+    /**
+     * What the tiles were last laid out FOR. A relayout destroys and rebuilds
+     * every tile, so it must happen only when the geometry actually changes -
+     * see updateGrid.
+     */
+    private layoutSignature;
+    /**
+     * The last frame each participant sent.
+     *
+     * A rebuilt tile starts blank and paints the avatar until the next frame
+     * arrives. When a relayout is genuinely needed - someone joins - that is a
+     * visible blink of the avatar over a live picture, so the new tile is
+     * handed the last frame immediately.
+     */
+    private lastFrames;
     constructor(options: VideoGridOptions);
     /**
      * Add or update a participant in the grid
@@ -73,6 +88,29 @@ export declare class VideoGrid {
     setActiveSpeaker(userId?: number | string): void;
     /**
      * Update the grid layout based on current participants
+     */
+    /** See video-layout.ts - the rules live there so they can be tested. */
+    private speakerModeParticipant;
+    private computeLayoutSignature;
+    /** Push current status onto the tiles without rebuilding them. */
+    private refreshTileStatus;
+    /**
+     * Hand a newly built tile the last picture its participant sent, so a
+     * relayout does not blink the avatar over live video.
+     */
+    private restoreFrame;
+    /**
+     * Lay the tiles out.
+     *
+     * This DESTROYS AND REBUILDS every tile, which is why it now begins by
+     * asking whether the layout changed at all. It used to run on any
+     * participant update, and a rebuilt tile starts with no frame - so it
+     * painted the avatar until the next frame arrived, roughly a tenth of a
+     * second later. Frame, avatar, frame, avatar: reported as "every second
+     * frame in the video is broken", and only in the 80x25 view, because that
+     * view runs in SPEAKER mode where setActiveSpeaker() relayouts - while
+     * voice activity toggles the active speaker continuously. In grid mode the
+     * same event only recolours a border, so the big view never flickered.
      */
     private updateGrid;
     /**

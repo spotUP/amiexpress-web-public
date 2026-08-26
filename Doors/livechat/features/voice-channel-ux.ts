@@ -1140,6 +1140,24 @@ export class EnhancedVoiceChannel {
         await this.ctx.audio.stopStreaming();
       }
 
+      // And the camera. Leaving the channel stopped the microphone only, so
+      // the webcam stayed live - and its light stayed on - after the user
+      // had left the call.
+      if (this.videoEnabled && this.ctx?.video) {
+        try {
+          await this.ctx.video.stopStream(`video-${this.socket.id}`);
+        } catch {
+          // best-effort: leaving must not be blocked by a camera that has
+          // already gone away.
+        }
+        this.videoEnabled = false;
+        this.currentStreamDims = null;
+        this.socket.emit('voice:video-toggle', { hasVideo: false });
+        if (this.videoGrid) {
+          this.videoGrid.updateParticipant(this.userId, { hasVideo: false });
+        }
+      }
+
       // Leave channel on server
       this.socket.emit('voice:leave-channel', {
         channelId: this.currentVoiceChannel,

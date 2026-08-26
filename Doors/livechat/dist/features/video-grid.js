@@ -16,6 +16,7 @@ exports.VideoGrid = void 0;
 exports.createVideoGrid = createVideoGrid;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const video_tile_1 = require("../ui/video-tile");
+const video_layout_1 = require("./video-layout");
 /**
  * Calculate optimal grid dimensions based on participant count
  */
@@ -47,6 +48,21 @@ class VideoGrid {
         this.participants = new Map();
         this.lastWidth = 0;
         this.lastHeight = 0;
+        /**
+         * What the tiles were last laid out FOR. A relayout destroys and rebuilds
+         * every tile, so it must happen only when the geometry actually changes -
+         * see updateGrid.
+         */
+        this.layoutSignature = null;
+        /**
+         * The last frame each participant sent.
+         *
+         * A rebuilt tile starts blank and paints the avatar until the next frame
+         * arrives. When a relayout is genuinely needed - someone joins - that is a
+         * visible blink of the avatar over a live picture, so the new tile is
+         * handed the last frame immediately.
+         */
+        this.lastFrames = new Map();
         this.screen = options.screen;
         this.currentUserId = options.currentUserId;
         this.currentUsername = options.currentUsername;
@@ -87,6 +103,7 @@ class VideoGrid {
     removeParticipant(userId) {
         const id = String(userId);
         this.participants.delete(id);
+        this.lastFrames.delete(id);
         const tile = this.tiles.get(id);
         if (tile) {
             tile.destroy();
@@ -118,6 +135,7 @@ class VideoGrid {
      */
     updateParticipantVideo(userId, frame) {
         const id = String(userId);
+        this.lastFrames.set(id, frame);
         const tile = this.tiles.get(id);
         console.log('[video-grid] updateParticipantVideo id=%s hasTile=%s tileCount=%d participantCount=%d', id, !!tile, this.tiles.size, this.participants.size);
         if (tile) {
@@ -165,6 +183,49 @@ class VideoGrid {
     /**
      * Update the grid layout based on current participants
      */
+    /** See video-layout.ts - the rules live there so they can be tested. */
+    speakerModeParticipant(participantArray) {
+        return (0, video_layout_1.pickSpeaker)(participantArray, this.activeSpeaker, this.currentUserId);
+    }
+    computeLayoutSignature(participantArray, width, height) {
+        return (0, video_layout_1.layoutSignature)(this.viewMode, width, height, participantArray, this.activeSpeaker, this.currentUserId);
+    }
+    /** Push current status onto the tiles without rebuilding them. */
+    refreshTileStatus(participantArray) {
+        for (const participant of participantArray) {
+            const tile = this.tiles.get(String(participant.userId));
+            if (!tile)
+                continue;
+            tile.updateStatus({
+                isMuted: participant.isMuted,
+                hasVideo: participant.hasVideo,
+                isSpeaking: participant.isSpeaking,
+                audioLevel: participant.audioLevel,
+            });
+        }
+    }
+    /**
+     * Hand a newly built tile the last picture its participant sent, so a
+     * relayout does not blink the avatar over live video.
+     */
+    restoreFrame(tile, userId) {
+        const frame = this.lastFrames.get(String(userId));
+        if (frame)
+            tile.setVideoFrame(frame);
+    }
+    /**
+     * Lay the tiles out.
+     *
+     * This DESTROYS AND REBUILDS every tile, which is why it now begins by
+     * asking whether the layout changed at all. It used to run on any
+     * participant update, and a rebuilt tile starts with no frame - so it
+     * painted the avatar until the next frame arrived, roughly a tenth of a
+     * second later. Frame, avatar, frame, avatar: reported as "every second
+     * frame in the video is broken", and only in the 80x25 view, because that
+     * view runs in SPEAKER mode where setActiveSpeaker() relayouts - while
+     * voice activity toggles the active speaker continuously. In grid mode the
+     * same event only recolours a border, so the big view never flickered.
+     */
     updateGrid() {
         const participantArray = Array.from(this.participants.values());
         const participantCount = participantArray.length;
@@ -177,9 +238,18 @@ class VideoGrid {
                 tile.destroy();
             }
             this.tiles.clear();
+            this.layoutSignature = null;
             this.screen.render();
             return;
         }
+        const signature = this.computeLayoutSignature(participantArray, containerWidth, containerHeight);
+        if (signature === this.layoutSignature && this.tiles.size > 0) {
+            // Same geometry: the tiles stay, and with them the picture they hold.
+            this.refreshTileStatus(participantArray);
+            this.screen.render();
+            return;
+        }
+        this.layoutSignature = signature;
         // Clear existing tiles
         for (const tile of this.tiles.values()) {
             tile.destroy();
@@ -187,16 +257,7 @@ class VideoGrid {
         this.tiles.clear();
         // SPEAKER MODE: Show only the active speaker (or self if nobody speaking)
         if (this.viewMode === 'speaker') {
-            // Determine who to show: active speaker, or self if nobody is speaking
-            let participantToShow = participantArray.find(p => String(p.userId) === String(this.activeSpeaker));
-            // If no active speaker, show yourself
-            if (!participantToShow) {
-                participantToShow = participantArray.find(p => String(p.userId) === String(this.currentUserId));
-            }
-            // If still nothing, show first participant
-            if (!participantToShow && participantArray.length > 0) {
-                participantToShow = participantArray[0];
-            }
+            const participantToShow = this.speakerModeParticipant(participantArray);
             if (participantToShow) {
                 // Show single participant filling entire container
                 const tileOptions = {
@@ -217,6 +278,7 @@ class VideoGrid {
                 };
                 const tile = new video_tile_1.VideoTile(tileOptions);
                 this.tiles.set(String(participantToShow.userId), tile);
+                this.restoreFrame(tile, participantToShow.userId);
                 this.attachTileRightClick(tile, participantToShow.userId);
             }
             this.screen.render();
@@ -272,6 +334,7 @@ class VideoGrid {
             };
             const tile = new video_tile_1.VideoTile(tileOptions);
             this.tiles.set(String(participant.userId), tile);
+            this.restoreFrame(tile, participant.userId);
             this.attachTileRightClick(tile, participant.userId);
         });
         this.screen.render();
@@ -325,6 +388,8 @@ class VideoGrid {
         }
         this.tiles.clear();
         this.participants.clear();
+        this.lastFrames.clear();
+        this.layoutSignature = null;
         this.container.destroy();
     }
     /**
