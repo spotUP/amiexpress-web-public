@@ -25,6 +25,7 @@ import {
   rms,
   scheduleStart,
   createBlockDownsampler,
+  classifyGap,
 } from '../../../../sdk/media/pcm';
 
 /** A sine wave, as a microphone would deliver it. */
@@ -287,5 +288,33 @@ describe('block-by-block downsampling', () => {
 
     expect(again.length).toBe(first.length);
     expect(again[0]).toBeCloseTo(first[0], 6);
+  });
+});
+
+/**
+ * Telling two stutters apart.
+ *
+ * Packets arriving late and packets arriving on time while the thread that
+ * must play them is busy sound identical, and they have different fixes.
+ * These are the thresholds the in-call counters use.
+ */
+describe('classifyGap', () => {
+  const EXPECTED = 42.6; // one 682-sample packet at 16 kHz
+
+  it('calls an on-time gap ok, jitter included', () => {
+    expect(classifyGap(EXPECTED, EXPECTED)).toBe('ok');
+    expect(classifyGap(EXPECTED * 1.4, EXPECTED)).toBe('ok');
+    expect(classifyGap(0, EXPECTED)).toBe('ok');
+  });
+
+  it('calls a gap half again too long late', () => {
+    expect(classifyGap(EXPECTED * 2, EXPECTED)).toBe('late');
+  });
+
+  it('calls a gap of three packets or more starved', () => {
+    // By here the audio has certainly run dry - this is what a blocked main
+    // thread looks like, as opposed to ordinary network jitter.
+    expect(classifyGap(EXPECTED * 4, EXPECTED)).toBe('starved');
+    expect(classifyGap(500, EXPECTED)).toBe('starved');
   });
 });

@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import {
   VOICE_SAMPLE_RATE,
   createBlockDownsampler,
+  classifyGap,
   type BlockDownsampler,
   floatToInt16,
   int16ToFloat,
@@ -74,6 +75,26 @@ export class VoiceCapture extends EventEmitter {
   }>();
   private _isMuted = false;
   private lastSpeaking = false;
+  /**
+   * Stutter diagnostics.
+   *
+   * A stutter caused by packets ARRIVING late and one caused by the main
+   * thread being too busy to hand them over sound the same, and they have
+   * different fixes. These counters say which is happening in a real call.
+   */
+  private stats = {
+    captureBlocks: 0,
+    captureLate: 0,
+    captureStarved: 0,
+    packetsPlayed: 0,
+    packetsLate: 0,
+    packetsStarved: 0,
+    worstCaptureGapMs: 0,
+    worstPacketGapMs: 0,
+  };
+  private lastCaptureAt = 0;
+  private lastPacketAt = new Map<string | number, number>();
+  private statsInterval: ReturnType<typeof setInterval> | null = null;
   private doorListeners: Array<[string, (...args: any[]) => void]> = [];
 
   constructor(door: any, options?: VoiceCaptureOptions) {
@@ -201,6 +222,21 @@ export class VoiceCapture extends EventEmitter {
       this.captureNode.onaudioprocess = (ev) => {
         if (this._isMuted || !this.captureNode || !this.downsampler) return;
         try {
+          // How late was this callback? A ScriptProcessorNode runs on the main
+          // thread, so video encoding or a big redraw delays it, and delayed
+          // capture is heard at the other end as a stutter.
+          const nowMs = Date.now();
+          const expectedMs = (2048 / sampleRate) * 1000;
+          if (this.lastCaptureAt > 0) {
+            const gap = nowMs - this.lastCaptureAt;
+            const verdict = classifyGap(gap, expectedMs);
+            if (verdict === 'late') this.stats.captureLate++;
+            if (verdict === 'starved') this.stats.captureStarved++;
+            if (gap > this.stats.worstCaptureGapMs) this.stats.worstCaptureGapMs = gap;
+          }
+          this.lastCaptureAt = nowMs;
+          this.stats.captureBlocks++;
+
           const input = ev.inputBuffer.getChannelData(0);
           const reduced = this.downsampler.process(input);
           if (reduced.length === 0) return;
@@ -220,6 +256,7 @@ export class VoiceCapture extends EventEmitter {
       mute.connect(this.audioContext.destination);
 
       this.startLevelMonitor();
+      this.startStatsReporter();
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
@@ -227,6 +264,9 @@ export class VoiceCapture extends EventEmitter {
 
   stop(): void {
     if (this.levelInterval) { clearInterval(this.levelInterval); this.levelInterval = null; }
+    if (this.statsInterval) { clearInterval(this.statsInterval); this.statsInterval = null; }
+    this.lastCaptureAt = 0;
+    this.lastPacketAt.clear();
     if (this.captureNode) {
       this.captureNode.onaudioprocess = null;
       this.captureNode.disconnect();
@@ -299,6 +339,43 @@ export class VoiceCapture extends EventEmitter {
     await this.start({ deviceId });
   }
 
+  /**
+   * Report the stutter counters, but only when there is something to say.
+   *
+   * A clean call prints nothing. Anything else names which side is late, so
+   * the next stutter report arrives with numbers instead of an adjective.
+   */
+  private startStatsReporter(): void {
+    if (this.statsInterval) return;
+    this.statsInterval = setInterval(() => {
+      const s = this.stats;
+      const trouble = s.captureLate + s.captureStarved + s.packetsLate + s.packetsStarved;
+      if (trouble === 0) return;
+
+      const report = {
+        captureBlocks: s.captureBlocks,
+        captureLate: s.captureLate,
+        captureStarved: s.captureStarved,
+        worstCaptureGapMs: Math.round(s.worstCaptureGapMs),
+        packetsPlayed: s.packetsPlayed,
+        packetsLate: s.packetsLate,
+        packetsStarved: s.packetsStarved,
+        worstPacketGapMs: Math.round(s.worstPacketGapMs),
+      };
+      console.log('[VoiceCapture] stutter stats', report);
+      // Logged server-side beside the microphone name, the same way
+      // audio:device is - so the numbers survive without a browser console.
+      this.door.emit('audio:stats', report);
+
+      s.captureLate = 0;
+      s.captureStarved = 0;
+      s.packetsLate = 0;
+      s.packetsStarved = 0;
+      s.worstCaptureGapMs = 0;
+      s.worstPacketGapMs = 0;
+    }, 10000);
+  }
+
   private startLevelMonitor(): void {
     if (this.levelInterval) return;
     const buf = new Uint8Array(this.analyserNode?.frequencyBinCount ?? 128);
@@ -330,6 +407,21 @@ export class VoiceCapture extends EventEmitter {
         p = { gainNode, source: null, nextTime: 0 };
         this.audioPlayers.set(userId, p);
       }
+
+      // How late did this packet arrive, measured per speaker? Compared with
+      // the capture counters above, this separates a slow network from a busy
+      // main thread.
+      const nowMs = Date.now();
+      const previous = this.lastPacketAt.get(userId);
+      if (previous !== undefined) {
+        const gap = nowMs - previous;
+        const verdict = classifyGap(gap, (682 / VOICE_SAMPLE_RATE) * 1000);
+        if (verdict === 'late') this.stats.packetsLate++;
+        if (verdict === 'starved') this.stats.packetsStarved++;
+        if (gap > this.stats.worstPacketGapMs) this.stats.worstPacketGapMs = gap;
+      }
+      this.lastPacketAt.set(userId, nowMs);
+      this.stats.packetsPlayed++;
 
       const samples = int16ToFloat(decodePcm(chunk));
       if (samples.length === 0) return;

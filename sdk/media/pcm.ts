@@ -196,6 +196,27 @@ export function decodePcm(buffer: ArrayBuffer): Int16Array {
 }
 
 /**
+ * Classify one gap between consecutive audio events.
+ *
+ * Two very different faults sound identical as a stutter: packets arriving
+ * late (network or pacing), and packets arriving on time but the thread that
+ * must handle them being busy elsewhere. Telling them apart needs numbers
+ * from a real call, so the counters are built here where they can be tested,
+ * and reported from the call itself.
+ *
+ * `late` is a gap noticeably longer than the packet it should have carried;
+ * `starved` is long enough that audio certainly ran dry.
+ */
+export function classifyGap(
+  gapMs: number,
+  expectedMs: number
+): 'ok' | 'late' | 'starved' {
+  if (gapMs > expectedMs * 3) return 'starved';
+  if (gapMs > expectedMs * 1.5) return 'late';
+  return 'ok';
+}
+
+/**
  * When the next packet of somebody's speech should start playing.
  *
  * Packets carry about 42ms of audio each and cross a network while the main

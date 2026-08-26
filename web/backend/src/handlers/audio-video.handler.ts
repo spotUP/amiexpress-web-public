@@ -226,6 +226,16 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 console.log('[Audio][device]', info?.label ?? 'unknown', JSON.stringify(info?.settings ?? {}));
   });
 
+  // Stutter diagnostics from the browser. Logged, not relayed - the same
+  // treatment as audio:device above, and for the same reason: it answers a
+  // question about a live call without needing somebody's browser console.
+  // A clean call sends nothing, so any line here is a real complaint.
+  socket.on('audio:stats', (stats: any) => {
+    const session = getSessionBySocketId(socket.id);
+    const who = session?.user?.username ?? 'unknown';
+console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
+  });
+
   // Relay audio chunks to other participants
   socket.on('audio:data', (chunk: ArrayBuffer) => {
     const session = getSessionBySocketId(socket.id);
