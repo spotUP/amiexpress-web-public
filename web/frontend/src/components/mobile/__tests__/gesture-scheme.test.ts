@@ -320,3 +320,82 @@ describe('menu gestures', () => {
     expect(menuGesture(stroke(), { x: 101, y: 101, t: 900 })).toBeNull();
   });
 });
+
+describe('speed decides the drop, not distance', () => {
+  /** Play a stroke through the tracker and return what lifting the thumb means. */
+  function swipeDown(distance: number, ms: number) {
+    const stroke = beginStroke({ x: 100, y: 100, t: 0 });
+    const steps = 4;
+    for (let i = 1; i <= steps; i++) {
+      trackMove(stroke, { x: 100, y: 100 + (distance * i) / steps, t: (ms * i) / steps });
+    }
+    return endStroke(stroke, { x: 100, y: 100 + distance, t: ms });
+  }
+
+  it('hard drops a SHORT fast flick', () => {
+    // "Even short swipes down should register as hard drops." 20px in 40ms
+    // used to fall through the 38px distance gate and soft drop instead.
+    expect(swipeDown(20, 40)).toEqual(GESTURE_KEYS.hardDrop);
+  });
+
+  it('hard drops a long fast flick', () => {
+    expect(swipeDown(90, 120)).toEqual(GESTURE_KEYS.hardDrop);
+  });
+
+  it('does NOT hard drop a slow drag', () => {
+    // "Slow swipes down should soft drop" - and a slow drag has already been
+    // emitting one soft drop per row on the way down.
+    expect(swipeDown(90, 900)).toBeNull();
+  });
+
+  it('soft drops on the way down', () => {
+    const stroke = beginStroke({ x: 100, y: 100, t: 0 });
+    const keys = [
+      ...trackMove(stroke, { x: 100, y: 130, t: 200 }),
+      ...trackMove(stroke, { x: 100, y: 200, t: 600 }),
+    ];
+
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.every(k => k.code === GESTURE_KEYS.down.code)).toBe(true);
+  });
+
+  it('reads a twitch on lift-off as the tap it is', () => {
+    // Fast but barely any travel, and never committed to an axis: that is a
+    // tap rolling off the glass, so it rotates rather than hard dropping.
+    expect(swipeDown(6, 10)).toEqual(GESTURE_KEYS.rotate);
+  });
+});
+
+describe('a hold still has to travel', () => {
+  function swipeUp(distance: number, ms: number) {
+    const stroke = beginStroke({ x: 100, y: 300, t: 0 });
+    for (let i = 1; i <= 4; i++) {
+      trackMove(stroke, { x: 100, y: 300 - (distance * i) / 4, t: (ms * i) / 4 });
+    }
+    return endStroke(stroke, { x: 100, y: 300 - distance, t: ms });
+  }
+
+  it('holds on a long fast flick up', () => {
+    expect(swipeUp(90, 120)).toEqual(GESTURE_KEYS.hold);
+  });
+
+  it('does not hold on a short flick up', () => {
+    // An accidental hold costs the player their piece, so up keeps its
+    // distance requirement even though down no longer has one.
+    expect(swipeUp(20, 40)).toBeNull();
+  });
+});
+
+describe('a down swipe stays down', () => {
+  it('does not move the piece sideways on a slightly diagonal stroke', () => {
+    const stroke = beginStroke({ x: 100, y: 100, t: 0 });
+    // 30px down, 16px across - a normal thumb arc, which used to lock
+    // horizontal and slide the piece.
+    const keys = [
+      ...trackMove(stroke, { x: 108, y: 115, t: 40 }),
+      ...trackMove(stroke, { x: 116, y: 130, t: 80 }),
+    ];
+
+    expect(keys.every(k => k.code === GESTURE_KEYS.down.code)).toBe(true);
+  });
+});

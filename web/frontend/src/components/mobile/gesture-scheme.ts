@@ -83,8 +83,24 @@ export interface GestureTuning {
   tapSlopPx: number;
   /** Travel that decides whether a stroke is horizontal or vertical. */
   axisLockPx: number;
-  /** A flick must cover at least this much (px) to be a swipe. */
+  /**
+   * A flick UP must cover at least this much (px) to be a swipe.
+   *
+   * Only up. A hard drop is decided by SPEED alone - see hardDropMinPx -
+   * because the distance gate is what made short flicks fall through to a
+   * soft drop. An accidental hold is a worse outcome than an accidental hard
+   * drop, so the up direction keeps its distance requirement.
+   */
   swipeDistancePx: number;
+  /**
+   * The least a downward flick can travel and still be a hard drop.
+   *
+   * Just past the tap slop: enough that a stationary lift-off is not a
+   * flick, small enough that a short sharp flick counts. "Even short swipes
+   * down should register as hard drops; fast swipes should hard drop and
+   * slow swipes down should soft drop" - so speed decides, not distance.
+   */
+  hardDropMinPx: number;
   /** ...and be no slower than this (px per millisecond), measured over
    *  the END of the stroke rather than the whole of it. */
   swipeVelocityPxPerMs: number;
@@ -110,8 +126,17 @@ export const DEFAULT_TUNING: GestureTuning = {
   // whole swipe then moved the piece ("it still moves sideways easily when
   // swiping down", 2026-08-25).
   axisLockPx: 14,
-  axisDominance: 1.5,
+  // 1.5 was still letting a down-swipe drift: 15px down against 10px across
+  // passes at 1.5 and locks VERTICAL, but 15 across against 10 down passes
+  // just as easily and moves the piece sideways instead. 1.8 asks the thumb
+  // to mean it ("it's super hard to swipe down without making it move
+  // sideways or rotate", 2026-08-26).
+  axisDominance: 1.8,
   swipeDistancePx: 38,
+  // 38px of flick was demanded in BOTH directions, so a short sharp flick
+  // down never qualified and fell through to the per-row soft drop: "I keep
+  // swiping down but it always registers as soft drop instead of hard drop".
+  hardDropMinPx: 14,
   swipeVelocityPxPerMs: 0.28,
   flickWindowMs: 120,
   tapMaxMs: 250,
@@ -274,11 +299,20 @@ export function endStroke(
   const flickSpeed = Math.abs(flickDy) / flickMs;
 
   const verticalFlick = Math.abs(flickDy) > Math.abs(flickDx);
-  const farEnough = Math.abs(flickDy) >= tuning.swipeDistancePx
-    || (stroke.axis === 'vertical' && Math.abs(dy) >= tuning.swipeDistancePx);
+  const fastEnough = flickSpeed >= tuning.swipeVelocityPxPerMs;
 
-  if (verticalFlick && farEnough && flickSpeed >= tuning.swipeVelocityPxPerMs) {
-    return flickDy < 0 ? GESTURE_KEYS.hold : GESTURE_KEYS.hardDrop;
+  if (verticalFlick && fastEnough) {
+    if (flickDy < 0) {
+      // Up is a hold, and an accidental hold is worse than an accidental
+      // hard drop, so it still has to travel.
+      const farEnough = Math.abs(flickDy) >= tuning.swipeDistancePx
+        || (stroke.axis === 'vertical' && Math.abs(dy) >= tuning.swipeDistancePx);
+      return farEnough ? GESTURE_KEYS.hold : null;
+    }
+    // Down: SPEED is the whole test. A slow drag down never gets here - it
+    // has been emitting one soft drop per row all along - and a quick flick
+    // hard drops however short it was.
+    return Math.abs(flickDy) >= tuning.hardDropMinPx ? GESTURE_KEYS.hardDrop : null;
   }
 
   return null;

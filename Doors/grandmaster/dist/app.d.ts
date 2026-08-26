@@ -62,6 +62,18 @@ export declare class GrandmasterApp {
      */
     private get currentScreen();
     private set currentScreen(value);
+    /**
+     * Tell the terminal whether a menu or the playfield is showing.
+     *
+     * A phone in gesture mode reads a tap as ROTATE while a game is up and as
+     * ENTER while a menu is - so a door that never says which it is showing
+     * leaves the player unable to choose anything. The setter above only fires
+     * on a CHANGE, and this door opens on its menu with _currentScreen already
+     * set to 'menu', so the opening screen was never announced and the
+     * terminal kept its default of 'game': tapping the main menu rotated a
+     * piece that was not there (reported 2026-08-26).
+     */
+    private announceInputMode;
     private _voiceRoom;
     private _voiceSocketHandlers;
     constructor(session: DoorSession);

@@ -16,6 +16,7 @@
  * and rendering them needs a DOM this suite does not carry.
  */
 
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 

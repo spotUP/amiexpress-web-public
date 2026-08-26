@@ -264,8 +264,23 @@ export class GrandmasterApp {
   private set currentScreen(screen: 'menu' | 'game' | 'lobby' | 'settings' | 'stats') {
     if (this._currentScreen === screen) return;
     this._currentScreen = screen;
+    this.announceInputMode();
+  }
+
+  /**
+   * Tell the terminal whether a menu or the playfield is showing.
+   *
+   * A phone in gesture mode reads a tap as ROTATE while a game is up and as
+   * ENTER while a menu is - so a door that never says which it is showing
+   * leaves the player unable to choose anything. The setter above only fires
+   * on a CHANGE, and this door opens on its menu with _currentScreen already
+   * set to 'menu', so the opening screen was never announced and the
+   * terminal kept its default of 'game': tapping the main menu rotated a
+   * piece that was not there (reported 2026-08-26).
+   */
+  private announceInputMode(): void {
     try {
-      (this.session?.bbs as any)?.setInputMode?.(screen === 'game' ? 'game' : 'menu');
+      (this.session?.bbs as any)?.setInputMode?.(this._currentScreen === 'game' ? 'game' : 'menu');
     } catch {
       // A door must never die because the terminal could not be told.
     }
@@ -504,6 +519,11 @@ export class GrandmasterApp {
    * Run the application
    */
   async run(initialMode?: string): Promise<void> {
+    // Say which mode we open in. The setter only speaks on a CHANGE, and
+    // this door starts on its menu, so without this the terminal never
+    // hears 'menu' and a phone tap rotates instead of choosing.
+    this.announceInputMode();
+
     // Clear any previous door's screen artifacts
     // This prevents ghosting when switching between doors
     this.screen.program.write('\x1b[2J');  // Clear entire screen with ANSI
