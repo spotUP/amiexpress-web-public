@@ -30,6 +30,16 @@ export interface VideoGridOptions {
     currentUsername: string;
     viewMode?: 'speaker' | 'grid';
     onTileRightClick?: (userId: string, x: number, y: number) => void;
+    /**
+     * Called whenever the tiles have been rebuilt at a new size.
+     *
+     * Whoever owns the camera needs this: the picture is encoded to fit a
+     * TILE, so it has to be re-encoded whenever the tile changes shape. The
+     * window resizing is only one of the ways that happens - toggling the
+     * sidebar, switching view mode and someone joining all resize the tiles
+     * too, and none of them are a window resize.
+     */
+    onLayoutChanged?: () => void;
 }
 /**
  * VideoGrid - Displays all participants in an adaptive grid layout
@@ -46,6 +56,7 @@ export declare class VideoGrid {
     private lastHeight;
     private viewMode;
     private onTileRightClick?;
+    private onLayoutChanged?;
     /**
      * What the tiles were last laid out FOR. A relayout destroys and rebuilds
      * every tile, so it must happen only when the geometry actually changes -

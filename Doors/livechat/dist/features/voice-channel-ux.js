@@ -889,6 +889,10 @@ class EnhancedVoiceChannel {
                         onTileRightClick: (uid, x, y) => {
                             this.onTileRightClick?.(uid, x, y);
                         },
+                        // Any change to the tiles means the picture has to be re-encoded
+                        // to fit them - a sidebar toggle and a view-mode switch resize
+                        // the tile just as surely as the window does.
+                        onLayoutChanged: () => this.scheduleStreamResize(),
                     });
                     // Start hidden until someone enables video
                     this.videoGrid.hide();

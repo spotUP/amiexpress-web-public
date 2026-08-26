@@ -210,3 +210,32 @@ describe('choosing the view mode', () => {
     expect(autoViewMode(1, true, 'grid')).toBe('grid');
   });
 });
+
+describe('telling the camera the tile changed', () => {
+  const { readFileSync } = require('fs');
+  const { join } = require('path');
+  const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+  const grid = readFileSync(join(DOOR, 'features', 'video-grid.ts'), 'utf8');
+  const voiceUx = readFileSync(join(DOOR, 'features', 'voice-channel-ux.ts'), 'utf8');
+
+  it('reports a rebuild to whoever owns the camera', () => {
+    // The picture is encoded to fit a TILE, so it must be re-encoded
+    // whenever the tile changes shape. Toggling the sidebar moved the video
+    // and left it the old size, because only a WINDOW resize was wired up.
+    expect(grid).toMatch(/this\.onLayoutChanged\?\.\(\)/);
+  });
+
+  it('does not report a rebuild that did not happen', () => {
+    // The skip path returns before the callback; re-encoding on every
+    // status tick would restart the camera constantly.
+    const body = grid.slice(grid.indexOf('const signature = this.computeLayoutSignature'));
+    const skipBlock = body.slice(0, body.indexOf('this.layoutSignature = signature;'));
+
+    expect(skipBlock).toMatch(/return;/);
+    expect(skipBlock).not.toMatch(/onLayoutChanged/);
+  });
+
+  it('is what triggers the re-encode', () => {
+    expect(voiceUx).toMatch(/onLayoutChanged: \(\) => this\.scheduleStreamResize\(\)/);
+  });
+});

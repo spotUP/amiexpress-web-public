@@ -36,6 +36,16 @@ export interface VideoGridOptions {
   currentUsername: string;
   viewMode?: 'speaker' | 'grid';  // Default: 'speaker' for low-res terminals
   onTileRightClick?: (userId: string, x: number, y: number) => void;
+  /**
+   * Called whenever the tiles have been rebuilt at a new size.
+   *
+   * Whoever owns the camera needs this: the picture is encoded to fit a
+   * TILE, so it has to be re-encoded whenever the tile changes shape. The
+   * window resizing is only one of the ways that happens - toggling the
+   * sidebar, switching view mode and someone joining all resize the tiles
+   * too, and none of them are a window resize.
+   */
+  onLayoutChanged?: () => void;
 }
 
 /**
@@ -68,6 +78,7 @@ export class VideoGrid {
   private lastHeight: number = 0;
   private viewMode: 'speaker' | 'grid';  // speaker = show one person, grid = show all
   private onTileRightClick?: (userId: string, x: number, y: number) => void;
+  private onLayoutChanged?: () => void;
 
   /**
    * What the tiles were last laid out FOR. A relayout destroys and rebuilds
@@ -98,6 +109,7 @@ export class VideoGrid {
     this.currentUsername = options.currentUsername;
     this.viewMode = options.viewMode ?? 'speaker';  // Default to speaker mode for low-res terminals
     this.onTileRightClick = options.onTileRightClick;
+    this.onLayoutChanged = options.onLayoutChanged;
 
     // Main container for video grid (no outer border — tiles have their own)
     this.container = blessed.box({
@@ -371,6 +383,7 @@ export class VideoGrid {
       }
 
       this.screen.render();
+      this.onLayoutChanged?.();
       return;
     }
 
@@ -436,6 +449,7 @@ export class VideoGrid {
     });
 
     this.screen.render();
+    this.onLayoutChanged?.();
   }
 
   /**

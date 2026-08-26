@@ -73,6 +73,7 @@ class VideoGrid {
         this.currentUsername = options.currentUsername;
         this.viewMode = options.viewMode ?? 'speaker'; // Default to speaker mode for low-res terminals
         this.onTileRightClick = options.onTileRightClick;
+        this.onLayoutChanged = options.onLayoutChanged;
         // Main container for video grid (no outer border — tiles have their own)
         this.container = blessed_1.default.box({
             parent: options.parent,
@@ -309,6 +310,7 @@ class VideoGrid {
                 this.attachTileRightClick(tile, participantToShow.userId);
             }
             this.screen.render();
+            this.onLayoutChanged?.();
             return;
         }
         // GRID MODE: Show all participants in a grid (original behavior)
@@ -365,6 +367,7 @@ class VideoGrid {
             this.attachTileRightClick(tile, participant.userId);
         });
         this.screen.render();
+        this.onLayoutChanged?.();
     }
     /**
      * Show the video grid
