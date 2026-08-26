@@ -12,7 +12,7 @@
  */
 
 import { Socket } from 'socket.io';
-import { getSessionBySocketId } from '../../server/session-manager';
+import { getSessionBySocketId, getSocketIdByUserId } from '../../server/session-manager';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -21,6 +21,36 @@ import { doorOwnsTerminal } from '../../utils/door-owns-terminal';
 
 import type { BBSSession } from '../../index';
 // Session type
+
+
+/**
+ * Attach presence to a room's membership list.
+ *
+ * getRoomMembers() returns everyone who has EVER joined the room. Sending
+ * that as the user list made the door show people as online for ever -
+ * reported twice, most recently as "coffe and DiNO are still stale in the
+ * chat". The door cannot tell the difference: only the server knows who
+ * currently holds a socket, so the answer has to travel with the list.
+ *
+ * `isOnline` is injected so the rule can be tested without a live server.
+ */
+export function withPresence(
+  members: any[],
+  isOnline: (userId: string) => boolean
+): Array<{ user_id: any; username: string; is_moderator: any; is_muted: any; is_online: boolean }> {
+  return members.map((m: any) => ({
+    user_id: m.user_id,
+    username: m.username,
+    is_moderator: m.is_moderator,
+    is_muted: m.is_muted,
+    is_online: isOnline(String(m.user_id)),
+  }));
+}
+
+/** Presence as the running server sees it: does this user hold a socket? */
+function userIsOnline(userId: string): boolean {
+  return getSocketIdByUserId(userId) !== null;
+}
 
 /** Terminal output for this session, suppressed while a door owns the screen. */
 function emitToTerminal(socket: Socket, session: BBSSession, data: string): void {
@@ -332,12 +362,7 @@ console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roo
           roomId: room.room_id,
           roomName: room.room_name,
           memberCount: members.length,
-          members: members.map((m: any) => ({
-            user_id: m.user_id,
-            username: m.username,
-            is_moderator: m.is_moderator,
-            is_muted: m.is_muted
-          }))
+          members: withPresence(members, userIsOnline)
         });
         return;
       }
@@ -468,12 +493,7 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
       memberCount: members.length,
       topic: room.topic || null,
       motd: room.motd || null,
-      members: members.map((m: any) => ({
-        user_id: m.user_id,
-        username: m.username,
-        is_moderator: m.is_moderator,
-        is_muted: m.is_muted
-      }))
+      members: withPresence(members, userIsOnline)
     };
 console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));
     socket.emit('room:joined', roomJoinedData);

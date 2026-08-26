@@ -30,13 +30,20 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
       const currentUserMember = d.members.find((m: any) => m.username === un);
       if (currentUserMember) {
         const currentUserId = String(currentUserMember.user_id || currentUserMember.userId);
+        // We are here, so we are online whatever the payload says.
         ou.set(currentUserId, { username: un, status: 'online', nodeId: nid, joinedAt: new Date() });
-        // Add all other members using UUID comparison
+        // Everyone ELSE only counts if the server says they hold a socket.
+        //
+        // This list is the sidebar's "Us (n)" roster and every entry gets a
+        // presence indicator, so it must be who is HERE - not the room's
+        // membership, which is everyone who ever joined and never leaves.
+        // Marking all of them online is what left coffe and DiNO showing as
+        // present for days.
         for (const m of d.members) {
           const memberId = String(m.user_id || m.userId);
-          if (memberId !== currentUserId) {
-            ou.set(memberId, { username: m.username, status: m.is_muted ? 'dnd' : 'online', joinedAt: new Date() });
-          }
+          if (memberId === currentUserId) continue;
+          if (!m.is_online) continue;
+          ou.set(memberId, { username: m.username, status: m.is_muted ? 'dnd' : 'online', joinedAt: new Date() });
         }
       }
     }

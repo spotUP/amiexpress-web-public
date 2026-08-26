@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSubmitHandler = createSubmitHandler;
 const command_exec_1 = require("../core/command-exec");
+const command_1 = require("./command");
 const emojis_1 = require("../utils/emojis");
 const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
@@ -33,7 +34,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 state.typingBuffers.delete(userId);
                 updateTypingPreview(); // Sync typingPreviewLines with typingBuffers
             }
-            if (msg.startsWith('/')) {
+            if ((0, command_1.looksLikeCommand)(msg)) {
                 cmdCtx.currentChannel = state.currentChannel;
                 const r = await (0, command_exec_1.executeCommand)(msg, registry, cmdCtx);
                 const cmdName = msg.slice(1).split(' ')[0].toLowerCase();

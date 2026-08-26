@@ -1,6 +1,23 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CommandHandler = void 0;
+exports.looksLikeCommand = looksLikeCommand;
+/** Slash command handler */
+/**
+ * Is this input a command, or is it something somebody wants to say?
+ *
+ * A command is a slash followed by a NAME. `startsWith('/')` alone was too
+ * loose: the emoji catalogue contains `/!\`, so picking it into an empty
+ * input and pressing Enter ran the command parser, which reported "Unknown
+ * command" and swallowed the line - the reported "some emojis cannot be sent
+ * because of the characters they start with".
+ *
+ * Deliberately strict about the first character after the slash: no command
+ * begins with a digit or punctuation, and text very well might.
+ */
+function looksLikeCommand(input) {
+    return /^\/[A-Za-z][A-Za-z0-9_-]*(\s|$)/.test(input);
+}
 /** Parse and execute slash commands */
 class CommandHandler {
     constructor() {
@@ -27,7 +44,7 @@ class CommandHandler {
     }
     /** Execute a command */
     execute(input) {
-        if (!input.startsWith('/')) {
+        if (!looksLikeCommand(input)) {
             return { handled: false };
         }
         const [cmd, ...rest] = input.slice(1).split(' ');
