@@ -233,7 +233,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const time = (0, format_1.formatTime)(new Date());
                     const color = (0, formatter_1.getUserColor)(username);
                     const rendered = (0, markdown_1.parseContent)(processedMsg);
-                    addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false);
+                    addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
                     // Clear typing preview
                     updateTypingPreview();
                     // Add to history with ID

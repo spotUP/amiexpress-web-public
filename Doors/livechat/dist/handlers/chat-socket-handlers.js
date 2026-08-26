@@ -132,7 +132,9 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         mh.addMessage(m);
         const im = mu(m.content, un);
         const f = fm(m, un, st.prefs.compactMode);
-        acm(f, false);
+        // The id travels with the line, so a right-click on it can name the
+        // message - see chat-row-map.
+        acm(f, false, m.id);
         if (im) {
             aa(`{yellow-fg}@${m.username} mentioned you{/yellow-fg}`);
             aud.onMessage(true);

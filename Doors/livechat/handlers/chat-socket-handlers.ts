@@ -1,7 +1,7 @@
 import { hidesRoomMessages, hidesDirectMessages } from '../core/mute-list';
 import { formatDmLine } from './dm-render';
 
-export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
+export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean, id?: string) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
   // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
   // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
   // If cross-chat with BBS terminal users is needed, the server should emit proper events.
@@ -126,7 +126,9 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     mh.addMessage(m);
     const im = mu(m.content, un);
     const f = fm(m, un, st.prefs.compactMode);
-    acm(f, false);
+    // The id travels with the line, so a right-click on it can name the
+    // message - see chat-row-map.
+    acm(f, false, m.id);
     if (im) {
       aa(`{yellow-fg}@${m.username} mentioned you{/yellow-fg}`);
       aud.onMessage(true);

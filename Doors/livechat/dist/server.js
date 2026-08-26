@@ -66,6 +66,7 @@ const typing_preview_1 = require("./ui/typing-preview");
 const screen_1 = require("./ui/screen");
 const menu_bar_1 = require("./ui/menu-bar");
 const theme_1 = require("./ui/theme");
+const chat_row_map_1 = require("./ui/chat-row-map");
 const layout_solver_1 = require("./ui/layout-solver");
 const status_bar_1 = require("./ui/status-bar");
 const input_box_1 = require("./ui/input-box");
@@ -1427,7 +1428,16 @@ async function createApp(session) {
         const nearBottom = y > height - 2;
         // Only show context menu if NOT in a resize handle area
         if (!nearLeft && !nearRight && !nearTop && !nearBottom) {
-            showContextMenu(x, y, 'chat');
+            // Name the message under the pointer. This used to pass nothing at
+            // all, which is why Pin, Delete and React could only print
+            // "requires message ID" - the menu knew a click had happened and
+            // nothing about what was under it.
+            const logWidth = Math.max(1, Number(chatLog.width) || 80);
+            const scrollRow = Number(chatLog.childBase) || 0;
+            // y is relative to the panel; the log sits one row inside its border.
+            const index = (0, chat_row_map_1.messageIndexAtRow)(chatMessages, logWidth, scrollRow, y - 1);
+            const messageId = index === null ? undefined : (chatMessageIds[index] ?? undefined);
+            showContextMenu(x, y, 'chat', messageId);
         }
         screen.render();
     });
@@ -1552,10 +1562,10 @@ async function createApp(session) {
     channelList.on('wheelup', () => { channelList.up(2); setTimeout(joinSelectedChannel, 0); screen.render(); });
     channelList.on('wheeldown', () => { channelList.down(2); setTimeout(joinSelectedChannel, 0); screen.render(); });
     // ========== HELPER FUNCTIONS ==========
-    function addChatMessage(line, applyMarkdown = true) {
+    function addChatMessage(line, applyMarkdown = true, messageId) {
         const parsed = applyMarkdown ? (0, markdown_1.parseContent)(line) : line;
         const highlighted = (0, mentions_1.highlightMentions)(parsed, username);
-        appendLineToLog(highlighted);
+        appendLineToLog(highlighted, messageId);
         screen.render();
     }
     /**
@@ -1568,6 +1578,7 @@ async function createApp(session) {
      */
     function clearChat() {
         chatMessages.length = 0;
+        chatMessageIds.length = 0;
         state.messages.length = 0;
         messageHandler.clear();
         animationManager.clear?.();
@@ -1588,6 +1599,15 @@ async function createApp(session) {
     }
     // Track logical chat messages separately
     const chatMessages = [];
+    /**
+     * The message id behind each rendered line, where there is one.
+     *
+     * Kept alongside chatMessages rather than inside it, so the rendering path
+     * is untouched. This is what lets a right-click on the log name the
+     * message under the pointer - without it, Pin, Delete and React had
+     * nothing to act on and said so.
+     */
+    const chatMessageIds = [];
     // Helper function to rebuild chat content from logical messages + previews
     function rebuildChatContent() {
         const previewLines = Array.from(state.typingBuffers.values()).map(buf => {
@@ -1620,8 +1640,9 @@ async function createApp(session) {
         chatLog.setContent(fullContent);
         chatLog.setScrollPerc(100);
     }
-    function appendLineToLog(line) {
+    function appendLineToLog(line, messageId) {
         chatMessages.push(line);
+        chatMessageIds.push(messageId ?? null);
         // Register animated lines
         const lineIndex = chatMessages.length - 1;
         if ((0, animations_1.hasAnimationTags)(line)) {

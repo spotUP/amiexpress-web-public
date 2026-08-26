@@ -192,6 +192,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const inputSentAt = useRef<number | null>(null);
   const latencySamples = useRef<number[]>([]);
   const latencyReportedAt = useRef(0);
+  /** How long xterm takes to draw what arrived - measured to the next frame. */
+  const paintSamples = useRef<number[]>([]);
   const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -1866,7 +1868,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           const s = latencySamples.current;
           const avg = Math.round(s.reduce((a, b) => a + b, 0) / s.length);
           const worst = Math.round(Math.max(...s));
-          const line = `avg ${avg}ms  worst ${worst}ms  n=${s.length}  frame ${data.length}B`;
+          const paint = paintSamples.current.length
+            ? Math.round(paintSamples.current.reduce((a, b) => a + b, 0) / paintSamples.current.length)
+            : 0;
+          paintSamples.current = [];
+          // paint = how long the TERMINAL took to put it on the glass after
+          // the bytes arrived. avg is the round trip. If the round trip is
+          // small and paint is large, the phone is the bottleneck and no
+          // amount of server work will help.
+          const line = `avg ${avg}ms  worst ${worst}ms  paint ${paint}ms  n=${s.length}  frame ${data.length}B`;
           console.log(`[Latency] key -> screen: ${line}`);
 
           // ON SCREEN as well as in the console. A phone has no console
@@ -2010,7 +2020,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
-        modemEmulatorRef.current.write(output);
+        {
+          const paintStart = performance.now();
+          modemEmulatorRef.current.write(output);
+          requestAnimationFrame(() => {
+            paintSamples.current.push(performance.now() - paintStart);
+            if (paintSamples.current.length > 120) paintSamples.current.shift();
+          });
+        }
       } else {
         term.write(output);
       }

@@ -141,16 +141,25 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           ib.focus();
           s.render();
           break;
+        // The menu NOW knows which message is under the pointer - the
+        // right-click resolves the row to a message id (see ui/chat-row-map),
+        // which it never did before. What is still missing is the other end:
+        // the server has no handler for pinning, deleting or reacting to a
+        // message, so these say so rather than emitting into the void and
+        // reporting success. Half a feature that claims to be whole is worse
+        // than one that admits what it is.
         case 'React':
-          asm('Opening emoji picker for reaction...');
-          // TODO: Open emoji picker in reaction mode
+          asm(cmt
+            ? '{yellow-fg}Reactions are not supported by the server yet.{/yellow-fg}'
+            : '{yellow-fg}Right-click on a message first.{/yellow-fg}');
           break;
         case 'Copy Text':
           asm('Copy to clipboard (not available in terminal)');
           break;
         case 'Pin Message':
-          asm('Pin message (requires message ID)');
-          // TODO: Get message ID and call /pin command
+          asm(cmt
+            ? '{yellow-fg}Pinning is not supported by the server yet.{/yellow-fg}'
+            : '{yellow-fg}Right-click on a message first.{/yellow-fg}');
           break;
         case 'Mark Unread':
           asm('Marked as unread');
@@ -162,8 +171,9 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           s.render();
           break;
         case 'Delete':
-          asm('{red-fg}Delete message (not implemented){/red-fg}');
-          // TODO: Confirm and delete message
+          asm(cmt
+            ? '{yellow-fg}Deleting is not supported by the server yet.{/yellow-fg}'
+            : '{yellow-fg}Right-click on a message first.{/yellow-fg}');
           break;
       }
     } else if (cmty === 'channel' && cmt) {

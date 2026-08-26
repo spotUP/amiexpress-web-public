@@ -30,7 +30,7 @@ export function createSubmitHandler(
   handleCommandActions: (r: any) => { handled: boolean },
   showLoading: (text: string) => void,
   showUserList: () => void,
-  addChatMessage: (msg: string, applyMarkdown?: boolean) => void,
+  addChatMessage: (msg: string, applyMarkdown?: boolean, messageId?: string) => void,
   addSystemMessage: (msg: string) => void,
   replyToThread: (socket: Socket, messageId: number, message: string) => void,
   pinMessage: (socket: Socket, roomId: string, messageId: number) => void,
@@ -282,7 +282,7 @@ export function createSubmitHandler(
           const time = formatTime(new Date());
           const color = getUserColor(username);
           const rendered = parseContent(processedMsg);
-          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false);
+          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
 
           // Clear typing preview
           updateTypingPreview();
