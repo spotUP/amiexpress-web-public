@@ -41,3 +41,17 @@ export declare function serializeMuteList(list: MuteList): Record<string, MuteLe
 export declare function deserializeMuteList(saved: unknown): MuteList;
 /** What to tell the user, without overstating what actually happened. */
 export declare function muteMessage(username: string, level: MuteLevel | null): string;
+/**
+ * The labels the user context menu should show for one person.
+ *
+ * The menu used to list "Mute User", "Ignore" and "Block" from a fixed
+ * array that never consulted this list. Muting worked - choosing the same
+ * level again lifts it - but nothing on screen said so, so there was no way
+ * to tell who was muted and the way back looked exactly like the way in.
+ *
+ * Only the level actually in force inverts: somebody who is ignored is not
+ * also muted, so offering "Unmute" for them would be a lie.
+ */
+export declare function muteMenuLabels(list: MuteList, username: string): string[];
+/** Which mute level a menu label refers to, whether or not it inverts. */
+export declare function muteLevelForLabel(label: string): MuteLevel | null;

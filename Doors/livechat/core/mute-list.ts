@@ -93,3 +93,41 @@ export function muteMessage(username: string, level: MuteLevel | null): string {
   // Deliberately not "they cannot contact you": nothing stops them sending.
   return `{red-fg}Blocked ${username} for you - they are hidden everywhere, but the server does not yet stop them sending.{/red-fg}`;
 }
+
+/**
+ * The labels the user context menu should show for one person.
+ *
+ * The menu used to list "Mute User", "Ignore" and "Block" from a fixed
+ * array that never consulted this list. Muting worked - choosing the same
+ * level again lifts it - but nothing on screen said so, so there was no way
+ * to tell who was muted and the way back looked exactly like the way in.
+ *
+ * Only the level actually in force inverts: somebody who is ignored is not
+ * also muted, so offering "Unmute" for them would be a lie.
+ */
+export function muteMenuLabels(list: MuteList, username: string): string[] {
+  const level = muteLevel(list, username);
+
+  return [
+    level === 'mute' ? 'Unmute User' : 'Mute User',
+    level === 'ignore' ? 'Unignore' : 'Ignore',
+    level === 'block' ? 'Unblock' : 'Block',
+  ];
+}
+
+/** Which mute level a menu label refers to, whether or not it inverts. */
+export function muteLevelForLabel(label: string): MuteLevel | null {
+  switch (label) {
+    case 'Mute User':
+    case 'Unmute User':
+      return 'mute';
+    case 'Ignore':
+    case 'Unignore':
+      return 'ignore';
+    case 'Block':
+    case 'Unblock':
+      return 'block';
+    default:
+      return null;
+  }
+}

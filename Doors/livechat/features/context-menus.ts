@@ -1,4 +1,4 @@
-import { toggleMute, muteMessage, type MuteList, type MuteLevel } from '../core/mute-list';
+import { toggleMute, muteMessage, muteMenuLabels, muteLevelForLabel, type MuteList } from '../core/mute-list';
 import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -28,7 +28,13 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     cmt = tgt || '';
     const its: string[] = [];
     if (t === 'user' && tgt) {
-      its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', 'Mute User', 'Ignore', 'Block');
+      // The mute entries are built from the CURRENT state, not from a fixed
+      // list: a muted user's entry reads "Unmute User", so the menu says who
+      // is muted instead of offering the way in as the way back.
+      const muteLabels = extras.muteList
+        ? muteMenuLabels(extras.muteList, tgt)
+        : ['Mute User', 'Ignore', 'Block'];
+      its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', ...muteLabels);
       if (extras.isSysop) {
         its.push('---', '{red-fg}Kick User{/red-fg}', '{red-fg}Ban User{/red-fg}');
       }
@@ -107,13 +113,17 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
         // arriving. Choosing the same level again lifts it, which is the
         // only obvious way back.
         case 'Mute User':
+        case 'Unmute User':
         case 'Ignore':
-        case 'Block': {
+        case 'Unignore':
+        case 'Block':
+        case 'Unblock': {
           if (!extras.muteList) {
             asm('{red-fg}Muting is unavailable.{/red-fg}');
             break;
           }
-          const level: MuteLevel = si === 'Mute User' ? 'mute' : si === 'Ignore' ? 'ignore' : 'block';
+          const level = muteLevelForLabel(si);
+          if (!level) break;
           const now = toggleMute(extras.muteList, cmt, level);
           asm(muteMessage(cmt, now));
           break;

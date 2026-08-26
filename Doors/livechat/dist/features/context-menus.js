@@ -19,7 +19,13 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
         cmt = tgt || '';
         const its = [];
         if (t === 'user' && tgt) {
-            its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', 'Mute User', 'Ignore', 'Block');
+            // The mute entries are built from the CURRENT state, not from a fixed
+            // list: a muted user's entry reads "Unmute User", so the menu says who
+            // is muted instead of offering the way in as the way back.
+            const muteLabels = extras.muteList
+                ? (0, mute_list_1.muteMenuLabels)(extras.muteList, tgt)
+                : ['Mute User', 'Ignore', 'Block'];
+            its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', ...muteLabels);
             if (extras.isSysop) {
                 its.push('---', '{red-fg}Kick User{/red-fg}', '{red-fg}Ban User{/red-fg}');
             }
@@ -96,13 +102,18 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                 // arriving. Choosing the same level again lifts it, which is the
                 // only obvious way back.
                 case 'Mute User':
+                case 'Unmute User':
                 case 'Ignore':
-                case 'Block': {
+                case 'Unignore':
+                case 'Block':
+                case 'Unblock': {
                     if (!extras.muteList) {
                         asm('{red-fg}Muting is unavailable.{/red-fg}');
                         break;
                     }
-                    const level = si === 'Mute User' ? 'mute' : si === 'Ignore' ? 'ignore' : 'block';
+                    const level = (0, mute_list_1.muteLevelForLabel)(si);
+                    if (!level)
+                        break;
                     const now = (0, mute_list_1.toggleMute)(extras.muteList, cmt, level);
                     asm((0, mute_list_1.muteMessage)(cmt, now));
                     break;
