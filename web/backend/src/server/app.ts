@@ -77,6 +77,11 @@ app.use(helmet({
       imgSrc: ["'self'", 'data:'],
       connectSrc: ["'self'"],
       workerSrc: ["'self'", 'blob:'],
+      // The webcam arrives as a MediaStream and is attached to a <video> as
+      // a blob: URL. Without this, default-src caught it and the browser
+      // reported a violation on every video call - harmless while the policy
+      // is report-only, and a broken camera the moment it is enforced.
+      mediaSrc: ["'self'", 'blob:', 'data:'],
       frameAncestors: ["'none'"],
       formAction: ["'self'"],
       baseUri: ["'self'"],

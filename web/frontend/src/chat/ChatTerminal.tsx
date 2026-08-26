@@ -78,15 +78,21 @@ export default function ChatTerminal() {
       // is the standard escape hatch, and the same one iTerm and Terminal
       // use: Option forces selection even while an app owns the mouse.
       macOptionClickForcesSelection: true,
-      // No scrollback. The door draws a full-screen UI and scrolls its own
-      // chat log, so terminal history buys nothing here and costs a great
+      // Almost no scrollback. The door draws a full-screen UI and scrolls its
+      // own chat log, so terminal history buys nothing here and costs a great
       // deal: on resize xterm REFLOWS the old rows into scrollback rather
       // than discarding them, ESC[2J clears only the viewport, and the
       // viewport can be left above the bottom - which showed up as copies of
       // the whole UI stacked above the live one during a resize drag
-      // (2026-08-26). With no history there is nowhere for a stale frame to
-      // hide.
-      scrollback: 0,
+      // (2026-08-26).
+      //
+      // ONE line, not zero. At zero, a resize could leave xterm's own
+      // renderer reading a row that is not in the buffer:
+      //   Cannot read properties of undefined (reading 'loadCell')
+      //     at _forEachCell -> _drawBackground -> handleGridChanged
+      // A single line of history is far too little for a stale frame to hide
+      // in and keeps the buffer out of that edge case.
+      scrollback: 1,
     });
 
     term.open(terminalRef.current);

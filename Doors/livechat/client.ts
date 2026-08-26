@@ -719,7 +719,18 @@ class LiveChatClient {
       this.videoStream = null;
     }
     if (this.videoElement) {
+      // Take the element OUT of the page, not just off the stream.
+      //
+      // Every door:load-client builds a new client, and each one appended its
+      // own hidden <video> to the body and left it there. Re-enter the chat
+      // enough times and Chrome refuses to make any more:
+      // "Blocked attempt to create a WebMediaPlayer as there are too many
+      // WebMediaPlayers already in existence" - at which point video stops
+      // working and nothing says why.
       this.videoElement.srcObject = null;
+      this.videoElement.pause();
+      this.videoElement.remove();
+      this.videoElement = null;
     }
     this.door.emit('video:stopped');
     console.log('[LiveChatClient] Video capture stopped');
