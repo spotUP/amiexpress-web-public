@@ -24,6 +24,7 @@ import { NetworkQualityMonitor, AdaptiveQualityManager } from '@amiexpress/bbs-d
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { VideoGrid, type VideoParticipant } from './video-grid';
 import { capStreamCells } from './video-layout';
+import { needsReshape, reshapeStream } from './stream-resize';
 import { decodeRichFrame } from '../video-codec';
 import { richToTags, fitRichToTile, modeCode, type RichFrame } from '../video-cells';
 
@@ -816,34 +817,31 @@ export class EnhancedVoiceChannel {
     if (!this.videoEnabled || !this.ctx?.video || !this.currentStreamDims) return;
     const target = this.computeStreamDims();
     const cur = this.currentStreamDims;
-    const wDelta = Math.abs(target.width - cur.width) / Math.max(1, cur.width);
-    const hDelta = Math.abs(target.height - cur.height) / Math.max(1, cur.height);
-    // 5%, not 20%. The wide threshold was there to stop a resize DRAG from
-    // restarting the camera dozens of times - but the browser now waits for
-    // the size to settle before announcing it, so this is called once per
-    // resize and can afford to track the window closely. At 20% an ordinary
-    // window change left the picture visibly the wrong shape.
-    if (wDelta < 0.05 && hDelta < 0.05) return;
+    if (!needsReshape(cur, target)) return;
 
-    console.log('[voice-channel-ux] resize stream %dx%d -> %dx%d', cur.width, cur.height, target.width, target.height);
-    const myStreamId = `video-${this.socket.id}`;
-    try {
-      await this.ctx.video.stopStream(myStreamId);
-    } catch {
-      // best-effort
-    }
+    console.log('[voice-channel-ux] reshape stream %dx%d -> %dx%d', cur.width, cur.height, target.width, target.height);
+
+    // Reshape, do NOT restart.
+    //
+    // This used to stopStream() and then startStream() at the new size, which
+    // put the camera light out and back on every time the tile changed - and
+    // a tile changes whenever anybody joins or leaves, because one person
+    // fills it and two people halve it. Reported as "my camera would blink on
+    // and off"; the live log caught it oscillating 67x18 -> 67x37 -> 67x18.
+    //
+    // The stop also told the ROOM the stream had ended, which changed
+    // everyone else's layout and blinked their cameras in turn, so one person
+    // joining rippled out over the whole call.
+    //
+    // The browser client reshapes a running capture in place and reads the
+    // frame shape on every tick, so the new size alone is enough.
     this.currentStreamDims = target;
     const videoOptions = this.qualityManager?.getVideoProfile();
-    await this.ctx.video.startStream(
-      { type: 'webcam' },
-      {
-        width: target.width,
-        height: target.height,
-        fps: videoOptions?.fps || 10,
-        colored: this.renderMode === 'color',
-        mode: this.renderMode,
-      } as any
-    );
+    await reshapeStream(this.ctx.video as any, target, {
+      fps: videoOptions?.fps || 10,
+      colored: this.renderMode === 'color',
+      mode: this.renderMode,
+    });
   }
 
   /**
