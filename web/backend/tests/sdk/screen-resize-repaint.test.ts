@@ -113,6 +113,60 @@ describe('after a resize', () => {
     }
   });
 
+  it('moves an element anchored to the bottom', () => {
+    // Screen extends Element and answers _getCoords() from its own position,
+    // which resize() used to leave at the size the session started with. A
+    // child anchored to the parent's BOTTOM - the input box, the status bar
+    // - therefore kept anchoring to a screen height that no longer existed,
+    // while a panel with an explicit height of its own moved correctly.
+    // Reported as "the input was correct before I made it tall".
+    const { screen } = screenWithCapture(80, 24);
+    const footer = new Box({
+      parent: screen,
+      left: 0,
+      bottom: 1,
+      width: 20,
+      height: 3,
+      content: 'footer',
+    } as any);
+
+    screen.resize(80, 42);
+
+    const coords = (footer as any)._getCoords();
+    expect(coords.yl).toBe(42 - 1);
+    expect(coords.yi).toBe(42 - 4);
+  });
+
+  it('widens an element anchored to the right', () => {
+    // The same fault on the other axis - reported as the input box
+    // disappearing on a very wide window.
+    const { screen } = screenWithCapture(80, 24);
+    const corner = new Box({
+      parent: screen,
+      right: 0,
+      top: 0,
+      width: 6,
+      height: 1,
+      content: 'x',
+    } as any);
+
+    screen.resize(174, 24);
+
+    const coords = (corner as any)._getCoords();
+    expect(coords.xl).toBe(174);
+    expect(coords.xi).toBe(174 - 6);
+  });
+
+  it('keeps the screen\'s own coords in step with its size', () => {
+    const { screen } = screenWithCapture(80, 24);
+
+    screen.resize(174, 42);
+
+    const coords = (screen as any)._getCoords();
+    expect(coords.xl).toBe(174);
+    expect(coords.yl).toBe(42);
+  });
+
   it('tells its elements to lay out again', () => {
     // The door repositions its panels from this event; it must arrive
     // before the repaint, or the repaint draws the old layout.

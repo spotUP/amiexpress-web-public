@@ -926,7 +926,6 @@ async function createApp(session) {
         // Typing bar (hidden but updated)
         typingBar.position.left = solved.chat.left;
         typingBar.position.width = solved.chat.width;
-        console.log('[LayoutDiag] screen=%dx%d chat(top=%s h=%s) sidebar(top=%s h=%s) input(bottom=%s h=%s) status(bottom=%s)', width, height, String(chatPanel.position.top), String(chatPanel.position.height), String(sidebarPanel.position.top), String(sidebarPanel.position.height), String(inputBox.position?.bottom), String(inputBox.position?.height), String(statusBar.position?.bottom));
         // 5. Invalidate Caches
         invalidateCache(sidebarPanel);
         invalidateCache(chatPanel);

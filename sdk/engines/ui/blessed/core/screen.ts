@@ -2532,6 +2532,22 @@ export class Screen extends Element {
     this.program.cols = cols;
     this.program.rows = rows;
 
+    // The screen's own POSITION, too - not just its dimensions.
+    //
+    // Screen extends Element, so it answers _getCoords() from this.position
+    // like any other element, and that is what children measure themselves
+    // against. Leaving it at the size the session started with froze the
+    // parent box: an element anchored to the parent's BOTTOM (the input box,
+    // the status bar) kept anchoring to a screen height that no longer
+    // existed, while a panel with an explicit height of its own moved
+    // correctly. Reported as "the input was correct before I made it tall"
+    // - and as the input vanishing on a very wide window, which is the same
+    // fault on the other axis.
+    this.position.width = cols;
+    this.position.height = rows;
+    this.position.left = 0;
+    this.position.top = 0;
+
     // Clear the terminal, whichever way it changed.
     //
     // This used to fire only when SHRINKING, on the theory that growing can

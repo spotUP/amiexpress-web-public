@@ -70,6 +70,15 @@ export default function ChatTerminal() {
       cursorBlink: true,
       cursorStyle: 'block',
       convertEol: false,
+      // No scrollback. The door draws a full-screen UI and scrolls its own
+      // chat log, so terminal history buys nothing here and costs a great
+      // deal: on resize xterm REFLOWS the old rows into scrollback rather
+      // than discarding them, ESC[2J clears only the viewport, and the
+      // viewport can be left above the bottom - which showed up as copies of
+      // the whole UI stacked above the live one during a resize drag
+      // (2026-08-26). With no history there is nowhere for a stale frame to
+      // hide.
+      scrollback: 0,
     });
 
     term.open(terminalRef.current);

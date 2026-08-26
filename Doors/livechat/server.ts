@@ -1038,12 +1038,6 @@ export async function createApp(session: DoorSession) {
     typingBar.position.left = solved.chat.left;
     typingBar.position.width = solved.chat.width;
 
-    console.log('[LayoutDiag] screen=%dx%d chat(top=%s h=%s) sidebar(top=%s h=%s) input(bottom=%s h=%s) status(bottom=%s)',
-      width, height,
-      String(chatPanel.position.top), String(chatPanel.position.height),
-      String(sidebarPanel.position.top), String(sidebarPanel.position.height),
-      String((inputBox as any).position?.bottom), String((inputBox as any).position?.height),
-      String((statusBar as any).position?.bottom));
 
     // 5. Invalidate Caches
     invalidateCache(sidebarPanel);
