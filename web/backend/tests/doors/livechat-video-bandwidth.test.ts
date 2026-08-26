@@ -68,7 +68,8 @@ describe('the client', () => {
 
   it('measures each frame it sends', () => {
     expect(client).toMatch(/private sendVideoFrame\([^)]*\): number/);
-    expect(client).toMatch(/return frame\.length/);
+    // The frame is measured after packing, so the size read is the packet's.
+    expect(client).toMatch(/return (frame\.length|packet\.byteLength)/);
   });
 
   it('schedules the next frame from the last one\'s size', () => {

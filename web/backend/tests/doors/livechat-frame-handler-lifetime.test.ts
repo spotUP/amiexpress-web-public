@@ -47,7 +47,9 @@ describe('what it does with a frame', () => {
   const fn = voiceUx.slice(voiceUx.indexOf('private ensureFrameHandler'));
 
   it('routes it to the sender', () => {
-    expect(fn.slice(0, 1200)).toMatch(/updateParticipantVideo\(owner, frame\)/);
+    // Whole function, not a fixed 1200-character window: comments added inside
+    // it pushed the call past the slice and failed a behaviour that was right.
+    expect(fn).toMatch(/updateParticipantVideo\(owner, frame\)/);
   });
 
   it('shows other people even when your own camera is off', () => {

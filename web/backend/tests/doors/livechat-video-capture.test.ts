@@ -67,7 +67,10 @@ describe('starting the camera', () => {
     // The handle lives in one field; overwriting it orphans the old timer.
     const body = startVideoCapture();
 
-    expect(body).toMatch(/if \(this\.videoFrameInterval\)\s*\{\s*clearInterval/);
+    // Pacing moved from setInterval to a self-scheduling setTimeout, so the
+    // clear call is clearTimeout now. What matters is that the previous timer
+    // is cleared before a new one is started, whichever timer API is used.
+    expect(body).toMatch(/if \(this\.videoFrameInterval\)\s*\{\s*clear(Interval|Timeout)/);
   });
 
   it('reads the frame shape fresh on every tick', () => {

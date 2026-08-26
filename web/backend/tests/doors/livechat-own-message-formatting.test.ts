@@ -37,7 +37,9 @@ describe('the local echo', () => {
   it('does not parse the whole line a second time', () => {
     // The timestamp and username tags are ours; re-parsing them would
     // escape or mangle them.
-    expect(echo).toMatch(/addChatMessage\([\s\S]*?, false\)/);
+    // `, false` may be followed by a messageId argument - match the flag, not
+    // the end of the call, or adding an argument reddens a passing behaviour.
+    expect(echo).toMatch(/addChatMessage\([\s\S]*?, false[,)]/);
   });
 });
 
