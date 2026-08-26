@@ -267,11 +267,26 @@ export class CategoryPicker extends Box {
     const items = this._getItems(this._currentCategory);
 
     if (selected !== undefined && items[selected]) {
-      if (this._onSelect) {
-        this._onSelect(items[selected], this._currentCategory);
-      }
-      this.emit('select', items[selected], this._currentCategory);
+      const item = items[selected];
+      const category = this._currentCategory;
+
+      // Get out of the way BEFORE handing control back.
+      //
+      // The callback is where a caller moves focus - livechat focuses its
+      // message input there. While this picker is still shown its focus TRAP
+      // is armed, and the trap reasserts itself on the next keypress (see
+      // core/screen.ts, "A focus trap has to reassert itself whenever focus
+      // is outside it"). So the focus the callback had just set was dragged
+      // straight back here, and the user's next Enter selected the same item
+      // a second time: picking an emoji, pressing Enter to send it, and
+      // getting a second copy instead (reported with a screenshot,
+      // 2026-08-26).
       this.hide();
+
+      if (this._onSelect) {
+        this._onSelect(item, category);
+      }
+      this.emit('select', item, category);
     }
   }
 
@@ -289,11 +304,15 @@ export class CategoryPicker extends Box {
   }
 
   private _handleCancel(): void {
+    // Hidden first, for the same reason as _selectCurrentItem: a caller that
+    // restores focus in its cancel handler must not have it taken back by a
+    // trap that is still armed.
+    this.hide();
+
     if (this._onCancel) {
       this._onCancel();
     }
     this.emit('cancel');
-    this.hide();
   }
 
   /**
