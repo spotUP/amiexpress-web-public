@@ -123,7 +123,13 @@ export interface GestureTuning {
 }
 
 export const DEFAULT_TUNING: GestureTuning = {
-  columnPx: 24,
+  // 34, not 24. Twenty-four CSS pixels is about four millimetres of thumb -
+  // small enough that aiming for one column often gave two, and that nudging
+  // a piece one place across took more care than the rest of the game
+  // ("it's a little hard to move just one step left/right, it's a little too
+  // sensitive"). A drag still tracks the thumb one column per cell crossed;
+  // the cell is simply the size of a deliberate movement now.
+  columnPx: 34,
   rowPx: 28,
   tapSlopPx: 10,
   // Was 12 with no dominance requirement, which is what let a downward swipe

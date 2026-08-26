@@ -399,3 +399,39 @@ describe('a down swipe stays down', () => {
     expect(keys.every(k => k.code === GESTURE_KEYS.down.code)).toBe(true);
   });
 });
+
+describe('nudging one column', () => {
+  /** Thumb travel in CSS pixels, as a drag of several samples. */
+  function dragAcross(px: number) {
+    const stroke = beginStroke({ x: 100, y: 300, t: 0 });
+    const keys = [];
+    for (let i = 1; i <= 5; i++) {
+      keys.push(...trackMove(stroke, { x: 100 + (px * i) / 5, y: 300, t: i * 20 }));
+    }
+    return keys;
+  }
+
+  it('takes a deliberate movement, not a twitch', () => {
+    // An ABSOLUTE distance, not one expressed in columnPx - the point is
+    // that 24 CSS pixels, about four millimetres of thumb, is too little to
+    // move a piece. Written relative to columnPx this would pass at any
+    // setting and pin nothing.
+    expect(dragAcross(24)).toHaveLength(0);
+  });
+
+  it('moves exactly one column for one column of travel', () => {
+    expect(dragAcross(DEFAULT_TUNING.columnPx)).toHaveLength(1);
+  });
+
+  it('still tracks the thumb over a long drag', () => {
+    // Less sensitive must not mean less faithful: four columns of travel is
+    // still four moves, not one.
+    expect(dragAcross(DEFAULT_TUNING.columnPx * 4)).toHaveLength(4);
+  });
+
+  it('asks for more than the axis lock before it moves anything', () => {
+    // Otherwise the stroke commits to an axis and immediately spends that
+    // same travel on a move, which is what made a small nudge overshoot.
+    expect(DEFAULT_TUNING.columnPx).toBeGreaterThan(DEFAULT_TUNING.axisLockPx);
+  });
+});
