@@ -12,6 +12,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { getSessionBySocketId } from '../../server/session-manager';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -43,7 +44,10 @@ function doorOwnsTerminal(session: BBSSession): boolean {
 /** Terminal output for this session, suppressed while a door owns the screen. */
 function emitToTerminal(socket: Socket, session: BBSSession, data: string): void {
   if (doorOwnsTerminal(session)) return;
-  emitToTerminal(socket, session, data);
+  // Not emitToTerminal() - this called ITSELF, so any session without a door
+  // recursed until the stack gave out. Door sessions returned on the line
+  // above, which is the only reason it was survivable.
+  socket.emit('ansi-output', data);
 }
 
 // Dependencies (injected via setter)
@@ -116,7 +120,17 @@ function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: s
   for (const socketId of members) {
     if (excludeSocketId && socketId === excludeSocketId) continue;
 
-    const memberSession = sessions.get(socketId);
+    // getSessionBySocketId, NOT sessions.get(socketId). The sessions map is
+    // keyed by NODE ID, so looking a socket id up in it always missed - and
+    // this guard, the one thing stopping raw room ANSI being painted over a
+    // door's screen, never fired once.
+    //
+    // That is what put the same message on screen twice: the door drew it
+    // from the structured chat:message event, and this wrote it again as raw
+    // ANSI at wherever the cursor happened to be, merging it into another
+    // row. Only OTHER people's messages doubled, because the sender is
+    // excluded from this broadcast - which is exactly what was reported.
+    const memberSession = getSessionBySocketId(socketId);
     if (memberSession && doorOwnsTerminal(memberSession)) continue;
 
     io.to(socketId).emit('ansi-output', output);

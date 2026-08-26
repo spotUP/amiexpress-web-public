@@ -35,6 +35,15 @@ class MessageHandler {
         this.messages.push(display);
         return display;
     }
+    /**
+     * Forget everything.
+     *
+     * The chat log can be rebuilt from more than one store, so clearing the
+     * display alone put the messages straight back on the next repaint.
+     */
+    clear() {
+        this.messages = [];
+    }
     /** Get all messages */
     getMessages() {
         return this.messages;

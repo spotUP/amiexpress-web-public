@@ -41,9 +41,6 @@ export declare const DEFAULT_KEYS: KeyConfig;
 export declare const KEY_PRESETS: Record<string, {
     name: string;
 } & KeyConfig>;
-/**
- * Map key name to game action
- */
 export declare function keyToAction(key: string, config?: KeyConfig): GameAction | null;
 /**
  * DAS/ARR timing constants (in milliseconds)

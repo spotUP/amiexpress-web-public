@@ -1797,6 +1797,23 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
+  /**
+   * Empty the chat log, and everything it can be rebuilt from.
+   *
+   * There are three stores of the same messages - the rendered lines, the
+   * app state and the MessageHandler - and clearing one of them left the
+   * others to put the messages back. Reported as "/clear didn't clear the
+   * messages from the other user".
+   */
+  function clearChat() {
+    chatMessages.length = 0;
+    state.messages.length = 0;
+    messageHandler.clear();
+    animationManager.clear?.();
+    chatLog.setContent('');
+    screen.render();
+  }
+
   function addSystemMessage(msg: string) {
     appendLineToLog(`{gray-fg}*** ${msg} ***{/gray-fg}`);
     screen.render();
@@ -2270,12 +2287,7 @@ export async function createApp(session: DoorSession) {
     updateUserTable,
     showFileSharing,
     updateTypingPreview,
-    () => {
-      // Clear chat log - both the tracked messages and the display
-      chatMessages.length = 0;
-      chatLog.setContent('');
-      screen.render();
-    },
+    clearChat,
     // tryJoinVoiceChannel - check if channel name matches a voice channel
     (channelName: string): boolean => {
       const match = channelItems.find(
@@ -2556,10 +2568,10 @@ export async function createApp(session: DoorSession) {
       const shown = toggleSidebar();
       addSystemMessage(shown ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)');
     },
-    onClearChat: () => {
-      chatLog.setContent('');
-      screen.render();
-    },
+    // The same clear /clear uses. This one used to blank the display only,
+    // leaving every store full, so the messages came back on the next
+    // repaint.
+    onClearChat: clearChat,
     onAbout: () => {
       addSystemMessage('{cyan-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/cyan-fg}');
     },

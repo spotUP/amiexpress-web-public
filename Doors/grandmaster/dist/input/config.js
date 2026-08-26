@@ -88,6 +88,22 @@ exports.KEY_PRESETS = {
 /**
  * Map key name to game action
  */
+/**
+ * What the touch layer sends, and what it means.
+ *
+ * A phone has no keyboard to bind, so the gesture surface sends fixed keys
+ * (web/frontend/src/components/mobile/gesture-scheme.ts) and they are read
+ * through the player's key map like anything else. That is fine until a
+ * player's map gives one of them a different job - and the DEFAULT map gives
+ * space to rotate-180, so a hard-drop swipe used to spin the piece.
+ *
+ * These are consulted only when the player's own map claims nothing, so a
+ * keyboard player who deliberately binds one of these keeps their binding.
+ */
+const TOUCH_FALLBACK = {
+    enter: 'hard_drop',
+    return: 'hard_drop',
+};
 function keyToAction(key, config = exports.DEFAULT_KEYS) {
     // TetriNET's special keys first: in that profile 1-6 must beat any other
     // meaning a digit might have.
@@ -124,6 +140,10 @@ function keyToAction(key, config = exports.DEFAULT_KEYS) {
         return 'hold';
     if (config.pause.includes(key))
         return 'pause';
+    // Nothing in the player's map wanted this key - see TOUCH_FALLBACK.
+    const fallback = TOUCH_FALLBACK[key];
+    if (fallback)
+        return fallback;
     return null;
 }
 /**

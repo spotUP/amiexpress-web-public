@@ -27,7 +27,12 @@ export const GESTURE_KEYS = {
   left: { key: 'ArrowLeft', code: 'ArrowLeft' },
   right: { key: 'ArrowRight', code: 'ArrowRight' },
   down: { key: 'ArrowDown', code: 'ArrowDown' },
-  hardDrop: { key: ' ', code: 'Space' },
+  // Enter, NOT space. Space is bound to ROTATE 180 in this door's default
+  // key map, so a hard-drop swipe spun the piece instead of dropping it -
+  // which is both "it always registers as soft drop" (the drag's own
+  // ArrowDowns were all that dropped) and "it rotates when I swipe down".
+  // Enter is a default hard-drop binding; see input/config.ts.
+  hardDrop: { key: 'Enter', code: 'Enter' },
   rotate: { key: 'x', code: 'KeyX' },
   hold: { key: 'c', code: 'KeyC' },
 } as const;

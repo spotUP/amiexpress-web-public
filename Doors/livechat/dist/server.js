@@ -1557,6 +1557,22 @@ async function createApp(session) {
         appendLineToLog(highlighted);
         screen.render();
     }
+    /**
+     * Empty the chat log, and everything it can be rebuilt from.
+     *
+     * There are three stores of the same messages - the rendered lines, the
+     * app state and the MessageHandler - and clearing one of them left the
+     * others to put the messages back. Reported as "/clear didn't clear the
+     * messages from the other user".
+     */
+    function clearChat() {
+        chatMessages.length = 0;
+        state.messages.length = 0;
+        messageHandler.clear();
+        animationManager.clear?.();
+        chatLog.setContent('');
+        screen.render();
+    }
     function addSystemMessage(msg) {
         appendLineToLog(`{gray-fg}*** ${msg} ***{/gray-fg}`);
         screen.render();
@@ -1912,12 +1928,7 @@ async function createApp(session) {
     const commandActionHandler = (r) => (0, command_execution_handlers_1.handleCommandActions)(r, socket, state, onlineUsers, currentSearchOverlayRef, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, screen, inputBox, cleanup, showConfirm // Pass showConfirm for quit confirmation
     );
     // Wrap async handler to satisfy blessed's sync event handler type requirement
-    const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, () => {
-        // Clear chat log - both the tracked messages and the display
-        chatMessages.length = 0;
-        chatLog.setContent('');
-        screen.render();
-    }, 
+    const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChat, 
     // tryJoinVoiceChannel - check if channel name matches a voice channel
     (channelName) => {
         const match = channelItems.find(c => c.type === 'voice' && c.name.toLowerCase() === channelName.toLowerCase());
@@ -2183,10 +2194,10 @@ async function createApp(session) {
             const shown = toggleSidebar();
             addSystemMessage(shown ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)');
         },
-        onClearChat: () => {
-            chatLog.setContent('');
-            screen.render();
-        },
+        // The same clear /clear uses. This one used to blank the display only,
+        // leaving every store full, so the messages came back on the next
+        // repaint.
+        onClearChat: clearChat,
         onAbout: () => {
             addSystemMessage('{cyan-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/cyan-fg}');
         },
