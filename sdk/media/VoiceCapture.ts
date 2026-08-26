@@ -319,7 +319,12 @@ export class VoiceCapture extends EventEmitter {
       if (samples.length === 0) return;
 
       const buffer = this.playbackContext.createBuffer(1, samples.length, VOICE_SAMPLE_RATE);
-      buffer.copyToChannel(samples, 0);
+      // set() on the channel rather than copyToChannel(): the latter is
+      // typed Float32Array<ArrayBuffer> under newer TypeScript, and a
+      // Float32Array built anywhere else is Float32Array<ArrayBufferLike>,
+      // which does not satisfy it. set() takes an ArrayLike and has no such
+      // constraint.
+      buffer.getChannelData(0).set(samples);
 
       const src = this.playbackContext.createBufferSource();
       src.buffer = buffer;
