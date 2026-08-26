@@ -305,6 +305,31 @@ class ApiClient {
     });
   }
 
+  // Security levels, as the BBS stores them: Access/ACS.<level>.info on disk.
+  // The endpoints below this comment write a database table the BBS never
+  // reads - see thoughts/shared/research/2026-08-27_admin-ui-audit.md.
+  async getAcsLevels() {
+    return this.request<ApiResponse>(`${API_BASE}/config/security/levels`);
+  }
+
+  async getAcsLevelFlags(level: number) {
+    return this.request<ApiResponse>(`${API_BASE}/config/security/levels/${level}`);
+  }
+
+  async saveAcsLevelFlags(level: number, flags: Record<string, boolean>) {
+    return this.request<ApiResponse>(`${API_BASE}/config/security/levels/${level}`, {
+      method: 'PUT',
+      body: JSON.stringify({ flags }),
+    });
+  }
+
+  async createAcsLevel(level: number, copyFrom?: number) {
+    return this.request<ApiResponse>(`${API_BASE}/config/security/levels/${level}`, {
+      method: 'POST',
+      body: JSON.stringify(copyFrom === undefined ? {} : { copyFrom }),
+    });
+  }
+
   // Security Level Access
   async getSecurityAccessForLevel(level: number) {
     return this.request<ApiResponse>(`${API_BASE}/config/security/${level}`);

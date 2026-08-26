@@ -23,6 +23,13 @@
 import * as fs from 'fs';
 
 export interface Tooltype {
+  /**
+   * How this entry was disabled in the file: Amiga parentheses or a bang.
+   * Preserved so an edit does not rewrite every disabled tooltype into the
+   * other syntax - the ACS files use parentheses, which is what express.e and
+   * a real Amiga read.
+   */
+  commentStyle?: '()' | '!';
   key: string;
   value: string;
   commented: boolean;
@@ -58,11 +65,14 @@ function parseTooltypeString(raw: string): Tooltype | null {
   let commented = false;
   let prefix = '';
 
+  let commentStyle: '()' | '!' | undefined;
   if (content.startsWith('!')) {
     commented = true;
+    commentStyle = '!';
     content = content.substring(1);
   } else if (content.startsWith('(') && content.endsWith(')')) {
     commented = true;
+    commentStyle = '()';
     content = content.substring(1, content.length - 1);
   }
 
@@ -77,12 +87,12 @@ function parseTooltypeString(raw: string): Tooltype | null {
     const key = rawKey.toUpperCase();
     const value = content.substring(eqIdx + 1).trim();
     if (!VALID_KEY_RE.test(rawKey)) return null;
-    return { key, value, commented, prefix, originalLine: raw };
+    return { key, value, commented, commentStyle, prefix, originalLine: raw };
   }
   const rawKey = content.trim();
   const key = rawKey.toUpperCase();
   if (!VALID_KEY_RE.test(rawKey)) return null;
-  return { key, value: '', commented, prefix, originalLine: raw };
+  return { key, value: '', commented, commentStyle, prefix, originalLine: raw };
 }
 
 /**
@@ -90,9 +100,12 @@ function parseTooltypeString(raw: string): Tooltype | null {
  * added separately by the writer).
  */
 function renderTooltype(tt: Tooltype): string {
-  const commentMark = tt.commented ? '!' : '';
-  const keyPart = `${commentMark}${tt.prefix || ''}${tt.key}`;
-  return tt.value ? `${keyPart}=${tt.value}` : keyPart;
+  const body = `${tt.prefix || ''}${tt.key}`;
+  const entry = tt.value ? `${body}=${tt.value}` : body;
+  if (!tt.commented) return entry;
+  // Parentheses when the file used them; a bang otherwise, which keeps the
+  // previous behaviour for entries nobody parsed from a file.
+  return tt.commentStyle === '()' ? `(${entry})` : `!${entry}`;
 }
 
 /**
@@ -471,3 +484,11 @@ export function checkToolTypeValue(info: InfoFile, key: string, value: string): 
   }
   return false;
 }
+
+/**
+ * Test seams for the two pure string functions above. They are the whole of
+ * the disabled-tooltype round trip and deserve direct coverage without
+ * writing a binary .info to disk.
+ */
+export const parseTooltypeStringForTest = parseTooltypeString;
+export const renderTooltypeForTest = renderTooltype;

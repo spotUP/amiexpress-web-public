@@ -1,268 +1,191 @@
+/**
+ * Security levels, edited where the BBS actually reads them.
+ *
+ * This page used to write a `security_level_access` database table while the
+ * BBS read Access/ACS.<level>.info from disk, so nothing configured here ever
+ * took effect. It also offered a hardcoded [10, 20, 50, 100, 200, 255], which
+ * matched neither the files on disk nor the users - level 30, where 30
+ * accounts sit, could not be chosen at all, and picking a level was really
+ * picking from that list.
+ *
+ * Now: the levels come from the files that exist, every ACS permission is
+ * listed with its true state, saving writes the .info file (backing it up
+ * first), and a level that does not exist yet can be created from an existing
+ * one - a .info is a binary Amiga icon, so a new level starts as a copy.
+ */
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Plus, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Shield, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 
-interface SecurityLevelAccess {
-  id: number;
-  security_level: number;
-  acs_flag: string;
-  enabled: boolean;
-  description?: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-interface ACSFormData {
-  acs_flag: string;
-  description: string;
-  enabled: boolean;
-}
-
-const SECURITY_LEVELS = [10, 20, 50, 100, 200, 255];
-
 export function SecurityPage() {
-  const [selectedLevel, setSelectedLevel] = useState(100);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState<ACSFormData>({
-    acs_flag: '',
-    description: '',
-    enabled: true,
-  });
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['security', selectedLevel],
-    queryFn: () => apiClient.getSecurityAccessForLevel(selectedLevel),
+  const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
+  const [dirty, setDirty] = useState(false);
+  const [newLevel, setNewLevel] = useState('');
+
+  const levelsQuery = useQuery({
+    queryKey: ['acs-levels'],
+    queryFn: () => apiClient.getAcsLevels(),
+  });
+
+  const levels: number[] = levelsQuery.data?.data?.levels ?? [];
+  const permissions: string[] = levelsQuery.data?.data?.permissions ?? [];
+
+  // Select the first real level once we know what exists, rather than
+  // defaulting to a number that may have no file at all.
+  useEffect(() => {
+    if (selectedLevel === null && levels.length > 0) setSelectedLevel(levels[0]);
+  }, [levels, selectedLevel]);
+
+  const flagsQuery = useQuery({
+    queryKey: ['acs-flags', selectedLevel],
+    queryFn: () => apiClient.getAcsLevelFlags(selectedLevel as number),
+    enabled: selectedLevel !== null,
+  });
+
+  useEffect(() => {
+    if (flagsQuery.data?.data?.flags) {
+      setFlags(flagsQuery.data.data.flags);
+      setDirty(false);
+    }
+  }, [flagsQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => apiClient.saveAcsLevelFlags(selectedLevel as number, flags),
+    onSuccess: () => {
+      showSuccess(`Level ${selectedLevel} saved to its .info file`);
+      setDirty(false);
+      queryClient.invalidateQueries({ queryKey: ['acs-flags', selectedLevel] });
+    },
+    onError: (error: Error) => showError(`Failed to save: ${error.message}`),
   });
 
   const createMutation = useMutation({
-    mutationFn: (access: { security_level: number; acs_flag: string; description: string; enabled: boolean }) =>
-      apiClient.createSecurityAccess(access),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security', selectedLevel] });
-      showSuccess('ACS flag created successfully');
-      setIsModalOpen(false);
-      setFormData({ acs_flag: '', description: '', enabled: true });
+    mutationFn: (level: number) => apiClient.createAcsLevel(level),
+    onSuccess: (res: any, level: number) => {
+      showSuccess(res?.message ?? `Level ${level} created`);
+      setNewLevel('');
+      queryClient.invalidateQueries({ queryKey: ['acs-levels'] });
+      setSelectedLevel(level);
     },
-    onError: (error: Error) => {
-      showError(`Failed to create ACS flag: ${error.message}`);
-    },
+    onError: (error: Error) => showError(`Failed to create level: ${error.message}`),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
-      apiClient.updateSecurityAccess(id, { enabled }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security', selectedLevel] });
-    },
-    onError: (error: Error) => {
-      showError(`Failed to update ACS flag: ${error.message}`);
-    },
-  });
-
-  const handleToggle = (access: SecurityLevelAccess) => {
-    updateMutation.mutate({ id: access.id, enabled: !access.enabled });
+  const toggle = (name: string) => {
+    setFlags(prev => ({ ...prev, [name]: !prev[name] }));
+    setDirty(true);
   };
 
-  const handleAdd = () => {
-    setFormData({ acs_flag: '', description: '', enabled: true });
-    setIsModalOpen(true);
+  const handleCreate = () => {
+    const level = parseInt(newLevel, 10);
+    if (!Number.isFinite(level) || level < 1 || level > 255) {
+      showError('Security level must be a number between 1 and 255');
+      return;
+    }
+    createMutation.mutate(level);
   };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    createMutation.mutate({
-      security_level: selectedLevel,
-      ...formData,
-    });
-  };
-
-  // Delete flow removed; toggles control state
-
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading security access flags...</div>;
-  }
-
-  const accessFlags = data?.data || [];
 
   return (
-    <div>
-      <div className="mb-8 flex justify-between items-center">
+    <div className="p-6 space-y-6">
+      <div className="flex items-center gap-3">
+        <Shield className="text-bbs-accent" size={24} />
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Security Level Access</h1>
-          <p className="text-bbs-muted">Manage ACS flags per security level (TOOLTYPE_ACCESS)</p>
+          <h1 className="text-xl font-semibold">Security Levels</h1>
+          <p className="text-sm text-bbs-muted">
+            Read and written as Access/ACS.&lt;level&gt;.info, the files the BBS reads.
+          </p>
         </div>
-        <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
-          <Plus size={20} />
-          <span>Add ACS Flag</span>
-        </button>
       </div>
 
-      <div className="mb-6 flex space-x-2">
-        {SECURITY_LEVELS.map((level) => (
+      {/* Levels that exist, plus a way to add one */}
+      <div className="flex flex-wrap items-center gap-2">
+        {levelsQuery.isLoading && <span className="text-bbs-muted">Loading levels...</span>}
+        {levels.map(level => (
           <button
             key={level}
             onClick={() => setSelectedLevel(level)}
-            className={`px-4 py-2 rounded font-medium transition-colors ${
-              selectedLevel === level
-                ? 'bg-bbs-accent text-white'
-                : 'bg-bbs-secondary text-bbs-text hover:bg-bbs-primary'
+            className={`px-3 py-1 rounded border ${
+              level === selectedLevel
+                ? 'bg-bbs-accent/20 border-bbs-accent text-bbs-accent'
+                : 'border-bbs-muted/40 text-bbs-muted hover:border-bbs-accent/60'
             }`}
           >
             Level {level}
           </button>
         ))}
+
+        <div className="flex items-center gap-1 ml-2">
+          <input
+            value={newLevel}
+            onChange={e => setNewLevel(e.target.value)}
+            placeholder="new level"
+            className="w-24 px-2 py-1 bg-transparent border border-bbs-muted/40 rounded text-sm"
+          />
+          <button
+            onClick={handleCreate}
+            disabled={createMutation.isPending}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-bbs-muted/40 hover:border-bbs-accent/60 text-sm"
+            title="Creates ACS.<level>.info by copying the nearest lower level"
+          >
+            <Plus size={16} /> Add
+          </button>
+        </div>
       </div>
 
-      <div className="card">
-        <h2 className="text-xl font-semibold text-bbs-text mb-4">
-          Security Level {selectedLevel} - {accessFlags.length} ACS Flags
-        </h2>
+      {levels.length === 0 && !levelsQuery.isLoading && (
+        <p className="text-bbs-muted">
+          No ACS level files found in the Access directory.
+        </p>
+      )}
 
-        <div className="space-y-2">
-          {accessFlags.map((access: SecurityLevelAccess) => (
-            <div
-              key={access.id}
-              className="flex items-center justify-between p-3 bg-bbs-secondary rounded hover:bg-bbs-primary transition-colors"
+      {/* Flags for the selected level */}
+      {selectedLevel !== null && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">
+              Level {selectedLevel} - {permissions.length} permissions
+            </h2>
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={!dirty || saveMutation.isPending}
+              className={`flex items-center gap-2 px-3 py-1 rounded border ${
+                dirty
+                  ? 'border-bbs-accent text-bbs-accent hover:bg-bbs-accent/10'
+                  : 'border-bbs-muted/30 text-bbs-muted'
+              }`}
             >
-              <div className="flex items-center space-x-4 flex-1">
-                <button
-                  onClick={() => handleToggle(access)}
-                  className="focus:outline-none"
-                >
-                  {access.enabled ? (
-                    <ToggleRight className="text-green-500" size={24} />
-                  ) : (
-                    <ToggleLeft className="text-bbs-muted" size={24} />
-                  )}
-                </button>
+              <Save size={16} /> {saveMutation.isPending ? 'Saving...' : 'Save to .info'}
+            </button>
+          </div>
 
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold text-bbs-text font-mono">{access.acs_flag}</h3>
-                  {access.description && (
-                    <p className="text-xs text-bbs-muted mt-1">{access.description}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <div
-                  className={`px-3 py-1 rounded text-xs ${
-                    access.enabled
-                      ? 'bg-green-500/20 text-green-500'
-                      : 'bg-bbs-muted/20 text-bbs-muted'
-                  }`}
-                >
-                  {access.enabled ? 'Enabled' : 'Disabled'}
-                </div>
-              </div>
+          {flagsQuery.isLoading ? (
+            <p className="text-bbs-muted">Loading flags...</p>
+          ) : (
+            <div className="grid gap-1 md:grid-cols-2">
+              {permissions.map(name => {
+                const granted = !!flags[name];
+                return (
+                  <button
+                    key={name}
+                    onClick={() => toggle(name)}
+                    className="flex items-center gap-2 px-3 py-2 rounded border border-bbs-muted/20 hover:border-bbs-accent/50 text-left"
+                  >
+                    {granted ? (
+                      <ToggleRight className="text-green-500 shrink-0" size={20} />
+                    ) : (
+                      <ToggleLeft className="text-bbs-muted shrink-0" size={20} />
+                    )}
+                    <span className={granted ? '' : 'text-bbs-muted'}>{name}</span>
+                  </button>
+                );
+              })}
             </div>
-          ))}
-        </div>
-
-        {accessFlags.length === 0 && (
-          <div className="text-center text-bbs-muted py-8">
-            No ACS flags configured for security level {selectedLevel}. Add ACS flags to control user permissions.
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 card bg-bbs-secondary">
-        <div className="flex items-start space-x-3">
-          <Shield className="text-bbs-accent mt-1" size={20} />
-          <div>
-            <h3 className="text-sm font-semibold text-bbs-text mb-2">About Security Levels</h3>
-            <p className="text-xs text-bbs-muted">
-              Security levels (1-255) control user access to BBS features. ACS (Access Control System) flags
-              define specific permissions for each security level. Toggle flags to enable/disable features
-              for users at this security level.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Add ACS Flag Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-md w-full m-4">
-            <div className="border-b border-bbs-primary p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-bbs-accent">Add ACS Flag</h2>
-              <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setFormData({ acs_flag: '', description: '', enabled: true });
-                }}
-                className="text-bbs-muted hover:text-bbs-text transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              <div>
-                <label htmlFor="acs_flag" className="label">ACS Flag Name *</label>
-                <input
-                  id="acs_flag"
-                  type="text"
-                  value={formData.acs_flag}
-                  onChange={(e) => setFormData({ ...formData, acs_flag: e.target.value })}
-                  className="input-field w-full font-mono"
-                  placeholder="e.g., ACS_SYSOP, ACS_DOWNLOAD_FILES"
-                  required
-                />
-                <p className="text-xs text-bbs-muted mt-1">
-                  Will be created for security level {selectedLevel}
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="description" className="label">Description</label>
-                <textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="input-field w-full"
-                  rows={3}
-                  placeholder="Describe what this flag controls..."
-                />
-              </div>
-
-              <div>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.enabled}
-                    onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                    className="form-checkbox h-5 w-5 text-bbs-accent"
-                  />
-                  <span className="text-bbs-text">Enabled by default</span>
-                </label>
-              </div>
-
-              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setFormData({ acs_flag: '', description: '', enabled: true });
-                  }}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={createMutation.isPending}
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create ACS Flag'}
-                </button>
-              </div>
-            </form>
-          </div>
+          )}
         </div>
       )}
     </div>

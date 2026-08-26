@@ -10,6 +10,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, findDoorInfoFile, doorDisplayName } from '../services/config-services/door-info-file.service';
+import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes } from '../services/config-services/acs-level-file.service';
+import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
 // which is not a dependency - so every password written through the admin
@@ -776,6 +778,117 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   });
 
   // ===== Security Level Access (TOOLTYPE_ACCESS) =====
+
+  /**
+   * GET /api/config/security/levels
+   *
+   * The levels that EXIST, read from Access/ACS.<level>.info - the files the
+   * BBS itself reads. The page used to offer a hardcoded
+   * [10, 20, 50, 100, 200, 255], which matched neither the files nor the
+   * users, so a level in use (30) could not be chosen at all.
+   */
+  router.get('/security/levels', async (_req: Request, res: Response) => {
+    try {
+      const bbsRoot = config.get('dataDir');
+      sendResponse(res, {
+        levels: listAcsLevels(bbsRoot),
+        permissions: ACS_PERMISSION_NAMES,
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/security/levels/:level
+   * The flags a level grants, from its file on disk.
+   */
+  router.get('/security/levels/:level', async (req: Request, res: Response) => {
+    try {
+      const level = parseInt(req.params.level, 10);
+      const bbsRoot = config.get('dataDir');
+      const file = acsLevelFilePath(bbsRoot, level);
+
+      if (!fsSync.existsSync(file)) {
+        return handleError(res, new Error(`No ACS file for level ${level}`));
+      }
+
+      const info = parseInfoFile(file);
+      sendResponse(res, { level, file, flags: tooltypesToFlags(info.tooltypes as any) });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * PUT /api/config/security/levels/:level
+   * Save a level's flags to disk. Body: { flags: { "ACS.DOWNLOAD": true } }
+   */
+  router.put('/security/levels/:level', async (req: any, res: Response) => {
+    try {
+      const level = parseInt(req.params.level, 10);
+      const flags = req.body?.flags;
+      if (!flags || typeof flags !== 'object') {
+        return handleError(res, new Error('flags object is required'));
+      }
+
+      const bbsRoot = config.get('dataDir');
+      const file = acsLevelFilePath(bbsRoot, level);
+      if (!fsSync.existsSync(file)) {
+        return handleError(res, new Error(`No ACS file for level ${level} - create it first`));
+      }
+
+      const backupPath = file + '.backup';
+      fsSync.copyFileSync(file, backupPath);
+
+      const info = parseInfoFile(file);
+      info.tooltypes = flagsToTooltypes(info.tooltypes as any, flags) as any;
+      writeInfoFile(info);
+
+      sendResponse(res, { level, file, backupPath }, `Security level ${level} saved`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/security/levels/:level
+   *
+   * Create a level that does not exist yet - the thing "add one for users at
+   * 30" was asking for. Copies an existing level's file as the starting
+   * point, because a .info is a binary Amiga icon and cannot be conjured from
+   * nothing; by default the nearest LOWER level, which is what findAcsLevel
+   * would have fallen back to anyway.
+   */
+  router.post('/security/levels/:level', async (req: any, res: Response) => {
+    try {
+      const level = parseInt(req.params.level, 10);
+      if (!Number.isFinite(level) || level < 1 || level > 255) {
+        return handleError(res, new Error('Security level must be between 1 and 255'));
+      }
+
+      const bbsRoot = config.get('dataDir');
+      const target = acsLevelFilePath(bbsRoot, level);
+      if (fsSync.existsSync(target)) {
+        return handleError(res, new Error(`Level ${level} already exists`));
+      }
+
+      const existing = listAcsLevels(bbsRoot);
+      const requested = req.body?.copyFrom !== undefined ? parseInt(req.body.copyFrom, 10) : undefined;
+      const source = requested !== undefined
+        ? requested
+        : [...existing].reverse().find(l => l < level) ?? existing[0];
+
+      if (source === undefined || !fsSync.existsSync(acsLevelFilePath(bbsRoot, source))) {
+        return handleError(res, new Error('No existing level to copy from'));
+      }
+
+      fsSync.copyFileSync(acsLevelFilePath(bbsRoot, source), target);
+      sendResponse(res, { level, file: target, copiedFrom: source }, `Security level ${level} created from ${source}`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
 
   /**
    * GET /api/config/security/:level
