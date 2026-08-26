@@ -61,19 +61,48 @@
                 exit 1
               fi
 
-              # Build + recreate. `--force-recreate` is the critical bit:
-              # without it, docker compose can decide the running container
-              # "matches" the spec hash and skip the restart even when
-              # --build produced a brand-new image. Result: new image sits
-              # idle, old container keeps serving stale code (the source
-              # of every "deploy succeeded but the site shows old behaviour"
-              # report).
-              echo "== docker compose up --build --force-recreate (with GIT_SHA) =="
+              # Build FIRST, separately from the recreate. Recreating the
+              # container drops every connected session, so the people using
+              # the BBS get a countdown between the two steps — and because
+              # the image is already built by then, that countdown costs no
+              # extra downtime. It used to be one `up --build --force-recreate`
+              # with no warning at all: on 2026-08-26 eight deploys went out in
+              # 46 minutes and threw the user out of /chat over and over.
+              #
               # Pass the resolved SHA as a build-arg so the image records
               # which revision it was built from. fetch-live-logs.yml reads
               # /app/.git-sha to surface this — answers "is the live deploy
               # actually fresh?" without having to inspect mtimes.
-              GIT_SHA="$ACTUAL_SHA" docker compose up -d --build --force-recreate
+              echo "== docker compose build (with GIT_SHA) =="
+              GIT_SHA="$ACTUAL_SHA" docker compose build
+
+              # Warn everybody who is connected, then wait out the countdown.
+              # SIGUSR1 is handled in web/backend/src/index.ts; the backend
+              # announces at 60/30/10/5s. A signal rather than an HTTP call
+              # because Caddy proxies every path to 3001 — an admin endpoint
+              # would be reachable from the outside and would need its own
+              # secret, `docker kill` needs neither.
+              #
+              # RESTART_NOTICE_SECONDS in docker-compose.yml must match this
+              # sleep. Skipped entirely when nothing is running (first deploy,
+              # or a container that died), so a cold start is not delayed.
+              NOTICE_SECONDS=60
+              if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || echo false)" = "true" ]; then
+                echo "== restart notice: SIGUSR1, then ${NOTICE_SECONDS}s countdown =="
+                docker kill -s SIGUSR1 amiexpress-bbs || true
+                sleep "$NOTICE_SECONDS"
+              else
+                echo "== restart notice skipped: no running container =="
+              fi
+
+              # `--force-recreate` is the critical bit: without it, docker
+              # compose can decide the running container "matches" the spec
+              # hash and skip the restart even when the build produced a
+              # brand-new image. Result: new image sits idle, old container
+              # keeps serving stale code (the source of every "deploy
+              # succeeded but the site shows old behaviour" report).
+              echo "== docker compose up --force-recreate =="
+              GIT_SHA="$ACTUAL_SHA" docker compose up -d --force-recreate --no-build
 
               # Sanity check: assert the container was actually recreated
               # by this build, not a leftover from an earlier run. Tighter

@@ -88,6 +88,7 @@ import { setupDmSidebarHandlers } from './handlers/dm-sidebar-handlers';
 import { buildSidebarItems } from './handlers/sidebar-items-builder';
 import { setupKeyboardShortcuts } from './handlers/keyboard-shortcuts';
 import { BBSEventHandler } from './handlers/bbs-event.handler';
+import { setupSystemNoticeHandler } from './handlers/system-notice.handler';
 import { setupThreadListeners, replyToThread, getThreadMessages, cleanupThreadListeners } from './handlers/thread-handlers';
 import { createThreadView } from './ui/thread-view';
 import { setupPinListeners, pinMessage, unpinMessage, getPinnedMessages, cleanupPinListeners } from './handlers/pin-handlers';
@@ -2152,6 +2153,11 @@ export async function createApp(session: DoorSession) {
 
   // ========== CHAT SOCKET HANDLERS ==========
   setupChatHandlers(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentionsUser, getUserColor, formatMessage, processKeystroke, updateTypingPreview, screen, shouldShowEvent, getEventMessage, eventBus, addMessage, messageHandler, formatTime);
+
+  // ========== SYSTEM NOTICES ==========
+  // Deploy countdowns and similar. The server cannot paint these as ANSI while
+  // this door owns the screen, so they arrive as structured events.
+  setupSystemNoticeHandler(socket, addSystemMessage, audio);
 
   // ========== BBS EVENT HANDLERS ==========
   // Listen to BBS system events (login, logout, upload, download, door activity)

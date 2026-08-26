@@ -90,6 +90,7 @@ const dm_sidebar_handlers_1 = require("./handlers/dm-sidebar-handlers");
 const sidebar_items_builder_1 = require("./handlers/sidebar-items-builder");
 const keyboard_shortcuts_1 = require("./handlers/keyboard-shortcuts");
 const bbs_event_handler_1 = require("./handlers/bbs-event.handler");
+const system_notice_handler_1 = require("./handlers/system-notice.handler");
 const thread_handlers_1 = require("./handlers/thread-handlers");
 const thread_view_1 = require("./ui/thread-view");
 const pin_handlers_1 = require("./handlers/pin-handlers");
@@ -1874,6 +1875,10 @@ async function createApp(session) {
     });
     // ========== CHAT SOCKET HANDLERS ==========
     (0, chat_socket_handlers_1.setupChatHandlers)(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentions_1.mentionsUser, formatter_1.getUserColor, formatter_1.formatMessage, typing_preview_1.processKeystroke, updateTypingPreview, screen, socket_typing_1.shouldShowEvent, services_1.getEventMessage, eventBus, state_1.addMessage, messageHandler, format_1.formatTime);
+    // ========== SYSTEM NOTICES ==========
+    // Deploy countdowns and similar. The server cannot paint these as ANSI while
+    // this door owns the screen, so they arrive as structured events.
+    (0, system_notice_handler_1.setupSystemNoticeHandler)(socket, addSystemMessage, audio);
     // ========== BBS EVENT HANDLERS ==========
     // Listen to BBS system events (login, logout, upload, download, door activity)
     const bbsEventHandler = new bbs_event_handler_1.BBSEventHandler(socket);

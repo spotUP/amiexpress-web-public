@@ -344,8 +344,13 @@ export default function ChatTerminal() {
     const socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 10,
+      // Infinity, not 10. A deploy recreates the container, and ten attempts
+      // with a 5s ceiling gave up while it was still starting - after which
+      // socket.io never tries again and the page sits on a dead terminal with
+      // nothing on screen to say so.
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       autoConnect: false,  // Don't connect until handlers are registered
       auth: ssoToken ? { token: ssoToken } : {},
       query: {
@@ -354,8 +359,15 @@ export default function ChatTerminal() {
     });
     socketRef.current = socket;
 
+    // True once the socket has been up at least once, so a later 'connect' is
+    // a RECONNECT rather than the first one. The door redraws its whole screen
+    // on re-entry, so nothing is written here - the status line below only
+    // exists for the window where there is no door to draw anything.
+    let hasConnectedBefore = false;
+
     socket.on('connect', () => {
       console.log('[ChatTerminal] Connected');
+      hasConnectedBefore = true;
       // Send terminal size on connect
       const { cols, rows } = term;
       socket.emit('terminal-size', { cols, rows });
@@ -383,7 +395,24 @@ export default function ChatTerminal() {
 
     socket.on('disconnect', (reason) => {
       console.log('[ChatTerminal] Disconnected:', reason);
-      // Disconnection is now handled by blessed modals on the door side
+      // Say so on screen. A deploy takes the container away mid-session and
+      // the terminal used to just freeze with the last frame still painted,
+      // which reads as a hung door rather than a restart. Safe to write over
+      // the door's screen here: the door is gone, and re-entry clears and
+      // redraws it in full.
+      if (hasConnectedBefore) {
+        term.write('\r\n\x1b[33m*** Disconnected - reconnecting...\x1b[0m\r\n');
+      }
+      // Anything beyond this is handled by blessed modals on the door side
+    });
+
+    // socket.io retries for ever now (see reconnectionAttempts above); this
+    // only reports progress so a long outage does not look like a dead page.
+    socket.io.on('reconnect_attempt', (attempt: number) => {
+      // Every attempt would scroll the screen away during a slow restart.
+      if (attempt === 1 || attempt % 10 === 0) {
+        term.write(`\x1b[90m  reconnect attempt ${attempt}...\x1b[0m\r\n`);
+      }
     });
 
     // ANSI output from server (including LiveChat door output)

@@ -230,6 +230,10 @@ import {
   setCommandExecutionDependencies,
 } from "./handlers/command.handler";
 import { reloadDoorCommands } from "./handlers/command-execution.handler";
+import {
+  startRestartCountdown,
+  DEFAULT_RESTART_SECONDS,
+} from "./services/restart-notice.service";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -670,6 +674,23 @@ setInterval(() => {
     console.warn(`[MEMORY WARNING] RSS ${rssMB}MB approaching ${memLimitMB}MB limit!`);
   }
 }, MEMORY_LOG_INTERVAL);
+
+// SIGUSR1 - the deploy workflow's "you are about to be replaced" signal.
+//
+// Sent after the new image has finished building and before the container is
+// recreated, so the countdown runs while nothing is down yet and costs no
+// extra downtime. A signal rather than an HTTP endpoint because Caddy proxies
+// everything to 3001: an admin route would need its own secret and would be
+// reachable from the outside, whereas `docker kill -s SIGUSR1` is not.
+process.on("SIGUSR1", () => {
+  const seconds = parseInt(process.env.RESTART_NOTICE_SECONDS || "", 10) || DEFAULT_RESTART_SECONDS;
+  console.log(`[RESTART NOTICE] SIGUSR1 received - announcing restart in ${seconds}s`);
+  try {
+    startRestartCountdown(io, seconds);
+  } catch (err) {
+    console.error("[RESTART NOTICE] broadcast failed:", err);
+  }
+});
 
 // SIGTERM handler - Docker/orchestrator sends this before stopping the container
 // This helps diagnose if crashes are due to health check timeouts

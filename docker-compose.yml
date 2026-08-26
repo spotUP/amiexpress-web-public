@@ -80,6 +80,11 @@ services:
       # CORS - add your domain
       - CORS_ORIGINS=${CORS_ORIGINS:-}
 
+      # How long the countdown runs when the deploy sends SIGUSR1 before
+      # recreating the container (web/backend/src/services/restart-notice.service.ts).
+      # Must stay in step with the `sleep` in .github/workflows/deploy-hetzner.yml.
+      - RESTART_NOTICE_SECONDS=${RESTART_NOTICE_SECONDS:-60}
+
       # Debug flags
       - DEBUG=${DEBUG:-false}
       - XIM_DEBUG=${XIM_DEBUG:-0}
