@@ -340,6 +340,37 @@ EOF
             exit 1
         fi
     done
+
+    # The rest of the BBS tree gets ADDITIVE repair: a file the image has and
+    # the volume does not is copied across; a file that already exists is left
+    # exactly as it is.
+    #
+    # These directories were only ever copied when the whole directory was
+    # missing, so anything ADDED to them after a board's first run never
+    # arrived - the same class of gap that left the door voices missing on
+    # live. They are not synced outright because a sysop edits them: access
+    # levels, protocols, help text and the conference tree carry local changes
+    # and message bases, and overwriting those would undo real work.
+    echo "[Entrypoint] Repairing content directories (adding missing files only)..."
+    for add_dir in Access Languages Protocols FCheck Zoom HELP Utils Devs L S Scripts System AmiXnet RIPgraphics; do
+        [ -d "$DEFAULT_DATA_DIR/$add_dir" ] || continue
+        [ -d "$BBS_DATA_DIR/$add_dir" ] || continue
+
+        added=0
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            src="$DEFAULT_DATA_DIR/$add_dir/$rel"
+            dst="$BBS_DATA_DIR/$add_dir/$rel"
+            [ -e "$dst" ] && continue
+            mkdir -p "$(dirname "$dst")"
+            cp -p "$src" "$dst" && added=$((added + 1))
+        done <<EOF
+$(cd "$DEFAULT_DATA_DIR/$add_dir" && find . -type f ! -name '*.db' ! -name '*.log' | sed 's|^\./||')
+EOF
+
+        [ "$added" -gt 0 ] && echo "[Entrypoint]   $add_dir: added $added missing file(s)"
+    done
+    echo "[Entrypoint] Content repair complete"
     # Remove .ts source files from Doors - production uses compiled dist/
     find "$BBS_DATA_DIR/Doors" -maxdepth 2 -name "*.ts" -not -path "*/node_modules/*" -not -path "*/dist/*" -delete 2>/dev/null || true
     echo "[Entrypoint]   Cleaned .ts source files from Doors"
