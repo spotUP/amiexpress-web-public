@@ -904,6 +904,19 @@ async function createApp(session) {
         // 4. Footer & Overlays
         statusBar.position.width = solved.statusBar.width;
         inputBox.position.width = solved.input.width;
+        // On a really short window the footer SHRINKS rather than overlapping the
+        // content: the input loses its border rows first, then the status line
+        // goes, then the menu bar. Applying what the solver decided.
+        inputBox.position.height = solved.input.height;
+        inputBox.position.bottom = solved.statusHeight;
+        if (solved.statusHeight > 0)
+            statusBar.show();
+        else
+            statusBar.hide();
+        if (solved.menuHeight > 0)
+            menuBar.element.show();
+        else
+            menuBar.element.hide();
         emojiButton.position.left = solved.emojiButton.left;
         if (solved.emojiButton.visible)
             emojiButton.show();

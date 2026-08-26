@@ -49,6 +49,22 @@ describe('the door', () => {
   });
 });
 
+describe('the footer on a short window', () => {
+  const body = server.slice(server.indexOf('function updateLayout() {'));
+
+  it('applies the height the solver decided, not the constant', () => {
+    // Otherwise the solver shrinks the footer on paper while the door keeps
+    // drawing it at full size, straight over the content.
+    expect(body).toMatch(/inputBox\.position\.height = solved\.input\.height/);
+    expect(body).toMatch(/inputBox\.position\.bottom = solved\.statusHeight/);
+  });
+
+  it('hides the status bar and menu when there is no room for them', () => {
+    expect(body).toMatch(/solved\.statusHeight > 0[\s\S]{0,80}?statusBar\.hide\(\)/);
+    expect(body).toMatch(/solved\.menuHeight > 0[\s\S]{0,120}?hide\(\)/);
+  });
+});
+
 describe('the screen underneath it', () => {
   it('is resized when the backend forwards the new size', () => {
     expect(helpers).toMatch(/bbs\.on\('screen:resize'/);
