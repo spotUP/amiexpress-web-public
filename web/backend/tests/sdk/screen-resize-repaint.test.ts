@@ -167,6 +167,27 @@ describe('after a resize', () => {
     expect(coords.yl).toBe(42);
   });
 
+  it('resets the colours BEFORE erasing', () => {
+    // An erase fills with the CURRENT background colour. Clearing while a
+    // blue background attribute is still active paints the whole terminal
+    // blue - reported as a resize that produced a solid blue square, which
+    // came back to normal on the next repaint.
+    const { screen, written } = screenWithCapture(80, 24);
+    panel(screen);
+    screen.render();
+
+    written.length = 0;
+    screen.resize(100, 30);
+
+    const out = written.join('');
+    const reset = out.indexOf('\x1b[0m');
+    const erase = out.indexOf('\x1b[2J');
+
+    expect(erase).toBeGreaterThanOrEqual(0);
+    expect(reset).toBeGreaterThanOrEqual(0);
+    expect(reset).toBeLessThan(erase);
+  });
+
   it('tells its elements to lay out again', () => {
     // The door repositions its panels from this event; it must arrive
     // before the repaint, or the repaint draws the old layout.

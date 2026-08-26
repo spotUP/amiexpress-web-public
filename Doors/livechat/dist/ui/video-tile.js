@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoTile = void 0;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const video_layout_1 = require("../features/video-layout");
 /**
  * Generate the no-video avatar: a large block-letter initial of the user's
  * handle, in a per-user foreground colour so tiles are visually distinct.
@@ -457,8 +458,10 @@ class VideoTile {
         //     looks like the frame "breaks" / overruns the status bar.
         //   - 2 rows of height safety so the status bar at `bottom: 0` is
         //     never overwritten by an overflowing final row.
-        const cw = Number(this.container.width) || 0;
-        const ch = Number(this.container.height) || 0;
+        // Resolved coords, not the spec - see resolveBoxSize in video-layout.
+        const resolved = (0, video_layout_1.resolveBoxSize)(this.container, { width: 0, height: 0 });
+        const cw = resolved.width;
+        const ch = resolved.height;
         return { width: Math.max(1, cw - 2), height: Math.max(1, ch - 2) };
     }
     /**

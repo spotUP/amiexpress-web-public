@@ -2559,7 +2559,12 @@ export class Screen extends Element {
     //
     // Whatever the terminal is showing after a resize, it is not what we
     // drew - so drop all of it and repaint from a known-empty screen.
-    this.program.write(ESC + '[2J' + ESC + '[H');
+    // ESC[0m FIRST. An erase fills with the CURRENT background colour, so
+    // clearing while a blue background attribute is still active paints the
+    // whole terminal blue - which is exactly what a resize produced, a solid
+    // blue square that came back to normal on the next repaint (2026-08-26).
+    // Reset the attributes, then erase.
+    this.program.write(ESC + '[2J' + ESC + '[H'); // RED
 
     // Reallocate buffers for new size
     this.realloc();

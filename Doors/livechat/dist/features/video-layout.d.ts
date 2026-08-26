@@ -35,3 +35,33 @@ export declare function pickSpeaker<T extends LayoutParticipant>(participants: T
  * watching changes no geometry.
  */
 export declare function layoutSignature(viewMode: ViewMode, width: number, height: number, participants: LayoutParticipant[], activeSpeaker: number | string | undefined, currentUserId: number | string): string;
+/**
+ * The real size of a box, in cells.
+ *
+ * NOT `element.width`. That returns whatever was passed in - and the video
+ * grid's container is created with '100%', so reading it back gives the
+ * layout SPEC, not a number. Measuring with it made the grid believe its
+ * size never changed (the signature came out "speaker|100%|100%|id" at every
+ * window size, so the tiles were never rebuilt) and handed each tile the
+ * string '100%' as its width. Reported as ASCII video that never resized
+ * with the window, while a session STARTED wide came out wide.
+ *
+ * Resolved coordinates are the only honest answer; the spec is a fallback
+ * for when they are not available yet.
+ */
+export declare function resolveBoxSize(element: {
+    _getCoords?: () => {
+        xi: number;
+        xl: number;
+        yi: number;
+        yl: number;
+    } | undefined;
+    width?: unknown;
+    height?: unknown;
+}, fallback: {
+    width: number;
+    height: number;
+}): {
+    width: number;
+    height: number;
+};

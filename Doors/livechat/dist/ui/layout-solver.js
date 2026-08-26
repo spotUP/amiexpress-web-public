@@ -40,11 +40,26 @@ function atLeastOne(n) {
 function solveLayout(request, constants) {
     const width = atLeastOne(request.width);
     const height = atLeastOne(request.height);
-    const footerHeight = constants.statusHeight + constants.inputHeight;
     // The footer is reserved BEFORE anything else. A chat you cannot type into
     // is not a chat, so when the window is too short it is the content that
     // loses its rows, not the input box.
-    const contentHeight = atLeastOne(height - constants.menuHeight - footerHeight);
+    //
+    // But the content cannot go below one row, so on a REALLY short window
+    // something has to give or the footer overlaps it - measured at 80x5: the
+    // content ended on row 2 while the input anchored at row 1. The footer
+    // shrinks instead, in order of how little it is missed: the input loses
+    // its border rows first, then the status line goes, then the menu bar.
+    let inputHeight = constants.inputHeight;
+    let statusHeight = constants.statusHeight;
+    let menuHeight = constants.menuHeight;
+    const needed = () => menuHeight + statusHeight + inputHeight + 1;
+    if (needed() > height)
+        inputHeight = Math.max(1, height - menuHeight - statusHeight - 1);
+    if (needed() > height)
+        statusHeight = 0;
+    if (needed() > height)
+        menuHeight = 0;
+    const contentHeight = atLeastOne(height - menuHeight - statusHeight - inputHeight);
     // The sidebar is the part that yields. It is clamped to whatever leaves the
     // chat panel a usable width, and dropped entirely when that leaves nothing
     // worth showing.
@@ -58,7 +73,7 @@ function solveLayout(request, constants) {
     const sidebar = sidebarWidth > 0
         ? {
             left: dockedLeft ? 0 : width - sidebarWidth,
-            top: constants.menuHeight,
+            top: menuHeight,
             width: sidebarWidth,
             height: contentHeight,
         }
@@ -66,7 +81,7 @@ function solveLayout(request, constants) {
     const chatWidth = atLeastOne(width - sidebarWidth);
     const chat = {
         left: sidebar && dockedLeft ? sidebarWidth : 0,
-        top: constants.menuHeight,
+        top: menuHeight,
         width: chatWidth,
         height: contentHeight,
     };
@@ -84,7 +99,12 @@ function solveLayout(request, constants) {
         sidebar,
         chat,
         chatLog,
-        input: { width: atLeastOne(emojiFits ? width - constants.emojiButtonWidth : width) },
+        input: {
+            width: atLeastOne(emojiFits ? width - constants.emojiButtonWidth : width),
+            height: inputHeight,
+        },
+        statusHeight,
+        menuHeight,
         emojiButton: {
             left: Math.max(0, width - constants.emojiButtonWidth),
             visible: emojiFits,

@@ -20,6 +20,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pickSpeaker = pickSpeaker;
 exports.layoutSignature = layoutSignature;
+exports.resolveBoxSize = resolveBoxSize;
 /**
  * Who fills the tile in speaker mode: the active speaker, else yourself,
  * else whoever is first.
@@ -42,4 +43,33 @@ function layoutSignature(viewMode, width, height, participants, activeSpeaker, c
         ? [pickSpeaker(participants, activeSpeaker, currentUserId)?.userId]
         : participants.map(p => p.userId);
     return [viewMode, width, height, ...shown.map(String)].join('|');
+}
+/**
+ * The real size of a box, in cells.
+ *
+ * NOT `element.width`. That returns whatever was passed in - and the video
+ * grid's container is created with '100%', so reading it back gives the
+ * layout SPEC, not a number. Measuring with it made the grid believe its
+ * size never changed (the signature came out "speaker|100%|100%|id" at every
+ * window size, so the tiles were never rebuilt) and handed each tile the
+ * string '100%' as its width. Reported as ASCII video that never resized
+ * with the window, while a session STARTED wide came out wide.
+ *
+ * Resolved coordinates are the only honest answer; the spec is a fallback
+ * for when they are not available yet.
+ */
+function resolveBoxSize(element, fallback) {
+    const coords = element._getCoords?.();
+    if (coords) {
+        const width = coords.xl - coords.xi;
+        const height = coords.yl - coords.yi;
+        if (width > 0 && height > 0)
+            return { width, height };
+    }
+    const specWidth = typeof element.width === 'number' ? element.width : NaN;
+    const specHeight = typeof element.height === 'number' ? element.height : NaN;
+    return {
+        width: Number.isFinite(specWidth) && specWidth > 0 ? specWidth : fallback.width,
+        height: Number.isFinite(specHeight) && specHeight > 0 ? specHeight : fallback.height,
+    };
 }

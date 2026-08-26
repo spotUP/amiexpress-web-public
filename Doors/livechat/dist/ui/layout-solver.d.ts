@@ -51,7 +51,11 @@ export interface SolvedLayout {
     };
     input: {
         width: number;
+        height: number;
     };
+    /** Zero when the window is too short to afford them. */
+    statusHeight: number;
+    menuHeight: number;
     emojiButton: {
         left: number;
         visible: boolean;

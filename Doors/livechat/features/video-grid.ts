@@ -11,7 +11,7 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { VideoTile, VideoTileOptions } from '../ui/video-tile';
-import { layoutSignature, pickSpeaker } from './video-layout';
+import { layoutSignature, pickSpeaker, resolveBoxSize } from './video-layout';
 
 export interface VideoParticipant {
   userId: number | string;
@@ -280,9 +280,14 @@ export class VideoGrid {
     const participantArray = Array.from(this.participants.values());
     const participantCount = participantArray.length;
 
-    // Get current container dimensions
-    const containerWidth = this.container.width as number;
-    const containerHeight = this.container.height as number;
+    // Get current container dimensions.
+    //
+    // From the RESOLVED COORDS, not container.width - that returns the
+    // layout spec it was built with ('100%'), which never changes however
+    // the window is resized. See resolveBoxSize.
+    const size = resolveBoxSize(this.container as any, { width: 80, height: 24 });
+    const containerWidth = size.width;
+    const containerHeight = size.height;
 
     if (participantCount === 0) {
       // Clear all tiles
@@ -296,6 +301,8 @@ export class VideoGrid {
     }
 
     const signature = this.computeLayoutSignature(participantArray, containerWidth, containerHeight);
+    console.log('[GridDiag] updateGrid sig=%s prev=%s tiles=%d -> %s', signature, this.layoutSignature, this.tiles.size,
+      (signature === this.layoutSignature && this.tiles.size > 0) ? 'SKIP' : 'REBUILD');
     if (signature === this.layoutSignature && this.tiles.size > 0) {
       // Same geometry: the tiles stay, and with them the picture they hold.
       this.refreshTileStatus(participantArray);

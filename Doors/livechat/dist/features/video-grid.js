@@ -229,9 +229,14 @@ class VideoGrid {
     updateGrid() {
         const participantArray = Array.from(this.participants.values());
         const participantCount = participantArray.length;
-        // Get current container dimensions
-        const containerWidth = this.container.width;
-        const containerHeight = this.container.height;
+        // Get current container dimensions.
+        //
+        // From the RESOLVED COORDS, not container.width - that returns the
+        // layout spec it was built with ('100%'), which never changes however
+        // the window is resized. See resolveBoxSize.
+        const size = (0, video_layout_1.resolveBoxSize)(this.container, { width: 80, height: 24 });
+        const containerWidth = size.width;
+        const containerHeight = size.height;
         if (participantCount === 0) {
             // Clear all tiles
             for (const tile of this.tiles.values()) {

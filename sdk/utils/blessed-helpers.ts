@@ -1136,7 +1136,10 @@ export function createCleanupHandler(
 
     // Show exit message
     if (options?.exitMessage) {
-      bbs.write(ESC + '[2J' + ESC + '[H');
+      // Reset attributes before erasing: an erase fills with the CURRENT
+      // background, so a door that exits with a colour still set would hand
+      // the user a screen painted in it.
+      bbs.write(ESC + '[0m' + ESC + '[2J' + ESC + '[H');
       bbs.writeLine(options.exitMessage);
     }
   };

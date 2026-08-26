@@ -552,7 +552,12 @@ class EnhancedVoiceChannel {
         const cur = this.currentStreamDims;
         const wDelta = Math.abs(target.width - cur.width) / Math.max(1, cur.width);
         const hDelta = Math.abs(target.height - cur.height) / Math.max(1, cur.height);
-        if (wDelta < 0.2 && hDelta < 0.2)
+        // 5%, not 20%. The wide threshold was there to stop a resize DRAG from
+        // restarting the camera dozens of times - but the browser now waits for
+        // the size to settle before announcing it, so this is called once per
+        // resize and can afford to track the window closely. At 20% an ordinary
+        // window change left the picture visibly the wrong shape.
+        if (wDelta < 0.05 && hDelta < 0.05)
             return;
         console.log('[voice-channel-ux] resize stream %dx%d -> %dx%d', cur.width, cur.height, target.width, target.height);
         const myStreamId = `video-${this.socket.id}`;

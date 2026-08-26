@@ -115,3 +115,50 @@ describe('who is on screen in speaker mode', () => {
     expect(pickSpeaker([], undefined, ME)).toBeUndefined();
   });
 });
+
+describe('measuring the grid container', () => {
+  const { resolveBoxSize } = require('../../../../Doors/livechat/features/video-layout');
+
+  /** A box built with a layout spec, as the video grid's container is. */
+  const specBox = (coords: any) => ({
+    width: '100%',
+    height: '100%',
+    _getCoords: () => coords,
+  });
+
+  it('reads the resolved size, not the spec', () => {
+    // container.width returns '100%' - the string it was built with - which
+    // never changes however the window is resized. Measuring with it made
+    // the grid believe its size was constant, so tiles were never rebuilt
+    // and the video never resized.
+    const size = resolveBoxSize(specBox({ xi: 15, xl: 99, yi: 1, yl: 44 }), { width: 80, height: 24 });
+
+    expect(size).toEqual({ width: 84, height: 43 });
+  });
+
+  it('changes when the window changes', () => {
+    const narrow = resolveBoxSize(specBox({ xi: 0, xl: 80, yi: 0, yl: 24 }), { width: 80, height: 24 });
+    const wide = resolveBoxSize(specBox({ xi: 0, xl: 170, yi: 0, yl: 26 }), { width: 80, height: 24 });
+
+    expect(wide).not.toEqual(narrow);
+  });
+
+  it('falls back when coords are not available yet', () => {
+    const size = resolveBoxSize({ width: '100%', height: '100%', _getCoords: () => undefined }, { width: 80, height: 24 });
+
+    expect(size).toEqual({ width: 80, height: 24 });
+  });
+
+  it('accepts a numeric spec as a fallback', () => {
+    const size = resolveBoxSize({ width: 56, height: 16, _getCoords: () => undefined }, { width: 80, height: 24 });
+
+    expect(size).toEqual({ width: 56, height: 16 });
+  });
+
+  it('never returns a zero or negative size', () => {
+    const size = resolveBoxSize(specBox({ xi: 10, xl: 10, yi: 5, yl: 5 }), { width: 80, height: 24 });
+
+    expect(size.width).toBeGreaterThan(0);
+    expect(size.height).toBeGreaterThan(0);
+  });
+});
