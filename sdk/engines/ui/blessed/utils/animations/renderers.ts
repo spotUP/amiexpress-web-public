@@ -9,8 +9,31 @@ import type { AnimationType, AnimationSegment } from './parser';
 const RAINBOW_COLORS = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
 const ALL_COLORS = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'gray'];
 
-// Sparkle characters
-const SPARKLE_CHARS = ['*', '+', '.', "'", '`', '"', '^'];
+/**
+ * Colours a sparkle passes through, brightest first. The text KEEPS its own
+ * characters - see renderSparkle.
+ */
+const SPARKLE_COLORS = ['white', 'yellow', 'white'];
+
+/**
+ * The ramp a gradient walks between its two ends.
+ *
+ * Sixteen-colour terminals cannot blend, so a gradient has to be built from
+ * the colours that exist. Ordering them by brightness is what makes a run of
+ * them read as a fade rather than as stripes.
+ */
+const GRADIENT_RAMPS: Record<string, string[]> = {
+  'red-blue': ['red', 'magenta', 'blue'],
+  'blue-red': ['blue', 'magenta', 'red'],
+  'red-yellow': ['red', 'yellow', 'white'],
+  'yellow-red': ['white', 'yellow', 'red'],
+  'green-cyan': ['green', 'cyan', 'white'],
+  'cyan-green': ['white', 'cyan', 'green'],
+  'blue-cyan': ['blue', 'cyan', 'white'],
+  'cyan-blue': ['white', 'cyan', 'blue'],
+  'magenta-cyan': ['magenta', 'blue', 'cyan'],
+  'cyan-magenta': ['cyan', 'blue', 'magenta'],
+};
 
 /**
  * Render rainbow animation - cycle colors through text
@@ -41,14 +64,16 @@ export function renderPulse(text: string, frame: number, params?: Record<string,
  */
 export function renderSparkle(text: string, frame: number): string {
   let result = '';
-  // Use frame as seed for consistent randomness per frame
+  // Frame as a seed, so a given frame always sparkles the same way.
   const seed = frame * 7;
   for (let i = 0; i < text.length; i++) {
     const rand = ((seed + i * 13) % 100) / 100;
     if (rand < 0.15 && text[i] !== ' ') {
-      // 15% chance to sparkle
-      const sparkleChar = SPARKLE_CHARS[(frame + i) % SPARKLE_CHARS.length];
-      result += `{yellow-fg}${sparkleChar}{/yellow-fg}`;
+      // Light the CHARACTER up. This used to substitute a sparkle glyph for
+      // it - so 15% of every message was replaced with punctuation on every
+      // frame, and the text was unreadable while the effect ran.
+      const color = SPARKLE_COLORS[(frame + i) % SPARKLE_COLORS.length];
+      result += `{${color}-fg}{bold}${text[i]}{/bold}{/${color}-fg}`;
     } else {
       result += text[i];
     }
@@ -60,11 +85,16 @@ export function renderSparkle(text: string, frame: number): string {
  * Render shake animation - add subtle random padding
  */
 export function renderShake(text: string, frame: number): string {
-  // Shake effect uses padding - add 0-1 spaces before/after
-  const shakeAmount = frame % 3;
-  const leftPad = shakeAmount === 1 ? ' ' : '';
-  const rightPad = shakeAmount === 2 ? ' ' : '';
-  return `${leftPad}${text}${rightPad}`;
+  // The width NEVER changes - only where the text sits inside it.
+  //
+  // This used to add a space on one side and nothing on the other, so the
+  // line got a column longer and shorter as it shook. In a fixed-width chat
+  // panel that re-wraps the line, which shoves everything after it around:
+  // the whole message area twitched, not the shaken word.
+  // Pure ASCII: one space, on one side or the other. Same width either way,
+  // and the text jumps a column. No zero-width or combining characters - an
+  // Amiga client renders those as a visible glyph, if at all.
+  return frame % 2 === 0 ? `${text} ` : ` ${text}`;
 }
 
 /**
@@ -91,18 +121,24 @@ export function renderWave(text: string, frame: number): string {
  * Render gradient animation - shift color across text
  */
 export function renderGradient(text: string, frame: number, params?: Record<string, string>): string {
+  if (text.length === 0) return '';
+
   const fromColor = params?.from || 'red';
   const toColor = params?.to || 'blue';
-  const colors = [fromColor, toColor];
+
+  // A real ramp between the two ends where one is known, so the run reads as
+  // a fade. It used to be the two end colours and nothing between, split
+  // down the middle - two blocks of solid colour, which is not a gradient.
+  const ramp = GRADIENT_RAMPS[`${fromColor}-${toColor}`] ?? [fromColor, toColor];
 
   let result = '';
-  const halfLen = Math.ceil(text.length / 2);
   const offset = frame % text.length;
 
   for (let i = 0; i < text.length; i++) {
     const shiftedI = (i + offset) % text.length;
-    const colorIndex = shiftedI < halfLen ? 0 : 1;
-    const color = colors[colorIndex];
+    const position = text.length === 1 ? 0 : shiftedI / (text.length - 1);
+    const stop = Math.min(ramp.length - 1, Math.floor(position * ramp.length));
+    const color = ramp[stop];
     result += `{${color}-fg}${text[i]}{/${color}-fg}`;
   }
   return result;

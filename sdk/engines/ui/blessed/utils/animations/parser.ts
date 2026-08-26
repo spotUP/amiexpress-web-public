@@ -22,7 +22,10 @@ export interface ParsedLine {
 }
 
 // Animation tag pattern: ~name~ or ~name param=value~
-const ANIMATION_TAG_REGEX = /~(\w+)(?:\s+([^~]+))?~(.*?)~\/\1~/g;
+// [\s\S], not `.` - the content of an effect can run across a line break,
+// and with `.` an effect that wrapped simply never matched, so it rendered
+// as its literal tags.
+const ANIMATION_TAG_REGEX = /~(\w+)(?:\s+([^~]+))?~([\s\S]*?)~\/\1~/g;
 
 /**
  * Parse animation tags from text and return segments
