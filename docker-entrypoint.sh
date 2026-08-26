@@ -419,20 +419,27 @@ if [ -d "$BBS_DATA_DIR/Doors" ]; then
             sdk_link_dir="$door_dir/node_modules/@amiexpress"
             sdk_link="$sdk_link_dir/bbs-door-sdk"
 
-            # Check if door has native dependencies that need installing
-            # These can't be pre-built because macOS binaries don't work on Linux
-            # Check for actual .node binary, not just directory (FORCE_REINIT_DOORS may copy incompatible node_modules)
-            if grep -q '"better-sqlite3"' "$door_dir/package.json" 2>/dev/null; then
-                if [ ! -f "$door_dir/node_modules/better-sqlite3/build/Release/better_sqlite3.node" ]; then
-                    echo "[Entrypoint]   Installing dependencies for $door_name (has native modules)..."
-                    (cd "$door_dir" && rm -rf node_modules && npm install --omit=dev 2>&1 | tail -5) || echo "[Entrypoint]   Warning: npm install failed for $door_name"
-                    NATIVE_INSTALL_COUNT=$((NATIVE_INSTALL_COUNT + 1))
-                    # Force recreate SDK symlink after npm install (npm creates wrong relative symlink from file:../../sdk)
-                    mkdir -p "$sdk_link_dir"
-                    rm -f "$sdk_link"
-                    ln -s /app/sdk "$sdk_link"
-                    echo "[Entrypoint]   Recreated SDK symlink for $door_name (after npm install)"
-                fi
+            # Does this door need its dependencies installed?
+            #
+            # This used to ask only whether package.json mentioned
+            # better-sqlite3, so every OTHER door got the SDK symlink and no
+            # node_modules at all - and node_modules is excluded from the
+            # Docker build, so nothing else supplied them. WHIP declares
+            # xml2js and died with "Cannot find module 'xml2js'" the first
+            # time somebody opened it; any door with a plain npm dependency
+            # was in the same state, unnoticed until run.
+            #
+            # The decision lives in a script so it can be tested - see
+            # web/backend/tests/scripts/door-needs-deps.test.ts.
+            if sh /app/web/backend/scripts/door-needs-deps.sh "$door_dir"; then
+                echo "[Entrypoint]   Installing dependencies for $door_name..."
+                (cd "$door_dir" && rm -rf node_modules && npm install --omit=dev 2>&1 | tail -5) || echo "[Entrypoint]   Warning: npm install failed for $door_name"
+                NATIVE_INSTALL_COUNT=$((NATIVE_INSTALL_COUNT + 1))
+                # Force recreate SDK symlink after npm install (npm creates wrong relative symlink from file:../../sdk)
+                mkdir -p "$sdk_link_dir"
+                rm -f "$sdk_link"
+                ln -s /app/sdk "$sdk_link"
+                echo "[Entrypoint]   Recreated SDK symlink for $door_name (after npm install)"
             fi
 
             # Create SDK symlink if missing (for doors without native modules)
