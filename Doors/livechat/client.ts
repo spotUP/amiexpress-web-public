@@ -36,13 +36,33 @@ interface AudioLevels {
 }
 
 import {
-  pixelsPerChar,
   renderAscii,
   renderHalfblock,
   renderBraille,
   fitPreservingAspect,
-  pixelAspect,
 } from './video-encoders';
+// fitColorMemory is applied HERE, not left to the renderer: it returns a
+// NEW memory when the tile changes shape, and a caller that does not store
+// it back throws away the colour history on every frame at the new size -
+// which looks exactly like the shimmer the hysteresis was added to remove.
+import { createColorMemory, fitColorMemory, type ColorMemory } from './video-hysteresis';
+import { richCells, type RichFrame } from './video-cells';
+
+/**
+ * Source pixels per character cell, for the two-plane frame: the braille
+ * grid, which is the finest any render mode needs.
+ */
+const RICH_PIXELS_PER_CHAR = { px: 2, py: 4 };
+
+/**
+ * How wide a source pixel is relative to its height, at that grid.
+ *
+ * A terminal cell is about twice as tall as it is wide, and the 2x4 grid
+ * puts twice as many samples across as a 1x2 one - which cancels out, so
+ * the source pixels are square.
+ */
+const RICH_PIXEL_ASPECT = 1;
+import { encodeRichFrame, isKeyframeDue } from './video-codec';
 
 
 /**
@@ -74,6 +94,17 @@ class LiveChatClient {
   private videoStream: MediaStream | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private videoCanvas: HTMLCanvasElement | null = null;
+  /**
+   * What each cell was last coloured, so camera noise cannot re-encode a
+   * still picture from scratch every frame. Measured at 2x smaller frames
+   * and 4x better fidelity - see video-hysteresis.ts.
+   */
+  private colorMemory: ColorMemory | null = null;
+  /** The last frame we sent, so the next one can be a delta against it. */
+  private previousFrame: RichFrame | null = null;
+  /** Frames since the last full one, so receivers can always resync. */
+  private framesSinceKeyframe = 0;
+  private videoFrameErrors = 0;
   private videoFrameInterval: ReturnType<typeof setInterval> | null = null;
   /** True between the start request and the camera answering. */
   private videoStarting: boolean = false;
@@ -84,14 +115,9 @@ class LiveChatClient {
   private isStreaming: boolean = false;
   private isMuted: boolean = false;
   private isSpeaking: boolean = false;
+  /** Most recent microphone level, so 'speaking' can report how loudly. */
+  private lastMicLevel: number = 0;
   private audioLevels: AudioLevels = { input: 0, output: 0 };
-
-  // Audio playback for other users (using Web Audio API for continuous streaming)
-  private audioPlayers: Map<string | number, {
-    source: AudioBufferSourceNode | null;
-    gainNode: GainNode;
-    chunks: ArrayBuffer[];
-  }> = new Map();
 
   // UI sound effects bus (reverb + echo) — matches the /sdk/ preview
   // SoundEffects chain so chat clicks/hovers/mentions feel like the same
@@ -213,10 +239,10 @@ class LiveChatClient {
       this.stopVideoCapture();
     });
 
-    // Incoming audio from other users in voice channel
-    this.door.on('audio:data', (data: { userId: string | number; chunk: ArrayBuffer }) => {
-      this.playAudioChunk(data.userId, data.chunk);
-    });
+    // Incoming audio is played by VoiceCapture, which owns the microphone,
+    // the playback context and the per-speaker scheduling. This class used
+    // to subscribe as well and decode every packet a second time, which
+    // achieved nothing except a second failure per packet.
 
     // ==========================================================================
     // Door Lifecycle
@@ -422,9 +448,13 @@ class LiveChatClient {
     });
     this.voiceCapture.on('speaking', (speaking: boolean) => {
       this.isSpeaking = speaking;
-      this.door.emit('voice:speaking', { isSpeaking: speaking, audioLevel: 0 });
+      // The real level, not a hardcoded zero. Whoever draws a meter needs
+      // something to draw, and "am I actually being heard?" is the one
+      // question a voice UI has to answer.
+      this.door.emit('voice:speaking', { isSpeaking: speaking, audioLevel: this.lastMicLevel });
     });
     this.voiceCapture.on('level', (rms: number) => {
+      this.lastMicLevel = rms;
       this.audioLevels = { input: rms, output: 0 };
       this.door.emit('audio:levels', this.audioLevels);
     });
@@ -464,84 +494,6 @@ class LiveChatClient {
   // Audio Playback from Other Users
   // ============================================================================
 
-  /**
-   * Play incoming audio chunk from another user
-   * Uses Web Audio API for better streaming performance
-   */
-  private async playAudioChunk(userId: string | number, chunk: ArrayBuffer): Promise<void> {
-    if (!this.audioContext) {
-      console.debug('[LiveChatClient] AudioContext not ready');
-      return;
-    }
-
-    try {
-      // Get or create player state for this user
-      let playerState = this.audioPlayers.get(userId);
-      if (!playerState) {
-        const gainNode = this.audioContext.createGain();
-        gainNode.gain.value = 0.8;
-        gainNode.connect(this.audioContext.destination);
-
-        playerState = {
-          source: null,
-          gainNode,
-          chunks: [],
-        };
-        this.audioPlayers.set(userId, playerState);
-      }
-
-      // Decode the audio chunk
-      const audioBuffer = await this.audioContext.decodeAudioData(chunk.slice(0));
-
-      // Create and play the audio buffer
-      const source = this.audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(playerState.gainNode);
-
-      // Start playback immediately
-      source.start(0);
-
-      // Store reference (so we can stop it if needed)
-      playerState.source = source;
-
-      // Clean up when finished
-      source.onended = () => {
-        if (playerState && playerState.source === source) {
-          playerState.source = null;
-        }
-      };
-
-    } catch (error) {
-      console.debug('[LiveChatClient] Failed to decode/play audio chunk:', error);
-
-      // Fallback to simple Audio element for compatibility
-      this.playAudioChunkFallback(userId, chunk);
-    }
-  }
-
-  /**
-   * Fallback audio playback using HTML Audio element
-   * Used if Web Audio API decoding fails
-   */
-  private playAudioChunkFallback(userId: string | number, chunk: ArrayBuffer): void {
-    try {
-      const blob = new Blob([chunk], { type: 'audio/webm;codecs=opus' });
-      const url = URL.createObjectURL(blob);
-
-      const audio = new Audio(url);
-      audio.volume = 0.8;
-      audio.play().catch((error) => {
-        console.debug('[LiveChatClient] Fallback playback failed:', error);
-      });
-
-      // Clean up blob URL after playback
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-      };
-    } catch (error) {
-      console.error('[LiveChatClient] Fallback playback error:', error);
-    }
-  }
 
   // ==========================================================================
   // Video Capture (Webcam)
@@ -605,7 +557,15 @@ class LiveChatClient {
       const charW = options.width || 80;
       const charH = options.height || 24;
       const mode = (options.mode as string) || (options.colored ? 'color' : 'ascii');
-      const { px, py } = pixelsPerChar(mode);
+    // ALWAYS braille resolution: two pixels across, four down, per cell.
+    //
+    // The canvas used to be sized per render mode, because each mode read
+    // the pixels its own way. The frame now carries both planes so the
+    // VIEWER can choose the mode, and the dot plane needs the finest grid
+    // any mode uses - 2x4. Sizing the canvas for half-block's 1x2 while
+    // sampling a 2x4 grid reads past the end of every row, which arrives as
+    // horizontal streaks instead of a picture.
+      const { px, py } = RICH_PIXELS_PER_CHAR;
       this.videoCanvas.width = charW * px;
       this.videoCanvas.height = charH * py;
 
@@ -633,8 +593,27 @@ class LiveChatClient {
       const tick = () => {
         if (!this.videoStream) return;
 
-        const shape = this.videoShape;
-        const bytes = this.sendVideoFrame(shape.mode, shape.charW, shape.charH) ?? 0;
+        // One bad frame must not end the stream.
+        //
+        // The loop reschedules itself, so an exception thrown while
+        // encoding did not just drop a frame - it broke the chain and video
+        // stopped for good, silently, with the tile left saying "waiting
+        // for video". Report it once and keep going.
+        let bytes = 0;
+        try {
+          const shape = this.videoShape;
+          bytes = this.sendVideoFrame(shape.mode, shape.charW, shape.charH) ?? 0;
+        } catch (error) {
+          this.videoFrameErrors++;
+          if (this.videoFrameErrors === 1 || this.videoFrameErrors % 100 === 0) {
+            const message = (error as Error)?.message ?? String(error);
+            console.error('[LiveChatClient] Frame encode failed:', error);
+            // Send it where it can be read without a browser console open.
+            this.door.emit('video:error', {
+              message: `frame encode failed (${this.videoFrameErrors}): ${message}`,
+            });
+          }
+        }
 
         // How long this frame's size says we should wait, at the budget.
         const budgetMs = (bytes / VIDEO_BYTES_PER_SECOND) * 1000;
@@ -674,7 +653,15 @@ class LiveChatClient {
       return;
     }
 
-    const { px, py } = pixelsPerChar(mode);
+    // ALWAYS braille resolution: two pixels across, four down, per cell.
+    //
+    // The canvas used to be sized per render mode, because each mode read
+    // the pixels its own way. The frame now carries both planes so the
+    // VIEWER can choose the mode, and the dot plane needs the finest grid
+    // any mode uses - 2x4. Sizing the canvas for half-block's 1x2 while
+    // sampling a 2x4 grid reads past the end of every row, which arrives as
+    // horizontal streaks instead of a picture.
+    const { px, py } = RICH_PIXELS_PER_CHAR;
     if (this.videoCanvas) {
       this.videoCanvas.width = charW * px;
       this.videoCanvas.height = charH * py;
@@ -701,7 +688,7 @@ class LiveChatClient {
       this.videoElement.videoHeight,
       this.videoCanvas.width,
       this.videoCanvas.height,
-      pixelAspect(mode)
+      RICH_PIXEL_ASPECT
     );
 
     // Black behind it, so the letterboxing is empty rather than whatever the
@@ -726,24 +713,42 @@ class LiveChatClient {
       this.videoCanvas.width,
       this.videoCanvas.height,
     );
-    let frame: string;
-    switch (mode) {
-      case 'braille':
-        frame = renderBraille(imgData, charW, charH);
-        break;
-      case 'halfblock':
-        frame = renderHalfblock(imgData, charW, charH);
-        break;
-      case 'color':
-        frame = renderAscii(imgData, charW, charH, true);
-        break;
-      case 'ascii':
-      default:
-        frame = renderAscii(imgData, charW, charH, false);
-        break;
-    }
-    this.door.emit('video:frame', { frame });
-    return frame.length;
+    // Cells, not markup.
+    //
+    // The picture used to be turned into blessed tags here and sent as
+    // text: twenty-four bytes every time the colour changed, the whole
+    // picture every frame. One byte per cell, run-length encoded, with
+    // unchanged stretches skipped against the last frame, is an order of
+    // magnitude less - and since the client paces itself on bytes, that is
+    // an order of magnitude more frames per second.
+    this.colorMemory = fitColorMemory(
+      this.colorMemory ?? createColorMemory(charW, charH), charW, charH);
+
+    // Both planes, so the mode is the VIEWER's choice.
+    //
+    // Each mode used to have its own cell format, which made render mode a
+    // property of the sender: cycling it changed what other people saw of
+    // you, not what you saw of them. Dots and colours together can be drawn
+    // as any of the modes, so everybody picks their own.
+    const frame = richCells(imgData, charW, charH, this.colorMemory);
+
+    // A delta is only valid against a frame of the same shape, and only
+    // against a base the receiver actually holds. A resize forces a full
+    // frame; so does the keyframe interval, which is what lets a viewer who
+    // joined mid-stream - or missed a packet - recover instead of staring
+    // at cells no delta ever mentions again.
+    const sameShape = this.previousFrame !== null
+      && this.previousFrame.dots.length === frame.dots.length;
+    const keyframe = isKeyframeDue(this.framesSinceKeyframe) || !sameShape;
+
+    const packet = encodeRichFrame(
+      frame, charW, charH, keyframe ? null : this.previousFrame
+    );
+    this.previousFrame = frame;
+    this.framesSinceKeyframe = keyframe ? 1 : this.framesSinceKeyframe + 1;
+
+    this.door.emit('video:cells', packet);
+    return packet.byteLength;
   }
 
   private stopVideoCapture(): void {
@@ -769,6 +774,13 @@ class LiveChatClient {
       this.videoElement.remove();
       this.videoElement = null;
     }
+    // Forget the per-cell colours: the next stream may be a different
+    // size, a different mode, or a different scene entirely. The frame
+    // history goes with them, so the next stream opens with a full frame.
+    this.colorMemory = null;
+    this.previousFrame = null;
+    this.framesSinceKeyframe = 0;
+
     this.door.emit('video:stopped');
     console.log('[LiveChatClient] Video capture stopped');
   }

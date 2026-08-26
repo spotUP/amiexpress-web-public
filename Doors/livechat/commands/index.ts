@@ -6,6 +6,7 @@ import { whoCmd, whoisCmd, awayCmd, backCmd, statusCmd, nickCmd } from './user';
 import { kickCmd, banCmd, unbanCmd, muteCmd, opCmd } from './moderation';
 import { helpCmd, quitCmd, clearCmd, searchCmd, pinCmd, pinsCmd } from './utility';
 import { soundsCmd, compactCmd, timestampsCmd } from './prefs';
+import { micCmd } from './mic';
 import { reactCmd, unreactCmd, reactionsCmd, thumbsUpCmd, heartCmd } from './reactions';
 import { voiceCmd, deafenCmd, undeafenCmd } from './voice';
 import { motdCmd, inviteCmd, uninviteCmd, modeCmd } from './mode';
@@ -25,7 +26,7 @@ export function createCommandRegistry(): CommandRegistry {
   [quitCmd, clearCmd, searchCmd, pinCmd, pinsCmd].forEach(c => r.register(c));
   r.register(helpCmd(r));
   // Prefs
-  [soundsCmd, compactCmd, timestampsCmd].forEach(c => r.register(c));
+  [soundsCmd, compactCmd, timestampsCmd, micCmd].forEach(c => r.register(c));
   // Note: eventsCmd is registered in app.ts after dependencies are available
   // Reactions
   [reactCmd, unreactCmd, reactionsCmd, thumbsUpCmd, heartCmd].forEach(c => r.register(c));

@@ -103,6 +103,11 @@ export class ClientDoor extends EventEmitter {
     'video:stopped',
     'video:error',
     'video:frame',
+    // Compact binary frames: one byte per cell, deltas against the last.
+    'video:cells',
+    // Which microphone the browser actually opened, and what else exists.
+    'audio:device',
+    'audio:devices',
   ]);
 
   /**
@@ -110,6 +115,26 @@ export class ClientDoor extends EventEmitter {
    * This allows client code to use `door.emit('audio:levels', data)` and have
    * it automatically sent to the server without requiring a separate method.
    */
+  /**
+   * Deliver an event to local listeners WITHOUT sending it to the server.
+   *
+   * Inbound events must use this. `emit` forwards anything in
+   * SERVER_FORWARD_EVENTS back to the server, and several of those events
+   * are also things the server SENDS us - video:frame and audio:data among
+   * them. Re-emitting one on arrival therefore bounced it straight back,
+   * the server rebroadcast it to the whole room, and every listening
+   * browser bounced it again: an amplification loop that multiplied the
+   * traffic on every hop.
+   *
+   * It corrupted the picture as well as the bandwidth. The echo carried the
+   * ECHOER's identity, so a viewer re-broadcast the speaker's frames as
+   * their own, and each tile alternated between two people - seen as
+   * "every second frame flickers".
+   */
+  private emitLocal(event: string, ...args: any[]): boolean {
+    return super.emit(event, ...args);
+  }
+
   public emit(event: string, ...args: any[]): boolean {
     // Forward to server if this is a server-bound event
     if (ClientDoor.SERVER_FORWARD_EVENTS.has(event)) {
@@ -216,45 +241,52 @@ export class ClientDoor extends EventEmitter {
         // Audio playback events from hybrid doors
         socket.on('audio:play', (data: any) => {
           console.log('[ClientDoor] Received audio:play event:', data);
-          this.emit('audio:play', data);
+          this.emitLocal('audio:play', data);
         });
         socket.on('audio:set-enabled', (data: any) => {
-          this.emit('audio:set-enabled', data);
+          this.emitLocal('audio:set-enabled', data);
         });
         socket.on('audio:set-volume', (data: any) => {
-          this.emit('audio:set-volume', data);
+          this.emitLocal('audio:set-volume', data);
         });
         // Audio streaming events for mic demos/voice chat
         socket.on('audio:start-streaming', (data: any) => {
           console.log('[ClientDoor] Received audio:start-streaming event:', data);
-          this.emit('audio:start-streaming', data);
+          this.emitLocal('audio:start-streaming', data);
         });
         socket.on('audio:stop-streaming', (data: any) => {
           console.log('[ClientDoor] Received audio:stop-streaming event:', data);
-          this.emit('audio:stop-streaming', data);
+          this.emitLocal('audio:stop-streaming', data);
         });
         socket.on('audio:mute', (data: any) => {
-          this.emit('audio:mute', data);
+          this.emitLocal('audio:mute', data);
         });
         // Video streaming events for webcam in voice chat
         socket.on('video:start-stream', (data: any) => {
           console.log('[ClientDoor] Received video:start-stream event:', data);
-          this.emit('video:start-stream', data);
+          this.emitLocal('video:start-stream', data);
         });
         socket.on('video:stop-stream', (data: any) => {
           console.log('[ClientDoor] Received video:stop-stream event:', data);
-          this.emit('video:stop-stream', data);
+          this.emitLocal('video:stop-stream', data);
         });
         socket.on('video:frame', (data: any) => {
-          this.emit('video:frame', data);
+          this.emitLocal('video:frame', data);
+        });
+        socket.on('video:cells', (data: any) => {
+          this.emitLocal('video:cells', data);
         });
         // Audio data from other users (for voice chat playback)
         socket.on('audio:data', (data: any) => {
-          this.emit('audio:data', data);
+          this.emitLocal('audio:data', data);
+        });
+        // The door asking for a different microphone.
+        socket.on('audio:select-device', (data: any) => {
+          this.emitLocal('audio:select-device', data);
         });
         // Voice speaking state from peers (server -> client browser)
         socket.on('voice:speaking', (data: any) => {
-          this.emit('voice:speaking', data);
+          this.emitLocal('voice:speaking', data);
         });
       }
 

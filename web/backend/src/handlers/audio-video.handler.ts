@@ -220,17 +220,25 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
     socket.emit('audio:levels', levels);
   });
 
+  // Which microphone the browser opened. Logged, not relayed: it answers
+  // "are we even listening to the right device?" without a browser console.
+  socket.on('audio:device', (info: any) => {
+console.log('[Audio][device]', info?.label ?? 'unknown', JSON.stringify(info?.settings ?? {}));
+  });
+
   // Relay audio chunks to other participants
   socket.on('audio:data', (chunk: ArrayBuffer) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    // Echo back to originating socket for local VU meters/demos
-    socket.emit('audio:data', {
-      userId: session.user?.id,
-      chunk
-    });
-
+    // No echo back to the sender.
+    //
+    // This used to send your own audio to you "for local VU meters", which
+    // was harmless only because nothing could decode it. Now that packets
+    // actually play, echoing them means hearing yourself a fraction of a
+    // second late - the single most disorienting thing a voice call can do.
+    // The level meter comes from the local analyser, not from this, so
+    // nothing needs the echo, and dropping it halves the traffic.
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
@@ -1044,8 +1052,8 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
       frame: trimmedFrame
     };
 
-    // Always send frame back to originating socket (for standalone demos)
-    socket.emit('video:frame', frameData);
+    // No frame back to the sender: it costs exactly as much as somebody
+    // else's picture and only shows you yourself.
 
     // Also broadcast to voice room if in one
     if (session) {
@@ -1057,6 +1065,23 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
     }
   });
 
+  // Relay compact binary frames - one byte per cell, deltas against the
+  // previous frame. Same routing as the text frames below; the payload is
+  // opaque here, since only the door that draws it needs to understand it.
+  socket.on('video:cells', (packet: ArrayBuffer) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
+    if (!roomId) return;
+
+    socket.to(`voice:${roomId}`).emit('video:cells', {
+      userId: session.user?.id,
+      username: session.user?.username,
+      packet,
+    });
+  });
+
   // Relay pre-rendered video frames (ASCII) to other participants
   socket.on('video:frame', (data: { streamId: string, frame: string }) => {
     const session = getSessionBySocketId(socket.id);
@@ -1066,8 +1091,13 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
     if (!roomId) return;
 
     const voiceRoomId = `voice:${roomId}`;
-    // Broadcast to everyone in the voice room (including sender)
-    io.to(voiceRoomId).emit('video:frame', {
+    // Everyone EXCEPT the sender.
+    //
+    // Sending a frame back to the browser that just produced it doubled the
+    // video traffic to pay for a self-preview nobody asked for - you can
+    // already see yourself in the mirror, and the picture cost the same as
+    // everybody else's. `socket.to` excludes the sender; `io.to` did not.
+    socket.to(voiceRoomId).emit('video:frame', {
       userId: session.user?.id,
       username: session.user?.username,
       streamId: data.streamId,

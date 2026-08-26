@@ -95,6 +95,15 @@ export function createSubmitHandler(
           return;
         }
 
+        // Switch microphone, when /mic named one.
+        //
+        // The browser owns the device; the door can only ask. It travels as
+        // an event rather than a return value because reopening the input
+        // means stopping and restarting capture.
+        if (r.data?.selectMicDeviceId) {
+          socket.emit('audio:select-device', { deviceId: r.data.selectMicDeviceId });
+        }
+
         // Handle various commands
         if (r.action === 'join' && r.data?.channel) {
           // Check if this is a voice channel (via callback to server.ts)
