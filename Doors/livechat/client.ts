@@ -61,6 +61,10 @@ class LiveChatClient {
   private videoElement: HTMLVideoElement | null = null;
   private videoCanvas: HTMLCanvasElement | null = null;
   private videoFrameInterval: ReturnType<typeof setInterval> | null = null;
+  /** True between the start request and the camera answering. */
+  private videoStarting: boolean = false;
+  /** The shape the running capture encodes to; read fresh on every frame. */
+  private videoShape: { mode: string; charW: number; charH: number } = { mode: 'ascii', charW: 80, charH: 24 };
 
   // Voice state
   private isStreaming: boolean = false;
@@ -510,10 +514,25 @@ class LiveChatClient {
   // ==========================================================================
 
   private async startVideoCapture(options: any): Promise<void> {
+    // Already running? Re-size the capture rather than starting a SECOND
+    // one. Two captures at different sizes both wrote frames into the same
+    // tile and the view alternated between them - which is the flicker
+    // reported as "every second frame is broken", visible only in the 80x25
+    // view because that is where the tile size changes (diagnosed from
+    // frames arriving as 54x15 and 27x8 in turn, 2026-08-26).
     if (this.videoStream) {
-      console.log('[LiveChatClient] Video already capturing');
+      this.resizeVideoCapture(options);
       return;
     }
+
+    // The old guard tested videoStream, which is not assigned until AFTER
+    // getUserMedia resolves - so two starts in quick succession both sailed
+    // past it and each set up its own stream and timer.
+    if (this.videoStarting) {
+      console.log('[LiveChatClient] Video already starting');
+      return;
+    }
+    this.videoStarting = true;
 
     try {
       console.log('[LiveChatClient] Requesting camera access...');
@@ -556,20 +575,55 @@ class LiveChatClient {
       this.videoCanvas.width = charW * px;
       this.videoCanvas.height = charH * py;
 
-      // Send frames at configured FPS
+      // Send frames at configured FPS. Never leave a previous timer running:
+      // the handle lives in one field, so overwriting it orphaned the old
+      // interval, which kept sending frames at the old size for ever.
+      if (this.videoFrameInterval) {
+        clearInterval(this.videoFrameInterval);
+        this.videoFrameInterval = null;
+      }
+      this.videoShape = { mode, charW, charH };
       const fps = options.fps || 10;
       const intervalMs = Math.max(50, Math.floor(1000 / fps));
       this.videoFrameInterval = setInterval(() => {
-        this.sendVideoFrame(mode, charW, charH);
+        const shape = this.videoShape;
+        this.sendVideoFrame(shape.mode, shape.charW, shape.charH);
       }, intervalMs);
 
       this.door.emit('video:started');
-      console.log('[LiveChatClient] Video capture started');
+      console.log(`[LiveChatClient] Video capture started (${charW}x${charH} ${mode})`);
     } catch (error) {
       console.error('[LiveChatClient] Failed to start video:', error);
       this.door.emit('video:error', { message: (error as Error).message });
       this.stopVideoCapture();
+    } finally {
+      this.videoStarting = false;
     }
+  }
+
+  /**
+   * Point an existing capture at a new tile size or render mode.
+   *
+   * One capture, one timer: the frame shape is read from videoShape on every
+   * tick, so changing it here takes effect on the next frame without
+   * touching the camera or the timer.
+   */
+  private resizeVideoCapture(options: any): void {
+    const charW = options.width || this.videoShape.charW;
+    const charH = options.height || this.videoShape.charH;
+    const mode = (options.mode as string) || (options.colored ? 'color' : this.videoShape.mode);
+
+    if (charW === this.videoShape.charW && charH === this.videoShape.charH && mode === this.videoShape.mode) {
+      return;
+    }
+
+    const { px, py } = pixelsPerChar(mode);
+    if (this.videoCanvas) {
+      this.videoCanvas.width = charW * px;
+      this.videoCanvas.height = charH * py;
+    }
+    this.videoShape = { mode, charW, charH };
+    console.log(`[LiveChatClient] Video capture resized to ${charW}x${charH} ${mode}`);
   }
 
   private sendVideoFrame(mode: string, charW: number, charH: number): void {
