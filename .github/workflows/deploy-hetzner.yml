@@ -3,6 +3,20 @@
   on:
     push:
       branches: [main]
+      # Documentation does not run on the server, and a deploy recreates
+      # the container - which drops every connected session. On 2026-08-26
+      # eight deploys went out in 46 minutes, three of them for notes and
+      # handoffs, and the user was kicked out of /chat over and over while
+      # trying to test. Writing something down should not disconnect
+      # everybody.
+      #
+      # Use workflow_dispatch to deploy deliberately when a docs change
+      # does need to go out.
+      paths-ignore:
+        - 'thoughts/**'
+        - '**/*.md'
+        - 'docs/**'
+        - 'LICENSE'
     workflow_dispatch:
 
   # Serialize deploys. Without this, two pushes in quick succession
