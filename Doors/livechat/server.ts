@@ -60,6 +60,7 @@ import { CommandHandler } from './handlers/command';
 import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
+import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, createEmojiButton, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
 import { createChatLog, updateChatHeader as updateChatHeaderFn, TYPING_HEIGHT } from './ui/chat-log';
@@ -945,74 +946,78 @@ export async function createApp(session: DoorSession) {
 
   // ========== RESPONSIVE LAYOUT ==========
   // Dynamic layout engine that handles screen resize, sidebar drag/resize, and docking
+  /**
+   * True when the sidebar was hidden because the window got too narrow, not
+   * because the user hid it - so it can come back when there is room again.
+   */
+  let sidebarSqueezedOut = false;
+
   function updateLayout() {
     const width = (screen as any).width;
     const height = (screen as any).height;
-    
+
     // Validate dimensions
     if (!width || !height || width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height)) {
       return;
     }
 
-    // Calculate available space
-    const menuHeight = MENU_HEIGHT;
-    const footerHeight = STATUS_HEIGHT + INPUT_HEIGHT;
-    const contentHeight = height - menuHeight - footerHeight;
+    // The geometry is SOLVED, not computed - see ui/layout-solver.ts. Plain
+    // subtraction breaks at awkward window shapes, and a panel handed a
+    // negative height draws over its neighbours instead of shrinking, which
+    // is how the input box ended up hidden under the chat panel.
+    const solved = solveLayout(
+      {
+        width,
+        height,
+        // A sidebar hidden only because the window got narrow still counts
+        // as wanted - otherwise it could never come back when there is room.
+        sidebarVisible: !sidebarPanel.hidden || sidebarSqueezedOut,
+        sidebarWidth: sidebarPanel.width as number,
+        sidebarDock: sidebarPanel.getDockPosition(),
+      },
+      {
+        menuHeight: MENU_HEIGHT,
+        statusHeight: STATUS_HEIGHT,
+        inputHeight: INPUT_HEIGHT,
+        emojiButtonWidth: EMOJI_BUTTON_WIDTH,
+      }
+    );
 
-    // Sidebar state
-    const sidebarVisible = !sidebarPanel.hidden;
-    const sidebarDock = sidebarPanel.getDockPosition();
-    const sidebarW = sidebarVisible ? (sidebarPanel.width as number) : 0;
-    
     // 1. Sidebar Panel Layout
-    // We only force dimensions/position if docked. Floating panels manage themselves.
-    if (sidebarVisible) {
-        if (sidebarDock === 'left') {
-            sidebarPanel.position.left = 0;
-            sidebarPanel.position.top = menuHeight;
-            sidebarPanel.position.height = contentHeight;
-        } else if (sidebarDock === 'right') {
-            sidebarPanel.position.left = width - sidebarW;
-            sidebarPanel.position.top = menuHeight;
-            sidebarPanel.position.height = contentHeight;
-        } else if (sidebarDock === 'top') {
-            // If docked top, we might need to adjust contentHeight, but let's keep it simple for now
-            // sidebarPanel.position.top = menuHeight;
-        }
+    // Only docked panels are placed; floating ones manage themselves. A
+    // sidebar the window has no room for is hidden rather than squeezed.
+    if (solved.sidebar) {
+      sidebarPanel.position.left = solved.sidebar.left;
+      sidebarPanel.position.top = solved.sidebar.top;
+      sidebarPanel.position.height = solved.sidebar.height;
+      if (sidebarSqueezedOut) {
+        // There is room again.
+        sidebarSqueezedOut = false;
+        sidebarPanel.show();
+      }
+    } else if (!sidebarPanel.hidden) {
+      sidebarSqueezedOut = true;
+      sidebarPanel.hide();
     }
 
     // 2. Chat Panel Layout
-    let chatLeft = 0;
-    let chatWidth = width;
-
-    if (sidebarVisible) {
-        if (sidebarDock === 'left') {
-            chatLeft = sidebarW;
-            chatWidth = width - sidebarW;
-        } else if (sidebarDock === 'right') {
-            chatLeft = 0;
-            chatWidth = width - sidebarW;
-        }
-        // If floating or top/bottom, chat takes full width (sidebar floats on top)
-    }
-
-    chatPanel.position.left = chatLeft;
-    chatPanel.position.top = menuHeight;
-    chatPanel.position.width = chatWidth;
-    chatPanel.position.height = contentHeight;
+    chatPanel.position.left = solved.chat.left;
+    chatPanel.position.top = solved.chat.top;
+    chatPanel.position.width = solved.chat.width;
+    chatPanel.position.height = solved.chat.height;
 
     // 3. Inner Chat Log Layout
-    // chatWidth - 3, not - 2: the panel's two border columns plus one column
-    // for the scrollbar, which Element draws at the log's own last column.
-    chatLog.position.width = Math.max(1, chatWidth - 3);
-    chatLog.position.height = Math.max(1, contentHeight - 2);
+    chatLog.position.width = solved.chatLog.width;
+    chatLog.position.height = solved.chatLog.height;
 
     // 4. Footer & Overlays
-    statusBar.position.width = width;
-    inputBox.position.width = width - EMOJI_BUTTON_WIDTH;
-    emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;
+    statusBar.position.width = solved.statusBar.width;
+    inputBox.position.width = solved.input.width;
+    emojiButton.position.left = solved.emojiButton.left;
+    if (solved.emojiButton.visible) emojiButton.show();
+    else emojiButton.hide();
     menuBar.element.position.width = width;
-    
+
     // Command suggestions
     (commandSuggestions as any).width = width;
     commandSuggestions.position.width = width;
@@ -1023,9 +1028,15 @@ export async function createApp(session: DoorSession) {
       ghostText.setFront();
     }
 
+    // The footer sits ON TOP of the chat panel, so a content area that has
+    // been squeezed can never hide the input box.
+    inputBox.setFront();
+    emojiButton.setFront();
+    statusBar.setFront();
+
     // Typing bar (hidden but updated)
-    typingBar.position.left = chatLeft;
-    typingBar.position.width = chatWidth;
+    typingBar.position.left = solved.chat.left;
+    typingBar.position.width = solved.chat.width;
 
     // 5. Invalidate Caches
     invalidateCache(sidebarPanel);
