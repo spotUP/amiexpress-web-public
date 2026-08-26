@@ -189,11 +189,40 @@ export default function ChatTerminal() {
       }
 
       console.log(`[ChatTerminal] Final size: ${cols}x${rows} (mode: ${terminalMode})`);
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('terminal-size', { cols, rows });
-        console.log(`[ChatTerminal] Emitted terminal-size event`);
-      }
+      // Telling the door is DEBOUNCED, not throttled - see announceSize.
+      announceSize(cols, rows);
     };
+
+    /**
+     * Tell the door the new size, once the dragging has stopped.
+     *
+     * Fitting xterm is cheap and local, so it can track the window at any
+     * rate. Telling the DOOR is not: every size it hears costs a whole-screen
+     * repaint, and at the old 16ms throttle a single drag sent about sixty of
+     * them. They landed while the terminal was still reflowing its own cell
+     * grid, which stacked partial frames at different scales on top of each
+     * other - the reported "layout really breaks, then pops back after some
+     * seconds". Waiting for the size to settle means the door paints once,
+     * at the size the window actually ended up.
+     */
+    let announceTimer: number | null = null;
+    let announcedSize = '';
+    const ANNOUNCE_SETTLE_MS = 120;
+
+    function announceSize(cols: number, rows: number) {
+      if (announceTimer) clearTimeout(announceTimer);
+      announceTimer = window.setTimeout(() => {
+        announceTimer = null;
+        const size = `${cols}x${rows}`;
+        // A resize that ends where it started costs the door nothing.
+        if (size === announcedSize) return;
+        announcedSize = size;
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('terminal-size', { cols, rows });
+          console.log(`[ChatTerminal] Emitted terminal-size ${size}`);
+        }
+      }, ANNOUNCE_SETTLE_MS);
+    }
 
     // Initial fit after a brief delay for DOM layout
     setTimeout(fitTerminal, 100);

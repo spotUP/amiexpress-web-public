@@ -93,6 +93,26 @@ describe('after a resize', () => {
     expect(written.join('')).toBe('');
   });
 
+  it('clears the terminal, growing as well as shrinking', () => {
+    // The clear used to fire only when shrinking, on the theory that growing
+    // can only reveal blank space. It cannot: the terminal reflows its own
+    // cell grid at its own pace, so rows painted before the change survive
+    // underneath the new layout at a different scale. A screenshot of a
+    // resize drag showed three copies of the UI stacked at three cell sizes.
+    const CLEAR = '\x1b[2J';
+
+    for (const [w, h] of [[100, 30], [60, 20], [80, 40]] as [number, number][]) {
+      const { screen, written } = screenWithCapture(80, 24);
+      panel(screen);
+      screen.render();
+
+      written.length = 0;
+      screen.resize(w, h);
+
+      expect(written.join('')).toContain(CLEAR);
+    }
+  });
+
   it('tells its elements to lay out again', () => {
     // The door repositions its panels from this event; it must arrive
     // before the repaint, or the repaint draws the old layout.

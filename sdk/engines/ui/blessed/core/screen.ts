@@ -2522,8 +2522,6 @@ export class Screen extends Element {
       return; // No change
     }
 
-    const wasShrinking = cols < this._width || rows < this._height;
-
     // Enable responsive mode if resizing to wider than 80 columns
     if (cols > 80) {
       this._responsive = true;
@@ -2534,12 +2532,18 @@ export class Screen extends Element {
     this.program.cols = cols;
     this.program.rows = rows;
 
-    // When shrinking, clear the terminal first to prevent line wrap artifacts
-    // The old content rendered at larger width gets incorrectly wrapped otherwise
-    if (wasShrinking) {
-      // Clear entire screen and move cursor to home
-      this.program.write(ESC + '[2J' + ESC + '[H');
-    }
+    // Clear the terminal, whichever way it changed.
+    //
+    // This used to fire only when SHRINKING, on the theory that growing can
+    // only reveal blank space. It cannot: the terminal reflows its own cell
+    // grid at its own pace, so rows painted before the change survive
+    // underneath the new layout at a different scale. A screenshot of a
+    // resize drag on /chat showed three copies of the UI stacked at three
+    // different cell sizes (2026-08-26).
+    //
+    // Whatever the terminal is showing after a resize, it is not what we
+    // drew - so drop all of it and repaint from a known-empty screen.
+    this.program.write(ESC + '[2J' + ESC + '[H');
 
     // Reallocate buffers for new size
     this.realloc();
