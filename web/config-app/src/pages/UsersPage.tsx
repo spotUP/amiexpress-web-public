@@ -30,6 +30,14 @@ const EMPTY_USERS: BbsUser[] = [];
 interface UserFormData {
   username: string;
   password: string;
+  /**
+   * Typed a second time, and never sent anywhere.
+   *
+   * A sysop setting someone else's password cannot see what they typed and
+   * will not be the one who finds out it was wrong - the user will, when
+   * they cannot log in.
+   */
+  confirmPassword: string;
   realname: string;
   location: string;
   phone: string;
@@ -52,6 +60,7 @@ export function UsersPage() {
   const [formData, setFormData] = useState<UserFormData>({
     username: '',
     password: '',
+    confirmPassword: '',
     realname: '',
     location: '',
     phone: '',
@@ -109,6 +118,7 @@ export function UsersPage() {
     setFormData({
       username: '',
       password: '',
+      confirmPassword: '',
       realname: '',
       location: '',
       phone: '',
@@ -129,6 +139,7 @@ export function UsersPage() {
     setFormData({
       username: user.username,
       password: '', // Password field left empty for editing
+      confirmPassword: '',
       realname: user.realname || '',
       location: user.location || '',
       phone: user.phone || '',
@@ -150,7 +161,16 @@ export function UsersPage() {
       return;
     }
 
+    // A typo here locks somebody out of their own account, and the person
+    // typing it is not the person who finds out.
+    if (formData.password && formData.password !== formData.confirmPassword) {
+      showError('The passwords do not match');
+      return;
+    }
+
     const submitData = { ...formData };
+    // The confirmation never leaves this form.
+    delete (submitData as any).confirmPassword;
     // Remove password from updates if empty (for edits)
     if (editingUser && !submitData.password) {
       delete (submitData as any).password;
@@ -265,7 +285,13 @@ export function UsersPage() {
     {
       key: 'time',
       header: 'Time',
-      render: (user) => <span className="text-bbs-text">{user.timeLimit} min</span>,
+      // -1 is this project's "unlimited" (see database/types.ts), and showing
+      // it raw reads as a bug rather than as a setting.
+      render: (user) => (
+        <span className="text-bbs-text">
+          {user.timeLimit < 0 ? 'Unlimited' : `${user.timeLimit} min`}
+        </span>
+      ),
     },
     {
       key: 'actions',
@@ -414,6 +440,24 @@ export function UsersPage() {
                 </div>
 
                 <div>
+                  <label htmlFor="confirmPassword" className="label">
+                    Confirm Password {!editingUser && '*'}
+                  </label>
+                  <input
+                    id="confirmPassword"
+                    type="password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    className="input-field w-full"
+                    required={!editingUser}
+                    placeholder={editingUser ? 'Repeat the new password' : ''}
+                  />
+                  {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                    <p className="text-xs text-bbs-error mt-1">The passwords do not match</p>
+                  )}
+                </div>
+
+                <div>
                   <label htmlFor="realname" className="label">
                     Real Name
                   </label>
@@ -493,14 +537,20 @@ export function UsersPage() {
                   <input
                     id="timeLimit"
                     type="number"
-                    min="0"
+                    // -1 is unlimited, so the field must accept it; min="0"
+                    // made the browser reject the value the BBS itself uses.
+                    min="-1"
                     value={formData.timeLimit}
-                    onChange={(e) =>
-                      setFormData({ ...formData, timeLimit: parseInt(e.target.value, 10) })
-                    }
+                    onChange={(e) => {
+                      const parsed = parseInt(e.target.value, 10);
+                      setFormData({ ...formData, timeLimit: Number.isNaN(parsed) ? 0 : parsed });
+                    }}
                     className="input-field w-full"
                     required
                   />
+                  <p className="text-xs text-bbs-muted mt-1">
+                    -1 for unlimited time.
+                  </p>
                 </div>
 
                 <div className="md:col-span-2">

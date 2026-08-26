@@ -7,6 +7,12 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+// bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
+// what package.json declares; this file alone required the NATIVE bcrypt,
+// which is not a dependency - so every password written through the admin
+// API threw "Cannot find module 'bcrypt'" in the container. The two produce
+// interchangeable hashes, so existing passwords still verify.
+import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '../services/config.service';
 import { ConferenceSetupService } from '../services/conference-setup.service';
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
@@ -1273,7 +1279,6 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
       };
 
       // Hash password
-      const bcrypt = require('bcrypt');
       const passwordHash = await bcrypt.hash(password, 10);
 
       // Create user with default values
@@ -1374,8 +1379,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
 
         // Handle password update
         if (password) {
-          const bcrypt = require('bcrypt');
-          updatedUser.passwordHash = await bcrypt.hash(password, 10);
+              updatedUser.passwordHash = await bcrypt.hash(password, 10);
         }
 
         // Write back to disk
@@ -1390,8 +1394,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
       // Otherwise, it's a database UUID - use database operations
       // If password is being updated, hash it
       if (password) {
-        const bcrypt = require('bcrypt');
-        updates.passwordHash = await bcrypt.hash(password, 10);
+          updates.passwordHash = await bcrypt.hash(password, 10);
       }
 
       await database.updateUser(id, updates);
