@@ -156,7 +156,6 @@ class VideoGrid {
         const id = String(userId);
         this.lastFrames.set(id, frame);
         const tile = this.tiles.get(id);
-        console.log('[video-grid] updateParticipantVideo id=%s hasTile=%s tileCount=%d participantCount=%d', id, !!tile, this.tiles.size, this.participants.size);
         if (tile) {
             tile.setVideoFrame(frame);
         }
@@ -270,7 +269,6 @@ class VideoGrid {
         // a call where you cannot see the other person is not a video call.
         this.viewMode = (0, video_layout_1.autoViewMode)(participantCount, this.viewModeChosen, this.viewMode);
         const signature = this.computeLayoutSignature(participantArray, containerWidth, containerHeight);
-        console.log('[GridDiag] updateGrid sig=%s prev=%s tiles=%d -> %s', signature, this.layoutSignature, this.tiles.size, (signature === this.layoutSignature && this.tiles.size > 0) ? 'SKIP' : 'REBUILD');
         if (signature === this.layoutSignature && this.tiles.size > 0) {
             // Same geometry: the tiles stay, and with them the picture they hold.
             this.refreshTileStatus(participantArray);

@@ -344,9 +344,6 @@ export class VideoTile {
    * Update video/avatar display
    */
   private updateVideoDisplay(): void {
-    console.log('[TileDiag] updateVideoDisplay user=%s hasVideo=%s hasFrame=%s -> %s',
-      String(this.options.userId), this.options.hasVideo, this.hasFrame,
-      this.options.hasVideo ? (this.hasFrame ? 'nothing' : 'PLACEHOLDER') : 'AVATAR');
     if (this.options.hasVideo) {
       if (!this.hasFrame) {
         const height = Math.max(0, (this.container.height as number) - 1);
@@ -440,12 +437,6 @@ export class VideoTile {
     // no-video avatar.
     this.hasFrame = true;
     this.videoError = null;
-
-    const rows = frame.split('\n');
-    const widths = Array.from(new Set(rows.map(r => r.replace(/\{[^}]*\}/g, '').length)));
-    console.log('[TileDiag] setVideoFrame user=%s rows=%d widths=%s box=%sx%s',
-      String(this.options.userId), rows.length, JSON.stringify(widths),
-      String(this.videoBox.width), String(this.videoBox.height));
 
     this.videoBox.setContent(frame);
     // Also flip our copy of hasVideo so updateVideoDisplay won't rewrite
