@@ -13,6 +13,32 @@ import { resolveBoxSize } from '../features/video-layout';
 import { fitFrameToTile } from './frame-fit';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
+/**
+ * What a tile with no picture yet should say.
+ *
+ * Every tile used to say "WAITING FOR VIDEO...", including your own and
+ * including when there was nobody else in the channel. Reported 2026-08-26 as
+ * a camera that "just wouldn't work" - by somebody whose camera was working
+ * and who was simply alone in the room.
+ */
+export function videoPlaceholderMessage(
+  opts: { isCurrentUser: boolean; videoError?: string | null }
+): string {
+  if (opts.videoError) return opts.videoError;
+  return opts.isCurrentUser ? 'STARTING CAMERA...' : 'WAITING FOR VIDEO...';
+}
+
+/**
+ * The line to show across an empty channel, or null when there is company.
+ *
+ * "Waiting" is only true when there is somebody to wait for.
+ */
+export function emptyChannelNotice(participantCount: number): string | null {
+  return participantCount === 1
+    ? 'You are the only one here - others appear when they join'
+    : null;
+}
+
 export interface VideoTileOptions {
   parent: any;
   screen: Screen;
@@ -357,7 +383,10 @@ export class VideoTile {
     if (this.options.hasVideo) {
       if (!this.hasFrame) {
         const height = Math.max(0, (this.container.height as number) - 1);
-        const message = this.videoError || 'WAITING FOR VIDEO...';
+        const message = videoPlaceholderMessage({
+          isCurrentUser: this.options.isCurrentUser,
+          videoError: this.videoError,
+        });
         const topPadding = Math.max(0, Math.floor((height - 1) / 2));
         const placeholder = [
           ...Array(topPadding).fill(''),

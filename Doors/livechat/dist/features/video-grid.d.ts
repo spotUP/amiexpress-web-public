@@ -49,6 +49,8 @@ export declare class VideoGrid {
     private screen;
     private tiles;
     private participants;
+    /** One line saying nobody else is here, when nobody else is. */
+    private emptyNoticeBox;
     private currentUserId;
     private currentUsername;
     private activeSpeaker?;
@@ -130,6 +132,18 @@ export declare class VideoGrid {
      * voice activity toggles the active speaker continuously. In grid mode the
      * same event only recolours a border, so the big view never flickered.
      */
+    /**
+     * Say when there is nobody to wait for.
+     *
+     * A tile that reads "waiting" is only honest if somebody is expected. Alone
+     * in a channel, the wait never ends, and the first person it happened to
+     * spent two days believing his camera was broken.
+     *
+     * Rebuilt with the tiles rather than kept: a relayout destroys the
+     * container's children, and forceFullRedraw() forgets what the terminal was
+     * showing.
+     */
+    private updateEmptyChannelNotice;
     private updateGrid;
     /**
      * Show the video grid

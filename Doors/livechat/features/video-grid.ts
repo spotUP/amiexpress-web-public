@@ -10,7 +10,7 @@
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { VideoTile, VideoTileOptions } from '../ui/video-tile';
+import { VideoTile, VideoTileOptions, emptyChannelNotice } from '../ui/video-tile';
 import { layoutSignature, pickSpeaker, resolveBoxSize, autoViewMode, bestColumns } from './video-layout';
 
 export interface VideoParticipant {
@@ -71,6 +71,8 @@ export class VideoGrid {
   private screen: Screen;
   private tiles: Map<number | string, VideoTile> = new Map();
   private participants: Map<number | string, VideoParticipant> = new Map();
+  /** One line saying nobody else is here, when nobody else is. */
+  private emptyNoticeBox: any = null;
   private currentUserId: number | string;
   private currentUsername: string;
   private activeSpeaker?: number | string;
@@ -312,6 +314,38 @@ export class VideoGrid {
    * voice activity toggles the active speaker continuously. In grid mode the
    * same event only recolours a border, so the big view never flickered.
    */
+  /**
+   * Say when there is nobody to wait for.
+   *
+   * A tile that reads "waiting" is only honest if somebody is expected. Alone
+   * in a channel, the wait never ends, and the first person it happened to
+   * spent two days believing his camera was broken.
+   *
+   * Rebuilt with the tiles rather than kept: a relayout destroys the
+   * container's children, and forceFullRedraw() forgets what the terminal was
+   * showing.
+   */
+  private updateEmptyChannelNotice(participantCount: number): void {
+    if (this.emptyNoticeBox) {
+      this.emptyNoticeBox.destroy();
+      this.emptyNoticeBox = null;
+    }
+
+    const text = emptyChannelNotice(participantCount);
+    if (!text) return;
+
+    this.emptyNoticeBox = blessed.box({
+      parent: this.container,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 1,
+      tags: true,
+      content: `{center}{gray-fg}${text}{/gray-fg}{/center}`,
+      style: { bg: 'black' },
+    });
+  }
+
   private updateGrid(): void {
     const participantArray = Array.from(this.participants.values());
     const participantCount = participantArray.length;
@@ -391,6 +425,7 @@ export class VideoGrid {
         this.attachTileRightClick(tile, participantToShow.userId);
       }
 
+      this.updateEmptyChannelNotice(participantCount);
       this.screen.render();
       this.onLayoutChanged?.();
       return;
@@ -447,6 +482,7 @@ export class VideoGrid {
       this.attachTileRightClick(tile, participant.userId);
     });
 
+    this.updateEmptyChannelNotice(participantCount);
     this.screen.render();
     this.onLayoutChanged?.();
   }

@@ -46,6 +46,8 @@ class VideoGrid {
     constructor(options) {
         this.tiles = new Map();
         this.participants = new Map();
+        /** One line saying nobody else is here, when nobody else is. */
+        this.emptyNoticeBox = null;
         this.lastWidth = 0;
         this.lastHeight = 0;
         /**
@@ -248,6 +250,36 @@ class VideoGrid {
      * voice activity toggles the active speaker continuously. In grid mode the
      * same event only recolours a border, so the big view never flickered.
      */
+    /**
+     * Say when there is nobody to wait for.
+     *
+     * A tile that reads "waiting" is only honest if somebody is expected. Alone
+     * in a channel, the wait never ends, and the first person it happened to
+     * spent two days believing his camera was broken.
+     *
+     * Rebuilt with the tiles rather than kept: a relayout destroys the
+     * container's children, and forceFullRedraw() forgets what the terminal was
+     * showing.
+     */
+    updateEmptyChannelNotice(participantCount) {
+        if (this.emptyNoticeBox) {
+            this.emptyNoticeBox.destroy();
+            this.emptyNoticeBox = null;
+        }
+        const text = (0, video_tile_1.emptyChannelNotice)(participantCount);
+        if (!text)
+            return;
+        this.emptyNoticeBox = blessed_1.default.box({
+            parent: this.container,
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            height: 1,
+            tags: true,
+            content: `{center}{gray-fg}${text}{/gray-fg}{/center}`,
+            style: { bg: 'black' },
+        });
+    }
     updateGrid() {
         const participantArray = Array.from(this.participants.values());
         const participantCount = participantArray.length;
@@ -317,6 +349,7 @@ class VideoGrid {
                 this.restoreFrame(tile, participantToShow.userId);
                 this.attachTileRightClick(tile, participantToShow.userId);
             }
+            this.updateEmptyChannelNotice(participantCount);
             this.screen.render();
             this.onLayoutChanged?.();
             return;
@@ -366,6 +399,7 @@ class VideoGrid {
             this.restoreFrame(tile, participant.userId);
             this.attachTileRightClick(tile, participant.userId);
         });
+        this.updateEmptyChannelNotice(participantCount);
         this.screen.render();
         this.onLayoutChanged?.();
     }

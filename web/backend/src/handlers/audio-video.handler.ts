@@ -1085,11 +1085,30 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
-    socket.to(`voice:${roomId}`).emit('video:cells', {
+    const cellFrame = {
       userId: session.user?.id,
       username: session.user?.username,
       packet,
-    });
+    };
+
+    socket.to(`voice:${roomId}`).emit('video:cells', cellFrame);
+
+    // And back to the sender, so you can see your own camera.
+    //
+    // socket.to() excludes the sender by definition, and the video grid is
+    // drawn by the SERVER-SIDE door rather than the browser, so nothing local
+    // could show you yourself. Alone in a channel you therefore sent frames
+    // and received none, and the tile sat on "WAITING FOR VIDEO" for ever -
+    // reported 2026-08-26 as a camera that "just wouldn't work", by somebody
+    // whose camera was working the whole time.
+    //
+    // Only this codec is echoed: a cell packet is under 2 KB at ~2.3 fps.
+    // The ASCII video:frame path below still excludes the sender, because
+    // that one carries a whole rendered screen of text.
+    //
+    // The door decides whether to draw it - own frames are gated on the local
+    // camera being on - so this is a self view, not an unconditional tile.
+    socket.emit('video:cells', cellFrame);
   });
 
   // Relay pre-rendered video frames (ASCII) to other participants

@@ -8,6 +8,24 @@
  * - Username label
  */
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+/**
+ * What a tile with no picture yet should say.
+ *
+ * Every tile used to say "WAITING FOR VIDEO...", including your own and
+ * including when there was nobody else in the channel. Reported 2026-08-26 as
+ * a camera that "just wouldn't work" - by somebody whose camera was working
+ * and who was simply alone in the room.
+ */
+export declare function videoPlaceholderMessage(opts: {
+    isCurrentUser: boolean;
+    videoError?: string | null;
+}): string;
+/**
+ * The line to show across an empty channel, or null when there is company.
+ *
+ * "Waiting" is only true when there is somebody to wait for.
+ */
+export declare function emptyChannelNotice(participantCount: number): string | null;
 export interface VideoTileOptions {
     parent: any;
     screen: Screen;
