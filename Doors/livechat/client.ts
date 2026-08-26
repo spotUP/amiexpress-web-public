@@ -44,6 +44,18 @@ import {
   pixelAspect,
 } from './video-encoders';
 
+
+/**
+ * Ceiling on outgoing video, in bytes per second.
+ *
+ * An ASCII frame of a full-window tile measures about 10KB. At ten frames a
+ * second that is 100KB/s of text written into the terminal and diffed by the
+ * door - enough to freeze the browser tab. 48KB/s keeps a small tile at full
+ * rate and makes a large one slow down instead.
+ */
+const VIDEO_BYTES_PER_SECOND = 48 * 1024;
+
+
 // =============================================================================
 // LiveChat Client
 // =============================================================================
@@ -601,16 +613,39 @@ class LiveChatClient {
       // the handle lives in one field, so overwriting it orphaned the old
       // interval, which kept sending frames at the old size for ever.
       if (this.videoFrameInterval) {
-        clearInterval(this.videoFrameInterval);
+        clearTimeout(this.videoFrameInterval);
         this.videoFrameInterval = null;
       }
       this.videoShape = { mode, charW, charH };
       const fps = options.fps || 10;
       const intervalMs = Math.max(50, Math.floor(1000 / fps));
-      this.videoFrameInterval = setInterval(() => {
+      // Pace by BYTES, not by frames alone.
+      //
+      // A frame is one ASCII picture of the tile, and a big tile makes a big
+      // picture: measured at 10KB each for a full-window tile. Ten of those a
+      // second is 100KB/s of text written into the terminal and diffed by the
+      // door on every frame, and the browser tab froze under it (reported
+      // 2026-08-26, twice, on the fullscreen chat).
+      //
+      // So the interval is a FLOOR and the byte budget is the real limit: a
+      // small tile still runs at full rate, a large one slows down instead of
+      // drowning the terminal. Slower video beats a frozen page.
+      const tick = () => {
+        if (!this.videoStream) return;
+
         const shape = this.videoShape;
-        this.sendVideoFrame(shape.mode, shape.charW, shape.charH);
-      }, intervalMs);
+        const bytes = this.sendVideoFrame(shape.mode, shape.charW, shape.charH) ?? 0;
+
+        // How long this frame's size says we should wait, at the budget.
+        const budgetMs = (bytes / VIDEO_BYTES_PER_SECOND) * 1000;
+        // ceil, not round: rounding down puts throughput back OVER the
+        // budget, and a ceiling that can be exceeded is not a ceiling.
+        const wait = Math.max(intervalMs, Math.ceil(budgetMs));
+
+        this.videoFrameInterval = setTimeout(tick, wait) as unknown as number;
+      };
+
+      this.videoFrameInterval = setTimeout(tick, intervalMs) as unknown as number;
 
       this.door.emit('video:started');
       console.log(`[LiveChatClient] Video capture started (${charW}x${charH} ${mode})`);
@@ -648,11 +683,12 @@ class LiveChatClient {
     console.log(`[LiveChatClient] Video capture resized to ${charW}x${charH} ${mode}`);
   }
 
-  private sendVideoFrame(mode: string, charW: number, charH: number): void {
-    if (!this.videoElement || !this.videoCanvas || !this.videoStream) return;
-    if (this.videoElement.videoWidth === 0) return;
+  /** Returns the frame's size in bytes, so the caller can pace by bandwidth. */
+  private sendVideoFrame(mode: string, charW: number, charH: number): number {
+    if (!this.videoElement || !this.videoCanvas || !this.videoStream) return 0;
+    if (this.videoElement.videoWidth === 0) return 0;
     const ctx = this.videoCanvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return 0;
     // Flip horizontally so the webcam reads as a mirror (what the user
     // expects when looking at themselves) — the raw <video> feed would
     // otherwise show their left hand on the right side of the frame.
@@ -707,11 +743,12 @@ class LiveChatClient {
         break;
     }
     this.door.emit('video:frame', { frame });
+    return frame.length;
   }
 
   private stopVideoCapture(): void {
     if (this.videoFrameInterval) {
-      clearInterval(this.videoFrameInterval);
+      clearTimeout(this.videoFrameInterval);
       this.videoFrameInterval = null;
     }
     if (this.videoStream) {

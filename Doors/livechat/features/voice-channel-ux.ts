@@ -571,11 +571,21 @@ export class EnhancedVoiceChannel {
         // working neoshowcase webcam-demo ordering so no frames between
         // 'startStream returned' and 'onFrame registered' can slip through
         // unhandled.
-        this.ctx.video.onFrame((frame: string) => {
-          console.log('[voice-channel-ux] onFrame fired, videoEnabled:', this.videoEnabled, 'hasGrid:', !!this.videoGrid, 'userId:', this.userId, 'participants:', this.videoGrid?.getParticipantCount(), 'frame len:', frame?.length ?? 0);
-          if (this.videoEnabled && this.videoGrid) {
-            this.videoGrid.updateParticipantVideo(this.userId, frame);
-          }
+        this.ctx.video.onFrame((frame: string, senderId?: string | number) => {
+          if (!this.videoGrid) return;
+
+          // The frame goes to WHOEVER SENT IT. This used to hand every frame
+          // to this.userId regardless, so with two people streaming both
+          // pictures landed in the local tile - it flipped between their two
+          // sizes - while the other person's tile sat on "WAITING FOR
+          // VIDEO" for a frame that had already been spent on the wrong one.
+          const owner = senderId === undefined || senderId === null ? this.userId : String(senderId);
+
+          // Own frames still need video to be on; someone else's do not.
+          const isSelf = String(owner) === String(this.userId);
+          if (isSelf && !this.videoEnabled) return;
+
+          this.videoGrid.updateParticipantVideo(owner, frame);
         });
 
         // Flip the self-tile's hasVideo BEFORE frames start arriving so

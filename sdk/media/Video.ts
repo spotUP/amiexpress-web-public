@@ -23,10 +23,13 @@ export class Video implements VideoAPI {
       this.activeStreams = streams;
     });
 
-    this.socket.on('video:frame', (data: { frame: string }) => {
+    this.socket.on('video:frame', (data: { frame: string; userId?: string | number }) => {
       console.log('[sdk/Video] video:frame received, has handler:', !!this.frameHandler, 'frame len:', data?.frame?.length ?? 0);
       if (this.frameHandler) {
-        this.frameHandler(data.frame);
+        // The sender travels with the frame. The backend has always sent it;
+        // this used to discard it, which left every door unable to tell its
+        // own camera from anyone else's.
+        this.frameHandler(data.frame, data.userId);
       }
     });
   }

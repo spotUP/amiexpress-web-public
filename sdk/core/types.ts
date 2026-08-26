@@ -864,7 +864,16 @@ export interface BBSApi {
 /**
  * Event handler for video frames
  */
-export type VideoFrameHandler = (frame: string) => void;
+/**
+ * A frame, and WHO sent it.
+ *
+ * The sender used to be dropped here, so a door had no way to tell its own
+ * camera from anybody else's and painted every frame it received into the
+ * local user's tile: two people streaming meant one tile flipping between
+ * two sizes while the other tile waited for video that had already been
+ * spent on the wrong one.
+ */
+export type VideoFrameHandler = (frame: string, userId?: string | number) => void;
 
 /**
  * Video API - ASCII Video Streaming
