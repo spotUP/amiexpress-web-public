@@ -13,6 +13,7 @@
  */
 
 import { setGroupChatDependencies, handleRoomMessage } from '../../src/handlers/chat/group-chat.handler';
+import { setSession, deleteSession } from '../../src/server/session-manager';
 
 interface Emitted { target: string; event: string; payload: unknown }
 
@@ -32,6 +33,16 @@ function environment(sessionsById: Record<string, Record<string, unknown>>) {
 
   const sessions = new Map<string, unknown>(Object.entries(sessionsById));
 
+  // Register each member the way the BBS does, through session-manager. The
+  // guard resolves members with getSessionBySocketId, which reads
+  // session-manager's own maps - a map injected here is never consulted, so
+  // every member used to come back undefined and the guard could not fire
+  // whatever the predicate said.
+  Object.entries(sessionsById).forEach(([socketId, session], index) => {
+    (session as Record<string, unknown>).nodeId = index + 1;
+    setSession(socketId, session as never);
+  });
+
   // Only what handleRoomMessage actually reaches for.
   const db = {
     isUserMuted: async () => false,
@@ -40,7 +51,7 @@ function environment(sessionsById: Record<string, Record<string, unknown>>) {
   };
 
   setGroupChatDependencies({ db, sessions, io } as never);
-  return { emitted };
+  return { emitted, socketIds: Object.keys(sessionsById) };
 }
 
 function plainUser(id: number): Record<string, unknown> {
@@ -52,8 +63,14 @@ function doorUser(id: number): Record<string, unknown> {
 }
 
 describe('chat output while a door owns the terminal', () => {
+  const registered: string[] = [];
+  afterEach(() => {
+    registered.splice(0).forEach(deleteSession);
+  });
+
   it('sends room ANSI to plain terminals but not to a door', async () => {
     const env = environment({ plain: plainUser(1), door: doorUser(2) });
+    registered.push(...env.socketIds);
     const socket = { id: 'sender', emit: () => undefined } as never;
 
     await handleRoomMessage(socket, plainUser(3) as never, { message: 'hello' });
@@ -65,6 +82,7 @@ describe('chat output while a door owns the terminal', () => {
 
   it('still gives the door the structured event it renders from', async () => {
     const env = environment({ door: doorUser(2) });
+    registered.push(...env.socketIds);
     const socket = { id: 'sender', emit: () => undefined } as never;
 
     await handleRoomMessage(socket, plainUser(3) as never, { message: 'hello' });

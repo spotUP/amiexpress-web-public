@@ -19,6 +19,8 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { doorOwnsTerminal } from '../../src/utils/door-owns-terminal';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
 
 const handler = readFileSync(
   join(__dirname, '..', '..', 'src', 'handlers', 'chat', 'group-chat.handler.ts'),
@@ -52,15 +54,28 @@ describe('the door guard', () => {
 });
 
 describe('what counts as a door owning the terminal', () => {
-  it('recognises every way a door can be running', () => {
-    const fn = handler.slice(
-      handler.indexOf('function doorOwnsTerminal'),
-      handler.indexOf('/** Terminal output for this session')
-    );
+  // Behaviour, not source text: the predicate moved to
+  // utils/door-owns-terminal.ts so the restart-notice broadcast could share it.
+  it('recognises a door that is actually running', () => {
+    expect(doorOwnsTerminal({ clientDoorActive: true } as any)).toBe(true);
+    expect(doorOwnsTerminal({ doorInputHandler: () => {} } as any)).toBe(true);
+    expect(doorOwnsTerminal({ subState: LoggedOnSubState.DOOR_RUNNING } as any)).toBe(true);
+  });
 
-    expect(fn).toMatch(/clientDoorActive/);
-    expect(fn).toMatch(/currentDoorName/);
-    expect(fn).toMatch(/doorInputHandler/);
+  it('does not count a door that has already exited', () => {
+    // currentDoorName is attribution, not liveness - door.handler.ts sets it
+    // so a door's events carry its registered command, and no exit path
+    // clears it. Treating it as "a door is running" made every session that
+    // ever ran FRONTEND at the login screen door-owned for ever, which
+    // silently suppressed room ANSI for that session from then on.
+    expect(doorOwnsTerminal({
+      currentDoorName: 'FRONTEND',
+      subState: LoggedOnSubState.DISPLAY_MENU,
+    } as any)).toBe(false);
+  });
+
+  it('an idle session owns its own terminal', () => {
+    expect(doorOwnsTerminal({} as any)).toBe(false);
   });
 });
 

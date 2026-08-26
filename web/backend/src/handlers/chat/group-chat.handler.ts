@@ -17,29 +17,10 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { getSystemTime } from '../../utils/date-time.util';
+import { doorOwnsTerminal } from '../../utils/door-owns-terminal';
 
 import type { BBSSession } from '../../index';
 // Session type
-
-/**
- * Whether a door currently owns this session's terminal.
- *
- * These handlers paint an ANSI chat room - clear screen, header box, message
- * lines - straight at the user. That is right when the BBS itself is running
- * the chat, and wrong when the LiveChat door is: the door draws its own UI on
- * the same terminal, and both ended up on screen at once (reported live
- * 2026-08-25 with a paste showing the two layouts stacked). The room work
- * itself - joining, broadcasting to everyone else, history - still has to
- * happen; only this session's terminal output is suppressed, because the door
- * renders that itself from its own room events.
- */
-function doorOwnsTerminal(session: BBSSession): boolean {
-  return Boolean(
-    (session as any).clientDoorActive
-    || (session as any).currentDoorName
-    || (session as any).doorInputHandler
-  );
-}
 
 /** Terminal output for this session, suppressed while a door owns the screen. */
 function emitToTerminal(socket: Socket, session: BBSSession, data: string): void {
