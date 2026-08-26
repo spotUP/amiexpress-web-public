@@ -46,6 +46,15 @@ function seedFontSize(containerWidth: number): number {
   return Math.max(4, Math.floor(containerWidth / BBS_COLS / CHAR_ASPECT));
 }
 
+/**
+ * Shortest gap between paddle positions sent to the door, in ms.
+ *
+ * The door renders at 20fps, so more than about thirty updates a second is
+ * work nobody can see - and every extra one is a message the paddle has to
+ * catch up through.
+ */
+const SPINNER_SEND_MS = 30;
+
 export function TerminalPage(): JSX.Element {
   const terminalRef = useRef<BBSTerminalRef>(null);
   const [isMobile, setIsMobile] = useState<boolean>(isPortraitMobile);
@@ -209,6 +218,13 @@ export function TerminalPage(): JSX.Element {
    * instead of teleporting the paddle back to the middle.
    */
   const spinnerColumn = useRef<number | null>(null);
+  /**
+   * The last column actually sent to the door, so a stream of touchmoves
+   * that all land in the same column costs one message instead of sixty.
+   */
+  const lastSpinnerSent = useRef<number | null>(null);
+  const spinnerPending = useRef<{ x: number; y: number } | null>(null);
+  const spinnerSendTimer = useRef<number | null>(null);
 
   /** Live column count - a door may have taken the terminal off 80 columns. */
   const terminalColumns = useCallback(
@@ -253,7 +269,49 @@ export function TerminalPage(): JSX.Element {
     const x = spinnerColumn.current ?? trackpadColumn(0.5, cols);
     const type: TerminalMouseEventType =
       phase === 'start' ? 'mouse-click' : phase === 'move' ? 'mouse-drag' : 'mouse-up';
-    terminalRef.current?.sendMouse(type, { x, y });
+
+    // Start and end go immediately: a tap must land, and a stroke must end
+    // where the thumb left it.
+    if (type !== 'mouse-drag') {
+      if (spinnerSendTimer.current !== null) {
+        clearTimeout(spinnerSendTimer.current);
+        spinnerSendTimer.current = null;
+      }
+      lastSpinnerSent.current = type === 'mouse-up' ? null : x;
+      terminalRef.current?.sendMouse(type, { x, y });
+      return;
+    }
+
+    // A drag sends the NEWEST position, at most every SPINNER_SEND_MS.
+    //
+    // touchmove fires about sixty times a second and every one of those used
+    // to become a socket message, a door render and a frame back. The door
+    // only cares which COLUMN the paddle is in, and only the latest one -
+    // every older position in the queue is a place the thumb has already
+    // left. Sending them all is how the paddle ended up "half a screen or
+    // more behind my finger": it was working through a backlog.
+    //
+    // Nothing is lost by dropping the intermediate ones. The column is
+    // accumulated from the whole gesture before this point, so the newest
+    // value already contains every delta.
+    if (x === lastSpinnerSent.current) return;
+    spinnerPending.current = { x, y };
+
+    if (spinnerSendTimer.current !== null) return;
+
+    const flush = () => {
+      spinnerSendTimer.current = null;
+      const pending = spinnerPending.current;
+      if (!pending) return;
+      spinnerPending.current = null;
+      if (pending.x === lastSpinnerSent.current) return;
+      lastSpinnerSent.current = pending.x;
+      terminalRef.current?.sendMouse('mouse-drag', pending);
+      // Keep the window open while the thumb is still moving, so the last
+      // position of a sweep is not left sitting in the buffer.
+      spinnerSendTimer.current = window.setTimeout(flush, SPINNER_SEND_MS);
+    };
+    flush();
   }, [terminalColumns]);
 
   const handleLaunch = useCallback(() => {

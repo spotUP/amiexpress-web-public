@@ -92,4 +92,26 @@
                 fi
                 sleep 2
               done
+              # The doors the container is actually RUNNING must match the
+              # ones in the image. They live on a persistent volume, so a
+              # deploy updates the image and the entrypoint syncs them across
+              # - and when that sync silently failed, live served door code
+              # from an earlier deploy while every check here passed
+              # (2026-08-26: the video aspect fix was in the image and not in
+              # the running door). Compare them and say so.
+              echo "== door sync verification =="
+              STALE=$(docker exec amiexpress-bbs sh -c '
+                cd /app/default-data/Doors 2>/dev/null || exit 0
+                find . -type f ! -name "*.db" ! -name "*.sqlite" ! -name "*.log" |
+                  while IFS= read -r f; do
+                    cmp -s "/app/default-data/Doors/$f" "/app/data/bbs/Doors/$f" || echo "$f"
+                  done
+              ' | head -20)
+              if [ -n "$STALE" ]; then
+                echo "ERROR: doors on the volume differ from the image:" >&2
+                echo "$STALE" >&2
+                exit 1
+              fi
+              echo "OK: doors on the volume match the image"
+
               echo "Deploy complete: HEAD=$ACTUAL_SHA at $(date)"

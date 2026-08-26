@@ -292,15 +292,52 @@ else
     fi
 
     # ALWAYS sync Doors, Commands, Screens, Libs, C from image on every startup
-    # This ensures deploys update code/binaries while preserving user data
+    # so a deploy updates code and assets while preserving user data.
+    #
+    # This used to be a single `cp -r ... 2>/dev/null || true`, which had two
+    # faults. It swallowed every error, so a failed sync looked exactly like a
+    # successful one - and live was found serving door code from an earlier
+    # deploy while claiming to be up to date (2026-08-26: the video aspect fix
+    # was in the image and not in the running door). And it overwrote
+    # EVERYTHING, including the committed .db files, so a deploy could drop a
+    # blank chat history over the live one.
+    #
+    # Now: copy file by file, skip runtime data, report what changed, and let
+    # a real failure be loud.
     echo "[Entrypoint] Syncing code directories from image..."
     for sync_dir in Doors Commands Screens Libs C; do
-        if [ -d "$DEFAULT_DATA_DIR/$sync_dir" ]; then
-            # Use cp with --update to only overwrite older files, and --no-clobber
-            # for safety. But for code we WANT to overwrite, so use rsync-like approach:
-            # Copy all files from image, but don't delete user-created files on disk.
-            cp -r "$DEFAULT_DATA_DIR/$sync_dir/." "$BBS_DATA_DIR/$sync_dir/" 2>/dev/null || true
-            echo "[Entrypoint]   Synced $sync_dir from image"
+        [ -d "$DEFAULT_DATA_DIR/$sync_dir" ] || continue
+
+        copied=0
+        failed=0
+        while IFS= read -r rel; do
+            src="$DEFAULT_DATA_DIR/$sync_dir/$rel"
+            dst="$BBS_DATA_DIR/$sync_dir/$rel"
+
+            # Same content already there: nothing to do.
+            if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
+                continue
+            fi
+
+            mkdir -p "$(dirname "$dst")"
+            if cp -p "$src" "$dst"; then
+                copied=$((copied + 1))
+            else
+                echo "[Entrypoint]   ERROR: failed to sync $sync_dir/$rel" >&2
+                failed=$((failed + 1))
+            fi
+        done <<EOF
+$(cd "$DEFAULT_DATA_DIR/$sync_dir" && find . -type f \
+    ! -name '*.db' ! -name '*.db-journal' ! -name '*.db-wal' ! -name '*.db-shm' \
+    ! -name '*.sqlite' ! -name '*.sqlite3' ! -name '*.log' \
+    -printf '%P\n' 2>/dev/null || cd "$DEFAULT_DATA_DIR/$sync_dir" && find . -type f \
+    ! -name '*.db' ! -name '*.sqlite' ! -name '*.log' | sed 's|^\./||')
+EOF
+
+        echo "[Entrypoint]   Synced $sync_dir: $copied file(s) updated, $failed failed"
+        if [ "$failed" -gt 0 ]; then
+            echo "[Entrypoint] ERROR: $failed file(s) failed to sync in $sync_dir" >&2
+            exit 1
         fi
     done
     # Remove .ts source files from Doors - production uses compiled dist/

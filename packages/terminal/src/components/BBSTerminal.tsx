@@ -731,8 +731,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     getTerminal: () => terminalInstance.current,
     pressGameKey: (key: string, code: string) => gameKeyPressRef.current?.(key, code),
     releaseGameKey: (key: string, code: string) => gameKeyReleaseRef.current?.(key, code),
-    sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) =>
-      emitMouseCell(type, cell, modifiers),
+    sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) => {
+      // The latency probe covers the mouse path too - ARKANOID steers with
+      // mouse cells, not keys, so measuring only key-down said nothing about
+      // the game that feels worst.
+      inputSentAt.current = performance.now();
+      emitMouseCell(type, cell, modifiers);
+    },
     startDownload: async (_amigaPath: string) => {
       console.warn('[Terminal] Downloads start from the BBS. Awaiting transfer-raw:init.');
     },

@@ -98,12 +98,49 @@ export function applyPiiPolicy(data: WebhookEventData['data'], overrideIncludePi
   return sanitised;
 }
 
+
+/**
+ * Usernames whose activity never reaches a webhook.
+ *
+ * A sysop testing the board fires the same triggers a real user does, and
+ * every one of them lands in the Discord channel - "can we disable webhooks
+ * for sysop user so I don't spam the discord with my tests". Muting the
+ * account that does the testing is the fix; muting the trigger would also
+ * mute it for everyone else.
+ *
+ * Read from WEBHOOK_EXCLUDE_USERS (comma separated) so a board can name its
+ * own testers, and defaulting to the sysop account because that is who tests.
+ */
+export function webhookExcludedUsers(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = env.WEBHOOK_EXCLUDE_USERS ?? 'sysop';
+  return raw
+    .split(',')
+    .map(name => name.trim().toLowerCase())
+    .filter(name => name.length > 0);
+}
+
+/** Is this event from somebody whose activity is muted? */
+export function isWebhookSuppressed(
+  username: string | undefined,
+  excluded: string[] = webhookExcludedUsers()
+): boolean {
+  if (!username) return false;
+  return excluded.includes(username.trim().toLowerCase());
+}
+
 class WebhookService {
   /**
    * Send webhook notification to all webhooks subscribed to this trigger
    */
   async sendWebhook(trigger: WebhookTrigger, data: WebhookEventData['data']): Promise<void> {
     try {
+      // Muted accounts never reach a webhook. Checked BEFORE the PII policy,
+      // which would otherwise replace the username with "User #7" and leave
+      // nothing to match on.
+      if (isWebhookSuppressed(data.username)) {
+        return;
+      }
+
       // Pass the door so webhooks scoped to specific doors are skipped for
       // everything else. Without this every door_score webhook fired for
       // every door, so a board with one webhook per game saw each score
