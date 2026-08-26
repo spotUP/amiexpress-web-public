@@ -2553,7 +2553,20 @@ export class Screen extends Element {
     // Emit resize event for elements that need to respond
     this.emit('resize');
 
-    // Force full redraw
+    // A full redraw, not a differential one.
+    //
+    // realloc() COPIES the old lastBuffer into the new one, so the renderer
+    // would believe the terminal still shows what it showed before the
+    // resize - while the real terminal has been cleared, or reflowed by the
+    // browser, and shows nothing. The diff then emits only the cells that
+    // changed against a record of a screen that no longer exists, and the
+    // result is a black screen that fills in piecemeal as hovering
+    // invalidates one region at a time (reported 2026-08-26 with a
+    // screenshot of /chat after a browser resize).
+    //
+    // After a resize, lastBuffer is not evidence of anything. Throw it away
+    // and repaint every cell.
+    this.forceFullRedraw();
     this.render();
   }
 

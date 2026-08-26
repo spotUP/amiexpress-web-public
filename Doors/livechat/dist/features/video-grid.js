@@ -243,6 +243,7 @@ class VideoGrid {
             return;
         }
         const signature = this.computeLayoutSignature(participantArray, containerWidth, containerHeight);
+        console.log('[GridDiag] updateGrid sig=%s prev=%s tiles=%d -> %s', signature, this.layoutSignature, this.tiles.size, (signature === this.layoutSignature && this.tiles.size > 0) ? 'SKIP' : 'REBUILD');
         if (signature === this.layoutSignature && this.tiles.size > 0) {
             // Same geometry: the tiles stay, and with them the picture they hold.
             this.refreshTileStatus(participantArray);
