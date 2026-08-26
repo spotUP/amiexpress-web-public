@@ -36,7 +36,7 @@ export function DoorsPage() {
     door_name: '',
     door_command: '',
     description: '',
-    door_type: '68K',
+    door_type: 'XIM',
     runtime_env: 'vamos',
     min_security_level: 0,
     time_limit: 30,
@@ -98,7 +98,7 @@ export function DoorsPage() {
       door_name: '',
       door_command: '',
       description: '',
-      door_type: '68K',
+      door_type: 'XIM',
       runtime_env: 'vamos',
       min_security_level: 0,
       time_limit: 30,
@@ -453,10 +453,22 @@ export function DoorsPage() {
                     className="input-field w-full"
                     required
                   >
-                    <option value="68K">68K (Amiga Binary)</option>
-                    <option value="JS">JavaScript</option>
-                    <option value="TS">TypeScript</option>
-                    <option value="EXEC">Executable</option>
+                    {/* The values the BBS actually uses - see
+                        web/backend/src/constants/door-types.ts. The old list
+                        (68K/JS/TS/EXEC) matched nothing the server serves or
+                        accepts, so an XIM door had no entry to display and
+                        saving it changed its type. */}
+                    <option value="XIM">XIM (Amiga 68K door)</option>
+                    <option value="AIM">AIM (Amiga 68K door)</option>
+                    <option value="SIM">SIM (Amiga 68K door)</option>
+                    <option value="TIM">TIM (Amiga 68K door)</option>
+                    <option value="IIM">IIM (Amiga 68K door)</option>
+                    <option value="FIM">FIM (FAME door port)</option>
+                    <option value="DD">DD (DayDream door)</option>
+                    <option value="typescript">TypeScript</option>
+                    <option value="SYSCMD">SYSCMD (system command)</option>
+                    <option value="BBSCMD">BBSCMD (BBS command)</option>
+                    <option value="INTERNAL">INTERNAL</option>
                   </select>
                 </div>
 
@@ -469,8 +481,9 @@ export function DoorsPage() {
                     className="input-field w-full"
                     required
                   >
-                    <option value="vamos">vamos (68K Emulator)</option>
-                    <option value="node">Node.js</option>
+                    <option value="vamos">vamos (68K emulator)</option>
+                    {/* "nodejs", not "node" - that is what the API serves. */}
+                    <option value="nodejs">Node.js</option>
                     <option value="native">Native</option>
                   </select>
                 </div>

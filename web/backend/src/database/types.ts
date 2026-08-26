@@ -1,3 +1,4 @@
+import type { DoorType, DoorRuntimeEnv } from '../constants/door-types';
 /**
  * Database Type Definitions
  * Extracted from database.ts for better modularity
@@ -501,7 +502,10 @@ export interface Door {
   // Door Identity
   door_name: string;
   door_command: string;
-  door_type: 'SYSCMD' | 'BBSCMD' | 'INTERNAL';
+  // The same vocabulary the API serves and the schema validates - see
+  // constants/door-types.ts. Narrowing it to the three command sources is
+  // what made an XIM door unsaveable from the admin page.
+  door_type: DoorType;
 
   // Execution Settings
   door_path: string;
@@ -511,7 +515,7 @@ export interface Door {
   // Door Options
   priority: string;  // P0-P4
   door_options: string[];
-  runtime_env: 'AMIGA_68K' | 'NATIVE_NODE' | 'BROWSER';
+  runtime_env: DoorRuntimeEnv;
 
   // Access Control
   min_security_level: number;

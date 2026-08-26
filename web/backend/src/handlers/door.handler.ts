@@ -448,10 +448,11 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
 // FAMEDoorPort/FIMProtocol (AmigaDoorSession.ts) instead of AEDoor.library.
 // DD is DayDream BBS's door-type marker, routed through dreamdoor.library
 // (DreamDoorLibrary/dreamdoor-vectors) the same way.
-export const AMIGA_68K_DOOR_TYPES = ['XIM', 'AIM', 'SIM', 'TIM', 'IIM', 'FIM', 'DD'];
+export { AMIGA_68K_DOOR_TYPES } from '../constants/door-types';
+import { AMIGA_68K_DOOR_TYPES as AMIGA_TYPES } from '../constants/door-types';
 
 export function isAmiga68kDoorType(t: string): boolean {
-  return AMIGA_68K_DOOR_TYPES.includes((t || '').toUpperCase());
+  return (AMIGA_TYPES as readonly string[]).includes((t || '').toUpperCase());
 }
 
 export interface Door {

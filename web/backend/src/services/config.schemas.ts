@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { DOOR_TYPES, DOOR_RUNTIME_ENVS } from '../constants/door-types';
 
 // ===== Zod Validation Schemas =====
 
@@ -198,13 +199,16 @@ export const ConferenceConfigSchema = z.object({
 export const DoorSchema = z.object({
   door_name: z.string().min(1).max(100),
   door_command: z.string().min(1).max(50),
-  door_type: z.enum(['SYSCMD', 'BBSCMD', 'INTERNAL']),
+  // Whatever GET /config/doors can serve, this must accept - see
+  // constants/door-types.ts. A door the admin page can open and not save is
+  // how wall.info failed with "received XIM".
+  door_type: z.enum(DOOR_TYPES),
   door_path: z.string().min(1).max(500),
   door_args: z.string().max(500).optional(),
   working_directory: z.string().max(500).optional(),
   priority: z.enum(['P0', 'P1', 'P2', 'P3', 'P4']).optional(),
   door_options: z.array(z.string()).optional(),
-  runtime_env: z.enum(['AMIGA_68K', 'NATIVE_NODE', 'BROWSER']).optional(),
+  runtime_env: z.enum(DOOR_RUNTIME_ENVS).optional(),
   min_security_level: z.number().int().min(1).max(255).optional(),
   max_security_level: z.number().int().min(1).max(255).optional(),
   required_flags: z.string().max(100).optional(),
