@@ -1866,7 +1866,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           const s = latencySamples.current;
           const avg = Math.round(s.reduce((a, b) => a + b, 0) / s.length);
           const worst = Math.round(Math.max(...s));
-          console.log(`[Latency] key -> screen: avg ${avg}ms, worst ${worst}ms, over ${s.length} inputs (frame ${data.length}B)`);
+          const line = `avg ${avg}ms  worst ${worst}ms  n=${s.length}  frame ${data.length}B`;
+          console.log(`[Latency] key -> screen: ${line}`);
+
+          // ON SCREEN as well as in the console. A phone has no console
+          // worth reading, and this number is only useful if the person
+          // holding the phone can see it.
+          let readout = document.getElementById('bbs-latency-readout');
+          if (!readout) {
+            readout = document.createElement('div');
+            readout.id = 'bbs-latency-readout';
+            readout.style.cssText = [
+              'position:fixed', 'top:0', 'left:0', 'z-index:2147483647',
+              'background:rgba(0,0,0,0.75)', 'color:#0f0',
+              'font:11px/1.4 monospace', 'padding:2px 6px',
+              'pointer-events:none', 'white-space:nowrap',
+            ].join(';');
+            document.body.appendChild(readout);
+          }
+          readout.textContent = line;
+
           latencySamples.current = [];
         }
       }
