@@ -495,7 +495,7 @@ async function createApp(session) {
         zIndex: 1,
         topConstraint: menu_bar_1.MENU_HEIGHT,
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
-        border: { type: 'line', fg: 'cyan' },
+        border: { type: 'line', fg: theme_1.PANEL_BORDER },
         fitContent: { width: true, height: false }, // Auto-expand width to fit content dynamically
         style: {
             fg: 'white',

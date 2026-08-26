@@ -47,10 +47,17 @@ describe('every panel', () => {
 
     for (const file of sources(DOOR)) {
       if (file.endsWith('ui/theme.ts')) continue;
-      const text = readFileSync(file, 'utf8');
+      // labelStyle lives INSIDE the border object and legitimately carries
+      // its own colours - the panel label is white on blue - so it is taken
+      // out before looking for border colours, or every labelled panel reads
+      // as an offender.
+      const text = readFileSync(file, 'utf8').replace(/labelStyle:\s*\{[^}]*\}/g, '');
 
-      // A literal colour where a border colour belongs.
-      for (const m of text.matchAll(/border:\s*\{\s*fg:\s*'(\w+)'/g)) {
+      // A literal colour ANYWHERE inside a border object - the first version
+      // of this test only matched `border: { fg: ... }` and walked straight
+      // past `border: { type: 'line', fg: 'cyan' }`, which is how the two
+      // main panels kept their old colour while the test said all was well.
+      for (const m of text.matchAll(/border:\s*\{[^}]*\bfg:\s*'(\w+)'/g)) {
         offenders.push(`${file.replace(DOOR + '/', '')}: border fg '${m[1]}'`);
       }
       for (const m of text.matchAll(/borderColor:\s*'(\w+)'/g)) {

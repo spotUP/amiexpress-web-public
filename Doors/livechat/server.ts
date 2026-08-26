@@ -573,7 +573,7 @@ export async function createApp(session: DoorSession) {
     zIndex: 1,
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
-    border: { type: 'line', fg: 'cyan' },
+    border: { type: 'line', fg: PANEL_BORDER },
     fitContent: { width: true, height: false },  // Auto-expand width to fit content dynamically
     style: {
       fg: 'white',
