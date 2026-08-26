@@ -90,11 +90,16 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:dm', (d: any) => {
+    if (!d) return;
+
     // Ignored or blocked: their DMs do not reach the user. Mute alone is
     // room-only, so a muted person can still message you directly.
+    //
+    // This ran BEFORE the guard above and dereferenced `d` to do it, so a
+    // payload without a sender threw out of the handler and the DM was never
+    // rendered - silently, since the throw was caught upstream by
+    // dispatchLocal. That is the reported "/msg does nothing".
     if (hidesDirectMessages(st.muteList, d.from ?? d.username)) return;
-
-    if (!d) return;
     // Backend now persists DMs and echoes the canonical payload back to
     // both sender and recipient. `direction` tells us which side we are.
     // Group DMs (isGroup=true) include a `participants` array.

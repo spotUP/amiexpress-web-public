@@ -32,7 +32,11 @@ export function createMuteList(): MuteList {
 
 /** Names are compared case-insensitively - "Bob" and "bob" are one person. */
 function key(username: string): string {
-  return username.trim().toLowerCase();
+  // A payload can arrive without a sender name - the live log caught
+  // `chat:dm` throwing "Cannot read properties of undefined (reading
+  // 'trim')" here, which aborted the handler and lost the message. A
+  // nameless sender matches no entry; it must not take the handler down.
+  return typeof username === 'string' ? username.trim().toLowerCase() : '';
 }
 
 /**
