@@ -448,11 +448,13 @@ export class VideoTile {
     this.hasFrame = true;
     this.videoError = null;
 
-    // Clip it to THIS tile. A sender encodes for the size of its own tile,
-    // and every viewer's tile can differ - so a frame that is too wide wraps
-    // every row onto the next and the picture arrives as stripes. ASCII
-    // cannot be rescaled, so it is cut instead: a smaller picture is honest,
-    // a wrapped one is unreadable.
+    // Fit it to THIS tile, exactly. A sender encodes for the size of its
+    // own tile and every viewer's tile can differ, so a frame is both cut
+    // when too big - an over-wide frame wraps every row onto the next and
+    // arrives as stripes - and padded when too small, so that no cell keeps
+    // showing the previous frame. ASCII cannot be rescaled; a smaller
+    // picture on a black field is honest, a wrapped or half-stale one is
+    // not.
     const box = resolveBoxSize(this.videoBox as any, { width: 0, height: 0 });
     const fitted = box.width > 0 && box.height > 0
       ? fitFrameToTile(frame, box.width, box.height)

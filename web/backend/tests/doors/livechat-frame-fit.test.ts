@@ -70,10 +70,20 @@ describe('clipping a row', () => {
 describe('fitting a frame', () => {
   const frame = ['aaaaaaaa', 'bbbbbbbb', 'cccccccc', 'dddddddd'].join('\n');
 
+  it('fills the tile exactly, in both directions', () => {
+    // Every cell of the tile is written every frame. Anything less and the
+    // cells the frame does not reach keep showing the PREVIOUS frame -
+    // which is what left fragments of old video around the picture.
+    const rows = fitFrameToTile(frame, 12, 6).split('\n');
+
+    expect(rows).toHaveLength(6);
+    expect(rows.every(r => visibleWidth(r) === 12)).toBe(true);
+  });
+
   it('clips every row to the tile width', () => {
     const rows = fitFrameToTile(frame, 3, 10).split('\n');
 
-    expect(rows.every(r => visibleWidth(r) <= 3)).toBe(true);
+    expect(rows.every(r => visibleWidth(r) === 3)).toBe(true);
   });
 
   it('drops rows past the tile height', () => {
@@ -85,12 +95,35 @@ describe('fitting a frame', () => {
     expect(fitFrameToTile(frame, 8, 4)).toBe(frame);
   });
 
-  it('leaves a SMALLER frame alone rather than stretching it', () => {
-    // It simply occupies less of the tile. Stretching ASCII means inventing
-    // characters that were never sent.
+  it('pads a SMALLER frame out to the tile rather than stretching it', () => {
+    // Padding is not stretching: the picture still occupies only what was
+    // sent, on a blank field. Stretching would mean inventing characters
+    // nobody sent; leaving the rest untouched means showing stale ones.
     const small = ['ab', 'cd'].join('\n');
+    const fitted = fitFrameToTile(small, 6, 4).split('\n');
 
-    expect(fitFrameToTile(small, 40, 20)).toBe(small);
+    expect(fitted).toEqual([
+      'ab    ',
+      'cd    ',
+      '      ',
+      '      ',
+    ]);
+  });
+
+  it('blanks a tile whose sender has stopped sending rows', () => {
+    // Camera off mid-stream: an empty frame must wipe the tile, not leave
+    // the last picture frozen in it.
+    const fitted = fitFrameToTile('', 4, 3).split('\n');
+
+    expect(fitted).toEqual(['    ', '    ', '    ']);
+  });
+
+  it('pads a tagged row by its VISIBLE width', () => {
+    // Colour tags take no columns; padding by string length would overrun
+    // the tile and wrap.
+    const tagged = '{red-fg}ab{/red-fg}';
+
+    expect(visibleWidth(fitFrameToTile(tagged, 5, 1))).toBe(5);
   });
 
   it('survives a tile with no size', () => {

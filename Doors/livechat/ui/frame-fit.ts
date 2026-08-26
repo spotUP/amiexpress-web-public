@@ -58,18 +58,38 @@ export function clipToWidth(line: string, width: number): string {
 }
 
 /**
- * Fit a whole frame to a tile: at most `height` rows, each at most `width`
- * columns.
+ * Fit a whole frame to a tile EXACTLY: `height` rows of `width` columns.
  *
- * Rows beyond the tile are dropped rather than allowed to push the layout
- * around - a frame one row too tall used to shove the status bar off the
- * bottom of its own tile.
+ * Both directions matter, and only one of them used to be handled.
+ *
+ * Too big is clipped: a frame one row too tall used to shove the status bar
+ * off the bottom of its own tile.
+ *
+ * Too small is PADDED, which it was not. A sender encodes for the size of
+ * its own tile, so a viewer with a larger tile received a smaller picture -
+ * and every cell the new frame did not reach still held the previous one.
+ * The result was fragments of old video around the live picture that never
+ * went away (reported 2026-08-26 as "old video frames not clearing"). A
+ * frame that covers the whole tile cannot leave anything behind.
  */
 export function fitFrameToTile(frame: string, width: number, height: number): string {
   if (width <= 0 || height <= 0) return '';
 
   const rows = frame.split('\n');
-  const kept = rows.length > height ? rows.slice(0, height) : rows;
+  const blank = ' '.repeat(width);
+  const out: string[] = [];
 
-  return kept.map(row => clipToWidth(row, width)).join('\n');
+  for (let i = 0; i < height; i++) {
+    const row = rows[i];
+    if (row === undefined) {
+      out.push(blank);
+      continue;
+    }
+
+    const clipped = clipToWidth(row, width);
+    const short = width - visibleWidth(clipped);
+    out.push(short > 0 ? clipped + ' '.repeat(short) : clipped);
+  }
+
+  return out.join('\n');
 }

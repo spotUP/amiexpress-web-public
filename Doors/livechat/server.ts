@@ -1542,13 +1542,23 @@ export async function createApp(session: DoorSession) {
   );
 
   // ========== VOICE CHANNEL (Discord-style UX) ==========
+  // Voice speaks the SERVER's id namespace, not the door's.
+  //
+  // The door coerces user ids with parseInt (core/initialization.ts), which
+  // turns a UUID into 7 or 0 - fine for its own bookkeeping, useless for
+  // matching the ids the voice backend sends. With the coerced id, the door
+  // could not find itself in the server's participant list and added a
+  // second copy of the user: two people in a channel, `voice (3)` in the
+  // sidebar and a third empty video tile (screenshot 2026-08-26).
+  const voiceUserId = (session as any).user?.id ?? userId;
+
   const voiceChannel = createEnhancedVoiceChannel({
     parent: sidebarPanel,  // Parent to sidebar so controls appear at bottom of sidebar (Discord-style)
     channelList,
     screen,
     socket,
     ctx: session as any, // Pass session as ctx for audio API access
-    userId,
+    userId: voiceUserId,
     username,
     chatPanel, // Pass chat panel so video grid renders in correct location
     onJoinVoice: (channelId: string) => {
@@ -1567,6 +1577,37 @@ export async function createApp(session: DoorSession) {
     onTileRightClick: (uid, x, y) => {
       showContextMenu(x, y, 'video', uid);
     },
+    onRosterChange: () => {
+      updateChannelList();
+    },
+    onVideoVisibility: (visible: boolean) => {
+      // Stop painting the chat panel's frame while a picture fills it.
+      //
+      // The frame belongs to a chat LOG. A video tile reaches every edge of
+      // the panel, so the frame became a rule sitting under the picture
+      // with nothing on the other side of it. The border still occupies its
+      // row - taking it away would reflow the panel mid-call - it is simply
+      // drawn in the background colour, which is to say not drawn.
+      const style = (chatPanel as any).style;
+      if (!style) return;
+      style.border = { ...(style.border ?? {}), fg: visible ? 'black' : PANEL_BORDER };
+      screen.render();
+    },
+  });
+
+  // Which microphones the browser can see, and which one it opened.
+  //
+  // The default input is not necessarily a microphone: with BlackHole or a
+  // similar loopback installed it can be system audio, so the call
+  // transmits whatever is playing. /mic lists these and switches.
+  socket.on('audio:devices', (data: any) => {
+    (cmdCtx as any).micDevices = data?.devices ?? [];
+  });
+  socket.on('audio:device', (data: any) => {
+    (cmdCtx as any).micDeviceId = data?.settings?.deviceId;
+    if (data?.label) {
+      addSystemMessage(`{gray-fg}Microphone: ${data.label} - change it with /mic{/gray-fg}`);
+    }
   });
 
   // Be ready to SHOW video from the start, without joining voice first.

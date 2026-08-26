@@ -14,6 +14,13 @@
  */
 
 /** The part of ImageData these encoders use. */
+import {
+  pickColor,
+  fitColorMemory,
+  type ColorMemory,
+  type PaletteEntry,
+} from './video-hysteresis';
+
 export interface PixelBuffer {
   data: Uint8ClampedArray | number[];
   width?: number;
@@ -46,7 +53,7 @@ const ASCII_RAMP = ' .:-=+*#%@';
  * for those bytes. Neoshowcase's working webcam demo uses this same
  * approach (rgbToBlessed + {name-fg} tags).
  */
-const PALETTE: Array<[string, number, number, number]> = [
+export const PALETTE: PaletteEntry[] = [
   ['black',    0,   0,   0],
   ['red',      170, 0,   0],
   ['green',    0,   170, 0],
@@ -65,19 +72,20 @@ const PALETTE: Array<[string, number, number, number]> = [
   ['lightwhite',   255, 255, 255],
 ];
 export function rgbToBlessed(r: number, g: number, b: number): string {
-  let best = 'white';
-  let bestDist = Infinity;
-  for (const [name, pr, pg, pb] of PALETTE) {
-    const dr = r - pr, dg = g - pg, db = b - pb;
-    const d = dr*dr + dg*dg + db*db;
-    if (d < bestDist) { bestDist = d; best = name as string; }
-  }
-  return best;
+  return PALETTE[pickColor(PALETTE, r, g, b, [])][0];
 }
 
-export function renderAscii(img: PixelBuffer, w: number, h: number, colored: boolean): string {
+export function renderAscii(
+  img: PixelBuffer,
+  w: number,
+  h: number,
+  colored: boolean,
+  memory?: ColorMemory
+): string {
   let out = '';
-  let lastFg = '';
+  let lastFgIdx = -1;
+  const mem = colored && memory ? fitColorMemory(memory, w, h) : undefined;
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
@@ -87,16 +95,18 @@ export function renderAscii(img: PixelBuffer, w: number, h: number, colored: boo
       const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       const ch = ASCII_RAMP[Math.floor(lum * (ASCII_RAMP.length - 1))] || ' ';
       if (colored) {
-        const fg = rgbToBlessed(r, g, b);
-        if (fg !== lastFg) {
-          if (lastFg) out += '{/}';
-          out += `{${fg}-fg}`;
-          lastFg = fg;
+        const cell = y * w + x;
+        const fgIdx = pickColor(PALETTE, r, g, b, mem ? [mem.fg[cell], lastFgIdx] : [], mem?.stickiness);
+        if (mem) mem.fg[cell] = fgIdx;
+        if (fgIdx !== lastFgIdx) {
+          if (lastFgIdx >= 0) out += '{/}';
+          out += `{${PALETTE[fgIdx][0]}-fg}`;
+          lastFgIdx = fgIdx;
         }
       }
       out += ch;
     }
-    if (lastFg) { out += '{/}'; lastFg = ''; }
+    if (lastFgIdx >= 0) { out += '{/}'; lastFgIdx = -1; }
     out += '\n';
   }
   return out.replace(/\n+$/, '');
@@ -107,24 +117,47 @@ export function renderAscii(img: PixelBuffer, w: number, h: number, colored: boo
  * vertically-stacked pixels. Uses blessed 16-colour palette tokens via
  * rgbToBlessed() so the output is safe for blessed's cell buffer.
  */
-export function renderHalfblock(img: PixelBuffer, w: number, h: number): string {
+export function renderHalfblock(
+  img: PixelBuffer,
+  w: number,
+  h: number,
+  memory?: ColorMemory
+): string {
   const sw = w;
   let out = '';
-  let lastFg = '', lastBg = '';
+  let lastFgIdx = -1, lastBgIdx = -1;
+  const mem = memory ? fitColorMemory(memory, w, h) : undefined;
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const topI = ((y * 2) * sw + x) * 4;
       const botI = ((y * 2 + 1) * sw + x) * 4;
-      const fg = rgbToBlessed(img.data[topI], img.data[topI + 1], img.data[topI + 2]);
-      const bg = rgbToBlessed(img.data[botI], img.data[botI + 1], img.data[botI + 2]);
-      if (fg !== lastFg || bg !== lastBg) {
-        if (lastFg || lastBg) out += '{/}';
-        out += `{${fg}-fg}{${bg}-bg}`;
-        lastFg = fg; lastBg = bg;
+      const cell = y * w + x;
+
+      // Prefer what this cell showed last frame, then what the current run
+      // is using. Without a memory this is the plain nearest match.
+      const fgIdx = pickColor(
+        PALETTE,
+        img.data[topI], img.data[topI + 1], img.data[topI + 2],
+        mem ? [mem.fg[cell], lastFgIdx] : [],
+        mem?.stickiness
+      );
+      const bgIdx = pickColor(
+        PALETTE,
+        img.data[botI], img.data[botI + 1], img.data[botI + 2],
+        mem ? [mem.bg[cell], lastBgIdx] : [],
+        mem?.stickiness
+      );
+      if (mem) { mem.fg[cell] = fgIdx; mem.bg[cell] = bgIdx; }
+
+      if (fgIdx !== lastFgIdx || bgIdx !== lastBgIdx) {
+        if (lastFgIdx >= 0 || lastBgIdx >= 0) out += '{/}';
+        out += `{${PALETTE[fgIdx][0]}-fg}{${PALETTE[bgIdx][0]}-bg}`;
+        lastFgIdx = fgIdx; lastBgIdx = bgIdx;
       }
       out += '▀';
     }
-    if (lastFg || lastBg) { out += '{/}'; lastFg = ''; lastBg = ''; }
+    if (lastFgIdx >= 0 || lastBgIdx >= 0) { out += '{/}'; lastFgIdx = -1; lastBgIdx = -1; }
     out += '\n';
   }
   return out.replace(/\n+$/, '');
