@@ -2397,7 +2397,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('game-mode', (enabled: boolean) => {
       gameMode.current = enabled;
-      if (!enabled) setActiveClientDoor(null);
+      if (!enabled) {
+        // This is the authoritative "door ended" signal - the backend does
+        // not emit door:unload-client - so it is where a client door has to
+        // be told to stop. Without it the door's timers and camera captures
+        // outlive the door itself.
+        window.dispatchEvent(new CustomEvent('bbs:door-unload', {
+          detail: { doorId: activeClientDoorId.current },
+        }));
+        setActiveClientDoor(null);
+      }
       // Clear key states and repeat timers when switching modes
       keyState.current = {};
       // Stop all key repeat timers
@@ -2436,6 +2445,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
+      // Stop whatever is already running before starting another copy.
+      // Re-entering a door used to leave the previous instance alive, and
+      // LiveChat's video showed it plainly: two capture loops feeding one
+      // tile at different sizes, flipping between them.
+      window.dispatchEvent(new CustomEvent('bbs:door-unload', {
+        detail: { doorId: data.doorId },
+      }));
+
       // Real-time games declare this; TUI doors like LiveChat do not, and
       // keep their cursor, their clicks and text selection.
       capturePointer.current = data.manifest?.capturePointer === true;
@@ -2507,6 +2524,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('door:unload-client', (data: { doorId: string; sessionId?: string }) => {
+      // TELL the door first. Removing its <script> does not stop the code it
+      // started - timers, camera captures and sockets all carry on - so a
+      // re-entered door left its previous copy running. LiveChat ended up
+      // with several capture loops sending frames at different sizes into
+      // one tile, and it got worse the more times the door was opened.
+      window.dispatchEvent(new CustomEvent('bbs:door-unload', {
+        detail: { doorId: data.doorId, sessionId: data.sessionId },
+      }));
+
       const scriptId = `door-${data.doorId}`;
       const script = document.getElementById(scriptId) || doorScripts.current[data.sessionId || ''] || null;
       if (script && script.parentNode) {

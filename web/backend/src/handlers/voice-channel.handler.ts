@@ -10,6 +10,7 @@
  */
 
 import type { Socket } from 'socket.io';
+import { getSessionBySocketId } from '../server/session-manager';
 import type { BBSSession } from '../index';
 import { getSystemTime } from '../utils/date-time.util';
 
@@ -91,12 +92,23 @@ function getVoiceParticipant(roomId: string, userId: number | string): VoicePart
 /**
  * Register voice channel handlers on a socket
  */
+/**
+ * NOTE ON SESSION LOOKUPS
+ *
+ * These handlers are handed the `sessions` map, which is keyed by NODE ID -
+ * so `sessions.get(socket.id)` never found anything, and every
+ * voice:join-channel answered "Session not found". Nobody ever joined a
+ * voice channel: two people in the same room each saw a grid containing only
+ * themselves, which is why "I am connected with two users and still see only
+ * one video" (2026-08-26). getSessionBySocketId walks socket.id -> nodeId ->
+ * session, which is the lookup that works.
+ */
 export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: Map<string, BBSSession>): void {
   /**
    * Join voice channel (legacy - joins current room's voice)
    */
   socket.on('voice:join', (callback?: (response: any) => void) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       callback?.({ success: false, error: 'Session not found' });
       return;
@@ -156,7 +168,7 @@ console.log(`[Voice Channel] User ${username} joined voice channel in room ${roo
    * Leave voice channel
    */
   socket.on('voice:leave', () => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentRoomId;
@@ -186,7 +198,7 @@ console.log(`[Voice Channel] User ${session.user?.username} left voice channel i
    * Join specific voice channel (Discord-style - by channel ID/name)
    */
   socket.on('voice:join-channel', (data: { channelId?: string; channelName?: string }, callback?: (response: any) => void) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       callback?.({ success: false, error: 'Session not found' });
       return;
@@ -244,7 +256,7 @@ console.log(`[Voice Channel] User ${username} joined voice channel: ${channelId}
    * Leave specific voice channel
    */
   socket.on('voice:leave-channel', (data?: { channelId?: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const userId = session.user?.id;
@@ -276,7 +288,7 @@ console.log(`[Voice Channel] User ${session.user?.username} left voice channel: 
    * Toggle mute status
    */
   socket.on('voice:mute', (data: { isMuted: boolean }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
@@ -302,7 +314,7 @@ console.log(`[Voice Channel] User ${session.user?.username} left voice channel: 
    * Toggle video
    */
   socket.on('voice:video-toggle', (data: { hasVideo: boolean }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
@@ -330,7 +342,7 @@ console.log(`[Voice Channel] User ${session.user?.username} ${data.hasVideo ? 'e
    * Toggle screen share
    */
   socket.on('voice:screenshare-toggle', (data: { hasScreenShare: boolean }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
@@ -358,7 +370,7 @@ console.log(`[Voice Channel] User ${session.user?.username} ${data.hasScreenShar
    * Relay speaking status (from audio streaming VAD)
    */
   socket.on('voice:speaking', (data: { isSpeaking: boolean; audioLevel: number }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
@@ -383,7 +395,7 @@ console.log(`[Voice Channel] User ${session.user?.username} ${data.hasScreenShar
    * Handle disconnect - clean up voice channel
    */
   socket.on('disconnect', () => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;

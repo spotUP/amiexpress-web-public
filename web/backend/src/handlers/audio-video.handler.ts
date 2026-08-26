@@ -6,6 +6,7 @@
  */
 
 import type { Socket, Server as SocketIOServer } from 'socket.io';
+import { getSessionBySocketId } from '../server/session-manager';
 import type { BBSSession } from '../index';
 import { rgbToHsv } from '../utils/image-to-ascii.util';
 import { renderShapeAscii } from '../utils/shape-ascii.util';
@@ -88,7 +89,7 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
   // ========== AUDIO HANDLERS ==========
 
   socket.on('audio:start-streaming', (options: any, callback?: (response: any) => void) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       callback?.({ success: false, error: 'Session not found' });
       return;
@@ -128,7 +129,7 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
   });
 
   socket.on('audio:stop-streaming', (callback?: () => void) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       callback?.();
       return;
@@ -147,7 +148,7 @@ console.log(`[Audio] User ${session.user?.username} stopped audio streaming`);
   });
 
   socket.on('audio:mute', (data: { muted: boolean }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
@@ -163,7 +164,7 @@ console.log(`[Audio] User ${session.user?.username} stopped audio streaming`);
   // ========== VIDEO HANDLERS ==========
 
   socket.on('video:start-stream', (data: { source: any, options: any }, callback?: (response: any) => void) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       callback?.({ success: false, error: 'Session not found' });
       return;
@@ -191,7 +192,7 @@ console.log(`[Audio] User ${session.user?.username} stopped audio streaming`);
   });
 
   socket.on('video:stop-stream', (data: { streamId: string }, callback?: (response: any) => void) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       callback?.({ success: false, error: 'Session not found' });
       return;
@@ -221,7 +222,7 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
   // Relay audio chunks to other participants
   socket.on('audio:data', (chunk: ArrayBuffer) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     // Echo back to originating socket for local VU meters/demos
@@ -245,7 +246,7 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
   // Inspired by Python/Pillow ASCII art techniques with calibrated characters
   // Modes: 'braille' (8x resolution), 'superres'/'halfblock' (4x rich mode with 10-level shading), 'ascii' (character-based), 'hsv' (16-color HSV-based), 'shape' (shape-based geometric rendering)
   socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv' | 'shape', data: ArrayBuffer }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
 
     const { width, height, colored, mode = 'halfblock', data: buffer } = data;
     const pixels = new Uint8Array(buffer);
@@ -1055,7 +1056,7 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
   // Relay pre-rendered video frames (ASCII) to other participants
   socket.on('video:frame', (data: { streamId: string, frame: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;
@@ -1072,7 +1073,7 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
   // Relay speaking status to all participants (including sender for local UI sync)
   socket.on('voice:speaking', (data: { isSpeaking: boolean, audioLevel: number }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const roomId = session.currentVoiceChannelId || session.currentRoomId;

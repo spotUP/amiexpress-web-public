@@ -4,6 +4,15 @@
  */
 
 import { EventEmitter } from './event-emitter';
+
+/**
+ * Dispatched on `window` when the terminal unloads a client door.
+ *
+ * Removing a door's <script> tag does not stop the code it started, so the
+ * terminal says so explicitly and every ClientDoor shuts itself down.
+ * `detail.doorId` names the door; omit it to stop all of them.
+ */
+export const DOOR_UNLOAD_EVENT = 'bbs:door-unload';
 import {
   BBSUser,
   DoorConfig,
@@ -123,6 +132,24 @@ export class ClientDoor extends EventEmitter {
     // Listen for browser events
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', () => this.shutdown());
+
+      // A door being UNLOADED must stop too.
+      //
+      // The terminal unloads a client door by removing its <script> from the
+      // page - which does not stop anything the script started. Timers,
+      // camera captures and sockets carried on, and every re-entry added
+      // another live copy: LiveChat ended up with several capture loops
+      // sending frames at different sizes into one tile, which is the video
+      // "flipping between two modes" reported 2026-08-26. It got worse the
+      // more times the door was opened, which is exactly what a leak looks
+      // like from the outside.
+      window.addEventListener(DOOR_UNLOAD_EVENT, (event: any) => {
+        const doorId = event?.detail?.doorId;
+        // No id means "everything"; an id only stops the door it names.
+        if (!doorId || doorId === this.config.name?.toLowerCase() || doorId === (this.config as any).id) {
+          this.shutdown();
+        }
+      });
     }
   }
 
