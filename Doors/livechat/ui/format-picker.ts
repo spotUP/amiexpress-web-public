@@ -3,6 +3,7 @@
  */
 
 import { Screen, CategoryPicker } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 import type { CategoryItem } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export type FormatCategory = 'colors' | 'effects' | 'markdown';
@@ -65,7 +66,7 @@ export class FormatPicker {
       categories: CATEGORIES,
       categoryWidth: 14,
       debounceMs: 80,
-      borderColor: 'yellow',
+      borderColor: PANEL_BORDER,
       categoryStyle: {
         fg: 'white',
         bg: 'black',

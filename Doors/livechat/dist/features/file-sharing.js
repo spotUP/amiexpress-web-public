@@ -5,8 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createFileSharing = createFileSharing;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const theme_1 = require("../ui/theme");
 function createFileSharing(s, sock, st, un, asm, acm, aa, aud, sm, hm) {
-    const o = blessed_1.default.box({ parent: s, top: 'center', left: 'center', width: '70%', height: '70%', label: ' Share Files [Drag to Move | Resize: Corner | ESC: Close] ', border: { type: 'line' }, shadow: true, hidden: true, mouse: true, draggable: true, ch: ' ', zIndex: 9990, style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
+    const o = blessed_1.default.box({ parent: s, top: 'center', left: 'center', width: '70%', height: '70%', label: ' Share Files [Drag to Move | Resize: Corner | ESC: Close] ', border: { type: 'line' }, shadow: true, hidden: true, mouse: true, draggable: true, ch: ' ', zIndex: 9990, style: { fg: 'white', bg: 'black', border: { fg: theme_1.PANEL_BORDER } } });
     o.enableResize();
     const fm = blessed_1.default.filemanager({ parent: o, top: 1, left: 1, width: '100%-4', height: '100%-6', cwd: '/uploads', files: [], directories: [], mouse: true, style: { fg: 'white' } });
     const sb = blessed_1.default.button({ parent: o, bottom: 1, left: 'center', width: 14, height: 1, content: ' Share File ', mouse: true, style: { fg: 'white', bg: 'green', focus: { bg: 'cyan' } } });

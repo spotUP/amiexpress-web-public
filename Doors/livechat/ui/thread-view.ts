@@ -2,6 +2,7 @@
  * Thread view UI component
  */
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -16,7 +17,7 @@ export function createThreadView(screen: Screen, threadData: any) {
       type: 'line',
       labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
     },
-    style: { border: { fg: 'cyan' } },
+    style: { border: { fg: PANEL_BORDER }, ...PANEL_FOCUS_STYLE },
     label: ` Thread: ${threadData.parent.message.substring(0, 40)}... `,
     tags: true,
     keys: true,

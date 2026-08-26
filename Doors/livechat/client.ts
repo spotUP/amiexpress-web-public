@@ -40,6 +40,8 @@ import {
   renderAscii,
   renderHalfblock,
   renderBraille,
+  fitPreservingAspect,
+  pixelAspect,
 } from './video-encoders';
 
 // =============================================================================
@@ -654,15 +656,32 @@ class LiveChatClient {
     // Flip horizontally so the webcam reads as a mirror (what the user
     // expects when looking at themselves) — the raw <video> feed would
     // otherwise show their left hand on the right side of the frame.
+    // Fit the camera inside the canvas rather than stretching it to fill.
+    // The tile can be any shape now, and stretching gave a wide tile a wide
+    // face. pixelAspect is what makes the fit correct in a terminal, where a
+    // cell is about twice as tall as it is wide.
+    const fit = fitPreservingAspect(
+      this.videoElement.videoWidth,
+      this.videoElement.videoHeight,
+      this.videoCanvas.width,
+      this.videoCanvas.height,
+      pixelAspect(mode)
+    );
+
+    // Black behind it, so the letterboxing is empty rather than whatever the
+    // last frame left there.
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.videoCanvas.width, this.videoCanvas.height);
+
     ctx.save();
     ctx.translate(this.videoCanvas.width, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(
       this.videoElement,
-      0,
-      0,
-      this.videoCanvas.width,
-      this.videoCanvas.height,
+      this.videoCanvas.width - fit.dx - fit.dw,
+      fit.dy,
+      fit.dw,
+      fit.dh,
     );
     ctx.restore();
     const imgData = ctx.getImageData(

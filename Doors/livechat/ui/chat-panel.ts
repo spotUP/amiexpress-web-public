@@ -1,4 +1,5 @@
 import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 import type { DisplayMessage } from '../types';
 import { userName, timestamp } from '../utils/ansi';
 import { escapeContent } from '../utils/format';
@@ -14,7 +15,7 @@ export function chatPanelConfig() {
     tags: true,
     style: {
       fg: 'white',
-      border: { fg: 'cyan' }
+      border: { fg: PANEL_BORDER }
     }
   };
 }

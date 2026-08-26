@@ -4,6 +4,7 @@ exports.TYPING_HEIGHT = void 0;
 exports.createTypingPreview = createTypingPreview;
 exports.renderTypingPreview = renderTypingPreview;
 exports.processKeystroke = processKeystroke;
+const theme_1 = require("./theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const status_bar_1 = require("./status-bar");
 const input_box_1 = require("./input-box");
@@ -18,7 +19,7 @@ function createTypingPreview(screen) {
         width: '100%-16',
         height: exports.TYPING_HEIGHT,
         border: { type: 'line' },
-        style: { fg: 'gray', border: { fg: 'gray' } },
+        style: { fg: 'gray', border: { fg: theme_1.PANEL_BORDER } },
         tags: true,
         content: '',
         focusable: false,

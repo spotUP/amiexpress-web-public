@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createDrawingCanvas = createDrawingCanvas;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const theme_1 = require("../ui/theme");
 function createDrawingCanvas(s, sock, st, cl, tb, bbs, ib, gcdn, ucl, usb, asm, MH, SW, SH, IH) {
     const dcs = new Set();
     let dm = false;
@@ -14,7 +15,7 @@ function createDrawingCanvas(s, sock, st, cl, tb, bbs, ib, gcdn, ucl, usb, asm, 
     let ldx = -1;
     let ldy = -1;
     const idc = (cn) => dcs.has(cn) || cn.startsWith('art:');
-    const canvas = blessed_1.default.canvas({ parent: s, top: MH, left: SW, right: 0, bottom: SH + IH, label: ' Drawing [Resize: Corner] - Click/Drag | C: Colors | X: Clear | ESC: Exit ', border: { type: 'line' }, hidden: true, mouse: true, fillChar: '\u2588', clearChar: ' ', ch: ' ', style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } } });
+    const canvas = blessed_1.default.canvas({ parent: s, top: MH, left: SW, right: 0, bottom: SH + IH, label: ' Drawing [Resize: Corner] - Click/Drag | C: Colors | X: Clear | ESC: Exit ', border: { type: 'line' }, hidden: true, mouse: true, fillChar: '\u2588', clearChar: ' ', ch: ' ', style: { fg: 'white', bg: 'black', border: { fg: theme_1.PANEL_BORDER } } });
     const cols = ['white', 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'gray'];
     let ci = 0;
     canvas.enableResize();

@@ -11,8 +11,13 @@
 /** Every panel border, focused or not. */
 export const PANEL_BORDER = 'blue';
 
-/** The focused panel's border. The SDK derives this from style.focus.border. */
-export const PANEL_BORDER_FOCUS = 'white';
+/**
+ * The focused panel's border. The SDK derives this from style.focus.border.
+ *
+ * Cyan, asked for directly: "all window borders in the chat need to have the
+ * dark blue colour when not active and cyan when active."
+ */
+export const PANEL_BORDER_FOCUS = 'cyan';
 
 /** Ready-made style fragment - spread into a panel's `style`. */
 export const PANEL_FOCUS_STYLE = {

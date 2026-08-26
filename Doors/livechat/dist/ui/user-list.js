@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createUserList = createUserList;
 exports.formatUserItem = formatUserItem;
 exports.buildUserListItems = buildUserListItems;
+const theme_1 = require("./theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const types_1 = require("../types");
 const ansi_1 = require("../utils/ansi");
@@ -19,7 +20,7 @@ function createUserList(screen) {
         hidden: true,
         style: {
             fg: 'white',
-            border: { fg: 'magenta' },
+            border: { fg: theme_1.PANEL_BORDER },
             selected: { bg: 'blue', fg: 'white' },
         },
         scrollbar: { ch: '█' },

@@ -18,6 +18,7 @@ exports.EnhancedVoiceChannel = exports.VoiceControlBar = void 0;
 exports.createEnhancedVoiceChannel = createEnhancedVoiceChannel;
 exports.createVoiceControlBar = createVoiceControlBar;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const theme_1 = require("../ui/theme");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const video_grid_1 = require("./video-grid");
 /**
@@ -57,8 +58,7 @@ class VoiceControlBar {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: {
-                    fg: 'green',
+                border: { fg: theme_1.PANEL_BORDER,
                 },
             },
             border: {
@@ -646,7 +646,7 @@ class EnhancedVoiceChannel {
                 style: {
                     fg: 'white',
                     bg: 'black',
-                    border: { fg: 'cyan' },
+                    border: { fg: theme_1.PANEL_BORDER },
                 },
                 tags: true,
                 label: ' {cyan-fg}Join Voice Channel{/cyan-fg} ',

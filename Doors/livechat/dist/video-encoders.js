@@ -19,6 +19,8 @@ exports.rgbToBlessed = rgbToBlessed;
 exports.renderAscii = renderAscii;
 exports.renderHalfblock = renderHalfblock;
 exports.renderBraille = renderBraille;
+exports.pixelAspect = pixelAspect;
+exports.fitPreservingAspect = fitPreservingAspect;
 /**
  * Source pixels per output char for each render mode.
  *  - ascii / color: 1 char = 1 pixel
@@ -177,4 +179,54 @@ function renderBraille(img, w, h) {
         out += '\n';
     }
     return out.replace(/\n+$/, '');
+}
+/**
+ * How wide one canvas pixel appears on screen, relative to its height.
+ *
+ * A terminal cell is about twice as tall as it is wide, and each render mode
+ * packs a different number of canvas pixels into one cell (see
+ * pixelsPerChar). In ASCII and colour modes one pixel IS one cell, so it
+ * appears half as wide as it is tall; halfblock and braille pack two and four
+ * rows into a cell, which comes out square.
+ */
+function pixelAspect(mode) {
+    const { px, py } = pixelsPerChar(mode);
+    // cell height is 2x cell width, so: (cellW/px) / (cellH/py) = py / (2*px)
+    return py / (2 * px);
+}
+/**
+ * Where to draw the camera inside the capture canvas so it keeps its shape.
+ *
+ * The camera used to be stretched to fill the canvas, which is fine only
+ * while the tile happens to match the camera's proportions - and once the
+ * video tile could be any shape, a wide tile gave everyone a wide face
+ * ("it does not force aspect, it's wide now").
+ *
+ * The picture is fitted inside the canvas instead, centred, with the
+ * leftover space black. `pixelAspect` is what makes this correct in a
+ * TERMINAL rather than on a square-pixel screen.
+ */
+function fitPreservingAspect(srcW, srcH, canvasW, canvasH, aspect) {
+    if (srcW <= 0 || srcH <= 0 || canvasW <= 0 || canvasH <= 0) {
+        return { dx: 0, dy: 0, dw: Math.max(0, canvasW), dh: Math.max(0, canvasH) };
+    }
+    // The width:height the destination needs, in canvas pixels, for the result
+    // to LOOK like the source once the terminal stretches each pixel.
+    const wanted = (srcW / srcH) / aspect;
+    let dw = canvasW;
+    let dh = dw / wanted;
+    if (dh > canvasH) {
+        dh = canvasH;
+        dw = dh * wanted;
+    }
+    // Round the SIZE first, then centre what is actually drawn - centring on
+    // the unrounded size leaves the picture a pixel off its own box.
+    const width = Math.round(dw);
+    const height = Math.round(dh);
+    return {
+        dx: Math.round((canvasW - width) / 2),
+        dy: Math.round((canvasH - height) / 2),
+        dw: width,
+        dh: height,
+    };
 }

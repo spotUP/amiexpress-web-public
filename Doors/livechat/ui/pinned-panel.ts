@@ -2,6 +2,7 @@
  * Pinned messages panel UI component
  */
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -16,7 +17,7 @@ export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
       type: 'line',
       labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
     },
-    style: { border: { fg: 'yellow' } },
+    style: { border: { fg: PANEL_BORDER }, ...PANEL_FOCUS_STYLE },
     label: ' Pinned Messages ',
     tags: true,
     keys: true,

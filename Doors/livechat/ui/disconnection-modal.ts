@@ -2,6 +2,7 @@
  * Disconnection Modal for ChatOnly Mode - uses SDK ConfirmModal widget
  */
 import { Screen, ConfirmModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 
 export interface DisconnectionModalOptions {
   screen: Screen;
@@ -16,7 +17,7 @@ export class DisconnectionModal {
     this.modal = new ConfirmModal({
       parent: options.screen,
       title: 'Connection Error',
-      borderColor: 'red',
+      borderColor: PANEL_BORDER,
       confirmText: '[ Retry ]',
       cancelText: '[ Cancel ]',
       confirmColor: 'green',

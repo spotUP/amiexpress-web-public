@@ -1,4 +1,5 @@
 import blessed, { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from '../ui/theme';
 import type { AppState } from '../core/state';
 import type { PresenceService, SocketEmitter } from '../services';
 import { createEventCheckboxes } from './settings-checkboxes-events';
@@ -35,7 +36,7 @@ export function createSettingsOverlay(
     draggable: true,
     trapFocus: true,
     ch: ' ',
-    style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+    style: { fg: 'white', bg: 'black', border: { fg: PANEL_BORDER } },
     zIndex: 9990,  // Modal overlays render above panels (1-10) but below dropdowns (9999)
   });
 

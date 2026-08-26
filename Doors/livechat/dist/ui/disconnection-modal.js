@@ -6,12 +6,13 @@ exports.createDisconnectionModal = createDisconnectionModal;
  * Disconnection Modal for ChatOnly Mode - uses SDK ConfirmModal widget
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const theme_1 = require("./theme");
 class DisconnectionModal {
     constructor(options) {
         this.modal = new blessed_1.ConfirmModal({
             parent: options.screen,
             title: 'Connection Error',
-            borderColor: 'red',
+            borderColor: theme_1.PANEL_BORDER,
             confirmText: '[ Retry ]',
             cancelText: '[ Cancel ]',
             confirmColor: 'green',

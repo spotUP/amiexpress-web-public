@@ -2,6 +2,7 @@
  * Search overlay UI component - uses SDK SearchModal widget
  */
 import { Screen, SearchModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 import type { SearchResult } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export function createSearchOverlay(
@@ -13,7 +14,7 @@ export function createSearchOverlay(
     parent: screen,
     title: 'Message Search',
     searchLabel: 'Query',
-    borderColor: 'green',
+    borderColor: PANEL_BORDER,
     zIndex: 9990,
     filters: [
       { id: 'username', label: 'Username (optional)' }

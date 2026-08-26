@@ -1,4 +1,5 @@
 import type { TypingUser } from '../types';
+import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
 import { color } from '../utils/ansi';
 
 /** Create input box config */
@@ -9,8 +10,8 @@ export function inputBoxConfig() {
     inputOnFocus: true,
     tags: true,
     style: {
-      border: { fg: 'green' },
-      focus: { border: { fg: 'yellow' } }
+      border: { fg: PANEL_BORDER },
+      focus: { border: { fg: PANEL_BORDER_FOCUS } }
     }
   };
 }

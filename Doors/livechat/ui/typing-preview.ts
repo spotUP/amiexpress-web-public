@@ -1,4 +1,5 @@
 import type { TypingUser } from '../types';
+import { PANEL_BORDER } from './theme';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { color } from '../utils/ansi';
@@ -25,7 +26,7 @@ export function createTypingPreview(screen: Screen): Box {
     width: '100%-16',
     height: TYPING_HEIGHT,
     border: { type: 'line' },
-    style: { fg: 'gray', border: { fg: 'gray' } },
+    style: { fg: 'gray', border: { fg: PANEL_BORDER } },
     tags: true,
     content: '',
     focusable: false,

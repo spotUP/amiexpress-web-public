@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.inputBoxConfig = inputBoxConfig;
 exports.formatTyping = formatTyping;
 exports.statusLineConfig = statusLineConfig;
+const theme_1 = require("./theme");
 const ansi_1 = require("../utils/ansi");
 /** Create input box config */
 function inputBoxConfig() {
@@ -12,8 +13,8 @@ function inputBoxConfig() {
         inputOnFocus: true,
         tags: true,
         style: {
-            border: { fg: 'green' },
-            focus: { border: { fg: 'yellow' } }
+            border: { fg: theme_1.PANEL_BORDER },
+            focus: { border: { fg: theme_1.PANEL_BORDER_FOCUS } }
         }
     };
 }

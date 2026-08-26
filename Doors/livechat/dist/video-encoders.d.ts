@@ -48,3 +48,32 @@ export declare function renderHalfblock(img: PixelBuffer, w: number, h: number):
  *   7 8
  */
 export declare function renderBraille(img: PixelBuffer, w: number, h: number): string;
+/**
+ * How wide one canvas pixel appears on screen, relative to its height.
+ *
+ * A terminal cell is about twice as tall as it is wide, and each render mode
+ * packs a different number of canvas pixels into one cell (see
+ * pixelsPerChar). In ASCII and colour modes one pixel IS one cell, so it
+ * appears half as wide as it is tall; halfblock and braille pack two and four
+ * rows into a cell, which comes out square.
+ */
+export declare function pixelAspect(mode: string): number;
+export interface FitRect {
+    dx: number;
+    dy: number;
+    dw: number;
+    dh: number;
+}
+/**
+ * Where to draw the camera inside the capture canvas so it keeps its shape.
+ *
+ * The camera used to be stretched to fill the canvas, which is fine only
+ * while the tile happens to match the camera's proportions - and once the
+ * video tile could be any shape, a wide tile gave everyone a wide face
+ * ("it does not force aspect, it's wide now").
+ *
+ * The picture is fitted inside the canvas instead, centred, with the
+ * leftover space black. `pixelAspect` is what makes this correct in a
+ * TERMINAL rather than on a square-pixel screen.
+ */
+export declare function fitPreservingAspect(srcW: number, srcH: number, canvasW: number, canvasH: number, aspect: number): FitRect;

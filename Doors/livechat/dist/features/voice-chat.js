@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VoiceChannel = void 0;
 exports.createVoiceChannel = createVoiceChannel;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const theme_1 = require("../ui/theme");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 class VoiceChannel {
     constructor(options) {
@@ -43,8 +44,7 @@ class VoiceChannel {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: {
-                    fg: 'cyan',
+                border: { fg: theme_1.PANEL_BORDER,
                 },
             },
             border: {
@@ -89,8 +89,7 @@ class VoiceChannel {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: {
-                    fg: 'green',
+                border: { fg: theme_1.PANEL_BORDER,
                 },
             },
             border: {
@@ -112,8 +111,7 @@ class VoiceChannel {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: {
-                    fg: 'yellow',
+                border: { fg: theme_1.PANEL_BORDER,
                 },
             },
             border: {
@@ -132,8 +130,7 @@ class VoiceChannel {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: {
-                    fg: 'magenta',
+                border: { fg: theme_1.PANEL_BORDER,
                 },
             },
             border: {
@@ -152,8 +149,7 @@ class VoiceChannel {
             style: {
                 fg: 'white',
                 bg: 'black',
-                border: {
-                    fg: 'cyan',
+                border: { fg: theme_1.PANEL_BORDER,
                 },
             },
             border: {

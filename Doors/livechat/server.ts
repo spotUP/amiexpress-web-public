@@ -60,6 +60,7 @@ import { CommandHandler } from './handlers/command';
 import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
+import { PANEL_BORDER } from './ui/theme';
 import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, createEmojiButton, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
@@ -345,7 +346,7 @@ export async function createApp(session: DoorSession) {
       // identically (or where the selection bar inherited the fg from
       // the base style and produced cyan-on-cyan).
       selected: { fg: 'white', bg: 'cyan' },
-      border: { fg: 'yellow' },
+      border: { fg: PANEL_BORDER },
     },
     scrollbar: {
       ch: ' ',
@@ -1333,7 +1334,7 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'white',
       bg: 'black',
-      border: { fg: 'red' },
+      border: { fg: PANEL_BORDER },
     },
     trapFocus: true,
   });
@@ -1349,7 +1350,7 @@ export async function createApp(session: DoorSession) {
     mouse: true,
     style: {
       fg: 'white',
-      border: { fg: 'gray' },
+      border: { fg: PANEL_BORDER },
     },
   });
 
@@ -1412,7 +1413,7 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'green',
       bg: 'black',
-      border: { fg: 'green' },
+      border: { fg: PANEL_BORDER },
     },
     hidden: true,
   });

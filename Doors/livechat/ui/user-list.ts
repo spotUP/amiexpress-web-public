@@ -1,4 +1,5 @@
 import type { Screen, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { ChannelMember, PresenceStatus } from '../types';
 import { PRESENCE_INDICATORS, PRESENCE_COLORS } from '../types';
@@ -17,7 +18,7 @@ export function createUserList(screen: Screen): List {
     hidden: true,
     style: {
       fg: 'white',
-      border: { fg: 'magenta' },
+      border: { fg: PANEL_BORDER },
       selected: { bg: 'blue', fg: 'white' },
     },
     scrollbar: { ch: '█' },

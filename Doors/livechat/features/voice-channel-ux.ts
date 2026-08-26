@@ -11,6 +11,7 @@
  */
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from '../ui/theme';
 import { NetworkQualityMonitor, AdaptiveQualityManager } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { VideoGrid, type VideoParticipant } from './video-grid';
@@ -92,8 +93,7 @@ export class VoiceControlBar {
       style: {
         fg: 'white',
         bg: 'black',
-        border: {
-          fg: 'green',
+        border: { fg: PANEL_BORDER,
         },
       },
       border: {
@@ -775,7 +775,7 @@ export class EnhancedVoiceChannel {
         style: {
           fg: 'white',
           bg: 'black',
-          border: { fg: 'cyan' },
+          border: { fg: PANEL_BORDER },
         },
         tags: true,
         label: ' {cyan-fg}Join Voice Channel{/cyan-fg} ',

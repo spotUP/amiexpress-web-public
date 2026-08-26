@@ -1,4 +1,5 @@
 import type { Screen, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Channel } from '../types';
 
@@ -14,7 +15,7 @@ export function createChannelList(screen: Screen): List {
     border: { type: 'line' },
     style: {
       fg: 'white',
-      border: { fg: 'cyan' },
+      border: { fg: PANEL_BORDER },
       selected: { bg: 'blue', fg: 'white', bold: true },
       item: { fg: 'white' },
     },

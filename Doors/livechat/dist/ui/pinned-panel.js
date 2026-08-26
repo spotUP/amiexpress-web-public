@@ -5,6 +5,7 @@ exports.createPinnedPanel = createPinnedPanel;
  * Pinned messages panel UI component
  */
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const theme_1 = require("./theme");
 function createPinnedPanel(screen, pinnedMessages) {
     const overlay = (0, blessed_helpers_1.createBox)({
         parent: screen,
@@ -16,7 +17,7 @@ function createPinnedPanel(screen, pinnedMessages) {
             type: 'line',
             labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
         },
-        style: { border: { fg: 'yellow' } },
+        style: { border: { fg: theme_1.PANEL_BORDER }, ...theme_1.PANEL_FOCUS_STYLE },
         label: ' Pinned Messages ',
         tags: true,
         keys: true,

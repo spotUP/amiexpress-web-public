@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSettingsOverlay = createSettingsOverlay;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const theme_1 = require("../ui/theme");
 const settings_checkboxes_events_1 = require("./settings-checkboxes-events");
 const settings_checkboxes_prefs_1 = require("./settings-checkboxes-prefs");
 const settings_status_radio_1 = require("./settings-status-radio");
@@ -29,7 +30,7 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         draggable: true,
         trapFocus: true,
         ch: ' ',
-        style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+        style: { fg: 'white', bg: 'black', border: { fg: theme_1.PANEL_BORDER } },
         zIndex: 9990, // Modal overlays render above panels (1-10) but below dropdowns (9999)
     });
     o.enableResize();

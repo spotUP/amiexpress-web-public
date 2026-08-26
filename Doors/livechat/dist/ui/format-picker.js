@@ -7,6 +7,7 @@ exports.FormatPicker = void 0;
 exports.getAllFormats = getAllFormats;
 exports.getFormatsByCategory = getFormatsByCategory;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const theme_1 = require("./theme");
 // Available formats grouped by category
 const FORMATS = {
     colors: [
@@ -52,7 +53,7 @@ class FormatPicker {
             categories: CATEGORIES,
             categoryWidth: 14,
             debounceMs: 80,
-            borderColor: 'yellow',
+            borderColor: theme_1.PANEL_BORDER,
             categoryStyle: {
                 fg: 'white',
                 bg: 'black',

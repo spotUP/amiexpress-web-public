@@ -65,6 +65,7 @@ const services_1 = require("./services");
 const typing_preview_1 = require("./ui/typing-preview");
 const screen_1 = require("./ui/screen");
 const menu_bar_1 = require("./ui/menu-bar");
+const theme_1 = require("./ui/theme");
 const layout_solver_1 = require("./ui/layout-solver");
 const status_bar_1 = require("./ui/status-bar");
 const input_box_1 = require("./ui/input-box");
@@ -292,7 +293,7 @@ async function createApp(session) {
             // identically (or where the selection bar inherited the fg from
             // the base style and produced cyan-on-cyan).
             selected: { fg: 'white', bg: 'cyan' },
-            border: { fg: 'yellow' },
+            border: { fg: theme_1.PANEL_BORDER },
         },
         scrollbar: {
             ch: ' ',
@@ -1185,7 +1186,7 @@ async function createApp(session) {
         style: {
             fg: 'white',
             bg: 'black',
-            border: { fg: 'red' },
+            border: { fg: theme_1.PANEL_BORDER },
         },
         trapFocus: true,
     });
@@ -1200,7 +1201,7 @@ async function createApp(session) {
         mouse: true,
         style: {
             fg: 'white',
-            border: { fg: 'gray' },
+            border: { fg: theme_1.PANEL_BORDER },
         },
     });
     const passwordSubmitBtn = (0, blessed_helpers_1.createButton)({
@@ -1255,7 +1256,7 @@ async function createApp(session) {
         style: {
             fg: 'green',
             bg: 'black',
-            border: { fg: 'green' },
+            border: { fg: theme_1.PANEL_BORDER },
         },
         hidden: true,
     });

@@ -112,3 +112,57 @@ describe('the capture size each mode asks for', () => {
     }
   });
 });
+
+describe('keeping the camera the right shape', () => {
+  const { fitPreservingAspect, pixelAspect } = require('../../../../Doors/livechat/video-encoders');
+
+  /** How the fitted picture LOOKS on screen, width over height. */
+  function screenAspect(fit: any, aspect: number): number {
+    return (fit.dw / fit.dh) * aspect;
+  }
+
+  it('does not stretch a 4:3 camera into a wide tile', () => {
+    // The bug: the camera was drawn to fill the canvas, so a wide tile gave
+    // everyone a wide face.
+    const canvasW = 160, canvasH = 40;
+    const fit = fitPreservingAspect(640, 480, canvasW, canvasH, pixelAspect('halfblock'));
+
+    expect(screenAspect(fit, pixelAspect('halfblock'))).toBeCloseTo(640 / 480, 1);
+  });
+
+  it('accounts for the terminal cell being twice as tall as it is wide', () => {
+    // In ascii mode one canvas pixel IS one cell, so the destination has to
+    // be twice as wide in pixels to look square on screen.
+    const ascii = fitPreservingAspect(640, 480, 200, 200, pixelAspect('ascii'));
+    const halfblock = fitPreservingAspect(640, 480, 200, 200, pixelAspect('halfblock'));
+
+    expect(ascii.dw / ascii.dh).toBeGreaterThan(halfblock.dw / halfblock.dh);
+  });
+
+  it('centres the picture in the space it has', () => {
+    const fit = fitPreservingAspect(640, 480, 200, 40, pixelAspect('halfblock'));
+
+    expect(fit.dx).toBe(Math.round((200 - fit.dw) / 2));
+    expect(fit.dy).toBe(Math.round((40 - fit.dh) / 2));
+  });
+
+  it('never draws outside the canvas', () => {
+    for (const [cw, ch] of [[160, 40], [40, 160], [80, 24], [7, 3]]) {
+      for (const mode of ['ascii', 'color', 'halfblock', 'braille']) {
+        const fit = fitPreservingAspect(1280, 720, cw, ch, pixelAspect(mode));
+
+        expect(fit.dx).toBeGreaterThanOrEqual(0);
+        expect(fit.dy).toBeGreaterThanOrEqual(0);
+        expect(fit.dx + fit.dw).toBeLessThanOrEqual(cw);
+        expect(fit.dy + fit.dh).toBeLessThanOrEqual(ch);
+      }
+    }
+  });
+
+  it('survives a camera that has not reported its size yet', () => {
+    const fit = fitPreservingAspect(0, 0, 80, 24, pixelAspect('ascii'));
+
+    expect(fit.dw).toBeGreaterThanOrEqual(0);
+    expect(fit.dh).toBeGreaterThanOrEqual(0);
+  });
+});

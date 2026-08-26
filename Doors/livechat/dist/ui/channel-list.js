@@ -4,6 +4,7 @@ exports.createChannelList = createChannelList;
 exports.formatChannelItem = formatChannelItem;
 exports.groupChannels = groupChannels;
 exports.buildChannelListItems = buildChannelListItems;
+const theme_1 = require("./theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 /** Create channel list component */
 function createChannelList(screen) {
@@ -17,7 +18,7 @@ function createChannelList(screen) {
         border: { type: 'line' },
         style: {
             fg: 'white',
-            border: { fg: 'cyan' },
+            border: { fg: theme_1.PANEL_BORDER },
             selected: { bg: 'blue', fg: 'white', bold: true },
             item: { fg: 'white' },
         },

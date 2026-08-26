@@ -5,12 +5,13 @@ exports.createSearchOverlay = createSearchOverlay;
  * Search overlay UI component - uses SDK SearchModal widget
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const theme_1 = require("./theme");
 function createSearchOverlay(screen, onSearch, onClose) {
     const modal = new blessed_1.SearchModal({
         parent: screen,
         title: 'Message Search',
         searchLabel: 'Query',
-        borderColor: 'green',
+        borderColor: theme_1.PANEL_BORDER,
         zIndex: 9990,
         filters: [
             { id: 'username', label: 'Username (optional)' }

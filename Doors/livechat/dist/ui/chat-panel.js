@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.chatPanelConfig = chatPanelConfig;
 exports.formatMessage = formatMessage;
 exports.renderMessages = renderMessages;
+const theme_1 = require("./theme");
 const ansi_1 = require("../utils/ansi");
 const format_1 = require("../utils/format");
 /** Create chat panel box config */
@@ -16,7 +17,7 @@ function chatPanelConfig() {
         tags: true,
         style: {
             fg: 'white',
-            border: { fg: 'cyan' }
+            border: { fg: theme_1.PANEL_BORDER }
         }
     };
 }

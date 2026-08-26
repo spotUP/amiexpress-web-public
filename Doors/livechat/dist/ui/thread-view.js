@@ -5,6 +5,7 @@ exports.createThreadView = createThreadView;
  * Thread view UI component
  */
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const theme_1 = require("./theme");
 function createThreadView(screen, threadData) {
     const overlay = (0, blessed_helpers_1.createBox)({
         parent: screen,
@@ -16,7 +17,7 @@ function createThreadView(screen, threadData) {
             type: 'line',
             labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
         },
-        style: { border: { fg: 'cyan' } },
+        style: { border: { fg: theme_1.PANEL_BORDER }, ...theme_1.PANEL_FOCUS_STYLE },
         label: ` Thread: ${threadData.parent.message.substring(0, 40)}... `,
         tags: true,
         keys: true,

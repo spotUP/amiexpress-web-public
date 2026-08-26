@@ -5,6 +5,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmojiPicker = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const theme_1 = require("./theme");
 const emojis_1 = require("../utils/emojis");
 const emoji_label_1 = require("../utils/emoji-label");
 const CATEGORY_MAP = {
@@ -42,7 +43,7 @@ class EmojiPicker {
             // ` Emotions` + `>>`.
             categoryWidth: CATEGORY_WIDTH,
             debounceMs: 80,
-            borderColor: 'cyan',
+            borderColor: theme_1.PANEL_BORDER,
             zIndex: 9990,
             categoryStyle: {
                 fg: 'white',

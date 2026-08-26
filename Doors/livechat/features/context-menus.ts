@@ -1,4 +1,5 @@
 import { toggleMute, muteMessage, type MuteList, type MuteLevel } from '../core/mute-list';
+import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -13,7 +14,7 @@ export interface ContextMenuExtras {
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
-  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } } as any);
+  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: 'white', bg: 'black', border: { fg: PANEL_BORDER }, selected: { fg: 'black', bg: 'cyan' } } } as any);
 
   // Set high z-index to ensure menu appears on top
   (cm as any).zi = 9999;

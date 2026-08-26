@@ -3,6 +3,7 @@
  */
 
 import { Screen, CategoryPicker } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PANEL_BORDER } from './theme';
 import type { CategoryItem } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { getEmojisByCategory, Emoji } from '../utils/emojis';
 import { emojiLabel } from '../utils/emoji-label';
@@ -52,7 +53,7 @@ export class EmojiPicker {
       // ` Emotions` + `>>`.
       categoryWidth: CATEGORY_WIDTH,
       debounceMs: 80,
-      borderColor: 'cyan',
+      borderColor: PANEL_BORDER,
       zIndex: 9990,
       categoryStyle: {
         fg: 'white',
