@@ -1,7 +1,8 @@
 import { EventEmitter } from 'events';
 import {
   VOICE_SAMPLE_RATE,
-  downsample,
+  createBlockDownsampler,
+  type BlockDownsampler,
   floatToInt16,
   int16ToFloat,
   decodePcm,
@@ -59,6 +60,7 @@ export class VoiceCapture extends EventEmitter {
   private opts: Required<VoiceCaptureOptions>;
   private mediaStream: MediaStream | null = null;
   private captureNode: ScriptProcessorNode | null = null;
+  private downsampler: BlockDownsampler | null = null;
   private audioContext: AudioContext | null = null;
   private playbackContext: AudioContext | null = null;
   private analyserNode: AnalyserNode | null = null;
@@ -186,12 +188,22 @@ export class VoiceCapture extends EventEmitter {
       // capture with it.
       const sampleRate = this.audioContext.sampleRate;
 
+      // One downsampler for the whole session, not one per block.
+      //
+      // 2048 frames do not divide by the 48k -> 16k ratio of 3, so
+      // downsampling each block on its own consumed 2046 frames and threw the
+      // last 2 away: 58.6 ms of audio never sent per minute, and a step in
+      // the waveform at every block join, 23 times a second. This carries the
+      // remainder into the next block.
+      this.downsampler = createBlockDownsampler(sampleRate, VOICE_SAMPLE_RATE);
+
       this.captureNode = this.audioContext.createScriptProcessor(2048, 1, 1);
       this.captureNode.onaudioprocess = (ev) => {
-        if (this._isMuted || !this.captureNode) return;
+        if (this._isMuted || !this.captureNode || !this.downsampler) return;
         try {
           const input = ev.inputBuffer.getChannelData(0);
-          const reduced = downsample(input, sampleRate, VOICE_SAMPLE_RATE);
+          const reduced = this.downsampler.process(input);
+          if (reduced.length === 0) return;
           this.door.emit('audio:data', encodePcm(floatToInt16(reduced)));
         } catch (err) {
           // One bad buffer must not end the call.
@@ -220,6 +232,10 @@ export class VoiceCapture extends EventEmitter {
       this.captureNode.disconnect();
       this.captureNode = null;
     }
+    // Carried samples belong to the microphone that produced them; selectDevice
+    // stops and restarts, and stale samples would be prepended to the new
+    // device's first block.
+    this.downsampler = null;
     this.sourceNode?.disconnect();
     this.sourceNode = null;
     this.mediaStream?.getTracks().forEach(t => t.stop());

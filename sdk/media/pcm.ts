@@ -61,6 +61,86 @@ export function downsample(
 }
 
 /**
+ * A downsampler that survives across capture blocks.
+ *
+ * `downsample()` above treats its input as a whole signal, and capture does
+ * not have one: a ScriptProcessorNode hands over 2048 frames at a time. 2048
+ * does not divide by the 48k -> 16k ratio of 3, so downsampling each block on
+ * its own emitted floor(2048/3) = 682 samples, consumed 2046 frames, and
+ * discarded the last 2. Measured: 58.6 ms of audio never sent per minute, and
+ * a step in the waveform at every block join - 23 of them a second, which is
+ * a buzz sitting under the speech rather than a gap in it.
+ *
+ * This keeps the leftover input and the running output position between
+ * calls, so the window boundaries continue across blocks exactly as they
+ * would in one continuous pass, and nothing is thrown away.
+ *
+ * Averaging, sample counts and the pass-through when no reduction is needed
+ * all match `downsample()` - the two must agree, and a test holds them to it.
+ */
+export interface BlockDownsampler {
+  /** Reduce one capture block, carrying the remainder into the next call. */
+  process(block: Float32Array): Float32Array;
+  /** Forget the carried samples - for reopening the microphone. */
+  reset(): void;
+}
+
+export function createBlockDownsampler(
+  inputRate: number,
+  targetRate: number = VOICE_SAMPLE_RATE
+): BlockDownsampler {
+  const ratio = inputRate / targetRate;
+
+  /** Input samples received but not yet consumed by a full output window. */
+  let carry = new Float32Array(0);
+  /** Global input index that `carry[0]` corresponds to. */
+  let carryStart = 0;
+  /** Index of the next output sample, in the continuous output stream. */
+  let outIndex = 0;
+
+  return {
+    process(block: Float32Array): Float32Array {
+      if (ratio <= 1 || block.length === 0) return block;
+
+      const buf = new Float32Array(carry.length + block.length);
+      buf.set(carry);
+      buf.set(block, carry.length);
+      const availableEnd = carryStart + buf.length;
+
+      // Emit only windows whose input has fully arrived. A partial window
+      // waits for the next block instead of being averaged short, which is
+      // what put a step at every join.
+      const out: number[] = [];
+      for (;;) {
+        const start = Math.floor(outIndex * ratio);
+        const end = Math.floor((outIndex + 1) * ratio);
+        if (end > availableEnd) break;
+        let sum = 0;
+        let count = 0;
+        for (let j = start; j < end; j++) {
+          sum += buf[j - carryStart];
+          count++;
+        }
+        out.push(count > 0 ? sum / count : 0);
+        outIndex++;
+      }
+
+      const nextStart = Math.floor(outIndex * ratio);
+      carry = buf.slice(Math.max(0, nextStart - carryStart));
+      carryStart = nextStart;
+
+      return Float32Array.from(out);
+    },
+
+    reset(): void {
+      carry = new Float32Array(0);
+      carryStart = 0;
+      outIndex = 0;
+    },
+  };
+}
+
+/**
  * Float samples (-1..1) to signed 16-bit, which is half the bytes and all
  * the fidelity a voice call can use.
  *

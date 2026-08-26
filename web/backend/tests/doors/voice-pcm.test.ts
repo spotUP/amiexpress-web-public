@@ -24,6 +24,7 @@ import {
   decodePcm,
   rms,
   scheduleStart,
+  createBlockDownsampler,
 } from '../../../../sdk/media/pcm';
 
 /** A sine wave, as a microphone would deliver it. */
@@ -182,5 +183,109 @@ describe('voice pcm', () => {
     it('survives an empty buffer', () => {
       expect(rms(new Float32Array(0))).toBe(0);
     });
+  });
+});
+
+/**
+ * Capture does not hand the downsampler one continuous signal - it hands it
+ * one 2048-frame block per ScriptProcessor callback, and each block used to
+ * be downsampled on its own.
+ *
+ * 2048 does not divide by the 48k->16k ratio of 3. Each block therefore
+ * emitted floor(2048/3) = 682 samples, consumed 2046 frames, and threw the
+ * remaining 2 away - 58.6 ms of audio discarded per minute, and a step in
+ * the waveform at every block join, 23 times a second.
+ */
+describe('block-by-block downsampling', () => {
+  const BLOCK = 2048;
+  const BLOCKS = 40;
+
+  it('keeps the samples that fall across a block boundary', () => {
+    const signal = tone(440, 48000, BLOCK * BLOCKS);
+    const ds = createBlockDownsampler(48000, VOICE_SAMPLE_RATE);
+
+    let produced = 0;
+    for (let b = 0; b < BLOCKS; b++) {
+      produced += ds.process(signal.subarray(b * BLOCK, (b + 1) * BLOCK)).length;
+    }
+
+    // Every input frame accounted for: 2048*40/3, not floor(2048/3)*40.
+    const whole = downsample(signal, 48000, VOICE_SAMPLE_RATE).length;
+    expect(produced).toBe(whole);
+  });
+
+  it('produces the same audio as downsampling the whole signal at once', () => {
+    const signal = tone(440, 48000, BLOCK * BLOCKS);
+    const ds = createBlockDownsampler(48000, VOICE_SAMPLE_RATE);
+
+    const pieces: number[] = [];
+    for (let b = 0; b < BLOCKS; b++) {
+      const out = ds.process(signal.subarray(b * BLOCK, (b + 1) * BLOCK));
+      for (let i = 0; i < out.length; i++) pieces.push(out[i]);
+    }
+
+    const whole = downsample(signal, 48000, VOICE_SAMPLE_RATE);
+    for (let i = 0; i < pieces.length; i++) {
+      expect(pieces[i]).toBeCloseTo(whole[i], 6);
+    }
+  });
+
+  it('leaves no step in the waveform at block joins', () => {
+    // The audible symptom: a discontinuity every 42ms is a 23 Hz buzz on top
+    // of speech. Measure the step at each join against the ordinary step
+    // between neighbouring samples - they should be the same size.
+    const signal = tone(440, 48000, BLOCK * BLOCKS);
+    const ds = createBlockDownsampler(48000, VOICE_SAMPLE_RATE);
+
+    const joins: number[] = [];
+    const all: number[] = [];
+    for (let b = 0; b < BLOCKS; b++) {
+      const out = ds.process(signal.subarray(b * BLOCK, (b + 1) * BLOCK));
+      if (b > 0 && out.length > 0 && all.length > 0) {
+        joins.push(Math.abs(out[0] - all[all.length - 1]));
+      }
+      for (let i = 0; i < out.length; i++) all.push(out[i]);
+    }
+
+    let insideSum = 0;
+    for (let i = 1; i < all.length; i++) insideSum += Math.abs(all[i] - all[i - 1]);
+    const insideAvg = insideSum / (all.length - 1);
+    const joinAvg = joins.reduce((a, b) => a + b, 0) / joins.length;
+
+    // Was 1.66x with per-block downsampling.
+    expect(joinAvg).toBeLessThan(insideAvg * 1.1);
+  });
+
+  it('handles a non-integer ratio without drifting', () => {
+    // 44100 -> 16000 is 2.75625. A downsampler that rounds per block loses a
+    // different amount every block and the drift accumulates.
+    const signal = tone(440, 44100, BLOCK * BLOCKS);
+    const ds = createBlockDownsampler(44100, VOICE_SAMPLE_RATE);
+
+    let produced = 0;
+    for (let b = 0; b < BLOCKS; b++) {
+      produced += ds.process(signal.subarray(b * BLOCK, (b + 1) * BLOCK)).length;
+    }
+
+    const expected = Math.floor((BLOCK * BLOCKS) / (44100 / VOICE_SAMPLE_RATE));
+    expect(Math.abs(produced - expected)).toBeLessThanOrEqual(1);
+  });
+
+  it('passes the block through untouched when no downsampling is needed', () => {
+    const ds = createBlockDownsampler(16000, VOICE_SAMPLE_RATE);
+    const block = tone(440, 16000, 512);
+    expect(ds.process(block)).toBe(block);
+  });
+
+  it('starts clean after reset, so reopening the microphone cannot carry stale samples', () => {
+    const signal = tone(440, 48000, BLOCK);
+    const ds = createBlockDownsampler(48000, VOICE_SAMPLE_RATE);
+
+    const first = ds.process(signal);
+    ds.reset();
+    const again = ds.process(signal);
+
+    expect(again.length).toBe(first.length);
+    expect(again[0]).toBeCloseTo(first[0], 6);
   });
 });
