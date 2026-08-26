@@ -285,6 +285,12 @@ class VideoGrid {
             tile.destroy();
         }
         this.tiles.clear();
+        // A destroyed element's cells are not automatically forgotten: the
+        // renderer's last-buffer still claims the terminal shows them, so it
+        // sends nothing for those cells and the old tile's edges stay on screen.
+        // That is the stray bracket-shaped frames left behind under the video
+        // when a one-tile layout became two (screenshot, 2026-08-26).
+        this.screen.forceFullRedraw?.();
         // SPEAKER MODE: Show only the active speaker (or self if nobody speaking)
         if (this.viewMode === 'speaker') {
             const participantToShow = this.speakerModeParticipant(participantArray);

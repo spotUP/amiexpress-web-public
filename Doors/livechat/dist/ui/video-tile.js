@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoTile = void 0;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const video_layout_1 = require("../features/video-layout");
+const frame_fit_1 = require("./frame-fit");
 /**
  * Generate the no-video avatar: a large block-letter initial of the user's
  * handle, in a per-user foreground colour so tiles are visually distinct.
@@ -398,7 +399,16 @@ class VideoTile {
         // no-video avatar.
         this.hasFrame = true;
         this.videoError = null;
-        this.videoBox.setContent(frame);
+        // Clip it to THIS tile. A sender encodes for the size of its own tile,
+        // and every viewer's tile can differ - so a frame that is too wide wraps
+        // every row onto the next and the picture arrives as stripes. ASCII
+        // cannot be rescaled, so it is cut instead: a smaller picture is honest,
+        // a wrapped one is unreadable.
+        const box = (0, video_layout_1.resolveBoxSize)(this.videoBox, { width: 0, height: 0 });
+        const fitted = box.width > 0 && box.height > 0
+            ? (0, frame_fit_1.fitFrameToTile)(frame, box.width, box.height)
+            : frame;
+        this.videoBox.setContent(fitted);
         // Also flip our copy of hasVideo so updateVideoDisplay won't rewrite
         // the avatar back over the frame on the next state tick.
         this.options.hasVideo = true;
