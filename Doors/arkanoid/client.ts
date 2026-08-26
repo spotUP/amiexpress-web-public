@@ -902,7 +902,6 @@ class ArkanoidGame {
     this.updateShineEffect();
 
     if (this.checkLevelComplete()) {
-      this.playSound('levelComplete');
       this.nextLevel();
     }
   }
@@ -995,7 +994,6 @@ class ArkanoidGame {
           pu.x >= paddle.x && pu.x <= paddle.x + paddle.width) {
         this.applyPowerUp(pu.type);
         pu.active = false;
-        this.playSound('powerup');
       }
 
       if (pu.y > GAME_BOTTOM) {
@@ -1057,7 +1055,6 @@ class ArkanoidGame {
   private loseLife(): void {
     this.data.lives--;
     this.data.comboCount = 0;
-    this.playSound('gameover');
 
     if (this.data.lives <= 0) {
       this.data.state = 'gameover';
@@ -1107,7 +1104,20 @@ class ArkanoidGame {
   // Audio
   // =============================================================================
 
-  private async playSound(type: 'hit' | 'explosion' | 'powerup' | 'gameover' | 'levelComplete'): Promise<void> {
+  /**
+   * Effects only - no jingles.
+   *
+   * The SDK's `powerup`, `gameover` and `coin` sounds are little MELODIES in
+   * fixed keys: C4-E4-G4-C5, E4-D4-C4-B3, E5-A5. Played over a tracker
+   * module in a different key they clash, which is what they were reported
+   * for. `hit` and `explosion` are noise synths with no pitch at all, so they
+   * sit under any music.
+   *
+   * Level-complete and life-lost already announce themselves by SWITCHING
+   * TRACK (see music-select.ts), so the jingle was doubling up on a cue the
+   * music was already giving.
+   */
+  private async playSound(type: 'hit' | 'explosion'): Promise<void> {
     try {
       await this.audio.init();
 
@@ -1117,15 +1127,6 @@ class ArkanoidGame {
           break;
         case 'explosion':
           this.audio.playSound('explosion', { frequency: 200, duration: 0.2 });
-          break;
-        case 'powerup':
-          this.audio.playSound('powerup', { frequency: 880, duration: 0.15 });
-          break;
-        case 'gameover':
-          this.audio.playSound('gameover', { frequency: 110, duration: 0.5 });
-          break;
-        case 'levelComplete':
-          this.audio.playSound('coin', { frequency: 660, duration: 0.1 });
           break;
       }
     } catch (e) {
