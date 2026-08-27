@@ -159,16 +159,18 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
     const oldProtocol = await this.getProtocol(id);
     if (!oldProtocol) return false;
 
-    const deleted = this.configRepo.deleteProtocol(id);
+    this.configRepo.deleteProtocol(id);
     await this.writeXprTypesInfoFile({ remove: oldProtocol.protocol_code });
 
-    if (deleted) {
-      this.configRepo.logConfigChange('protocols', oldProtocol.id, 'DELETE',
-        context.userId, context.username, oldProtocol, undefined,
-        context.ipAddress, context.userAgent);
-    }
+    // The entry existed and XprTypes.info no longer lists it. Reporting the
+    // mirror's row count instead made the page say "not found" for a protocol
+    // it had just deleted from the file - getProtocol resolves ids against
+    // DISK, so there need never have been a row.
+    this.configRepo.logConfigChange('protocols', oldProtocol.id, 'DELETE',
+      context.userId, context.username, oldProtocol, undefined,
+      context.ipAddress, context.userAgent);
 
-    return deleted;
+    return true;
   }
 
   /**

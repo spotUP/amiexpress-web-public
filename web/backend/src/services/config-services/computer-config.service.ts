@@ -9,6 +9,7 @@ import type { ComputerType } from '../../database/types';
 import { ComputerTypeSchema, type RequestContext } from '../config.schemas';
 import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
+import { getSystemTime } from '../../utils/date-time.util';
 import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -65,7 +66,21 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     }
   }
 
+  /**
+   * Resolve the computer the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position (COMPUTER.3 -> id 3). Looking that number up as a computer_types
+   * rowid is a different namespace entirely: with the table empty every edit
+   * threw "Computer type 3 not found", and with the table partly filled it
+   * would have edited a different computer. Same mistake the doors page made -
+   * see door-info-file.service.ts.
+   */
   async getComputerType(id: number): Promise<ComputerType | null> {
+    const onDisk = await this.getAllComputerTypes();
+    const fromDisk = onDisk.find(c => c.id === id);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getComputerTypeById(id);
   }
 
@@ -81,8 +96,18 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
       enabled: validated.enabled ?? true
     });
 
-    const newType = await this.getComputerType(id);
-    if (!newType) throw new Error('Failed to create computer type');
+    // Built from what was just validated, not read back through
+    // getComputerType - that resolves ids against DISK, where this id is some
+    // other computer's position.
+    const now = getSystemTime();
+    const newType: ComputerType = {
+      id,
+      computer_number: validated.computer_number,
+      computer_name: validated.computer_name,
+      enabled: validated.enabled ?? true,
+      created_at: now,
+      updated_at: now
+    };
 
     await this.writeComputerListInfoFile({ entry: newType });
     this.configRepo.logConfigChange('computer_types', id, 'CREATE',
@@ -101,11 +126,16 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     const oldType = await this.getComputerType(id);
     if (!oldType) throw new Error(`Computer type ${id} not found`);
 
-    const success = this.configRepo.updateComputerType(id, validated);
-    if (!success) throw new Error(`Failed to update computer type ${id}`);
+    // The mirror is updated best-effort. It holds no row for a computer that
+    // only exists on disk, and that must not stop the edit from reaching
+    // ComputerList.info, which is what the BBS reads.
+    this.configRepo.updateComputerType(id, validated);
 
-    const newType = await this.getComputerType(id);
-    if (!newType) throw new Error('Failed to retrieve updated computer type');
+    const newType: ComputerType = {
+      ...oldType,
+      ...validated,
+      updated_at: getSystemTime()
+    };
 
     // The change itself is what gets merged over disk - not the database's
     // copy of it. A renamed computer is still on disk under its old name, so
@@ -127,16 +157,17 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     const oldType = await this.getComputerType(id);
     if (!oldType) return false;
 
-    const deleted = this.configRepo.deleteComputerType(id);
+    this.configRepo.deleteComputerType(id);
     await this.writeComputerListInfoFile({ remove: oldType.computer_name });
 
-    if (deleted) {
-      this.configRepo.logConfigChange('computer_types', id, 'DELETE',
-        context.userId, context.username, oldType, undefined,
-        context.ipAddress, context.userAgent);
-    }
+    // The entry existed and ComputerList.info no longer lists it. Reporting
+    // the mirror's row count instead made the page say "not found" for a
+    // computer it had just deleted from the file.
+    this.configRepo.logConfigChange('computer_types', id, 'DELETE',
+      context.userId, context.username, oldType, undefined,
+      context.ipAddress, context.userAgent);
 
-    return deleted;
+    return true;
   }
 
   /**

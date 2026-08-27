@@ -184,7 +184,7 @@ describe('ProtocolConfigService writes what is on disk plus the change', () => {
   it('deleting one protocol removes only that one', async () => {
     const deleted = await service.deleteProtocol(3, context);
 
-    expect(deleted).toBe(false); // nothing in the mirror to delete
+    expect(deleted).toBe(true); // the file no longer lists it, mirror row or not
     expect(readXprTypes(bbsRoot)).toEqual([
       ['INTERNAL', '/X Zmodem'],
       ['xprzmodem.library', 'XPR Zmodem'],

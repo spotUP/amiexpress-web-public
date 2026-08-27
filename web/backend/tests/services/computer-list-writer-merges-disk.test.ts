@@ -139,10 +139,8 @@ describe('ComputerConfigService writes what is on disk plus the change', () => {
   });
 
   it('renaming one computer type does not erase the computer types that exist only on disk', async () => {
-    // The database knows about a single computer - the one being edited.
-    const id = table.createComputerType({ computer_number: 6, computer_name: 'PC', enabled: true });
-
-    await service.updateComputerType(id, { computer_name: 'PC/MS-DOS' }, context);
+    // The id came from the list the page showed, which is the file: COMPUTER.6.
+    await service.updateComputerType(6, { computer_name: 'PC/MS-DOS' }, context);
 
     expect(readComputerList(bbsRoot)).toEqual([
       'AMiGA 500', 'AMiGA 2000', 'AMiGA 3000', 'AMiGA 4000',
@@ -151,9 +149,7 @@ describe('ComputerConfigService writes what is on disk plus the change', () => {
   });
 
   it('deleting one computer type removes only that one', async () => {
-    const id = table.createComputerType({ computer_number: 7, computer_name: 'mAC', enabled: true });
-
-    const deleted = await service.deleteComputerType(id, context);
+    const deleted = await service.deleteComputerType(7, context);
 
     expect(deleted).toBe(true);
     expect(readComputerList(bbsRoot)).toEqual([
@@ -173,5 +169,26 @@ describe('ComputerConfigService writes what is on disk plus the change', () => {
     for (const original of DISK_COMPUTERS) {
       expect(namesOnDisk).toContain(original);
     }
+  });
+
+  it('editing a computer that exists only on disk is not reported as not found', async () => {
+    // The list is numbered by position in ComputerList.info; looking that
+    // number up as a computer_types rowid threw "Computer type 4 not found"
+    // for every computer on the page, because the table is empty.
+    const updated = await service.updateComputerType(4, { computer_name: 'AMiGA 4000T' }, context);
+
+    expect(updated.computer_name).toBe('AMiGA 4000T');
+    expect(readComputerList(bbsRoot)[3]).toBe('AMiGA 4000T');
+  });
+
+  it('creating a computer type returns the computer that was created', async () => {
+    // The new row's id is 1, which on disk is AMiGA 500 - reading the created
+    // entry back by id would have returned the wrong computer.
+    const created = await service.createComputerType(
+      { computer_number: 9, computer_name: 'AMiGA 600', enabled: true },
+      context,
+    );
+
+    expect(created.computer_name).toBe('AMiGA 600');
   });
 });
