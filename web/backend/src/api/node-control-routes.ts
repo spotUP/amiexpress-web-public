@@ -14,8 +14,8 @@
  * - POST /api/nodes/:nodeId/kick - Force disconnect user (SV_KICKUSER)
  * - POST /api/nodes/:nodeId/start - Start node (SV_STARTNODE)
  * - GET  /api/nodes/status - Get real-time status for all nodes
- * - POST /api/system/toggle-chat - Enable/disable chat globally (SV_CHATTOGGLE)
- * - POST /api/system/quiet-mode - Toggle MCP quiet mode (SV_QUIETNODE)
+ * - POST /api/nodes/toggle-chat - Enable/disable chat globally (SV_CHATTOGGLE)
+ * - POST /api/nodes/quiet-mode - Toggle MCP quiet mode (SV_QUIETNODE)
  */
 
 import express, { Request, Response } from 'express';
@@ -380,7 +380,7 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
   });
 
   /**
-   * POST /api/system/toggle-chat
+   * POST /api/nodes/toggle-chat
    * Enable/disable chat globally (SV_CHATTOGGLE: 172)
    */
   router.post('/toggle-chat', (req: Request, res: Response) => {
@@ -403,7 +403,7 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
   });
 
   /**
-   * POST /api/system/quiet-mode
+   * POST /api/nodes/quiet-mode
    * Toggle MCP quiet mode (SV_QUIETNODE: 178)
    */
   router.post('/quiet-mode', (req: Request, res: Response) => {

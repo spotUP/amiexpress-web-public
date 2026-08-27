@@ -18,6 +18,10 @@ web/backend/src/**/*.d.ts.map
 web/backend/src/**/*.js.map
 web/config-app/src/**/*.js
 web/config-app/src/**/*.d.ts
+# vite-env.d.ts is SOURCE, not a build artefact: without it TypeScript does
+# not know import.meta.env and the app does not compile. web/frontend commits
+# its own copy for the same reason.
+!web/config-app/src/vite-env.d.ts
 sdk/dist-esm/**/*.map
 !web/backend/src/**/*.config.js
 !web/backend/src/**/*.setup.js

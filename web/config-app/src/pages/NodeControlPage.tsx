@@ -90,7 +90,11 @@ export function NodeControlPage() {
   // System command mutations
   const sendSystemCommand = useMutation({
     mutationFn: async ({ command, data }: { command: string; data?: any }) => {
-      const response = await apiClient.post(`/api/system/${command}`, data);
+      // /api/nodes, not /api/system. These handlers are declared on
+      // nodeControlRouter, which is mounted at /api/nodes - their own doc
+      // comments said /api/system, which is mounted nowhere, so every
+      // system-wide command 404'd silently.
+      const response = await apiClient.post(`/api/nodes/${command}`, data);
       return response.data;
     },
     onSuccess: () => {
