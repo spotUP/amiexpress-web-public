@@ -9,6 +9,7 @@ import type { ComputerType } from '../../database/types';
 import { ComputerTypeSchema, type RequestContext } from '../config.schemas';
 import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
+import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -83,8 +84,8 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     const newType = await this.getComputerType(id);
     if (!newType) throw new Error('Failed to create computer type');
 
-    this.writeComputerListInfoFile();
-    this.configRepo.logConfigChange('computer_types', id, 'CREATE', 
+    await this.writeComputerListInfoFile({ entry: newType });
+    this.configRepo.logConfigChange('computer_types', id, 'CREATE',
       context.userId, context.username, undefined, newType, 
       context.ipAddress, context.userAgent);
 
@@ -106,7 +107,15 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     const newType = await this.getComputerType(id);
     if (!newType) throw new Error('Failed to retrieve updated computer type');
 
-    this.writeComputerListInfoFile();
+    // The change itself is what gets merged over disk - not the database's
+    // copy of it. A renamed computer is still on disk under its old name, so
+    // name the rename or the merge keeps the old entry and appends the new one.
+    await this.writeComputerListInfoFile({
+      entry: newType,
+      ...(newType.computer_name !== oldType.computer_name
+        ? { rename: { from: oldType.computer_name, to: newType.computer_name } }
+        : {})
+    });
     this.configRepo.logConfigChange('computer_types', id, 'UPDATE',
       context.userId, context.username, oldType, newType,
       context.ipAddress, context.userAgent);
@@ -119,7 +128,7 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     if (!oldType) return false;
 
     const deleted = this.configRepo.deleteComputerType(id);
-    this.writeComputerListInfoFile();
+    await this.writeComputerListInfoFile({ remove: oldType.computer_name });
 
     if (deleted) {
       this.configRepo.logConfigChange('computer_types', id, 'DELETE',
@@ -130,12 +139,41 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     return deleted;
   }
 
-  private writeComputerListInfoFile(): void {
+  /**
+   * Rewrite ComputerList.info.
+   *
+   * `change` describes what the caller just did: `entry` is the created or
+   * edited computer, `remove` a deletion, `rename` an edit that changed the
+   * computer name, which is the key this file is merged on. All three are
+   * needed because the merge starts from a DISK that still holds the old shape.
+   */
+  private async writeComputerListInfoFile(
+    change: { entry?: ComputerType; remove?: string; rename?: { from: string; to: string } } = {}
+  ): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
     const computerListPath = path.join(bbsRoot, 'ComputerList.info');
 
     try {
-      const computers = this.configRepo.getAllComputerTypes();
+      // Disk first. This used to rebuild the file from
+      // configRepo.getAllComputerTypes() alone, while the page reads its list
+      // from ComputerList.info - so with a stale or empty computer_types table,
+      // saving one computer erased every computer that only existed on disk.
+      // The database is a mirror; a mirror that has fallen behind must not
+      // truncate what it mirrors.
+      const onDisk = await this.getAllComputerTypes();
+      const fromDb = this.configRepo.getAllComputerTypes();
+      // The caller's entry goes last so it wins over a stale mirror row.
+      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
+      const computers = mergeForWrite(
+        onDisk,
+        changed,
+        (c: ComputerType) => String(c.computer_name ?? ''),
+        {
+          remove: change.remove ? [change.remove] : [],
+          ...(change.rename ? { rename: change.rename } : {})
+        }
+      );
+
       const toolTypes = new Map<string, string>();
       let computerNum = 0;
 
