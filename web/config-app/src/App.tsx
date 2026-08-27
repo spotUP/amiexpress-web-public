@@ -1,7 +1,10 @@
+import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
-import { Layout } from './components/Layout';
+import { AppShell } from './components/AppShell/AppShell';
+import { SkeletonRows } from './components/ui/states';
 import { LoginPage } from './pages/LoginPage';
+import { OverviewPage } from './pages/OverviewPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { NodesPage } from './pages/NodesPage';
 import { ConferencesPage } from './pages/ConferencesPage';
@@ -16,18 +19,34 @@ import { ComputersPage } from './pages/ComputersPage';
 import { ScreenTypesPage } from './pages/ScreenTypesPage';
 import { FileCheckersPage } from './pages/FileCheckersPage';
 import { UsersPage } from './pages/UsersPage';
-import { ImportExportPage } from './pages/ImportExportPage';
 import { DeploymentPage } from './pages/DeploymentPage';
 import { LogsPage } from './pages/LogsPage';
 import { BatchEditorPage } from './pages/BatchEditorPage';
-import { SessionLogsPage } from './pages/SessionLogsPage';
 import { HealthCheckPage } from './pages/HealthCheckPage';
 import { StatisticsPage } from './pages/StatisticsPage';
 import { NodeControlPage } from './pages/NodeControlPage';
-import { OperatorChatPage } from './pages/OperatorChatPage';
 import { OperatorChatSettingsPage } from './pages/OperatorChatSettingsPage';
 import { AmiXnetPage } from './pages/AmiXnetPage';
 import { SystemFilesPage } from './pages/SystemFilesPage';
+
+/**
+ * The heavy leaves. Operator Chat and Session Logs each pull in xterm, and
+ * Import and Export pulls in the upload and validation components; none of
+ * them belong in the bundle a sysop downloads to look at the Overview.
+ */
+const OperatorChatPage = lazy(() =>
+  import('./pages/OperatorChatPage').then((module) => ({ default: module.OperatorChatPage }))
+);
+const SessionLogsPage = lazy(() =>
+  import('./pages/SessionLogsPage').then((module) => ({ default: module.SessionLogsPage }))
+);
+const ImportExportPage = lazy(() =>
+  import('./pages/ImportExportPage').then((module) => ({ default: module.ImportExportPage }))
+);
+
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<SkeletonRows rows={6} />}>{children}</Suspense>;
+}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -43,8 +62,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bbs-bg">
-        <div className="text-bbs-text">Loading...</div>
+      <div className="min-h-screen bg-surface-0 p-5">
+        <SkeletonRows rows={8} />
       </div>
     );
   }
@@ -63,11 +82,11 @@ function App() {
         path="/admin/*"
         element={
           <PrivateRoute>
-            <Layout />
+            <AppShell />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="system" replace />} />
+        <Route index element={<OverviewPage />} />
         <Route path="system" element={<SystemConfigPage />} />
         <Route path="health" element={<HealthCheckPage />} />
         <Route path="statistics" element={<StatisticsPage />} />
@@ -85,16 +104,17 @@ function App() {
         <Route path="screen-types" element={<ScreenTypesPage />} />
         <Route path="file-checkers" element={<FileCheckersPage />} />
         <Route path="deployment" element={<DeploymentPage />} />
-        <Route path="import-export" element={<ImportExportPage />} />
+        <Route path="import-export" element={<LazyPage><ImportExportPage /></LazyPage>} />
         <Route path="audit" element={<AuditLogPage />} />
         <Route path="logs" element={<LogsPage />} />
-        <Route path="session-logs" element={<SessionLogsPage />} />
+        <Route path="session-logs" element={<LazyPage><SessionLogsPage /></LazyPage>} />
         <Route path="batches" element={<BatchEditorPage />} />
-        <Route path="operator-chat" element={<OperatorChatPage />} />
+        <Route path="operator-chat" element={<LazyPage><OperatorChatPage /></LazyPage>} />
         <Route path="operator-chat-settings" element={<OperatorChatSettingsPage />} />
         <Route path="amixnet" element={<AmiXnetPage />} />
         <Route path="system-files" element={<SystemFilesPage />} />
-        <Route path="*" element={<Navigate to="system" replace />} />
+        {/* An unknown admin path lands on the Overview, not on a form. */}
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
     </Routes>
   );
