@@ -9,6 +9,7 @@ import type { ScreenType } from '../../database/types';
 import { ScreenTypeSchema, type RequestContext } from '../config.schemas';
 import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
+import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -92,7 +93,7 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     const newType = await this.getScreenType(id);
     if (!newType) throw new Error('Failed to create screen type');
 
-    this.writeScreenTypesInfoFile();
+    await this.writeScreenTypesInfoFile();
     this.configRepo.logConfigChange('screen_types', id, 'CREATE',
       context.userId, context.username, undefined, newType,
       context.ipAddress, context.userAgent);
@@ -115,7 +116,7 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     const newType = await this.getScreenType(id);
     if (!newType) throw new Error('Failed to retrieve updated screen type');
 
-    this.writeScreenTypesInfoFile();
+    await this.writeScreenTypesInfoFile();
     this.configRepo.logConfigChange('screen_types', id, 'UPDATE',
       context.userId, context.username, oldType, newType,
       context.ipAddress, context.userAgent);
@@ -128,7 +129,7 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     if (!oldType) return false;
 
     const deleted = this.configRepo.deleteScreenType(id);
-    this.writeScreenTypesInfoFile();
+    await this.writeScreenTypesInfoFile(oldType.screen_type);
 
     if (deleted) {
       this.configRepo.logConfigChange('screen_types', id, 'DELETE',
@@ -139,12 +140,31 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     return deleted;
   }
 
-  private writeScreenTypesInfoFile(): void {
+  /**
+   * Rewrite ScreenTypes.info.
+   *
+   * `removeType` names an entry being deleted, because the merge starts from
+   * DISK and disk still has it.
+   */
+  private async writeScreenTypesInfoFile(removeType?: string): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
     const screenTypesPath = path.join(bbsRoot, 'ScreenTypes.info');
 
     try {
-      const screenTypes = this.configRepo.getAllScreenTypes();
+      // Disk first. This used to rebuild the file from
+      // configRepo.getAllScreenTypes() alone - and on the live site that table
+      // holds ZERO rows against two entries on disk, so saving one screen type
+      // erased both. The database is a mirror; a mirror that has fallen behind
+      // must not truncate what it mirrors.
+      const onDisk = await this.getAllScreenTypes();
+      const fromDb = this.configRepo.getAllScreenTypes();
+      const screenTypes = mergeForWrite(
+        onDisk,
+        fromDb,
+        (t: any) => String(t.screen_type ?? ''),
+        { remove: removeType ? [removeType] : [] }
+      );
+
       const toolTypes = new Map<string, string>();
       let typeNum = 0;
 
