@@ -122,3 +122,41 @@ export function doorDisplayName(
   const title = typeof raw === 'string' ? raw.trim() : '';
   return title || door.name;
 }
+
+/**
+ * The tooltypes a NEW door's .info should carry.
+ *
+ * The previous writer led with `${door_type}=${door_command}` - "XIM=WALL",
+ * which is not a tooltype AmiExpress reads - and set TYPE from a runtime map
+ * that produced "TS" or "AMIGA", neither of which the loader recognises as a
+ * door type, so a created 68K door was not treated as one.
+ *
+ * Only what a door actually needs, and nothing invented: a door with no name
+ * gets no NAME, rather than having its command written in as its title, which
+ * is how wall lost "dRE!WAll v2.0".
+ */
+export function buildNewDoorTooltypes(fields: {
+  door_command: string;
+  door_type: string;
+  door_path?: string;
+  door_name?: string;
+  min_security_level?: number;
+  priority?: string;
+  door_args?: string;
+}): Tooltype[] {
+  const tts: Tooltype[] = [];
+  const add = (key: string, value: string) =>
+    tts.push({ key, value, commented: false, originalLine: `${key}=${value}` });
+
+  if (fields.door_path) add('LOCATION', fields.door_path);
+  add('TYPE', fields.door_type);
+  if (fields.door_name) add('NAME', fields.door_name);
+  add('ACCESS', String(fields.min_security_level ?? 0));
+  add('MULTINODE', 'YES');
+
+  const priority = fields.priority?.match(/^P?(\d+)$/i)?.[1];
+  if (priority) add('PRIORITY', priority);
+  if (fields.door_args) add('ARGS', fields.door_args);
+
+  return tts;
+}

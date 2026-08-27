@@ -5,6 +5,8 @@
 
 import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
+import { findDoorInfoFile, applyDoorFieldsToTooltypes, buildNewDoorTooltypes } from './door-info-file.service';
+import { parseInfoFile, writeInfoFile } from '../../utils/info-file.util';
 import type { Door } from '../../database/types';
 import { DoorSchema, type RequestContext } from '../config.schemas';
 import { config as appConfig } from '../../config';
@@ -36,6 +38,21 @@ export class DoorConfigService {
   ): Promise<Door> {
     const validated = DoorSchema.parse(door) as Omit<Door, 'id' | 'created_at' | 'updated_at'>;
 
+    // Uniqueness against DISK, not the database.
+    //
+    // This asked getDoorByCommand, which reads the `doors` table - but doors
+    // live in Commands/BBSCmd/*.info (350 of them on the live site) and that
+    // table is largely empty. So creating a door named after an existing one
+    // passed the guard, and the write below replaced a real binary .info with
+    // a plain-text one: both parse, so nothing complained, and STACK,
+    // PRIORITY, NAME, MULTINODE and the door's icon were silently lost.
+    const bbsRootForCheck = appConfig.get('dataDir');
+    if (findDoorInfoFile(bbsRootForCheck, validated.door_command)) {
+      throw new Error(
+        `A door with the command '${validated.door_command}' already exists on disk - edit it instead`
+      );
+    }
+
     const existing = await this.getDoorByCommand(validated.door_command);
     if (existing) {
       throw new Error(`Door command '${validated.door_command}' already exists`);
@@ -61,11 +78,33 @@ export class DoorConfigService {
     if (!oldDoor) throw new Error(`Door ${id} not found`);
 
     if (validated.door_command && validated.door_command !== oldDoor.door_command) {
+      const bbsRootForRename = appConfig.get('dataDir');
+
+      // Disk decides whether the new command is taken, for the same reason as
+      // createDoor: the doors table is not the authority on what exists.
+      if (findDoorInfoFile(bbsRootForRename, validated.door_command)) {
+        throw new Error(
+          `A door with the command '${validated.door_command}' already exists on disk`
+        );
+      }
       const existing = await this.getDoorByCommand(validated.door_command);
       if (existing) {
         throw new Error(`Door command '${validated.door_command}' already exists`);
       }
-      this.deleteDoorInfoFile(oldDoor.door_command, oldDoor.door_type);
+
+      // MOVE the file rather than deleting it and writing a fresh one. A
+      // rename is still the same door, and its STACK, MULTINODE, RESIDENT and
+      // icon should survive being renamed.
+      const from = findDoorInfoFile(bbsRootForRename, oldDoor.door_command);
+      if (from) {
+        const to = path.join(path.dirname(from), `${validated.door_command}.info`);
+        try {
+          fs.renameSync(from, to);
+console.log(`[DoorConfigService] Renamed ${from} -> ${to}`);
+        } catch (error) {
+console.error(`[DoorConfigService] Failed to rename ${from}:`, error);
+        }
+      }
     }
 
     const newDoor = this.configRepo.updateDoor(id, validated);
@@ -108,24 +147,32 @@ export class DoorConfigService {
         fs.mkdirSync(dirPath, { recursive: true });
       }
 
-      const lines: string[] = [];
-      lines.push(`${door.door_type}=${door.door_command}`);
+      // An existing .info is EDITED, never replaced: it is a binary Amiga
+      // icon carrying tooltypes this form knows nothing about (STACK,
+      // MULTINODE, RESIDENT), and rewriting it as text threw all of them away.
+      const existingPath = findDoorInfoFile(bbsRoot, door.door_command);
+      if (existingPath) {
+        const info = parseInfoFile(existingPath);
+        info.tooltypes = applyDoorFieldsToTooltypes(info.tooltypes as any, door as any) as any;
+        writeInfoFile(info);
+console.log(`[DoorConfigService] Updated ${existingPath}`);
+        return;
+      }
 
-      const typeMap: Record<string, string> = {
-        'NATIVE_NODE': 'TS',
-        'BROWSER': 'TS',
-        'AMIGA_68K': 'AMIGA'
-      };
-      const runtimeType = door.runtime_env ? (typeMap[door.runtime_env] || 'TS') : 'TS';
-      lines.push(`TYPE=${runtimeType}`);
-
-      if (door.door_path) lines.push(`LOCATION=${door.door_path}`);
-      if (door.door_name) lines.push(`DESCRIPTION=${door.door_name}`);
-      lines.push(`ACCESS=${door.min_security_level ?? 0}`);
-      lines.push(`MULTINODE=YES`);
-      lines.push(`PRIORITY=${door.priority || 'SAME'}`);
+      // A door that does not exist yet: write the tooltypes it needs, with
+      // TYPE as the door type the loader understands rather than a runtime
+      // name, and no invented NAME.
+      const tooltypes = buildNewDoorTooltypes({
+        door_command: door.door_command,
+        door_type: door.door_type as string,
+        door_path: door.door_path,
+        door_name: door.door_name,
+        min_security_level: door.min_security_level,
+        priority: door.priority,
+        door_args: door.door_args,
+      });
+      const lines = tooltypes.map(t => (t.value ? `${t.key}=${t.value}` : t.key));
       if (door.working_directory) lines.push(`WORKDIR=${door.working_directory}`);
-      if (door.door_args) lines.push(`ARGS=${door.door_args}`);
 
       fs.writeFileSync(infoPath, lines.join('\r\n') + '\r\n');
 console.log(`[DoorConfigService] Wrote ${infoPath}`);
