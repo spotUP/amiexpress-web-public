@@ -9,6 +9,7 @@ import type { Protocol } from '../../database/types';
 import { ProtocolSchema, type RequestContext } from '../config.schemas';
 import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
+import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
@@ -103,7 +104,7 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
     const newProtocol = this.configRepo.createProtocol(validated);
     if (!newProtocol) throw new Error('Failed to create protocol');
 
-    await this.writeXprTypesInfoFile();
+    await this.writeXprTypesInfoFile({ entry: newProtocol });
     this.configRepo.logConfigChange('protocols', newProtocol.id, 'CREATE',
       context.userId, context.username, undefined, newProtocol,
       context.ipAddress, context.userAgent);
@@ -137,7 +138,16 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
       updated_at: getSystemTime()
     };
 
-    await this.writeXprTypesInfoFile();
+    // The change itself is what gets merged over disk - not the database's
+    // copy of it, which may not exist. A protocol whose code changed is still
+    // on disk under the old code, so name the rename or the merge keeps the
+    // old entry and appends the new one.
+    await this.writeXprTypesInfoFile({
+      entry: newProtocol,
+      ...(newProtocol.protocol_code !== oldProtocol.protocol_code
+        ? { rename: { from: oldProtocol.protocol_code, to: newProtocol.protocol_code } }
+        : {})
+    });
     this.configRepo.logConfigChange('protocols', newProtocol.id, 'UPDATE',
       context.userId, context.username, oldProtocol, newProtocol,
       context.ipAddress, context.userAgent);
@@ -150,7 +160,7 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
     if (!oldProtocol) return false;
 
     const deleted = this.configRepo.deleteProtocol(id);
-    await this.writeXprTypesInfoFile();
+    await this.writeXprTypesInfoFile({ remove: oldProtocol.protocol_code });
 
     if (deleted) {
       this.configRepo.logConfigChange('protocols', oldProtocol.id, 'DELETE',
@@ -161,7 +171,17 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
     return deleted;
   }
 
-  private async writeXprTypesInfoFile(): Promise<void> {
+  /**
+   * Rewrite Protocols/XprTypes.info.
+   *
+   * `change` describes what the caller just did: `entry` is the created or
+   * edited protocol, `remove` a deletion, `rename` an edit that changed the
+   * protocol code, which is the key this file is merged on. All three are
+   * needed because the merge starts from a DISK that still holds the old shape.
+   */
+  private async writeXprTypesInfoFile(
+    change: { entry?: Protocol; remove?: string; rename?: { from: string; to: string } } = {}
+  ): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
     const protocolsDir = path.join(bbsRoot, 'Protocols');
     const xprTypesPath = path.join(protocolsDir, 'XprTypes.info');
@@ -171,7 +191,29 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
         fs.mkdirSync(protocolsDir, { recursive: true });
       }
 
-      const protocols = this.configRepo.getProtocols();
+      // Disk first. This used to rebuild the file from
+      // configRepo.getProtocols() alone, while the page reads its list from
+      // XprTypes.info - so with a stale or partial protocols table, saving one
+      // protocol erased every protocol that only existed on disk. The database
+      // is a mirror; a mirror that has fallen behind must not truncate what it
+      // mirrors.
+      //
+      // XprTypes.info is ordered (LIBRARY.1, LIBRARY.2, ...) and the BBS reads
+      // it by index, so entries keep their position and additions go on the end.
+      const onDisk = await this.getProtocols();
+      const fromDb = this.configRepo.getProtocols();
+      // The caller's entry goes last so it wins over a stale mirror row.
+      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
+      const protocols = mergeForWrite(
+        onDisk,
+        changed,
+        (p: Protocol) => String(p.protocol_code ?? ''),
+        {
+          remove: change.remove ? [change.remove] : [],
+          ...(change.rename ? { rename: change.rename } : {})
+        }
+      );
+
       const toolTypes = new Map<string, string>();
       let protocolNum = 1;
 
