@@ -1,0 +1,71 @@
+/*
+ * Design tokens for the admin interface.
+ *
+ * Single source of truth for colour, type, spacing, radius and density.
+ * Nothing outside this file may hardcode a colour: Tailwind reads these
+ * through `tailwind.config.js`, which also keeps the legacy `bbs-*` names
+ * as aliases onto this ramp so pages that have not been converted yet
+ * inherit the new palette without a rename diff.
+ *
+ * Colours are stored as space-separated RGB channels, not hex, because
+ * Tailwind needs `rgb(var(--token) / <alpha-value>)` to support opacity
+ * modifiers such as `bg-surface-2/50`. The hex value is in the comment.
+ */
+
+:root {
+  /* Surfaces. On a dark interface depth comes from this ramp, not shadow. */
+  --surface-0: 11 14 20;      /* #0b0e14  page background */
+  --surface-1: 17 21 29;      /* #11151d  panel, card */
+  --surface-2: 23 28 38;      /* #171c26  raised: table header, popover, sidebar */
+  --surface-3: 30 36 49;      /* #1e2431  hover, selected row */
+  --border: 35 42 56;         /* #232a38  hairline */
+  --border-strong: 49 58 77;  /* #313a4d  input border, focused panel */
+
+  /* Text */
+  --text-primary: 230 233 239;   /* #e6e9ef */
+  --text-secondary: 163 173 191; /* #a3adbf */
+  --text-muted: 107 118 138;     /* #6b768a */
+  --text-inverse: 11 14 20;      /* #0b0e14  on accent and status fills */
+
+  /*
+   * Brand and action. AmiExpress red is identity only - the wordmark and the
+   * active navigation indicator. Red on every button reads as danger, so blue
+   * carries action and red is reclaimed for destruction.
+   */
+  --brand: 233 69 96;        /* #e94560 */
+  --accent: 77 157 255;      /* #4d9dff  primary action, focus ring */
+  --accent-hover: 108 176 255; /* #6cb0ff */
+
+  /* Status. Always paired with a text label - colour is never the only channel. */
+  --status-ok: 63 185 80;       /* #3fb950  online, healthy */
+  --status-warn: 210 153 34;    /* #d29922  degraded, reserved, idle */
+  --status-danger: 248 81 73;   /* #f85149  error, failed check, destructive */
+  --status-info: 77 157 255;    /* #4d9dff */
+  --status-neutral: 107 118 138; /* #6b768a  configured but not connected */
+
+  /* Overlays only. Cards never carry a shadow. */
+  --shadow-overlay: 0 16px 32px -8px rgb(0 0 0 / 0.6);
+
+  /* Spacing, on a 4 px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Density. Set on the document element and persisted under admin.density. */
+  --row-height: 32px;
+  --control-height: 32px;
+}
+
+:root[data-density='compact'] {
+  --row-height: 28px;
+  --control-height: 28px;
+}

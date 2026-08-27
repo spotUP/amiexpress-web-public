@@ -47,6 +47,27 @@ describe('Tailwind bbs-* colour tokens', () => {
     expect(report, `Undefined colours compile to nothing:\n${report}`).toBe('');
   });
 
+  it('resolves every theme value to a custom property declared in tokens.css', () => {
+    // A misspelled var name still compiles; the element just renders with no
+    // colour at all. This catches that at test time instead of on screen.
+    const tokensCss = readFileSync(resolve(SRC_DIR, 'styles/tokens.css'), 'utf8');
+    const declared = new Set(
+      [...tokensCss.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((match) => match[1])
+    );
+
+    const configSource = readFileSync(resolve(SRC_DIR, '..', 'tailwind.config.js'), 'utf8');
+    const referenced = new Set(
+      [...configSource.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((match) => match[1])
+    );
+    // `token('surface-0')` builds the var name from a bare token name.
+    for (const match of configSource.matchAll(/token\('([a-z0-9-]+)'\)/g)) {
+      referenced.add(`--${match[1]}`);
+    }
+
+    const undeclared = [...referenced].filter((name) => !declared.has(name));
+    expect(undeclared, `Not declared in tokens.css: ${undeclared.join(', ')}`).toEqual([]);
+  });
+
   it('keeps the five colours that were missing on 2026-08-27', () => {
     // These were used 122 times across 15 files while resolving to nothing.
     for (const name of ['bbs-border', 'bbs-secondary', 'bbs-background', 'bbs-hover', 'bbs-error']) {

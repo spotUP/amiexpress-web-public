@@ -1,31 +1,46 @@
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-bbs-bg text-bbs-text font-mono;
+    @apply bg-surface-0 text-content-primary font-sans text-sm antialiased;
+  }
+
+  /* Values read off disk stay monospace, and their digits line up. */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer components {
+  /* Action is blue. Red is identity and destruction only. */
   .btn-primary {
-    @apply bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors;
+    @apply bg-accent hover:bg-accent-hover text-content-inverse font-medium py-2 px-4 rounded transition-colors;
   }
 
   .btn-secondary {
-    @apply bg-bbs-primary hover:bg-bbs-primary/90 text-bbs-text font-medium py-2 px-4 rounded transition-colors;
+    @apply bg-surface-2 hover:bg-surface-3 border border-border text-content-primary font-medium py-2 px-4 rounded transition-colors;
+  }
+
+  .btn-danger {
+    @apply bg-status-danger hover:bg-status-danger/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors;
   }
 
   .input-field {
-    @apply bg-bbs-surface border border-bbs-primary text-bbs-text rounded px-3 py-2 focus:outline-none focus:border-bbs-accent;
+    @apply bg-surface-0 border border-border-strong text-content-primary rounded px-3 py-2 focus:outline-none focus:border-accent;
   }
 
   .card {
-    @apply bg-bbs-surface border border-bbs-primary rounded-lg p-6;
+    @apply bg-surface-1 border border-border rounded-lg p-4;
   }
 
   .label {
-    @apply block text-sm font-medium text-bbs-text mb-2;
+    @apply block text-sm font-medium text-content-secondary mb-2;
   }
 }
