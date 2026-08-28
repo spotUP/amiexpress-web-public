@@ -36,6 +36,7 @@
 #include "infocache.h"
 #include "shell.h"
 #include "json_lite.h"
+#include "owner_auth.h"
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
@@ -1279,6 +1280,151 @@ static void learned_show(void)
     }
 }
 
+/* ---- Owner mode state ----------------------------------------------------
+ *
+ * Lazy login: the first admin API call triggers authentication. The token
+ * is held ONLY in memory, never written to disk. If AdminUsername /
+ * AdminPassword are not configured, owner mode is silently disabled. */
+static owner_auth_state g_owner;
+static int g_owner_enabled = 0;
+
+static void owner_init(const dr_config *cfg)
+{
+    owner_auth_reset(&g_owner);
+    g_owner_enabled = (cfg->admin_username[0] != '\0'
+                       && cfg->admin_password[0] != '\0') ? 1 : 0;
+}
+
+static int owner_is_enabled(void)
+{
+    return g_owner_enabled;
+}
+
+static int owner_is_logged_in(void)
+{
+    return g_owner_enabled && g_owner.have_token;
+}
+
+/* Attempt owner login. Returns 0 on success, negative on failure.
+ * Displays result to the sysop. */
+static int owner_try_login(const dr_config *cfg)
+{
+    char error[128];
+    int rc;
+
+    if (!g_owner_enabled) {
+        ae_put("Owner mode not configured (AdminUsername/AdminPassword missing).", 1);
+        return OWNER_AUTH_ERR_ARGS;
+    }
+
+    if (g_owner.have_token) {
+        ae_put("Already logged in as owner.", 1);
+        return OWNER_AUTH_OK;
+    }
+
+    ae_put("Logging in...", 0);
+    rc = owner_auth_login(cfg, &g_owner, error, sizeof(error));
+    if (rc == OWNER_AUTH_OK) {
+        ae_put(" OK", 0);
+        ae_put("", 1);
+        ae_put("Owner mode active.", 1);
+    } else {
+        ae_put(" FAILED", 0);
+        ae_put("", 1);
+        if (error[0] != '\0') {
+            ae_put(error, 1);
+        } else if (rc == OWNER_AUTH_ERR_INVALID_CREDS) {
+            ae_put("Invalid credentials.", 1);
+        } else if (rc == OWNER_AUTH_ERR_LOCKED_OUT) {
+            ae_put("Account locked out. Try again later.", 1);
+        } else if (rc == OWNER_AUTH_ERR_SERVER_DISABLED) {
+            ae_put("Admin API not available on this server.", 1);
+        } else if (rc == OWNER_AUTH_ERR_TRANSPORT) {
+            ae_put("Could not reach the server.", 1);
+        } else {
+            ae_put("Login failed.", 1);
+        }
+    }
+    return rc;
+}
+
+/* Admin DELETE request. Returns 0 on success, negative on failure.
+ * Displays result to the sysop. */
+static int owner_delete_door(const dr_config *cfg, const char *archive)
+{
+    http_response resp;
+    char path[256];
+    int rc;
+
+    if (!owner_is_logged_in()) {
+        rc = owner_try_login(cfg);
+        if (rc != OWNER_AUTH_OK) return rc;
+    }
+
+    if ((unsigned long) snprintf(path, sizeof(path), "%s/admin/doors/%s",
+                                 cfg->path, archive) >= sizeof(path)) {
+        ae_put("Path too long.", 1);
+        return -1;
+    }
+
+    ae_put("Deleting from repository...", 0);
+    rc = owner_auth_call(cfg, &g_owner, "DELETE", path,
+                         (const char *) 0, 0,
+                         (const char * const *) 0, 0,
+                         &resp, (int (*)(void *, const unsigned char *, unsigned long)) 0,
+                         (void *) 0, (void (*)(void *)) 0);
+    if (rc != OWNER_AUTH_OK || resp.status < 200 || resp.status >= 300) {
+        ae_put(" FAILED", 0);
+        ae_put("", 1);
+        if (resp.status == 404) {
+            ae_put("Door not found in repository.", 1);
+        } else {
+            ae_put("Delete failed.", 1);
+        }
+        return -1;
+    }
+    ae_put(" OK", 0);
+    ae_put("", 1);
+    ae_put("Door hidden from repository.", 1);
+    return 0;
+}
+
+/* Admin POST strip request. Returns 0 on success, negative on failure. */
+static int owner_strip_archive(const dr_config *cfg, const char *archive,
+                               const char *body, unsigned long body_len)
+{
+    http_response resp;
+    char path[256];
+    int rc;
+
+    if (!owner_is_logged_in()) {
+        rc = owner_try_login(cfg);
+        if (rc != OWNER_AUTH_OK) return rc;
+    }
+
+    if ((unsigned long) snprintf(path, sizeof(path), "%s/admin/doors/%s/strip",
+                                 cfg->path, archive) >= sizeof(path)) {
+        ae_put("Path too long.", 1);
+        return -1;
+    }
+
+    ae_put("Stripping archive on server...", 0);
+    rc = owner_auth_call(cfg, &g_owner, "POST", path,
+                         body, body_len,
+                         (const char * const *) 0, 0,
+                         &resp, (int (*)(void *, const unsigned char *, unsigned long)) 0,
+                         (void *) 0, (void (*)(void *)) 0);
+    if (rc != OWNER_AUTH_OK || resp.status < 200 || resp.status >= 300) {
+        ae_put(" FAILED", 0);
+        ae_put("", 1);
+        ae_put("Strip failed.", 1);
+        return -1;
+    }
+    ae_put(" OK", 0);
+    ae_put("", 1);
+    return 0;
+}
+
 /* Renders `node` into g_guide_render and makes it the current node. */
 static void guide_show_node(int node)
 {
@@ -1634,7 +1780,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
                           int installed, int has_junk)
 {
     char bar[160];
-    const char *optional[8];
+    const char *optional[10];
     int n = 0;
     int len;
 
@@ -1674,6 +1820,12 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
     optional[n++] = "C=System";
     optional[n++] = "L=Installed";
     optional[n++] = "K=Patterns";
+    if (owner_is_enabled() && !owner_is_logged_in()) {
+        optional[n++] = "O=Owner";
+    }
+    if (owner_is_logged_in()) {
+        optional[n++] = "D=Hide";
+    }
 
     len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                 installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install",
@@ -4286,6 +4438,33 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             (void) ae_key();
             need_full_redraw = 1;
             break;
+        case 'o': case 'O':
+            ae_put("", 1);
+            owner_try_login(cfg);
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            need_full_redraw = 1;
+            break;
+        case 'd': case 'D':
+            if (owner_is_enabled() && view.count > 0) {
+                const dr_entry *sel = &cat->rows[view.index[selected]];
+                char question[160];
+                strcpy(question, "Hide ");
+                strncat(question, sel->archive, sizeof(question) - 30);
+                strcat(question, " from repo?");
+                if (ui_confirm(&buf, frame, (long) sizeof(frame), &g, question)) {
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_cursor(&buf, 0);
+                    ansi_flush(&buf);
+                    owner_delete_door(cfg, sel->archive);
+                    ae_put("", 1);
+                    ae_put("Press any key to return to the list.", 1);
+                    (void) ae_key();
+                    need_full_redraw = 1;
+                }
+            }
+            break;
         case 'q': case 'Q':
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);
@@ -5500,6 +5679,8 @@ int main(int argc, char **argv)
     config_defaults(&cfg);
     skipped = 0;
     config_load(&cfg, DOOR_CONFIG_PATH, &skipped);
+
+    owner_init(&cfg);
 
     print_banner();
 
