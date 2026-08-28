@@ -1745,6 +1745,7 @@ class StripView extends BaseView {
         });
         this.keys.key(['a','A'], () => { this.checked.fill(true); this.renderFiles(); });
         this.keys.key(['n','N'], () => { this.checked.fill(false); this.renderFiles(); });
+        this.keys.key(['l','L'], () => { this.learnSelected(); });
         this.keys.key(['s','S'], () => {
           if (this.canStrip && !this.overrideDir && this.archiveStrip) {
             this.doStripArchive();
@@ -1802,6 +1803,47 @@ class StripView extends BaseView {
       : '{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {grey-fg}Preview only{/grey-fg}  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}'
     );
     this.layout.render();
+  }
+
+  /**
+   * Learn the currently selected file as a junk pattern. This teaches the
+   * central classifier to recognise this filename in future archives.
+   * Re-runs the analysis afterward so the sysop sees the updated verdict.
+   */
+  private learnSelected(): void {
+    const idx = this.layout.listSelected;
+    const sel = this.files[idx];
+    if (!sel) return;
+    const filePath = sel.path as string;
+
+    const { learnPattern } = require('./repo-client') as typeof import('./repo-client');
+    const { resolveDoorRepoMode, consumerCacheFilePath } = require('./repoDataSource') as typeof import('./repoDataSource');
+    const mode = resolveDoorRepoMode();
+    if (mode.kind !== 'consumer') {
+      this.layout.setInfo('{yellow-fg}No door-repo config — cannot learn patterns.{/yellow-fg}');
+      this.layout.render();
+      return;
+    }
+    const cfg: RepoClientConfig = { url: mode.url, cacheFile: consumerCacheFilePath(PROJECT_ROOT) };
+
+    this.layout.setFooter('{center}{cyan-fg}Learning pattern...{/cyan-fg}{/center}');
+    this.layout.render();
+
+    learnPattern(cfg, filePath, mode.learnKey, this.entry.archive_name, filePath)
+      .then((result: { ok: boolean; duplicate?: boolean }) => {
+        if (result.ok) {
+          const msg = result.duplicate ? 'Pattern already known' : `Learned: ${filePath}`;
+          this.layout.setInfo(`{green-fg}${msg}{/green-fg}`);
+        } else {
+          this.layout.setInfo('{yellow-fg}Learn failed — server may not have DOORREPO_LEARN_KEY set.{/yellow-fg}');
+        }
+        this.layout.render();
+        setTimeout(() => { this.layout.setInfo(''); this.layout.render(); }, 1500);
+      })
+      .catch(() => {
+        this.layout.setInfo('{yellow-fg}Learn failed.{/yellow-fg}');
+        this.layout.render();
+      });
   }
 
   /**

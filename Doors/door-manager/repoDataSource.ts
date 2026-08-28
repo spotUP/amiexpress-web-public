@@ -56,7 +56,7 @@ export interface CatalogEntry {
 export type DoorRepoMode =
   | { kind: 'owner' }
   | { kind: 'disabled' }
-  | { kind: 'consumer'; url: string };
+  | { kind: 'consumer'; url: string; learnKey: string | null };
 
 export const DEFAULT_DOOR_REPO_URL = 'https://bbs.uprough.net';
 
@@ -77,7 +77,8 @@ export function resolveDoorRepoMode(
   // operator-supplied DOOR_REPO_URL ending in '/' would otherwise produce a
   // double slash (`https://host//api/door-repo/manifest`) that Express does
   // not route, turning a config typo into a silent-looking 404.
-  return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
+  const learnKey = env.DOORREPO_LEARN_KEY?.trim() || null;
+  return { kind: 'consumer', url: rawUrl.replace(/\/+$/, ''), learnKey };
 }
 
 // ─── Install state (door_installs) ──────────────────────────────────────────

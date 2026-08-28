@@ -29,6 +29,7 @@ export type DoorRepoMode = {
 } | {
     kind: 'consumer';
     url: string;
+    learnKey: string | null;
 };
 export declare const DEFAULT_DOOR_REPO_URL = "https://bbs.uprough.net";
 /**

@@ -81,7 +81,8 @@ function resolveDoorRepoMode(env = process.env) {
     // operator-supplied DOOR_REPO_URL ending in '/' would otherwise produce a
     // double slash (`https://host//api/door-repo/manifest`) that Express does
     // not route, turning a config typo into a silent-looking 404.
-    return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
+    const learnKey = env.DOORREPO_LEARN_KEY?.trim() || null;
+    return { kind: 'consumer', url: rawUrl.replace(/\/+$/, ''), learnKey };
 }
 /** Overlays door_installs state onto an already-built CatalogEntry (e.g.
  * one door_catalog's searchCatalog produced). `lookupInstall` is

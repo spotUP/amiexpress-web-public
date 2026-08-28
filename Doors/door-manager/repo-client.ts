@@ -399,3 +399,53 @@ export async function downloadArchive(
     );
   }
 }
+
+// ─── learnPattern ────────────────────────────────────────────────────
+
+/**
+ * Teach the central classifier a new junk pattern. Used by DOORMAN's
+ * StripView when the sysop marks a file as ad/junk that the classifier
+ * missed. The pattern is an exact filename glob (e.g. "7hE-EdGE.nfo").
+ *
+ * Requires DOORREPO_LEARN_KEY to be set on the doorserver; silently
+ * succeeds (returns { ok: false }) when the server has no learn key
+ * configured, so DOORMAN never blocks on a server that does not opt in.
+ */
+export async function learnPattern(
+  cfg: RepoClientConfig,
+  pattern: string,
+  learnKey: string | null,
+  archiveName?: string,
+  filePath?: string
+): Promise<{ ok: boolean; id?: number; duplicate?: boolean }> {
+  if (!learnKey) return { ok: false };
+  const url = `${cfg.url}/api/door-repo/learn`;
+  const body: Record<string, string> = { pattern };
+  if (archiveName) body.archiveName = archiveName;
+  if (filePath) body.filePath = filePath;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Learn-Key': learnKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return { ok: false };
+  }
+
+  if (!response.ok) {
+    return { ok: false };
+  }
+
+  try {
+    return (await response.json()) as { ok: boolean; id?: number; duplicate?: boolean };
+  } catch {
+    return { ok: false };
+  }
+}

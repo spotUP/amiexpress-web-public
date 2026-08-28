@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchManifest = fetchManifest;
 exports.downloadArchive = downloadArchive;
+exports.learnPattern = learnPattern;
 /**
  * repo-client: DOORMAN-side HTTP client for the central door-repo API
  * (web/backend/src/server/door-repo.routes.ts).
@@ -370,6 +371,50 @@ async function downloadArchive(cfg, archiveName, destPath, expectedSha256) {
     if (actualSha256 !== expectedSha256) {
         safeUnlink(destPath);
         throw new Error(`DOOR REPO: CHECKSUM MISMATCH for ${archiveName}: expected sha256 ${expectedSha256}, got ${actualSha256}`);
+    }
+}
+// ─── learnPattern ────────────────────────────────────────────────────
+/**
+ * Teach the central classifier a new junk pattern. Used by DOORMAN's
+ * StripView when the sysop marks a file as ad/junk that the classifier
+ * missed. The pattern is an exact filename glob (e.g. "7hE-EdGE.nfo").
+ *
+ * Requires DOORREPO_LEARN_KEY to be set on the doorserver; silently
+ * succeeds (returns { ok: false }) when the server has no learn key
+ * configured, so DOORMAN never blocks on a server that does not opt in.
+ */
+async function learnPattern(cfg, pattern, learnKey, archiveName, filePath) {
+    if (!learnKey)
+        return { ok: false };
+    const url = `${cfg.url}/api/door-repo/learn`;
+    const body = { pattern };
+    if (archiveName)
+        body.archiveName = archiveName;
+    if (filePath)
+        body.filePath = filePath;
+    let response;
+    try {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Learn-Key': learnKey,
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(10000),
+        });
+    }
+    catch {
+        return { ok: false };
+    }
+    if (!response.ok) {
+        return { ok: false };
+    }
+    try {
+        return (await response.json());
+    }
+    catch {
+        return { ok: false };
     }
 }
 //# sourceMappingURL=repo-client.js.map
