@@ -35,6 +35,7 @@
 #include "ansi.h"
 #include "infocache.h"
 #include "shell.h"
+#include "json_lite.h"
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
@@ -1191,6 +1192,93 @@ static int g_guide_node = -1;
 static int g_guide_history[16];
 static int g_guide_history_len = 0;
 
+/* ---- Learned patterns ---------------------------------------------------
+ *
+ * Patterns the classifier has learned from sysop feedback (via the web UI
+ * or DOORMAN).  Fetched once per session and displayed on demand.  The
+ * response is a JSON array of objects with a "pattern" string field. */
+#define LEARNED_MAX_BYTES 8192
+#define LEARNED_MAX_PATTERNS 64
+
+static char g_learned[LEARNED_MAX_BYTES + 1];
+static int g_learned_ok = 0;
+static int g_learned_count = 0;
+static char g_learned_patterns[LEARNED_MAX_PATTERNS][80];
+
+static void learned_load(const dr_config *cfg)
+{
+    char path[256];
+    http_response resp;
+    diz_ctx lc;
+    int rc;
+    unsigned long cursor;
+    const char *obj;
+    unsigned long obj_len;
+    int shown;
+
+    if (g_learned_ok) {
+        return;
+    }
+
+    /* Build path: /api/door-repo/learned-patterns */
+    if ((unsigned long) snprintf(path, sizeof(path), "%s/learned-patterns",
+                                 cfg->path) >= sizeof(path)) {
+        return;
+    }
+
+    g_learned[0] = '\0';
+    lc.buf = g_learned;
+    lc.len = 0;
+    lc.cap = (unsigned long) LEARNED_MAX_BYTES;
+
+    rc = http_get(cfg, path, &resp, files_sink, &lc);
+    if (rc != HTTP_OK || resp.status != 200 || lc.len == 0) {
+        g_learned[0] = '\0';
+        return;
+    }
+
+    g_learned_ok = 1;
+    g_learned_count = 0;
+    shown = 0;
+    cursor = 0;
+    while (shown < LEARNED_MAX_PATTERNS
+           && json_next_array_object(g_learned, "patterns", &cursor,
+                                     &obj, &obj_len) == 0) {
+        char pattern[80];
+        if (json_extract_string(obj, "pattern", pattern, sizeof(pattern)) == 0
+            && pattern[0] != '\0') {
+            strncpy(g_learned_patterns[shown], pattern,
+                    sizeof(g_learned_patterns[shown]) - 1);
+            g_learned_patterns[shown][sizeof(g_learned_patterns[shown]) - 1] = '\0';
+            shown++;
+        }
+    }
+    g_learned_count = shown;
+}
+
+static void learned_show(void)
+{
+    int i;
+    char msg[96];
+
+    if (!g_learned_ok) {
+        ae_put("Could not fetch learned patterns from the server.", 1);
+        return;
+    }
+    if (g_learned_count == 0) {
+        ae_put("No patterns learned yet.", 1);
+        return;
+    }
+
+    sprintf(msg, "Learned patterns (%d):", g_learned_count);
+    ae_put(msg, 1);
+    ae_put("", 1);
+    for (i = 0; i < g_learned_count; i++) {
+        sprintf(msg, "  %s", g_learned_patterns[i]);
+        ae_put(msg, 1);
+    }
+}
+
 /* Renders `node` into g_guide_render and makes it the current node. */
 static void guide_show_node(int node)
 {
@@ -1546,7 +1634,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
                           int installed, int has_junk)
 {
     char bar[160];
-    const char *optional[7];
+    const char *optional[8];
     int n = 0;
     int len;
 
@@ -1585,6 +1673,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
     optional[n++] = "F=Find";
     optional[n++] = "C=System";
     optional[n++] = "L=Installed";
+    optional[n++] = "K=Patterns";
 
     len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                 installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install",
@@ -4186,6 +4275,15 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ui_view_rebuild(&view, cat);
             selected = 0;
             top_index = 0;
+            need_full_redraw = 1;
+            break;
+        case 'k': case 'K':
+            learned_load(cfg);
+            ae_put("", 1);
+            learned_show();
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
             need_full_redraw = 1;
             break;
         case 'q': case 'Q':
