@@ -5,6 +5,23 @@
  */
 
 import * as path from 'path';
+import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
+import {
+  buildDoorInfoContent,
+  extractAndRegisterDoor,
+  extractArchiveTo,
+  findExtractedBinary,
+} from './install-core';
+import type { InstallDeps } from './install-core';
+// Re-exported: the install core moved to its own module when app.ts passed
+// the 2000-line ceiling, and the tests import these from here.
+export {
+  buildDoorInfoContent,
+  extractAndRegisterDoor,
+  extractArchiveTo,
+  findExtractedBinary,
+} from './install-core';
+export type { InstallDeps, InstallOutcome } from './install-core';
 import * as fs from 'fs';
 import {
   Screen, Panel, List, ScrollableBox, ConfirmModal, Prompt, Textbox,
@@ -103,14 +120,6 @@ export function commandClaimedByOtherArchive(
   return true;
 }
 
-function getExtractorFactory(): any {
-  // Same require.cache discovery as getCatalogSvc — the backend's shared
-  // archive-extractor (WASM unlzx included) when loaded in this process.
-  for (const k of Object.keys(require.cache))
-    if (k.includes('archive-extractor')) return require.cache[k]?.exports ?? null;
-  return null;
-}
-
 function getStripLib(): any {
   for (const k of Object.keys(require.cache))
     if (k.includes('ami-stripper.lib')) return require.cache[k]?.exports ?? null;
@@ -194,161 +203,6 @@ export function resolveArchivePath(archivePath: string | null | undefined): stri
   } catch { return archivePath; }
 }
 
-/** Content of the .info-style command config written on install. Pure and
- * exported for testing: door_type must flow through as TYPE= (a FIM door
- * force-typed XIM at install time simply won't run under the FIM engine). */
-export function buildDoorInfoContent(doorType: string, cmd: string, binaryRel: string): string {
-  return `TYPE=${doorType}\nLOCATION=Doors:${cmd}/${binaryRel}\nSTACK=65536\nACCESS=0\n`;
-}
-
-/**
- * Extract every file in an archive into destDir, preserving the archive's
- * internal directory structure. Portable — uses the backend's shared
- * extractor factory (pure-JS LHA, WASM LZX, etc.) instead of the native
- * `lha` CLI, so it works the same on macOS dev machines and the Linux
- * container on the live server.
- */
-export async function extractArchiveTo(
-  archivePath: string, destDir: string
-): Promise<{ ok: boolean; fileCount: number; error?: string }> {
-  const factory = getExtractorFactory();
-  if (!factory?.getExtractorForFile) {
-    return { ok: false, fileCount: 0, error: 'Extractor unavailable in this process' };
-  }
-  let extractor: any;
-  try {
-    extractor = await factory.getExtractorForFile(archivePath);
-  } catch (err: any) {
-    return { ok: false, fileCount: 0, error: `Extractor init failed: ${err.message}` };
-  }
-  if (!extractor) return { ok: false, fileCount: 0, error: 'Unsupported archive format' };
-
-  let entries: Array<{ name: string; size: number }>;
-  try {
-    entries = await extractor.getEntries(archivePath);
-  } catch (err: any) {
-    return { ok: false, fileCount: 0, error: `Could not read archive: ${err.message}` };
-  }
-  if (!entries.length) return { ok: false, fileCount: 0, error: 'Archive is empty or unreadable' };
-
-  const destRoot = path.normalize(destDir + path.sep);
-  let written = 0;
-  for (const entry of entries) {
-    if (!entry.name) continue;
-    // The pure-JS LHA reader emits Amiga-style directory-separated names
-    // with '\' (its "directory" extended header joins path segments with
-    // 0xFF, which the parser renders as a literal backslash) — normalize
-    // to '/' so path.join/dirname treat it as real subdirectories on every
-    // OS instead of writing one file with a literal backslash in its name.
-    const entryPath = entry.name.replace(/\\/g, '/');
-    if (entryPath.endsWith('/')) continue; // directory marker, nothing to write
-    let data: Buffer | null = null;
-    try {
-      data = await extractor.extractFile(archivePath, entry.name);
-    } catch { /* skip unreadable member, keep going */ }
-    if (!data) continue;
-    const outPath = path.normalize(path.join(destDir, entryPath));
-    if (!outPath.startsWith(destRoot)) continue; // zip-slip guard
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, data);
-    written++;
-  }
-  return written > 0
-    ? { ok: true, fileCount: written }
-    : { ok: false, fileCount: 0, error: 'No files could be extracted' };
-}
-
-/**
- * Archives (especially FAME door packs) often nest the actual door binary
- * several directories deep (e.g. "add_2_fame/doors/5d/5d!sysop/5d!sysop").
- * The catalog only stores the binary's basename, so after extraction we
- * search the extracted tree for a case-insensitive match rather than
- * assuming it landed at the archive root. Returns a path relative to
- * destDir (posix-style, for use in an AmigaDOS LOCATION= line).
- */
-export function findExtractedBinary(destDir: string, binaryName: string | null | undefined): string | null {
-  if (!binaryName) return null;
-  const target = binaryName.toLowerCase();
-  const stack: string[] = [destDir];
-  while (stack.length) {
-    const dir = stack.pop() as string;
-    let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) { stack.push(full); continue; }
-      if (e.name.toLowerCase() === target) {
-        return path.relative(destDir, full).split(path.sep).join('/');
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * Shared install core: extract an already-on-disk archive, write the .info
- * command config, register the install locally, and refresh the boot-time
- * door registry. Both owner mode (local archive already resolved via
- * resolveArchivePath) and consumer mode (archive downloaded from the
- * central repo into tmp-door-repo/, see installConsumerDoor below) funnel
- * through this exact function once they have a real archivePath — this is
- * the ONE place extractArchiveTo/findExtractedBinary/buildDoorInfoContent
- * get called from, so both modes stay byte-identical past this point. Pure
- * except for the injected deps (all real I/O), so it is directly testable
- * without a blessed Screen.
- */
-export interface InstallDeps {
-  extractArchiveTo: (archivePath: string, destDir: string) => Promise<{ ok: boolean; fileCount: number; error?: string }>;
-  findExtractedBinary: (destDir: string, binaryName: string | null | undefined) => string | null;
-  writeInfoFile: (infoPath: string, content: string) => void;
-  /** Caller-supplied: encapsulates whatever "persist the install locally"
-   * means for this mode -- both owner and consumer now record a row in
-   * door_installs (Task 5); door_catalog no longer carries install state.
-   * Errors are caught and logged here, exactly like the pre-Task-5 inline
-   * behavior: a bookkeeping failure never rolls back a working on-disk
-   * install. */
-  recordInstall: () => void;
-  refreshDoorRegistry: () => Promise<boolean>;
-}
-
-export type InstallOutcome =
-  | { ok: true; doorType: string; fileCount: number; binaryRel: string }
-  | { ok: false; step: string; detail: string };
-
-export async function extractAndRegisterDoor(
-  archivePath: string,
-  installDir: string,
-  infoPath: string,
-  doorType: string,
-  binaryName: string | null,
-  finalCmd: string,
-  deps: InstallDeps
-): Promise<InstallOutcome> {
-  const result = await deps.extractArchiveTo(archivePath, installDir);
-  if (!result.ok) return { ok: false, step: 'extract', detail: result.error ?? 'unknown error' };
-
-  const resolvedDoorType = doorType || 'XIM';
-  const binaryRel = deps.findExtractedBinary(installDir, binaryName) ?? (binaryName ?? finalCmd);
-  try {
-    deps.writeInfoFile(infoPath, buildDoorInfoContent(resolvedDoorType, finalCmd, binaryRel));
-  } catch (err: any) {
-    return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}` };
-  }
-
-  try {
-    deps.recordInstall();
-  } catch (err: any) {
-    // The door is on disk and the .info is written — it will run. The
-    // install just won't show as installed locally. Surface it but don't
-    // roll back a working install over a bookkeeping error.
-    console.log(`[DOORMAN] install failed: record-install: ${err?.message ?? err}`);
-  }
-
-  const refreshed = await deps.refreshDoorRegistry();
-  if (!refreshed) console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
-
-  return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel };
-}
 
 /** Mirrors door_installs' columns (door-installs.repository.ts's
  * DoorInstall, read directly rather than imported -- DOORMAN cannot import
@@ -1264,19 +1118,44 @@ class RepoView extends BaseView {
         `Uninstall {yellow-fg}${e.installed_as}{/yellow-fg}?\n\nRemoves .info + Doors/${e.installed_as}/`,
         'Uninstall', 'Cancel',
         () => {
+          // Every path this removes is checked first and named as it goes.
+          // Unguarded, this deleted the whole Doors directory on the live
+          // board - install_dir is written as `Doors/${command}`, so a record
+          // with no command gives `Doors/`, and a recursive force-delete of
+          // that takes every door with it, DOORMAN included.
+          const removed: string[] = [];
           const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
           const infoPath = path.join(bbsCmdDir, `${e.installed_as}.info`);
-          if (fs.existsSync(infoPath)) fs.unlinkSync(infoPath);
-          if (e.install_dir) {
-            const abs = path.join(PROJECT_ROOT, e.install_dir);
-            if (fs.existsSync(abs)) fs.rmSync(abs, { recursive: true, force: true });
+          if (fs.existsSync(infoPath)) {
+            fs.unlinkSync(infoPath);
+            removed.push(path.relative(PROJECT_ROOT, infoPath));
+          }
+
+          const decision = resolveDoorInstallDir(PROJECT_ROOT, e.install_dir);
+          if (isSafeToDelete(decision)) {
+            if (fs.existsSync(decision.path)) {
+              fs.rmSync(decision.path, { recursive: true, force: true });
+              removed.push(path.relative(PROJECT_ROOT, decision.path) + '/');
+            }
+          } else {
+            // Refuse and say so. Leaving a directory behind is recoverable;
+            // deleting the wrong one is not.
+            this.setStatus(
+              `Kept the files: ${decision.reason}. Removed ${removed.join(', ') || 'nothing'}.`,
+              'yellow',
+              8000
+            );
+            getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
+            void refreshDoorRegistry();
+            this.refresh(this.layout.listSelected);
+            return;
           }
           // door_installs (Task 5) is keyed by command -- installed_as is
           // the command this door was installed as; archive_name is only a
           // fallback for a stale row where installed_as was never set.
           getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
           void refreshDoorRegistry(); // doors list is boot-cached; drop the entry now
-          this.setStatus(`Uninstalled ${e.installed_as}`, 'green', 4000);
+          this.setStatus(`Uninstalled ${e.installed_as}: removed ${removed.join(', ')}`, 'green', 6000);
           this.refresh(this.layout.listSelected);
         }
       ));
