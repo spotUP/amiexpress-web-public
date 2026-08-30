@@ -876,11 +876,11 @@ console.error('Error analyzing archive:', error);
 
       // Derive command name for tracking (package.json bbsCommand > doorName uppercased)
       const tsCommand = (analysis.packageJson?.bbsCommand || analysis.packageJson?.doorMetadata?.command || doorName).toUpperCase();
-      try {
-        db.trackDoorFiles(tsCommand, [
-          { filePath: path.relative(this.bbsRoot, doorInstallPath), fileType: 'dir' },
-        ]);
-      } catch { /* db may not be ready */ }
+      // TypeScript doors have no Commands/BBSCmd/<CMD>.info written by this
+      // installer; pass the path one would live at. recordInstalled/the
+      // recorder skips paths that do not exist.
+      const tsInfoPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd', `${tsCommand}.info`);
+      this.recordInstalled(tsCommand, path.basename(archivePath), doorInstallPath, tsInfoPath);
 
       return {
         success: true,
@@ -1162,6 +1162,7 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
 
         // Install Amiga library files (.library) to Libs/
         const libraryFiles = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
+        const installedLibraryPaths: string[] = [];
         if (libraryFiles.length > 0) {
           const libsDir = this.assigns['Libs:'];
           amigafs.mkdirSync(libsDir, { recursive: true });
@@ -1170,6 +1171,7 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
             const libraryName = path.basename(libraryFile);
             const destPath = path.join(libsDir, libraryName);
             amigafs.copyFileSync(libraryFile, destPath);
+            installedLibraryPaths.push(destPath);
           }
         }
 
@@ -1196,19 +1198,9 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
           }
         }
 
-        // Track installed files in DB so deletion is complete
-        const trackedEntries: Array<{ filePath: string; fileType: 'dir' | 'info' | 'library' | 'file' }> = [];
-        trackedEntries.push({ filePath: path.relative(this.bbsRoot, infoDestPath), fileType: 'info' });
-        if (doorName) {
-          const doorDestDir = path.join(this.assigns['Doors:'], doorName);
-          trackedEntries.push({ filePath: path.relative(this.bbsRoot, doorDestDir), fileType: 'dir' });
-        }
-        const libraryFiles2 = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
-        for (const lf of libraryFiles2) {
-          const destPath = path.join(this.assigns['Libs:'], path.basename(lf));
-          trackedEntries.push({ filePath: path.relative(this.bbsRoot, destPath), fileType: 'library' });
-        }
-        try { db.trackDoorFiles(commandName, trackedEntries); } catch { /* db may not be ready */ }
+        // Record the install: the archive link plus the file list, so a
+        // delete can find exactly what this install put on disk.
+        this.recordInstalled(commandName, path.basename(archivePath), doorDestDir, infoDestPath, installedLibraryPaths);
 
         installedCount++;
       }
@@ -1238,6 +1230,27 @@ console.error('Door installation error:', error);
         message: `Installation failed: ${(error as Error).message}`,
       };
     }
+  }
+
+  /** One install, recorded in both halves. The archive name is the catalog
+   *  key: without it the board has files it cannot explain, which is how 370
+   *  commands ended up with zero tracked files between them. */
+  private recordInstalled(
+    command: string,
+    archiveName: string,
+    installDir: string,
+    infoPath: string,
+    extraFiles?: string[]
+  ): void {
+    const { recordDoorInstall } = require('./door-install-record');
+    recordDoorInstall({
+      bbsRoot: this.bbsRoot,
+      command,
+      archiveName,
+      installDir,
+      infoPath,
+      extraFiles,
+    });
   }
 
   /**

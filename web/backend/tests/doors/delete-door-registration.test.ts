@@ -36,6 +36,12 @@ jest.mock('../../src/handlers/door.handler', () => ({
   initializeDoors: jest.fn().mockResolvedValue(undefined),
 }));
 
+const recordedInstalls: any[] = [];
+jest.mock('../../src/doors/door-install-record', () => ({
+  recordDoorInstall: jest.fn((input: any) => { recordedInstalls.push(input); }),
+  walkInstalledFiles: jest.fn(() => []),
+}));
+
 import { AmigaDoorManager } from '../../src/doors/amigaDoorManager';
 
 let root: string;
@@ -63,10 +69,46 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'door-delete-'));
   trackedRows.length = 0;
   clearedCommands.length = 0;
+  recordedInstalls.length = 0;
 });
 
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+describe('recordInstalled', () => {
+  it('an install through the archive installer is linked to its archive', async () => {
+    // Not the DOORMAN path: the installer the admin upload uses.
+    const manager = new AmigaDoorManager(root);
+    const { doorDir, infoPath } = makeDoor('AEHELP');
+
+    (manager as any).recordInstalled('AEHELP', 'AEHELP.LHA', doorDir, infoPath);
+
+    expect(recordedInstalls[0]).toMatchObject({
+      command: 'AEHELP',
+      archiveName: 'AEHELP.LHA',
+    });
+  });
+
+  it('a TypeScript door install is linked to its archive too, with an info path that need not exist', async () => {
+    // installTypeScriptDoor never writes a Commands/BBSCmd/<CMD>.info - the
+    // recorder must still be given the path one would live at, and it must
+    // tolerate that path not existing on disk.
+    const manager = new AmigaDoorManager(root);
+    const doorDir = path.join(root, 'Doors', 'arkanoid');
+    fs.mkdirSync(doorDir, { recursive: true });
+    const missingInfoPath = path.join(root, 'Commands', 'BBSCmd', 'ARKANOID.info');
+
+    (manager as any).recordInstalled('ARKANOID', 'arkanoid.zip', doorDir, missingInfoPath);
+
+    expect(fs.existsSync(missingInfoPath)).toBe(false);
+    expect(recordedInstalls[0]).toMatchObject({
+      command: 'ARKANOID',
+      archiveName: 'arkanoid.zip',
+      installDir: doorDir,
+      infoPath: missingInfoPath,
+    });
+  });
 });
 
 describe('deleteAmigaDoor', () => {
