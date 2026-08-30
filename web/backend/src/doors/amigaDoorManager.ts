@@ -1417,18 +1417,44 @@ console.error('Cleanup error:', error);
     let tracked: Array<{ filePath: string; fileType: string }> = [];
     try { tracked = db.getDoorFiles(command); } catch { /* db may not be ready */ }
 
-    // Every path is resolved and confined to Doors/ or Commands/ before it is
-    // touched - the DB's rows included. They are as capable of naming
-    // something outside the tree as a caller's fallback is, and a recursive
-    // delete that trusted a string is what took the whole Doors/ directory
-    // out on 2026-08-30.
+    // A recorded 'library' entry lives under Libs:, not Doors/ or Commands/,
+    // so it needs its own narrow admission into the guard below - narrow
+    // because the guard exists specifically to stop an unchecked recursive
+    // delete from taking a whole tree out (Doors/ once, on 2026-08-30): only
+    // a path THIS install actually recorded as a library, under the Libs:
+    // assign, is admitted - never an arbitrary Libs: path, and nothing else
+    // about the guard widens.
+    const libsDir = this.assigns['Libs:'];
+    const resolvedLibsDir = libsDir ? path.resolve(libsDir) : null;
+    const recordedLibraryPaths = new Set(
+      tracked
+        .filter(entry => entry.fileType === 'library')
+        .map(entry => path.resolve(path.join(this.bbsRoot, entry.filePath)))
+    );
+
+    // Every path is resolved and confined to Doors/, Commands/, or a
+    // recorded library under Libs: before it is touched - the DB's rows
+    // included. They are as capable of naming something outside the tree as
+    // a caller's fallback is, and a recursive delete that trusted a string
+    // is what took the whole Doors/ directory out on 2026-08-30.
     const withinTree = (absPath: string): boolean => {
       const resolved = path.resolve(absPath);
-      return (
+      if (
         (resolved.startsWith(doorsDir + path.sep) || resolved.startsWith(commandsDir + path.sep)) &&
         resolved !== doorsDir &&
         resolved !== commandsDir
-      );
+      ) {
+        return true;
+      }
+      if (
+        resolvedLibsDir &&
+        recordedLibraryPaths.has(resolved) &&
+        resolved.startsWith(resolvedLibsDir + path.sep) &&
+        resolved !== resolvedLibsDir
+      ) {
+        return true;
+      }
+      return false;
     };
 
     const rel = (absPath: string): string => path.relative(this.bbsRoot, absPath);

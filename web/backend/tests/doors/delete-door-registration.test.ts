@@ -172,6 +172,39 @@ describe('deleteAmigaDoor', () => {
     expect(fs.existsSync(outside)).toBe(true);
   });
 
+  it('deletes a recorded library file under Libs:', async () => {
+    // withinTree used to confine deletion to Doors/ and Commands/ only, so a
+    // .library file the install itself copied to Libs: - and recorded as
+    // fileType 'library' - was tracked forever but never actually
+    // deletable: it was recorded, then refused at delete time.
+    makeDoor('DD');
+    fs.mkdirSync(path.join(root, 'Libs'), { recursive: true });
+    const libPath = write(path.join('Libs', 'dd.library'), 'library-bytes');
+    trackedRows.push({ filePath: path.join('Libs', 'dd.library'), fileType: 'library' });
+
+    const result = await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(libPath)).toBe(false);
+  });
+
+  it('still refuses a path outside Doors/, Commands/, and Libs/ - even one claiming to be a library', async () => {
+    // The narrow admission for library files must not become a general
+    // escape hatch: a path outside all three trees is refused regardless of
+    // what fileType the tracked row claims for it.
+    makeDoor('DD');
+    const outside = write('outside-the-tree.txt', 'keep me');
+    trackedRows.push({ filePath: '../outside-the-tree.txt', fileType: 'library' });
+    trackedRows.push({
+      filePath: path.join('..', path.basename(root), 'outside-the-tree.txt'),
+      fileType: 'library',
+    });
+
+    await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
   it('clears the tracking rows for the command it deleted', async () => {
     makeDoor('DD');
 
