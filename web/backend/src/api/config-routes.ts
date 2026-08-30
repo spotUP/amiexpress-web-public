@@ -131,7 +131,10 @@ console.error('Config API error:', error);
     try {
       const context = getRequestContext(req);
       const config = await configService.updateSystemConfig(req.body, context);
-      sendResponse(res, config, 'System configuration updated');
+      // A save that could not update the icon file still succeeded; say so
+      // rather than reporting a clean write.
+      const warning = (configService as any).lastSaveWarning as string | undefined;
+      sendResponse(res, config, warning ?? 'System configuration updated');
     } catch (error) {
       handleError(res, error);
     }

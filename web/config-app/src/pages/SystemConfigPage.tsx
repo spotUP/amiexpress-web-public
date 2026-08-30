@@ -62,7 +62,7 @@ const LOG_RETENTION_PRESETS = [
 
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
-  const { showSuccess, showError, confirm } = useNotification();
+  const { showSuccess, showError, showWarning, confirm } = useNotification();
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isDeletingKey, setIsDeletingKey] = useState(false);
   /**
@@ -126,7 +126,16 @@ export function SystemConfigPage() {
       if (resp?.data) {
         reset(resp.data as any);
       }
-      showSuccess('System configuration written to bbsConfig.info');
+      // The server says which file it managed to write. On a board whose
+      // icon has a non-standard tooltype array it can only update the text
+      // companion, and a sysop needs to be told that rather than shown a
+      // clean success.
+      const message = (resp as { message?: string } | undefined)?.message;
+      if (message && message !== 'System configuration updated') {
+        showWarning(message);
+      } else {
+        showSuccess('System configuration written to bbsConfig.info');
+      }
     },
     onError: (error: Error) => {
       showError(`Failed to update configuration: ${error.message}`);

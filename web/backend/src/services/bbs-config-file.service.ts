@@ -9,7 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
-import { parseInfoFile, updateTooltype, writeInfoFile } from '../utils/info-file.util';
+import { InfoFileWriteError, parseInfoFile, updateTooltype, writeInfoFile } from '../utils/info-file.util';
 import type { SystemConfig } from '../database/types';
 import { isSensitiveField } from '../utils/secrets-encryption.util';
 import { getSystemTime } from '../utils/date-time.util';
@@ -246,14 +246,27 @@ export function getConfigTooltypeKeys(): Record<string, string> {
   return { ...REVERSE_TOOLTYPE_MAP };
 }
 
+/**
+ * Upper-cased tooltype name -> the canonical spelling in TOOLTYPE_MAP.
+ *
+ * Needed because one tooltype is genuinely not upper case:
+ * LVL_CAPITOLS_in_FILE, exactly as AmiExpress declares it (axcommon.e:53).
+ * Upper-casing every key on the way in meant that one could never be matched,
+ * so "capitalise uploaded filenames" could be saved and never read back - the
+ * form showed it off however many times a sysop switched it on.
+ */
+const CANONICAL_TOOLTYPE_KEY: Record<string, string> = Object.fromEntries(
+  Object.keys(TOOLTYPE_MAP).map(key => [key.toUpperCase(), key])
+);
+
 function normalizeTooltypeKey(rawKey: string): string {
   const upper = rawKey.toUpperCase();
-  if (TOOLTYPE_MAP[upper]) {
-    return upper;
+  if (CANONICAL_TOOLTYPE_KEY[upper]) {
+    return CANONICAL_TOOLTYPE_KEY[upper];
   }
 
   const stripped = upper.replace(/^[^A-Z0-9]+/, '');
-  return TOOLTYPE_MAP[stripped] ? stripped : upper;
+  return CANONICAL_TOOLTYPE_KEY[stripped] ?? upper;
 }
 
 function parseTooltypesTextFile(filePath: string): Map<string, string> {
@@ -327,10 +340,29 @@ console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
 
   if (fs.existsSync(configTextPath)) {
     const textToolTypes = parseTooltypesTextFile(configTextPath);
-    for (const [key, value] of textToolTypes.entries()) {
-      mergedToolTypes.set(key, value);
+
+    // Both files are complete snapshots - the writer builds the text
+    // companion from the whole merged tooltype set - so the NEWER of the two
+    // is the truth and the older one is stale, not a partial override.
+    //
+    // Merging the text file over the icon looked equivalent and was not: a
+    // boolean tooltype is expressed by its PRESENCE, so switching one off
+    // removes it from the text file, and a merge then read it straight back
+    // out of the icon. Turning any flag off silently did nothing on a board
+    // whose icon the writer cannot update.
+    const textIsNewer =
+      !fs.existsSync(configPath) ||
+      fs.statSync(configTextPath).mtimeMs >= fs.statSync(configPath).mtimeMs;
+
+    if (textIsNewer) {
+      mergedToolTypes.clear();
+      for (const [key, value] of textToolTypes.entries()) {
+        mergedToolTypes.set(key, value);
+      }
+console.log('[BBSConfig] Loaded configuration from bbsConfig.info.txt (newer than the icon)');
+    } else {
+console.log('[BBSConfig] Ignoring bbsConfig.info.txt; the icon file is newer');
     }
-console.log('[BBSConfig] Loaded configuration overrides from bbsConfig.info.txt');
   }
 
   if (mergedToolTypes.size === 0) {
@@ -340,6 +372,21 @@ console.log('[BBSConfig] bbsConfig.info not found, using defaults');
 
   try {
     const config: Partial<BBSConfigData> = {};
+
+    // A boolean tooltype means what AmiExpress means by it: present is on,
+    // absent is off. Once a configuration file exists, EVERY flag starts off
+    // and is switched on only by being in the file.
+    //
+    // Without this, a flag whose default is true (confirm_deletions,
+    // ansi_enabled, file_check_enabled and five others) could not be turned
+    // off at all: unchecking it removed the tooltype, and the default put it
+    // straight back on the next read.
+    const defaults = getDefaultConfig() as Record<string, unknown>;
+    for (const [field, value] of Object.entries(defaults)) {
+      if (typeof value === 'boolean') {
+        (config as any)[field] = false;
+      }
+    }
 
     // Parse each tooltype
     for (const [rawKey, rawValue] of mergedToolTypes.entries()) {
@@ -377,7 +424,31 @@ console.error('[BBSConfig] Failed to parse configuration:', error);
 /**
  * Save system configuration to bbsConfig.info
  */
-export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): void {
+export interface SaveBBSConfigResult {
+  /** The text companion, which this BBS reads, was updated. */
+  textFileWritten: boolean;
+  /** The Amiga icon file was updated too. */
+  infoFileWritten: boolean;
+  /** Set when the two files now disagree, and why. */
+  warning?: string;
+}
+
+/**
+ * A tooltype key as it should appear in the text companion.
+ *
+ * The heuristic extraction used on an icon whose tooltype array cannot be
+ * located picks up fragments of the surrounding binary - single letters, bare
+ * digits, and a stray length byte glued to the front of a real key
+ * ("6FTPDATAPORT=50101,..."). Writing those back multiplied them on every
+ * save. A leading run of digits is stripped; anything that still does not
+ * look like a key is dropped.
+ */
+function cleanTooltypeKey(key: string): string | null {
+  const stripped = key.replace(/^[0-9]+(?=[A-Za-z])/, '');
+  return /^[A-Za-z][A-Za-z0-9_.]*$/.test(stripped) && stripped.length >= 2 ? stripped : null;
+}
+
+export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): SaveBBSConfigResult {
   const configPath = path.join(bbsRoot, 'bbsConfig.info');
   const configTextPath = configPath + '.txt';
 
@@ -440,15 +511,19 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       }
     }
 
-    // The actual binary .info is written below via writeInfoFile() (icon.library
-    // format). Build a companion plain-text file (bbsConfig.info.txt) for humans
-    // and tooling that can't parse Amiga icon files.
+    // The binary .info is written below via writeInfoFile() (icon.library
+    // format). Build a companion plain-text file (bbsConfig.info.txt) for
+    // humans and tooling that cannot parse Amiga icon files. loadBBSConfig
+    // applies this file AFTER the .info, so it is what this BBS actually
+    // reads.
     const tooltypes: string[] = [];
     for (const [key, value] of existing.entries()) {
+      const cleanKey = cleanTooltypeKey(key);
+      if (!cleanKey) continue;
       if (value === '') {
-        tooltypes.push(key);
+        tooltypes.push(cleanKey);
       } else {
-        tooltypes.push(`${key}=${value}`);
+        tooltypes.push(`${cleanKey}=${value}`);
       }
     }
     const content = tooltypes.join('\n') + '\n';
@@ -459,15 +534,39 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       fs.copyFileSync(configPath, backupPath);
     }
 
-    if (infoFile) {
-      writeInfoFile(infoFile);
-console.log('[BBSConfig] Saved configuration to bbsConfig.info');
-    } else {
-console.warn('[BBSConfig] bbsConfig.info not found; skipping .info update');
-    }
-
+    // The text companion goes first, and on its own. It used to be written
+    // after the .info, so an icon the writer refuses to touch - one whose
+    // tooltype array it could only read heuristically - threw before this
+    // line and the sysop's change was lost entirely while the form reported
+    // a failure with nothing saved anywhere.
     fs.writeFileSync(configTextPath, content, 'utf-8');
 console.log('[BBSConfig] Saved configuration to bbsConfig.info.txt');
+
+    if (!infoFile) {
+console.warn('[BBSConfig] bbsConfig.info not found; wrote bbsConfig.info.txt only');
+      return { textFileWritten: true, infoFileWritten: false, warning: 'bbsConfig.info does not exist; the change is in bbsConfig.info.txt.' };
+    }
+
+    try {
+      writeInfoFile(infoFile);
+console.log('[BBSConfig] Saved configuration to bbsConfig.info');
+      return { textFileWritten: true, infoFileWritten: true };
+    } catch (error) {
+      if (error instanceof InfoFileWriteError) {
+        // The icon's tooltype array is not in the standard layout, so it was
+        // only readable heuristically and cannot be re-serialised without
+        // risking the file. The change is not lost - it is in the text
+        // companion, which is the file this BBS reads - but the icon now
+        // disagrees with it, and only re-creating the icon fixes that.
+        const warning =
+          'bbsConfig.info has a non-standard tooltype layout and was left untouched. ' +
+          'The change is saved in bbsConfig.info.txt, which this BBS reads, but the ' +
+          'icon file no longer matches it. Re-create the icon to bring them back together.';
+console.warn(`[BBSConfig] ${warning}`);
+        return { textFileWritten: true, infoFileWritten: false, warning };
+      }
+      throw error;
+    }
   } catch (error) {
 console.error('[BBSConfig] Failed to save bbsConfig.info:', error);
     throw error;

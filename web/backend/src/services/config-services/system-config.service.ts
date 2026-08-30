@@ -69,6 +69,12 @@ export class SystemConfigService {
     return config;
   }
 
+  /**
+   * Set when the last save could not update bbsConfig.info itself. Read by
+   * the route so the sysop is told, rather than the divergence being silent.
+   */
+  lastSaveWarning?: string;
+
   async updateSystemConfig(
     updates: Partial<SystemConfig>,
     context: RequestContext
@@ -99,7 +105,13 @@ export class SystemConfigService {
     // DISK-BASED: Write non-sensitive fields to bbsConfig.info
     if (Object.keys(diskUpdates).length > 0) {
       const bbsRoot = appConfig.get('dataDir');
-      saveBBSConfig(bbsRoot, diskUpdates);
+      const saved = saveBBSConfig(bbsRoot, diskUpdates);
+
+      // The writer refuses to re-serialise an icon whose tooltype array it
+      // could only read heuristically. The change is still saved - in
+      // bbsConfig.info.txt, which this BBS reads - but the icon no longer
+      // agrees with it, and a sysop who never sees this would not know.
+      this.lastSaveWarning = saved.warning;
     }
 
     // Get updated config (merged from disk + database)
