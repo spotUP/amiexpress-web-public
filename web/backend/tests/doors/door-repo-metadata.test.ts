@@ -165,6 +165,41 @@ describe('applyRepoMetadata precedence', () => {
     expect(applyRepoMetadata(unlinked, index).name).toBe('.______.');
     expect(applyRepoMetadata(linked, index, { archiveName: 'HACKCHK.LHA' }).name).toBe('Hack Check');
   });
+
+  it('falls back to the name/command heuristic when the linked archive is missing from the index', () => {
+    // A door with an install record whose archive was re-indexed or removed
+    // from the catalog since. The exact-archive match misses, but the door's
+    // own command still matches HACKCHK's catalog entry by name/command -
+    // the heuristic must still fill the description rather than the door
+    // reaching the menu untouched, as it did before this fix.
+    const door = { command: 'HACKCHK', name: '', description: '' };
+
+    const result = applyRepoMetadata(door, index, { archiveName: 'NO-SUCH-ARCHIVE.LHA' });
+
+    expect(result).toMatchObject({
+      name: 'Hack Check',
+      description: 'Checks for known hacks',
+      category: 'Security',
+    });
+  });
+
+  it('keeps the NAME-override rule scoped to an exact archive match, even for a linked door', () => {
+    // The archive misses the index, so this falls to the heuristic path -
+    // which only FILLS empty fields, it never overwrites a NAME (however
+    // implausible) the way an exact archive match does.
+    const door = { command: 'HACKCHK', name: '.______.', description: '' };
+
+    const result = applyRepoMetadata(door, index, { archiveName: 'NO-SUCH-ARCHIVE.LHA' });
+
+    expect(result.name).toBe('.______.');
+    expect(result.description).toBe('Checks for known hacks');
+  });
+
+  it('leaves a linked door alone when neither the archive nor the heuristic matches anything', () => {
+    const door = { command: 'ZZ9', name: 'Something Else', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'NO-SUCH-ARCHIVE.LHA' })).toEqual(door);
+  });
 });
 
 describe('fetching the index', () => {

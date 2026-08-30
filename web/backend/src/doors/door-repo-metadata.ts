@@ -151,23 +151,30 @@ export function applyRepoMetadata<T extends EnrichableDoor>(
 
   if (link?.archiveName) {
     const match = index.get(archiveKey(link.archiveName));
-    if (!match) return door;
+    if (match) {
+      const keepOwnName = isPlausibleDoorName(door.name, {
+        command: door.command,
+        archiveName: link.archiveName,
+      });
 
-    const keepOwnName = isPlausibleDoorName(door.name, {
-      command: door.command,
-      archiveName: link.archiveName,
-    });
-
-    return {
-      ...door,
-      name: keepOwnName ? door.name : (match.name || door.name),
-      description: door.description || match.description || '',
-      category: door.category || match.category || undefined,
-    };
+      return {
+        ...door,
+        name: keepOwnName ? door.name : (match.name || door.name),
+        description: door.description || match.description || '',
+        category: door.category || match.category || undefined,
+      };
+    }
+    // Linked, but the archive is not (or no longer) in the catalog index -
+    // fall through to the name/command heuristic below instead of leaving
+    // the door untouched. The NAME-override rule above stays scoped to an
+    // EXACT archive match: without one, we do not know the repo's entry for
+    // this door, so a heuristic match here is treated exactly like an
+    // unlinked door's (fill empty fields only, never overwrite NAME).
   }
 
-  // No install record: the old heuristic, byte-for-byte. What the door
-  // itself says always wins here, whatever its NAME looks like.
+  // No install record, or a linked one whose archive missed the index: the
+  // old heuristic, byte-for-byte. What the door itself says always wins
+  // here, whatever its NAME looks like.
   if (door.description && door.category && door.name) return door;
 
   const match =
