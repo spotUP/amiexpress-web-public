@@ -46,6 +46,7 @@ exports.createApp = createApp;
 const path = __importStar(require("path"));
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
+const archive_browse_view_1 = require("./archive-browse-view");
 const install_core_1 = require("./install-core");
 // Re-exported: the install core moved to its own module when app.ts passed
 // the 2000-line ceiling, and the tests import these from here.
@@ -1342,79 +1343,78 @@ class RepoView extends ViewManager_1.BaseView {
             this.refresh(this.layout.listSelected);
         }));
     }
+    /**
+     * Documentation comes from wherever this BBS's catalog actually is.
+     *
+     * An owner has it locally, in the entry's own doc_raw. A consumer does not
+     * - the catalog lives on the door server - so it asks the server, which
+     * has answered at /api/door-repo/doc/:archiveName all along. Before this,
+     * [V]iew doc on a consumer did nothing at all.
+     */
     doViewDoc() {
         const e = this.entry();
-        if (!e?.doc_raw) {
+        if (!e)
+            return;
+        if (e.doc_raw) {
+            this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
+            return;
+        }
+        if (this.repoMode.kind !== 'consumer') {
             this.setStatus('No documentation available', 'yellow');
             return;
         }
-        this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
+        const cfg = this.consumerClientConfig();
+        this.setStatus('Fetching documentation...', 'yellow', 15000);
+        void (async () => {
+            const doc = await (0, repo_client_1.fetchDoc)(cfg, e.archive_name);
+            if (!doc) {
+                this.setStatus('No documentation available', 'yellow', 4000);
+                return;
+            }
+            this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, doc));
+        })();
     }
+    /** The archive's contents, from the local catalog or from the server. */
     doBrowseArchive() {
         const e = this.entry();
         if (!e)
             return;
         const svc = getCatalogSvc();
-        if (!svc?.getArchiveFiles) {
-            this.setStatus('File catalog not available', 'yellow');
-            return;
+        if (svc?.getArchiveFiles) {
+            let files = [];
+            try {
+                files = svc.getArchiveFiles(e.id);
+            }
+            catch {
+                files = [];
+            }
+            if (files.length) {
+                this.vm.push(new archive_browse_view_1.ArchiveBrowseView(this.layout, e.archive_name, files));
+                return;
+            }
         }
-        let files;
-        try {
-            files = svc.getArchiveFiles(e.id);
-        }
-        catch {
-            this.setStatus('Could not load file list', 'red');
-            return;
-        }
-        if (!files.length) {
+        if (this.repoMode.kind !== 'consumer') {
             this.setStatus('No file data in catalog', 'yellow');
             return;
         }
-        this.vm.push(new ArchiveBrowseView(this.layout, e.archive_name, files));
+        const cfg = this.consumerClientConfig();
+        this.setStatus('Fetching file list...', 'yellow', 15000);
+        void (async () => {
+            const listing = await (0, repo_client_1.fetchArchiveFiles)(cfg, e.archive_name);
+            if (!listing || listing.files.length === 0) {
+                this.setStatus('The repo has no file list for this archive', 'yellow', 4000);
+                return;
+            }
+            // ArchiveBrowseView reads the catalog's own column names.
+            this.vm.push(new archive_browse_view_1.ArchiveBrowseView(this.layout, e.archive_name, listing.files.map(f => ({ path: f.path, size: f.size, is_junk: f.isJunk ? 1 : 0 }))));
+        })();
     }
-}
-// ── Archive Browser (from catalog, no lha needed) ────────────────────────────
-class ArchiveBrowseView extends ViewManager_1.BaseView {
-    constructor(layout, archiveName, files) {
-        super();
-        this.layout = layout;
-        this.archiveName = archiveName;
-        this.files = files;
-    }
-    enter() {
-        // Hide filter panel (was shown in repo mode), use installed-style layout
-        this.layout.showInstalledLayout();
-        // Filter out hidden files (starting with . or __) and system files
-        const visible = this.files.filter((f) => {
-            const base = f.path.split('/').pop() ?? f.path;
-            return !base.startsWith('.') && !base.startsWith('__');
-        });
-        const junk = visible.filter((f) => f.is_junk).length;
-        const items = visible.map((f) => {
-            const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
-            const mark = f.is_junk ? '!' : ' ';
-            const w = this.layout.width - 7;
-            const name = f.path.length > w
-                ? '<' + f.path.slice(f.path.length - w + 1)
-                : f.path;
-            return `${mark} ${name.padEnd(w)} ${sz.padStart(5)}`;
-        });
-        this.layout.setListLabel(` ${this.archiveName} (${visible.length} files) `);
-        this.layout.setListItems(items);
-        this.layout.setListSelect(0);
-        this.layout.setInfo(`{yellow-fg}${this.archiveName}{/yellow-fg}\n\n` +
-            `{white-fg}${visible.length} files{/white-fg}` +
-            (junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}') +
-            '\n\n{grey-fg}! = flagged as ad file{/grey-fg}');
-        this.layout.setFooter('{center}{yellow-fg}↑/↓{/yellow-fg} Navigate  {yellow-fg}ESC/Q{/yellow-fg} Back{/center}');
-        this.layout.focusList();
-        this.layout.render();
-        this.keys.key(['q', 'Q'], () => this.vm.pop());
-    }
-    exit() {
-        this.layout.showRepoLayout(); // restore repo layout on exit
-        this.keys.release();
+    /** The repo client config for this node's consumer mode. */
+    consumerClientConfig() {
+        return {
+            url: this.repoMode.url,
+            cacheFile: (0, repoDataSource_1.consumerCacheFilePath)(PROJECT_ROOT),
+        };
     }
 }
 // ── Document Viewer ───────────────────────────────────────────────────────────

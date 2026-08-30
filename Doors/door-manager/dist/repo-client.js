@@ -36,6 +36,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchManifest = fetchManifest;
 exports.downloadArchive = downloadArchive;
 exports.learnPattern = learnPattern;
+exports.fetchArchiveFiles = fetchArchiveFiles;
+exports.fetchDoc = fetchDoc;
 /**
  * repo-client: DOORMAN-side HTTP client for the central door-repo API
  * (web/backend/src/server/door-repo.routes.ts).
@@ -416,5 +418,65 @@ async function learnPattern(cfg, pattern, learnKey, archiveName, filePath) {
     catch {
         return { ok: false };
     }
+}
+const DETAIL_TIMEOUT_MS = 15000;
+/** The archive's contents, or null when the server has none for it. */
+async function fetchArchiveFiles(cfg, archiveName) {
+    const url = `${cfg.url}/api/door-repo/files/${encodeURIComponent(archiveName)}`;
+    let response;
+    try {
+        response = await fetch(url, {
+            headers: { 'Cache-Control': 'max-age=0' },
+            signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+        });
+    }
+    catch {
+        return null;
+    }
+    if (!response.ok)
+        return null;
+    const body = await response.text();
+    const lines = body.split(/\r?\n/).filter(line => line.length > 0);
+    if (lines.length === 0)
+        return null;
+    const header = lines[0].split('|');
+    if (header[0] !== 'FILES')
+        return null;
+    const files = [];
+    for (const line of lines.slice(1)) {
+        const parts = line.split('|');
+        if (parts.length < 3)
+            continue;
+        // The path itself may contain '|' - everything after the second
+        // separator is the path.
+        files.push({
+            size: Number.parseInt(parts[0], 10) || 0,
+            isJunk: parts[1] === '1',
+            path: parts.slice(2).join('|'),
+        });
+    }
+    return {
+        count: Number.parseInt(header[1], 10) || files.length,
+        junkCount: Number.parseInt(header[2], 10) || files.filter(f => f.isJunk).length,
+        files,
+    };
+}
+/** The archive's documentation, or null when it carries none. */
+async function fetchDoc(cfg, archiveName) {
+    const url = `${cfg.url}/api/door-repo/doc/${encodeURIComponent(archiveName)}`;
+    let response;
+    try {
+        response = await fetch(url, {
+            headers: { 'Cache-Control': 'max-age=0' },
+            signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+        });
+    }
+    catch {
+        return null;
+    }
+    if (!response.ok)
+        return null;
+    const text = await response.text();
+    return text.length > 0 ? text : null;
 }
 //# sourceMappingURL=repo-client.js.map

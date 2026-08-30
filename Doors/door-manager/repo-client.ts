@@ -449,3 +449,101 @@ export async function learnPattern(
     return { ok: false };
   }
 }
+
+// ─── fetchArchiveFiles / fetchDoc ───────────────────────────────────────
+//
+// Consumer mode had no way to answer two questions the browse view asks on
+// every entry: what is inside this archive, and what does its documentation
+// say. Both came from the LOCAL catalog service - `svc.getArchiveFiles(id)`
+// and the entry's own `doc_raw` - which a consumer BBS does not have: the
+// catalog moved to the door server, so on a consumer the file list was empty
+// and [V]iew doc did nothing.
+//
+// The server answers both, and has all along:
+//
+//   GET /api/door-repo/files/:archiveName
+//   GET /api/door-repo/doc/:archiveName
+//
+// The files format is deliberately trivial to parse in C89, so it is trivial
+// here too:
+//
+//   FILES|<count>|<junkCount>
+//   <size>|<isJunk 0|1>|<path>
+
+export interface RepoArchiveFile {
+  size: number;
+  isJunk: boolean;
+  path: string;
+}
+
+export interface RepoArchiveFiles {
+  count: number;
+  junkCount: number;
+  files: RepoArchiveFile[];
+}
+
+const DETAIL_TIMEOUT_MS = 15_000;
+
+/** The archive's contents, or null when the server has none for it. */
+export async function fetchArchiveFiles(
+  cfg: RepoClientConfig,
+  archiveName: string
+): Promise<RepoArchiveFiles | null> {
+  const url = `${cfg.url}/api/door-repo/files/${encodeURIComponent(archiveName)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { 'Cache-Control': 'max-age=0' },
+      signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  const body = await response.text();
+  const lines = body.split(/\r?\n/).filter(line => line.length > 0);
+  if (lines.length === 0) return null;
+
+  const header = lines[0].split('|');
+  if (header[0] !== 'FILES') return null;
+
+  const files: RepoArchiveFile[] = [];
+  for (const line of lines.slice(1)) {
+    const parts = line.split('|');
+    if (parts.length < 3) continue;
+    // The path itself may contain '|' - everything after the second
+    // separator is the path.
+    files.push({
+      size: Number.parseInt(parts[0], 10) || 0,
+      isJunk: parts[1] === '1',
+      path: parts.slice(2).join('|'),
+    });
+  }
+
+  return {
+    count: Number.parseInt(header[1], 10) || files.length,
+    junkCount: Number.parseInt(header[2], 10) || files.filter(f => f.isJunk).length,
+    files,
+  };
+}
+
+/** The archive's documentation, or null when it carries none. */
+export async function fetchDoc(cfg: RepoClientConfig, archiveName: string): Promise<string | null> {
+  const url = `${cfg.url}/api/door-repo/doc/${encodeURIComponent(archiveName)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { 'Cache-Control': 'max-age=0' },
+      signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  const text = await response.text();
+  return text.length > 0 ? text : null;
+}

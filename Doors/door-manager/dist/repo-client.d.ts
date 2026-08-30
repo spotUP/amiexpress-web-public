@@ -31,4 +31,18 @@ export declare function learnPattern(cfg: RepoClientConfig, pattern: string, lea
     id?: number;
     duplicate?: boolean;
 }>;
+export interface RepoArchiveFile {
+    size: number;
+    isJunk: boolean;
+    path: string;
+}
+export interface RepoArchiveFiles {
+    count: number;
+    junkCount: number;
+    files: RepoArchiveFile[];
+}
+/** The archive's contents, or null when the server has none for it. */
+export declare function fetchArchiveFiles(cfg: RepoClientConfig, archiveName: string): Promise<RepoArchiveFiles | null>;
+/** The archive's documentation, or null when it carries none. */
+export declare function fetchDoc(cfg: RepoClientConfig, archiveName: string): Promise<string | null>;
 //# sourceMappingURL=repo-client.d.ts.map
