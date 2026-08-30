@@ -2,7 +2,7 @@
  * Super Qix - Enemy System
  * Handles Qix, Sparx, and Fuse behavior
  */
-import { SuperQixData, Sparx, Point, LevelConfig } from './types';
+import { SuperQixData, Qix, Sparx, Point, LevelConfig } from './types';
 /**
  * Enemy system managing Qix, Sparx, and Fuse
  */
@@ -64,6 +64,33 @@ export declare class EnemySystem {
      * when a completed stix converts the cells it is standing on.
      */
     private findNearestOpenCell;
+    /**
+     * How strongly the Gremlin steers towards the marker, 0 (pure wander) to
+     * 1 (straight at them).
+     *
+     * There is always a slight lean, so it drifts into whichever corner the
+     * player is working in. Detaching to draw raises it, and on later levels
+     * it rises further - the "zoom towards you every time you detach" the FAQ
+     * describes for the upper levels.
+     */
+    private markerPull;
+    /**
+     * Split a Gremlin in two.
+     *
+     * FAQ 2.2: "In later levels, the Gremlin will actually split into multiple
+     * independently-moving copies of himself", and FAQ 2.5.3 notes there is
+     * "usually only one Gremlin in Super Qix (though he sometimes divides into
+     * two or more during a level)". The copy starts where the original is,
+     * heading the other way.
+     */
+    splitQix(qix: Qix): Qix | null;
+    /**
+     * Should the Gremlin divide this tick?
+     *
+     * Only on later levels, and only rarely, so a level normally has the one
+     * Gremlin the FAQ describes.
+     */
+    maybeSplitQix(): void;
     /**
      * Is this position off limits to a Qix?
      *

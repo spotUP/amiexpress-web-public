@@ -288,6 +288,18 @@ export class QixEngine {
         }
         const nextCell = d.field[nextY][nextX];
         if (d.marker.isDrawing && d.currentStix) {
+            // Retracing one step back along the line (FAQ 2.1: backtracking IS
+            // allowed in Super Qix). The line shortens and the abandoned cell goes
+            // back to open field. Deliberately does NOT reset stopTimer: FAQ 2.2
+            // says "backtracking counts as not moving for the purposes of the
+            // Fuse", so the fuse keeps burning while the player reverses out.
+            if (this.drawingSystem.isBacktrack({ x: nextX, y: nextY })) {
+                if (this.drawingSystem.retractStix()) {
+                    d.marker.x = nextX;
+                    d.marker.y = nextY;
+                }
+                return;
+            }
             // Drawing mode - can move into unclaimed or back to border/claimed
             if (nextCell === 'unclaimed') {
                 // Extend stix

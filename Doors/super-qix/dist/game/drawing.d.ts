@@ -14,6 +14,23 @@ export declare class DrawingSystem {
      */
     extendStix(point: Point): boolean;
     /**
+     * Is this the cell the marker came from, one step back along the line?
+     *
+     * FAQ 2.1: "In Super Qix, unlike the original, you ARE allowed to
+     * backtrack along your incomplete lines". Only the immediately previous
+     * point counts - stepping onto any OTHER part of the line is crossing it,
+     * which is still fatal.
+     */
+    isBacktrack(point: Point): boolean;
+    /**
+     * Retrace one step, giving the cell the marker leaves back to the field.
+     *
+     * The line shortens rather than the marker walking over itself, so a
+     * player can reverse out of a corner they have drawn themselves into -
+     * the "Spiral Death Trap" the FAQ describes as survivable in Super Qix.
+     */
+    retractStix(): boolean;
+    /**
      * Check if stix contains a point
      */
     private stixContains;

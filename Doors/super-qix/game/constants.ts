@@ -65,6 +65,20 @@ export const WORD_COMPLETE_POINTS = 10000;
 export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on separation
 
 // Enemy parameters
+// How strongly the Gremlin steers towards the marker (FAQ 2.2: its bounce is
+// "weighted somewhat towards your marker", and on later levels it will "zoom
+// towards you every time you detach from a wall").
+export const QIX_BASE_PULL = 0.08;      // always a slight lean
+export const QIX_LEVEL_PULL = 0.12;     // added by level 16
+export const QIX_DRAWING_PULL = 0.25;   // added while the player is exposed
+export const QIX_MAX_PULL = 0.6;        // never a perfect homing missile
+
+// The Gremlin divides on later levels, rarely, and never without limit
+// (FAQ 2.2 / 2.5.3: usually one, sometimes two or more).
+export const QIX_SPLIT_FROM_LEVEL = 7;
+export const QIX_SPLIT_CHANCE_PER_TICK = 0.0015;
+export const QIX_MAX_COPIES = 3;
+
 export const QIX_BASE_SPEED = 2;
 export const QIX_SEGMENT_COUNT = 5;
 export const SPARX_BASE_SPEED = 1.5;

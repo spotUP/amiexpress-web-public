@@ -36,6 +36,44 @@ export class DrawingSystem {
         return true;
     }
     /**
+     * Is this the cell the marker came from, one step back along the line?
+     *
+     * FAQ 2.1: "In Super Qix, unlike the original, you ARE allowed to
+     * backtrack along your incomplete lines". Only the immediately previous
+     * point counts - stepping onto any OTHER part of the line is crossing it,
+     * which is still fatal.
+     */
+    isBacktrack(point) {
+        const d = this.data;
+        if (!d.currentStix)
+            return false;
+        const points = d.currentStix.points;
+        if (points.length < 2)
+            return false;
+        const previous = points[points.length - 2];
+        return previous.x === point.x && previous.y === point.y;
+    }
+    /**
+     * Retrace one step, giving the cell the marker leaves back to the field.
+     *
+     * The line shortens rather than the marker walking over itself, so a
+     * player can reverse out of a corner they have drawn themselves into -
+     * the "Spiral Death Trap" the FAQ describes as survivable in Super Qix.
+     */
+    retractStix() {
+        const d = this.data;
+        if (!d.currentStix)
+            return false;
+        const points = d.currentStix.points;
+        if (points.length < 2)
+            return false;
+        const abandoned = points.pop();
+        if (d.field[abandoned.y][abandoned.x] === 'stix') {
+            d.field[abandoned.y][abandoned.x] = 'unclaimed';
+        }
+        return true;
+    }
+    /**
      * Check if stix contains a point
      */
     stixContains(point) {
@@ -92,19 +130,44 @@ export class DrawingSystem {
             x: Math.floor(q.x),
             y: Math.floor(q.y)
         }));
-        // Claim regions that don't contain any Qix
-        let totalClaimed = 0;
-        const totalUnclaimed = this.countCells('unclaimed');
+        /**
+         * Which region counts as "Outside"?
+         *
+         * FAQ 2.1: "the area containing the Gremlin is always considered
+         * 'Outside' and the complementary area without the Gremlin is filled
+         * in". FAQ 2.2 settles the case of a divided Gremlin: cut between two
+         * copies and "'Outside' is considered to be the larger of the two areas
+         * and the Gremlin trapped in the smaller area will disappear when it
+         * fills in".
+         *
+         * Both are the same rule: Outside is the LARGEST region holding a
+         * Gremlin. Everything else is claimed, and any Gremlin caught in what
+         * gets claimed is gone.
+         */
+        let outside = null;
         for (const region of regions) {
-            const containsQix = qixPositions.some(qp => region.points.some(rp => rp.x === qp.x && rp.y === qp.y));
-            if (!containsQix) {
-                // Collected, not painted: the engine fills these in over a few
-                // frames so the sweep is visible (see QixEngine's pending fill).
-                for (const point of region.points) {
-                    filled.push(point);
-                }
-                totalClaimed += region.points.length;
+            const holdsQix = qixPositions.some(qp => region.points.some(rp => rp.x === qp.x && rp.y === qp.y));
+            if (!holdsQix)
+                continue;
+            if (!outside || region.points.length > outside.points.length) {
+                outside = region;
             }
+        }
+        let totalClaimed = 0;
+        for (const region of regions) {
+            if (region === outside)
+                continue;
+            // Collected, not painted: the engine fills these in over a few
+            // frames so the sweep is visible (see QixEngine's pending fill).
+            for (const point of region.points) {
+                filled.push(point);
+            }
+            totalClaimed += region.points.length;
+        }
+        // A Gremlin sealed into ground that is being claimed disappears with it.
+        if (outside) {
+            const claimedCells = new Set(filled.map(p => `${p.x},${p.y}`));
+            d.qixList = d.qixList.filter(q => !claimedCells.has(`${Math.floor(q.x)},${Math.floor(q.y)}`));
         }
         // Calculate percentage of total field
         const fieldArea = (FIELD_WIDTH - 2) * (FIELD_HEIGHT - 2); // Exclude borders

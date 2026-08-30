@@ -15,6 +15,13 @@ import {
   FIELD_WIDTH,
   FIELD_HEIGHT,
   QIX_BASE_SPEED,
+  QIX_BASE_PULL,
+  QIX_LEVEL_PULL,
+  QIX_DRAWING_PULL,
+  QIX_MAX_PULL,
+  QIX_SPLIT_FROM_LEVEL,
+  QIX_SPLIT_CHANCE_PER_TICK,
+  QIX_MAX_COPIES,
   QIX_SEGMENT_COUNT,
   SPARX_BASE_SPEED,
   SKULLS_AT_LEVEL_START,
@@ -218,6 +225,9 @@ export class EnemySystem {
       }
     }
 
+    // The Gremlin may divide on later levels.
+    this.maybeSplitQix();
+
     // Update Skulls. They never promote: FAQ 2.5.3 says Super Qix has no
     // Super Skulls that chase the player up an unfinished line.
     for (const sparx of d.sparxList) {
@@ -281,6 +291,71 @@ export class EnemySystem {
     }
 
     return null;
+  }
+
+  /**
+   * How strongly the Gremlin steers towards the marker, 0 (pure wander) to
+   * 1 (straight at them).
+   *
+   * There is always a slight lean, so it drifts into whichever corner the
+   * player is working in. Detaching to draw raises it, and on later levels
+   * it rises further - the "zoom towards you every time you detach" the FAQ
+   * describes for the upper levels.
+   */
+  private markerPull(): number {
+    const d = this.data;
+
+    const levelFactor = Math.min(1, (d.level - 1) / 15);   // 0 at L1, 1 at L16
+    const base = QIX_BASE_PULL + levelFactor * QIX_LEVEL_PULL;
+
+    if (!d.marker.isDrawing) return base;
+    return Math.min(QIX_MAX_PULL, base + QIX_DRAWING_PULL * (0.5 + levelFactor));
+  }
+
+  /**
+   * Split a Gremlin in two.
+   *
+   * FAQ 2.2: "In later levels, the Gremlin will actually split into multiple
+   * independently-moving copies of himself", and FAQ 2.5.3 notes there is
+   * "usually only one Gremlin in Super Qix (though he sometimes divides into
+   * two or more during a level)". The copy starts where the original is,
+   * heading the other way.
+   */
+  splitQix(qix: Qix): Qix | null {
+    const d = this.data;
+    if (d.qixList.length >= QIX_MAX_COPIES) return null;
+
+    d.qixIdCounter = (d.qixIdCounter || 0) + 1;
+    const copy: Qix = {
+      id: d.qixIdCounter,
+      x: qix.x,
+      y: qix.y,
+      vx: -qix.vx,
+      vy: -qix.vy,
+      speed: qix.speed,
+      segments: qix.segments.map(s => ({ ...s })),
+      frozen: qix.frozen,
+      frozenTimer: qix.frozenTimer,
+    };
+
+    d.qixList.push(copy);
+    return copy;
+  }
+
+  /**
+   * Should the Gremlin divide this tick?
+   *
+   * Only on later levels, and only rarely, so a level normally has the one
+   * Gremlin the FAQ describes.
+   */
+  maybeSplitQix(): void {
+    const d = this.data;
+    if (d.level < QIX_SPLIT_FROM_LEVEL) return;
+    if (d.qixList.length >= QIX_MAX_COPIES) return;
+    if (Math.random() >= QIX_SPLIT_CHANCE_PER_TICK) return;
+
+    const original = d.qixList[0];
+    if (original) this.splitQix(original);
   }
 
   /**
@@ -350,9 +425,31 @@ export class EnemySystem {
     // Keep the Qix wandering rather than tracing one straight line forever.
     // The nudge rotates the direction and preserves the speed, so it cannot
     // decay the way the old positional jitter did.
+    //
+    // FAQ 2.2: the Gremlin's bounce is "random in pattern, though apparently
+    // weighted somewhat towards your marker - he will tend to find his way
+    // into whichever corner of the field you happen to be working in", and
+    // "in later levels ... he will get extremely aggressive and zoom towards
+    // you every time you detach from a wall". So the nudge is pulled towards
+    // the marker rather than being uniformly random, and pulled harder while
+    // the player is drawing on a later level.
     if (Math.random() < 0.05) {
       const speed = Math.hypot(qix.vx, qix.vy) || qix.speed;
-      const angle = Math.atan2(qix.vy, qix.vx) + (Math.random() - 0.5) * 0.8;
+      const current = Math.atan2(qix.vy, qix.vx);
+      const wander = (Math.random() - 0.5) * 0.8;
+
+      const towardsMarker = Math.atan2(
+        this.data.marker.y - qix.y,
+        this.data.marker.x - qix.x
+      );
+      const pull = this.markerPull();
+
+      // Shortest way round from the current heading to the marker's.
+      let turn = towardsMarker - current;
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+
+      const angle = current + wander + turn * pull;
       qix.vx = Math.cos(angle) * speed;
       qix.vy = Math.sin(angle) * speed;
     }
