@@ -742,6 +742,40 @@ int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
 int flow_pick_door_binary(const char *files_body, const char *archive_name,
                           const char *cmd, char *out, unsigned long outsize);
 
+/* The command an archive names, read from the same /files listing
+ * flow_pick_door_binary() above uses.
+ *
+ * A door archive ships Commands/BBSCmd/<CMD>.info, and that .info carries
+ * the tooltypes the door was built with - a door installed under an
+ * invented name does not answer to it (see Task 8's DOORMAN fix, which
+ * removed the equivalent free-text prompt there). This door cannot
+ * enumerate a directory (C89 offers none, and AmigaDOS's Examine/ExNext is
+ * not available through the portable backend), so the /files listing
+ * doubles as the manifest that answers the same question an extracted
+ * directory would - exactly the reasoning documented above
+ * flow_pick_door_binary().
+ *
+ * Reuses flow_files_next_line()/flow_files_parse_row() rather than
+ * re-parsing the "<size>|<junk>|<path>" rows itself, so a path containing
+ * an extra '|' or a CRLF row ending is handled identically here and in
+ * flow_pick_door_binary() - one parser, not two that could silently
+ * disagree.
+ *
+ * A path is a match when, case- and separator-insensitively (both '/' and
+ * '\\' are tolerated - real catalog archives are built on both platforms),
+ * it contains "commands/bbscmd/" followed by a non-empty stem and a
+ * ".info" suffix. The stem is upper-cased into `out` and must additionally
+ * pass flow_is_valid_bbs_command() - a stem over FLOW_MAX_BBS_COMMAND
+ * characters, or containing anything outside A-Z0-9, is not a usable BBS
+ * command and is treated the same as no registration at all, so the
+ * caller falls back to flow_suggest_bbs_command() instead of installing
+ * under a name the BBS could never route to.
+ *
+ * Returns 1 and fills `out` when the listing names exactly one such usable
+ * command (the first one found), 0 otherwise - including when `listing`,
+ * `out` is NULL, or `outlen` is 0. */
+int flow_command_from_listing(const char *listing, char *out, unsigned long outlen);
+
 /* The door type to write into the command config, given the catalog's type
  * and the program that was actually chosen.
  *

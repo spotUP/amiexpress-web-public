@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include "flow.h"
 
 void flow_compute_page(unsigned long total_rows, int page_size,
@@ -1309,6 +1310,77 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
     }
     strcpy(out, best);
     return (int) strlen(out);
+}
+
+/* See flow.h for the full contract. Reuses flow_files_next_line()/
+ * flow_files_parse_row() - the same row parser flow_pick_door_binary()
+ * above uses - rather than re-splitting the "<size>|<junk>|<path>" rows a
+ * second time. */
+int flow_command_from_listing(const char *listing, char *out, unsigned long outlen)
+{
+    const char *line;
+    char path[512];
+    char lower[512];
+    unsigned long plen;
+    unsigned long i;
+
+    if (listing == (const char *) 0 || out == (char *) 0 || outlen == 0) {
+        return 0;
+    }
+
+    line = listing;
+    /* Skip the "FILES|<count>|<junk>" header line, same convention
+     * flow_pick_door_binary() applies to the same listing. */
+    if (strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+
+    while (line != (const char *) 0) {
+        if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0,
+                                 path, sizeof(path)) == 0) {
+            const char *seg;
+
+            plen = (unsigned long) strlen(path);
+
+            /* Case- and separator-folded copy: '\\' becomes '/' and every
+             * byte is lower-cased, so "Commands/BBSCmd/" and
+             * "commands\bbscmd\" both match the same needle below. `lower`
+             * and `path` stay the same length byte-for-byte, so an offset
+             * found in one is a valid offset into the other. */
+            for (i = 0; i <= plen; i++) {
+                char c = path[i];
+                if (c == '\\') {
+                    c = '/';
+                }
+                lower[i] = (char) tolower((unsigned char) c);
+            }
+
+            seg = strstr(lower, "commands/bbscmd/");
+            if (seg != (const char *) 0) {
+                const char *name = path + (seg - lower) + 16;
+                const char *dot = strrchr(name, '.');
+
+                if (dot != (const char *) 0
+                    && (dot - name) > 0
+                    && (unsigned long) (dot - name) < outlen
+                    && strcmp(lower + (dot - path), ".info") == 0) {
+                    unsigned long nlen = (unsigned long) (dot - name);
+
+                    for (i = 0; i < nlen; i++) {
+                        out[i] = (char) toupper((unsigned char) name[i]);
+                    }
+                    out[nlen] = '\0';
+                    if (flow_is_valid_bbs_command(out)) {
+                        return 1;
+                    }
+                }
+            }
+        }
+
+        line = flow_files_next_line(line);
+    }
+
+    return 0;
 }
 
 int flow_key_ends_session(int key)

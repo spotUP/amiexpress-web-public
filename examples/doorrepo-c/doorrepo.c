@@ -3116,7 +3116,7 @@ static void strip_repo_archive(const dr_config *cfg, const char *archive,
     (void) ae_key();
 }
 
-/* Task 4's non-ANSI (Ansi=no) counterpart to strip_installed_door() above -
+/* Task 4's non-ANSI (Ansi=no) counterpart to strip_installed_door() above. */
 static void plain_strip_installed_door(const dr_config *cfg, const char *archive, long junk)
 {
     const char *cmdname = index_lookup(cfg, archive);
@@ -3220,6 +3220,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     int listed_checked;
     int listed_present;
     int verdict;
+    int named_by_archive;
 
     /* The archive name has already passed the CWE-22 filename check at
      * catalog-parse time; re-checked here for the same reason the
@@ -3230,13 +3231,25 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    cmdname[0] = '\0';
-    (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+    /* The listing is this door's only way to see what a Commands/BBSCmd/
+     * <CMD>.info entry INSIDE the archive names - C89 has no directory
+     * enumeration, so the /files listing doubles as the manifest an
+     * extracted directory would otherwise answer (see flow.h's
+     * flow_command_from_listing() comment). files_load() is idempotent
+     * and cached per archive - the same call the archive pane itself
+     * makes - so calling it here, before deriving a command at all, costs
+     * nothing on a cache hit and means the derived command never depends
+     * on whether the sysop happened to browse the archive pane first. */
+    files_load(cfg, entry->archive);
 
-    if (!ui_text_prompt(b, frame, framecap, g, "Install as BBS command:",
-                        cmdname, FLOW_MAX_BBS_COMMAND)) {
-        return; /* empty answer = changed their mind */
+    cmdname[0] = '\0';
+    if (g_files_ok && flow_command_from_listing(g_files, cmdname, sizeof(cmdname))) {
+        named_by_archive = 1;
+    } else {
+        named_by_archive = 0;
+        (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
     }
+
     if (!flow_is_valid_bbs_command(cmdname)) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
@@ -3249,6 +3262,19 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         ae_put("Press any key to return to the list.", 1);
         (void) ae_key();
         return;
+    }
+
+    /* No free-text field any more (Task 8 removed DOORMAN's equivalent
+     * prompt for the same reason): a door installed under an invented
+     * name does not answer to the Commands/BBSCmd/<CMD>.info its own
+     * archive ships. The sysop confirms or cancels, nothing more. */
+    if (named_by_archive) {
+        sprintf(msg, "Install as %s (named by the archive)?  [Y/N]", cmdname);
+    } else {
+        sprintf(msg, "Archive names no command; install as %s?  [Y/N]", cmdname);
+    }
+    if (!ui_confirm(b, frame, framecap, g, msg)) {
+        return; /* sysop cancelled */
     }
 
     if (flow_build_local_path(local_path, sizeof(local_path), cfg->download_dir, entry->archive) < 0

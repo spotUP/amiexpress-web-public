@@ -1212,6 +1212,49 @@ TEST(pick_binary_ignores_ad_files)
 }
 
 
+TEST(command_from_listing)
+{
+    char cmd[32];
+    const char *listing;
+    const char *lower;
+    const char *none;
+    const char *toolong;
+
+    /* The archive's own registration names the command. */
+    listing =
+        "FILES|3|0\n"
+        "950|0|Commands/BBSCmd/HACKCHECK.info\n"
+        "12|0|Doors/HackCheck/HackCheck\n"
+        "5|0|FILE_ID.DIZ\n";
+    ASSERT_EQ(flow_command_from_listing(listing, cmd, sizeof(cmd)), 1,
+              "the archive's own BBSCmd registration is found");
+    ASSERT_STR_EQ(cmd, "HACKCHECK", "command name matches the .info stem");
+
+    /* Case and separator variations still resolve. */
+    lower =
+        "FILES|1|0\n"
+        "950|0|commands\\bbscmd\\ozone.info\n";
+    ASSERT_EQ(flow_command_from_listing(lower, cmd, sizeof(cmd)), 1,
+              "lower-case names and backslash separators still resolve");
+    ASSERT_STR_EQ(cmd, "OZONE", "command name is upper-cased");
+
+    /* No registration in the archive. */
+    none =
+        "FILES|2|0\n"
+        "950|0|Ozone/Ozone\n"
+        "5|0|FILE_ID.DIZ\n";
+    ASSERT_EQ(flow_command_from_listing(none, cmd, sizeof(cmd)), 0,
+              "no Commands/BBSCmd entry means no command named");
+
+    /* A name too long for a BBS command is not a command. */
+    toolong =
+        "FILES|1|0\n"
+        "950|0|Commands/BBSCmd/THISNAMEISWAYTOOLONG.info\n";
+    ASSERT_EQ(flow_command_from_listing(toolong, cmd, sizeof(cmd)), 0,
+              "a stem over FLOW_MAX_BBS_COMMAND is refused, not truncated");
+}
+
+
 TEST(eof_key_ends_the_session)
 {
     /* ae_key() returns -1 at EOF / carrier loss. Every other value is a
@@ -2433,6 +2476,7 @@ int main(void)
     RUN_TEST(pick_binary_prefers_an_exact_name_match);
     RUN_TEST(pick_binary_gives_up_when_everything_has_an_extension);
     RUN_TEST(pick_binary_ignores_ad_files);
+    RUN_TEST(command_from_listing);
 
     RUN_TEST(page_first_page_full);
     RUN_TEST(page_middle_page_full);
