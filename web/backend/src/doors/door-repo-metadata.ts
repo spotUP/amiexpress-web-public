@@ -11,17 +11,25 @@
  *
  * The repo knows what most of them are. This module asks it - once, cached -
  * and offers the answer to anything rendering a door list. It never
- * overwrites what a door's own .info says; it only fills what is empty.
+ * overwrites what a door's own .info says; it only fills what is empty - with
+ * one exception: a NAME that is not a name at all (ASCII art, mojibake, an
+ * echo of the command) loses to the catalog's title. See
+ * ./door-name-plausibility for that call.
  *
  * Matching is deliberately narrow, because a wrong description is worse than
  * none:
  *
- *   1. the door's name equals a catalog entry's name, ignoring case and
- *      punctuation
- *   2. the door's command equals an archive's base name, same comparison
+ *   1. a door with an install record is matched by its recorded archive name,
+ *      exactly - nothing else is trusted for it
+ *   2. otherwise, the door's name equals a catalog entry's name, ignoring
+ *      case and punctuation
+ *   3. otherwise, the door's command equals an archive's base name, same
+ *      comparison
  *
  * Anything less certain than that is left alone.
  */
+
+import { isPlausibleDoorName } from './door-name-plausibility';
 
 export interface RepoDoorMetadata {
   archiveName: string;
@@ -124,25 +132,35 @@ export interface EnrichableDoor {
 /**
  * Fill a door's empty fields from the repo.
  *
- * What the door itself says always wins: a sysop who set NAME in a door's
- * .info meant it.
+ * What the door itself says always wins, except for a NAME that is not a
+ * name at all - see ./door-name-plausibility.
  */
 export function applyRepoMetadata<T extends EnrichableDoor>(
   door: T,
-  index: Map<string, RepoDoorMetadata>
+  index: Map<string, RepoDoorMetadata>,
+  link?: { archiveName: string | null }
 ): T {
   if (index.size === 0) return door;
-  if (door.description && door.category && door.name) return door;
 
-  const match =
-    index.get(metadataKey(door.name)) ??
-    index.get(metadataKey(door.command)) ??
-    null;
+  // A door installed through DOORMAN or DOORREPO records the archive it came
+  // from, so it is looked up by that and nothing else. The name/command
+  // heuristics below exist only for the doors that predate the recorder.
+  const match = link?.archiveName
+    ? index.get(archiveKey(link.archiveName)) ?? null
+    : index.get(metadataKey(door.name)) ?? index.get(metadataKey(door.command)) ?? null;
   if (!match) return door;
+
+  // The repo's name wins when the door's own is not a name at all - art,
+  // mojibake, or an echo of the command. Anything a sysop plainly wrote is
+  // kept, which is why this asks a predicate rather than testing for empty.
+  const keepOwnName = isPlausibleDoorName(door.name, {
+    command: door.command,
+    archiveName: link?.archiveName ?? null,
+  });
 
   return {
     ...door,
-    name: door.name || match.name || door.name,
+    name: keepOwnName ? door.name : (match.name || door.name),
     description: door.description || match.description || '',
     category: door.category || match.category || undefined,
   };

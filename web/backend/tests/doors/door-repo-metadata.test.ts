@@ -101,6 +101,49 @@ describe('applying repo metadata to a door', () => {
   });
 });
 
+describe('applyRepoMetadata precedence', () => {
+  const HACKCHK: RepoDoorMetadata = {
+    archiveName: 'HACKCHK.LHA',
+    name: 'Hack Check',
+    description: 'Checks for known hacks',
+    category: 'Security',
+    author: null,
+    releaseGroup: null,
+    doorType: 'XIM',
+  };
+  const index = buildMetadataIndex([HACKCHK]);
+
+  it('replaces a NAME that is ASCII art with the catalog name', () => {
+    const door = { command: 'HACKCHECK', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'HACKCHK.LHA' })).toMatchObject({
+      name: 'Hack Check',
+      description: 'Checks for known hacks',
+    });
+  });
+
+  it('keeps a NAME the sysop plainly meant', () => {
+    const door = { command: 'HACKCHECK', name: 'My Hack Checker', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'HACKCHK.LHA' }).name)
+      .toBe('My Hack Checker');
+  });
+
+  it('matches on the linked archive exactly, not on a name that happens to look alike', () => {
+    // No name/command match exists here: the link is the only way in.
+    const door = { command: 'ZZ9', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'HACKCHK.LHA' }).name)
+      .toBe('Hack Check');
+  });
+
+  it('leaves an unlinked door to the old heuristic', () => {
+    const door = { command: 'ZZ9', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(door, index).name).toBe('.______.');
+  });
+});
+
 describe('fetching the index', () => {
   const originalUrl = process.env.DOOR_SERVER_URL;
 

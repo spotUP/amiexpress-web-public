@@ -1395,7 +1395,13 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     // always wins.
     try {
       const repoIndex = await getRepoMetadataIndex();
-      return withMetadata.map((door: any) => applyRepoMetadata(door, repoIndex));
+      return withMetadata.map((door: any) => {
+        let archiveName: string | null = null;
+        try {
+          archiveName = getInstallByCommand(door.command)?.archive_name ?? null;
+        } catch { /* the installs table may not exist yet */ }
+        return applyRepoMetadata(door, repoIndex, { archiveName });
+      });
     } catch {
       return withMetadata;
     }
