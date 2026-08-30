@@ -26,12 +26,16 @@ jest.mock('../../src/doors/door-launch-token', () => ({
   verifyLaunchToken: jest.fn(() => claims),
 }));
 
-import { doorAdminRouter } from '../../src/server/door-admin.routes';
+import { doorAdminRouter, doorAdminBodyError } from '../../src/server/door-admin.routes';
 
+// Mounts the parser, the body-parser error handler, and the router in the
+// exact order app.ts does (see app.ts's `/api/door-admin` mount). Importing
+// doorAdminBodyError from door-admin.routes.ts rather than redefining it
+// here means this helper and the real mount can never drift apart - there
+// is only one function, used in both places.
 function app() {
   const a = express();
-  a.use(express.json());
-  a.use('/api/door-admin', doorAdminRouter);
+  a.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminBodyError, doorAdminRouter);
   return a;
 }
 
@@ -76,5 +80,59 @@ it('refuses a command that is not a command', async () => {
     .send({ command: '../../etc', archiveName: 'AEHELP.LHA' });
 
   expect(res.status).toBe(400);
+  expect(recorded).toHaveLength(0);
+});
+
+// A body-parser failure (malformed JSON, a bare JSON string, a body over
+// the limit) happens in express.json() before doorAdminRouter ever runs.
+// Without doorAdminBodyError sitting between the parser and the router,
+// this falls through to app.ts's global error handler, which answers with
+// a JSON body - exactly what a C89 door reading plain text CRLF must never
+// receive on any path, including this one.
+it('answers malformed JSON in plain text, never JSON', async () => {
+  const res = await request(app())
+    .post('/api/door-admin/installed')
+    .set('X-Door-Token', 'valid')
+    .set('Content-Type', 'application/json')
+    .send('{not valid json');
+
+  expect(res.status).toBe(400);
+  expect(res.text).toBe('BAD REQUEST\r\n');
+  expect(res.headers['content-type']).toMatch(/text\/plain/);
+});
+
+it('answers a bare JSON string in plain text', async () => {
+  const res = await request(app())
+    .post('/api/door-admin/installed')
+    .set('X-Door-Token', 'valid')
+    .set('Content-Type', 'application/json')
+    .send('"hello"');
+
+  expect(res.status).toBe(400);
+  expect(res.headers['content-type']).toMatch(/text\/plain/);
+});
+
+// The command regex builds filesystem paths (installDir, infoPath) on a
+// public, delete-adjacent surface - the regex looking correct on inspection
+// is not the same as it being exercised against the shapes an attacker
+// would actually try. Every case must both 400 AND leave `recorded` empty:
+// the status code alone doesn't prove the value never reached the
+// filesystem-touching recorder.
+it.each([
+  ['a traversal', '../../etc'],
+  ['a path separator', 'FOO/BAR'],
+  ['an encoded separator', 'FOO%2F..'],
+  ['a backslash', 'FOO\\BAR'],
+  ['an empty command', ''],
+  ['a name over twelve characters', 'THIRTEENCHARS'],
+  ['an embedded null byte', 'FOO BAR'],
+])('refuses %s and records nothing', async (_label, command) => {
+  const res = await request(app())
+    .post('/api/door-admin/installed')
+    .set('X-Door-Token', 'valid')
+    .send({ command, archiveName: 'AEHELP.LHA' });
+
+  expect(res.status).toBe(400);
+  expect(res.text).toBe('BAD REQUEST\r\n');
   expect(recorded).toHaveLength(0);
 });

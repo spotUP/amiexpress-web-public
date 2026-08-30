@@ -21,6 +21,30 @@ import { verifyLaunchToken } from '../doors/door-launch-token';
 
 export const doorAdminRouter = express.Router();
 
+/**
+ * A body-parser failure (malformed JSON, a body over the limit, a bare
+ * JSON string) happens before Express reaches `doorAdminRouter` at all, so
+ * without this it would fall through to app.ts's global JSON error
+ * handler. The client here is a C89 door reading plain text with CRLF - it
+ * must never be handed JSON, including on this path. Exported (rather than
+ * defined inline at the app.ts mount site) so the mount and the test that
+ * exercises it import the exact same function instead of two copies that
+ * can drift apart.
+ *
+ * Four parameters, not three: Express only recognises a middleware as an
+ * error handler when its function signature declares four parameters, so
+ * the unused `_req` must stay.
+ */
+export function doorAdminBodyError(
+  err: unknown,
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!err) { next(); return; }
+  res.status(400).type('text/plain').send('BAD REQUEST\r\n');
+}
+
 /** A BBS command: A-Z, 0-9, up to 12 - the same shape the C door validates
  *  and the only shape that can name a Commands/BBSCmd/<CMD>.info. */
 function isCommandName(value: unknown): value is string {

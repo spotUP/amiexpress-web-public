@@ -6,7 +6,7 @@ import path from 'path';
 import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
-import { doorAdminRouter } from './door-admin.routes';
+import { doorAdminRouter, doorAdminBodyError } from './door-admin.routes';
 import { doorRepoRouter, isDoorRepoProxyEnabled } from './door-repo.routes';
 import { doorRepoCors, isDoorRepoPath } from './door-repo-cors';
 import { getSystemTime } from '../utils/date-time.util';
@@ -250,7 +250,14 @@ if (isDoorRepoProxyEnabled()) {
 // NOT /api/doors: that prefix is door-api-routes.ts above, which serves
 // browsers with no token at all, and this router's auth middleware would
 // 401 every one of those requests if mounted on the same path.
-app.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminRouter);
+//
+// A body-parser failure (malformed JSON, a body over the limit, a bare
+// JSON string) never reaches the router, so it would otherwise fall
+// through to the global JSON error handler below. doorAdminBodyError
+// (door-admin.routes.ts) intercepts it and answers plain text instead -
+// the client here is a C89 door that reads plain text with CRLF, never
+// JSON, on any path.
+app.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminBodyError, doorAdminRouter);
 
 // Debug-MCP routes — dev-only, read-only introspection for the MCP sidecar.
 // See mcp-server-debug/ and web/backend/src/debug/debug-mcp.routes.ts.
