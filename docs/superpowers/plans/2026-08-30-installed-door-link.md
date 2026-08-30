@@ -1179,25 +1179,50 @@ export function commandForArchive(
 }
 ```
 
-In `Doors/door-manager/app.ts`, replace each `InputView(... 'Install as BBS command:' ...)` with a `ConfirmView` that states the command and where it came from:
+In `Doors/door-manager/app.ts`, each install site currently reads:
 
 ```ts
-      const chosen = commandForArchive(e.archive_name, archiveCommandFor(e));
-      const why = chosen.source === 'archive'
-        ? `The archive installs as {yellow-fg}${chosen.command}{/yellow-fg}.`
-        : `The archive names no command; using {yellow-fg}${chosen.command}{/yellow-fg}\nfrom the archive filename.`;
-      this.vm.push(new ConfirmView(this.layout,
-        `Install {yellow-fg}${sanitizeForTags(e.archive_name)}{/yellow-fg}?\n\n${why}`,
-        'Install', 'Cancel',
-        () => { /* the existing install body, with finalCmd = chosen.command */ }
-      ));
+      const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
+        .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
+      this.vm.push(new InputView(this.layout,
+        `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested,
+        (cmd) => {
+          if (!cmd) return;
+          if (this.installing) return;
+          this.installing = true;
+          const finalCmd = cmd.trim().toUpperCase() || suggested;
+          // ... the rest of the install body, unchanged
 ```
 
-Consumer mode has no extracted directory to read before downloading, so
-`archiveCommandFor(e)` returns `null` there and the archive's own command is
-still applied after extraction by `extractAndRegisterDoor`'s existing rename —
-the confirmation names the fallback, and the install log reports the rename
-when it happens.
+Replace those lines, down to and including `const finalCmd`, with a
+confirmation. Everything below `const finalCmd` stays exactly as it is:
+
+```ts
+      // Neither mode can read the archive's own .info before extracting it -
+      // owner mode has only a path, consumer mode has not downloaded yet - so
+      // the confirmation names the fallback, and extractAndRegisterDoor's
+      // existing rename applies the archive's real command afterwards and
+      // reports it in the install log ("the archive installs as X, not Y").
+      const chosen = commandForArchive(e.archive_name, null);
+      this.vm.push(new ConfirmView(this.layout,
+        `Install {yellow-fg}${sanitizeForTags(e.archive_name)}{/yellow-fg}?` +
+        `\n\nThe archive names no command yet; using ` +
+        `{yellow-fg}${chosen.command}{/yellow-fg} from the archive filename.` +
+        `\nIf the archive names its own command, the install uses that` +
+        `\ninstead and says so.`,
+        'Install', 'Cancel',
+        () => {
+          if (this.installing) return;
+          this.installing = true;
+          const finalCmd = chosen.command;
+          // ... the rest of the install body, unchanged
+```
+
+Import the helper at the top of `app.ts`:
+
+```ts
+import { commandForArchive } from './archive-command';
+```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1480,12 +1505,30 @@ install:
 ```c
     if (config_read_token(cfg, token, sizeof(token))) {
         char body[512];
+        char tokenhdr[160];
+        const char *headers[2];
+        http_response resp;
+
         sprintf(body, "{\"command\":\"%s\",\"archiveName\":\"%s\"}", cmdname, entry->archive);
-        if (!http_post_json(cfg->repo_host, "/api/doors/installed", token, body)) {
+        sprintf(tokenhdr, "X-Door-Token: %s", token);
+        headers[0] = "Content-Type: application/json";
+        headers[1] = tokenhdr;
+
+        memset(&resp, 0, sizeof(resp));
+        if (http_request(cfg, "POST", "/api/doors/installed",
+                         body, (unsigned long) strlen(body),
+                         headers, 2, &resp,
+                         (int (*)(void *, const unsigned char *, unsigned long)) 0,
+                         (void *) 0) != HTTP_OK
+            || resp.status != 200) {
             ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
         }
     }
 ```
+
+`http_request` is the general-purpose call `http.c` already exports (there is
+no `http_post` helper): method, body, extra headers, a response struct, and a
+NULL sink to discard the response body.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1560,8 +1603,22 @@ export function releaseLaunchTokenForDoor(token: string | null): void {
 }
 ```
 
-Call `launchTokenForDoor` where a door is started and `releaseLaunchTokenForDoor`
-where it exits, keeping the token in the session's door state.
+Call it from `executeDoor` (`web/backend/src/handlers/door.handler.ts:1585`),
+which every door launch passes through, and release it in a `finally` so a
+crashed door does not leave a live token behind:
+
+```ts
+  const managementToken = launchTokenForDoor(door.command, bbsRoot, {
+    nodeId: session.nodeId,
+    userId: session.user.id,
+    secLevel: session.user.secLevel,
+  });
+  try {
+    // ... the existing launch body
+  } finally {
+    releaseLaunchTokenForDoor(managementToken);
+  }
+```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
