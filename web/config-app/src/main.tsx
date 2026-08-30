@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { queryClient } from './lib/query-client';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { RealtimeProvider } from './realtime/RealtimeProvider';
 import App from './App';
 import './index.css';
 
@@ -14,7 +15,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <AuthProvider>
           <NotificationProvider>
-            <App />
+            <RealtimeProvider>
+              <App />
+            </RealtimeProvider>
           </NotificationProvider>
         </AuthProvider>
       </BrowserRouter>

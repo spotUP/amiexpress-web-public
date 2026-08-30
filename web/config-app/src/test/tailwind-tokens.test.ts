@@ -12,8 +12,13 @@ const definedColors = new Set(
   Object.keys((tailwindConfig.theme?.extend?.colors ?? {}) as Record<string, string>)
 );
 
-/** `text-bbs-muted`, `hover:bg-bbs-secondary/80`, `divide-bbs-border` -> `bbs-muted` etc. */
-const BBS_CLASS = /\bbbs-[a-z][a-z0-9-]*/g;
+/**
+ * `text-bbs-muted`, `hover:bg-bbs-secondary/80`, `divide-bbs-border` ->
+ * `bbs-muted` and so on. The utility prefix is required so a prose mention of
+ * a filename such as bbs-event-emitter.ts is not read as a class name.
+ */
+const BBS_CLASS =
+  /\b(?:bg|text|border|divide|ring|outline|shadow|fill|stroke|caret|accent|decoration|placeholder|from|via|to)-(bbs-[a-z][a-z0-9-]*)/g;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -31,12 +36,13 @@ describe('Tailwind bbs-* colour tokens', () => {
 
     for (const file of sourceFiles(SRC_DIR)) {
       const text = readFileSync(file, 'utf8');
-      for (const match of text.match(BBS_CLASS) ?? []) {
-        if (definedColors.has(match)) continue;
-        const users = missing.get(match) ?? [];
+      for (const match of text.matchAll(BBS_CLASS)) {
+        const name = match[1];
+        if (definedColors.has(name)) continue;
+        const users = missing.get(name) ?? [];
         const relative = file.slice(SRC_DIR.length + 1);
         if (!users.includes(relative)) users.push(relative);
-        missing.set(match, users);
+        missing.set(name, users);
       }
     }
 

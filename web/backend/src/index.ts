@@ -76,6 +76,7 @@ import {
   hasKeysFile,
 } from "./handlers/screen.handler";
 import { registerSocketHandlers } from "./server/socket-handlers";
+import { decideAdminSocket } from "./server/admin-socket";
 import { displaySystemBulletins } from "./server/database-helpers";
 import { initializeData } from "./server/initialization";
 import {
@@ -1525,6 +1526,36 @@ console.log("[ChatOnly] Executing LiveChat door");
     await executeDoor(socket, session, liveChatDoor);
 
     return;
+  }
+
+  // ADMIN-ONLY MODE: a dashboard socket, not a caller.
+  //
+  // The admin app opens a socket to watch the board - node status, transfers,
+  // sysop pages. Without this branch it falls through to node assignment
+  // below and is handed a real BBS node plus the whole welcome sequence, so
+  // every admin browser tab occupied a node and showed up as a phantom user
+  // in node status. It also joins the `admin` room, which nothing had ever
+  // joined, leaving the import progress events emitted to it with no
+  // listener.
+  //
+  // The query flag is a request, never the authority: the level is read from
+  // the session the JWT middleware attached. A non-sysop passing
+  // adminOnly=true falls through to the ordinary BBS path.
+  const adminUser = (socket as any).session?.user;
+  const adminDecision = decideAdminSocket(socket.handshake?.query, adminUser);
+
+  if (adminDecision.serveAsAdmin) {
+    for (const room of adminDecision.rooms) socket.join(room);
+console.log(
+      `[AdminOnly] Dashboard socket for ${adminUser?.username} - no node assigned`
+    );
+    return;
+  }
+
+  if (adminDecision.refusedReason) {
+console.warn(
+      `[AdminOnly] Refused for ${adminUser?.username ?? "an unauthenticated socket"}: ${adminDecision.refusedReason}. Continuing as a normal connection.`
+    );
   }
 
   // Initialize session with multi-node support

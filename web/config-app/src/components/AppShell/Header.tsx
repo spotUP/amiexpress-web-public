@@ -11,7 +11,8 @@ import { useLocation } from 'react-router-dom';
 import { AlignJustify, Rows } from 'lucide-react';
 import { useDensity } from '../../hooks/useDensity';
 import { NODE_BACKGROUND_POLL_MS, useNodeStatus, useSessionStats } from '../../hooks/useBoardData';
-import { formatClockTime, formatDuration } from '../../lib/format';
+import { useRealtime } from '../../realtime/RealtimeProvider';
+import { formatClockTime, formatDuration, formatRelativeTime } from '../../lib/format';
 import { StatusDot } from '../ui/StatusDot';
 import { navItemForPath } from './nav-config';
 
@@ -20,6 +21,7 @@ export function Header() {
   const { density, toggleDensity } = useDensity();
   const { data: nodeStatus, dataUpdatedAt, isError } = useNodeStatus(NODE_BACKGROUND_POLL_MS);
   const { data: sessionStats } = useSessionStats();
+  const { status, lastEventAt } = useRealtime();
 
   const item = navItemForPath(location.pathname);
   const onlineNodes = nodeStatus?.onlineNodes ?? 0;
@@ -39,10 +41,15 @@ export function Header() {
 
       <div className="flex shrink-0 items-center gap-3">
         <div className="flex items-center gap-3 rounded border border-border bg-surface-2 px-3 py-1.5 text-xs">
+          {/* Honest about where the numbers come from: Live means the socket
+              is up and events are arriving, Polling means it is not. */}
           <StatusDot
-            tone={isError ? 'danger' : 'info'}
-            label={isError ? 'Disconnected' : 'Polling'}
+            tone={status === 'live' ? 'ok' : status === 'reconnecting' ? 'warn' : isError ? 'danger' : 'neutral'}
+            label={status === 'live' ? 'Live' : status === 'reconnecting' ? 'Reconnecting' : 'Polling'}
           />
+          {status === 'live' && lastEventAt !== null && (
+            <span className="text-content-muted">{formatRelativeTime(lastEventAt)}</span>
+          )}
           <span className="text-content-muted">|</span>
           <span className="text-content-secondary">
             Nodes <span className="font-mono text-content-primary">{onlineNodes}</span>

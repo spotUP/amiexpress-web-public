@@ -79,7 +79,13 @@ export function OperatorChatPage() {
       secure: socketUrl?.startsWith('https'),
       auth: {
         token
-      }
+      },
+      // Without this the backend treats an admin browser as a caller and
+      // hands it a real BBS node plus the welcome sequence, so every visit
+      // to this page occupied a node and showed as a phantom user in node
+      // status. The operator chat handlers register on their own connection
+      // listener, so they still attach.
+      query: { adminOnly: 'true' }
     });
 
     socketInstance.on('connect', () => {
