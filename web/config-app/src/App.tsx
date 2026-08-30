@@ -29,6 +29,7 @@ import { NodeControlPage } from './pages/NodeControlPage';
 import { OperatorChatSettingsPage } from './pages/OperatorChatSettingsPage';
 import { AmiXnetPage } from './pages/AmiXnetPage';
 import { SystemFilesPage } from './pages/SystemFilesPage';
+import { InfoEditorPage } from './pages/InfoEditorPage';
 
 /**
  * The heavy leaves. Operator Chat and Session Logs each pull in xterm, and
@@ -115,6 +116,7 @@ function App() {
         <Route path="operator-chat-settings" element={<OperatorChatSettingsPage />} />
         <Route path="amixnet" element={<AmiXnetPage />} />
         <Route path="system-files" element={<SystemFilesPage />} />
+        <Route path="tooltypes" element={<InfoEditorPage />} />
         {/* An unknown admin path lands on the Overview, not on a form. */}
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>

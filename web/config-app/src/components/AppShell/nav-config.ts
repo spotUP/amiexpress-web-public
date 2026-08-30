@@ -36,6 +36,7 @@ import {
   Server,
   Settings,
   Shield,
+  SlidersHorizontal,
   Users,
   Zap,
 } from 'lucide-react';
@@ -92,6 +93,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: 'system', label: 'Configuration', icon: Settings, description: 'bbsConfig.info, section by section' },
       { path: 'system-files', label: 'Configuration Files', icon: FolderOpen, description: 'Tooltype editor over the system .info files' },
+      { path: 'tooltypes', label: 'Tooltype Editor', icon: SlidersHorizontal, description: 'Any .info file, tooltype by tooltype, with comment toggles' },
       { path: 'amixnet', label: 'AmiXnet Network', icon: Network, description: 'Network node and routing files' },
       { path: 'batches', label: 'Batch Editor', icon: FileText, description: 'batch*.info command scripts' },
       { path: 'health', label: 'Health Check', icon: Gauge, description: 'Filesystem and configuration audit' },
