@@ -755,18 +755,31 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
  * directory would - exactly the reasoning documented above
  * flow_pick_door_binary().
  *
- * Reuses flow_files_next_line()/flow_files_parse_row() rather than
- * re-parsing the "<size>|<junk>|<path>" rows itself, so a path containing
- * an extra '|' or a CRLF row ending is handled identically here and in
- * flow_pick_door_binary() - one parser, not two that could silently
- * disagree.
+ * Reuses flow_files_next_line() to walk row boundaries (CRLF-tolerant,
+ * same as flow_pick_door_binary()), but NOT flow_files_parse_row() to
+ * pull the path out of a row: that function (rightly, for its own
+ * callers) treats the path as a THIRD '|'-delimited field and stops at
+ * the next '|' it finds, but the server's format contract - and the
+ * TypeScript client reading this same endpoint, Doors/door-manager/
+ * repo-client.ts's `parts.slice(2).join('|')` - is that the path is
+ * everything past the SECOND separator, pipes and all. This function
+ * splits each row's path field itself so a path containing '|' is never
+ * truncated (a real, demonstrated bug in an earlier version of this
+ * function: a truncated path silently failed to match, and the caller
+ * fell back to naming the door from the archive filename instead of from
+ * its own registration).
  *
  * A path is a match when, case- and separator-insensitively (both '/' and
  * '\\' are tolerated - real catalog archives are built on both platforms),
- * it contains "commands/bbscmd/" followed by a non-empty stem and a
- * ".info" suffix. The stem is upper-cased into `out` and must additionally
- * pass flow_is_valid_bbs_command() - a stem over FLOW_MAX_BBS_COMMAND
- * characters, or containing anything outside A-Z0-9, is not a usable BBS
+ * it contains "commands/bbscmd/" anywhere, followed eventually by a
+ * ".info" file. The stem is taken from the FINAL path segment before
+ * ".info" - not everything between the matched prefix and the extension -
+ * so a .info nested one directory deeper than Commands/BBSCmd/ itself
+ * still resolves correctly. The stem is upper-cased into `out` and must
+ * additionally pass flow_is_valid_bbs_command() - a stem over
+ * FLOW_MAX_BBS_COMMAND characters, or containing anything outside
+ * A-Z0-9 (including a '|' that survived because it sat inside a
+ * directory segment rather than the final one), is not a usable BBS
  * command and is treated the same as no registration at all, so the
  * caller falls back to flow_suggest_bbs_command() instead of installing
  * under a name the BBS could never route to.

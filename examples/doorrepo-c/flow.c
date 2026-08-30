@@ -1312,21 +1312,46 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
     return (int) strlen(out);
 }
 
-/* See flow.h for the full contract. Reuses flow_files_next_line()/
- * flow_files_parse_row() - the same row parser flow_pick_door_binary()
- * above uses - rather than re-splitting the "<size>|<junk>|<path>" rows a
- * second time. */
+/* See flow.h for the full contract.
+ *
+ * Fix round 1 (review finding, Important): this function used to reuse
+ * flow_files_parse_row() to pull the path out of a row - wrong here, even
+ * though it is exactly right for flow_pick_door_binary()'s callers.
+ * flow_files_parse_row() treats the path as a THIRD '|'-delimited field
+ * and stops at the next '|' it finds, but the server's format contract is
+ * "everything after the SECOND separator is the path" - the path itself
+ * may legitimately contain '|', so it is never itself a delimited field.
+ * The TypeScript client reading this same endpoint already implements it
+ * that way (Doors/door-manager/repo-client.ts's `parts.slice(2).
+ * join('|')`); two clients of one endpoint must not disagree about its
+ * format. A path containing '|' used to be silently truncated at that
+ * '|', the match would then fail, and install_door() would fall back to
+ * naming the door from the archive filename instead of from its own
+ * registration - exactly the silent, input-shape-dependent wrong-naming
+ * this task exists to remove. This function now splits each row into its
+ * path field itself (bar1/bar2 below), rather than reusing
+ * flow_files_parse_row(); flow_files_next_line() is still reused to walk
+ * row boundaries, since CRLF-tolerant row splitting is a separate concern
+ * from what a row's path field contains. */
 int flow_command_from_listing(const char *listing, char *out, unsigned long outlen)
 {
     const char *line;
     char path[512];
     char lower[512];
+    char cand[FLOW_MAX_BBS_COMMAND + 1];
     unsigned long plen;
     unsigned long i;
 
     if (listing == (const char *) 0 || out == (char *) 0 || outlen == 0) {
         return 0;
     }
+    /* Fix round 1 (review finding, Minor): cleared up front, like
+     * flow_suggest_bbs_command() and flow_pick_door_binary() both do, so a
+     * 0 return always leaves `out` empty. Below, a candidate is built and
+     * validated in the local `cand` buffer and copied into `out` only at
+     * the point of returning 1 - `out` itself is never written to on a
+     * rejected candidate, so there is no failure path left to re-clear. */
+    out[0] = '\0';
 
     line = listing;
     /* Skip the "FILES|<count>|<junk>" header line, same convention
@@ -1336,42 +1361,82 @@ int flow_command_from_listing(const char *listing, char *out, unsigned long outl
     }
 
     while (line != (const char *) 0) {
-        if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0,
-                                 path, sizeof(path)) == 0) {
-            const char *seg;
+        const char *row_end;
+        const char *bar1;
+        const char *bar2;
 
-            plen = (unsigned long) strlen(path);
+        row_end = strchr(line, '\n');
+        if (row_end == (const char *) 0) {
+            row_end = line + strlen(line);
+        }
+        /* CRLF-tolerant, matching flow_files_next_line()'s own tolerance. */
+        while (row_end > line && *(row_end - 1) == '\r') {
+            row_end--;
+        }
 
-            /* Case- and separator-folded copy: '\\' becomes '/' and every
-             * byte is lower-cased, so "Commands/BBSCmd/" and
-             * "commands\bbscmd\" both match the same needle below. `lower`
-             * and `path` stay the same length byte-for-byte, so an offset
-             * found in one is a valid offset into the other. */
-            for (i = 0; i <= plen; i++) {
-                char c = path[i];
-                if (c == '\\') {
-                    c = '/';
-                }
-                lower[i] = (char) tolower((unsigned char) c);
-            }
+        bar1 = (const char *) memchr(line, '|', (size_t) (row_end - line));
+        bar2 = (bar1 != (const char *) 0)
+            ? (const char *) memchr(bar1 + 1, '|', (size_t) (row_end - (bar1 + 1)))
+            : (const char *) 0;
 
-            seg = strstr(lower, "commands/bbscmd/");
-            if (seg != (const char *) 0) {
-                const char *name = path + (seg - lower) + 16;
-                const char *dot = strrchr(name, '.');
+        if (bar2 != (const char *) 0) {
+            const char *path_start = bar2 + 1;
+            unsigned long row_len = (unsigned long) (row_end - path_start);
 
-                if (dot != (const char *) 0
-                    && (dot - name) > 0
-                    && (unsigned long) (dot - name) < outlen
-                    && strcmp(lower + (dot - path), ".info") == 0) {
-                    unsigned long nlen = (unsigned long) (dot - name);
+            if (row_len > 0 && row_len < sizeof(path)) {
+                const char *seg;
 
-                    for (i = 0; i < nlen; i++) {
-                        out[i] = (char) toupper((unsigned char) name[i]);
+                memcpy(path, path_start, (size_t) row_len);
+                path[row_len] = '\0';
+                plen = row_len;
+
+                /* Case- and separator-folded copy: '\\' becomes '/' and
+                 * every byte is lower-cased, so "Commands/BBSCmd/" and
+                 * "commands\bbscmd\" both match the same needle below.
+                 * `lower` and `path` stay the same length byte-for-byte,
+                 * so an offset found in one is a valid offset into the
+                 * other. */
+                for (i = 0; i <= plen; i++) {
+                    char c = path[i];
+                    if (c == '\\') {
+                        c = '/';
                     }
-                    out[nlen] = '\0';
-                    if (flow_is_valid_bbs_command(out)) {
-                        return 1;
+                    lower[i] = (char) tolower((unsigned char) c);
+                }
+
+                seg = strstr(lower, "commands/bbscmd/");
+                if (seg != (const char *) 0) {
+                    /* The BASENAME of whatever follows the matched
+                     * prefix, not the whole tail: a path may legitimately
+                     * nest the .info under a subdirectory of
+                     * Commands/BBSCmd/ (or, as a pathological but now
+                     * correctly-handled case, under a directory name that
+                     * itself contains '|'), and only the final path
+                     * segment is ever the command's own stem. */
+                    unsigned long tail_off = (unsigned long) (seg - lower) + 16;
+                    const char *tail_lower = lower + tail_off;
+                    const char *last_slash = strrchr(tail_lower, '/');
+                    unsigned long name_off = (last_slash != (const char *) 0)
+                        ? tail_off + (unsigned long) (last_slash - tail_lower) + 1
+                        : tail_off;
+                    const char *name = path + name_off;
+                    const char *dot = strrchr(name, '.');
+
+                    if (dot != (const char *) 0
+                        && (dot - name) > 0
+                        && (unsigned long) (dot - name) <= (unsigned long) FLOW_MAX_BBS_COMMAND
+                        && strcmp(lower + (dot - path), ".info") == 0) {
+                        unsigned long nlen = (unsigned long) (dot - name);
+
+                        for (i = 0; i < nlen; i++) {
+                            cand[i] = (char) toupper((unsigned char) name[i]);
+                        }
+                        cand[nlen] = '\0';
+
+                        if (flow_is_valid_bbs_command(cand) && nlen < outlen) {
+                            strcpy(out, cand);
+                            return 1;
+                        }
                     }
                 }
             }
