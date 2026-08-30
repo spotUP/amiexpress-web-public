@@ -6,14 +6,14 @@
 
 import * as path from 'path';
 import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
-import { ActionLog } from './action-log';
+import { ActionLog, installLogPanel } from './action-log';
 import {
   buildDoorInfoContent,
   extractAndRegisterDoor,
   extractArchiveTo,
   findExtractedBinary,
 } from './install-core';
-import type { InstallDeps } from './install-core';
+import type { InstallDeps, InstallStep } from './install-core';
 // Re-exported: the install core moved to its own module when app.ts passed
 // the 2000-line ceiling, and the tests import these from here.
 export {
@@ -256,7 +256,7 @@ export interface ConsumerInstallDeps {
 }
 
 export type ConsumerInstallOutcome =
-  | { ok: true; doorType: string; fileCount: number; binaryRel: string; registeredLocally: boolean }
+  | { ok: true; doorType: string; fileCount: number; binaryRel: string; steps: InstallStep[]; registeredLocally: boolean }
   | { ok: false; step: string; detail: string };
 
 export async function installConsumerDoor(
@@ -334,7 +334,7 @@ export async function installConsumerDoor(
     });
 
     if (!outcome.ok) return outcome;
-    return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, registeredLocally };
+    return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };
   } finally {
     deps.unlink(destPath);
   }
@@ -1230,6 +1230,7 @@ class RepoView extends BaseView {
               }
               this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
               this.layout.setInfo(
+                installLogPanel(`Installed ${finalCmd}`, outcome.steps) + '\n\n' +
                 `{green-fg}Installed{/green-fg}\n\n` +
                 `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
                 `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
@@ -1317,6 +1318,7 @@ class RepoView extends BaseView {
               }
               this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
               this.layout.setInfo(
+                installLogPanel(`Installed ${finalCmd}`, outcome.steps) + '\n\n' +
                 `{green-fg}Installed{/green-fg}\n\n` +
                 `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
                 `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +

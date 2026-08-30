@@ -54,3 +54,15 @@ export class ActionLog {
     return `{yellow-fg}${this.title}{/yellow-fg}\n\n${lines.join('\n')}`;
   }
 }
+
+/**
+ * Render the steps an install reported into the same panel format.
+ *
+ * The install core returns them; this turns them into the text the sysop
+ * reads, so both halves of a door's lifecycle look the same on screen.
+ */
+export function installLogPanel(title: string, steps: ReadonlyArray<ActionLogEntry>): string {
+  const log = new ActionLog(title);
+  for (const step of steps) log.add(step.kind, step.text);
+  return log.render();
+}

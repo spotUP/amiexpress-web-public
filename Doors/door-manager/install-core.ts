@@ -139,9 +139,21 @@ export interface InstallDeps {
   refreshDoorRegistry: () => Promise<boolean>;
 }
 
+/**
+ * What the install did, step by step, for the panel the sysop watches.
+ *
+ * An install reported one line when it finished and nothing while it ran,
+ * which is the other half of "show me a log in the right panel" - asked for
+ * after an uninstall removed more than it should have.
+ */
+export interface InstallStep {
+  kind: 'ok' | 'skip' | 'fail';
+  text: string;
+}
+
 export type InstallOutcome =
-  | { ok: true; doorType: string; fileCount: number; binaryRel: string }
-  | { ok: false; step: string; detail: string };
+  | { ok: true; doorType: string; fileCount: number; binaryRel: string; steps: InstallStep[] }
+  | { ok: false; step: string; detail: string; steps: InstallStep[] };
 
 export async function extractAndRegisterDoor(
   archivePath: string,
@@ -152,20 +164,32 @@ export async function extractAndRegisterDoor(
   finalCmd: string,
   deps: InstallDeps
 ): Promise<InstallOutcome> {
+  const steps: InstallStep[] = [];
+
   const result = await deps.extractArchiveTo(archivePath, installDir);
-  if (!result.ok) return { ok: false, step: 'extract', detail: result.error ?? 'unknown error' };
+  if (!result.ok) {
+    steps.push({ kind: 'fail', text: `extract ${path.basename(archivePath)}: ${result.error ?? 'unknown error'}` });
+    return { ok: false, step: 'extract', detail: result.error ?? 'unknown error', steps };
+  }
+  steps.push({ kind: 'ok', text: `extracted ${result.fileCount} files to ${installDir}` });
 
   const resolvedDoorType = doorType || 'XIM';
   const binaryRel = deps.findExtractedBinary(installDir, binaryName) ?? (binaryName ?? finalCmd);
+  steps.push({ kind: 'ok', text: `binary ${binaryRel}, type ${resolvedDoorType}` });
+
   try {
     deps.writeInfoFile(infoPath, buildDoorInfoContent(resolvedDoorType, finalCmd, binaryRel));
+    steps.push({ kind: 'ok', text: `wrote ${infoPath}` });
   } catch (err: any) {
-    return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}` };
+    steps.push({ kind: 'fail', text: `write ${infoPath}: ${err?.message ?? err}` });
+    return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}`, steps };
   }
 
   try {
     deps.recordInstall();
+    steps.push({ kind: 'ok', text: `recorded the install as ${finalCmd}` });
   } catch (err: any) {
+    steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
     // The door is on disk and the .info is written — it will run. The
     // install just won't show as installed locally. Surface it but don't
     // roll back a working install over a bookkeeping error.
@@ -173,7 +197,12 @@ export async function extractAndRegisterDoor(
   }
 
   const refreshed = await deps.refreshDoorRegistry();
-  if (!refreshed) console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
+  if (refreshed) {
+    steps.push({ kind: 'ok', text: 'door registry reloaded' });
+  } else {
+    steps.push({ kind: 'skip', text: 'registry refresh unavailable - the door is hidden until the BBS restarts' });
+console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
+  }
 
-  return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel };
+  return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel, steps };
 }

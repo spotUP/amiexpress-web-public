@@ -59,15 +59,28 @@ export interface InstallDeps {
     recordInstall: () => void;
     refreshDoorRegistry: () => Promise<boolean>;
 }
+/**
+ * What the install did, step by step, for the panel the sysop watches.
+ *
+ * An install reported one line when it finished and nothing while it ran,
+ * which is the other half of "show me a log in the right panel" - asked for
+ * after an uninstall removed more than it should have.
+ */
+export interface InstallStep {
+    kind: 'ok' | 'skip' | 'fail';
+    text: string;
+}
 export type InstallOutcome = {
     ok: true;
     doorType: string;
     fileCount: number;
     binaryRel: string;
+    steps: InstallStep[];
 } | {
     ok: false;
     step: string;
     detail: string;
+    steps: InstallStep[];
 };
 export declare function extractAndRegisterDoor(archivePath: string, installDir: string, infoPath: string, doorType: string, binaryName: string | null, finalCmd: string, deps: InstallDeps): Promise<InstallOutcome>;
 //# sourceMappingURL=install-core.d.ts.map

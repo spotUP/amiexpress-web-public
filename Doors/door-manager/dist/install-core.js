@@ -162,29 +162,43 @@ function findExtractedBinary(destDir, binaryName) {
     return null;
 }
 async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorType, binaryName, finalCmd, deps) {
+    const steps = [];
     const result = await deps.extractArchiveTo(archivePath, installDir);
-    if (!result.ok)
-        return { ok: false, step: 'extract', detail: result.error ?? 'unknown error' };
+    if (!result.ok) {
+        steps.push({ kind: 'fail', text: `extract ${path.basename(archivePath)}: ${result.error ?? 'unknown error'}` });
+        return { ok: false, step: 'extract', detail: result.error ?? 'unknown error', steps };
+    }
+    steps.push({ kind: 'ok', text: `extracted ${result.fileCount} files to ${installDir}` });
     const resolvedDoorType = doorType || 'XIM';
     const binaryRel = deps.findExtractedBinary(installDir, binaryName) ?? (binaryName ?? finalCmd);
+    steps.push({ kind: 'ok', text: `binary ${binaryRel}, type ${resolvedDoorType}` });
     try {
         deps.writeInfoFile(infoPath, buildDoorInfoContent(resolvedDoorType, finalCmd, binaryRel));
+        steps.push({ kind: 'ok', text: `wrote ${infoPath}` });
     }
     catch (err) {
-        return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}` };
+        steps.push({ kind: 'fail', text: `write ${infoPath}: ${err?.message ?? err}` });
+        return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}`, steps };
     }
     try {
         deps.recordInstall();
+        steps.push({ kind: 'ok', text: `recorded the install as ${finalCmd}` });
     }
     catch (err) {
+        steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
         // The door is on disk and the .info is written — it will run. The
         // install just won't show as installed locally. Surface it but don't
         // roll back a working install over a bookkeeping error.
         console.log(`[DOORMAN] install failed: record-install: ${err?.message ?? err}`);
     }
     const refreshed = await deps.refreshDoorRegistry();
-    if (!refreshed)
+    if (refreshed) {
+        steps.push({ kind: 'ok', text: 'door registry reloaded' });
+    }
+    else {
+        steps.push({ kind: 'skip', text: 'registry refresh unavailable - the door is hidden until the BBS restarts' });
         console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
-    return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel };
+    }
+    return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel, steps };
 }
 //# sourceMappingURL=install-core.js.map

@@ -29,4 +29,11 @@ export declare class ActionLog {
     /** The panel body. */
     render(): string;
 }
+/**
+ * Render the steps an install reported into the same panel format.
+ *
+ * The install core returns them; this turns them into the text the sysop
+ * reads, so both halves of a door's lifecycle look the same on screen.
+ */
+export declare function installLogPanel(title: string, steps: ReadonlyArray<ActionLogEntry>): string;
 //# sourceMappingURL=action-log.d.ts.map

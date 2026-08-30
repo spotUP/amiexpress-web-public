@@ -3,7 +3,7 @@
  * Rewritten around a ViewManager / view stack so each screen owns its
  * own key bindings and ESC always pops cleanly.
  */
-import type { InstallDeps } from './install-core';
+import type { InstallDeps, InstallStep } from './install-core';
 export { buildDoorInfoContent, extractAndRegisterDoor, extractArchiveTo, findExtractedBinary, } from './install-core';
 export type { InstallDeps, InstallOutcome } from './install-core';
 import type { LocalCatalogLookup } from './repoDataSource';
@@ -84,6 +84,7 @@ export type ConsumerInstallOutcome = {
     doorType: string;
     fileCount: number;
     binaryRel: string;
+    steps: InstallStep[];
     registeredLocally: boolean;
 } | {
     ok: false;

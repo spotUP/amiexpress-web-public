@@ -148,7 +148,10 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
     const outcome = await extractAndRegisterDoor(
       '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
     );
-    expect(outcome).toEqual({ ok: false, step: 'extract', detail: 'bad archive' });
+    expect(outcome).toMatchObject({ ok: false, step: 'extract', detail: 'bad archive' });
+    // The install reports what it did for the sysop's panel; a failed
+    // extract says so and stops there.
+    expect(outcome.steps.map(s => s.kind)).toEqual(['fail']);
     expect(deps.writeInfoFile).not.toHaveBeenCalled();
     expect(deps.recordInstall).not.toHaveBeenCalled();
   });
@@ -162,7 +165,9 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
     expect(deps.writeInfoFile).toHaveBeenCalledWith('/cmd/FOO.info', expect.stringContaining('TYPE=FIM'));
     expect(deps.recordInstall).toHaveBeenCalledTimes(1);
     expect(deps.refreshDoorRegistry).toHaveBeenCalledTimes(1);
-    expect(outcome).toEqual({ ok: true, doorType: 'FIM', fileCount: 3, binaryRel: 'BIN' });
+    expect(outcome).toMatchObject({ ok: true, doorType: 'FIM', fileCount: 3, binaryRel: 'BIN' });
+    // Every step the panel shows the sysop, in the order they happened.
+    expect(outcome.steps.map(s => s.kind)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
   });
 
   it('a recordInstall that throws does not fail the install -- the door is already on disk and working', async () => {
@@ -323,7 +328,7 @@ describe('DOORMAN app.ts: installConsumerDoor (consumer download-install)', () =
       path.join(tmpDir, 'FOO.info'), path.join(tmpDir, 'tmp-door-repo'), deps
     );
 
-    expect(outcome).toEqual({ ok: false, step: 'extract', detail: 'unreadable archive' });
+    expect(outcome).toMatchObject({ ok: false, step: 'extract', detail: 'unreadable archive' });
     // The download itself succeeded -- proving this cleanup is OUR
     // finally, not downloadArchive's own on-failure safeUnlink.
     expect(fs.existsSync(destPath)).toBe(false);

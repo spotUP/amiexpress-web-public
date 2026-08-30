@@ -269,7 +269,7 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
         });
         if (!outcome.ok)
             return outcome;
-        return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, registeredLocally };
+        return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };
     }
     finally {
         deps.unlink(destPath);
@@ -1151,7 +1151,8 @@ class RepoView extends ViewManager_1.BaseView {
                             return;
                         }
                         this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
-                        this.layout.setInfo(`{green-fg}Installed{/green-fg}\n\n` +
+                        this.layout.setInfo((0, action_log_1.installLogPanel)(`Installed ${finalCmd}`, outcome.steps) + '\n\n' +
+                            `{green-fg}Installed{/green-fg}\n\n` +
                             `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
                             `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
                             `{yellow-fg}Files:{/yellow-fg} ${outcome.fileCount}\n` +
@@ -1234,7 +1235,8 @@ class RepoView extends ViewManager_1.BaseView {
                             return;
                         }
                         this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
-                        this.layout.setInfo(`{green-fg}Installed{/green-fg}\n\n` +
+                        this.layout.setInfo((0, action_log_1.installLogPanel)(`Installed ${finalCmd}`, outcome.steps) + '\n\n' +
+                            `{green-fg}Installed{/green-fg}\n\n` +
                             `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
                             `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
                             `{yellow-fg}Files:{/yellow-fg} ${outcome.fileCount}\n` +

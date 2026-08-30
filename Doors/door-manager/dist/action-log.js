@@ -12,6 +12,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActionLog = void 0;
+exports.installLogPanel = installLogPanel;
 const MARKER = {
     ok: '{green-fg}[OK]{/green-fg}',
     skip: '{yellow-fg}[SKIP]{/yellow-fg}',
@@ -44,4 +45,16 @@ class ActionLog {
     }
 }
 exports.ActionLog = ActionLog;
+/**
+ * Render the steps an install reported into the same panel format.
+ *
+ * The install core returns them; this turns them into the text the sysop
+ * reads, so both halves of a door's lifecycle look the same on screen.
+ */
+function installLogPanel(title, steps) {
+    const log = new ActionLog(title);
+    for (const step of steps)
+        log.add(step.kind, step.text);
+    return log.render();
+}
 //# sourceMappingURL=action-log.js.map
