@@ -142,6 +142,22 @@ describe('applyRepoMetadata precedence', () => {
 
     expect(applyRepoMetadata(door, index).name).toBe('.______.');
   });
+
+  it('never touches an unlinked door that already has all three fields', () => {
+    // The 370 doors this plan leaves alone: no install record, so no
+    // precedence rule applies to them, whatever their NAME looks like.
+    const door = { command: 'HACKCHECK', name: '.______.', description: 'own text', category: 'Utility' };
+
+    expect(applyRepoMetadata(door, index)).toEqual(door);
+  });
+
+  it('applies the plausibility rule only to a linked door', () => {
+    const unlinked = { command: 'HACKCHECK', name: '.______.', description: '' };
+    const linked = { command: 'HACKCHECK', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(unlinked, index).name).toBe('.______.');
+    expect(applyRepoMetadata(linked, index, { archiveName: 'HACKCHK.LHA' }).name).toBe('Hack Check');
+  });
 });
 
 describe('fetching the index', () => {

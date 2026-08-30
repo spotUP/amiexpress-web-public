@@ -132,8 +132,15 @@ export interface EnrichableDoor {
 /**
  * Fill a door's empty fields from the repo.
  *
- * What the door itself says always wins, except for a NAME that is not a
- * name at all - see ./door-name-plausibility.
+ * A door with an install record (a `link`) is the only one the plausibility
+ * rule applies to: its repo entry is known exactly, by archive, so a NAME
+ * that is not a name at all - art, mojibake, an echo of the command - loses
+ * to the catalog's title. See ./door-name-plausibility.
+ *
+ * Every other door - the 370 already on this board with no install record -
+ * gets the behaviour that shipped before this rule existed: fill what is
+ * empty, never overwrite, and skip the lookup entirely once all three fields
+ * are already set.
  */
 export function applyRepoMetadata<T extends EnrichableDoor>(
   door: T,
@@ -142,25 +149,36 @@ export function applyRepoMetadata<T extends EnrichableDoor>(
 ): T {
   if (index.size === 0) return door;
 
-  // A door installed through DOORMAN or DOORREPO records the archive it came
-  // from, so it is looked up by that and nothing else. The name/command
-  // heuristics below exist only for the doors that predate the recorder.
-  const match = link?.archiveName
-    ? index.get(archiveKey(link.archiveName)) ?? null
-    : index.get(metadataKey(door.name)) ?? index.get(metadataKey(door.command)) ?? null;
-  if (!match) return door;
+  if (link?.archiveName) {
+    const match = index.get(archiveKey(link.archiveName));
+    if (!match) return door;
 
-  // The repo's name wins when the door's own is not a name at all - art,
-  // mojibake, or an echo of the command. Anything a sysop plainly wrote is
-  // kept, which is why this asks a predicate rather than testing for empty.
-  const keepOwnName = isPlausibleDoorName(door.name, {
-    command: door.command,
-    archiveName: link?.archiveName ?? null,
-  });
+    const keepOwnName = isPlausibleDoorName(door.name, {
+      command: door.command,
+      archiveName: link.archiveName,
+    });
+
+    return {
+      ...door,
+      name: keepOwnName ? door.name : (match.name || door.name),
+      description: door.description || match.description || '',
+      category: door.category || match.category || undefined,
+    };
+  }
+
+  // No install record: the old heuristic, byte-for-byte. What the door
+  // itself says always wins here, whatever its NAME looks like.
+  if (door.description && door.category && door.name) return door;
+
+  const match =
+    index.get(metadataKey(door.name)) ??
+    index.get(metadataKey(door.command)) ??
+    null;
+  if (!match) return door;
 
   return {
     ...door,
-    name: keepOwnName ? door.name : (match.name || door.name),
+    name: door.name || match.name || door.name,
     description: door.description || match.description || '',
     category: door.category || match.category || undefined,
   };
