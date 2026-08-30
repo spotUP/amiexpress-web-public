@@ -10,6 +10,7 @@
 
 const TEST_MODULES = [
   './sparx-reanchor.test',
+  './qix-movement.test',
 ];
 
 (async () => {

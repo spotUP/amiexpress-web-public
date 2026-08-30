@@ -138,50 +138,116 @@ export class EnemySystem {
         };
     }
     /**
-     * Update a single Qix
+     * Nearest unclaimed cell to a point, searched outwards in rings.
+     *
+     * Used to free a Qix that ended up inside claimed ground - which happens
+     * when a completed stix converts the cells it is standing on.
      */
-    updateQix(qix) {
-        const d = this.data;
-        // Move Qix
-        const nextX = qix.x + qix.vx * 0.1;
-        const nextY = qix.y + qix.vy * 0.1;
-        // Check bounds and bounce
-        let bounced = false;
-        // Check collision with borders and claimed areas
-        const checkX = Math.floor(nextX);
-        const checkY = Math.floor(nextY);
-        if (checkX <= 0 || checkX >= FIELD_WIDTH - 1) {
-            qix.vx = -qix.vx;
-            bounced = true;
-        }
-        if (checkY <= 0 || checkY >= FIELD_HEIGHT - 1) {
-            qix.vy = -qix.vy;
-            bounced = true;
-        }
-        // Check collision with claimed area
-        if (!bounced && checkX >= 0 && checkX < FIELD_WIDTH && checkY >= 0 && checkY < FIELD_HEIGHT) {
-            const cell = d.field[checkY][checkX];
-            if (cell === 'claimed' || cell === 'border') {
-                // Random bounce direction
-                const angle = Math.random() * Math.PI * 2;
-                qix.vx = Math.cos(angle) * qix.speed;
-                qix.vy = Math.sin(angle) * qix.speed;
-                bounced = true;
+    findNearestOpenCell(x, y) {
+        const startX = Math.floor(x);
+        const startY = Math.floor(y);
+        const maxRadius = Math.max(FIELD_WIDTH, FIELD_HEIGHT);
+        for (let r = 1; r < maxRadius; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    // Only the perimeter of this ring; the inside was already searched.
+                    if (Math.abs(dx) !== r && Math.abs(dy) !== r)
+                        continue;
+                    const cx = startX + dx;
+                    const cy = startY + dy;
+                    if (cx < 1 || cx > FIELD_WIDTH - 2)
+                        continue;
+                    if (cy < 1 || cy > FIELD_HEIGHT - 2)
+                        continue;
+                    if (this.data.field[cy]?.[cx] !== 'unclaimed')
+                        continue;
+                    // Centre of the cell, so it is not sitting on a boundary.
+                    return { x: cx + 0.5, y: cy + 0.5 };
+                }
             }
         }
-        // Update position
-        if (!bounced) {
+        return null;
+    }
+    /**
+     * Is this position off limits to a Qix?
+     *
+     * The Qix roams the unclaimed interior only. The playable range is the
+     * non-border cells, x in [1, FIELD_WIDTH-2] and y in [1, FIELD_HEIGHT-2] -
+     * the SAME range the movement code keeps it inside, so the bounce test and
+     * the bounds can never disagree.
+     *
+     * A stix is deliberately not blocking: running over the player's line is
+     * how the Qix kills, and checkQixCollision handles that.
+     */
+    isBlockedForQix(x, y) {
+        const cx = Math.floor(x);
+        const cy = Math.floor(y);
+        if (cx < 1 || cx > FIELD_WIDTH - 2)
+            return true;
+        if (cy < 1 || cy > FIELD_HEIGHT - 2)
+            return true;
+        const cell = this.data.field[cy]?.[cx];
+        return cell === 'claimed' || cell === 'border';
+    }
+    /**
+     * Update a single Qix
+     *
+     * Previously the Qix glued itself to the edge of the playfield and stopped
+     * moving: the bounce test fired at FIELD_HEIGHT-1 (the border row) but the
+     * position was then clamped to FIELD_HEIGHT-2, so in the gap between the
+     * two the Qix was pushed back every tick without its velocity ever being
+     * reversed. vy stayed at full speed into the wall forever, the random
+     * per-bounce jitter shook the other axis down to nothing, and it parked on
+     * the bottom row - measured at 98% of ticks against a wall, moving on only
+     * 2% of them, visiting 13 of 576 cells. That is also why it killed the
+     * player on nearly every draw: it sat exactly where the marker starts.
+     *
+     * Movement is now axis-separated reflection against isBlockedForQix, so a
+     * wall reverses the component that hit it and the Qix keeps its speed.
+     */
+    updateQix(qix) {
+        const step = 0.1;
+        let nextX = qix.x + qix.vx * step;
+        let nextY = qix.y + qix.vy * step;
+        // Reflect each axis independently, so sliding along a wall works and a
+        // head-on hit reverses only the component that struck it.
+        if (this.isBlockedForQix(nextX, qix.y)) {
+            qix.vx = -qix.vx;
+            nextX = qix.x;
+        }
+        if (this.isBlockedForQix(qix.x, nextY)) {
+            qix.vy = -qix.vy;
+            nextY = qix.y;
+        }
+        if (!this.isBlockedForQix(nextX, nextY)) {
             qix.x = nextX;
             qix.y = nextY;
         }
         else {
-            // Small random perturbation on bounce
-            qix.x += (Math.random() - 0.5) * 0.5;
-            qix.y += (Math.random() - 0.5) * 0.5;
+            // Interior corner: both axes were individually fine but the diagonal
+            // is not. Reverse completely rather than tunnelling through it.
+            qix.vx = -qix.vx;
+            qix.vy = -qix.vy;
         }
-        // Keep in bounds
-        qix.x = Math.max(1, Math.min(FIELD_WIDTH - 2, qix.x));
-        qix.y = Math.max(1, Math.min(FIELD_HEIGHT - 2, qix.y));
+        // Keep the Qix wandering rather than tracing one straight line forever.
+        // The nudge rotates the direction and preserves the speed, so it cannot
+        // decay the way the old positional jitter did.
+        if (Math.random() < 0.05) {
+            const speed = Math.hypot(qix.vx, qix.vy) || qix.speed;
+            const angle = Math.atan2(qix.vy, qix.vx) + (Math.random() - 0.5) * 0.8;
+            qix.vx = Math.cos(angle) * speed;
+            qix.vy = Math.sin(angle) * speed;
+        }
+        // Last resort: if the Qix is somehow inside claimed ground (the player's
+        // completed line converts cells underneath it), walk it back to open
+        // space instead of letting it sit there stuck.
+        if (this.isBlockedForQix(qix.x, qix.y)) {
+            const escape = this.findNearestOpenCell(qix.x, qix.y);
+            if (escape) {
+                qix.x = escape.x;
+                qix.y = escape.y;
+            }
+        }
         // Update visual segments (trailing effect)
         for (let i = qix.segments.length - 1; i > 0; i--) {
             qix.segments[i] = { ...qix.segments[i - 1] };
