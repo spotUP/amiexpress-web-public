@@ -778,9 +778,12 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
  * still resolves correctly. The stem is upper-cased into `out` and must
  * additionally pass flow_is_valid_bbs_command() - a stem over
  * FLOW_MAX_BBS_COMMAND characters, or containing anything outside
- * A-Z0-9 (including a '|' that survived because it sat inside a
- * directory segment rather than the final one), is not a usable BBS
- * command and is treated the same as no registration at all, so the
+ * A-Z0-9 (including a '|' that survived because it sat in the FINAL path
+ * segment, e.g. "Commands/BBSCmd/HACK|CHECK.info" - a '|' inside an
+ * earlier directory segment, e.g. "Commands/BBSCmd/ODD|PATH/HACKCHECK.info",
+ * is stripped away with the rest of that segment and does not reach the
+ * stem at all), is not a usable BBS command and is treated the same as no
+ * registration at all, so the
  * caller falls back to flow_suggest_bbs_command() instead of installing
  * under a name the BBS could never route to.
  *
