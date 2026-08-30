@@ -108,6 +108,22 @@ console.error('Config API error:', error);
   });
 
   /**
+   * GET /api/config/system/tooltypes
+   *
+   * Which tooltype in bbsConfig.info each field is written to, so the admin
+   * form can show the key under the field it edits. Read-only, and derived
+   * from the writer's own map rather than a copy of it.
+   */
+  router.get('/system/tooltypes', async (_req: Request, res: Response) => {
+    try {
+      const { getConfigTooltypeKeys } = require('../services/bbs-config-file.service');
+      sendResponse(res, getConfigTooltypeKeys());
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
    * PUT /api/config/system
    * Update system configuration
    */

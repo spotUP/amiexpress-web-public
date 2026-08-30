@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { TooltypeKey } from '../components/ui/TooltypeKey';
 import type { SystemConfig, Language, ScreenType } from '../types';
 import { useEffect, useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
@@ -284,6 +285,7 @@ export function SystemConfigPage() {
               <label htmlFor="bbs_name" className="label">
                 BBS Name
               </label>
+              <TooltypeKey field="bbs_name" />
               <input
                 id="bbs_name"
                 type="text"
@@ -296,6 +298,7 @@ export function SystemConfigPage() {
               <label htmlFor="sysop_name" className="label">
                 Sysop Name
               </label>
+              <TooltypeKey field="sysop_name" />
               <input
                 id="sysop_name"
                 type="text"
@@ -308,6 +311,7 @@ export function SystemConfigPage() {
               <label htmlFor="location" className="label">
                 Location
               </label>
+              <TooltypeKey field="location" />
               <input
                 id="location"
                 type="text"
@@ -320,6 +324,7 @@ export function SystemConfigPage() {
               <label htmlFor="phone" className="label">
                 Phone
               </label>
+              <TooltypeKey field="phone" />
               <input
                 id="phone"
                 type="text"
@@ -332,6 +337,7 @@ export function SystemConfigPage() {
               <label htmlFor="email" className="label">
                 Email
               </label>
+              <TooltypeKey field="email" />
               <input
                 id="email"
                 type="email"
@@ -344,6 +350,7 @@ export function SystemConfigPage() {
               <label htmlFor="website" className="label">
                 Website
               </label>
+              <TooltypeKey field="website" />
               <input
                 id="website"
                 type="url"
@@ -364,6 +371,7 @@ export function SystemConfigPage() {
               <label htmlFor="min_password_length" className="label">
                 Minimum Password Length
               </label>
+              <TooltypeKey field="min_password_length" />
               <input
                 id="min_password_length"
                 type="number"
@@ -376,6 +384,7 @@ export function SystemConfigPage() {
               <label htmlFor="min_password_strength" className="label">
                 Minimum Password Strength
               </label>
+              <TooltypeKey field="min_password_strength" />
               <select
                 id="min_password_strength"
                 {...register('min_password_strength', { setValueAs: (v) => parseInt(v, 10) })}
@@ -393,6 +402,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_password_fails" className="label">
                 Max Password Fails
               </label>
+              <TooltypeKey field="max_password_fails" />
               <select
                 id="max_password_fails"
                 {...register('max_password_fails', { setValueAs: (v) => parseInt(v, 10) })}
@@ -410,6 +420,7 @@ export function SystemConfigPage() {
               <label htmlFor="password_security" className="label">
                 Password Security
               </label>
+              <TooltypeKey field="password_security" />
               <select
                 id="password_security"
                 {...register('password_security')}
@@ -470,6 +481,7 @@ export function SystemConfigPage() {
               <label htmlFor="default_time_limit" className="label">
                 Default Time Limit (minutes)
               </label>
+              <TooltypeKey field="default_time_limit" />
               <div className="flex space-x-2">
                 <input
                   id="default_time_limit"
@@ -486,6 +498,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_session_time" className="label">
                 Max Session Time (minutes)
               </label>
+              <TooltypeKey field="max_session_time" />
               <div className="flex space-x-2">
                 <input
                   id="max_session_time"
@@ -502,6 +515,7 @@ export function SystemConfigPage() {
               <label htmlFor="idle_timeout" className="label">
                 Idle Timeout
               </label>
+              <TooltypeKey field="idle_timeout" />
               <select
                 id="idle_timeout"
                 {...register('idle_timeout', { setValueAs: (v) => parseInt(v, 10) })}
@@ -527,6 +541,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_sec_level" className="label">
                 Default Security Level
               </label>
+              <TooltypeKey field="new_user_sec_level" />
               <select
                 id="new_user_sec_level"
                 {...register('new_user_sec_level', { setValueAs: (v) => parseInt(v, 10) })}
@@ -543,6 +558,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_time_limit" className="label">
                 Default Daily Time (minutes)
               </label>
+              <TooltypeKey field="new_user_time_limit" />
               <div className="flex space-x-2">
                 <input
                   id="new_user_time_limit"
@@ -558,6 +574,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_chat_limit" className="label">
                 Chat Time Limit (minutes)
               </label>
+              <TooltypeKey field="new_user_chat_limit" />
               <div className="flex space-x-2">
                 <input
                   id="new_user_chat_limit"
@@ -573,6 +590,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_lines_per_screen" className="label">
                 Lines Per Screen
               </label>
+              <TooltypeKey field="new_user_lines_per_screen" />
               <select
                 id="new_user_lines_per_screen"
                 {...register('new_user_lines_per_screen', { setValueAs: (v) => parseInt(v, 10) })}
@@ -589,6 +607,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_protocol" className="label">
                 Default Protocol
               </label>
+              <TooltypeKey field="new_user_protocol" />
               <select
                 id="new_user_protocol"
                 {...register('new_user_protocol')}
@@ -607,6 +626,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_screen_type" className="label">
                 Default Screen Type
               </label>
+              <TooltypeKey field="new_user_screen_type" />
               <select
                 id="new_user_screen_type"
                 {...register('new_user_screen_type')}
@@ -632,6 +652,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_editor" className="label">
                 Default Editor
               </label>
+              <TooltypeKey field="new_user_editor" />
               <select
                 id="new_user_editor"
                 {...register('new_user_editor')}
@@ -648,6 +669,7 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_conf_access" className="label">
                 Default Conference Access
               </label>
+              <TooltypeKey field="new_user_conf_access" />
               <input
                 id="new_user_conf_access"
                 type="text"
@@ -729,6 +751,7 @@ export function SystemConfigPage() {
               <label htmlFor="autoval_delay" className="label">
                 Auto-Validation Delay (hours)
               </label>
+              <TooltypeKey field="autoval_delay" />
               <input
                 id="autoval_delay"
                 type="number"
@@ -745,6 +768,7 @@ export function SystemConfigPage() {
               <label htmlFor="autoval_preset" className="label">
                 Auto-Validation Preset
               </label>
+              <TooltypeKey field="autoval_preset" />
               <input
                 id="autoval_preset"
                 type="text"
@@ -761,6 +785,7 @@ export function SystemConfigPage() {
               <label htmlFor="autoval_password" className="label">
                 Instant Validation Password
               </label>
+              <TooltypeKey field="autoval_password" />
               <input
                 id="autoval_password"
                 type="password"
@@ -785,6 +810,7 @@ export function SystemConfigPage() {
               <label htmlFor="password_expiry_days" className="label">
                 Password Expiry (days)
               </label>
+              <TooltypeKey field="password_expiry_days" />
               <input
                 id="password_expiry_days"
                 type="number"
@@ -801,6 +827,7 @@ export function SystemConfigPage() {
               <label htmlFor="auto_deactivate_days" className="label">
                 Auto-Deactivate After (days)
               </label>
+              <TooltypeKey field="auto_deactivate_days" />
               <input
                 id="auto_deactivate_days"
                 type="number"
@@ -857,6 +884,7 @@ export function SystemConfigPage() {
               <label htmlFor="language_base" className="label">
                 Language Base Directory
               </label>
+              <TooltypeKey field="language_base" />
               <input
                 id="language_base"
                 type="text"
@@ -871,6 +899,7 @@ export function SystemConfigPage() {
               <label htmlFor="default_language" className="label">
                 Default Language
               </label>
+              <TooltypeKey field="default_language" />
               <select
                 id="default_language"
                 {...register('default_language')}
@@ -901,6 +930,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_conferences" className="label">
                 Max Conferences
               </label>
+              <TooltypeKey field="max_conferences" />
               <input
                 id="max_conferences"
                 type="number"
@@ -913,6 +943,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_message_bases" className="label">
                 Max Message Bases
               </label>
+              <TooltypeKey field="max_message_bases" />
               <input
                 id="max_message_bases"
                 type="number"
@@ -926,6 +957,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_file_areas" className="label">
                 Max File Areas
               </label>
+              <TooltypeKey field="max_file_areas" />
               <input
                 id="max_file_areas"
                 type="number"
@@ -939,6 +971,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_nodes" className="label">
                 Max Nodes
               </label>
+              <TooltypeKey field="max_nodes" />
               <input
                 id="max_nodes"
                 type="number"
@@ -996,6 +1029,7 @@ export function SystemConfigPage() {
               <label htmlFor="local_upload_path" className="label">
                 Local Upload Path
               </label>
+              <TooltypeKey field="local_upload_path" />
               <input
                 id="local_upload_path"
                 type="text"
@@ -1010,6 +1044,7 @@ export function SystemConfigPage() {
               <label htmlFor="filediz_syscmd" className="label">
                 File DIZ Extract Command
               </label>
+              <TooltypeKey field="filediz_syscmd" />
               <input
                 id="filediz_syscmd"
                 type="text"
@@ -1024,6 +1059,7 @@ export function SystemConfigPage() {
               <label htmlFor="max_desclines" className="label">
                 Max Description Lines
               </label>
+              <TooltypeKey field="max_desclines" />
               <input
                 id="max_desclines"
                 type="number"
@@ -1038,6 +1074,7 @@ export function SystemConfigPage() {
               <label htmlFor="hold_access_level" className="label">
                 Hold Files Access Level
               </label>
+              <TooltypeKey field="hold_access_level" />
               <input
                 id="hold_access_level"
                 type="number"
@@ -1060,6 +1097,7 @@ export function SystemConfigPage() {
               <label htmlFor="smtp_server" className="label">
                 SMTP Server
               </label>
+              <TooltypeKey field="smtp_server" />
               <input
                 id="smtp_server"
                 type="text"
@@ -1073,6 +1111,7 @@ export function SystemConfigPage() {
               <label htmlFor="smtp_port" className="label">
                 SMTP Port
               </label>
+              <TooltypeKey field="smtp_port" />
               <input
                 id="smtp_port"
                 type="number"
@@ -1086,6 +1125,7 @@ export function SystemConfigPage() {
               <label htmlFor="smtp_username" className="label">
                 SMTP Username
               </label>
+              <TooltypeKey field="smtp_username" />
               <input
                 id="smtp_username"
                 type="text"
@@ -1126,6 +1166,7 @@ export function SystemConfigPage() {
               <label htmlFor="smtp_from_email" className="label">
                 SMTP From Email
               </label>
+              <TooltypeKey field="smtp_from_email" />
               <input
                 id="smtp_from_email"
                 type="email"
@@ -1138,6 +1179,7 @@ export function SystemConfigPage() {
               <label htmlFor="sysop_email" className="label">
                 Sysop Email
               </label>
+              <TooltypeKey field="sysop_email" />
               <input
                 id="sysop_email"
                 type="email"
@@ -1150,6 +1192,7 @@ export function SystemConfigPage() {
               <label htmlFor="bbs_email" className="label">
                 BBS Email
               </label>
+              <TooltypeKey field="bbs_email" />
               <input
                 id="bbs_email"
                 type="email"
@@ -1331,6 +1374,7 @@ export function SystemConfigPage() {
               <label htmlFor="ftp_host" className="label">
                 FTP Host
               </label>
+              <TooltypeKey field="ftp_host" />
               <input
                 id="ftp_host"
                 type="text"
@@ -1344,6 +1388,7 @@ export function SystemConfigPage() {
               <label htmlFor="ftp_port" className="label">
                 FTP Port
               </label>
+              <TooltypeKey field="ftp_port" />
               <input
                 id="ftp_port"
                 type="number"
@@ -1357,6 +1402,7 @@ export function SystemConfigPage() {
               <label htmlFor="ftp_data_ports" className="label">
                 FTP Data Ports (comma-separated)
               </label>
+              <TooltypeKey field="ftp_data_ports" />
               <input
                 id="ftp_data_ports"
                 type="text"
@@ -1390,6 +1436,7 @@ export function SystemConfigPage() {
               <label htmlFor="http_host" className="label">
                 HTTP Host
               </label>
+              <TooltypeKey field="http_host" />
               <input
                 id="http_host"
                 type="text"
@@ -1403,6 +1450,7 @@ export function SystemConfigPage() {
               <label htmlFor="http_port" className="label">
                 HTTP Port
               </label>
+              <TooltypeKey field="http_port" />
               <input
                 id="http_port"
                 type="number"
@@ -1436,6 +1484,7 @@ export function SystemConfigPage() {
               <label htmlFor="telnet_port" className="label">
                 Telnet Port
               </label>
+              <TooltypeKey field="telnet_port" />
               <input
                 id="telnet_port"
                 type="number"
@@ -1451,6 +1500,7 @@ export function SystemConfigPage() {
               <label htmlFor="ssh_port" className="label">
                 SSH Port
               </label>
+              <TooltypeKey field="ssh_port" />
               <input
                 id="ssh_port"
                 type="number"
@@ -1596,6 +1646,7 @@ export function SystemConfigPage() {
               <label htmlFor="reg_key" className="label">
                 Registration Key
               </label>
+              <TooltypeKey field="reg_key" />
               <input
                 id="reg_key"
                 type="text"
@@ -1640,6 +1691,7 @@ export function SystemConfigPage() {
               <label htmlFor="log_level" className="label">
                 Log Level
               </label>
+              <TooltypeKey field="log_level" />
               <select
                 id="log_level"
                 {...register('log_level')}
@@ -1656,6 +1708,7 @@ export function SystemConfigPage() {
               <label htmlFor="log_retention_days" className="label">
                 Log Retention
               </label>
+              <TooltypeKey field="log_retention_days" />
               <select
                 id="log_retention_days"
                 {...register('log_retention_days', { setValueAs: (v) => parseInt(v, 10) })}

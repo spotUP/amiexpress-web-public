@@ -233,6 +233,19 @@ const REVERSE_TOOLTYPE_MAP: Record<string, string> = Object.fromEntries(
   Object.entries(TOOLTYPE_MAP).map(([k, v]) => [v, k])
 );
 
+/**
+ * Which tooltype in bbsConfig.info each configuration field is written to.
+ *
+ * Served to the admin so a form field can show the key it edits - a sysop
+ * reading `SYSOP_NAME` under a field can cross-check it against the file on
+ * disk, which is the actual source of truth. A copy of this map in the
+ * frontend would be a second source of truth for something the writer owns,
+ * so the writer publishes it instead.
+ */
+export function getConfigTooltypeKeys(): Record<string, string> {
+  return { ...REVERSE_TOOLTYPE_MAP };
+}
+
 function normalizeTooltypeKey(rawKey: string): string {
   const upper = rawKey.toUpperCase();
   if (TOOLTYPE_MAP[upper]) {
