@@ -37,6 +37,7 @@ import {
   Settings,
   Shield,
   Users,
+  Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -63,6 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Live',
     items: [
       { path: '', label: 'Overview', icon: LayoutDashboard, description: 'The state of the board at a glance' },
+      { path: 'activity', label: 'Activity', icon: Zap, description: 'Live feed of logons, doors and transfers' },
       { path: 'node-control', label: 'Node Control', icon: Monitor, description: 'Live nodes and supervisor commands' },
       { path: 'nodes', label: 'Node Configuration', icon: Server, description: 'Per-node settings written to disk' },
       { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, description: 'Answer a caller paging the sysop' },

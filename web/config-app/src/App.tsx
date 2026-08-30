@@ -5,6 +5,7 @@ import { AppShell } from './components/AppShell/AppShell';
 import { SkeletonRows } from './components/ui/states';
 import { LoginPage } from './pages/LoginPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { NodesPage } from './pages/NodesPage';
 import { ConferencesPage } from './pages/ConferencesPage';
@@ -90,6 +91,7 @@ function App() {
         <Route path="system" element={<SystemConfigPage />} />
         <Route path="health" element={<HealthCheckPage />} />
         <Route path="statistics" element={<StatisticsPage />} />
+        <Route path="activity" element={<ActivityPage />} />
         <Route path="node-control" element={<NodeControlPage />} />
         <Route path="nodes" element={<NodesPage />} />
         <Route path="users" element={<UsersPage />} />
