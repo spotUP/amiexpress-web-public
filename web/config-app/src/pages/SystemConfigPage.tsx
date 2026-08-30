@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig, Language, ScreenType } from '../types';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 
 // Standard AmiExpress security levels
@@ -64,9 +64,11 @@ export function SystemConfigPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isDeletingKey, setIsDeletingKey] = useState(false);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
-  const skipNextSave = useRef(true);
+  /**
+   * Saving is explicit. This form used to write bbsConfig.info on a debounced
+   * timer 800 ms after any keystroke - a running BBS reads that file, so a
+   * half-typed port number reached it.
+   */
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // Password visibility and SMTP test state
@@ -123,16 +125,19 @@ export function SystemConfigPage() {
       if (resp?.data) {
         reset(resp.data as any);
       }
-      setAutoSaveStatus('saved');
-      showSuccess('System configuration saved');
+      showSuccess('System configuration written to bbsConfig.info');
     },
     onError: (error: Error) => {
-      setAutoSaveStatus('error');
       showError(`Failed to update configuration: ${error.message}`);
     },
   });
 
-  const { register, watch, reset } = useForm<SystemConfig>({
+  const {
+    register,
+    reset,
+    handleSubmit,
+    formState: { isDirty, dirtyFields },
+  } = useForm<SystemConfig>({
     values: {
       language_base: 'Languages',
       default_language: 'English',
@@ -146,44 +151,25 @@ export function SystemConfigPage() {
   useEffect(() => {
     if (data?.data) {
       reset(data.data);
-      skipNextSave.current = true;
     }
   }, [data, reset]);
 
-  useEffect(() => {
-    const subscription = watch((value) => {
-      if (!data?.data) return;
-      if (skipNextSave.current) {
-        skipNextSave.current = false;
-        return;
-      }
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
-      }
-      setAutoSaveStatus('saving');
-      autoSaveTimer.current = setTimeout(() => {
-        const { created_at, updated_at, ...updates } = value as any;
+  const onSubmit = (value: SystemConfig) => {
+    const { created_at, updated_at, ...updates } = value as any;
 
-        // Don't overwrite existing encrypted passwords with empty strings
-        // If password field is empty, remove it from updates to preserve existing value
-        if (!updates.smtp_password || updates.smtp_password === '') {
-          delete updates.smtp_password;
-        }
-        if (!updates.reg_key || updates.reg_key === '') {
-          delete updates.reg_key;
-        }
+    // An empty password field means "leave it alone", not "clear it": the
+    // server holds these encrypted and never sends them back.
+    if (!updates.smtp_password || updates.smtp_password === '') {
+      delete updates.smtp_password;
+    }
+    if (!updates.reg_key || updates.reg_key === '') {
+      delete updates.reg_key;
+    }
 
-        mutation.mutate(updates);
-      }, 800);
-    });
+    mutation.mutate(updates);
+  };
 
-    return () => {
-      subscription.unsubscribe();
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
-      }
-    };
-  }, [watch, mutation, data]);
+  const changedFieldCount = Object.keys(dirtyFields).length;
 
   const handleGenerateSSHKey = async () => {
     if (sshKeyData?.data?.exists) {
@@ -270,28 +256,16 @@ export function SystemConfigPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <div className="flex items-center space-x-3">
-          <span className="text-xs text-bbs-muted">
-            {autoSaveStatus === 'saving' && 'Saving...'}
-            {autoSaveStatus === 'saved' && 'Saved'}
-            {autoSaveStatus === 'error' && 'Save failed'}
-            {autoSaveStatus === 'idle' && 'Auto-save ready'}
-          </span>
-        </div>
-      </div>
-
-      {/* Category Filter */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-1">
         {categories.map((category) => (
           <button
             key={category}
             onClick={() => setSelectedCategory(category)}
             type="button"
-            className={`px-4 py-2 rounded transition-colors ${
+            className={`h-control rounded border px-3 text-xs transition-colors ${
               selectedCategory === category
-                ? 'bg-bbs-accent text-bbs-background'
-                : 'bg-bbs-secondary text-bbs-text hover:bg-bbs-secondary/80'
+                ? 'border-border-strong bg-surface-3 text-content-primary'
+                : 'border-border bg-surface-2 text-content-secondary hover:bg-surface-3 hover:text-content-primary'
             }`}
           >
             {category}
@@ -299,7 +273,7 @@ export function SystemConfigPage() {
         ))}
       </div>
 
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-20">
         {/* Basic Information */}
         {shouldShowSection('Basic Information') && (
         <div className="card">
@@ -1721,6 +1695,33 @@ export function SystemConfigPage() {
         </div>
         )}
 
+        {/* The save bar. It appears only when something has changed, names
+            how much, and is the only thing that writes bbsConfig.info. */}
+        {isDirty && (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-2/95 px-5 py-3 backdrop-blur">
+            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
+              <span className="text-sm text-content-secondary">
+                {changedFieldCount === 1 ? '1 field changed' : `${changedFieldCount} fields changed`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => reset(data?.data)}
+                  className="h-control rounded border border-border bg-surface-1 px-3 text-sm text-content-secondary transition-colors hover:bg-surface-3 hover:text-content-primary"
+                >
+                  Discard
+                </button>
+                <button
+                  type="submit"
+                  disabled={mutation.isPending}
+                  className="btn-primary h-control py-0 text-sm disabled:opacity-50"
+                >
+                  {mutation.isPending ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
     </div>
   );
