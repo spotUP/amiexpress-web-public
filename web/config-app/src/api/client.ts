@@ -236,8 +236,15 @@ class ApiClient {
     });
   }
 
-  async deleteDoor(id: number) {
-    return this.request<ApiResponse>(`${API_BASE}/config/doors/${id}`, {
+  /**
+   * Delete a door by its COMMAND, not by its row in the list.
+   *
+   * The list numbers doors by position, and that number used to be sent
+   * here and looked up as a database row - so a delete could remove a
+   * different door's registration than the one on screen.
+   */
+  async deleteDoor(command: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}`, {
       method: 'DELETE',
     });
   }
