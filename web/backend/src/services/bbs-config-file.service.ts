@@ -413,7 +413,13 @@ console.log('[BBSConfig] Ignoring bbsConfig.info.txt; the icon file is newer');
     }
   }
 
-  if (mergedToolTypes.size === 0) {
+  // "No configuration at all" and "a configuration that switches everything
+  // off" are different answers, and testing the tooltype count could not tell
+  // them apart. A board whose only file is the text companion - one with no
+  // icon, which is every board before its first icon is written - turned the
+  // last flag off, wrote an empty companion, and read the defaults straight
+  // back: the flag came back on and could not be cleared at all.
+  if (!fs.existsSync(configPath) && !fs.existsSync(configTextPath)) {
 console.log('[BBSConfig] bbsConfig.info not found, using defaults');
     return getDefaultConfig();
   }
