@@ -96,6 +96,52 @@ export async function menuArrowHandlersDoNotResetTheSelection(): Promise<void> {
 }
 
 /**
+ * Every arcade door must drive movement from held keys, not from the
+ * character stream.
+ *
+ * Reported live 2026-08-30: "all arcade games except arkanoid and gmaster
+ * have key repeat/delay problems". blessed delivers characters, not presses
+ * and releases, so a held key arrives as the client's auto-repeat - one
+ * character, a ~400-500ms gap, then a burst. A door that moves on each
+ * character inherits that stutter and cannot fix it locally.
+ *
+ * The fix each door must carry has two halves, and BOTH are required:
+ * opting into held-key tracking, and guarding its character movement path
+ * so it does not also move (which would double every step).
+ */
+export async function arcadeDoorsDriveMovementFromHeldKeys(): Promise<void> {
+  const missingOptIn: string[] = [];
+  const missingGuard: string[] = [];
+  const missingPoll: string[] = [];
+
+  for (const door of MENU_DOORS) {
+    const file = path.join(REPO_ROOT, 'Doors', door, 'index.ts');
+    const src = fs.readFileSync(file, 'utf-8');
+
+    if (!/trackHeldKeys:\s*true/.test(src)) missingOptIn.push(door);
+
+    // Something must consult the held state every tick.
+    if (!/isHeld\(|consumeRepeat\(/.test(src)) missingPoll.push(door);
+
+    // ...and the character path must stand down when key state is live.
+    if (!/isKeyStateActive\(\)/.test(src)) missingGuard.push(door);
+  }
+
+  assert.deepStrictEqual(
+    missingOptIn, [],
+    `these doors never ask for held-key tracking, so they still stutter on the client's auto-repeat: ${missingOptIn.join(', ')}`
+  );
+  assert.deepStrictEqual(
+    missingPoll, [],
+    `these doors track held keys but never read them, so holding a key does nothing: ${missingPoll.join(', ')}`
+  );
+  assert.deepStrictEqual(
+    missingGuard, [],
+    `these doors read held keys but never guard the character path, so every press moves twice: ${missingGuard.join(', ')}`
+  );
+}
+
+/**
  * Arkanoid wrote its highscores to a path built from process.cwd(). The
  * backend runs with cwd web/backend (Dockerfile sets WORKDIR
  * /app/web/backend), so scores landed in web/backend/Doors/arkanoid/ -

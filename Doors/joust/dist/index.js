@@ -4,6 +4,7 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { JoustGame } from "./game/joust-game";
 import { rpcHandlers } from "./server";
 import { GAME_WIDTH, GAME_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, DEFAULT_HIGHSCORES, STANDARD_PLATFORMS, LAVA_PITS, } from "./game/constants";
@@ -66,6 +67,7 @@ let hudBox;
 let footerBox;
 let menuBox = null;
 let gameLoop = null;
+let inputManager = null;
 let game = null;
 let doorContext; // Will be set on start
 function initScreen() {
@@ -255,8 +257,10 @@ function startGame() {
     if (gameLoop)
         clearInterval(gameLoop);
     gameLoop = setInterval(() => {
-        if (gameData.state === "playing")
+        if (gameData.state === "playing") {
+            pollHeldDirections();
             game?.update();
+        }
     }, GAME_TICK_MS);
 }
 function showWaveComplete() {
@@ -390,12 +394,34 @@ function handleMenuInput(key) {
         doorContext?.close();
     }
 }
+/**
+ * Move the rider for whichever directions are held down.
+ *
+ * Called once per game tick. Replaces reacting to the character stream,
+ * which is the client's auto-repeat - one character, a ~400ms gap, then a
+ * burst - and made movement stutter. Flap stays on the character path: it
+ * is a tap, not something you hold.
+ */
+function pollHeldDirections() {
+    if (!inputManager?.isKeyStateActive())
+        return;
+    for (const dir of ["left", "right"]) {
+        if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+            game?.handleDirection(dir);
+        }
+    }
+}
 function handleGameInput(key) {
+    // Held keys drive movement when real key edges are available; acting on
+    // the character too would move twice per press.
+    const heldDrivesMovement = !!inputManager?.isKeyStateActive();
     if (key === "left") {
-        game?.handleDirection("left");
+        if (!heldDrivesMovement)
+            game?.handleDirection("left");
     }
     else if (key === "right") {
-        game?.handleDirection("right");
+        if (!heldDrivesMovement)
+            game?.handleDirection("right");
     }
     else if (key === "flap" || key === "up") {
         game?.handleFlap();
@@ -523,6 +549,10 @@ async function handleNameEntryInput(key) {
 let keepAlive = null;
 // doorContext already declared above
 function cleanup() {
+    if (inputManager) {
+        inputManager.disable();
+        inputManager = null;
+    }
     if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;
@@ -552,6 +582,17 @@ door.onStart(async (ctx) => {
     screen.program.write('\x1b[H');
     screen.clearRegion(0, screen.width, 0, screen.height);
     screen.alloc();
+    // Real key-down/key-up edges, so movement can be driven by which
+    // keys are actually held instead of the client's auto-repeat.
+    inputManager = new DoorInputManager(ctx, screen, {
+        enableGameMode: true, // Game needs raw keyboard input
+        enableGrabKeys: true, // Capture all keys for game controls
+        enableMouse: false, // No mouse interaction in this game
+        trackHeldKeys: true, // Move from held keys, not the auto-repeat stream
+        debug: false,
+        debugName: 'Joust'
+    });
+    inputManager.enable();
     showMenu();
 });
 door.onInput((ctx, key) => handleInput(key.raw || key.key || key));

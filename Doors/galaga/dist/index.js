@@ -274,6 +274,7 @@ function startGame() {
         clearInterval(gameLoop);
     gameLoop = setInterval(() => {
         if (gameData.state === "playing") {
+            pollHeldControls();
             game?.update();
         }
     }, constants_1.GAME_TICK_MS);
@@ -357,7 +358,48 @@ function handleMenuInput(key) {
             break;
     }
 }
+/**
+ * Which controls the game currently believes are down, so that edges are
+ * only sent when they actually change.
+ */
+const keyStateMirror = {
+    left: false,
+    right: false,
+    fire: false,
+};
+/**
+ * Mirror the real held keys into the game's own key-down/key-up model.
+ *
+ * The game already thinks in presses and releases, but the character stream
+ * has no releases - so this door used to send a key-down and fake the
+ * matching key-up on a 100ms timer, and never released "fire" at all. The
+ * ship therefore moved in 100ms twitches however long the key was held.
+ * With real edges the game gets a true press and a true release, and its
+ * own movement code runs continuously the way it was written to.
+ */
+function pollHeldControls() {
+    if (!inputManager?.isKeyStateActive())
+        return;
+    for (const control of ["left", "right", "fire"]) {
+        const held = inputManager.isHeld(control === "fire" ? "space" : control);
+        if (held === keyStateMirror[control])
+            continue;
+        keyStateMirror[control] = held;
+        if (held) {
+            game?.handleKeyDown(control);
+        }
+        else {
+            game?.handleKeyUp(control);
+        }
+    }
+}
 function handleGameInput(key) {
+    // Held keys drive the ship when real key edges are available; acting on
+    // the character too would double up on every press.
+    if (inputManager?.isKeyStateActive() &&
+        (key === "left" || key === "right" || key === "fire")) {
+        return;
+    }
     switch (key) {
         case "left":
             game?.handleKeyDown("left");
@@ -545,6 +587,7 @@ door.onStart(async (ctx) => {
         enableGameMode: true, // Game needs raw keyboard input
         enableGrabKeys: true, // Capture all keys for game controls
         enableMouse: true, // Enable mouse events
+        trackHeldKeys: true, // Move from held keys, not the auto-repeat stream
         debug: false,
         debugName: 'Galaga'
     });

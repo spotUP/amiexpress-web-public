@@ -282,8 +282,10 @@ function startGame() {
     if (gameLoop)
         clearInterval(gameLoop);
     gameLoop = setInterval(() => {
-        if (gameData.state === "playing")
+        if (gameData.state === "playing") {
+            pollHeldDirections();
             game?.update();
+        }
     }, constants_1.GAME_TICK_MS);
 }
 function handleInput(key) {
@@ -369,8 +371,29 @@ function handleMenuInput(key) {
         doorContext?.close();
     }
 }
+/**
+ * Step the player for whichever directions are held down.
+ *
+ * Called once per game tick. This replaces reacting to the character
+ * stream, which arrives as the client's auto-repeat - one character, a
+ * ~400ms gap, then a burst - and made movement stutter. Holding a key now
+ * moves at a steady rate from the moment it goes down.
+ */
+function pollHeldDirections() {
+    if (!inputManager?.isKeyStateActive())
+        return;
+    for (const dir of ["up", "down", "left", "right"]) {
+        if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+            game?.handleDirection(dir);
+        }
+    }
+}
 function handleGameInput(key) {
     if (key === "up" || key === "down" || key === "left" || key === "right") {
+        // Held keys drive movement when real key edges are available; acting on
+        // the character too would move twice per press.
+        if (inputManager?.isKeyStateActive())
+            return;
         game?.handleDirection(key);
     }
     else if (key === "push") {
@@ -561,6 +584,7 @@ door.onStart(async (ctx) => {
         enableGameMode: true, // Game needs raw keyboard input
         enableGrabKeys: true, // Capture all keys for game controls
         enableMouse: true, // Enable mouse events
+        trackHeldKeys: true, // Move from held keys, not the auto-repeat stream
         debug: false,
         debugName: 'Pengo'
     });

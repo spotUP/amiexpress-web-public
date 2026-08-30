@@ -339,6 +339,7 @@ function startGame(): void {
 
   gameLoop = setInterval(() => {
     if (gameData.state === "playing") {
+      pollHeldDirections();
       game?.update();
     }
   }, GAME_TICK_MS);
@@ -435,6 +436,24 @@ function handleMenuInput(key: InputKey): void {
 }
 
 /**
+ * Hop for whichever directions are held down.
+ *
+ * Frogger is a hopper, not a continuous mover: one press is one hop. So
+ * unlike the free-roaming games this keeps a deliberate delay before a held
+ * key starts repeating - the same shape GrandMaster uses for its discrete
+ * grid steps - and repeats slowly after that. Holding a direction should
+ * walk the frog forward, not fire it across the road.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["up", "down", "left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { initialDelay: 250, repeatRate: 140 })) {
+      game?.handleDirection(dir);
+    }
+  }
+}
+
+/**
  * Handle game input
  */
 function handleGameInput(key: InputKey): void {
@@ -443,6 +462,9 @@ function handleGameInput(key: InputKey): void {
     case "down":
     case "left":
     case "right":
+      // Held keys drive hopping when real key edges are available; acting on
+      // the character too would hop twice per press.
+      if (inputManager?.isKeyStateActive()) break;
       game?.handleDirection(key as Direction);
       break;
     case "p":
@@ -653,6 +675,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'Frogger'
   });

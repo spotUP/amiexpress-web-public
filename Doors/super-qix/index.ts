@@ -382,6 +382,15 @@ function startGame(): void {
 
   gameLoop = setInterval(() => {
     if (gameData.state === "playing") {
+      // Drive movement from the keys actually held down, the way Arkanoid
+      // does: one step per frame while a direction is held, with no wait
+      // for the client's auto-repeat. handleDirection keeps its own move
+      // throttle, so this sets responsiveness, not speed.
+      if (inputManager?.isKeyStateActive()) {
+        for (const dir of ["up", "down", "left", "right"] as Direction[]) {
+          if (inputManager.isHeld(dir)) engine?.handleDirection(dir);
+        }
+      }
       engine?.update();
     } else if (gameData.state === "levelTransition") {
       gameData.transitionTimer--;
@@ -501,6 +510,11 @@ function handleGameInput(key: InputKey): void {
     case "down":
     case "left":
     case "right":
+      // When real key-down/key-up edges are available the game loop drives
+      // movement from the held keys instead (see the gameLoop below), which
+      // is what removes the client's ~400ms auto-repeat gap. Acting on the
+      // character here as well would move the marker twice per press.
+      if (inputManager?.isKeyStateActive()) break;
       engine?.handleDirection(key as Direction);
       break;
 
@@ -713,6 +727,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'SuperQix'
   });

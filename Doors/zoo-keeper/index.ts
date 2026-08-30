@@ -385,9 +385,26 @@ function startGame(): void {
       gameData.state === "platform" ||
       gameData.state === "stampede"
     ) {
+      pollHeldDirections();
       game?.update();
     }
   }, GAME_TICK_MS);
+}
+
+/**
+ * Step the keeper for whichever directions are held down.
+ *
+ * Called once per game tick, replacing movement driven by the character
+ * stream - that stream is the client's auto-repeat (one character, a ~400ms
+ * gap, then a burst), which is what made movement stutter.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["up", "down", "left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+      game?.handleDirection(dir);
+    }
+  }
 }
 
 /**
@@ -503,6 +520,9 @@ function handleGameInput(key: InputKey): void {
     case "down":
     case "left":
     case "right":
+      // Held keys drive movement when real key edges are available; acting
+      // on the character too would move twice per press.
+      if (inputManager?.isKeyStateActive()) break;
       game?.handleDirection(key as Direction);
       break;
 
@@ -713,6 +733,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'ZooKeeper'
   });

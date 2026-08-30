@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
 import { BubbleBobbleGame } from "./game/bubble-bobble-game";
@@ -88,6 +89,7 @@ let hudBox: ReturnType<typeof blessed.box>;
 let footerBox: ReturnType<typeof blessed.box>;
 let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
+let inputManager: DoorInputManager | null = null;
 let game: BubbleBobbleGame | null = null;
 let doorContext: any; // Will be set on start
 let gamepadManager: GamepadInputManager | null = null;
@@ -312,7 +314,10 @@ function startGame(): void {
 
   if (gameLoop) clearInterval(gameLoop);
   gameLoop = setInterval(() => {
-    if (gameData.state === "playing") game?.update();
+    if (gameData.state === "playing") {
+      pollHeldDirections();
+      game?.update();
+    }
   }, GAME_TICK_MS);
 }
 
@@ -442,11 +447,30 @@ function handleMenuInput(key: InputKey): void {
   }
 }
 
+/**
+ * Move for whichever directions are held down.
+ *
+ * Called once per game tick, replacing movement driven by the character
+ * stream (the client's auto-repeat: one character, a ~400ms gap, then a
+ * burst). Jump and bubble stay on the character path - they are taps.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+      game?.handleMove(dir);
+    }
+  }
+}
+
 function handleGameInput(key: InputKey): void {
+  // Held keys drive movement when real key edges are available; acting on
+  // the character too would move twice per press.
+  const heldDrivesMovement = !!inputManager?.isKeyStateActive();
   if (key === "left") {
-    game?.handleMove("left");
+    if (!heldDrivesMovement) game?.handleMove("left");
   } else if (key === "right") {
-    game?.handleMove("right");
+    if (!heldDrivesMovement) game?.handleMove("right");
   } else if (key === "jump" || key === "up") {
     game?.handleJump();
   } else if (key === "bubble") {
@@ -577,6 +601,10 @@ let keepAlive: ReturnType<typeof setInterval> | null = null;
 // doorContext already declared above
 
 function cleanup(): void {
+  if (inputManager) {
+    inputManager.disable();
+    inputManager = null;
+  }
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
@@ -613,6 +641,18 @@ door.onStart(async (ctx: any) => {
   screen.program.write('\x1b[H');
   screen.clearRegion(0, screen.width, 0, screen.height);
   screen.alloc();
+
+  // Real key-down/key-up edges, so movement can be driven by which
+  // keys are actually held instead of the client's auto-repeat.
+  inputManager = new DoorInputManager(ctx, screen, {
+    enableGameMode: true,   // Game needs raw keyboard input
+    enableGrabKeys: true,   // Capture all keys for game controls
+    enableMouse: false,     // No mouse interaction in this game
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
+    debug: false,
+    debugName: 'BubbleBobble'
+  });
+  inputManager.enable();
 
   // Set up gamepad support
   gamepadManager = new GamepadInputManager(ctx.session);

@@ -73,6 +73,27 @@ export interface DoorInputOptions {
   enableAutoSuspend?: boolean;
 
   /**
+   * Track which keys are currently held, from real key-down/key-up edges.
+   *
+   * Off by default: only real-time games want it, and it is meaningless to
+   * the doors that drive blessed widgets.
+   *
+   * Why it exists: blessed delivers CHARACTERS, not key presses and
+   * releases. Holding a key therefore arrives as the client's auto-repeat -
+   * one character, a ~400-500ms pause, then a fast stream - so a door that
+   * moves on each character inherits that stutter and cannot do anything
+   * about it. Both doors in this repo whose movement feels right avoid the
+   * character stream entirely: GrandMaster takes real edges from
+   * bbs.onKeyDown/onKeyUp, and Arkanoid keeps a held-key set and moves once
+   * per frame while a key is down. This option provides that same held-key
+   * state to any door.
+   *
+   * Requires game mode, which is what makes the client send key events at
+   * all; enabling this turns enableGameMode on implicitly.
+   */
+  trackHeldKeys?: boolean;
+
+  /**
    * Enable debug logging
    */
   debug?: boolean;
@@ -81,6 +102,21 @@ export interface DoorInputOptions {
    * Debug name for log messages
    */
   debugName?: string;
+}
+
+/** Options for a single {@link DoorInputManager.consumeRepeat} call. */
+export interface RepeatOptions {
+  /**
+   * Milliseconds to wait after the first step before repeating.
+   *
+   * Defaults to 0 - Arkanoid's feel, where holding a key moves every frame
+   * with no hesitation. Set it (GrandMaster uses 267) for a game that wants
+   * a deliberate pause before auto-repeat, such as a discrete grid stepper.
+   */
+  initialDelay?: number;
+
+  /** Milliseconds between repeats once repeating has begun. */
+  repeatRate?: number;
 }
 
 export class DoorInputManager {
@@ -92,11 +128,23 @@ export class DoorInputManager {
   private autoSuspended: boolean = false;  // Track auto-suspend separately from manual suspend
   private autoSuspendEnabled: boolean = false;
 
+  /** Keys currently held down, normalised (see normaliseKeyName). */
+  private held: Set<string> = new Set();
+  /** True once key-down/key-up handlers are actually attached. */
+  private keyStateActive: boolean = false;
+  /** When each held key last produced a step, for consumeRepeat. */
+  private lastStepAt: Map<string, number> = new Map();
+  /** When each held key was first pressed, for the initial delay. */
+  private pressedAt: Map<string, number> = new Map();
+
   constructor(session: any, screen: Screen, options: DoorInputOptions = {}) {
     this.session = session;
     this.screen = screen;
     this.options = {
-      enableGameMode: options.enableGameMode ?? false,  // Default OFF - only enable for raw game input (ncurses)
+      // Held-key tracking is fed by the client's key events, which only
+      // arrive in game mode - so asking for one implies the other.
+      enableGameMode: options.enableGameMode ?? options.trackHeldKeys ?? false,  // Default OFF - only enable for raw game input (ncurses)
+      trackHeldKeys: options.trackHeldKeys ?? false,
       enableGrabKeys: options.enableGrabKeys ?? false,  // Default OFF - only enable for games needing all keys
       enableMouse: options.enableMouse ?? true,
       enableAutoSuspend: options.enableAutoSuspend ?? true,  // Default ON - auto-suspend when blessed widgets gain focus
@@ -165,11 +213,138 @@ export class DoorInputManager {
       this.log('✓ Input handler connected');
     }
 
+    // 5b. Track held keys from real key-down/key-up edges
+    this.setupHeldKeyTracking();
+
     // 6. Setup automatic input suspension for blessed widgets
     this.setupAutoSuspend();
 
     this.enabled = true;
     this.log('Door input enabled');
+  }
+
+  /**
+   * Normalise a client key name to the short lowercase form doors use.
+   *
+   * The client sends browser KeyboardEvent.key values ("ArrowLeft", " ");
+   * doors think in terms of "left" and "space". Same mapping GrandMaster
+   * uses, so the two agree on names.
+   */
+  private static normaliseKeyName(key: string): string {
+    switch (key) {
+      case 'ArrowLeft': return 'left';
+      case 'ArrowRight': return 'right';
+      case 'ArrowUp': return 'up';
+      case 'ArrowDown': return 'down';
+      case ' ':
+      case 'Spacebar': return 'space';
+      case 'Enter': return 'enter';
+      case 'Escape': return 'escape';
+      default: return key.toLowerCase();
+    }
+  }
+
+  /**
+   * Attach key-down/key-up handlers, if the session can deliver them.
+   *
+   * Silently does nothing when the transport has no key events - telnet and
+   * SSH sessions, for instance. isKeyStateActive() then stays false and the
+   * door keeps whatever character-driven path it had.
+   */
+  private setupHeldKeyTracking(): void {
+    if (!this.options.trackHeldKeys) return;
+
+    const bbs = this.session?.bbs;
+    if (!bbs?.onKeyDown || !bbs?.onKeyUp) {
+      this.log('Held-key tracking requested but this session sends no key events');
+      return;
+    }
+
+    // Register down BEFORE up: onKeyUp wraps the existing handler to build a
+    // single combined callback, so the order is not interchangeable.
+    bbs.onKeyDown((key: string) => {
+      const name = DoorInputManager.normaliseKeyName(key);
+      // The client re-sends key-down while a key auto-repeats. Only a real
+      // edge counts, or the press time resets and the repeat never settles.
+      if (this.held.has(name)) return;
+      this.held.add(name);
+      this.pressedAt.set(name, Date.now());
+      this.lastStepAt.delete(name);
+    });
+
+    bbs.onKeyUp((key: string) => {
+      const name = DoorInputManager.normaliseKeyName(key);
+      this.held.delete(name);
+      this.pressedAt.delete(name);
+      this.lastStepAt.delete(name);
+    });
+
+    this.keyStateActive = true;
+    this.log('✓ Held-key tracking enabled');
+  }
+
+  /**
+   * Are real key-down/key-up edges being delivered?
+   *
+   * Doors use this to decide whether to drive movement from held keys or
+   * fall back to their character handler. A door that acts on BOTH moves
+   * twice per press, so the character path must check this and return.
+   */
+  isKeyStateActive(): boolean {
+    return this.keyStateActive && !this.suspended && !this.autoSuspended;
+  }
+
+  /** Is this key currently held? Name in short form, e.g. "left". */
+  isHeld(key: string): boolean {
+    if (!this.isKeyStateActive()) return false;
+    return this.held.has(key);
+  }
+
+  /** Every currently held key. */
+  heldKeys(): string[] {
+    if (!this.isKeyStateActive()) return [];
+    return [...this.held];
+  }
+
+  /**
+   * Should the game loop take one movement step for this key right now?
+   *
+   * Call once per key per tick. Returns true immediately on the press, then
+   * again once per repeatRate for as long as the key stays down (after
+   * initialDelay, when one is given). Returns false when the key is not
+   * held, so a loop can simply ask each direction every frame.
+   *
+   * With the defaults - no initial delay, repeat governed only by how often
+   * the loop asks - this reproduces Arkanoid's feel: movement starts the
+   * instant the key goes down and continues smoothly while it is held,
+   * without the client's auto-repeat gap.
+   */
+  consumeRepeat(key: string, options: RepeatOptions = {}): boolean {
+    if (!this.isHeld(key)) return false;
+
+    const { initialDelay = 0, repeatRate = 0 } = options;
+    const now = Date.now();
+    const last = this.lastStepAt.get(key);
+
+    // First step of this press: always immediate.
+    if (last === undefined) {
+      this.lastStepAt.set(key, now);
+      return true;
+    }
+
+    const pressed = this.pressedAt.get(key) ?? now;
+    if (initialDelay > 0 && now - pressed < initialDelay) return false;
+    if (now - last < repeatRate) return false;
+
+    this.lastStepAt.set(key, now);
+    return true;
+  }
+
+  /** Forget all held-key state. Used on disable and on suspend. */
+  private clearHeldKeys(): void {
+    this.held.clear();
+    this.pressedAt.clear();
+    this.lastStepAt.clear();
   }
 
   /**
@@ -226,6 +401,8 @@ export class DoorInputManager {
 
     this.enabled = false;
     this.suspended = false;
+    this.keyStateActive = false;
+    this.clearHeldKeys();
     this.log('Door input disabled');
   }
 
@@ -249,6 +426,10 @@ export class DoorInputManager {
 
     // Clear auto-suspend flag when manually suspending
     this.autoSuspended = false;
+
+    // Game mode goes away here, so no key-up will arrive for anything held
+    // right now. Forget it, or that key looks stuck down on resume.
+    this.clearHeldKeys();
 
     // Suspend game mode so blessed widgets can receive keyboard input
     if (this.options.enableGameMode && this.session.bbs?.disableGameMode) {
@@ -324,6 +505,8 @@ export class DoorInputManager {
       if (needsKeyboard && !this.autoSuspended && !this.suspended) {
         this.log(`Auto-suspend triggered by ${el.type} widget`);
         this.autoSuspended = true;
+        // No key-up will reach us while suspended (see suspend()).
+        this.clearHeldKeys();
 
         // Only suspend if not already manually suspended
         if (!this.suspended) {
