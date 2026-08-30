@@ -32,7 +32,7 @@ export type {
 } from './install-core';
 import * as fs from 'fs';
 import {
-  Screen, Panel, List, ScrollableBox, ConfirmModal, Prompt, Textbox,
+  Screen, Panel, List, ScrollableBox, ConfirmModal, Textbox,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { FileExplorerOverlay } from './FileExplorerOverlay';
@@ -778,8 +778,8 @@ class RepoView extends BaseView {
   }
 
   /** Fetches + maps the central manifest once (guarded against overlapping
-   * calls — enter() re-runs every time a child view like ConfirmView/
-   * InputView pops back to RepoView, per ViewManager.pop()). Retries on a
+   * calls — enter() re-runs every time a child view like ConfirmView pops
+   * back to RepoView, per ViewManager.pop()). Retries on a
    * later enter() if the previous attempt failed (consumerEntries still
    * null) — a transient network blip should not permanently disable
    * browsing for the rest of the session. */
@@ -1888,34 +1888,6 @@ class ConfirmView extends BaseView {
   }
 
   exit(): void { this.keys.release(); }
-}
-
-// ── Text Input ────────────────────────────────────────────────────────────────
-
-class InputView extends BaseView {
-  private layout: DoormanLayout;
-  private prompt: string; private defaultValue: string;
-  private onSubmit: (value: string | null) => void;
-
-  constructor(layout: DoormanLayout, prompt: string, defaultValue: string,
-              onSubmit: (value: string | null) => void) {
-    super(); this.layout = layout; this.prompt = prompt;
-    this.defaultValue = defaultValue; this.onSubmit = onSubmit;
-  }
-
-  enter(): void {
-    const p = new Prompt({ parent: this.layout.screen, top:'center', left:'center',
-      width: 50, height: 7, tags: true, style: { border:{ fg:'yellow' } }, overlay: true } as any);
-    (p as any).showInput(this.prompt, this.defaultValue, (_err: any, val?: string) => {
-      (p as any).destroy();
-      this.vm.pop();
-      this.onSubmit(val ?? null);
-    });
-    this.layout.render();
-  }
-
-  exit(): void { this.keys.release(); }
-  onEsc(): void { this.vm.pop(); this.onSubmit(null); }
 }
 
 // ── Info Editor Overlay ───────────────────────────────────────────────────────

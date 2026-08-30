@@ -752,8 +752,8 @@ class RepoView extends ViewManager_1.BaseView {
         this.repoUnavailable = result.repoUnavailable;
     }
     /** Fetches + maps the central manifest once (guarded against overlapping
-     * calls — enter() re-runs every time a child view like ConfirmView/
-     * InputView pops back to RepoView, per ViewManager.pop()). Retries on a
+     * calls — enter() re-runs every time a child view like ConfirmView pops
+     * back to RepoView, per ViewManager.pop()). Retries on a
      * later enter() if the previous attempt failed (consumerEntries still
      * null) — a transient network blip should not permanently disable
      * browsing for the rest of the session. */
@@ -1857,28 +1857,6 @@ class ConfirmView extends ViewManager_1.BaseView {
         }).display();
     }
     exit() { this.keys.release(); }
-}
-// ── Text Input ────────────────────────────────────────────────────────────────
-class InputView extends ViewManager_1.BaseView {
-    constructor(layout, prompt, defaultValue, onSubmit) {
-        super();
-        this.layout = layout;
-        this.prompt = prompt;
-        this.defaultValue = defaultValue;
-        this.onSubmit = onSubmit;
-    }
-    enter() {
-        const p = new blessed_1.Prompt({ parent: this.layout.screen, top: 'center', left: 'center',
-            width: 50, height: 7, tags: true, style: { border: { fg: 'yellow' } }, overlay: true });
-        p.showInput(this.prompt, this.defaultValue, (_err, val) => {
-            p.destroy();
-            this.vm.pop();
-            this.onSubmit(val ?? null);
-        });
-        this.layout.render();
-    }
-    exit() { this.keys.release(); }
-    onEsc() { this.vm.pop(); this.onSubmit(null); }
 }
 // ── Info Editor Overlay ───────────────────────────────────────────────────────
 class InfoEditorOverlayView extends ViewManager_1.BaseView {
