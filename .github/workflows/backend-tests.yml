@@ -86,6 +86,10 @@ jobs:
         working-directory: web/backend
         run: npx tsc --noEmit
 
+      - name: Type-check tests
+        working-directory: web/backend
+        run: npm run typecheck:tests
+
       - name: Jest
         working-directory: web/backend
         env:
