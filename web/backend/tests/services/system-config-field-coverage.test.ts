@@ -35,10 +35,12 @@ import {
   getConfigTooltypeKeys,
 } from '../../src/services/bbs-config-file.service';
 import type { BBSConfigData } from '../../src/services/bbs-config-file.service';
-import { SystemConfigSchema } from '../../src/services/config.schemas';
+import { SystemConfigSchema, describeValidationError } from '../../src/services/config.schemas';
 import {
   isSensitiveField,
   isDatabaseOnlyField,
+  isMaskedValue,
+  MASKED_VALUE,
 } from '../../src/utils/secrets-encryption.util';
 
 /**
@@ -70,6 +72,7 @@ const NOT_ON_DISK: Record<string, string> = {
   vapid_public_key: 'Web push is a web-BBS extension; express.e has no tooltype for it. Database column.',
   vapid_private_key: 'Web push signing key; encrypted in the database, decrypted on read.',
   vapid_contact_email: 'Web push contact; a database column, not a tooltype.',
+  webhook_include_pii: 'GDPR toggle for what a webhook payload may carry; a database column, not a tooltype.',
 };
 
 describe('System Configuration field coverage', () => {
@@ -175,6 +178,86 @@ describe('System Configuration field coverage', () => {
       // see it. A shared board password that the BBS must read is not a
       // secret this app gets to keep to itself.
       expect(isSensitiveField('autoval_password')).toBe(false);
+    });
+  });
+
+  describe('the settings that only look like secrets', () => {
+    it('treats the password POLICY as configuration, not as a secret', () => {
+      // isSensitiveField matches any name containing "password", so five
+      // settings that merely describe the password rules were being encrypted
+      // into the database and served back masked. express.e reads all five
+      // out of bbsConfig.info, so the board never saw them at all.
+      expect(isSensitiveField('min_password_length')).toBe(false);
+      expect(isSensitiveField('min_password_strength')).toBe(false);
+      expect(isSensitiveField('max_password_fails')).toBe(false);
+      expect(isSensitiveField('password_security')).toBe(false);
+      expect(isSensitiveField('strict_password_policy')).toBe(false);
+
+      // The one that really is a secret still is.
+      expect(isSensitiveField('smtp_password')).toBe(true);
+    });
+
+    it('round-trips the password policy to disk', () => {
+      saveBBSConfig(root, {
+        min_password_length: 6,
+        max_password_fails: 3,
+        password_security: 'sha256',
+        strict_password_policy: true,
+      });
+
+      const reloaded = loadBBSConfig(root);
+      expect(reloaded.min_password_length).toBe(6);
+      expect(reloaded.max_password_fails).toBe(3);
+      expect(reloaded.password_security).toBe('sha256');
+      expect(reloaded.strict_password_policy).toBe(true);
+    });
+
+    it('keeps the GDPR webhook toggle out of the secret bucket', () => {
+      // "webhook" matched it, but it is a boolean about what a payload may
+      // contain, and it lives in a database column of its own.
+      expect(isSensitiveField('webhook_include_pii')).toBe(false);
+      expect(isDatabaseOnlyField('webhook_include_pii')).toBe(true);
+    });
+  });
+
+  describe('the mask the form is shown', () => {
+    it('never writes the mask back over the value it hides', () => {
+      // GET replaces every secret with "***". The form posts all of its
+      // fields back, and the only guard dropped a secret when it was EMPTY -
+      // "***" is not empty, so saving anything at all would have stored the
+      // mask as the SMTP password.
+      expect(isMaskedValue(MASKED_VALUE)).toBe(true);
+      expect(isMaskedValue('***')).toBe(true);
+      expect(isMaskedValue('a real password')).toBe(false);
+      expect(isMaskedValue('')).toBe(false);
+      expect(isMaskedValue(undefined)).toBe(false);
+      expect(isMaskedValue(7)).toBe(false);
+    });
+  });
+
+  describe('what a rejected save tells the sysop', () => {
+    it('names the fields that were rejected, not the whole issue array', () => {
+      // The live board reported "Config API error: ZodError: [" followed by
+      // the entire array as JSON. In a one-line toast that closes itself,
+      // that told a sysop nothing about which field to change.
+      const result = SystemConfigSchema.partial().safeParse({
+        min_password_length: null,
+        password_security: '***',
+      });
+      expect(result.success).toBe(false);
+
+      const described = describeValidationError((result as { error: unknown }).error);
+
+      expect(described).toContain('min_password_length');
+      expect(described).toContain('password_security');
+      expect(described).toContain('Configuration rejected');
+      // The raw JSON array is what made it unreadable.
+      expect(described).not.toContain('"code"');
+    });
+
+    it('says nothing for an error that is not a validation failure', () => {
+      expect(describeValidationError(new Error('disk is full'))).toBeNull();
+      expect(describeValidationError(undefined)).toBeNull();
     });
   });
 

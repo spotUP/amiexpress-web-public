@@ -327,3 +327,29 @@ export interface RequestContext {
   ipAddress?: string;
   userAgent?: string;
 }
+
+/**
+ * A validation failure a person can read, and paste somewhere.
+ *
+ * A ZodError's own message is the whole issue array as JSON. Shown in a
+ * toast that is one line high and closes itself, it told a sysop nothing
+ * about which field was rejected - a save failed, and the reason was
+ * technically on screen and practically unreachable.
+ */
+export function describeValidationError(error: unknown): string | null {
+  if (error === null || typeof error !== 'object') return null;
+  const issues = (error as { issues?: unknown }).issues;
+  if (!Array.isArray(issues) || issues.length === 0) return null;
+
+  const parts = issues.slice(0, 6).map((raw) => {
+    const issue = raw as { path?: unknown[]; message?: string; received?: unknown };
+    const field = Array.isArray(issue.path) && issue.path.length > 0
+      ? issue.path.join('.')
+      : 'value';
+    const detail = issue.message ?? 'is not valid';
+    return `${field}: ${detail}`;
+  });
+
+  const more = issues.length > parts.length ? ` (and ${issues.length - parts.length} more)` : '';
+  return `Configuration rejected - ${parts.join('; ')}${more}`;
+}

@@ -15,7 +15,7 @@ import type { SystemConfig } from '../../database/types';
 import { SystemConfigSchema, type RequestContext } from '../config.schemas';
 import { loadBBSConfig, saveBBSConfig } from '../bbs-config-file.service';
 import { config as appConfig } from '../../config';
-import { isSensitiveField, isDatabaseOnlyField, SENSITIVE_FIELDS } from '../../utils/secrets-encryption.util';
+import { isSensitiveField, isDatabaseOnlyField, isMaskedValue, SENSITIVE_FIELDS } from '../../utils/secrets-encryption.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -81,8 +81,19 @@ export class SystemConfigService {
     updates: Partial<SystemConfig>,
     context: RequestContext
   ): Promise<SystemConfig> {
+    // A secret the form was shown as "***" comes back as "***". Writing that
+    // would replace the secret with the mask that was hiding it, and the only
+    // guard on the way in dropped a secret when it was EMPTY - which the mask
+    // is not. Dropping it here means "leave it alone", which is what showing
+    // a mask promised.
+    const submitted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (isMaskedValue(value)) continue;
+      submitted[key] = value;
+    }
+
     // Validate input
-    const validated = SystemConfigSchema.partial().parse(updates);
+    const validated = SystemConfigSchema.partial().parse(submitted);
 
     // Get old values for audit
     const oldConfig = await this.getSystemConfig();

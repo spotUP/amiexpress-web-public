@@ -57,7 +57,36 @@ const DISK_ONLY_FIELDS = new Set<string>([
   // caller types to be auto-validated, not a credential of the sysop's, and
   // it sits in the same file as the rest of the board's configuration.
   'autoval_password',
+
+  // The password POLICY. These describe the rules a password must satisfy;
+  // none of them is a password. The substring rule below caught all five, so
+  // they were encrypted into the database and served back masked - and since
+  // the form posts what it was given straight back, "***" and null then
+  // failed validation and no System Configuration save could succeed at all.
+  //
+  // Every one has a tooltype the BBS reads, so disk is where they belong.
+  'min_password_length',
+  'min_password_strength',
+  'max_password_fails',
+  'password_expiry_days',
+  'password_security',
+  'strict_password_policy',
 ]);
+
+/** What a masked secret looks like on the way out of the API. */
+export const MASKED_VALUE = '***';
+
+/**
+ * Is this the mask standing in for a secret, rather than a value?
+ *
+ * GET replaces every secret with MASKED_VALUE so it is never exposed. The
+ * form posts all of its fields back, so without this the mask is written
+ * straight over the secret it was hiding - the only guard dropped a secret
+ * when it was EMPTY, and "***" is not empty.
+ */
+export function isMaskedValue(value: unknown): boolean {
+  return typeof value === 'string' && value === MASKED_VALUE;
+}
 
 /**
  * Fields that live in the database rather than in bbsConfig.info, but are not
@@ -73,6 +102,11 @@ const DATABASE_ONLY_FIELDS = new Set<string>([
   // there is no tooltype for these to go to.
   'vapid_public_key',
   'vapid_contact_email',
+
+  // A GDPR toggle deciding whether webhook payloads may carry personal
+  // details. "webhook" in the name matched the secret rule; it is a boolean
+  // about what a payload may contain, and it has a column of its own.
+  'webhook_include_pii',
 ]);
 
 /**
@@ -89,7 +123,10 @@ export function isDatabaseOnlyField(fieldName: string): boolean {
 export function isSensitiveField(fieldName: string): boolean {
   const lowerField = fieldName.toLowerCase();
 
-  if (DISK_ONLY_FIELDS.has(lowerField)) {
+  // Both lists name fields whose CONTENT is not secret, whatever their name
+  // looks like. They are checked before the substring rules below, which
+  // cannot tell a password from a rule about passwords.
+  if (DISK_ONLY_FIELDS.has(lowerField) || DATABASE_ONLY_FIELDS.has(lowerField)) {
     return false;
   }
   return (

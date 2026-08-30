@@ -8,7 +8,8 @@
  */
 
 import * as ToastPrimitive from '@radix-ui/react-toast';
-import { AlertTriangle, CheckCircle, Info, X, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle, Copy, Info, X, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -52,6 +53,21 @@ interface ToastProps {
 
 export function Toast({ message, type, open, onOpenChange }: ToastProps) {
   const Icon = TOAST_ICON[type];
+  const [copied, setCopied] = useState(false);
+
+  // An error is the one kind of message that has to leave the screen: it gets
+  // pasted into a bug report or a chat. A toast cannot be selected with the
+  // mouse before it closes itself, so the text was effectively unreachable.
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused; leave the label alone rather than
+      // claiming a copy that did not happen.
+    }
+  };
 
   return (
     <ToastPrimitive.Root
@@ -63,6 +79,21 @@ export function Toast({ message, type, open, onOpenChange }: ToastProps) {
       <ToastPrimitive.Description className="min-w-0 flex-1 whitespace-pre-line text-sm text-content-primary">
         {message}
       </ToastPrimitive.Description>
+      {type === 'error' && (
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={copied ? 'Error message copied' : 'Copy error message'}
+          title={copied ? 'Copied' : 'Copy error message'}
+          className="shrink-0 text-content-muted transition-colors hover:text-content-primary"
+        >
+          {copied ? (
+            <Check size={14} className="text-status-ok" aria-hidden="true" />
+          ) : (
+            <Copy size={14} aria-hidden="true" />
+          )}
+        </button>
+      )}
       <ToastPrimitive.Close
         aria-label="Dismiss"
         className="shrink-0 text-content-muted transition-colors hover:text-content-primary"
