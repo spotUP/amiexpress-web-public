@@ -155,7 +155,8 @@ export function SystemConfigPage() {
   }, [data, reset]);
 
   const onSubmit = (value: SystemConfig) => {
-    const { created_at, updated_at, ...updates } = value as any;
+    // Named only to drop them from the payload.
+    const { created_at: _created_at, updated_at: _updated_at, ...updates } = value as any;
 
     // An empty password field means "leave it alone", not "clear it": the
     // server holds these encrypted and never sends them back.

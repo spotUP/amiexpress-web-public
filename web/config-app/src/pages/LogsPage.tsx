@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Search, Trash2, Download, Terminal, Filter, Info, ExternalLink } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -59,7 +59,12 @@ export function LogsPage() {
   });
 
   const logData = data?.data as LogData | undefined;
-  const doorLogs = (doorLogsData?.data?.files || []) as DoorLogFile[];
+  // Memoised because an effect below depends on it: a fresh [] every render
+  // would re-run that effect on every render.
+  const doorLogs = useMemo(
+    () => (doorLogsData?.data?.files || []) as DoorLogFile[],
+    [doorLogsData]
+  );
 
   useEffect(() => {
     if (logType !== 'door68k') {

@@ -152,12 +152,13 @@ export function parseAnsiToHtml(text: string): string {
 
         switch (command) {
           case 'H':
-          case 'f':
+          case 'f': {
             // Cursor position
             const row = params[0] || 1;
             const col = params[1] || 1;
             placeholder = `<span class="ansi-placeholder" style="color: #888; background: #222; padding: 2px 4px; margin: 0 2px; border-radius: 2px;">[GOTO ${row},${col}]</span>`;
             break;
+          }
           case 'A':
             // Cursor up
             placeholder = `<span class="ansi-placeholder" style="color: #888; background: #222; padding: 2px 4px; margin: 0 2px; border-radius: 2px;">[UP ${params[0] || 1}]</span>`;

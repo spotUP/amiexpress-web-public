@@ -88,11 +88,16 @@ describe('the pointer follows the RUNNING door, not the last one', () => {
   });
 
   it('gives the pointer back when a door unloads', () => {
+    // Read the whole handler, not a fixed number of characters from its
+    // start: this asserted over the first 1200 and started failing when a
+    // comment was added at the top, while the release itself never moved.
     const start = terminal.indexOf("socket.on('door:unload-client'");
     expect(start).toBeGreaterThan(0);
-    const body = terminal.slice(start, start + 1200);
+    const next = terminal.indexOf("socket.on('", start + 1);
+    const body = terminal.slice(start, next > 0 ? next : undefined);
 
     expect(body).toMatch(/applyPointerCapture\(false\)/);
+    expect(body).toMatch(/capturePointer\.current\s*=\s*false/);
   });
 
   it('does NOT blanket-clear the screen when a door exits', () => {

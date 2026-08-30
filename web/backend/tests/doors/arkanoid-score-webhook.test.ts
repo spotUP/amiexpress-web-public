@@ -12,6 +12,23 @@
  * the second argument here mirrors production exactly.
  */
 
+// jest.mock('fs') below auto-mocks the WHOLE 'fs' module for this file,
+// including the copy 'bindings'/'better-sqlite3' use to find their native
+// binary. tests/setup.ts opens a REAL sqlite database in a global beforeAll
+// unless SKIP_DB_INIT=1, and with 'fs' mocked out from under it that open
+// fails with "Could not locate the bindings file" - nothing to do with these
+// tests, none of which touch the database.
+//
+// Saved and restored rather than just set: a Jest worker runs several test
+// FILES in one process and process.env is not reset between them, so setting
+// it unconditionally would skip the real DB init of whichever file runs next.
+const __savedSkipDbInit = process.env.SKIP_DB_INIT;
+process.env.SKIP_DB_INIT = '1';
+afterAll(() => {
+  if (__savedSkipDbInit === undefined) delete process.env.SKIP_DB_INIT;
+  else process.env.SKIP_DB_INIT = __savedSkipDbInit;
+});
+
 jest.mock('fs');
 
 import * as fs from 'fs';

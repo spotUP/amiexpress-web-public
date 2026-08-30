@@ -48,7 +48,11 @@ describe('DOORMAN repoDataSource: resolveDoorRepoMode', () => {
   });
 
   it('consumer: DOOR_REPO_URL unset defaults to DEFAULT_DOOR_REPO_URL', () => {
-    expect(resolveDoorRepoMode({})).toEqual({ kind: 'consumer', url: DEFAULT_DOOR_REPO_URL });
+    expect(resolveDoorRepoMode({})).toEqual({
+      kind: 'consumer',
+      url: DEFAULT_DOOR_REPO_URL,
+      learnKey: null,
+    });
     expect(DEFAULT_DOOR_REPO_URL).toBe('https://bbs.uprough.net');
   });
 
@@ -56,7 +60,29 @@ describe('DOORMAN repoDataSource: resolveDoorRepoMode', () => {
     expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'https://mirror.example' })).toEqual({
       kind: 'consumer',
       url: 'https://mirror.example',
+      learnKey: null,
     });
+  });
+
+  // The owner-mode learn key rides along on consumer mode: it is what lets a
+  // node identify itself to the repo it is learning from. These assertions
+  // exist because the field was added to the returned object with nothing
+  // covering it, which is how five of these tests came to be stale.
+  it('consumer: carries DOORREPO_LEARN_KEY when one is set', () => {
+    expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'https://mirror.example', DOORREPO_LEARN_KEY: 'abc123' })).toEqual({
+      kind: 'consumer',
+      url: 'https://mirror.example',
+      learnKey: 'abc123',
+    });
+  });
+
+  it('consumer: treats a blank learn key as no key at all', () => {
+    expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'https://mirror.example', DOORREPO_LEARN_KEY: '   ' }).learnKey ?? null).toBeNull();
+  });
+
+  it('owner and disabled modes carry no learn key', () => {
+    expect(resolveDoorRepoMode({ DOOR_REPO_ROLE: 'owner', DOORREPO_LEARN_KEY: 'abc123' })).toEqual({ kind: 'owner' });
+    expect(resolveDoorRepoMode({ DOOR_REPO_URL: '', DOORREPO_LEARN_KEY: 'abc123' })).toEqual({ kind: 'disabled' });
   });
 });
 

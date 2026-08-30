@@ -110,14 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUserFromToken]);
 
   const login = async (username: string, password: string) => {
-    try {
-      const data = await apiClient.login(username, password);
-      if (data?.user) {
-        setUser(data.user);
-        persistUser(data.user);
-      }
-    } catch (error) {
-      throw error;
+    // No try/catch: it only rethrew. The caller (LoginPage) shows the message.
+    const data = await apiClient.login(username, password);
+    if (data?.user) {
+      setUser(data.user);
+      persistUser(data.user);
     }
   };
 

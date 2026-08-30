@@ -132,7 +132,12 @@ describe('arkanoid ball physics', () => {
       expect(b.y).toBeGreaterThan(p.y - 2);
     });
 
-    it('sticky paddle catches the ball: deactivates it and consumes the sticky flag', () => {
+    it('sticky paddle catches the ball and stays sticky', () => {
+      // The paddle used to clear its own sticky flag on the first catch, so
+      // the pickup was worth exactly one ball - reported as "magnetic ball
+      // only works once, they should be active until the next pickup or
+      // death". It is cleared by losing a life or by picking something else
+      // up, not by catching.
       const p = paddle({ sticky: true });
       const b = ball({ x: 40, y: 19.5, vx: 0, vy: 1, speed: 0.7 });
 
@@ -140,7 +145,7 @@ describe('arkanoid ball physics', () => {
 
       expect(events.map((e) => e.type)).toContain('paddleCatch');
       expect(b.active).toBe(false);
-      expect(p.sticky).toBe(false);
+      expect(p.sticky).toBe(true);
     });
 
     it('hits only the first overlapping brick per substep', () => {

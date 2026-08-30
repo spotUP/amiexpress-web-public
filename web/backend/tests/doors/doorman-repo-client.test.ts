@@ -421,6 +421,7 @@ describe('resolveDoorRepoMode base URL normalization', () => {
     expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test/' })).toEqual({
       kind: 'consumer',
       url: 'http://repo.example.test',
+      learnKey: null,
     });
   });
 
@@ -428,6 +429,7 @@ describe('resolveDoorRepoMode base URL normalization', () => {
     expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test///' })).toEqual({
       kind: 'consumer',
       url: 'http://repo.example.test',
+      learnKey: null,
     });
   });
 
@@ -435,6 +437,7 @@ describe('resolveDoorRepoMode base URL normalization', () => {
     expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test' })).toEqual({
       kind: 'consumer',
       url: 'http://repo.example.test',
+      learnKey: null,
     });
   });
 });

@@ -13,7 +13,7 @@
  * first), and a level that does not exist yet can be created from an existing
  * one - a .info is a binary Amiga icon, so a new level starts as a copy.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -33,7 +33,9 @@ export function SecurityPage() {
     queryFn: () => apiClient.getAcsLevels(),
   });
 
-  const levels: number[] = levelsQuery.data?.data?.levels ?? [];
+  // Memoised: the effect below depends on it, and a fresh [] each render
+  // would re-run it every time.
+  const levels: number[] = useMemo(() => levelsQuery.data?.data?.levels ?? [], [levelsQuery.data]);
   const permissions: string[] = levelsQuery.data?.data?.permissions ?? [];
 
   // Select the first real level once we know what exists, rather than

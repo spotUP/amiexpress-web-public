@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Copy, Save, Eye, Users, Activity, Clock } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -70,7 +70,9 @@ export function SessionLogsPage() {
     }
   };
 
-  const sessions = (sessionsData as any)?.sessions || [];
+  // Memoised: the auto-select effect below depends on it, and a fresh []
+  // each render would re-run it every time.
+  const sessions = useMemo(() => (sessionsData as any)?.sessions || [], [sessionsData]);
   const stats = (statsData as any)?.stats;
   const sessionLog = (logData as any)?.log;
 

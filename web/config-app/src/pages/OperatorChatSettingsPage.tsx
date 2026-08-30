@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { MessageSquare, Bot, Bell, Clock, Shield, Webhook, BellRing, Smartphone, AlertCircle, CheckCircle, Key, RefreshCw, Save, Eye, EyeOff, Server } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
 interface OperatorChatConfig {
@@ -79,8 +79,13 @@ export function OperatorChatSettingsPage() {
     },
   });
 
-  // Auto-save with debounce (500ms delay)
-  const autoSave = () => {
+  // Auto-save with debounce (500ms delay).
+  //
+  // useCallback so the watch subscription below can depend on it honestly:
+  // the effect ran once and closed over the first render's autoSave, which
+  // happened to work only because everything it touches is a ref or a stable
+  // mutation object. Naming the dependency keeps it that way.
+  const autoSave = useCallback(() => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
@@ -89,7 +94,7 @@ export function OperatorChatSettingsPage() {
       const currentValues = getValues();
       updateMutation.mutate(currentValues);
     }, 500);
-  };
+  }, [getValues, updateMutation]);
 
   // Watch all fields and trigger auto-save
   const quietHoursEnabled = watch('quietHours.enabled');
@@ -205,7 +210,7 @@ export function OperatorChatSettingsPage() {
       autoSave();
     });
     return () => subscription.unsubscribe();
-  }, [watch]);
+  }, [watch, autoSave]);
 
   // Cleanup timeout on unmount
   useEffect(() => {

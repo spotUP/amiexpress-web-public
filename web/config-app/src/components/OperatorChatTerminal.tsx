@@ -32,6 +32,9 @@ export function OperatorChatTerminal({
   onEndChat,
   onKeystroke,
 }: OperatorChatTerminalProps) {
+  // Always the latest callback, without rebuilding the terminal.
+  const onKeystrokeRef = useRef(onKeystroke);
+  onKeystrokeRef.current = onKeystroke;
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -156,8 +159,8 @@ export function OperatorChatTerminal({
         }
 
         // Send Enter keystroke for real-time transmission
-        if (onKeystroke) {
-          onKeystroke('Enter');
+        if (onKeystrokeRef.current) {
+          onKeystrokeRef.current('Enter');
         }
 
         // Update display
@@ -170,8 +173,8 @@ export function OperatorChatTerminal({
         if (inputBufferRef.current.length > 0) {
           inputBufferRef.current = inputBufferRef.current.slice(0, -1);
           // Send Backspace keystroke for real-time transmission
-          if (onKeystroke) {
-            onKeystroke('Backspace');
+          if (onKeystrokeRef.current) {
+            onKeystrokeRef.current('Backspace');
           }
           updateTypingPreview(terminal, lastUserTypingRef.current, inputBufferRef.current);
         }
@@ -191,9 +194,9 @@ export function OperatorChatTerminal({
       // Handle printable characters (including paste - multiple chars at once)
       inputBufferRef.current += data;
       // Send keystrokes for real-time transmission (each character)
-      if (onKeystroke) {
+      if (onKeystrokeRef.current) {
         for (const char of data) {
-          onKeystroke(char);
+          onKeystrokeRef.current(char);
         }
       }
       updateTypingPreview(terminal, lastUserTypingRef.current, inputBufferRef.current);
@@ -210,6 +213,9 @@ export function OperatorChatTerminal({
       window.removeEventListener('resize', handleResize);
       terminal.dispose();
     };
+    // onKeystroke is deliberately not a dependency: it is read through
+    // onKeystrokeRef, because rebuilding the terminal on every parent render
+    // would discard the conversation on screen.
   }, [onSendMessage, onEndChat, updateTypingPreview]);
 
   // Handle new messages

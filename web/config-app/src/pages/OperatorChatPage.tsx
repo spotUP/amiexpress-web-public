@@ -38,6 +38,14 @@ export function OperatorChatPage() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [pendingPages, setPendingPages] = useState<PageRequest[]>([]);
   const [activeChat, setActiveChat] = useState<PageRequest | null>(null);
+  /**
+   * The socket handlers below are registered once, so reading `activeChat`
+   * inside them saw its value at mount - null - for the life of the page.
+   * A chat the caller ended stayed on screen, and typing status from the
+   * caller never arrived. The ref is what those handlers read.
+   */
+  const activeChatRef = useRef<PageRequest | null>(null);
+  activeChatRef.current = activeChat;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -152,21 +160,21 @@ export function OperatorChatPage() {
     });
 
     socketInstance.on('operator:typing-status', ({ pageId, senderType, isTyping: typing }: { pageId: string; senderType: string; isTyping: boolean }) => {
-      if (activeChat?.id === pageId && senderType === 'user') {
+      if (activeChatRef.current?.id === pageId && senderType === 'user') {
         setIsTyping(typing);
       }
     });
 
     // Real-time user typing (char-by-char like livechat)
     socketInstance.on('operator:user-typing', ({ pageId, buffer }: { pageId: string; buffer: string }) => {
-      if (activeChat?.id === pageId) {
+      if (activeChatRef.current?.id === pageId) {
         setUserTypingBuffer(buffer);
       }
     });
 
     socketInstance.on('operator:chat-ended', ({ pageId }: { pageId: string }) => {
       console.log('[Operator Chat] Chat ended:', pageId);
-      if (activeChat?.id === pageId) {
+      if (activeChatRef.current?.id === pageId) {
         setActiveChat(null);
         setMessages([]);
       }
