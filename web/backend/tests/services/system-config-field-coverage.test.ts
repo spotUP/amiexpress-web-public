@@ -41,14 +41,21 @@ import {
   isDatabaseOnlyField,
 } from '../../src/utils/secrets-encryption.util';
 
-const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
-const FIXTURE = path.join(REPO_ROOT, 'bbsConfig.info');
-
+/**
+ * An empty BBS root - deliberately with no bbsConfig.info in it.
+ *
+ * The obvious fixture is the repository's own bbsConfig.info, which is what
+ * the round-trip suite beside this one copies. That file is gitignored: it is
+ * a real board's configuration, so it exists only on a machine that runs one,
+ * and a test that needs it cannot pass in a clean checkout.
+ *
+ * Nothing here needs the icon. saveBBSConfig writes bbsConfig.info.txt on its
+ * own when there is no icon to update, loadBBSConfig applies that file after
+ * the icon, and it is the one this BBS actually reads - so the whole round
+ * trip these tests are about happens in the text companion either way.
+ */
 function makeRoot(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bbsconfig-coverage-'));
-  // Binary copy: the .info carries high-bit bytes a text round trip destroys.
-  fs.copyFileSync(FIXTURE, path.join(dir, 'bbsConfig.info'));
-  return dir;
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'bbsconfig-coverage-'));
 }
 
 /**
