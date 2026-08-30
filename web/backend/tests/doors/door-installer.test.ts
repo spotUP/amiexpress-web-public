@@ -14,6 +14,15 @@ jest.mock('../../src/doors/amigaDoorManager', () => ({
   getAmigaDoorManager: jest.fn(),
 }));
 
+const trackedFiles: Array<{ command: string; entries: any[] }> = [];
+const recordedInstalls: any[] = [];
+jest.mock('../../src/database', () => ({
+  db: { trackDoorFiles: jest.fn((command: string, entries: any[]) => { trackedFiles.push({ command, entries }); }) },
+}));
+jest.mock('../../src/doors/door-installs.repository', () => ({
+  recordInstall: jest.fn((entry: any) => { recordedInstalls.push(entry); }),
+}));
+
 import { DoorInstaller } from '../../src/doors/door-installer';
 import { getExtractorForFile } from '../../src/utils/archive-extractor';
 
@@ -46,10 +55,34 @@ describe('DoorInstaller — TypeScript door', () => {
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'door-install-'));
     installer = new DoorInstaller(tmpRoot);
+    trackedFiles.length = 0;
+    recordedInstalls.length = 0;
   });
 
   afterEach(() => {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  // Finding: DoorInstaller.install() is the fourth path DOORMAN's [U]pload
+  // key reaches, and it used to record nothing in either table — the exact
+  // failure this branch exists to fix, reached through a different door.
+  test('records the install in both door_installs and door_installed_files', async () => {
+    const pkg = { name: 'mygame', bbsCommand: 'MYGAME', description: 'A game', main: 'dist/index.js' };
+    stubExtractor(makeZipWithPackage(pkg));
+
+    const result = await installer.install('/fake/archives/mygame.zip');
+
+    expect(result.success).toBe(true);
+    expect(recordedInstalls).toHaveLength(1);
+    expect(recordedInstalls[0]).toMatchObject({
+      command: 'MYGAME',
+      archive_name: 'mygame.zip',
+      install_dir: path.join('Doors', 'mygame'),
+    });
+    expect(trackedFiles).toHaveLength(1);
+    expect(trackedFiles[0].command).toBe('MYGAME');
+    expect(trackedFiles[0].entries.map((e: any) => e.filePath))
+      .toContain(path.join('Commands', 'BBSCmd', 'MYGAME.info'));
   });
 
   test('installs a zip with bbsCommand in package.json', async () => {
@@ -136,10 +169,42 @@ describe('DoorInstaller — 68K door', () => {
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'door-install-68k-'));
     installer = new DoorInstaller(tmpRoot);
+    trackedFiles.length = 0;
+    recordedInstalls.length = 0;
   });
 
   afterEach(() => {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('records the install in both door_installs and door_installed_files', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 200,
+          data: Buffer.from(
+            'BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online\nACCESS=0',
+          ),
+        },
+      ],
+    });
+
+    const result = await installer.install('/fake/archives/who.lha');
+
+    expect(result.success).toBe(true);
+    expect(recordedInstalls).toHaveLength(1);
+    expect(recordedInstalls[0]).toMatchObject({
+      command: 'WHO',
+      archive_name: 'who.lha',
+      install_dir: path.join('Doors', 'who'),
+      door_type: 'XIM',
+    });
+    expect(trackedFiles).toHaveLength(1);
+    expect(trackedFiles[0].command).toBe('WHO');
+    expect(trackedFiles[0].entries.map((e: any) => e.filePath))
+      .toContain(path.join('Doors', 'who', 'WHO'));
   });
 
   test('installs a 68K door from LHA entries', async () => {
