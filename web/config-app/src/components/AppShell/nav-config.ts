@@ -6,11 +6,12 @@
  * destinations, grouped by what a sysop is actually doing, and landing on the
  * Overview instead.
  *
- * Pages are NOT merged here. The plan merges Nodes with Node Control, the four
- * tooltype editors into one file tree, and the five lookup tables into tabs -
- * each of those is its own phase with its own verification, because every one
- * of them is the only route to a piece of BBS configuration. Grouping first
- * means navigation improves without a single data path moving.
+ * Several destinations are merges: Nodes carries the live view and the
+ * configuration, Conferences carries the file areas, Configuration Files
+ * carries all four tooltype editors, Lookup Tables carries five small lists.
+ * Each merged screen puts the original pages behind tabs without touching
+ * what they write, and every path they used to live at still resolves - see
+ * routes/legacy-routes.ts.
  */
 
 import {
@@ -18,25 +19,16 @@ import {
   ArrowUpDown,
   Boxes,
   DoorOpen,
-  Download,
-  Eye,
-  FileCheck,
   FileText,
   FolderOpen,
   Gauge,
   Globe,
-  HardDrive,
   History,
-  Languages,
   LayoutDashboard,
   MessageSquare,
   Monitor,
-  Network,
-  Rocket,
-  Server,
   Settings,
   Shield,
-  SlidersHorizontal,
   Users,
   Zap,
 } from 'lucide-react';
@@ -66,10 +58,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '', label: 'Overview', icon: LayoutDashboard, description: 'The state of the board at a glance' },
       { path: 'activity', label: 'Activity', icon: Zap, description: 'Live feed of logons, doors and transfers' },
-      { path: 'node-control', label: 'Node Control', icon: Monitor, description: 'Live nodes and supervisor commands' },
-      { path: 'nodes', label: 'Node Configuration', icon: Server, description: 'Per-node settings written to disk' },
+      { path: 'nodes', label: 'Nodes', icon: Monitor, description: 'Live nodes, supervisor commands and per-node settings' },
       { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, description: 'Answer a caller paging the sysop' },
-      { path: 'operator-chat-settings', label: 'Chat Settings', icon: Settings, description: 'Paging hours, alerts and away messages' },
     ],
   },
   {
@@ -82,8 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Content',
     items: [
-      { path: 'conferences', label: 'Conferences', icon: MessageSquare, description: 'Message and file areas' },
-      { path: 'drives', label: 'File Areas', icon: HardDrive, description: 'Upload and download paths per conference' },
+      { path: 'conferences', label: 'Conferences', icon: MessageSquare, description: 'Message areas, and the file paths that belong to them' },
       { path: 'doors', label: 'Doors', icon: DoorOpen, description: 'External programs on the command menu' },
       { path: 'globalwall', label: 'Global Wall', icon: Globe, description: 'Messages left for everyone' },
     ],
@@ -92,23 +81,9 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'System',
     items: [
       { path: 'system', label: 'Configuration', icon: Settings, description: 'bbsConfig.info, section by section' },
-      { path: 'system-files', label: 'Configuration Files', icon: FolderOpen, description: 'Tooltype editor over the system .info files' },
-      { path: 'tooltypes', label: 'Tooltype Editor', icon: SlidersHorizontal, description: 'Any .info file, tooltype by tooltype, with comment toggles' },
-      { path: 'amixnet', label: 'AmiXnet Network', icon: Network, description: 'Network node and routing files' },
-      { path: 'batches', label: 'Batch Editor', icon: FileText, description: 'batch*.info command scripts' },
-      { path: 'health', label: 'Health Check', icon: Gauge, description: 'Filesystem and configuration audit' },
-      { path: 'deployment', label: 'Deployment', icon: Rocket, description: 'Build, version and container state' },
-    ],
-  },
-  {
-    title: 'Lookup Tables',
-    collapsedByDefault: true,
-    items: [
-      { path: 'computers', label: 'Computers', icon: Boxes, description: 'ComputerList.info' },
-      { path: 'screen-types', label: 'Screen Types', icon: Eye, description: 'Terminal capabilities offered at login' },
-      { path: 'languages', label: 'Languages', icon: Languages, description: 'Language sets available to callers' },
-      { path: 'protocols', label: 'Transfer Protocols', icon: Download, description: 'Protocols/ transfer definitions' },
-      { path: 'file-checkers', label: 'File Checkers', icon: FileCheck, description: 'Archive validation commands' },
+      { path: 'config-files', label: 'Configuration Files', icon: FolderOpen, description: 'System, AmiXnet, batch and any other .info file' },
+      { path: 'lookup-tables', label: 'Lookup Tables', icon: Boxes, description: 'Computers, screen types, languages, protocols and file checkers' },
+      { path: 'health', label: 'Health and Deployment', icon: Gauge, description: 'Filesystem audit, build and container state' },
     ],
   },
   {

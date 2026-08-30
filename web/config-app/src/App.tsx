@@ -3,42 +3,33 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { AppShell } from './components/AppShell/AppShell';
 import { SkeletonRows } from './components/ui/states';
+import { LEGACY_ROUTES } from './routes/legacy-routes';
 import { LoginPage } from './pages/LoginPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
-import { NodesPage } from './pages/NodesPage';
-import { ConferencesPage } from './pages/ConferencesPage';
 import { DoorsPage } from './pages/DoorsPage';
 import { GlobalWallPage } from './pages/GlobalWallPage';
-import { LanguagesPage } from './pages/LanguagesPage';
-import { ProtocolsPage } from './pages/ProtocolsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { SecurityPage } from './pages/SecurityPage';
-import { DrivesPage } from './pages/DrivesPage';
-import { ComputersPage } from './pages/ComputersPage';
-import { ScreenTypesPage } from './pages/ScreenTypesPage';
-import { FileCheckersPage } from './pages/FileCheckersPage';
 import { UsersPage } from './pages/UsersPage';
-import { DeploymentPage } from './pages/DeploymentPage';
 import { LogsPage } from './pages/LogsPage';
-import { BatchEditorPage } from './pages/BatchEditorPage';
-import { HealthCheckPage } from './pages/HealthCheckPage';
 import { StatisticsPage } from './pages/StatisticsPage';
-import { NodeControlPage } from './pages/NodeControlPage';
-import { OperatorChatSettingsPage } from './pages/OperatorChatSettingsPage';
-import { AmiXnetPage } from './pages/AmiXnetPage';
-import { SystemFilesPage } from './pages/SystemFilesPage';
-import { InfoEditorPage } from './pages/InfoEditorPage';
+import {
+  ConferencesWorkspace,
+  ConfigFilesWorkspace,
+  HealthWorkspace,
+  LookupTablesWorkspace,
+  NodesWorkspace,
+  OperatorChatWorkspace,
+} from './pages/workspaces';
 
 /**
- * The heavy leaves. Operator Chat and Session Logs each pull in xterm, and
- * Import and Export pulls in the upload and validation components; none of
- * them belong in the bundle a sysop downloads to look at the Overview.
+ * The heavy leaves. Session Logs pulls in xterm and Import and Export pulls in
+ * the upload and validation components; neither belongs in the bundle a sysop
+ * downloads to look at the Overview. Operator Chat is lazy as well, inside its
+ * own workspace.
  */
-const OperatorChatPage = lazy(() =>
-  import('./pages/OperatorChatPage').then((module) => ({ default: module.OperatorChatPage }))
-);
 const SessionLogsPage = lazy(() =>
   import('./pages/SessionLogsPage').then((module) => ({ default: module.SessionLogsPage }))
 );
@@ -89,34 +80,46 @@ function App() {
         }
       >
         <Route index element={<OverviewPage />} />
-        <Route path="system" element={<SystemConfigPage />} />
-        <Route path="health" element={<HealthCheckPage />} />
-        <Route path="statistics" element={<StatisticsPage />} />
+
+        {/* Live */}
         <Route path="activity" element={<ActivityPage />} />
-        <Route path="node-control" element={<NodeControlPage />} />
-        <Route path="nodes" element={<NodesPage />} />
+        <Route path="nodes" element={<NodesWorkspace />} />
+        <Route path="operator-chat" element={<OperatorChatWorkspace />} />
+
+        {/* People */}
         <Route path="users" element={<UsersPage />} />
-        <Route path="conferences" element={<ConferencesPage />} />
+        <Route path="security" element={<SecurityPage />} />
+
+        {/* Content */}
+        <Route path="conferences" element={<ConferencesWorkspace />} />
         <Route path="doors" element={<DoorsPage />} />
         <Route path="globalwall" element={<GlobalWallPage />} />
-        <Route path="languages" element={<LanguagesPage />} />
-        <Route path="protocols" element={<ProtocolsPage />} />
-        <Route path="security" element={<SecurityPage />} />
-        <Route path="drives" element={<DrivesPage />} />
-        <Route path="computers" element={<ComputersPage />} />
-        <Route path="screen-types" element={<ScreenTypesPage />} />
-        <Route path="file-checkers" element={<FileCheckersPage />} />
-        <Route path="deployment" element={<DeploymentPage />} />
-        <Route path="import-export" element={<LazyPage><ImportExportPage /></LazyPage>} />
-        <Route path="audit" element={<AuditLogPage />} />
+
+        {/* System */}
+        <Route path="system" element={<SystemConfigPage />} />
+        <Route path="config-files" element={<ConfigFilesWorkspace />} />
+        <Route path="lookup-tables" element={<LookupTablesWorkspace />} />
+        <Route path="health" element={<HealthWorkspace />} />
+
+        {/* Diagnostics */}
+        <Route path="statistics" element={<StatisticsPage />} />
         <Route path="logs" element={<LogsPage />} />
         <Route path="session-logs" element={<LazyPage><SessionLogsPage /></LazyPage>} />
-        <Route path="batches" element={<BatchEditorPage />} />
-        <Route path="operator-chat" element={<LazyPage><OperatorChatPage /></LazyPage>} />
-        <Route path="operator-chat-settings" element={<OperatorChatSettingsPage />} />
-        <Route path="amixnet" element={<AmiXnetPage />} />
-        <Route path="system-files" element={<SystemFilesPage />} />
-        <Route path="tooltypes" element={<InfoEditorPage />} />
+        <Route path="audit" element={<AuditLogPage />} />
+        <Route path="import-export" element={<LazyPage><ImportExportPage /></LazyPage>} />
+
+        {/*
+          Permanent redirects for every destination folded into a tab, from one
+          table so the router and the test read the same list.
+        */}
+        {LEGACY_ROUTES.map((route) => (
+          <Route
+            key={route.from}
+            path={route.from}
+            element={<Navigate to={`/admin/${route.to}`} replace />}
+          />
+        ))}
+
         {/* An unknown admin path lands on the Overview, not on a form. */}
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
