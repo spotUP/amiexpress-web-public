@@ -4,9 +4,10 @@
  * The admin used to open on a 1 729-line configuration form. The first screen
  * a sysop sees should be the state of the board.
  *
- * Everything here comes from endpoints that already exist, over polling only.
- * There is no socket in this phase, which is what lets the whole dashboard
- * ship without a single backend change.
+ * Every figure comes from an endpoint that already existed. The shared socket
+ * does not feed this page directly: it invalidates the query keys behind it,
+ * so a caller logging on moves these tiles without any of them subscribing to
+ * anything.
  */
 
 import { Link } from 'react-router-dom';
@@ -16,6 +17,7 @@ import {
   Gauge,
   HardDrive,
   Phone,
+  PhoneCall,
   Server,
   Upload,
   Users,
@@ -30,6 +32,7 @@ import {
 } from '../hooks/useBoardData';
 import { NODE_STATE_TONE, nodeState, nodeStateLabel } from '../lib/node-state';
 import { formatBytes, formatCount, formatMinutes, formatRelativeTime } from '../lib/format';
+import { useRealtime } from '../realtime/RealtimeProvider';
 import { StatTile } from '../components/ui/StatTile';
 import { StatusDot } from '../components/ui/StatusDot';
 import { EmptyState, ErrorPanel, SkeletonRows } from '../components/ui/states';
@@ -92,6 +95,7 @@ function PanelHeading({ title, to, linkLabel }: { title: string; to?: string; li
 }
 
 export function OverviewPage() {
+  const { pendingPages } = useRealtime();
   const nodes = useNodeStatus();
   const stats = useSystemStats();
   const health = useHealthReport();
@@ -118,7 +122,7 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <StatTile
           label="Nodes online"
           value={`${onlineNodes} / ${totalNodes}`}
@@ -148,6 +152,13 @@ export function OverviewPage() {
           loading={stats.isLoading}
         />
         <StatTile
+          label="Callers waiting"
+          value={formatCount(pendingPages)}
+          icon={PhoneCall}
+          tone={pendingPages > 0 ? 'warn' : 'neutral'}
+          footnote={pendingPages > 0 ? 'Someone is paging the sysop' : 'Nobody is paging'}
+        />
+        <StatTile
           label="Health"
           value={report ? `${report.totalIssues}` : '-'}
           icon={Gauge}
@@ -158,7 +169,7 @@ export function OverviewPage() {
       </section>
 
       <section>
-        <PanelHeading title="Nodes" to="/admin/node-control" linkLabel="Node Control" />
+        <PanelHeading title="Nodes" to="/admin/nodes?tab=live" linkLabel="Node control" />
         {nodes.isError ? (
           <ErrorPanel
             message={nodes.error instanceof Error ? nodes.error.message : 'Node status could not be read'}
