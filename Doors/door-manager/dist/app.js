@@ -1032,6 +1032,22 @@ class RepoView extends ViewManager_1.BaseView {
         this.keys.release();
     }
     onEsc() { this.vm.pop(); } // returns to installed list
+    /**
+     * Redraw the list AFTER the door registry has actually reloaded.
+     *
+     * The uninstall used to fire `void refreshDoorRegistry()` and redraw in the
+     * same tick, so the list was rebuilt from the still-cached registry and the
+     * door that had just been deleted was still on it - reported as "when I
+     * delete a door in doorman the list doesn't update".
+     */
+    async refreshAfterRegistry() {
+        try {
+            await (0, ViewManager_1.refreshDoorRegistry)();
+        }
+        finally {
+            this.refresh(this.layout.listSelected);
+        }
+    }
     doInstallUninstall() {
         const e = this.entry();
         if (!e)
@@ -1062,17 +1078,15 @@ class RepoView extends ViewManager_1.BaseView {
                     // deleting the wrong one is not.
                     this.setStatus(`Kept the files: ${decision.reason}. Removed ${removed.join(', ') || 'nothing'}.`, 'yellow', 8000);
                     getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
-                    void (0, ViewManager_1.refreshDoorRegistry)();
-                    this.refresh(this.layout.listSelected);
+                    void this.refreshAfterRegistry();
                     return;
                 }
                 // door_installs (Task 5) is keyed by command -- installed_as is
                 // the command this door was installed as; archive_name is only a
                 // fallback for a stale row where installed_as was never set.
                 getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
-                void (0, ViewManager_1.refreshDoorRegistry)(); // doors list is boot-cached; drop the entry now
                 this.setStatus(`Uninstalled ${e.installed_as}: removed ${removed.join(', ')}`, 'green', 6000);
-                this.refresh(this.layout.listSelected);
+                void this.refreshAfterRegistry();
             }));
         }
         else if (this.repoMode.kind === 'consumer') {
