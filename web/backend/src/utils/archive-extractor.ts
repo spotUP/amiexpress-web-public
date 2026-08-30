@@ -207,11 +207,17 @@ export async function getExtractorForFile(filepath: string): Promise<IArchiveExt
       const { ZipExtractor } = await import('./extractors/zip-extractor');
       return new ZipExtractor();
     case 'lha':
+    case 'lzh':
+      // LZH and LHA are the same archive format (two names for the same
+      // container). Route both through the pure-JS LhaExtractor. A separate
+      // LzhExtractor used to exist here but it parsed via lzh-parser (which
+      // threw a Buffer offset-range error on real archives) and extracted by
+      // shelling out to a system `lha` binary - the exact native-CLI
+      // dependency this project's portable extractor factory was built to
+      // remove (see Doors/door-manager/app.ts). It has been deleted; nothing
+      // else referenced it.
       const { LhaExtractor } = await import('./extractors/lha-extractor');
       return new LhaExtractor();
-    case 'lzh':
-      const { LzhExtractor } = await import('./extractors/lzh-extractor');
-      return new LzhExtractor();
     case 'tar':
     case 'tar.gz':
       const { TarExtractor } = await import('./extractors/tar-extractor');

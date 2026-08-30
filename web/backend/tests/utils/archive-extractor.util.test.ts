@@ -50,15 +50,6 @@ jest.mock('../../src/utils/extractors/lha-extractor', () => ({
   })),
 }));
 
-jest.mock('../../src/utils/extractors/lzh-extractor', () => ({
-  LzhExtractor: jest.fn().mockImplementation(() => ({
-    listFiles: jest.fn(),
-    extractFile: jest.fn(),
-    getEntries: jest.fn(),
-    extractFileDiz: jest.fn(),
-  })),
-}));
-
 jest.mock('../../src/utils/extractors/tar-extractor', () => ({
   TarExtractor: jest.fn().mockImplementation(() => ({
     listFiles: jest.fn(),
@@ -482,7 +473,7 @@ describe('Archive Extractor Utility', () => {
       expect(extractor).not.toBeNull();
     });
 
-    it('should return LzhExtractor for .lzh files', async () => {
+    it('should return LhaExtractor for .lzh files (LZH and LHA are the same format)', async () => {
       const extractor = await getExtractorForFile('/path/file.lzh');
 
       expect(extractor).not.toBeNull();
