@@ -45,6 +45,7 @@ exports.installConsumerDoor = installConsumerDoor;
 exports.createApp = createApp;
 const path = __importStar(require("path"));
 const safe_install_dir_1 = require("./safe-install-dir");
+const action_log_1 = require("./action-log");
 const install_core_1 = require("./install-core");
 // Re-exported: the install core moved to its own module when app.ts passed
 // the 2000-line ceiling, and the tests import these from here.
@@ -1059,24 +1060,36 @@ class RepoView extends ViewManager_1.BaseView {
                 // board - install_dir is written as `Doors/${command}`, so a record
                 // with no command gives `Doors/`, and a recursive force-delete of
                 // that takes every door with it, DOORMAN included.
+                const log = new action_log_1.ActionLog(`Uninstalling ${e.installed_as}`);
                 const removed = [];
                 const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
                 const infoPath = path.join(bbsCmdDir, `${e.installed_as}.info`);
                 if (fs.existsSync(infoPath)) {
                     fs.unlinkSync(infoPath);
                     removed.push(path.relative(PROJECT_ROOT, infoPath));
+                    log.ok(`removed ${path.relative(PROJECT_ROOT, infoPath)}`);
+                }
+                else {
+                    log.skip(`no ${path.relative(PROJECT_ROOT, infoPath)} to remove`);
                 }
                 const decision = (0, safe_install_dir_1.resolveDoorInstallDir)(PROJECT_ROOT, e.install_dir);
                 if ((0, safe_install_dir_1.isSafeToDelete)(decision)) {
                     if (fs.existsSync(decision.path)) {
                         fs.rmSync(decision.path, { recursive: true, force: true });
                         removed.push(path.relative(PROJECT_ROOT, decision.path) + '/');
+                        log.ok(`removed ${path.relative(PROJECT_ROOT, decision.path)}/`);
+                    }
+                    else {
+                        log.skip(`${path.relative(PROJECT_ROOT, decision.path)}/ was not there`);
                     }
                 }
                 else {
                     // Refuse and say so. Leaving a directory behind is recoverable;
                     // deleting the wrong one is not.
-                    this.setStatus(`Kept the files: ${decision.reason}. Removed ${removed.join(', ') || 'nothing'}.`, 'yellow', 8000);
+                    log.fail(`kept the files: ${decision.reason}`);
+                    this.setStatus(`Kept the files: ${decision.reason}`, 'yellow', 8000);
+                    this.layout.setInfo(log.render());
+                    this.layout.render();
                     getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
                     void this.refreshAfterRegistry();
                     return;
@@ -1085,7 +1098,10 @@ class RepoView extends ViewManager_1.BaseView {
                 // the command this door was installed as; archive_name is only a
                 // fallback for a stale row where installed_as was never set.
                 getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
-                this.setStatus(`Uninstalled ${e.installed_as}: removed ${removed.join(', ')}`, 'green', 6000);
+                log.ok('dropped the install record');
+                this.setStatus(`Uninstalled ${e.installed_as}: ${log.summary()}`, 'green', 6000);
+                this.layout.setInfo(log.render());
+                this.layout.render();
                 void this.refreshAfterRegistry();
             }));
         }
