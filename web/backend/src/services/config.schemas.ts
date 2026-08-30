@@ -115,7 +115,30 @@ export const SystemConfigSchema = z.object({
   // Push Notifications (VAPID)
   vapid_public_key: z.string().max(500).optional(),
   vapid_private_key: z.string().max(500).optional(),
-  vapid_contact_email: z.string().email().max(200).optional().or(z.literal(''))
+  vapid_contact_email: z.string().email().max(200).optional().or(z.literal('')),
+
+  // Mail notifications to the sysop. The form has offered these since it was
+  // written; without them here zod stripped the keys before the writer saw
+  // them, so the checkboxes could not be set at all.
+  // express.e:6716 reads MAIL_ON_LOGON with checkToolTypeExists.
+  mail_on_logon: z.boolean().optional(),
+  mail_on_logoff: z.boolean().optional(),
+  mail_on_new_user: z.boolean().optional(),
+  mail_on_upload: z.boolean().optional(),
+  mail_on_sysop_page: z.boolean().optional(),
+  mail_on_sysop_comment: z.boolean().optional(),
+  mail_on_pwd_fail: z.boolean().optional(),
+
+  // Auto-validation — express.e:29677, :29687, :30063
+  autoval_delay: z.number().int().min(0).optional(),
+  autoval_preset: z.string().max(100).optional(),
+  autoval_password: z.string().max(200).optional(),
+
+  // Accounts, uploads and file descriptions
+  auto_deactivate_days: z.number().int().min(0).optional(),
+  local_upload_path: z.string().max(500).optional(),
+  filediz_syscmd: z.string().max(500).optional(),   // express.e:19258
+  max_desclines: z.number().int().min(1).max(100).optional()   // express.e:348
 });
 
 export const NodeConfigSchema = z.object({

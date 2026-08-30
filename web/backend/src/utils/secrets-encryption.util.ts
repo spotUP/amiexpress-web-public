@@ -34,15 +34,64 @@ export const SENSITIVE_FIELDS = [
   'api_key',
   'discord_webhook_url',
   'render_deploy_hook_url',
+  // The push signing key. config-repository.ts:1054 already decrypts it on
+  // read; nothing was encrypting it on the way in, because no substring rule
+  // matched the name.
+  'vapid_private_key',
 ] as const;
 
 export type SensitiveField = typeof SENSITIVE_FIELDS[number];
+
+/**
+ * Fields whose name looks sensitive but which the BBS itself must be able to
+ * read, so they belong in bbsConfig.info in plain text.
+ *
+ * Encrypting one of these puts it somewhere express.e cannot look, and the
+ * feature simply stops working with nothing to show for it. Add to this list
+ * only when the Amiga side reads the value directly; anything the web backend
+ * alone consumes should stay encrypted.
+ */
+const DISK_ONLY_FIELDS = new Set<string>([
+  // express.e:30063 reads AUTOVAL_PASSWORD out of bbsConfig.info (falling back
+  // to it from the node icon at :30062). It is a shared board password a
+  // caller types to be auto-validated, not a credential of the sysop's, and
+  // it sits in the same file as the rest of the board's configuration.
+  'autoval_password',
+]);
+
+/**
+ * Fields that live in the database rather than in bbsConfig.info, but are not
+ * secret and must NOT be encrypted.
+ *
+ * "Is it a secret" and "where does it live" are different questions, and
+ * conflating them lost the VAPID push settings: they are not sensitive by
+ * name, so they were routed to the disk writer, which has no tooltype for
+ * them and dropped them - while their columns sat empty in system_config.
+ */
+const DATABASE_ONLY_FIELDS = new Set<string>([
+  // Web push is a web-BBS extension. express.e knows nothing about it, so
+  // there is no tooltype for these to go to.
+  'vapid_public_key',
+  'vapid_contact_email',
+]);
+
+/**
+ * Does this field belong in the database rather than on disk, without being a
+ * secret? Sensitive fields are database-resident too; this covers the rest.
+ */
+export function isDatabaseOnlyField(fieldName: string): boolean {
+  return DATABASE_ONLY_FIELDS.has(fieldName.toLowerCase());
+}
 
 /**
  * Check if a field name is sensitive and should be encrypted
  */
 export function isSensitiveField(fieldName: string): boolean {
   const lowerField = fieldName.toLowerCase();
+
+  if (DISK_ONLY_FIELDS.has(lowerField)) {
+    return false;
+  }
   return (
     lowerField.includes('password') ||
     lowerField.includes('secret') ||

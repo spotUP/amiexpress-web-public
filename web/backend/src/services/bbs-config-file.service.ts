@@ -118,6 +118,33 @@ export interface BBSConfigData {
   // AREXX engine override — 'auto' (default), 'native', 'ts'.
   // 'auto' picks native when System/RexxMast is present, TS otherwise.
   arexx_engine?: string;
+
+  // Mail notifications to the sysop. express.e:6716 tests these with
+  // checkToolTypeExists, so the tooltype's presence is the value.
+  mail_on_logon?: boolean;
+  mail_on_logoff?: boolean;
+  mail_on_new_user?: boolean;
+  mail_on_upload?: boolean;
+  mail_on_sysop_page?: boolean;
+  mail_on_sysop_comment?: boolean;
+  mail_on_pwd_fail?: boolean;
+
+  // Auto-validation. express.e:29677 (AUTOVAL_DELAY), :29687 (AUTOVAL_PRESET)
+  // and :30063 (AUTOVAL_PASSWORD) read all three from bbsConfig.info, falling
+  // back to it when the node's own icon does not carry them.
+  autoval_delay?: number;
+  autoval_preset?: string;
+  autoval_password?: string;
+
+  // Accounts and uploads
+  auto_deactivate_days?: number;
+  local_upload_path?: string;
+  // express.e:19258 and :19567 — the command run to pull FILE_ID.DIZ out of
+  // an archive.
+  filediz_syscmd?: string;
+  // express.e:348 defaults it to 15; :17720 and :19290 tell the caller how
+  // many description lines they have.
+  max_desclines?: number;
 }
 
 /**
@@ -224,6 +251,27 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'LOG_RETENTION_DAYS': 'log_retention_days',
   'SYSOP_DEBUG_OUTPUT': 'sysop_debug_enabled',
   'AREXX_ENGINE': 'arexx_engine',
+
+  // Mail notifications — express.e:6716 reads MAIL_ON_LOGON with
+  // checkToolTypeExists, so these are presence flags.
+  'MAIL_ON_LOGON': 'mail_on_logon',
+  'MAIL_ON_LOGOFF': 'mail_on_logoff',
+  'MAIL_ON_NEW_USER': 'mail_on_new_user',
+  'MAIL_ON_UPLOAD': 'mail_on_upload',
+  'MAIL_ON_SYSOP_PAGE': 'mail_on_sysop_page',
+  'MAIL_ON_SYSOP_COMMENT': 'mail_on_sysop_comment',
+  'MAIL_ON_PWD_FAIL': 'mail_on_pwd_fail',
+
+  // Auto-validation — express.e:29677, :29687, :30063
+  'AUTOVAL_DELAY': 'autoval_delay',
+  'AUTOVAL_PRESET': 'autoval_preset',
+  'AUTOVAL_PASSWORD': 'autoval_password',
+
+  // Accounts, uploads and file descriptions
+  'AUTO_DEACTIVATE_DAYS': 'auto_deactivate_days',
+  'LOCAL_UPLOAD_PATH': 'local_upload_path',
+  'FILEDIZ_SYSCMD': 'filediz_syscmd',   // express.e:19258, :19567
+  'MAX_DESCLINES': 'max_desclines',     // express.e:348
 };
 
 /**
@@ -646,6 +694,24 @@ function getDefaultConfig(): BBSConfigData {
     log_level: 'info',
     log_retention_days: 90,
     sysop_debug_enabled: false,
+
+    // These defaults are also what tells the parser a field's type: a
+    // tooltype is read as a flag, a number or a string according to the
+    // typeof its default here.
+    mail_on_logon: false,
+    mail_on_logoff: false,
+    mail_on_new_user: false,
+    mail_on_upload: false,
+    mail_on_sysop_page: false,
+    mail_on_sysop_comment: false,
+    mail_on_pwd_fail: false,
+    autoval_delay: 0,
+    autoval_preset: '',
+    autoval_password: '',
+    auto_deactivate_days: 0,
+    local_upload_path: '',
+    filediz_syscmd: '',
+    max_desclines: 15,   // express.e:348 — DEF max_desclines=15
   };
 }
 
