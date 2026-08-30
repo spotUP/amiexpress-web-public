@@ -284,7 +284,25 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
     const nodeInfoPath = path.join(bbsRoot, `Node${nodeNum}.info`);
 
     try {
+      // Start from what NodeN.info already holds. Building the map from
+      // nothing dropped every tooltype this form does not own on each save,
+      // and a node's icon carries more than the dozen fields edited here.
       const toolTypes = new Map<string, string>();
+      if (fs.existsSync(nodeInfoPath)) {
+        const existing = new InfoFileParser().parse(fs.readFileSync(nodeInfoPath));
+        for (const [key, value] of existing.toolTypes.entries()) {
+          toolTypes.set(key.toUpperCase(), value);
+        }
+      }
+
+      // Flags are written by presence, so an unset one has to be removed
+      // rather than left behind from the previous save.
+      for (const flag of [
+        'CAPITOL_FILES', 'DEF_SCREENS', 'SENTBY_FILES', 'CALLERS_LOG', 'START_LOG',
+        'UD_LOG', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
+      ]) {
+        toolTypes.delete(flag);
+      }
 
       if (config.node_start) toolTypes.set('NODESTART', config.node_start);
       if (config.priority !== undefined) toolTypes.set('PRIORITY', config.priority.toString());

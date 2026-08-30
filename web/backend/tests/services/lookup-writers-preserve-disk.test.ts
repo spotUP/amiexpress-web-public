@@ -20,6 +20,7 @@ import * as path from 'path';
 import { InfoFileParser } from '../../src/services/info-file-parser';
 import { FileCheckerConfigService } from '../../src/services/config-services/file-checker-config.service';
 import { LanguageConfigService } from '../../src/services/config-services/language-config.service';
+import { NodeConfigService } from '../../src/services/config-services/node-config.service';
 import { config as appConfig } from '../../src/config';
 
 function writeInfo(filePath: string, entries: Record<string, string>): void {
@@ -44,6 +45,9 @@ function repoStub(overrides: Record<string, unknown> = {}) {
     updateFileChecker: () => true,
     deleteFileChecker: () => true,
     getLanguages: () => [],
+    getNodeConfig: () => null,
+    getNodeConfigs: () => [],
+    updateNodeConfig: () => ({ id: 1 }),
     getLanguage: () => null,
     getLanguageByCode: () => null,
     createLanguage: (l: unknown) => ({ id: 1, ...(l as object) }),
@@ -140,5 +144,24 @@ describe('lookup table writers', () => {
 
     expect(language.language_code).toBe('en');
     expect(language.enabled).toBe(true);
+  });
+
+  it('keeps a node tooltype the form does not own, and clears a flag it does', async () => {
+    // NodeN.info carries more than the dozen fields this form edits, and the
+    // writer used to rebuild the file from nothing every save.
+    const infoPath = path.join(root, 'Node1.info');
+    writeInfo(infoPath, { NODESTART: 'BBS:Express', CALLERS_LOG: '1', SOMETHING_ELSE: 'keep me' });
+
+    const repo = repoStub();
+    const service = new NodeConfigService({ getConfigRepository: () => repo } as never);
+
+    await service.updateNodeConfig(2, { node_number: 1, callers_log: false, start_log: true }, CONTEXT);
+
+    const written = readInfo(infoPath);
+    expect(written.get('SOMETHING_ELSE')).toBe('keep me');
+    expect(written.get('NODESTART')).toBe('BBS:Express');
+    expect(written.has('START_LOG')).toBe(true);
+    // Presence is the value, so switching a flag off has to remove it.
+    expect(written.has('CALLERS_LOG')).toBe(false);
   });
 });
