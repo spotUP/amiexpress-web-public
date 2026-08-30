@@ -19,6 +19,7 @@ import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // interchangeable hashes, so existing passwords still verify.
 import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '../services/config.service';
+import { describeValidationError } from '../services/config.schemas';
 import { ConferenceSetupService } from '../services/conference-setup.service';
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
@@ -28,7 +29,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
-import { isSensitiveField } from '../utils/secrets-encryption.util';
+import { isSensitiveField, MASKED_VALUE } from '../utils/secrets-encryption.util';
 
 // Standard API response format
 interface ApiResponse<T = any> {
@@ -73,8 +74,13 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
   const handleError = (res: Response, error: unknown) => {
 console.error('Config API error:', error);
 
-    const message = error instanceof Error ? error.message : 'An error occurred';
-    const statusCode = message.includes('not found') ? 404 :
+    // A rejected field is the sysop's to fix, so say which one. Zod's own
+    // message is the entire issue array as JSON, which is unreadable in a
+    // toast and told them nothing about what to change.
+    const validation = describeValidationError(error);
+    const message = validation ?? (error instanceof Error ? error.message : 'An error occurred');
+    const statusCode = validation ? 400 :
+                       message.includes('not found') ? 404 :
                        message.includes('already exists') ? 409 :
                        message.includes('must be') ? 400 : 500;
 
@@ -99,7 +105,7 @@ console.error('Config API error:', error);
       // Mask sensitive fields (smtp_password, reg_key, etc.) — never expose in GET response
       const sanitized: Record<string, any> = {};
       for (const [key, value] of Object.entries(config as any)) {
-        sanitized[key] = isSensitiveField(key) && value ? '***' : value;
+        sanitized[key] = isSensitiveField(key) && value ? MASKED_VALUE : value;
       }
       sendResponse(res, sanitized);
     } catch (error) {
