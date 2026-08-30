@@ -27,9 +27,7 @@ import { LanguagesPage } from './LanguagesPage';
 import { ProtocolsPage } from './ProtocolsPage';
 import { FileCheckersPage } from './FileCheckersPage';
 import { SystemFilesPage } from './SystemFilesPage';
-import { AmiXnetPage } from './AmiXnetPage';
 import { BatchEditorPage } from './BatchEditorPage';
-import { InfoEditorPage } from './InfoEditorPage';
 import { HealthCheckPage } from './HealthCheckPage';
 import { DeploymentPage } from './DeploymentPage';
 import { OperatorChatSettingsPage } from './OperatorChatSettingsPage';
@@ -76,16 +74,27 @@ export function LookupTablesWorkspace() {
 }
 
 /**
- * Four editors over the same kind of file. System Files, AmiXnet and the
- * Tooltype editor all declare the identical Tooltype shape and all call
- * updateInfoFile; Batch Editor is a text editor over batch*.info. One
- * destination, four scopes.
+ * One tree over every .info file, and the one editor that is not a tooltype
+ * editor at all.
+ *
+ * There used to be four tabs here, three of which were the same editor over
+ * the same two endpoints - getInfoFile and updateInfoFile - differing only in
+ * which files they chose to show. System Files already walks the whole BBS
+ * root and groups what it finds by scope, so it was the tree the plan asked
+ * for; AmiXnet was fourteen of those same files listed by hand, and "Any
+ * .info file" was a third copy whose only distinctive feature was adding a
+ * tooltype through a browser prompt().
+ *
+ * Both folded into the tree. The AmiXnet descriptions were the one thing
+ * neither of the others had, so they moved to info-file-notes.ts and are
+ * shown against those files wherever they appear.
+ *
+ * Batch scripts stays: batch*.info is edited as text, not as tooltypes, so
+ * it is a different editor rather than a different scope.
  */
 const CONFIG_FILE_TABS: TabDefinition[] = [
-  { id: 'system', label: 'System files', render: () => <SystemFilesPage /> },
-  { id: 'amixnet', label: 'AmiXnet', render: () => <AmiXnetPage /> },
+  { id: 'system', label: 'All .info files', render: () => <SystemFilesPage /> },
   { id: 'batch', label: 'Batch scripts', render: () => <BatchEditorPage /> },
-  { id: 'tooltypes', label: 'Any .info file', render: () => <InfoEditorPage /> },
 ];
 
 export function ConfigFilesWorkspace() {
@@ -122,3 +131,20 @@ const OPERATOR_CHAT_TABS: TabDefinition[] = [
 export function OperatorChatWorkspace() {
   return <TabbedWorkspace tabs={OPERATOR_CHAT_TABS} defaultTab="chat" />;
 }
+
+/**
+ * The tabs each workspace actually has, by the nav path that reaches it.
+ *
+ * LEGACY_ROUTES sends old paths to `destination?tab=<id>`, and nothing used
+ * to check that the id existed - so collapsing two tabs into one would have
+ * left two redirects pointing at tabs that were gone, landing the sysop on
+ * the default tab with no indication anything had moved.
+ */
+export const WORKSPACE_TABS: Record<string, string[]> = {
+  nodes: NODE_TABS.map((tab) => tab.id),
+  conferences: CONFERENCE_TABS.map((tab) => tab.id),
+  'lookup-tables': LOOKUP_TABS.map((tab) => tab.id),
+  'config-files': CONFIG_FILE_TABS.map((tab) => tab.id),
+  health: HEALTH_TABS.map((tab) => tab.id),
+  'operator-chat': OPERATOR_CHAT_TABS.map((tab) => tab.id),
+};
