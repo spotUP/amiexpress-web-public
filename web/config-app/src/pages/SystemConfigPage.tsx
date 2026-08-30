@@ -214,7 +214,10 @@ export function SystemConfigPage() {
 
     // An empty password field means "leave it alone": the server holds these
     // encrypted and never sends them back.
-    if ((name === 'smtp_password' || name === 'reg_key') && !value) return;
+    // An empty SMTP password means "leave it alone": the server holds it
+    // encrypted and never sends it back. reg_key is not a secret - it is a
+    // tooltype the BBS prints at login - so clearing it must be savable.
+    if (name === 'smtp_password' && !value) return;
 
     setSavingField(name);
     fieldMutation.mutate({ name, value });
@@ -256,9 +259,7 @@ export function SystemConfigPage() {
     if (!updates.smtp_password || updates.smtp_password === '') {
       delete updates.smtp_password;
     }
-    if (!updates.reg_key || updates.reg_key === '') {
-      delete updates.reg_key;
-    }
+
 
     mutation.mutate(updates);
   };

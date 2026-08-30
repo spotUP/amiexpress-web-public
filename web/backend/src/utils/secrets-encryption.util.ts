@@ -27,7 +27,6 @@ export const SENSITIVE_FIELDS = [
   'smtp_password',
   'smtp_username', // Could contain auth tokens
   'sendgrid_api_key',
-  'reg_key',
   'ftp_password',
   'ssh_host_key',
   'jwt_secret',
@@ -71,6 +70,13 @@ const DISK_ONLY_FIELDS = new Set<string>([
   'password_expiry_days',
   'password_security',
   'strict_password_policy',
+
+  // express.e:31991 reads REGKEY out of bbsConfig.info and prints it to every
+  // caller at login (express.e:25696, :28786, :29516). A value read from a
+  // plaintext tooltype and shown to everyone who connects is not a
+  // credential; classing it as one sent it to the encrypted database while
+  // the login banner read the disk, so the field could not be set at all.
+  'reg_key',
 ]);
 
 /** What a masked secret looks like on the way out of the API. */

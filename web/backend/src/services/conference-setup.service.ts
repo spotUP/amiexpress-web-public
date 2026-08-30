@@ -36,6 +36,37 @@ export interface ConferenceSetupOptions {
   readOnly?: boolean;
 }
 
+/**
+ * The directories a conference genuinely needs, and who says so.
+ *
+ * The previous list also demanded Upload/, Hold/ and SysopStats/ in every
+ * conference, and none of the three is real:
+ *
+ *   Upload   the upload path is whatever ULPATH.n names (express.e:18438),
+ *            not a fixed directory beside the conference.
+ *   Hold     express.e appends 'HOLD' to a FILENAME - SysopStats/NumULs_5HOLD
+ *            at express.e:18772 - it is not a directory at all.
+ *   SysopStats  real, but at the BBS ROOT: express.e:18718 builds it from
+ *            cmds.bbsLoc, not from the conference.
+ *
+ * So the health check reported three missing directories per conference that
+ * nothing would ever read, and offered to create them - twenty-odd fabricated
+ * directories on a live board, from a button labelled "auto-fix".
+ *
+ * What is left is what something actually reads:
+ *   Messages   this backend's own message store (bbs-paths.util.ts:122)
+ *   MsgBase    express.e:2068 - <ConfLocation>MsgBase/
+ *   Bulletins  express.e:24648 - <ConfLocation>Bulletins/Bull<n>
+ *   Files      the default this service writes into DLPATH.n when it creates
+ *              a conference, so a conference it made has one
+ */
+export const CONFERENCE_DIRECTORIES = [
+  'Messages',
+  'Files',
+  'Bulletins',
+  'MsgBase',
+] as const;
+
 export class ConferenceSetupService {
   private bbsRoot: string;
 
@@ -76,16 +107,7 @@ export class ConferenceSetupService {
         result.missingDirectories.push(confDirPath);
       }
 
-      // Standard directories required by express.e
-      const requiredDirs = [
-        'Messages',      // Message storage
-        'Upload',        // File uploads
-        'Files',         // Processed/approved files
-        'Hold',          // Held uploads
-        'Bulletins',     // Conference bulletins
-        'SysopStats',    // Statistics
-        'MsgBase'        // Message base metadata
-      ];
+      const requiredDirs = CONFERENCE_DIRECTORIES;
 
       for (const dir of requiredDirs) {
         const dirPath = path.join(this.bbsRoot, confLocation, dir);
@@ -200,13 +222,7 @@ console.log(`[ConferenceSetup] Created ${location}/`);
 
     // 3. Create standard directories (express.e structure)
     const requiredDirs = [
-      'Messages',      // Message storage
-      'Upload',        // File uploads
-      'Files',         // Processed/approved files
-      'Hold',          // Held uploads
-      'Bulletins',     // Conference bulletins
-      'SysopStats',    // Statistics
-      'MsgBase'        // Message base metadata
+      ...CONFERENCE_DIRECTORIES,
     ];
 
     for (const dir of requiredDirs) {

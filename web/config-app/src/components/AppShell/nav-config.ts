@@ -81,7 +81,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'System',
     items: [
       { path: 'system', label: 'Configuration', icon: Settings, description: 'bbsConfig.info, section by section' },
-      { path: 'config-files', label: 'Configuration Files', icon: FolderOpen, description: 'System, AmiXnet, batch and any other .info file' },
+      { path: 'config-files', label: 'Configuration Files', icon: FolderOpen, description: 'Every .info file on the board, and the batch scripts' },
       { path: 'lookup-tables', label: 'Lookup Tables', icon: Boxes, description: 'Computers, screen types, languages, protocols and file checkers' },
       { path: 'health', label: 'Health and Deployment', icon: Gauge, description: 'Filesystem audit, build and container state' },
     ],
