@@ -31,9 +31,29 @@ import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
 import { joinVoiceChannel, leaveVoiceChannel, setVoiceMute, setVoiceVideo } from './voice-channel.handler';
+import { mintLaunchToken, revokeLaunchToken } from '../doors/door-launch-token';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
+
+/**
+ * Only the DoorRepo door gets a management token, and only for a sysop.
+ * Every other door has no business calling /api/doors — a token handed to
+ * arbitrary door code would be a remote door-wipe credential.
+ */
+export function launchTokenForDoor(
+  command: string,
+  bbsRoot: string,
+  session: { nodeId: number | string; userId: number; secLevel: number }
+): string | null {
+  if (command.toUpperCase() !== 'DOORREPO') return null;
+  if (session.secLevel < 250) return null;
+  return mintLaunchToken(bbsRoot, session);
+}
+
+export function releaseLaunchTokenForDoor(token: string | null): void {
+  if (token) revokeLaunchToken(token);
+}
 
 function logDoorDebug(message: string) {
   try {
@@ -1594,6 +1614,13 @@ console.log('Executing door:', door.name);
   let doorSession: DoorSession | null = null;
   const originalSubState = session.subState;
 
+  const bbsRoot = config.get('dataDir');
+  const managementToken = launchTokenForDoor(door.command || door.id, bbsRoot, {
+    nodeId: session.nodeId || 0,
+    userId: session.user?.id ?? 0,
+    secLevel: session.user?.secLevel ?? 0,
+  });
+
   try {
     // Check if this is a client door (needs to detect runtime from manifest)
     const doorManifest = await loadDoorManifestForExecution(door);
@@ -1797,6 +1824,11 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
 
     // Re-throw to ensure error is logged at process level
     throw error;
+  } finally {
+    // Release the management token on every exit path — success, the
+    // interactive-prompt returns above, or the crash handled just above.
+    // A door that throws must not leave a live token behind.
+    releaseLaunchTokenForDoor(managementToken);
   }
 }
 
