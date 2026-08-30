@@ -44,15 +44,6 @@ function LazyPage({ children }: { children: React.ReactNode }) {
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // TEMPORARY: Bypass authentication if VITE_BYPASS_AUTH is set
-  // This allows emergency access when database is empty and no sysop exists
-  // REMOVE THIS AFTER CREATING INITIAL SYSOP USER
-  const bypassAuth = import.meta.env.VITE_BYPASS_AUTH === 'true';
-
-  if (bypassAuth) {
-    console.warn('[SECURITY] Authentication bypassed via VITE_BYPASS_AUTH - REMOVE THIS IN PRODUCTION');
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-surface-0 p-5">
@@ -61,7 +52,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (isAuthenticated || bypassAuth) ? <>{children}</> : <Navigate to="/admin/login" />;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
 function App() {
