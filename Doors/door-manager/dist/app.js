@@ -47,6 +47,7 @@ const action_log_1 = require("./action-log");
 const archive_browse_view_1 = require("./archive-browse-view");
 const install_core_1 = require("./install-core");
 const install_core_2 = require("./install-core");
+const archive_command_1 = require("./archive-command");
 // Re-exported: the install core moved to its own module when app.ts passed
 // the 2000-line ceiling, and the tests import these from here.
 var install_core_3 = require("./install-core");
@@ -1121,6 +1122,19 @@ class RepoView extends ViewManager_1.BaseView {
             this.refresh(this.layout.listSelected);
         }
     }
+    // Neither install mode can read the archive's own .info before extracting
+    // it - owner mode has only a path, consumer mode has not downloaded yet -
+    // so the confirmation names the fallback, and extractAndRegisterDoor's
+    // existing rename applies the archive's real command afterwards and
+    // reports it in the install log ("the archive installs as X, not Y").
+    confirmArchiveInstall(archiveName, onConfirm) {
+        const chosen = (0, archive_command_1.commandForArchive)(archiveName, null);
+        this.vm.push(new ConfirmView(this.layout, `Install {yellow-fg}${(0, ViewManager_1.sanitizeForTags)(archiveName)}{/yellow-fg}?` +
+            `\n\nThe archive names no command yet; using ` +
+            `{yellow-fg}${chosen.command}{/yellow-fg} from the archive filename.` +
+            `\nIf the archive names its own command, the install uses that` +
+            `\ninstead and says so.`, 'Install', 'Cancel', () => onConfirm(chosen.command)));
+    }
     doInstallUninstall() {
         const e = this.entry();
         if (!e)
@@ -1183,15 +1197,10 @@ class RepoView extends ViewManager_1.BaseView {
             // check, and any failure surfaces from inside installConsumerDoor's
             // async callback below via the same reportInstallFailure panel.
             const repoUrl = this.repoMode.url;
-            const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
-                .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
-            this.vm.push(new InputView(this.layout, `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested, (cmd) => {
-                if (!cmd)
-                    return;
+            this.confirmArchiveInstall(e.archive_name, (finalCmd) => {
                 if (this.installing)
                     return; // an install is already in flight
                 this.installing = true;
-                const finalCmd = cmd.trim().toUpperCase() || suggested;
                 const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
                 fs.mkdirSync(installDir, { recursive: true });
                 this.setStatus('Downloading…', 'yellow', 30000);
@@ -1244,7 +1253,7 @@ class RepoView extends ViewManager_1.BaseView {
                         this.installing = false;
                     }
                 })();
-            }));
+            });
         }
         else {
             const resolvedArchive = resolveArchivePath(e.archive_path);
@@ -1258,15 +1267,10 @@ class RepoView extends ViewManager_1.BaseView {
                 this.layout.render();
                 return;
             }
-            const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
-                .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
-            this.vm.push(new InputView(this.layout, `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested, (cmd) => {
-                if (!cmd)
-                    return;
+            this.confirmArchiveInstall(e.archive_name, (finalCmd) => {
                 if (this.installing)
                     return; // an install is already in flight
                 this.installing = true;
-                const finalCmd = cmd.trim().toUpperCase() || suggested;
                 const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
                 fs.mkdirSync(installDir, { recursive: true });
                 this.setStatus('Installing…', 'yellow', 30000);
@@ -1324,7 +1328,7 @@ class RepoView extends ViewManager_1.BaseView {
                         this.installing = false;
                     }
                 })();
-            }));
+            });
         }
     }
     /**
