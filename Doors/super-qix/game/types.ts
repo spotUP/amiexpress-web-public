@@ -60,7 +60,8 @@ export interface Sparx {
   pathIndex: number;
   direction: 1 | -1;  // Direction along border path
   speed: number;
-  isSuper: boolean;
+  /** When this Skull last reversed, so it cannot flip twice in a row. */
+  lastReversedAt: number;
   frozen: boolean;
   frozenTimer: number;
 }
@@ -113,7 +114,8 @@ export interface LevelConfig {
   qixSpeed: number;
   sparxCount: number;
   sparxSpeed: number;
-  superSparxTime: number;  // Time until Sparx become Super
+  /** How long the border Time Meter takes to fill (FAQ 1). */
+  timeMeterMs: number;
   fuseSpeed: number;
   targetPercent: number;
   word: string;  // Word to spell for auto-complete
@@ -184,6 +186,12 @@ export interface SuperQixData {
   frameCount: number;
   levelStartTime: number;
   stopTimer: number;  // Time marker has been stopped (for fuse)
+
+  /**
+   * How full the border Time Meter is, 0..1 (FAQ 1). At 1 two more
+   * Skulls are released and it resets.
+   */
+  timeMeter: number;
 
   // Transition
   transitionTimer: number;

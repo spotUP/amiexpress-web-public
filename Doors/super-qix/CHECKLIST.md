@@ -13,7 +13,7 @@ user-agreed reason)
 A tick requires Gate 3 evidence: a test that drives the door's top-level entry
 point, proves the new code ran, and asserts the spec's stated numbers.
 
-**Total: 74 · DONE: 11 · EXEMPT: 0 · OPEN: 63**  _(last updated 2026-08-31)_
+**Total: 74 · DONE: 28 · EXEMPT: 0 · OPEN: 46**  _(last updated 2026-08-31)_
 
 ---
 
@@ -31,27 +31,27 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | ID | Item | Status |
 |----|------|--------|
 | FAQ-1c | Marker starts at the centre of the bottom border | DONE (tests/movement.test.ts) |
-| FAQ-1b | Level starts as an empty rectangle containing the Gremlin and TWO Skulls | PARTIAL |
+| FAQ-1b | Level starts as an empty rectangle containing the Gremlin and TWO Skulls | DONE (tests/enemies.test.ts) |
 | FAQ-1e | Closing a shape reveals part of the picture, awards points, may release a letter/power-up | PARTIAL |
 | FAQ-1f | After claiming, the marker may travel the border of the claimed area; internal lines are NOT walkable | DONE (tests/movement.test.ts) |
-| FAQ-1g | The outer border is a Time Meter: squares change colour two at a time until the whole border is red | MISSING |
-| FAQ-1h | When the meter fills, two more Skulls are released and the counter resets | MISSING |
-| FAQ-1i | Neither Gremlin nor Skulls can be destroyed | DONE (verify) |
-| FAQ-1j | Later levels: enemies faster and more aggressive, timer counts down quicker | PARTIAL |
+| FAQ-1g | The outer border is a Time Meter: squares change colour two at a time until the whole border is red | DONE (tests/enemies.test.ts) |
+| FAQ-1h | When the meter fills, two more Skulls are released and the counter resets | DONE (tests/enemies.test.ts) |
+| FAQ-1i | Neither Gremlin nor Skulls can be destroyed | DONE (tests/enemies.test.ts) |
+| FAQ-1j | Later levels: enemies faster and more aggressive, timer counts down quicker | DONE (tests/enemies.test.ts) |
 
 ## 2.1 What to do
 
 | ID | Item | Status |
 |----|------|--------|
 | FAQ-2.1a | Movement restricted to border or inside edges of claimed areas (same as USER-1) | DONE (tests/movement.test.ts) |
-| FAQ-2.1b | On an edge: safe from the Gremlin, still vulnerable to Skulls | MISSING |
+| FAQ-2.1b | On an edge: safe from the Gremlin, still vulnerable to Skulls | DONE (tests/enemies.test.ts) |
 | FAQ-2.1c | Cannot leave the field edge without drawing | DONE (tests/movement.test.ts) |
 | FAQ-2.1d | Holding Draw moves freely inside the field, leaving a YELLOW line | DONE (tests/drawing.test.ts) |
 | FAQ-2.1e | The line turns BLUE and becomes safe once it reconnects to border or finished line | DONE (tests/drawing.test.ts) |
 | FAQ-2.1f | Crossing your own line is not allowed | DONE (verify) |
 | FAQ-2.1g | Backtracking along your own incomplete line IS allowed | MISSING |
-| FAQ-2.1h | While drawing: Skulls cannot reach you, the Gremlin can | MISSING |
-| FAQ-2.1i | Gremlin touching the marker OR any point of the incomplete stix costs a life | DONE (verify) |
+| FAQ-2.1h | While drawing: Skulls cannot reach you, the Gremlin can | DONE (tests/enemies.test.ts) |
+| FAQ-2.1i | Gremlin touching the marker OR any point of the incomplete stix costs a life | DONE (tests/enemies.test.ts) |
 | FAQ-2.1j | The region containing the Gremlin is always "Outside"; the other region fills | DONE (verify) |
 
 ## 2.2 Enemies
@@ -59,18 +59,18 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | ID | Item | Status |
 |----|------|--------|
 | FAQ-2.2a | Gremlin bounces semi-randomly, weighted towards the marker | PARTIAL |
-| FAQ-2.2b | Gremlin cannot touch the marker while it is on a wall or claimed edge | MISSING |
-| FAQ-2.2c | Gremlin kills by hitting the marker or any point of the incomplete line | DONE (verify) |
+| FAQ-2.2b | Gremlin cannot touch the marker while it is on a wall or claimed edge | DONE (tests/enemies.test.ts) |
+| FAQ-2.2c | Gremlin kills by hitting the marker or any point of the incomplete line | DONE (tests/enemies.test.ts) |
 | FAQ-2.2d | Later levels: Gremlin zooms toward the marker whenever it detaches | MISSING |
 | FAQ-2.2e | Later levels: the Gremlin splits into multiple independent copies | MISSING |
 | FAQ-2.2f | Drawing between two copies: "Outside" is the LARGER area; the trapped copy disappears | MISSING |
-| FAQ-2.2g | Two Skulls start directly opposite the marker, travelling in opposite directions | PARTIAL |
-| FAQ-2.2h | Skulls are slower than the marker (outrunnable) and faster than letters/power-ups | PARTIAL |
+| FAQ-2.2g | Two Skulls start directly opposite the marker, travelling in opposite directions | DONE (tests/enemies.test.ts) |
+| FAQ-2.2h | Skulls are slower than the marker (outrunnable) and faster than letters/power-ups | DONE (tests/enemies.test.ts) |
 | FAQ-2.2i | Skulls may follow any line, including internal lines the player cannot use | PARTIAL |
-| FAQ-2.2j | Skulls cannot follow the player up an incomplete stix | MISSING |
-| FAQ-2.2k | A Skull never instantly reverses direction on a line | MISSING |
-| FAQ-2.2l | Timer expiry releases two Skulls from centre-top and resets the counter | MISSING |
-| FAQ-2.2m | On death, all but two Skulls disappear | MISSING |
+| FAQ-2.2j | Skulls cannot follow the player up an incomplete stix | DONE (tests/enemies.test.ts) |
+| FAQ-2.2k | A Skull never instantly reverses direction on a line | DONE (tests/enemies.test.ts) |
+| FAQ-2.2l | Timer expiry releases two Skulls from centre-top and resets the counter | DONE (tests/enemies.test.ts) |
+| FAQ-2.2m | On death, all but two Skulls disappear | DONE (tests/enemies.test.ts) |
 | FAQ-2.2n | Stopping while drawing starts a fuse burning from the line's end toward the marker | DONE (verify) |
 | FAQ-2.2o | Moving stops the fuse; pausing again resumes it from where it stopped | PARTIAL |
 | FAQ-2.2p | Backtracking counts as NOT moving for the fuse | MISSING |
@@ -121,7 +121,7 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | FAQ-2.5.1 | Default high score table: CAS/6/32750, THU/5/30010, ROC/5/28200, DRA/4/21280, FAN/3/20570 | CONTRADICTS |
 | FAQ-2.5.2 | On completion the Gremlin becomes a Joker card that flies up erasing the stix while the picture is revealed | MISSING |
 | FAQ-2.5.3b | Usually ONE Gremlin, which sometimes divides | PARTIAL |
-| FAQ-2.5.3c | No Super Skulls that chase up an unfinished line | CONTRADICTS |
+| FAQ-2.5.3c | No Super Skulls that chase up an unfinished line | DONE (tests/enemies.test.ts) |
 | FAQ-2.5.3d | No fast/slow draw option in Super Qix | DONE (tests/drawing.test.ts) |
 | FAQ-2.5.3e | The marker can retrace its path | MISSING |
 

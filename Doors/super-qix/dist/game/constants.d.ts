@@ -30,8 +30,9 @@ export declare const SPLIT_QIX_MULTIPLIERS: number[];
 export declare const QIX_BASE_SPEED = 2;
 export declare const QIX_SEGMENT_COUNT = 5;
 export declare const SPARX_BASE_SPEED = 1.5;
-export declare const SUPER_SPARX_SPEED_MULT = 1.5;
-export declare const SUPER_SPARX_DEFAULT_TIME = 30000;
+export declare const SKULLS_PER_RELEASE = 2;
+export declare const SKULLS_AT_LEVEL_START = 2;
+export declare const SKULL_REVERSE_COOLDOWN_MS = 1000;
 export declare const FUSE_BASE_SPEED = 2;
 export declare const FUSE_START_DELAY = 500;
 export declare const POWERUP_SPAWN_CHANCE = 0.25;
@@ -88,6 +89,7 @@ export declare const COLORS: {
 export declare const ART_PALETTE: string[];
 export declare const BG_COLORS: {
     border: string;
+    borderMeter: string;
     unclaimed: string;
     claimed: string;
     stix: string;

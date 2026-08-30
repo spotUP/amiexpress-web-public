@@ -56,6 +56,16 @@ export declare class QixEngine {
      */
     update(): void;
     /**
+     * Fill the border Time Meter, and release Skulls when it tops out.
+     *
+     * FAQ 1: "The outside border of the playing field is composed of squares
+     * which serve as a Time Meter. As you play, they change colour two at a
+     * time, until the whole border is red at which point two more Skulls are
+     * released onto the field and the counter resets and starts again." Later
+     * levels fill it faster (FAQ 1: "the timer counts down more quickly").
+     */
+    private advanceTimeMeter;
+    /**
      * Queue a won area to be painted in, sweeping right to left.
      *
      * Grouped by column and reversed so the highest x is filled first. The
@@ -64,6 +74,14 @@ export declare class QixEngine {
      * a fixed per-column rate would make a big claim crawl.
      */
     private beginFill;
+    /**
+     * Has the Time Meter consumed this border square yet?
+     *
+     * The meter runs along the border path, and squares are consumed in pairs
+     * (FAQ 1: "they change colour two at a time"), so the boundary is rounded
+     * down to an even number of squares.
+     */
+    private isMeterFilled;
     /** Paint the next slice of a sweeping claim. */
     private advanceFill;
     /** Is a claim still sweeping across the field? */

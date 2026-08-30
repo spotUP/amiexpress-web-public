@@ -68,8 +68,18 @@ export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on s
 export const QIX_BASE_SPEED = 2;
 export const QIX_SEGMENT_COUNT = 5;
 export const SPARX_BASE_SPEED = 1.5;
-export const SUPER_SPARX_SPEED_MULT = 1.5;
-export const SUPER_SPARX_DEFAULT_TIME = 30000;  // 30 seconds
+// FAQ 2.5.3: "There are no Super Skulls capable of chasing your marker
+// up an unfinished line." Skulls never promote.
+//
+// FAQ 1: the outer border is a Time Meter. When it fills, two more
+// Skulls are released and the counter resets. Later levels count down
+// more quickly.
+export const SKULLS_PER_RELEASE = 2;
+export const SKULLS_AT_LEVEL_START = 2;
+
+// FAQ 2.2: a Skull never instantly reverses on a line, so a turn is
+// refused while the last one is still fresh.
+export const SKULL_REVERSE_COOLDOWN_MS = 1000;
 export const FUSE_BASE_SPEED = 2;
 export const FUSE_START_DELAY = 500;  // ms before fuse starts
 
@@ -143,6 +153,9 @@ export const ART_PALETTE = [
 // color blocks, the way the arcade original renders them.
 export const BG_COLORS = {
   border: 'white',
+  // The border doubles as the Time Meter: squares turn red as it fills
+  // (FAQ 1), and when the whole border is red two more Skulls arrive.
+  borderMeter: 'red',
   unclaimed: 'black',
   claimed: 'blue',
   // FAQ 2.1: the line you are drawing is YELLOW, and turns BLUE once it
@@ -166,9 +179,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 1,
     qixCount: 1,
     qixSpeed: 1.0,
-    sparxCount: 2,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.0,
-    superSparxTime: 45000,
+    timeMeterMs: 45000,
     fuseSpeed: 1.5,
     targetPercent: 75,
     word: 'CAT',
@@ -178,9 +191,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 2,
     qixCount: 1,
     qixSpeed: 1.1,
-    sparxCount: 2,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.1,
-    superSparxTime: 40000,
+    timeMeterMs: 40000,
     fuseSpeed: 1.6,
     targetPercent: 75,
     word: 'DOG',
@@ -190,9 +203,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 3,
     qixCount: 1,
     qixSpeed: 1.2,
-    sparxCount: 3,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.2,
-    superSparxTime: 35000,
+    timeMeterMs: 35000,
     fuseSpeed: 1.7,
     targetPercent: 75,
     word: 'FISH',
@@ -202,9 +215,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 4,
     qixCount: 1,
     qixSpeed: 1.3,
-    sparxCount: 3,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.3,
-    superSparxTime: 30000,
+    timeMeterMs: 30000,
     fuseSpeed: 1.8,
     targetPercent: 75,
     word: 'BIRD',
@@ -215,9 +228,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 5,
     qixCount: 1,
     qixSpeed: 1.5,
-    sparxCount: 4,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.4,
-    superSparxTime: 25000,
+    timeMeterMs: 25000,
     fuseSpeed: 2.0,
     targetPercent: 75,
     word: 'LION',
@@ -227,9 +240,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 6,
     qixCount: 1,
     qixSpeed: 1.6,
-    sparxCount: 4,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.5,
-    superSparxTime: 22000,
+    timeMeterMs: 22000,
     fuseSpeed: 2.1,
     targetPercent: 75,
     word: 'TIGER',
@@ -239,9 +252,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 7,
     qixCount: 2,
     qixSpeed: 1.4,
-    sparxCount: 4,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.5,
-    superSparxTime: 20000,
+    timeMeterMs: 20000,
     fuseSpeed: 2.2,
     targetPercent: 75,
     word: 'BEAR',
@@ -251,9 +264,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 8,
     qixCount: 2,
     qixSpeed: 1.5,
-    sparxCount: 5,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.6,
-    superSparxTime: 18000,
+    timeMeterMs: 18000,
     fuseSpeed: 2.3,
     targetPercent: 75,
     word: 'WOLF',
@@ -264,9 +277,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 9,
     qixCount: 2,
     qixSpeed: 1.7,
-    sparxCount: 5,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.7,
-    superSparxTime: 15000,
+    timeMeterMs: 15000,
     fuseSpeed: 2.5,
     targetPercent: 75,
     word: 'EAGLE',
@@ -276,9 +289,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 10,
     qixCount: 2,
     qixSpeed: 1.8,
-    sparxCount: 6,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.8,
-    superSparxTime: 12000,
+    timeMeterMs: 12000,
     fuseSpeed: 2.6,
     targetPercent: 75,
     word: 'SHARK',
@@ -288,9 +301,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 11,
     qixCount: 2,
     qixSpeed: 1.9,
-    sparxCount: 6,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.9,
-    superSparxTime: 10000,
+    timeMeterMs: 10000,
     fuseSpeed: 2.7,
     targetPercent: 75,
     word: 'WHALE',
@@ -300,9 +313,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 12,
     qixCount: 3,
     qixSpeed: 1.8,
-    sparxCount: 6,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.0,
-    superSparxTime: 8000,
+    timeMeterMs: 8000,
     fuseSpeed: 2.8,
     targetPercent: 75,
     word: 'SNAKE',
@@ -313,9 +326,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 13,
     qixCount: 3,
     qixSpeed: 2.0,
-    sparxCount: 7,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.1,
-    superSparxTime: 6000,
+    timeMeterMs: 6000,
     fuseSpeed: 3.0,
     targetPercent: 75,
     word: 'FROG',
@@ -325,9 +338,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 14,
     qixCount: 3,
     qixSpeed: 2.2,
-    sparxCount: 7,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.2,
-    superSparxTime: 5000,
+    timeMeterMs: 5000,
     fuseSpeed: 3.2,
     targetPercent: 75,
     word: 'DEER',
@@ -337,9 +350,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 15,
     qixCount: 3,
     qixSpeed: 2.4,
-    sparxCount: 8,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.3,
-    superSparxTime: 4000,
+    timeMeterMs: 4000,
     fuseSpeed: 3.4,
     targetPercent: 75,
     word: 'SEAL',
@@ -349,9 +362,9 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 16,
     qixCount: 4,
     qixSpeed: 2.5,
-    sparxCount: 8,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.5,
-    superSparxTime: 3000,
+    timeMeterMs: 3000,
     fuseSpeed: 3.5,
     targetPercent: 75,
     word: 'PANDA',
@@ -374,7 +387,7 @@ export function getLevelConfig(level: number): LevelConfig {
     config.qixSpeed *= 1 + (loopCount * 0.2);
     config.sparxSpeed *= 1 + (loopCount * 0.2);
     config.fuseSpeed *= 1 + (loopCount * 0.15);
-    config.superSparxTime = Math.max(2000, config.superSparxTime - (loopCount * 1000));
+    config.timeMeterMs = Math.max(2000, config.timeMeterMs - (loopCount * 1000));
   }
 
   return config;

@@ -22,6 +22,7 @@ import {
   DEFAULT_TARGET_PERCENT,
   EXTRA_LIFE_PERCENT,
   FILL_ANIMATION_FRAMES,
+  SKULLS_PER_RELEASE,
   POINTS_PER_BONUS_PERCENT,
   BONUS_PERCENT_START,
   CHARS,
@@ -102,6 +103,7 @@ export class QixEngine {
     d.activeEffects = [];
     d.levelStartTime = Date.now();
     d.stopTimer = 0;
+    d.timeMeter = 0;
 
     // Initialize playfield
     d.fieldWidth = FIELD_WIDTH;
@@ -196,6 +198,9 @@ export class QixEngine {
     // Paint in any claim still sweeping across the field
     this.advanceFill();
 
+    // Fill the border Time Meter
+    this.advanceTimeMeter();
+
     // Update active effects
     this.powerUpSystem.updateEffects();
 
@@ -238,6 +243,27 @@ export class QixEngine {
   }
 
   /**
+   * Fill the border Time Meter, and release Skulls when it tops out.
+   *
+   * FAQ 1: "The outside border of the playing field is composed of squares
+   * which serve as a Time Meter. As you play, they change colour two at a
+   * time, until the whole border is red at which point two more Skulls are
+   * released onto the field and the counter resets and starts again." Later
+   * levels fill it faster (FAQ 1: "the timer counts down more quickly").
+   */
+  private advanceTimeMeter(): void {
+    const d = this.data;
+    const config = getLevelConfig(d.level);
+
+    d.timeMeter += GAME_TICK_MS / config.timeMeterMs;
+
+    if (d.timeMeter >= 1) {
+      d.timeMeter = 0;
+      this.enemySystem.releaseSkulls(SKULLS_PER_RELEASE, config.sparxSpeed);
+    }
+  }
+
+  /**
    * Queue a won area to be painted in, sweeping right to left.
    *
    * Grouped by column and reversed so the highest x is filled first. The
@@ -263,6 +289,25 @@ export class QixEngine {
       columns,
       perTick: Math.max(1, Math.ceil(columns.length / FILL_ANIMATION_FRAMES)),
     };
+  }
+
+  /**
+   * Has the Time Meter consumed this border square yet?
+   *
+   * The meter runs along the border path, and squares are consumed in pairs
+   * (FAQ 1: "they change colour two at a time"), so the boundary is rounded
+   * down to an even number of squares.
+   */
+  private isMeterFilled(x: number, y: number): boolean {
+    const d = this.data;
+    const path = d.borderPath;
+    if (path.length === 0) return false;
+
+    const index = path.findIndex(p => p.x === x && p.y === y);
+    if (index < 0) return false;
+
+    const consumed = Math.floor((d.timeMeter * path.length) / 2) * 2;
+    return index < consumed;
   }
 
   /** Paint the next slice of a sweeping claim. */
@@ -507,6 +552,8 @@ export class QixEngine {
     }
     d.currentStix = null;
     d.marker.isDrawing = false;
+    // FAQ 2.2: "If you should die, all but two Skulls will disappear."
+    this.enemySystem.cullSkullsAfterDeath();
     d.fuse = null;
     d.stopTimer = 0;
 
@@ -596,7 +643,13 @@ export class QixEngine {
         const cell = d.field[y][x];
         switch (cell) {
           case 'border':
-            buffer[y][x] = { ch: ' ', bg: BG_COLORS.border };
+            // The frame is also the Time Meter: the squares already
+            // consumed show red, two at a time, until the whole border
+            // is red and two more Skulls are released (FAQ 1).
+            buffer[y][x] = {
+              ch: ' ',
+              bg: this.isMeterFilled(x, y) ? BG_COLORS.borderMeter : BG_COLORS.border,
+            };
             break;
           case 'unclaimed':
             buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
@@ -649,11 +702,11 @@ export class QixEngine {
       const sx = Math.floor(sparx.x);
       const sy = Math.floor(sparx.y);
       if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-        const isSuper = sparx.isSuper;
+        // Every Skull looks the same: there are no Super Skulls.
         buffer[sy][sx] = {
-          ch: isSuper ? CHARS.superSparx : CHARS.sparx,
-          fg: isSuper ? 'yellow' : 'white',
-          bg: isSuper ? BG_COLORS.superSparx : BG_COLORS.sparx
+          ch: CHARS.sparx,
+          fg: 'white',
+          bg: BG_COLORS.sparx
         };
       }
     }

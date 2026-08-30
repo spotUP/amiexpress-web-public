@@ -15,6 +15,7 @@ const TEST_MODULES = [
   './layout.test',
   './movement.test',
   './drawing.test',
+  './enemies.test',
 ];
 
 (async () => {

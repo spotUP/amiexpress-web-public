@@ -17,7 +17,8 @@ import {
   QIX_BASE_SPEED,
   QIX_SEGMENT_COUNT,
   SPARX_BASE_SPEED,
-  SUPER_SPARX_SPEED_MULT,
+  SKULLS_AT_LEVEL_START,
+  SKULL_REVERSE_COOLDOWN_MS,
   FUSE_BASE_SPEED
 } from './constants';
 
@@ -93,13 +94,19 @@ export class EnemySystem {
   /**
    * Create a new Sparx
    */
+  /**
+   * Create a Skull.
+   *
+   * FAQ 2.2: "Two of these start directly opposite you at the beginning of
+   * each level, and move in opposite directions around the edge of the
+   * screen." Opposite means half a lap round the border path from the
+   * marker, and the pair then walks away from each other.
+   */
   private createSparx(speedMult: number, index: number): Sparx {
     const d = this.data;
     d.sparxIdCounter = (d.sparxIdCounter || 0) + 1;
 
-    // Start at different positions on the border
-    const borderLength = d.borderPath.length;
-    const startIndex = Math.floor((index / 4) * borderLength) % borderLength;
+    const startIndex = this.oppositeMarkerIndex();
     const startPoint = d.borderPath[startIndex] || { x: 0, y: 0 };
 
     return {
@@ -109,10 +116,88 @@ export class EnemySystem {
       pathIndex: startIndex,
       direction: index % 2 === 0 ? 1 : -1,
       speed: SPARX_BASE_SPEED * speedMult,
-      isSuper: false,
+      lastReversedAt: 0,
       frozen: false,
       frozenTimer: 0
     };
+  }
+
+  /**
+   * The point on the border path directly opposite the marker - half a lap
+   * away, so a Skull released there is as far from the player as the path
+   * allows.
+   */
+  private oppositeMarkerIndex(): number {
+    const d = this.data;
+    const length = d.borderPath.length;
+    if (length === 0) return 0;
+
+    let markerIndex = 0;
+    let best = Infinity;
+    for (let i = 0; i < length; i++) {
+      const p = d.borderPath[i];
+      const dist = Math.abs(p.x - d.marker.x) + Math.abs(p.y - d.marker.y);
+      if (dist < best) {
+        best = dist;
+        markerIndex = i;
+      }
+    }
+
+    return (markerIndex + Math.floor(length / 2)) % length;
+  }
+
+  /**
+   * Release more Skulls onto the field.
+   *
+   * FAQ 1: when the Time Meter fills, "two more Skulls are released onto the
+   * field and the counter resets"; FAQ 2.2 says they come from the
+   * centre-top. They join the ones already patrolling.
+   */
+  releaseSkulls(count: number, speedMult: number = 1): void {
+    const d = this.data;
+    const length = d.borderPath.length;
+
+    for (let i = 0; i < count; i++) {
+      d.sparxIdCounter = (d.sparxIdCounter || 0) + 1;
+
+      // Centre-top of the border.
+      let index = 0;
+      let best = Infinity;
+      const targetX = Math.floor(FIELD_WIDTH / 2);
+      for (let j = 0; j < length; j++) {
+        const p = d.borderPath[j];
+        const dist = Math.abs(p.x - targetX) + p.y;
+        if (dist < best) {
+          best = dist;
+          index = j;
+        }
+      }
+
+      const point = d.borderPath[index] || { x: targetX, y: 0 };
+      d.sparxList.push({
+        id: d.sparxIdCounter,
+        x: point.x,
+        y: point.y,
+        pathIndex: index,
+        direction: i % 2 === 0 ? 1 : -1,
+        speed: SPARX_BASE_SPEED * speedMult,
+        lastReversedAt: 0,
+        frozen: false,
+        frozenTimer: 0
+      });
+    }
+  }
+
+  /**
+   * Cull the Skulls back to the two a level starts with.
+   *
+   * FAQ 2.2: "If you should die, all but two Skulls will disappear."
+   */
+  cullSkullsAfterDeath(): void {
+    const d = this.data;
+    if (d.sparxList.length > SKULLS_AT_LEVEL_START) {
+      d.sparxList = d.sparxList.slice(0, SKULLS_AT_LEVEL_START);
+    }
   }
 
   /**
@@ -133,17 +218,9 @@ export class EnemySystem {
       }
     }
 
-    // Update Sparx
-    const levelTime = Date.now() - d.levelStartTime;
-    const config = this.getLevelConfig();
-
+    // Update Skulls. They never promote: FAQ 2.5.3 says Super Qix has no
+    // Super Skulls that chase the player up an unfinished line.
     for (const sparx of d.sparxList) {
-      // Check for Super Sparx transformation
-      if (!sparx.isSuper && levelTime > config.superSparxTime) {
-        sparx.isSuper = true;
-        sparx.speed *= SUPER_SPARX_SPEED_MULT;
-      }
-
       if (!sparx.frozen) {
         this.updateSparx(sparx);
       } else {
@@ -166,7 +243,7 @@ export class EnemySystem {
       qixSpeed: 1.0,
       sparxCount: 2,
       sparxSpeed: 1.0,
-      superSparxTime: 30000,
+      timeMeterMs: 30000,
       fuseSpeed: 2.0,
       targetPercent: 75,
       word: 'QIX',
@@ -350,7 +427,9 @@ export class EnemySystem {
     // Move along border path
     sparx.pathIndex += sparx.direction * sparx.speed * 0.1;
 
-    // Wrap around
+    // Wrap around rather than reversing: FAQ 2.2 says a Skull never
+    // instantly turns round on a line, so reaching the end of the path
+    // continues the same way about, it does not bounce back.
     if (sparx.pathIndex >= d.borderPath.length) {
       sparx.pathIndex = 0;
     } else if (sparx.pathIndex < 0) {
@@ -364,17 +443,22 @@ export class EnemySystem {
       sparx.y = pathPoint.y;
     }
 
-    // Super Sparx can follow stix
-    if (sparx.isSuper && d.currentStix && d.currentStix.points.length > 0) {
-      // Check if near the start of stix
-      const stixStart = d.currentStix.points[0];
-      const dist = Math.abs(sparx.x - stixStart.x) + Math.abs(sparx.y - stixStart.y);
+  }
 
-      if (dist <= 2) {
-        // Start following stix
-        // This would need more complex pathing - simplified for now
-      }
-    }
+  /**
+   * Turn a Skull round, if it is allowed to.
+   *
+   * FAQ 2.2: "Skulls will never instantly reverse direction on a line (i.e.
+   * after you dodge around one by drawing a small box, they can't
+   * immediately turn around and chase you)". A reversal is therefore
+   * refused while one is still fresh.
+   */
+  reverseSkull(sparx: Sparx, now: number = Date.now()): boolean {
+    if (now - sparx.lastReversedAt < SKULL_REVERSE_COOLDOWN_MS) return false;
+
+    sparx.direction = sparx.direction === 1 ? -1 : 1;
+    sparx.lastReversedAt = now;
+    return true;
   }
 
   /**
@@ -460,6 +544,11 @@ export class EnemySystem {
    */
   checkSparxCollision(marker: Point): boolean {
     const d = this.data;
+
+    // FAQ 2.1: "When you are Drawing a line, the Skulls can't reach
+    // you" - they travel the lines, and the player is out in the open
+    // field. Only the Gremlin is a danger then.
+    if (d.marker.isDrawing) return false;
 
     for (const sparx of d.sparxList) {
       const dist = Math.abs(sparx.x - marker.x) + Math.abs(sparx.y - marker.y);

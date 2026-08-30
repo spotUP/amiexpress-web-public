@@ -65,7 +65,7 @@ function createData(): SuperQixData {
     lastUpdateTime: Date.now(),
     frameCount: 0,
     levelStartTime: Date.now(),
-    stopTimer: 0,
+    stopTimer: 0, timeMeter: 0,
 
     transitionTimer: 0,
     transitionMessage: '',

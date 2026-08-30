@@ -80,6 +80,7 @@ function createInitialGameData(): SuperQixData {
     frameCount: 0,
     levelStartTime: Date.now(),
     stopTimer: 0,
+    timeMeter: 0,
 
     transitionTimer: 0,
     transitionMessage: "",

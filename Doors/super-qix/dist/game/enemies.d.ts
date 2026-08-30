@@ -2,7 +2,7 @@
  * Super Qix - Enemy System
  * Handles Qix, Sparx, and Fuse behavior
  */
-import { SuperQixData, Point, LevelConfig } from './types';
+import { SuperQixData, Sparx, Point, LevelConfig } from './types';
 /**
  * Enemy system managing Qix, Sparx, and Fuse
  */
@@ -20,7 +20,35 @@ export declare class EnemySystem {
     /**
      * Create a new Sparx
      */
+    /**
+     * Create a Skull.
+     *
+     * FAQ 2.2: "Two of these start directly opposite you at the beginning of
+     * each level, and move in opposite directions around the edge of the
+     * screen." Opposite means half a lap round the border path from the
+     * marker, and the pair then walks away from each other.
+     */
     private createSparx;
+    /**
+     * The point on the border path directly opposite the marker - half a lap
+     * away, so a Skull released there is as far from the player as the path
+     * allows.
+     */
+    private oppositeMarkerIndex;
+    /**
+     * Release more Skulls onto the field.
+     *
+     * FAQ 1: when the Time Meter fills, "two more Skulls are released onto the
+     * field and the counter resets"; FAQ 2.2 says they come from the
+     * centre-top. They join the ones already patrolling.
+     */
+    releaseSkulls(count: number, speedMult?: number): void;
+    /**
+     * Cull the Skulls back to the two a level starts with.
+     *
+     * FAQ 2.2: "If you should die, all but two Skulls will disappear."
+     */
+    cullSkullsAfterDeath(): void;
     /**
      * Main update loop
      */
@@ -81,6 +109,15 @@ export declare class EnemySystem {
      * Update a single Sparx
      */
     private updateSparx;
+    /**
+     * Turn a Skull round, if it is allowed to.
+     *
+     * FAQ 2.2: "Skulls will never instantly reverse direction on a line (i.e.
+     * after you dodge around one by drawing a small box, they can't
+     * immediately turn around and chase you)". A reversal is therefore
+     * refused while one is still fresh.
+     */
+    reverseSkull(sparx: Sparx, now?: number): boolean;
     /**
      * Update fuse (burns along stix when player stops)
      */
