@@ -64,7 +64,14 @@ describe('BBSApi installed-door lookup', () => {
   });
 
   it('falls back to the door object own values when the install record has blanks', () => {
-    const door = { command: 'X', name: 'Door Name', description: 'Door description', category: 'Games' };
+    // applyInstallMetadata always adds version/releaseGroup keys to its
+    // result (possibly undefined); type the fixture to admit those fields
+    // so this reads the real return contract instead of the narrower shape
+    // TS would otherwise infer from the literal.
+    const door: {
+      command: string; name: string; description: string; category: string;
+      version?: string; releaseGroup?: string;
+    } = { command: 'X', name: 'Door Name', description: 'Door description', category: 'Games' };
     const out = applyInstallMetadata(door, {
       id: 'i2', catalog_id: null, archive_name: 'X.LHA', command: 'X', install_dir: 'Doors/X',
       door_type: 'XIM', name: '', description: '', category: '', version: null,

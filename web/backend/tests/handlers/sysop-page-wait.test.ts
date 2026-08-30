@@ -39,8 +39,15 @@ import { ChatHandler, setHelpers } from "../../src/handlers/chat/chat.handler";
 import { ChatSessionUseCase } from "../../src/services/use-cases/chat-session.use-case";
 import { LoggedOnSubState } from "../../src/constants/bbs-states";
 import type { BBSSession } from "../../src/index";
+import type { Socket } from "socket.io";
 
-function makeSocket() {
+// runPendingSysopPageWait takes a real socket.io Socket; this fake only
+// implements the two members the code under test actually touches (emit,
+// plus `emitted` for assertions). Cast once here, at the boundary, rather
+// than at every call site below.
+type FakeSocket = Socket & { emitted: Array<{ event: string; data: unknown }> };
+
+function makeSocket(): FakeSocket {
   const emitted: Array<{ event: string; data: unknown }> = [];
   return {
     emitted,
@@ -48,7 +55,7 @@ function makeSocket() {
       emitted.push({ event, data });
       return true;
     },
-  };
+  } as unknown as FakeSocket;
 }
 
 function makeSession(overrides: Partial<BBSSession> = {}): BBSSession {

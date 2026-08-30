@@ -59,6 +59,8 @@ function sampleManifest(revision: string): DoorRepoManifest {
         archiveSize: 1234,
         md5: 'deadbeef',
         sha256: 'cafebabe',
+        junkCount: 0,
+        hasDoc: false,
       },
     ],
   };

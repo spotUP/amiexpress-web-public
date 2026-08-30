@@ -40,6 +40,7 @@ describe('routeAmigaDoorInput', () => {
       ximProtocol: {
         queueInput: (d: string) => { xim.push(d); },
         isWaitingForLineInput: () => true,
+        injectInputToNativeDoor: () => {},
       },
       dosLibrary: { queueInput: (d: string) => { dos.push(d); } },
     }, 'z');

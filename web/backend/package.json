@@ -10,6 +10,7 @@
     "start": "npx tsx src/index.ts",
     "start:dev": "npx tsx src/index.ts",
     "render-start": "npx tsx src/index.ts",
+    "typecheck:tests": "tsc --project tsconfig.tests.json --noEmit",
     "test": "jest --config dev-scripts/jest.config.ts --rootDir .",
     "test:watch": "jest --config dev-scripts/jest.config.ts --rootDir . --watch",
     "test:coverage": "jest --config dev-scripts/jest.config.ts --rootDir . --coverage",

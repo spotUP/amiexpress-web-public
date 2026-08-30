@@ -64,7 +64,14 @@ describe('applying repo metadata to a door', () => {
   const index = buildMetadataIndex([CALC]);
 
   it('fills a missing description from a name match', () => {
-    const door = applyRepoMetadata({ command: 'CALC', name: 'Calculator', description: '' }, index);
+    // applyRepoMetadata fills category from the repo match even when the
+    // input door didn't declare one; type the fixture to admit that field
+    // so this reads the real return contract instead of the narrower shape
+    // TS would otherwise infer from the literal.
+    const door = applyRepoMetadata<{ command: string; name: string; description: string; category?: string }>(
+      { command: 'CALC', name: 'Calculator', description: '' },
+      index
+    );
 
     expect(door.description).toBe('Today calculator');
     expect(door.category).toBe('Utility');
