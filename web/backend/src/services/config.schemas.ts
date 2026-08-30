@@ -141,8 +141,14 @@ export const SystemConfigSchema = z.object({
 });
 
 export const NodeConfigSchema = z.object({
-  node_number: z.number().int().min(1).max(255),
-  node_start: z.string().max(200).optional(),
+  // Node0 is a real node - it exists on this board and on the live one, and
+  // AmiExpress numbers from zero. Requiring 1 meant the admin refused to save
+  // the first node it listed.
+  node_number: z.number().int().min(0).max(255),
+  // NODESTART is a multi-line block - the command, then a tooltype per line
+  // (QUIETNODE, PRIORITY, CONSOLE_OUTPUT_DEVICE and the rest). A real one is
+  // well past 200 characters, so the cap rejected every node that had one.
+  node_start: z.string().max(4000).optional(),
   priority: z.number().int().min(-1).max(20).optional(),
   capitol_files: z.boolean().optional(),
   def_screens: z.boolean().optional(),
@@ -214,8 +220,11 @@ export const ConferenceConfigSchema = z.object({
   use_username: z.boolean().optional(),
   use_realname: z.boolean().optional(),
   use_internetname: z.boolean().optional(),
-  min_access_level: z.number().int().min(1).max(255).optional(),
-  max_access_level: z.number().int().min(1).max(255).optional()
+  // Level 0 is a real access level - it is what a conference open to
+  // everyone carries, and this board serves it. Requiring 1 meant such a
+  // conference could not be saved.
+  min_access_level: z.number().int().min(0).max(255).optional(),
+  max_access_level: z.number().int().min(0).max(255).optional()
 });
 
 export const DoorSchema = z.object({
