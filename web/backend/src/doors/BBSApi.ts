@@ -1408,7 +1408,11 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
    * @param isTypeScriptDoor - Set to true if this is a TypeScript/SDK door
    * @returns Result object with success status and message
    */
-  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string; removed?: string[] }> {
+  async deleteDoor(
+    identifier: string,
+    isTypeScriptDoor?: boolean,
+    onStep?: (step: { kind: 'ok' | 'skip' | 'fail'; text: string }) => void
+  ): Promise<{ success: boolean; message: string; removed?: string[] }> {
 console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
 
     // Check if user has sysop access
@@ -1424,18 +1428,21 @@ console.log(`[BBSApi.deleteDoor] Access denied: user secLevel=${this.session.use
       const { getAmigaDoorManager, refreshDoorCache } = await import('./amigaDoorManager');
       const manager = getAmigaDoorManager();
 console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${isTypeScriptDoor})`);
-      const result = await manager.deleteDoor(identifier, isTypeScriptDoor);
+      const result = await manager.deleteDoor(identifier, isTypeScriptDoor, onStep);
 console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
 
       if (result.success) {
         // Refresh amiga door cache
+        onStep?.({ kind: 'ok', text: 'rescanning the door definitions' });
         await refreshDoorCache();
         // Also reload the TypeScript door registry so the deleted door
         // is removed from getDoors() immediately (without server restart)
         try {
           const { initializeDoors } = require('../handlers/door.handler');
+          onStep?.({ kind: 'ok', text: 'reloading the door registry' });
           await initializeDoors();
         } catch (e) {
+          onStep?.({ kind: 'fail', text: `door registry reload failed: ${(e as Error).message}` });
           console.warn('[BBSApi.deleteDoor] Could not reload door registry:', e);
         }
       }

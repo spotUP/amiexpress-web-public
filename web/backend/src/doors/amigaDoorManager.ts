@@ -120,6 +120,23 @@ export interface DoorDeleteResult {
   removed?: string[];
 }
 
+/** One line of a delete, as it happens. */
+export interface DoorDeleteStep {
+  kind: 'ok' | 'skip' | 'fail';
+  text: string;
+}
+
+/**
+ * Called with each step WHILE the delete runs, not afterwards.
+ *
+ * DOORMAN runs in this same process, so this is a direct call rather than
+ * anything serialised: the door appends the step to its panel and repaints,
+ * and because the filesystem work between steps is asynchronous the repaint
+ * actually reaches the terminal. Before this, the sysop watched a still
+ * screen for the whole delete and got the entire log at the end.
+ */
+export type DoorDeleteProgress = (step: DoorDeleteStep) => void;
+
 export class AmigaDoorManager {
   public bbsRoot: string;
   private assigns: AmigaDOSAssigns;
@@ -1366,7 +1383,11 @@ console.error('Cleanup error:', error);
    * Delete all tracked + heuristic paths for a door command.
    * Used by both deleteAmigaDoor and deleteTypeScriptDoor.
    */
-  private async deleteTrackedFiles(command: string, fallbackPaths: string[]): Promise<string[]> {
+  private async deleteTrackedFiles(
+    command: string,
+    fallbackPaths: string[],
+    onStep?: DoorDeleteProgress
+  ): Promise<string[]> {
     const doorsDir = path.join(this.bbsRoot, 'Doors');
     const commandsDir = path.join(this.bbsRoot, 'Commands');
     const removed: string[] = [];
@@ -1388,20 +1409,47 @@ console.error('Cleanup error:', error);
       );
     };
 
+    const rel = (absPath: string): string => path.relative(this.bbsRoot, absPath);
+
     const deletePath = async (absPath: string): Promise<void> => {
       try {
-        if (!amigafs.existsSync(absPath)) return;
+        if (!amigafs.existsSync(absPath)) {
+          onStep?.({ kind: 'skip', text: `${rel(absPath)} was not there` });
+          return;
+        }
         const stats = amigafs.statSync(absPath);
         // Asynchronous on purpose: this process serves every node, and the
         // synchronous version froze the whole board for the length of the
         // delete (a door with a few hundred files is a visible stall).
         if (stats.isDirectory()) {
+          // One entry at a time rather than a single recursive rm, so the
+          // sysop sees what is being removed instead of one long pause
+          // followed by a finished log.
+          let children: string[] = [];
+          try { children = amigafs.readdirSync(absPath); } catch { children = []; }
+          onStep?.({ kind: 'ok', text: `${rel(absPath)}/ - ${children.length} entries` });
+          for (const child of children) {
+            const childPath = path.join(absPath, child);
+            try {
+              await amigafs.rm(childPath, { recursive: true, force: true });
+              onStep?.({ kind: 'ok', text: `removed ${rel(childPath)}` });
+            } catch (err) {
+              onStep?.({ kind: 'fail', text: `${rel(childPath)}: ${(err as Error).message}` });
+            }
+          }
           await amigafs.rm(absPath, { recursive: true, force: true });
+          onStep?.({ kind: 'ok', text: `removed ${rel(absPath)}/` });
         } else {
           await amigafs.unlink(absPath);
+          onStep?.({ kind: 'ok', text: `removed ${rel(absPath)}` });
         }
-        removed.push(path.relative(this.bbsRoot, absPath));
-      } catch { /* ignore - a path that cannot be removed is reported by the caller's verification */ }
+        removed.push(rel(absPath));
+      } catch (err) {
+        // Reported, never swallowed: a path that could not be removed is
+        // exactly what the caller's verification is about to fail on, and
+        // the sysop should see which one it was.
+        onStep?.({ kind: 'fail', text: `${rel(absPath)}: ${(err as Error).message}` });
+      }
     };
 
     // Tracked rows AND the caller's fallbacks, not one or the other.
@@ -1416,12 +1464,20 @@ console.error('Cleanup error:', error);
       ...tracked.map(entry => path.join(this.bbsRoot, entry.filePath)),
       ...fallbackPaths,
     ];
+    onStep?.({
+      kind: 'ok',
+      text: `${tracked.length} tracked path(s), ${fallbackPaths.length} from the door's own registration`,
+    });
+
     const seen = new Set<string>();
     for (const candidate of candidates) {
       const resolved = path.resolve(candidate);
       if (seen.has(resolved)) continue;
       seen.add(resolved);
-      if (!withinTree(resolved)) continue;
+      if (!withinTree(resolved)) {
+        onStep?.({ kind: 'skip', text: `refused ${candidate} - outside Doors/ and Commands/` });
+        continue;
+      }
       await deletePath(resolved);
     }
 
@@ -1432,7 +1488,7 @@ console.error('Cleanup error:', error);
   /**
    * Delete Amiga door (removes .info file and door directory)
    */
-  async deleteAmigaDoor(command: string): Promise<DoorDeleteResult> {
+  async deleteAmigaDoor(command: string, onStep?: DoorDeleteProgress): Promise<DoorDeleteResult> {
     try {
       const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
       const infoPath = path.join(commandsPath, `${command}.info`);
@@ -1441,6 +1497,7 @@ console.error('Cleanup error:', error);
         return { success: false, message: `Door command '${command}' not found` };
       }
 
+      onStep?.({ kind: 'ok', text: `reading ${path.relative(this.bbsRoot, infoPath)}` });
       const metadata = this.parseInfoFile(infoPath);
 
       // Build fallback paths from .info metadata
@@ -1450,14 +1507,16 @@ console.error('Cleanup error:', error);
         fallbacks.push(path.dirname(metadata.resolvedPath));
       }
 
-      const removed = await this.deleteTrackedFiles(command.toUpperCase(), fallbacks);
+      const removed = await this.deleteTrackedFiles(command.toUpperCase(), fallbacks, onStep);
 
       // Verify, do not assume. The command's .info is what puts a door in
       // every list the BBS draws, so a delete that leaves it behind has not
       // deleted the door - and saying so is the difference between a sysop
       // seeing an error and seeing "deleted" beside a door that is still
       // there.
+      onStep?.({ kind: 'ok', text: 'checking what is left on disk' });
       if (amigafs.existsSync(infoPath)) {
+        onStep?.({ kind: 'fail', text: `${path.relative(this.bbsRoot, infoPath)} is still there` });
         return {
           success: false,
           message: `Door '${command}' still registered: ${path.relative(this.bbsRoot, infoPath)} could not be removed`,
@@ -1477,7 +1536,7 @@ console.error('Cleanup error:', error);
    * @param doorName - The door name (directory name in Doors/)
    * @returns Result object with success status and message
    */
-  async deleteTypeScriptDoor(doorName: string): Promise<DoorDeleteResult> {
+  async deleteTypeScriptDoor(doorName: string, onStep?: DoorDeleteProgress): Promise<DoorDeleteResult> {
     try {
       // Accept both 'arkanoid' and 'Doors/arkanoid' — strip any leading Doors/ prefix
       const name = (doorName || '').replace(/^Doors[\\/]/i, '').trim();
@@ -1606,6 +1665,7 @@ console.warn(`[deleteTypeScriptDoor] BBSCmd scan failed: ${(e as Error).message}
             if (lowerFile === `${resolvedCommand.toLowerCase()}.info`) {
               const infoPath = path.join(commandsPath, file);
               amigafs.unlinkSync(infoPath);
+              onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, infoPath)}` });
               deletedFiles.push(infoPath);
             }
           }
@@ -1624,6 +1684,7 @@ console.warn(`Could not clean up Commands/BBSCmd: ${(e as Error).message}`);
             if (lowerFile === `${resolvedCommand.toLowerCase()}.info`) {
               const infoPath = path.join(sysCmdPath, file);
               amigafs.unlinkSync(infoPath);
+              onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, infoPath)}` });
               deletedFiles.push(infoPath);
             }
           }
@@ -1635,7 +1696,9 @@ console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
       // Delete door directory (also deletes any library files tracked under it).
       // Asynchronous: the synchronous version blocked the single process that
       // serves every node, freezing the board for the whole delete.
+      onStep?.({ kind: 'ok', text: `removing ${path.relative(this.bbsRoot, doorPath)}/` });
       await amigafs.rm(doorPath, { recursive: true, force: true });
+      onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, doorPath)}/` });
       deletedFiles.push(doorPath);
 
       // Delete any library files tracked separately in DB (e.g. Libs/*.library)
@@ -1685,10 +1748,15 @@ console.error('TypeScript door deletion error:', error);
    * @param isTypeScriptDoor - Optional flag to force TypeScript door deletion
    * @returns Result object with success status and message
    */
-  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<DoorDeleteResult> {
+  async deleteDoor(
+    identifier: string,
+    isTypeScriptDoor?: boolean,
+    onStep?: DoorDeleteProgress
+  ): Promise<DoorDeleteResult> {
     // If explicitly marked as TypeScript door, delete as such
     if (isTypeScriptDoor === true) {
-      return this.deleteTypeScriptDoor(identifier);
+      onStep?.({ kind: 'ok', text: `${identifier} is a TypeScript door` });
+      return this.deleteTypeScriptDoor(identifier, onStep);
     }
 
     // Try Amiga door first
@@ -1696,13 +1764,15 @@ console.error('TypeScript door deletion error:', error);
     const infoPath = path.join(commandsPath, `${identifier}.info`);
 
     if (amigafs.existsSync(infoPath)) {
-      return this.deleteAmigaDoor(identifier);
+      onStep?.({ kind: 'ok', text: `${identifier} is registered in Commands/BBSCmd` });
+      return this.deleteAmigaDoor(identifier, onStep);
     }
 
     // Try TypeScript door
     const tsPath = path.join(this.bbsRoot, 'Doors', identifier);
     if (amigafs.existsSync(tsPath)) {
-      return this.deleteTypeScriptDoor(identifier);
+      onStep?.({ kind: 'ok', text: `no .info; found Doors/${identifier}` });
+      return this.deleteTypeScriptDoor(identifier, onStep);
     }
 
     return {

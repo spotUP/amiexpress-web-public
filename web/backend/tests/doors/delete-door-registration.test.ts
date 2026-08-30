@@ -8,11 +8,15 @@
  * deleting a door's files while leaving its `.info` deletes the door's body
  * and keeps its name.
  *
- * The cause was in deleteTrackedFiles: it treated the DB's tracked rows as
- * an EXCLUSIVE list, and fell back to the caller's paths only when there
- * were none. DD had tracked rows covering its directory but not its .info,
- * so the fallbacks - which name the .info - were skipped entirely. And
- * deleteAmigaDoor returned success without ever looking at what was left.
+ * deleteTrackedFiles treated the DB's tracked rows as an EXCLUSIVE list and
+ * fell back to the caller's paths - the ones that name the .info - only when
+ * there were none. That is fixed here, but it is NOT proven to be what
+ * happened to DD: the live `door_installed_files` table holds zero rows for
+ * any door, and the logs that would have said were destroyed when a deploy
+ * recreated the container. What is certain is that the delete reported
+ * success with the registration still on disk, because nothing looked. The
+ * verification below is what turns that from a silent lie into an error the
+ * sysop can see, whatever the path taken.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -67,7 +71,8 @@ afterEach(() => {
 
 describe('deleteAmigaDoor', () => {
   it('removes the command registration even when the DB tracks other files', async () => {
-    // The live shape: tracked rows name the directory, never the .info.
+    // Tracked rows that name the directory and not the .info: the shape the
+    // old code silently mishandled.
     const { infoPath, doorDir } = makeDoor('DD');
     trackedRows.push({ filePath: path.join('Doors', 'DD'), fileType: 'dir' });
 
@@ -182,5 +187,55 @@ describe('the delete does not block the event loop', () => {
 
     expect(ticked).toBe(true);
     expect(fs.existsSync(dir)).toBe(false);
+  });
+});
+
+describe('delete progress', () => {
+  it('reports each step while the delete runs, not after it', async () => {
+    // "after a pause it shows the log" - the sysop got the whole log at the
+    // end. Steps must arrive as they happen, and the last one must land
+    // before the call resolves.
+    const { doorDir } = makeDoor('AEHELP');
+    for (let i = 0; i < 5; i++) fs.writeFileSync(path.join(doorDir, `f${i}.dat`), 'x');
+
+    const seen: string[] = [];
+    let stepsBeforeResolve = 0;
+    const promise = new AmigaDoorManager(root)
+      .deleteAmigaDoor('AEHELP', step => { seen.push(`${step.kind}:${step.text}`); })
+      .then(result => { stepsBeforeResolve = seen.length; return result; });
+
+    // Nothing can have finished synchronously - the first await inside the
+    // delete has not returned yet.
+    const seenAtCallTime = seen.length;
+    const result = await promise;
+
+    expect(result.success).toBe(true);
+    expect(seenAtCallTime).toBeLessThan(stepsBeforeResolve);
+    expect(seen.some(s => s.includes('f0.dat'))).toBe(true);
+    expect(seen.some(s => s.includes('AEHELP.info'))).toBe(true);
+    expect(seen.some(s => s.startsWith('ok:checking what is left on disk'))).toBe(true);
+  });
+
+  it('names a path it refused, instead of skipping it silently', async () => {
+    makeDoor('AEHELP');
+    trackedRows.push({ filePath: path.join('..', 'escape.txt'), fileType: 'file' });
+
+    const seen: string[] = [];
+    await new AmigaDoorManager(root).deleteAmigaDoor('AEHELP', step => seen.push(`${step.kind}:${step.text}`));
+
+    expect(seen.some(s => s.startsWith('skip:refused'))).toBe(true);
+  });
+
+  it('reports a file it could not remove as a failure', async () => {
+    makeDoor('AEHELP');
+    const spy = jest.spyOn(fs.promises, 'unlink').mockRejectedValue(new Error('EPERM'));
+
+    const seen: string[] = [];
+    const result = await new AmigaDoorManager(root)
+      .deleteAmigaDoor('AEHELP', step => seen.push(`${step.kind}:${step.text}`));
+
+    spy.mockRestore();
+    expect(seen.some(s => s.startsWith('fail:'))).toBe(true);
+    expect(result.success).toBe(false);
   });
 });

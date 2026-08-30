@@ -434,13 +434,19 @@ class InstalledView extends ViewManager_1.BaseView {
                 this.layout.render();
             };
             this.setStatus(`Deleting ${d.name}...`, 'yellow', 30000);
-            log.ok(`removing ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
+            log.ok(`${d.command}: ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
             paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
             try {
-                const r = await this.bbs.deleteDoor(id, isTS);
-                for (const removed of (r.removed ?? [])) {
-                    log.ok(`removed ${removed}`);
-                }
+                // Each step is painted AS it happens. DOORMAN runs in the backend's
+                // own process, so this callback is a direct call from the delete -
+                // and because the filesystem work between steps is asynchronous,
+                // the repaint actually reaches the terminal instead of arriving as
+                // one finished log after the pause.
+                const onStep = (step) => {
+                    log.add(step.kind, step.text);
+                    paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+                };
+                const r = await this.bbs.deleteDoor(id, isTS, onStep);
                 if (r.success) {
                     // Belt and braces: deleteDoor refreshes backend caches itself,
                     // but a stale registry here left deleted doors visible with no
