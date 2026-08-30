@@ -17,6 +17,14 @@ export interface TabDefinition {
   label: string;
   /** Lazily rendered: a tab that is not open mounts nothing. */
   render: () => ReactNode;
+  /**
+   * Keep the tab mounted while another one is open.
+   *
+   * For anything holding live state - an operator chat in progress, a
+   * terminal - unmounting on a tab change would drop it. Such a tab is
+   * hidden rather than removed.
+   */
+  keepMounted?: boolean;
 }
 
 interface TabbedWorkspaceProps {
@@ -67,13 +75,24 @@ export function TabbedWorkspace({ tabs, defaultTab, aside }: TabbedWorkspaceProp
         {aside}
       </div>
 
-      {tabs.map((tab) => (
-        <TabsPrimitive.Content key={tab.id} value={tab.id} className="focus:outline-none">
-          {/* Only the open tab is mounted, so a screen that polls or holds a
-              socket does neither while it is out of view. */}
-          {active === tab.id && tab.render()}
-        </TabsPrimitive.Content>
-      ))}
+      {tabs.map((tab) =>
+        tab.keepMounted ? (
+          <TabsPrimitive.Content
+            key={tab.id}
+            value={tab.id}
+            forceMount
+            className="focus:outline-none data-[state=inactive]:hidden"
+          >
+            {tab.render()}
+          </TabsPrimitive.Content>
+        ) : (
+          <TabsPrimitive.Content key={tab.id} value={tab.id} className="focus:outline-none">
+            {/* Everything else mounts only while it is open, so a screen that
+                polls does not poll out of view. */}
+            {active === tab.id && tab.render()}
+          </TabsPrimitive.Content>
+        )
+      )}
     </TabsPrimitive.Root>
   );
 }

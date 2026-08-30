@@ -107,6 +107,9 @@ const OPERATOR_CHAT_TABS: TabDefinition[] = [
   {
     id: 'chat',
     label: 'Chat',
+    // Stays mounted: a sysop opening Settings in the middle of a conversation
+    // must not drop the conversation.
+    keepMounted: true,
     render: () => (
       <Suspense fallback={<SkeletonRows rows={6} />}>
         <OperatorChatPage />
