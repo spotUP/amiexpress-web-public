@@ -31,3 +31,24 @@ it('replaces the previous token for the same node', () => {
   expect(verifyLaunchToken(first)).toBeNull();
   expect(verifyLaunchToken(second)).not.toBeNull();
 });
+
+it('hands back a copy, so a caller cannot rewrite the stored claims', () => {
+  const token = mintLaunchToken(root, { nodeId: 1, userId: 7, secLevel: 255 });
+
+  const first = verifyLaunchToken(token)!;
+  first.secLevel = 0;
+
+  // The store still holds what was minted.
+  expect(verifyLaunchToken(token)!.secLevel).toBe(255);
+});
+
+it('writes the token file readable only by the BBS account', () => {
+  const token = mintLaunchToken(root, { nodeId: 1, userId: 7, secLevel: 255 });
+  expect(token).toBeTruthy();
+
+  const tokenPath = path.join(root, 'Doors', 'DoorRepo', 'DoorRepo.token');
+  const mode = fs.statSync(tokenPath).mode & 0o777;
+
+  if (process.platform === 'win32') return; // no POSIX modes to assert
+  expect(mode).toBe(0o600);
+});

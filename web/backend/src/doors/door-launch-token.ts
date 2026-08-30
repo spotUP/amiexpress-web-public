@@ -38,14 +38,25 @@ export function mintLaunchToken(
 
   const tokenPath = path.join(bbsRoot, 'Doors', 'DoorRepo', 'DoorRepo.token');
   fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
-  fs.writeFileSync(tokenPath, `${token}\n`, 'latin1');
+  // 0600: the token is a bearer credential for a delete-capable API, and it
+  // has to live in the door's own directory because a C89 door reads it with
+  // fgets. Narrow what can read it to the account the BBS runs as.
+  fs.writeFileSync(tokenPath, `${token}\n`, { encoding: 'latin1', mode: 0o600 });
+  try {
+    fs.chmodSync(tokenPath, 0o600);
+  } catch {
+    // A filesystem without POSIX modes (a FAT-mounted volume, some Windows
+    // setups) cannot narrow this; the token is still per-launch and revoked
+    // when the door exits.
+  }
 
   return token;
 }
 
 export function verifyLaunchToken(token: string | undefined): LaunchTokenClaims | null {
   if (!token) return null;
-  return live.get(token) ?? null;
+  const claims = live.get(token);
+  return claims ? { ...claims } : null;
 }
 
 export function revokeLaunchToken(token: string): void {
