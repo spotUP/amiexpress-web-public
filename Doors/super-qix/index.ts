@@ -11,6 +11,7 @@ import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
+import { loadBackgroundForLevel } from "./game/background";
 import { rpcHandlers } from "./server";
 import { SuperQixData, GameState, InputKey, Direction } from "./game/types";
 import {
@@ -353,9 +354,25 @@ function showHelp(): void {
 }
 
 /**
+ * Load the picture for a level and hand it to the engine.
+ *
+ * Reading the art is I/O, so it happens here rather than inside initLevel.
+ * A board with no backgrounds/ directory simply gets null and the playfield
+ * draws in flat colour, exactly as it did before.
+ */
+async function applyLevelBackground(level: number): Promise<void> {
+  try {
+    engine?.setBackground(await loadBackgroundForLevel(level));
+  } catch (error) {
+    console.error("[Super Qix] Background load failed:", error);
+    engine?.setBackground(null);
+  }
+}
+
+/**
  * Start the game
  */
-function startGame(): void {
+async function startGame(): Promise<void> {
   gameData.state = "playing";
   gameData.score = 0;
   gameData.lives = STARTING_LIVES;
@@ -373,6 +390,7 @@ function startGame(): void {
     screen.render();
   });
 
+  await applyLevelBackground(1);
   engine.initLevel(1);
 
   // Start game loop
@@ -395,7 +413,11 @@ function startGame(): void {
     } else if (gameData.state === "levelTransition") {
       gameData.transitionTimer--;
       if (gameData.transitionTimer <= 0) {
-        engine?.advanceLevel();
+        // Reveal a different picture on the next level. The load is async;
+        // advance once it is in place so the new level never paints a frame
+        // with the previous level's art.
+        const nextLevel = gameData.level + 1;
+        void applyLevelBackground(nextLevel).then(() => engine?.advanceLevel());
       }
     }
   }, GAME_TICK_MS);

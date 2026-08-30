@@ -3,6 +3,7 @@
  * Main game logic and state management
  */
 import { SuperQixData, Direction } from './types';
+import { Background } from './background';
 type RenderCallback = (content: string) => void;
 /**
  * Main game engine for Super Qix
@@ -14,7 +15,20 @@ export declare class QixEngine {
     private enemySystem;
     private powerUpSystem;
     private lastMoveTime;
+    /**
+     * The picture hidden behind the playfield, revealed as area is claimed.
+     * Null when the board has no art, in which case claimed area is drawn as
+     * a flat colour and the game plays exactly as before.
+     */
+    private background;
     constructor(data: SuperQixData, renderCallback: RenderCallback);
+    /**
+     * Set the picture revealed as area is claimed.
+     *
+     * Loading it reads a file, so the door does that and hands the result in
+     * rather than initLevel blocking on I/O.
+     */
+    setBackground(background: Background | null): void;
     /**
      * Initialize a new level
      */

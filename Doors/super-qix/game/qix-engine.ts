@@ -29,10 +29,12 @@ import {
   CHARS,
   BG_COLORS,
   CELL_WIDTH,
+  ART_PALETTE,
   getLevelConfig,
   DEFAULT_HIGHSCORES,
   FUSE_START_DELAY
 } from './constants';
+import { Background, ArtCell, artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
 import { PowerUpSystem } from './powerups';
@@ -50,12 +52,29 @@ export class QixEngine {
   private powerUpSystem: PowerUpSystem;
   private lastMoveTime: number = 0;
 
+  /**
+   * The picture hidden behind the playfield, revealed as area is claimed.
+   * Null when the board has no art, in which case claimed area is drawn as
+   * a flat colour and the game plays exactly as before.
+   */
+  private background: Background | null = null;
+
   constructor(data: SuperQixData, renderCallback: RenderCallback) {
     this.data = data;
     this.renderCallback = renderCallback;
     this.drawingSystem = new DrawingSystem(data);
     this.enemySystem = new EnemySystem(data);
     this.powerUpSystem = new PowerUpSystem(data);
+  }
+
+  /**
+   * Set the picture revealed as area is claimed.
+   *
+   * Loading it reads a file, so the door does that and hands the result in
+   * rather than initLevel blocking on I/O.
+   */
+  setBackground(background: Background | null): void {
+    this.background = background;
   }
 
   /**
@@ -502,7 +521,10 @@ export class QixEngine {
     // same space glyph (border/unclaimed/claimed/stix are all blocks), so a
     // char->color lookup can no longer tell them apart; bg is now what
     // carries the meaning.
-    type Cell = { ch: string; fg?: string; bg?: string };
+    // `art` carries the CELL_WIDTH characters of the hidden picture that sit
+    // behind this cell, each with its own colours. A claimed cell is drawn
+    // as those characters; everything else uses ch/fg/bg.
+    type Cell = { ch: string; fg?: string; bg?: string; art?: ArtCell[] };
     const buffer: Cell[][] = [];
     for (let y = 0; y < FIELD_HEIGHT; y++) {
       buffer[y] = [];
@@ -523,7 +545,11 @@ export class QixEngine {
             buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
             break;
           case 'claimed':
-            buffer[y][x] = { ch: ' ', bg: BG_COLORS.claimed };
+            // Claiming ground is what uncovers the picture. With no art
+            // loaded this falls back to the flat colour it used to be.
+            buffer[y][x] = this.background
+              ? { ch: ' ', art: artForCell(this.background, x, y) }
+              : { ch: ' ', bg: BG_COLORS.claimed };
             break;
           case 'stix': {
             const slow = d.currentStix?.speed === 'slow';
@@ -619,7 +645,20 @@ export class QixEngine {
     for (let y = 0; y < buffer.length; y++) {
       let line = '';
       for (let x = 0; x < buffer[y].length; x++) {
-        const { ch, fg, bg } = buffer[y][x];
+        const { ch, fg, bg, art } = buffer[y][x];
+
+        // Revealed picture: each art character keeps its own colours, so the
+        // two columns of a cell can differ - which is what makes it read as
+        // artwork rather than a coloured block.
+        if (art) {
+          for (const part of art) {
+            const artFg = ART_PALETTE[part.fg] || 'white';
+            const artBg = ART_PALETTE[part.bg] || 'black';
+            line += `{${artBg}-bg}{${artFg}-fg}${part.char}{/${artFg}-fg}{/${artBg}-bg}`;
+          }
+          continue;
+        }
+
         let cellStr = ch + ' '.repeat(CELL_WIDTH - 1);
         if (fg) cellStr = `{${fg}-fg}${cellStr}{/${fg}-fg}`;
         if (bg) cellStr = `{${bg}-bg}${cellStr}{/${bg}-bg}`;

@@ -17,9 +17,18 @@ export const SCREEN_HEIGHT = 24;
 // tall on screen - square. The grid is therefore 38 logical columns
 // rendered as 76 characters, which still fits SCREEN_WIDTH (80).
 // All game logic works in logical cells and needs no aspect correction.
+// The grid is also sized to the background art: a piece is 80 columns wide,
+// and at CELL_WIDTH characters per cell that is exactly FIELD_WIDTH cells,
+// so the art is revealed at its native resolution with nothing squashed.
+// FIELD_HEIGHT matches the game area (SCREEN_HEIGHT less the HUD and the
+// footer), and the art's remaining rows are cropped.
 export const CELL_WIDTH = 2;
-export const FIELD_WIDTH = 38;
-export const FIELD_HEIGHT = 18;
+export const FIELD_WIDTH = 40;
+export const FIELD_HEIGHT = 20;
+// Background art dimensions. Every piece in backgrounds/ is 80x25 (SAUCE
+// says so for all of them); the field shows the top FIELD_HEIGHT rows.
+export const ART_WIDTH = FIELD_WIDTH * CELL_WIDTH; // 80
+export const ART_HEIGHT = FIELD_HEIGHT; // 20 of the art's 25 rows
 export const FIELD_OFFSET_X = 2;
 export const FIELD_OFFSET_Y = 2;
 // Game timing
@@ -95,6 +104,20 @@ export const COLORS = {
     level: 'cyan',
     percent: 'green'
 };
+/**
+ * The 16 ANSI colours, indexed the way ANSI art indexes them, named the way
+ * blessed tags name them. Art cells carry fg/bg as 0-15, so this is the
+ * translation used when a claimed cell reveals the picture behind it.
+ *
+ * Same names and order as the palette in the LiveChat door, so the two agree
+ * on what "colour 9" is called.
+ */
+export const ART_PALETTE = [
+    'black', 'red', 'green', 'yellow',
+    'blue', 'magenta', 'cyan', 'white',
+    'gray', 'lightred', 'lightgreen', 'lightyellow',
+    'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
+];
 // Background-block colors for the playfield. A space glyph colored with
 // -fg is invisible (fg has no effect on a blank char) - the field must be
 // painted with -bg so claimed/border/stix area actually shows as filled

@@ -3,6 +3,7 @@
  * Supports .ANS (ANSI), .ASC (ASCII), .XB (XBin) formats
  */
 
+import { decodeCP437, encodeCP437, cp437ByteToChar, charToCP437Byte } from './cp437';
 import type { Cell } from '../types';
 import * as Canvas from './canvas';
 
@@ -42,7 +43,7 @@ function parseSAUCE(data: Uint8Array): SAUCERecord | null {
   const id = String.fromCharCode(...Array.from(data.slice(sauceOffset, sauceOffset + 5)));
   if (id !== 'SAUCE') return null;
 
-  const decoder = new TextDecoder('cp437');
+  const decoder = { decode: (b: Uint8Array) => decodeCP437(b) };
 
   return {
     id,
@@ -161,6 +162,9 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
   let fg = 7; // White
   let bg = 0; // Black
   let blink = false;
+  // ESC[s / ESC[u save and restore
+  let savedX = 0;
+  let savedY = 0;
 
   let i = 0;
   while (i < content.length && y < height) {
@@ -212,21 +216,74 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
         }
         i++;
       }
-    }
-    // Cursor position (ESC[y;xH)
-    else if (byte === 0x1B && i + 1 < content.length && content[i + 1] === 0x5B) {
-      i += 2;
-      let code = '';
-      while (i < content.length && (content[i] >= 0x30 && content[i] <= 0x39 || content[i] === 0x3B)) {
-        code += String.fromCharCode(content[i]);
-        i++;
-      }
+      else {
+        // Not SGR: the same ESC [ <params> <final> shape, dispatched on the
+        // final byte. This used to sit in a second `else if` with an
+        // identical condition, which could never be reached - so every
+        // cursor-movement sequence was silently dropped.
+      const final = i < content.length ? content[i] : 0;
+      const parts = code.split(';').map(c => parseInt(c) || 1);
+      const count = parseInt(code) || 1;
 
-      if (i < content.length && (content[i] === 0x48 || content[i] === 0x66)) { // 'H' or 'f'
-        const parts = code.split(';').map(c => parseInt(c) || 1);
-        y = (parts[0] - 1) || 0;
-        x = (parts[1] - 1) || 0;
-        i++;
+      switch (final) {
+        case 0x48: // 'H' - cursor position
+        case 0x66: // 'f'
+          y = (parts[0] - 1) || 0;
+          x = (parts[1] - 1) || 0;
+          i++;
+          break;
+        // Relative cursor moves. Art uses ESC[C constantly to skip runs of
+        // background instead of writing spaces; ignoring it collapsed every
+        // such gap and shifted the rest of the line to the left.
+        case 0x41: // 'A' - up
+          y = Math.max(0, y - count);
+          i++;
+          break;
+        case 0x42: // 'B' - down
+          y = y + count;
+          i++;
+          break;
+        case 0x43: // 'C' - forward
+          x = x + count;
+          i++;
+          break;
+        case 0x44: // 'D' - back
+          x = Math.max(0, x - count);
+          i++;
+          break;
+        case 0x45: // 'E' - next line, column 0
+          y = y + count;
+          x = 0;
+          i++;
+          break;
+        case 0x46: // 'F' - previous line, column 0
+          y = Math.max(0, y - count);
+          x = 0;
+          i++;
+          break;
+        case 0x47: // 'G' - absolute column
+          x = Math.max(0, count - 1);
+          i++;
+          break;
+        case 0x73: // 's' - save cursor
+          savedX = x;
+          savedY = y;
+          i++;
+          break;
+        case 0x75: // 'u' - restore cursor
+          x = savedX;
+          y = savedY;
+          i++;
+          break;
+        case 0x4A: // 'J' - erase display. The canvas starts blank, so there
+        case 0x4B: // 'K' - erase line. is nothing to clear; just consume it.
+          i++;
+          break;
+        default:
+          // Unknown final byte: consume it so it is not painted as a glyph.
+          if (final !== 0) i++;
+          break;
+      }
       }
     }
     // Newline
@@ -247,7 +304,17 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
     }
     // Regular character
     else {
-      const char = String.fromCharCode(byte);
+      // Wrap at the right margin, the way a real terminal does. Plenty of
+      // art never emits a newline at all and simply runs past column 80,
+      // trusting the terminal to wrap; without this those pieces collapsed
+      // onto a single row and everything past column 80 was discarded.
+      if (x >= width) {
+        x = 0;
+        y++;
+        if (y >= height) break;
+      }
+
+      const char = cp437ByteToChar(byte);
       if (x < width && y < height) {
         Canvas.setCell(canvas, x, y, {
           char,
@@ -329,9 +396,10 @@ export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?
   // Add reset code at end
   ansiContent += '\x1B[0m';
 
-  // Encode content
-  const encoder = new TextEncoder();
-  const contentData = encoder.encode(ansiContent);
+  // Encode content as CP437, the character set the art is drawn in.
+  // TextEncoder would write UTF-8 here, turning each block glyph into three
+  // bytes and shifting every column after it.
+  const contentData = encodeCP437(ansiContent);
 
   // Add SAUCE record if provided
   if (sauce) {
@@ -361,9 +429,8 @@ export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?
  * Load .ASC (ASCII art) file
  */
 export async function loadASCFile(data: Uint8Array): Promise<{ canvas: Cell[][], width: number, height: number }> {
-  // Parse as plain text
-  const decoder = new TextDecoder('cp437');
-  const text = decoder.decode(data);
+  // Parse as plain text (CP437, the PC character set the art is drawn in)
+  const text = decodeCP437(data);
   const lines = text.split(/\r?\n/);
 
   // Calculate dimensions
@@ -406,9 +473,8 @@ export function saveASCFile(canvas: Cell[][]): Uint8Array {
     lines.push(line);
   }
 
-  const text = lines.join('\r\n');
-  const encoder = new TextEncoder();
-  return encoder.encode(text);
+  // CP437, not UTF-8 - see the note in saveANSFile.
+  return encodeCP437(lines.join('\r\n'));
 }
 
 /**

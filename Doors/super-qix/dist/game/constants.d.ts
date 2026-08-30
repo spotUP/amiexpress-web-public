@@ -6,8 +6,10 @@ import { LevelConfig, PowerUpType } from './types';
 export declare const SCREEN_WIDTH = 80;
 export declare const SCREEN_HEIGHT = 24;
 export declare const CELL_WIDTH = 2;
-export declare const FIELD_WIDTH = 38;
-export declare const FIELD_HEIGHT = 18;
+export declare const FIELD_WIDTH = 40;
+export declare const FIELD_HEIGHT = 20;
+export declare const ART_WIDTH: number;
+export declare const ART_HEIGHT = 20;
 export declare const FIELD_OFFSET_X = 2;
 export declare const FIELD_OFFSET_Y = 2;
 export declare const GAME_TICK_MS = 33;
@@ -75,6 +77,15 @@ export declare const COLORS: {
     level: string;
     percent: string;
 };
+/**
+ * The 16 ANSI colours, indexed the way ANSI art indexes them, named the way
+ * blessed tags name them. Art cells carry fg/bg as 0-15, so this is the
+ * translation used when a claimed cell reveals the picture behind it.
+ *
+ * Same names and order as the palette in the LiveChat door, so the two agree
+ * on what "colour 9" is called.
+ */
+export declare const ART_PALETTE: string[];
 export declare const BG_COLORS: {
     border: string;
     unclaimed: string;

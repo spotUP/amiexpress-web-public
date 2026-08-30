@@ -2,7 +2,8 @@
  * Super Qix - Core Game Engine
  * Main game logic and state management
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, POINTS_PER_BONUS_PERCENT, BONUS_PERCENT_START, CHARS, BG_COLORS, CELL_WIDTH, getLevelConfig, FUSE_START_DELAY } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, POINTS_PER_BONUS_PERCENT, BONUS_PERCENT_START, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY } from './constants';
+import { artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
 import { PowerUpSystem } from './powerups';
@@ -12,11 +13,26 @@ import { PowerUpSystem } from './powerups';
 export class QixEngine {
     constructor(data, renderCallback) {
         this.lastMoveTime = 0;
+        /**
+         * The picture hidden behind the playfield, revealed as area is claimed.
+         * Null when the board has no art, in which case claimed area is drawn as
+         * a flat colour and the game plays exactly as before.
+         */
+        this.background = null;
         this.data = data;
         this.renderCallback = renderCallback;
         this.drawingSystem = new DrawingSystem(data);
         this.enemySystem = new EnemySystem(data);
         this.powerUpSystem = new PowerUpSystem(data);
+    }
+    /**
+     * Set the picture revealed as area is claimed.
+     *
+     * Loading it reads a file, so the door does that and hands the result in
+     * rather than initLevel blocking on I/O.
+     */
+    setBackground(background) {
+        this.background = background;
     }
     /**
      * Initialize a new level
@@ -430,7 +446,11 @@ export class QixEngine {
                         buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
                         break;
                     case 'claimed':
-                        buffer[y][x] = { ch: ' ', bg: BG_COLORS.claimed };
+                        // Claiming ground is what uncovers the picture. With no art
+                        // loaded this falls back to the flat colour it used to be.
+                        buffer[y][x] = this.background
+                            ? { ch: ' ', art: artForCell(this.background, x, y) }
+                            : { ch: ' ', bg: BG_COLORS.claimed };
                         break;
                     case 'stix': {
                         const slow = d.currentStix?.speed === 'slow';
@@ -519,7 +539,18 @@ export class QixEngine {
         for (let y = 0; y < buffer.length; y++) {
             let line = '';
             for (let x = 0; x < buffer[y].length; x++) {
-                const { ch, fg, bg } = buffer[y][x];
+                const { ch, fg, bg, art } = buffer[y][x];
+                // Revealed picture: each art character keeps its own colours, so the
+                // two columns of a cell can differ - which is what makes it read as
+                // artwork rather than a coloured block.
+                if (art) {
+                    for (const part of art) {
+                        const artFg = ART_PALETTE[part.fg] || 'white';
+                        const artBg = ART_PALETTE[part.bg] || 'black';
+                        line += `{${artBg}-bg}{${artFg}-fg}${part.char}{/${artFg}-fg}{/${artBg}-bg}`;
+                    }
+                    continue;
+                }
                 let cellStr = ch + ' '.repeat(CELL_WIDTH - 1);
                 if (fg)
                     cellStr = `{${fg}-fg}${cellStr}{/${fg}-fg}`;
