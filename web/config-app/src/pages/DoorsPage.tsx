@@ -4,6 +4,10 @@ import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload } from 
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+
+/** A stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_DOORS: Door[] = [];
 
 interface DoorFormData {
   door_name: string;
@@ -28,8 +32,6 @@ export function DoorsPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
-  const [sortColumn, setSortColumn] = useState<keyof Door>('door_name');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isUploading, setIsUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<DoorFormData>({
@@ -138,11 +140,14 @@ export function DoorsPage() {
 
   const handleDelete = async (door: Door) => {
     const confirmed = await confirm({
-      title: 'Delete Door',
-      message: `Are you sure you want to delete door "${door.door_name}"?`,
+      title: 'Delete door',
+      message: `Deleting ${door.door_name} removes its entry from Commands/BBSCmd/${door.door_command}.info. Callers lose the command immediately.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
-      type: 'danger'
+      type: 'danger',
+      // A door removed by mistake takes its tooltypes with it. Type the
+      // command back before this goes ahead.
+      requireTypedConfirmation: door.door_command
     });
     if (confirmed) {
       deleteMutation.mutate(door.id);
@@ -236,35 +241,81 @@ export function DoorsPage() {
     setInfoDirty(true);
   };
 
-  const handleSort = (column: keyof Door) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  };
+  const doors: Door[] = data?.data ?? EMPTY_DOORS;
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading doors...</div>;
-  }
-
-  const doors = (data?.data || []).sort((a: Door, b: Door) => {
-    const aVal = a[sortColumn];
-    const bVal = b[sortColumn];
-    const modifier = sortDirection === 'asc' ? 1 : -1;
-
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return aVal.localeCompare(bVal) * modifier;
-    }
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return (aVal - bVal) * modifier;
-    }
-    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
-      return (aVal === bVal ? 0 : aVal ? -1 : 1) * modifier;
-    }
-    return 0;
-  });
+  const columns: DataTableColumn<Door>[] = [
+    {
+      id: 'enabled',
+      header: 'Status',
+      value: (door) => (door.enabled ? 1 : 0),
+      width: '9rem',
+      cell: (door) =>
+        door.enabled ? (
+          <span className="inline-flex items-center gap-1 rounded bg-status-ok/20 px-2 py-0.5 text-xs text-status-ok">
+            <Power size={11} aria-hidden="true" /> Enabled
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded bg-surface-3 px-2 py-0.5 text-xs text-content-muted">
+            <PowerOff size={11} aria-hidden="true" /> Disabled
+          </span>
+        ),
+    },
+    {
+      id: 'door_name',
+      header: 'Name',
+      value: (door) => door.door_name,
+      cell: (door) => <span className="text-content-primary">{door.door_name}</span>,
+    },
+    {
+      id: 'door_command',
+      header: 'Command',
+      value: (door) => door.door_command,
+      mono: true,
+      width: '10rem',
+      cell: (door) => <span className="text-content-primary">{door.door_command}</span>,
+    },
+    {
+      id: 'description',
+      header: 'Description',
+      value: (door) => door.description ?? '',
+      cell: (door) => (
+        <span className="block max-w-md truncate text-content-secondary" title={door.description}>
+          {door.description}
+        </span>
+      ),
+    },
+    {
+      id: 'door_type',
+      header: 'Type',
+      value: (door) => door.door_type,
+      mono: true,
+      width: '7rem',
+    },
+    {
+      id: 'runtime_env',
+      header: 'Runtime',
+      value: (door) => door.runtime_env,
+      mono: true,
+      width: '8rem',
+    },
+    {
+      id: 'min_security_level',
+      header: 'Min level',
+      value: (door) => door.min_security_level,
+      align: 'right',
+      mono: true,
+      width: '7rem',
+    },
+    {
+      id: 'time_limit',
+      header: 'Time limit',
+      value: (door) => door.time_limit,
+      align: 'right',
+      mono: true,
+      width: '7rem',
+      cell: (door) => `${door.time_limit} min`,
+    },
+  ];
 
   return (
     <div>
@@ -292,96 +343,42 @@ export function DoorsPage() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-bbs-border">
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('enabled')}>
-                Status {sortColumn === 'enabled' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('door_name')}>
-                Name {sortColumn === 'door_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('door_command')}>
-                Command {sortColumn === 'door_command' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold">
-                Description
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('door_type')}>
-                Type {sortColumn === 'door_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('runtime_env')}>
-                Runtime {sortColumn === 'runtime_env' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('min_security_level')}>
-                Min Sec {sortColumn === 'min_security_level' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('time_limit')}>
-                Time {sortColumn === 'time_limit' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="text-right py-3 px-4 text-bbs-text font-semibold">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {doors.map((door: Door) => (
-              <tr key={door.id} className="border-b border-bbs-border hover:bg-bbs-secondary/20 transition-colors">
-                <td className="py-3 px-4">
-                  {door.enabled ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-status-ok/20 text-status-ok">
-                      <Power size={12} className="mr-1" /> Enabled
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-bbs-muted/20 text-bbs-muted">
-                      <PowerOff size={12} className="mr-1" /> Disabled
-                    </span>
-                  )}
-                </td>
-                <td className="py-3 px-4 text-bbs-text font-semibold">{door.door_name}</td>
-                <td className="py-3 px-4 text-bbs-text font-mono text-sm">/{door.door_command}</td>
-                <td className="py-3 px-4 text-bbs-muted text-sm max-w-xs truncate" title={door.description}>{door.description}</td>
-                <td className="py-3 px-4 text-bbs-text font-mono text-sm">{door.door_type}</td>
-                <td className="py-3 px-4 text-bbs-text font-mono text-sm">{door.runtime_env}</td>
-                <td className="py-3 px-4 text-bbs-text text-center">{door.min_security_level}</td>
-                <td className="py-3 px-4 text-bbs-text text-center">{door.time_limit}m</td>
-                <td className="py-3 px-4">
-                  <div className="flex space-x-2 justify-end">
-                    <button
-                      onClick={() => handleEdit(door)}
-                      className="p-2 bg-bbs-secondary hover:bg-bbs-secondary/80 text-bbs-text rounded transition-colors"
-                      title="Edit door"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleEditInfo(door)}
-                      className="p-2 bg-accent hover:bg-accent-hover text-content-inverse rounded transition-colors"
-                      title="Edit .info file"
-                    >
-                      <FileCode size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(door)}
-                      className="p-2 bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse rounded transition-colors"
-                      title="Delete door"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {doors.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No doors configured. Add doors to provide external programs and games.
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={doors}
+        getRowId={(door) => String(door.id)}
+        initialSort={[{ id: 'door_name', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No doors configured. Doors are the external programs and games on the command menu."
+        rowActions={(door) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(door)}
+              aria-label={`Edit ${door.door_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleEditInfo(door)}
+              aria-label={`Edit the .info file for ${door.door_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <FileCode size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(door)}
+              aria-label={`Delete ${door.door_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
+      />
 
       {/* Add/Edit Modal */}
       {isModalOpen && (

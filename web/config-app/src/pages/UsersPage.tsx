@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Trash2, Plus, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, Search } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
-import { DataGrid, type DataGridColumn } from '../components/DataGrid';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+import { formatCount } from '../lib/format';
 
 interface BbsUser {
   id: string;
@@ -51,10 +52,6 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<'username' | 'secLevel' | 'calls' | 'uploads' | 'downloads'>('username');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<BbsUser | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
@@ -186,10 +183,11 @@ export function UsersPage() {
   const handleDelete = async (user: BbsUser) => {
     const confirmed = await confirm({
       title: 'Delete User',
-      message: `Are you sure you want to delete user "${user.username}"?\n\nThis action cannot be undone.`,
+      message: `Deleting ${user.username} removes the account and its record on this board. This cannot be undone.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
-      type: 'danger'
+      type: 'danger',
+      requireTypedConfirmation: user.username
     });
     if (confirmed) {
       deleteMutation.mutate(user.id);
@@ -207,178 +205,135 @@ export function UsersPage() {
   // Use stable reference for empty fallback to prevent infinite re-renders
   const users = (data?.data ?? EMPTY_USERS) as BbsUser[];
 
+  // Filtering stays here; the table owns sorting.
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    let list = users;
-    if (term) {
-      list = list.filter(
-        (u) =>
-          u.username.toLowerCase().includes(term) ||
-          (u.realname || '').toLowerCase().includes(term) ||
-          (u.email || '').toLowerCase().includes(term)
-      );
-    }
-    list = [...list].sort((a, b) => {
-      const dir = sortDir === 'asc' ? 1 : -1;
-      switch (sortKey) {
-        case 'secLevel':
-          return (a.secLevel - b.secLevel) * dir;
-        case 'calls':
-          return (a.calls - b.calls) * dir;
-        case 'uploads':
-          return (a.uploads - b.uploads) * dir;
-        case 'downloads':
-          return (a.downloads - b.downloads) * dir;
-        default:
-          return a.username.localeCompare(b.username) * dir;
-      }
-    });
-    return list;
-  }, [users, search, sortKey, sortDir]);
+    if (!term) return users;
+    return users.filter(
+      (u) =>
+        u.username.toLowerCase().includes(term) ||
+        (u.realname || '').toLowerCase().includes(term) ||
+        (u.email || '').toLowerCase().includes(term)
+    );
+  }, [users, search]);
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading users...</div>;
-  }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageUsers = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  const columns: DataGridColumn<BbsUser>[] = [
+  const columns: DataTableColumn<BbsUser>[] = [
     {
-      key: 'username',
+      id: 'username',
       header: 'Username',
-      sortable: true,
-      render: (user) => <span className="text-bbs-text font-mono">{user.username}</span>,
+      value: (user) => user.username,
+      mono: true,
+      cell: (user) => <span className="text-content-primary">{user.username}</span>,
     },
     {
-      key: 'secLevel',
-      header: 'SecLvl',
-      sortable: true,
-      render: (user) => <span className={getSecurityLevelColor(user.secLevel)}>{user.secLevel}</span>,
+      id: 'secLevel',
+      header: 'Level',
+      value: (user) => user.secLevel,
+      align: 'right',
+      mono: true,
+      width: '5rem',
+      cell: (user) => <span className={getSecurityLevelColor(user.secLevel)}>{user.secLevel}</span>,
     },
     {
-      key: 'realname',
-      header: 'Real Name',
-      render: (user) => <span className="text-bbs-text truncate">{user.realname || '—'}</span>,
+      id: 'realname',
+      header: 'Real name',
+      value: (user) => user.realname ?? '',
+      cell: (user) => <span className="text-content-secondary">{user.realname || '-'}</span>,
     },
     {
-      key: 'email',
+      id: 'email',
       header: 'Email',
-      render: (user) => <span className="text-bbs-text truncate">{user.email || '—'}</span>,
+      value: (user) => user.email ?? '',
+      cell: (user) => <span className="truncate text-content-secondary">{user.email || '-'}</span>,
     },
     {
-      key: 'calls',
+      id: 'calls',
       header: 'Calls',
-      sortable: true,
-      render: (user) => <span className="text-bbs-text">{user.calls}</span>,
+      value: (user) => user.calls,
+      align: 'right',
+      mono: true,
+      width: '6rem',
+      cell: (user) => formatCount(user.calls),
     },
     {
-      key: 'files',
-      header: 'Files (U/D)',
-      className: 'text-sm',
-      render: (user) => (
-        <span className="text-bbs-text">
-          {user.uploads} / {user.downloads}
-        </span>
-      ),
+      id: 'transfers',
+      header: 'Up / down',
+      value: (user) => user.uploads + user.downloads,
+      align: 'right',
+      mono: true,
+      width: '8rem',
+      cell: (user) => `${formatCount(user.uploads)} / ${formatCount(user.downloads)}`,
     },
     {
-      key: 'time',
-      header: 'Time',
+      id: 'timeLimit',
+      header: 'Time limit',
+      value: (user) => user.timeLimit,
+      align: 'right',
+      mono: true,
+      width: '8rem',
       // -1 is this project's "unlimited" (see database/types.ts), and showing
       // it raw reads as a bug rather than as a setting.
-      render: (user) => (
-        <span className="text-bbs-text">
-          {user.timeLimit < 0 ? 'Unlimited' : `${user.timeLimit} min`}
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      render: (user) => (
-        <div className="flex space-x-2">
-          <button
-            onClick={() => handleEdit(user)}
-            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
-          >
-            <Edit2 size={14} />
-            <span>Edit</span>
-          </button>
-          <button
-            onClick={() => handleDelete(user)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs flex items-center space-x-1"
-          >
-            <Trash2 size={14} />
-            <span>Del</span>
-          </button>
-        </div>
-      ),
+      cell: (user) => (user.timeLimit < 0 ? 'Unlimited' : `${user.timeLimit} min`),
     },
   ];
 
   return (
     <div>
-      <div className="mb-4 flex justify-between items-center">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center bg-bbs-background border border-bbs-border rounded px-2">
-            <Search size={16} className="text-bbs-muted" />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-control items-center rounded border border-border bg-surface-0 px-2">
+            <Search size={14} className="text-content-muted" aria-hidden="true" />
             <input
-              type="text"
-              placeholder="Search username, real name, email"
+              type="search"
+              placeholder="Search username, real name or email"
+              aria-label="Search users"
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="bg-transparent focus:outline-none px-2 py-1 text-sm text-bbs-text"
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-72 bg-transparent px-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none"
             />
           </div>
-          <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
-            <Plus size={20} />
-            <span>Add User</span>
+          <button onClick={handleAdd} className="btn-primary flex h-control items-center gap-2 py-0 text-sm">
+            <Plus size={14} aria-hidden="true" />
+            <span>Add user</span>
           </button>
         </div>
       </div>
 
-      <DataGrid
+      <DataTable
         columns={columns}
-        rows={pageUsers}
-        sortKey={sortKey}
-        sortDir={sortDir}
-        onSort={(key) => {
-          setSortKey(key as typeof sortKey);
-          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
-        }}
-        emptyMessage="No users found."
-        getRowKey={(row) => row.id}
+        rows={filtered}
+        getRowId={(user) => user.id}
+        initialSort={[{ id: 'username', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage={search ? 'No user matches that search.' : 'No users yet.'}
+        rowActions={(user) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(user)}
+              aria-label={`Edit ${user.username}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(user)}
+              aria-label={`Delete ${user.username}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
       />
 
-      <div className="flex justify-between items-center mt-4">
-        <div className="text-sm text-bbs-muted">
-          Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of{' '}
-          {filtered.length}
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="btn-secondary px-3 py-1 disabled:opacity-50"
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span className="text-sm text-bbs-text">
-            {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="btn-secondary px-3 py-1 disabled:opacity-50"
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
+      <p className="mt-2 text-xs text-content-muted">
+        {filtered.length === users.length
+          ? `${users.length} users`
+          : `${filtered.length} of ${users.length} users`}
+      </p>
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
