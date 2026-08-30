@@ -168,6 +168,8 @@ function makeManifestDoor(overrides: Partial<ManifestDoor> = {}): ManifestDoor {
     archiveSize: 16080,
     md5: '52ee1086c055fc1c82407dc0961ab04d',
     sha256: 'd918a826c5ea694ba2aca4a5e18f464f5947c59d85e6d1e15cc14341e805b367',
+    junkCount: 0,
+    hasDoc: false,
     ...overrides,
   };
 }
@@ -223,7 +225,22 @@ describe('DOORMAN repoDataSource: mapManifestDoorToEntry', () => {
       installed: 0,
       installed_as: null,
       install_dir: null,
+      has_doc: false,
     });
+  });
+
+  // The manifest carries junkCount and hasDoc precisely so a client can
+  // decide what to OFFER before fetching anything. Both were dropped here,
+  // so every consumer-mode row claimed no documentation and no junk: the
+  // footer never advertised [V]iew doc on any of the 5900 rows, even after
+  // the key itself started working.
+  it('carries the manifest junk count and doc flag instead of neutral defaults', () => {
+    const entry = mapManifestDoorToEntry(
+      makeManifestDoor({ junkCount: 3, hasDoc: true }),
+      () => null
+    );
+    expect(entry.junk_count).toBe(3);
+    expect(entry.has_doc).toBe(true);
   });
 
   it('installed locally: installed resolved from the LOCAL lookup, not the manifest (manifest has no concept of it)', () => {

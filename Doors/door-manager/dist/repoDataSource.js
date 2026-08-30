@@ -37,6 +37,7 @@ exports.DEFAULT_DOOR_REPO_URL = void 0;
 exports.resolveDoorRepoMode = resolveDoorRepoMode;
 exports.loadLocalCatalogEntries = loadLocalCatalogEntries;
 exports.mapManifestDoorToEntry = mapManifestDoorToEntry;
+exports.mergeDoorDetailIntoEntry = mergeDoorDetailIntoEntry;
 exports.filterManifestEntries = filterManifestEntries;
 exports.loadConsumerCatalog = loadConsumerCatalog;
 exports.consumerCacheFilePath = consumerCacheFilePath;
@@ -145,8 +146,17 @@ function loadLocalCatalogEntries(svc, filter, lookupInstall) {
  * door_installs lookup to give keep working unchanged.
  *
  * Fields the manifest genuinely has no equivalent for (version,
- * doc_filename, doc_raw, suggested_tooltypes, junk_count) are left at a
- * neutral default; browsing/filtering never reads them for manifest rows.
+ * doc_filename, doc_raw, suggested_tooltypes) are left at a neutral
+ * default; browsing/filtering never reads them, and mergeDoorDetailIntoEntry
+ * fills them from GET /doors/:archiveName when a per-archive view needs
+ * them.
+ *
+ * `junk_count` and `has_doc` are NOT among them: the manifest carries
+ * junkCount and hasDoc precisely so a client can decide what to OFFER
+ * before fetching anything (see repo-types.generated.ts). Dropping them
+ * here is what left every consumer-mode row claiming no documentation, so
+ * the footer never advertised [V]iew doc even after the key started
+ * working.
  */
 function mapManifestDoorToEntry(door, lookupLocal, lookupInstall) {
     const local = lookupLocal(door.archiveName);
@@ -169,10 +179,43 @@ function mapManifestDoorToEntry(door, lookupLocal, lookupInstall) {
         suggested_tooltypes: null,
         category: door.category,
         archive_size: door.archiveSize ?? 0,
-        junk_count: 0,
+        junk_count: door.junkCount ?? 0,
         installed: installKnown ? (install ? 1 : 0) : (local?.installed ? 1 : 0),
         installed_as: installKnown ? (install?.command ?? null) : (local?.installed_as ?? null),
         install_dir: installKnown ? (install?.install_dir ?? null) : (local?.install_dir ?? null),
+        has_doc: door.hasDoc === true,
+    };
+}
+/**
+ * Fills a manifest-mapped entry's neutral defaults from the door server's
+ * per-archive detail. Only EMPTY fields are filled, for the same reason the
+ * backend's description overlay fills only empty ones: an owner-mode row
+ * came from this BBS's own catalog scan, and what a local scan found about
+ * a local archive outranks what the central catalog believes about its own
+ * copy.
+ *
+ * Install state (installed/installed_as/install_dir) and the locally
+ * resolved id/archive_path/binary_name are never touched -- the detail
+ * endpoint describes the catalog's copy, not this node's.
+ */
+function mergeDoorDetailIntoEntry(entry, detail) {
+    const keep = (current, incoming) => (current ?? incoming);
+    return {
+        ...entry,
+        version: keep(entry.version, detail.version),
+        file_id_diz: keep(entry.file_id_diz, detail.fileIdDiz),
+        doc_filename: keep(entry.doc_filename, detail.docFilename),
+        doc_raw: keep(entry.doc_raw, detail.doc),
+        suggested_tooltypes: keep(entry.suggested_tooltypes, detail.suggestedTooltypes),
+        description: keep(entry.description, detail.description),
+        category: keep(entry.category, detail.category),
+        author: keep(entry.author, detail.author),
+        release_group: keep(entry.release_group, detail.releaseGroup),
+        // A count, not a value that can be "already set": the detail's count is
+        // derived from the archive's actual file rows, so it supersedes the
+        // manifest's summary whenever the detail carries one.
+        junk_count: detail.junkCount > 0 ? detail.junkCount : entry.junk_count,
+        has_doc: entry.has_doc === true || detail.hasDoc || (entry.doc_raw ?? detail.doc) !== null,
     };
 }
 /**

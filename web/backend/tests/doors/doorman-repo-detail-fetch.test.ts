@@ -1,109 +1,156 @@
-import { fetchArchiveFiles, fetchDoc } from '../../../../Doors/door-manager/repo-client';
+import { fetchDoorDetail } from '../../../../Doors/door-manager/repo-client';
 
 /**
  * A consumer BBS has no catalog of its own - it moved to the door server -
- * so DOORMAN's two per-archive views had nothing to read. [V]iew doc did
- * nothing, and the file list said "no file data in catalog", on a server
- * that answers both:
+ * so every per-archive view had nothing to read: the file list said "no file
+ * data in catalog", [V]iew doc did nothing, and version /
+ * suggestedTooltypes / FILE_ID.DIZ sat at mapManifestDoorToEntry's neutral
+ * defaults for all 5900 rows.
  *
- *   GET /api/door-repo/files/:archiveName
- *   GET /api/door-repo/doc/:archiveName
+ * One endpoint answers all of it:
  *
- * The files format is the one the C door parses, so these tests pin the
- * parsing rather than trusting a shape.
+ *   GET /api/door-repo/doors/:archiveName
+ *
+ * It replaced the two narrower calls (/files, /doc). These tests pin the
+ * parse rather than trusting a shape, including everything a proxy or a
+ * half-dead server can put in front of it.
  */
 
 const CFG = { url: 'https://doors.example.test', cacheFile: '/tmp/unused-cache.json' };
 
-function mockFetch(body: string, ok = true, status = 200) {
+const FULL_ROW = {
+  archiveName: '-D-CALC.LHA',
+  name: 'Calculator',
+  version: 'v1.2',
+  description: 'A calculator door',
+  category: 'Utility',
+  author: 'Someone',
+  releaseGroup: 'DLT',
+  fileIdDiz: '  CALC  \n  v1.2  ',
+  docFilename: 'Calc.doc',
+  doc: 'HOW TO INSTALL\n',
+  suggestedTooltypes: '{"TYPE":"XIM","STACK":"10000"}',
+  junkCount: 1,
+  hasDoc: true,
+  md5: 'aa',
+  sha256: 'bb',
+  files: [
+    { path: '7hE-EdGE', size: 950, isJunk: false, junkReason: null },
+    { path: 'FILE_ID.DIZ', size: 305, isJunk: false, junkReason: null },
+    { path: 'S-ANCTUA-RY', size: 2217, isJunk: true, junkReason: 'ad' },
+  ],
+};
+
+function mockJson(body: unknown, ok = true, status = 200) {
   return jest.fn().mockResolvedValue({
     ok,
     status,
-    text: async () => body,
+    json: async () => body,
   });
 }
 
-describe('fetchArchiveFiles', () => {
+describe('fetchDoorDetail', () => {
   const original = global.fetch;
   afterEach(() => { global.fetch = original; });
 
-  it('parses the header and every row', async () => {
-    global.fetch = mockFetch(
-      'FILES|3|1\r\n950|0|7hE-EdGE\r\n305|0|FILE_ID.DIZ\r\n2217|1|S-ANCTUA-RY\r\n'
-    ) as never;
+  it('carries every field DOORMAN leaves at a neutral default', async () => {
+    global.fetch = mockJson(FULL_ROW) as never;
 
-    const listing = await fetchArchiveFiles(CFG, '-D-CALC.LHA');
+    const detail = await fetchDoorDetail(CFG, '-D-CALC.LHA');
 
-    expect(listing?.count).toBe(3);
-    expect(listing?.junkCount).toBe(1);
-    expect(listing?.files).toEqual([
-      { size: 950, isJunk: false, path: '7hE-EdGE' },
-      { size: 305, isJunk: false, path: 'FILE_ID.DIZ' },
-      { size: 2217, isJunk: true, path: 'S-ANCTUA-RY' },
+    expect(detail).toMatchObject({
+      archiveName: '-D-CALC.LHA',
+      version: 'v1.2',
+      suggestedTooltypes: '{"TYPE":"XIM","STACK":"10000"}',
+      fileIdDiz: '  CALC  \n  v1.2  ',
+      docFilename: 'Calc.doc',
+      doc: 'HOW TO INSTALL\n',
+      hasDoc: true,
+      md5: 'aa',
+      sha256: 'bb',
+    });
+    expect(detail?.files).toEqual([
+      { path: '7hE-EdGE', size: 950, isJunk: false },
+      { path: 'FILE_ID.DIZ', size: 305, isJunk: false },
+      { path: 'S-ANCTUA-RY', size: 2217, isJunk: true },
     ]);
   });
 
-  it('keeps a path that contains the separator', async () => {
-    // The format is split-on-pipe with the path last, so a path carrying a
-    // pipe must not lose its tail.
-    global.fetch = mockFetch('FILES|1|0\n100|0|dir/we|rd.txt\n') as never;
+  it('counts the junk the file rows actually flag, not the row summary', async () => {
+    // The catalog's junk_count can lag its own file rows (a strip re-derives
+    // one and not the other). The rows are what the browse view shows.
+    global.fetch = mockJson({ ...FULL_ROW, junkCount: 9 }) as never;
 
-    expect((await fetchArchiveFiles(CFG, 'X.LHA'))?.files[0].path).toBe('dir/we|rd.txt');
+    expect((await fetchDoorDetail(CFG, 'X.LHA'))?.junkCount).toBe(1);
   });
 
-  it('reads LF-only output as well as CRLF', async () => {
-    global.fetch = mockFetch('FILES|1|0\n10|1|ad.txt\n') as never;
+  it('falls back to the row summary when no file rows came', async () => {
+    global.fetch = mockJson({ ...FULL_ROW, files: [], junkCount: 4 }) as never;
 
-    const listing = await fetchArchiveFiles(CFG, 'X.LHA');
-    expect(listing?.files).toHaveLength(1);
-    expect(listing?.files[0].isJunk).toBe(true);
+    expect((await fetchDoorDetail(CFG, 'X.LHA'))?.junkCount).toBe(4);
   });
 
-  it('returns null for a body that is not this format', async () => {
-    global.fetch = mockFetch('<html>404</html>') as never;
-    expect(await fetchArchiveFiles(CFG, 'X.LHA')).toBeNull();
+  it('reads hasDoc from the doc itself when the flag is missing', async () => {
+    global.fetch = mockJson({ archiveName: 'X.LHA', doc: 'READ ME' }) as never;
+
+    expect((await fetchDoorDetail(CFG, 'X.LHA'))?.hasDoc).toBe(true);
   });
 
-  it('returns null on a failed request rather than throwing', async () => {
-    global.fetch = mockFetch('', false, 404) as never;
-    expect(await fetchArchiveFiles(CFG, 'X.LHA')).toBeNull();
+  it('normalises absent and empty fields to null', async () => {
+    global.fetch = mockJson({ archiveName: 'X.LHA', version: '', doc: null }) as never;
+
+    const detail = await fetchDoorDetail(CFG, 'X.LHA');
+    expect(detail?.version).toBeNull();
+    expect(detail?.doc).toBeNull();
+    expect(detail?.suggestedTooltypes).toBeNull();
+    expect(detail?.hasDoc).toBe(false);
+    expect(detail?.files).toEqual([]);
+  });
+
+  it('skips file rows with no path rather than rendering blank lines', async () => {
+    global.fetch = mockJson({
+      archiveName: 'X.LHA',
+      files: [{ size: 10 }, null, 'nope', { path: 'ok.txt', size: 5, isJunk: true }],
+    }) as never;
+
+    expect((await fetchDoorDetail(CFG, 'X.LHA'))?.files).toEqual([
+      { path: 'ok.txt', size: 5, isJunk: true },
+    ]);
+  });
+
+  it('returns null for a 200 that is not a door row', async () => {
+    // A proxy error page, or a redirect that landed on the SPA: rendering
+    // that as an empty door is worse than saying nothing.
+    global.fetch = mockJson({ error: 'no such door' }) as never;
+    expect(await fetchDoorDetail(CFG, 'X.LHA')).toBeNull();
+
+    global.fetch = mockJson('<html>404</html>') as never;
+    expect(await fetchDoorDetail(CFG, 'X.LHA')).toBeNull();
+  });
+
+  it('returns null rather than throwing on a failed or unparseable response', async () => {
+    global.fetch = mockJson({}, false, 404) as never;
+    expect(await fetchDoorDetail(CFG, 'X.LHA')).toBeNull();
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    }) as never;
+    expect(await fetchDoorDetail(CFG, 'X.LHA')).toBeNull();
 
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as never;
-    expect(await fetchArchiveFiles(CFG, 'X.LHA')).toBeNull();
+    expect(await fetchDoorDetail(CFG, 'X.LHA')).toBeNull();
   });
 
   it('asks for the archive by name, encoded', async () => {
-    const spy = mockFetch('FILES|0|0\n');
+    const spy = mockJson({ archiveName: 'a b&c.LHA' });
     global.fetch = spy as never;
 
-    await fetchArchiveFiles(CFG, 'a b&c.LHA');
+    await fetchDoorDetail(CFG, 'a b&c.LHA');
 
     expect(spy.mock.calls[0][0]).toBe(
-      'https://doors.example.test/api/door-repo/files/a%20b%26c.LHA'
+      'https://doors.example.test/api/door-repo/doors/a%20b%26c.LHA'
     );
-  });
-});
-
-describe('fetchDoc', () => {
-  const original = global.fetch;
-  afterEach(() => { global.fetch = original; });
-
-  it('returns the documentation as it came', async () => {
-    global.fetch = mockFetch('   ___\n  /  /  DOC\n') as never;
-
-    expect(await fetchDoc(CFG, 'X.LHA')).toBe('   ___\n  /  /  DOC\n');
-  });
-
-  it('returns null for an archive with no documentation', async () => {
-    global.fetch = mockFetch('', true, 200) as never;
-    expect(await fetchDoc(CFG, 'X.LHA')).toBeNull();
-
-    global.fetch = mockFetch('', false, 404) as never;
-    expect(await fetchDoc(CFG, 'X.LHA')).toBeNull();
-  });
-
-  it('does not throw when the server cannot be reached', async () => {
-    global.fetch = jest.fn().mockRejectedValue(new Error('timeout')) as never;
-    expect(await fetchDoc(CFG, 'X.LHA')).toBeNull();
   });
 });

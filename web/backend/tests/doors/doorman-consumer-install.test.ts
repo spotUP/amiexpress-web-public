@@ -42,6 +42,7 @@ import * as path from 'path';
 jest.mock('../../../../Doors/door-manager/repo-client', () => ({
   downloadArchive: jest.fn(),
   fetchManifest: jest.fn(),
+  fetchDoorDetail: jest.fn(),
 }));
 
 import {
@@ -76,6 +77,8 @@ function makeManifestDoor(overrides: Partial<ManifestDoor> = {}): ManifestDoor {
     archiveSize: 1234,
     md5: null,
     sha256: SHA256,
+    junkCount: 0,
+    hasDoc: false,
     ...overrides,
   };
 }
@@ -413,8 +416,68 @@ describe('DOORMAN app.ts: installConsumerDoor (consumer download-install)', () =
       version: null,
       release_group: 'GRP',
       source_url: CFG.url,
-      source_revision: null,
+      // The revision the manifest this install actually resolved against
+      // was stamped with -- it was already in hand and recorded as null.
+      source_revision: 'rev1',
     } satisfies DoorInstallEntry);
+  });
+
+  // ── What the record actually knows (item 7) ────────────────────────────
+  //
+  // Three fields were written as null with the data already in hand: md5
+  // and the manifest revision were both sitting in the manifest this very
+  // install resolved against, and version is the one field only
+  // GET /doors/:archiveName carries.
+
+  it('records the version from the detail endpoint and the md5/revision the manifest already carried', async () => {
+    mockFetchManifest.mockResolvedValue({
+      manifest: makeManifest([makeManifestDoor({ archiveName: 'FOO.LHA', md5: 'abc123' })]),
+      fromCache: false,
+      cachedAt: null,
+    } satisfies FetchManifestResult);
+    mockDownloadArchive.mockImplementation(async (_cfg, _name, destPath) => {
+      fs.writeFileSync(destPath, 'archive-bytes');
+    });
+    const recordInstall = jest.fn();
+    const fetchDoorDetail = jest.fn().mockResolvedValue({ archiveName: 'FOO.LHA', version: 'v2.1' });
+    const deps = baseDeps({ recordInstall, fetchDoorDetail });
+
+    const outcome = await installConsumerDoor(
+      CFG, 'FOO.LHA', 'XIM', 'FOO', 'FOODOOR', path.join(tmpDir, 'Doors', 'FOODOOR'),
+      path.join(tmpDir, 'FOODOOR.info'), path.join(tmpDir, 'tmp-door-repo'), deps
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(fetchDoorDetail).toHaveBeenCalledWith(CFG, 'FOO.LHA');
+    expect(recordInstall).toHaveBeenCalledWith(expect.objectContaining({
+      version: 'v2.1',
+      md5: 'abc123',
+      source_revision: 'rev1',
+    }));
+  });
+
+  it('a failing detail fetch costs the record its version, never the install', async () => {
+    mockFetchManifest.mockResolvedValue({
+      manifest: makeManifest([makeManifestDoor({ archiveName: 'FOO.LHA' })]),
+      fromCache: false,
+      cachedAt: null,
+    } satisfies FetchManifestResult);
+    mockDownloadArchive.mockImplementation(async (_cfg, _name, destPath) => {
+      fs.writeFileSync(destPath, 'archive-bytes');
+    });
+    const recordInstall = jest.fn();
+    const deps = baseDeps({
+      recordInstall,
+      fetchDoorDetail: jest.fn().mockRejectedValue(new Error('door server down')),
+    });
+
+    const outcome = await installConsumerDoor(
+      CFG, 'FOO.LHA', 'XIM', 'FOO', 'FOODOOR', path.join(tmpDir, 'Doors', 'FOODOOR'),
+      path.join(tmpDir, 'FOODOOR.info'), path.join(tmpDir, 'tmp-door-repo'), deps
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(recordInstall).toHaveBeenCalledWith(expect.objectContaining({ version: null }));
   });
 
   it('no local door_catalog row (the normal case for a fresh consumer install): records with catalog_id null, still registeredLocally', async () => {

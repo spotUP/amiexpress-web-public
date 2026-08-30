@@ -83,6 +83,87 @@ export function repoViewFooterParts(
   return `{center}${parts}{/center}`;
 }
 
+/**
+ * Whether [V]iew doc has anything to open for this entry.
+ *
+ * An owner's row carries the documentation itself (doc_raw). A consumer's
+ * row carries only the manifest's has_doc flag until something fetches the
+ * text - and reading doc_raw alone is what left the footer silent about
+ * [V] on every consumer row, months after the key started working.
+ */
+export function entryHasDoc(entry: { doc_raw?: string | null; has_doc?: boolean } | null): boolean {
+  if (!entry) return false;
+  return !!entry.doc_raw || entry.has_doc === true;
+}
+
+/** One row of an archive listing, in either source's spelling: the local
+ *  catalog service returns door_catalog_files rows (`is_junk`, 0 or 1), the
+ *  door server's detail endpoint returns `isJunk`. */
+export interface ArchiveFileRow {
+  path: string;
+  size: number;
+  is_junk?: number | boolean;
+  isJunk?: boolean;
+}
+
+function isJunkRow(file: ArchiveFileRow): boolean {
+  return file.isJunk === true || file.is_junk === 1 || file.is_junk === true;
+}
+
+/**
+ * The info pane's file-listing block, identical for both sources: the local
+ * catalog's door_catalog_files rows (owner mode) and the door server's
+ * detail rows (consumer mode). One renderer, so a consumer's listing cannot
+ * drift from an owner's.
+ *
+ * Returns '' for an empty list -- the pane simply shows nothing rather than
+ * an empty box, which is what it did when only the local source existed.
+ */
+export function renderFileLines(files: ArchiveFileRow[], limit = 25): string {
+  if (files.length === 0) return '';
+  const junk = files.filter(isJunkRow).length;
+  const junkTag = junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}';
+  let out = `\n\n{grey-fg}─── ${files.length} files${junkTag}{/grey-fg}  {grey-fg}──────────────────────{/grey-fg}\n`;
+  for (const f of files.slice(0, limit)) {
+    const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
+    const junkMark = isJunkRow(f) ? '{red-fg}!{/red-fg}' : ' ';
+    const name = f.path.length > 34 ? '<' + f.path.slice(f.path.length - 33) : f.path;
+    out += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
+  }
+  if (files.length > limit) out += `{grey-fg}  ... and ${files.length - limit} more{/grey-fg}\n`;
+  return out;
+}
+
+/**
+ * The catalog's suggested tooltypes, as readable NAME=value lines.
+ *
+ * Stored as a JSON object of tooltype name -> value, read out of whatever
+ * the scanner could find - an archive's own icon, or its documentation.
+ * Plenty of rows are partial or plainly wrong ("LOCATION":"<dir>-",
+ * "TYPE":"XIM."), which is why this is only ever SHOWN to the sysop: an
+ * installed door's .info comes from the archive's own icon, never from
+ * here.
+ *
+ * Anything that is not a JSON object is returned as its own single line, so
+ * a differently-shaped row still tells the sysop something instead of
+ * vanishing.
+ */
+export function formatSuggestedTooltypes(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return [trimmed];
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [trimmed];
+  return Object.entries(parsed as Record<string, unknown>).map(
+    ([key, value]) => `${key}=${value == null ? '' : String(value)}`
+  );
+}
+
 export interface RepoViewHotkeyHandlers {
   onInstallUninstall: () => void;
   onStrip: () => void;

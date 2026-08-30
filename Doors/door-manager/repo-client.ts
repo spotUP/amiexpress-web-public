@@ -450,25 +450,29 @@ export async function learnPattern(
   }
 }
 
-// ─── fetchArchiveFiles / fetchDoc ───────────────────────────────────────
+// ─── fetchDoorDetail ────────────────────────────────────────────────────
 //
-// Consumer mode had no way to answer two questions the browse view asks on
-// every entry: what is inside this archive, and what does its documentation
-// say. Both came from the LOCAL catalog service - `svc.getArchiveFiles(id)`
-// and the entry's own `doc_raw` - which a consumer BBS does not have: the
-// catalog moved to the door server, so on a consumer the file list was empty
-// and [V]iew doc did nothing.
+// Consumer mode had no way to answer anything the browse view asks about a
+// single archive: what is inside it, what its documentation says, which
+// version it is, which tooltypes its author suggested. All of it came from
+// the LOCAL catalog service - `svc.getArchiveFiles(id)` and the entry's own
+// doc_raw/version/suggested_tooltypes columns - which a consumer BBS does
+// not have: the catalog moved to the door server, so on a consumer the file
+// list was empty, [V]iew doc did nothing, and every remaining column sat at
+// mapManifestDoorToEntry's neutral default.
 //
-// The server answers both, and has all along:
+//   GET /api/door-repo/doors/:archiveName
 //
-//   GET /api/door-repo/files/:archiveName
-//   GET /api/door-repo/doc/:archiveName
+// carries the whole row - the manifest's fields plus version,
+// suggestedTooltypes, fileIdDiz, docFilename, doc and the file list. It
+// replaces the two narrower calls this module used to make (/files, which
+// answers in the pipe-delimited format the C89 DoorRepo door parses, and
+// /doc): one request now fills every field instead of two filling two.
 //
-// The files format is deliberately trivial to parse in C89, so it is trivial
-// here too:
-//
-//   FILES|<count>|<junkCount>
-//   <size>|<isJunk 0|1>|<path>
+// The server's own `guide` field (its parse of an AmigaGuide doc) is
+// deliberately not read: DocView detects and renders AmigaGuide from the raw
+// text itself (AmigaGuideViewer), so consuming a second, differently-shaped
+// parse would be two renderers for one format.
 
 export interface RepoArchiveFile {
   size: number;
@@ -476,20 +480,48 @@ export interface RepoArchiveFile {
   path: string;
 }
 
-export interface RepoArchiveFiles {
-  count: number;
+/** One catalog row as GET /doors/:archiveName returns it. Only the fields
+ *  DOORMAN renders or records are typed here; the endpoint sends more
+ *  (screenshots, Demozoo credits, download URL) that this door has no use
+ *  for. */
+export interface RepoDoorDetail {
+  archiveName: string;
+  name: string | null;
+  version: string | null;
+  description: string | null;
+  category: string | null;
+  author: string | null;
+  releaseGroup: string | null;
+  fileIdDiz: string | null;
+  docFilename: string | null;
+  doc: string | null;
+  /** As stored: a JSON object of tooltype name -> value, from whatever the
+   *  scanner read out of the archive's own icon or its documentation. Often
+   *  partial or nonsense ("LOCATION":"<dir>-"), which is why it is shown to
+   *  the sysop and never written into an installed door's .info. */
+  suggestedTooltypes: string | null;
   junkCount: number;
+  hasDoc: boolean;
+  md5: string | null;
+  sha256: string | null;
   files: RepoArchiveFile[];
 }
 
 const DETAIL_TIMEOUT_MS = 15_000;
 
-/** The archive's contents, or null when the server has none for it. */
-export async function fetchArchiveFiles(
+function str(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** Everything the repo knows about one archive, or null when the server has
+ *  no such row, cannot be reached, or answers with something that is not
+ *  this shape. Never throws: every caller is a UI action that must degrade
+ *  to "the repo could not tell us", not take the door down. */
+export async function fetchDoorDetail(
   cfg: RepoClientConfig,
   archiveName: string
-): Promise<RepoArchiveFiles | null> {
-  const url = `${cfg.url}/api/door-repo/files/${encodeURIComponent(archiveName)}`;
+): Promise<RepoDoorDetail | null> {
+  const url = `${cfg.url}/api/door-repo/doors/${encodeURIComponent(archiveName)}`;
 
   let response: Response;
   try {
@@ -502,48 +534,55 @@ export async function fetchArchiveFiles(
   }
   if (!response.ok) return null;
 
-  const body = await response.text();
-  const lines = body.split(/\r?\n/).filter(line => line.length > 0);
-  if (lines.length === 0) return null;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== 'object') return null;
 
-  const header = lines[0].split('|');
-  if (header[0] !== 'FILES') return null;
+  const row = body as Record<string, unknown>;
+  // A 200 that is not a door row (a proxy's error page, a redirect landing
+  // on the SPA) has no archiveName -- treated as "no such door" rather than
+  // rendered as an empty one.
+  const name = str(row.archiveName);
+  if (!name) return null;
 
+  const rawFiles = Array.isArray(row.files) ? row.files : [];
   const files: RepoArchiveFile[] = [];
-  for (const line of lines.slice(1)) {
-    const parts = line.split('|');
-    if (parts.length < 3) continue;
-    // The path itself may contain '|' - everything after the second
-    // separator is the path.
+  for (const f of rawFiles) {
+    if (!f || typeof f !== 'object') continue;
+    const file = f as Record<string, unknown>;
+    const filePath = str(file.path);
+    if (!filePath) continue;
     files.push({
-      size: Number.parseInt(parts[0], 10) || 0,
-      isJunk: parts[1] === '1',
-      path: parts.slice(2).join('|'),
+      path: filePath,
+      size: typeof file.size === 'number' ? file.size : 0,
+      isJunk: file.isJunk === true,
     });
   }
 
   return {
-    count: Number.parseInt(header[1], 10) || files.length,
-    junkCount: Number.parseInt(header[2], 10) || files.filter(f => f.isJunk).length,
+    archiveName: name,
+    name: str(row.name),
+    version: str(row.version),
+    description: str(row.description),
+    category: str(row.category),
+    author: str(row.author),
+    releaseGroup: str(row.releaseGroup),
+    fileIdDiz: str(row.fileIdDiz),
+    docFilename: str(row.docFilename),
+    doc: str(row.doc),
+    suggestedTooltypes: str(row.suggestedTooltypes),
+    // The row's own junkCount is the catalog's count; the file list is what
+    // is actually flagged right now. Prefer the live rows when they came.
+    junkCount: files.length > 0
+      ? files.filter(f => f.isJunk).length
+      : (typeof row.junkCount === 'number' ? row.junkCount : 0),
+    hasDoc: row.hasDoc === true || str(row.doc) !== null,
+    md5: str(row.md5),
+    sha256: str(row.sha256),
     files,
   };
-}
-
-/** The archive's documentation, or null when it carries none. */
-export async function fetchDoc(cfg: RepoClientConfig, archiveName: string): Promise<string | null> {
-  const url = `${cfg.url}/api/door-repo/doc/${encodeURIComponent(archiveName)}`;
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: { 'Cache-Control': 'max-age=0' },
-      signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
-    });
-  } catch {
-    return null;
-  }
-  if (!response.ok) return null;
-
-  const text = await response.text();
-  return text.length > 0 ? text : null;
 }

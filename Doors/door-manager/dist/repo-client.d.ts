@@ -36,13 +36,35 @@ export interface RepoArchiveFile {
     isJunk: boolean;
     path: string;
 }
-export interface RepoArchiveFiles {
-    count: number;
+/** One catalog row as GET /doors/:archiveName returns it. Only the fields
+ *  DOORMAN renders or records are typed here; the endpoint sends more
+ *  (screenshots, Demozoo credits, download URL) that this door has no use
+ *  for. */
+export interface RepoDoorDetail {
+    archiveName: string;
+    name: string | null;
+    version: string | null;
+    description: string | null;
+    category: string | null;
+    author: string | null;
+    releaseGroup: string | null;
+    fileIdDiz: string | null;
+    docFilename: string | null;
+    doc: string | null;
+    /** As stored: a JSON object of tooltype name -> value, from whatever the
+     *  scanner read out of the archive's own icon or its documentation. Often
+     *  partial or nonsense ("LOCATION":"<dir>-"), which is why it is shown to
+     *  the sysop and never written into an installed door's .info. */
+    suggestedTooltypes: string | null;
     junkCount: number;
+    hasDoc: boolean;
+    md5: string | null;
+    sha256: string | null;
     files: RepoArchiveFile[];
 }
-/** The archive's contents, or null when the server has none for it. */
-export declare function fetchArchiveFiles(cfg: RepoClientConfig, archiveName: string): Promise<RepoArchiveFiles | null>;
-/** The archive's documentation, or null when it carries none. */
-export declare function fetchDoc(cfg: RepoClientConfig, archiveName: string): Promise<string | null>;
+/** Everything the repo knows about one archive, or null when the server has
+ *  no such row, cannot be reached, or answers with something that is not
+ *  this shape. Never throws: every caller is a UI action that must degrade
+ *  to "the repo could not tell us", not take the door down. */
+export declare function fetchDoorDetail(cfg: RepoClientConfig, archiveName: string): Promise<RepoDoorDetail | null>;
 //# sourceMappingURL=repo-client.d.ts.map

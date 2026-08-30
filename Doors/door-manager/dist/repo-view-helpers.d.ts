@@ -31,6 +31,52 @@ export declare function repoViewFooterParts(mode: DoorRepoMode, opts: {
     hasJunk: boolean;
     hasDoc: boolean;
 }): string;
+/**
+ * Whether [V]iew doc has anything to open for this entry.
+ *
+ * An owner's row carries the documentation itself (doc_raw). A consumer's
+ * row carries only the manifest's has_doc flag until something fetches the
+ * text - and reading doc_raw alone is what left the footer silent about
+ * [V] on every consumer row, months after the key started working.
+ */
+export declare function entryHasDoc(entry: {
+    doc_raw?: string | null;
+    has_doc?: boolean;
+} | null): boolean;
+/** One row of an archive listing, in either source's spelling: the local
+ *  catalog service returns door_catalog_files rows (`is_junk`, 0 or 1), the
+ *  door server's detail endpoint returns `isJunk`. */
+export interface ArchiveFileRow {
+    path: string;
+    size: number;
+    is_junk?: number | boolean;
+    isJunk?: boolean;
+}
+/**
+ * The info pane's file-listing block, identical for both sources: the local
+ * catalog's door_catalog_files rows (owner mode) and the door server's
+ * detail rows (consumer mode). One renderer, so a consumer's listing cannot
+ * drift from an owner's.
+ *
+ * Returns '' for an empty list -- the pane simply shows nothing rather than
+ * an empty box, which is what it did when only the local source existed.
+ */
+export declare function renderFileLines(files: ArchiveFileRow[], limit?: number): string;
+/**
+ * The catalog's suggested tooltypes, as readable NAME=value lines.
+ *
+ * Stored as a JSON object of tooltype name -> value, read out of whatever
+ * the scanner could find - an archive's own icon, or its documentation.
+ * Plenty of rows are partial or plainly wrong ("LOCATION":"<dir>-",
+ * "TYPE":"XIM."), which is why this is only ever SHOWN to the sysop: an
+ * installed door's .info comes from the archive's own icon, never from
+ * here.
+ *
+ * Anything that is not a JSON object is returned as its own single line, so
+ * a differently-shaped row still tells the sysop something instead of
+ * vanishing.
+ */
+export declare function formatSuggestedTooltypes(raw: string | null | undefined): string[];
 export interface RepoViewHotkeyHandlers {
     onInstallUninstall: () => void;
     onStrip: () => void;

@@ -38,23 +38,24 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerRepoViewActionKeys = exports.repoViewFooterParts = exports.repoViewCurationAllowed = exports.clampSelection = exports.wrapText = exports.findExtractedBinary = exports.extractArchiveTo = exports.extractAndRegisterDoor = exports.buildDoorInfoContent = void 0;
-exports.commandClaimedByOtherArchive = commandClaimedByOtherArchive;
+exports.formatSuggestedTooltypes = exports.renderFileLines = exports.entryHasDoc = exports.registerRepoViewActionKeys = exports.repoViewFooterParts = exports.repoViewCurationAllowed = exports.clampSelection = exports.wrapText = exports.installConsumerDoor = exports.commandClaimedByOtherArchive = exports.findExtractedBinary = exports.extractArchiveTo = exports.extractAndRegisterDoor = exports.buildDoorInfoContent = void 0;
 exports.resolveArchivePath = resolveArchivePath;
-exports.installConsumerDoor = installConsumerDoor;
 exports.createApp = createApp;
 const path = __importStar(require("path"));
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
 const archive_browse_view_1 = require("./archive-browse-view");
 const install_core_1 = require("./install-core");
+const install_core_2 = require("./install-core");
 // Re-exported: the install core moved to its own module when app.ts passed
 // the 2000-line ceiling, and the tests import these from here.
-var install_core_2 = require("./install-core");
-Object.defineProperty(exports, "buildDoorInfoContent", { enumerable: true, get: function () { return install_core_2.buildDoorInfoContent; } });
-Object.defineProperty(exports, "extractAndRegisterDoor", { enumerable: true, get: function () { return install_core_2.extractAndRegisterDoor; } });
-Object.defineProperty(exports, "extractArchiveTo", { enumerable: true, get: function () { return install_core_2.extractArchiveTo; } });
-Object.defineProperty(exports, "findExtractedBinary", { enumerable: true, get: function () { return install_core_2.findExtractedBinary; } });
+var install_core_3 = require("./install-core");
+Object.defineProperty(exports, "buildDoorInfoContent", { enumerable: true, get: function () { return install_core_3.buildDoorInfoContent; } });
+Object.defineProperty(exports, "extractAndRegisterDoor", { enumerable: true, get: function () { return install_core_3.extractAndRegisterDoor; } });
+Object.defineProperty(exports, "extractArchiveTo", { enumerable: true, get: function () { return install_core_3.extractArchiveTo; } });
+Object.defineProperty(exports, "findExtractedBinary", { enumerable: true, get: function () { return install_core_3.findExtractedBinary; } });
+Object.defineProperty(exports, "commandClaimedByOtherArchive", { enumerable: true, get: function () { return install_core_3.commandClaimedByOtherArchive; } });
+Object.defineProperty(exports, "installConsumerDoor", { enumerable: true, get: function () { return install_core_3.installConsumerDoor; } });
 const fs = __importStar(require("fs"));
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
@@ -108,17 +109,6 @@ function recordInstallSafe(entry) {
         return;
     }
     repo.recordInstall(entry);
-}
-// True when `command` is already claimed by a DIFFERENT archive -- guards
-// both install call sites against recordInstall's ON CONFLICT(command)
-// upsert silently stealing another install's row.
-function commandClaimedByOtherArchive(getInstallByCommand, command, archiveName) {
-    const collision = getInstallByCommand(command);
-    if (!collision || collision.archive_name === archiveName)
-        return false;
-    console.log(`[DOORMAN] install: "${command}" already installed from a different archive ` +
-        `(${collision.archive_name}) -- not clobbering it; ${archiveName} installs registry-only.`);
-    return true;
 }
 function getStripLib() {
     for (const k of Object.keys(require.cache))
@@ -203,79 +193,6 @@ function resolveArchivePath(archivePath) {
     }
     catch {
         return archivePath;
-    }
-}
-async function installConsumerDoor(cfg, archiveName, doorType, binaryName, finalCmd, installDir, infoPath, tmpDir, deps) {
-    const destPath = path.join(tmpDir, archiveName);
-    try {
-        deps.mkdir(tmpDir);
-        let manifest;
-        try {
-            ({ manifest } = await deps.fetchManifest(cfg));
-        }
-        catch (err) {
-            // This is a SEPARATE fetch from whatever populated the browse list
-            // (loadConsumerManifest, on view enter) -- normally a cheap 304 off
-            // repo-client's ETag cache, but if the on-disk cache file is gone or
-            // the network is down at this exact moment, an install that would
-            // otherwise have succeeded (the sysop already saw this door in the
-            // browse list moments ago) fails here instead. Said plainly, not
-            // just via repo-client's raw error text.
-            return {
-                ok: false, step: 'manifest-lookup',
-                detail: `could not re-fetch the central manifest to verify this download ` +
-                    `(browsing and installing re-fetch independently -- this can fail even ` +
-                    `right after a successful browse if the network or manifest cache ` +
-                    `dropped out in between): ${err?.message ?? String(err)}`,
-            };
-        }
-        const manifestRow = manifest.doors.find(d => d.archiveName === archiveName);
-        if (!manifestRow || !manifestRow.sha256) {
-            return { ok: false, step: 'manifest-lookup', detail: `No sha256 for ${archiveName} in the central manifest` };
-        }
-        try {
-            await deps.downloadArchive(cfg, archiveName, destPath, manifestRow.sha256);
-        }
-        catch (err) {
-            return { ok: false, step: 'download', detail: err?.message ?? String(err) };
-        }
-        let registeredLocally = false;
-        const localRow = deps.lookupLocal(archiveName);
-        const outcome = await (0, install_core_1.extractAndRegisterDoor)(destPath, installDir, infoPath, doorType, binaryName, finalCmd, {
-            extractArchiveTo: deps.extractArchiveTo,
-            findExtractedBinary: deps.findExtractedBinary,
-            writeInfoFile: deps.writeInfoFile,
-            refreshDoorRegistry: deps.refreshDoorRegistry,
-            recordInstall: (installedCmd, installedDir) => {
-                // installedCmd, not finalCmd: the archive may name its own command,
-                // and the record has to describe what is actually on disk.
-                if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archiveName))
-                    return;
-                deps.recordInstall({
-                    id: `install-${installedCmd}`,
-                    catalog_id: localRow?.id ?? null,
-                    archive_name: archiveName,
-                    command: installedCmd,
-                    install_dir: installedDir,
-                    door_type: doorType || 'XIM',
-                    name: manifestRow.name ?? archiveName,
-                    md5: null, // ManifestDoor carries no md5; the digest was already verified at download time
-                    description: manifestRow.description ?? null,
-                    category: manifestRow.category ?? null,
-                    version: null, // the manifest has no version concept -- see mapManifestDoorToEntry
-                    release_group: manifestRow.releaseGroup ?? null,
-                    source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
-                    source_revision: null, // no manifest revision is threaded down to this call site
-                });
-                registeredLocally = true;
-            },
-        });
-        if (!outcome.ok)
-            return outcome;
-        return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };
-    }
-    finally {
-        deps.unlink(destPath);
     }
 }
 // ─── Shared Layout ───────────────────────────────────────────────────────────
@@ -644,6 +561,9 @@ Object.defineProperty(exports, "clampSelection", { enumerable: true, get: functi
 Object.defineProperty(exports, "repoViewCurationAllowed", { enumerable: true, get: function () { return repo_view_helpers_1.repoViewCurationAllowed; } });
 Object.defineProperty(exports, "repoViewFooterParts", { enumerable: true, get: function () { return repo_view_helpers_1.repoViewFooterParts; } });
 Object.defineProperty(exports, "registerRepoViewActionKeys", { enumerable: true, get: function () { return repo_view_helpers_1.registerRepoViewActionKeys; } });
+Object.defineProperty(exports, "entryHasDoc", { enumerable: true, get: function () { return repo_view_helpers_1.entryHasDoc; } });
+Object.defineProperty(exports, "renderFileLines", { enumerable: true, get: function () { return repo_view_helpers_1.renderFileLines; } });
+Object.defineProperty(exports, "formatSuggestedTooltypes", { enumerable: true, get: function () { return repo_view_helpers_1.formatSuggestedTooltypes; } });
 const repo_view_helpers_2 = require("./repo-view-helpers");
 class RepoView extends ViewManager_1.BaseView {
     constructor(layout, bbs) {
@@ -665,6 +585,24 @@ class RepoView extends ViewManager_1.BaseView {
         this.consumerCachedAt = null;
         this.consumerError = null;
         this.consumerLoading = false;
+        // Per-archive detail (GET /doors/:archiveName), consumer mode only. The
+        // manifest is a list; everything the info pane, the doc viewer and the
+        // archive browser want about ONE door - version, the suggested tooltypes,
+        // the documentation, the file list - lives behind this endpoint.
+        //
+        // Cached by archive name for the life of the view: browsing back and
+        // forth over the same handful of doors, or pressing V then A on one, is
+        // one request per door and not one per keystroke. A cached `null` is a
+        // real answer ("the repo has nothing for this archive") and stops the
+        // retry loop that re-asking on every render would be.
+        this.detailCache = new Map();
+        this.detailInFlight = new Set();
+        this.detailTimer = null;
+        // False between exit() and the next enter() (the ViewManager exits this
+        // view whenever a child is pushed) - an in-flight fetch that lands while
+        // a ConfirmView is on screen still fills the cache, but must not repaint
+        // the panels underneath it.
+        this.active = false;
         this.repoUnavailable = false;
         this.layout = layout;
         this.bbs = bbs;
@@ -824,35 +762,34 @@ class RepoView extends ViewManager_1.BaseView {
                 'this system are unaffected.'
             : 'No entry selected.';
     }
+    /** The selected entry with whatever the detail endpoint has already told
+     *  us folded in. Identical to the entry itself in owner mode, and until
+     *  the fetch lands. */
+    entryWithDetail(e) {
+        const detail = this.detailCache.get(e.archive_name);
+        return detail ? (0, repoDataSource_1.mergeDoorDetailIntoEntry)(e, detail) : e;
+    }
+    /** The archive's contents, from whichever source this node has: the local
+     *  catalog (owner), or the already-fetched detail (consumer). */
+    archiveFilesFor(e) {
+        try {
+            const files = getCatalogSvc()?.getArchiveFiles?.(e.id) ?? [];
+            if (files.length > 0)
+                return files;
+        }
+        catch { /* the local catalog is optional - a consumer has none */ }
+        return this.detailCache.get(e.archive_name)?.files ?? [];
+    }
     updateInfo() {
-        const e = this.entry();
-        if (!e) {
+        const selected = this.entry();
+        if (!selected) {
             this.layout.setInfo(this.noEntryMessage());
             return;
         }
-        // Try to get per-file listing from door_catalog_files
-        const svc = getCatalogSvc();
-        let fileLines = '';
-        try {
-            const files = svc?.getArchiveFiles?.(e.id) ?? [];
-            if (files.length > 0) {
-                const junk = files.filter((f) => f.is_junk).length;
-                const junkTag = junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}';
-                fileLines = `\n\n{grey-fg}─── ${files.length} files${junkTag}{/grey-fg}  {grey-fg}──────────────────────{/grey-fg}\n`;
-                for (const f of files.slice(0, 25)) {
-                    const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
-                    const junkMark = f.is_junk ? '{red-fg}!{/red-fg}' : ' ';
-                    const name = f.path.length > 34
-                        ? '<' + f.path.slice(f.path.length - 33)
-                        : f.path;
-                    fileLines += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
-                }
-                if (files.length > 25)
-                    fileLines += `{grey-fg}  ... and ${files.length - 25} more{/grey-fg}\n`;
-            }
-        }
-        catch { /* ignore */ }
+        const e = this.entryWithDetail(selected);
+        const fileLines = (0, repo_view_helpers_2.renderFileLines)(this.archiveFilesFor(e));
         let content = `{yellow-fg}${e.archive_name}{/yellow-fg}  ${e.door_type ?? 'XIM'}` +
+            (e.version ? `  {white-fg}${(0, ViewManager_1.sanitizeForTags)(e.version)}{/white-fg}` : '') +
             (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
             (e.installed ? `  {green-fg}[${e.installed_as}]{/green-fg}` : '');
         if (e.file_id_diz) {
@@ -862,7 +799,63 @@ class RepoView extends ViewManager_1.BaseView {
             content += `\n\n{white-fg}${(0, ViewManager_1.sanitizeForTags)(e.description)}{/white-fg}`;
         }
         content += fileLines;
+        // What the door's author configured, as the catalog read it. Shown, not
+        // applied: an install takes the archive's own icon, tooltypes and all
+        // (extractAndRegisterDoor), and plenty of these rows are half-read
+        // guesses from a doc file.
+        const tooltypes = (0, repo_view_helpers_2.formatSuggestedTooltypes)(e.suggested_tooltypes);
+        if (tooltypes.length > 0) {
+            content += `\n{grey-fg}─── suggested tooltypes{/grey-fg}  {grey-fg}──────────────────{/grey-fg}\n` +
+                tooltypes.map(line => `{grey-fg}${(0, ViewManager_1.sanitizeForTags)(line)}{/grey-fg}`).join('\n') + '\n';
+        }
         this.layout.setInfo(content);
+        this.scheduleDetailFetch(selected.archive_name);
+    }
+    /**
+     * Asks the door server about the selected archive, once the cursor has
+     * settled. Consumer mode only - an owner already has every one of these
+     * fields in its own catalog.
+     *
+     * Debounced because this runs from updateInfo, which runs on every
+     * 'select item': holding an arrow key down the length of a 5000-row list
+     * would otherwise be one HTTP request per row. Only the archive still
+     * selected when the timer fires is fetched.
+     */
+    scheduleDetailFetch(archiveName) {
+        if (this.repoMode.kind !== 'consumer')
+            return;
+        if (this.detailCache.has(archiveName) || this.detailInFlight.has(archiveName))
+            return;
+        clearTimeout(this.detailTimer);
+        this.detailTimer = setTimeout(() => {
+            const current = this.entry();
+            if (!current || current.archive_name !== archiveName)
+                return;
+            if (this.detailCache.has(archiveName) || this.detailInFlight.has(archiveName))
+                return;
+            this.detailInFlight.add(archiveName);
+            const cfg = this.consumerClientConfig();
+            void (async () => {
+                let detail = null;
+                try {
+                    detail = await (0, repo_client_1.fetchDoorDetail)(cfg, archiveName);
+                }
+                finally {
+                    this.detailInFlight.delete(archiveName);
+                }
+                this.detailCache.set(archiveName, detail);
+                // Repaint only if this is still the door on screen AND this view is
+                // still the one on screen - a fetch that lands under a pushed child
+                // view has done its job by filling the cache.
+                if (!this.active)
+                    return;
+                if (this.entry()?.archive_name !== archiveName)
+                    return;
+                this.updateInfo();
+                this.updateFooter();
+                this.layout.render();
+            })();
+        }, RepoView.DETAIL_DEBOUNCE_MS);
     }
     getEntryJunkCount(e) {
         // Prefer live file-level count over catalog's potentially stale junk_count
@@ -876,15 +869,17 @@ class RepoView extends ViewManager_1.BaseView {
         return e.junk_count;
     }
     updateFooter() {
-        const e = this.entry();
+        const selected = this.entry();
+        const e = selected ? this.entryWithDetail(selected) : null;
         const hasJunk = e ? this.getEntryJunkCount(e) > 0 : false;
         this.layout.setFooter((0, repo_view_helpers_2.repoViewFooterParts)(this.repoMode, {
             installed: !!e?.installed,
             hasJunk,
-            hasDoc: !!e?.doc_raw,
+            hasDoc: (0, repo_view_helpers_2.entryHasDoc)(e),
         }));
     }
     enter() {
+        this.active = true;
         this.layout.showRepoLayout();
         this.refresh(0);
         if (this.repoMode.kind === 'consumer')
@@ -1033,6 +1028,8 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout.screen.off('keypress', this._onFilterKey);
         this.layout.filterBox.off('click', this._onFilterClick);
         clearTimeout(this.statusTimer);
+        clearTimeout(this.detailTimer);
+        this.active = false;
         this.keys.release();
     }
     onEsc() { this.vm.pop(); } // returns to installed list
@@ -1133,7 +1130,7 @@ class RepoView extends ViewManager_1.BaseView {
                 const cfg = { url: repoUrl, cacheFile: (0, repoDataSource_1.consumerCacheFilePath)(PROJECT_ROOT) };
                 void (async () => {
                     try {
-                        const outcome = await installConsumerDoor(cfg, e.archive_name, e.door_type, e.binary_name, finalCmd, installDir, infoPath, tmpDir, {
+                        const outcome = await (0, install_core_2.installConsumerDoor)(cfg, e.archive_name, e.door_type, e.binary_name, finalCmd, installDir, infoPath, tmpDir, {
                             fetchManifest: repo_client_1.fetchManifest,
                             downloadArchive: repo_client_1.downloadArchive,
                             extractArchiveTo: install_core_1.extractArchiveTo,
@@ -1148,6 +1145,7 @@ class RepoView extends ViewManager_1.BaseView {
                                 fs.unlinkSync(p);
                             }
                             catch { /* never existed, or already removed */ } },
+                            fetchDoorDetail: repo_client_1.fetchDoorDetail,
                         });
                         if (!outcome.ok) {
                             this.reportInstallFailure(outcome.step, outcome.detail, tmpArchivePath, e.archive_name);
@@ -1213,7 +1211,7 @@ class RepoView extends ViewManager_1.BaseView {
                             recordInstall: (installedCmd, installedDir) => {
                                 // The archive's own command wins, so record that one.
                                 const chk = (cmd) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
-                                if (commandClaimedByOtherArchive(chk, installedCmd, e.archive_name))
+                                if ((0, install_core_2.commandClaimedByOtherArchive)(chk, installedCmd, e.archive_name))
                                     return;
                                 recordInstallSafe({
                                     id: `install-${installedCmd}`,
@@ -1344,17 +1342,42 @@ class RepoView extends ViewManager_1.BaseView {
         }));
     }
     /**
+     * The detail this view already holds for an archive, fetching it once if
+     * it does not. Consumer mode only; an owner reads its own catalog.
+     *
+     * Every per-archive action shares this one cache, so pressing [V] then
+     * [A] on the same door is one request, not two - and the row the info
+     * pane already fetched costs neither.
+     */
+    async ensureDetail(archiveName) {
+        if (this.detailCache.has(archiveName))
+            return this.detailCache.get(archiveName) ?? null;
+        if (this.repoMode.kind !== 'consumer')
+            return null;
+        this.detailInFlight.add(archiveName);
+        let detail = null;
+        try {
+            detail = await (0, repo_client_1.fetchDoorDetail)(this.consumerClientConfig(), archiveName);
+        }
+        finally {
+            this.detailInFlight.delete(archiveName);
+        }
+        this.detailCache.set(archiveName, detail);
+        return detail;
+    }
+    /**
      * Documentation comes from wherever this BBS's catalog actually is.
      *
      * An owner has it locally, in the entry's own doc_raw. A consumer does not
      * - the catalog lives on the door server - so it asks the server, which
-     * has answered at /api/door-repo/doc/:archiveName all along. Before this,
-     * [V]iew doc on a consumer did nothing at all.
+     * has answered at /api/door-repo/doors/:archiveName all along. Before
+     * this, [V]iew doc on a consumer did nothing at all.
      */
     doViewDoc() {
-        const e = this.entry();
-        if (!e)
+        const selected = this.entry();
+        if (!selected)
             return;
+        const e = this.entryWithDetail(selected);
         if (e.doc_raw) {
             this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
             return;
@@ -1363,15 +1386,14 @@ class RepoView extends ViewManager_1.BaseView {
             this.setStatus('No documentation available', 'yellow');
             return;
         }
-        const cfg = this.consumerClientConfig();
         this.setStatus('Fetching documentation...', 'yellow', 15000);
         void (async () => {
-            const doc = await (0, repo_client_1.fetchDoc)(cfg, e.archive_name);
-            if (!doc) {
+            const detail = await this.ensureDetail(e.archive_name);
+            if (!detail?.doc) {
                 this.setStatus('No documentation available', 'yellow', 4000);
                 return;
             }
-            this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, doc));
+            this.vm.push(new DocView(this.layout, detail.docFilename ?? e.archive_name, detail.doc));
         })();
     }
     /** The archive's contents, from the local catalog or from the server. */
@@ -1397,16 +1419,15 @@ class RepoView extends ViewManager_1.BaseView {
             this.setStatus('No file data in catalog', 'yellow');
             return;
         }
-        const cfg = this.consumerClientConfig();
         this.setStatus('Fetching file list...', 'yellow', 15000);
         void (async () => {
-            const listing = await (0, repo_client_1.fetchArchiveFiles)(cfg, e.archive_name);
-            if (!listing || listing.files.length === 0) {
+            const detail = await this.ensureDetail(e.archive_name);
+            if (!detail || detail.files.length === 0) {
                 this.setStatus('The repo has no file list for this archive', 'yellow', 4000);
                 return;
             }
             // ArchiveBrowseView reads the catalog's own column names.
-            this.vm.push(new archive_browse_view_1.ArchiveBrowseView(this.layout, e.archive_name, listing.files.map(f => ({ path: f.path, size: f.size, is_junk: f.isJunk ? 1 : 0 }))));
+            this.vm.push(new archive_browse_view_1.ArchiveBrowseView(this.layout, e.archive_name, detail.files.map(f => ({ path: f.path, size: f.size, is_junk: f.isJunk ? 1 : 0 }))));
         })();
     }
     /** The repo client config for this node's consumer mode. */
@@ -1417,6 +1438,7 @@ class RepoView extends ViewManager_1.BaseView {
         };
     }
 }
+RepoView.DETAIL_DEBOUNCE_MS = 350;
 // ── Document Viewer ───────────────────────────────────────────────────────────
 class DocView extends ViewManager_1.BaseView {
     constructor(layout, title, content) {

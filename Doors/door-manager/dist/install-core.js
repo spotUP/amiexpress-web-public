@@ -5,6 +5,12 @@
  * Extracted from app.ts, which had grown past the repo's 2000-line ceiling.
  * Nothing here touches the UI - it is the part of installing that both owner
  * mode and consumer mode share, and the part worth testing directly.
+ *
+ * installConsumerDoor and the command-collision guard moved here from app.ts
+ * the second time it crossed that ceiling: consumer mode's orchestrator
+ * belongs beside the extract/register core it delegates to, not in the file
+ * that draws the panels. app.ts re-exports all of it, so its importers and
+ * tests are unaffected.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -44,6 +50,8 @@ exports.buildDoorInfoContent = buildDoorInfoContent;
 exports.extractArchiveTo = extractArchiveTo;
 exports.findExtractedBinary = findExtractedBinary;
 exports.extractAndRegisterDoor = extractAndRegisterDoor;
+exports.commandClaimedByOtherArchive = commandClaimedByOtherArchive;
+exports.installConsumerDoor = installConsumerDoor;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const archive_command_1 = require("./archive-command");
@@ -266,5 +274,103 @@ async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorTyp
         console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
     }
     return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel, steps };
+}
+// ─── Consumer-mode install (moved from app.ts) ─────────────────────────
+// True when `command` is already claimed by a DIFFERENT archive -- guards
+// both install call sites against recordInstall's ON CONFLICT(command)
+// upsert silently stealing another install's row.
+function commandClaimedByOtherArchive(getInstallByCommand, command, archiveName) {
+    const collision = getInstallByCommand(command);
+    if (!collision || collision.archive_name === archiveName)
+        return false;
+    console.log(`[DOORMAN] install: "${command}" already installed from a different archive ` +
+        `(${collision.archive_name}) -- not clobbering it; ${archiveName} installs registry-only.`);
+    return true;
+}
+async function installConsumerDoor(cfg, archiveName, doorType, binaryName, finalCmd, installDir, infoPath, tmpDir, deps) {
+    const destPath = path.join(tmpDir, archiveName);
+    try {
+        deps.mkdir(tmpDir);
+        let manifest;
+        try {
+            ({ manifest } = await deps.fetchManifest(cfg));
+        }
+        catch (err) {
+            // This is a SEPARATE fetch from whatever populated the browse list
+            // (loadConsumerManifest, on view enter) -- normally a cheap 304 off
+            // repo-client's ETag cache, but if the on-disk cache file is gone or
+            // the network is down at this exact moment, an install that would
+            // otherwise have succeeded (the sysop already saw this door in the
+            // browse list moments ago) fails here instead. Said plainly, not
+            // just via repo-client's raw error text.
+            return {
+                ok: false, step: 'manifest-lookup',
+                detail: `could not re-fetch the central manifest to verify this download ` +
+                    `(browsing and installing re-fetch independently -- this can fail even ` +
+                    `right after a successful browse if the network or manifest cache ` +
+                    `dropped out in between): ${err?.message ?? String(err)}`,
+            };
+        }
+        const manifestRow = manifest.doors.find(d => d.archiveName === archiveName);
+        if (!manifestRow || !manifestRow.sha256) {
+            return { ok: false, step: 'manifest-lookup', detail: `No sha256 for ${archiveName} in the central manifest` };
+        }
+        try {
+            await deps.downloadArchive(cfg, archiveName, destPath, manifestRow.sha256);
+        }
+        catch (err) {
+            return { ok: false, step: 'download', detail: err?.message ?? String(err) };
+        }
+        let registeredLocally = false;
+        const localRow = deps.lookupLocal(archiveName);
+        // The manifest has no version; GET /doors/:archiveName does. The
+        // archive is already downloaded and verified at this point, so a
+        // detail fetch that fails or times out costs the record one field
+        // rather than the install.
+        let detail = null;
+        if (deps.fetchDoorDetail) {
+            try {
+                detail = await deps.fetchDoorDetail(cfg, archiveName);
+            }
+            catch {
+                detail = null;
+            }
+        }
+        const outcome = await extractAndRegisterDoor(destPath, installDir, infoPath, doorType, binaryName, finalCmd, {
+            extractArchiveTo: deps.extractArchiveTo,
+            findExtractedBinary: deps.findExtractedBinary,
+            writeInfoFile: deps.writeInfoFile,
+            refreshDoorRegistry: deps.refreshDoorRegistry,
+            recordInstall: (installedCmd, installedDir) => {
+                // installedCmd, not finalCmd: the archive may name its own command,
+                // and the record has to describe what is actually on disk.
+                if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archiveName))
+                    return;
+                deps.recordInstall({
+                    id: `install-${installedCmd}`,
+                    catalog_id: localRow?.id ?? null,
+                    archive_name: archiveName,
+                    command: installedCmd,
+                    install_dir: installedDir,
+                    door_type: doorType || 'XIM',
+                    name: manifestRow.name ?? archiveName,
+                    md5: manifestRow.md5 ?? null,
+                    description: manifestRow.description ?? null,
+                    category: manifestRow.category ?? null,
+                    version: detail?.version ?? null, // only the detail endpoint carries a version
+                    release_group: manifestRow.releaseGroup ?? null,
+                    source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
+                    source_revision: manifest.revision ?? null, // the revision this install actually came from
+                });
+                registeredLocally = true;
+            },
+        });
+        if (!outcome.ok)
+            return outcome;
+        return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };
+    }
+    finally {
+        deps.unlink(destPath);
+    }
 }
 //# sourceMappingURL=install-core.js.map

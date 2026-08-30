@@ -21,6 +21,12 @@ export interface CatalogEntry {
     installed: number;
     installed_as: string | null;
     install_dir: string | null;
+    /** Whether the catalog holds documentation for this archive, when that is
+     *  known WITHOUT holding the text. Optional because the local catalog
+     *  source has no such column and does not need one: an owner's rows carry
+     *  `doc_raw` itself. A consumer's manifest row carries only this flag, so
+     *  the footer can offer [V]iew doc before anything has been fetched. */
+    has_doc?: boolean;
 }
 export type DoorRepoMode = {
     kind: 'owner';
@@ -104,10 +110,48 @@ export type LocalCatalogLookup = (archiveName: string) => LocalCatalogRow | null
  * door_installs lookup to give keep working unchanged.
  *
  * Fields the manifest genuinely has no equivalent for (version,
- * doc_filename, doc_raw, suggested_tooltypes, junk_count) are left at a
- * neutral default; browsing/filtering never reads them for manifest rows.
+ * doc_filename, doc_raw, suggested_tooltypes) are left at a neutral
+ * default; browsing/filtering never reads them, and mergeDoorDetailIntoEntry
+ * fills them from GET /doors/:archiveName when a per-archive view needs
+ * them.
+ *
+ * `junk_count` and `has_doc` are NOT among them: the manifest carries
+ * junkCount and hasDoc precisely so a client can decide what to OFFER
+ * before fetching anything (see repo-types.generated.ts). Dropping them
+ * here is what left every consumer-mode row claiming no documentation, so
+ * the footer never advertised [V]iew doc even after the key started
+ * working.
  */
 export declare function mapManifestDoorToEntry(door: ManifestDoor, lookupLocal: LocalCatalogLookup, lookupInstall?: InstallLookup): CatalogEntry;
+/** The subset of repo-client's RepoDoorDetail this merge reads. Declared
+ *  structurally rather than imported so this module stays free of the HTTP
+ *  client (and its `fetch`) for unit tests. */
+export interface DoorDetailFields {
+    version: string | null;
+    fileIdDiz: string | null;
+    docFilename: string | null;
+    doc: string | null;
+    suggestedTooltypes: string | null;
+    junkCount: number;
+    hasDoc: boolean;
+    description: string | null;
+    category: string | null;
+    author: string | null;
+    releaseGroup: string | null;
+}
+/**
+ * Fills a manifest-mapped entry's neutral defaults from the door server's
+ * per-archive detail. Only EMPTY fields are filled, for the same reason the
+ * backend's description overlay fills only empty ones: an owner-mode row
+ * came from this BBS's own catalog scan, and what a local scan found about
+ * a local archive outranks what the central catalog believes about its own
+ * copy.
+ *
+ * Install state (installed/installed_as/install_dir) and the locally
+ * resolved id/archive_path/binary_name are never touched -- the detail
+ * endpoint describes the catalog's copy, not this node's.
+ */
+export declare function mergeDoorDetailIntoEntry(entry: CatalogEntry, detail: DoorDetailFields): CatalogEntry;
 /**
  * Client-side text filter over already-mapped manifest entries, mirroring
  * door-catalog.service's searchCatalog SQL WHERE clause field-for-field

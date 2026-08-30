@@ -4,11 +4,20 @@
  * Extracted from app.ts, which had grown past the repo's 2000-line ceiling.
  * Nothing here touches the UI - it is the part of installing that both owner
  * mode and consumer mode share, and the part worth testing directly.
+ *
+ * installConsumerDoor and the command-collision guard moved here from app.ts
+ * the second time it crossed that ceiling: consumer mode's orchestrator
+ * belongs beside the extract/register core it delegates to, not in the file
+ * that draws the panels. app.ts re-exports all of it, so its importers and
+ * tests are unaffected.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { findArchiveCommand, isUsableCommand } from './archive-command';
+import type { RepoClientConfig, FetchManifestResult, RepoDoorDetail } from './repo-client';
+import type { DoorRepoManifest } from './repo-types.generated';
+import type { LocalCatalogLookup } from './repoDataSource';
 
 /**
  * The backend's shared archive extractor, if it is loaded in this process.
@@ -277,4 +286,177 @@ console.log('[DOORMAN] warning: door registry refresh unavailable — new door h
   }
 
   return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel, steps };
+}
+
+// ─── Consumer-mode install (moved from app.ts) ─────────────────────────
+
+// True when `command` is already claimed by a DIFFERENT archive -- guards
+// both install call sites against recordInstall's ON CONFLICT(command)
+// upsert silently stealing another install's row.
+export function commandClaimedByOtherArchive(
+  getInstallByCommand: (command: string) => { archive_name: string } | null,
+  command: string,
+  archiveName: string
+): boolean {
+  const collision = getInstallByCommand(command);
+  if (!collision || collision.archive_name === archiveName) return false;
+  console.log(
+    `[DOORMAN] install: "${command}" already installed from a different archive ` +
+    `(${collision.archive_name}) -- not clobbering it; ${archiveName} installs registry-only.`
+  );
+  return true;
+}
+
+/** Mirrors door_installs' columns (door-installs.repository.ts's
+ * DoorInstall, read directly rather than imported -- DOORMAN cannot import
+ * web/backend source paths; getInstallsRepo() above reaches the
+ * already-loaded module via require.cache instead). `installed_at` is
+ * stamped by the repository itself and is intentionally absent. */
+export interface DoorInstallEntry {
+  id: string; catalog_id: string | null; archive_name: string; command: string;
+  install_dir: string; door_type: string | null; name: string | null; md5: string | null;
+  description: string | null; category: string | null; version: string | null;
+  release_group: string | null; source_url: string | null; source_revision: string | null;
+}
+
+/**
+ * Consumer-mode install: download + verify the archive from the central
+ * door-repo API, then hand off to extractAndRegisterDoor for the identical
+ * extract/register flow owner mode already uses. destPath always lives
+ * under tmp-door-repo/ and is removed in the finally on every path,
+ * including every failure — downloadArchive already deletes it on a
+ * network/checksum failure, but a failure further down (extract,
+ * write-info) still leaves a successfully-downloaded archive sitting in
+ * tmp-door-repo/ unless this cleans it up too.
+ *
+ * Local registration (Task 5): door_installs, not door_catalog, is the
+ * install-state store -- no "invent a local catalog row" step. `lookupLocal`
+ * still runs (door_catalog) purely to capture `catalog_id` for provenance
+ * when a real local row exists; never required for the install to succeed.
+ *
+ * door_installs enforces uniqueness on `command` (ON CONFLICT(command)
+ * upserts, so reinstalling is naturally idempotent) -- which is also why a
+ * collision guard is still needed: installing a NEW archive under a command
+ * some OTHER archive already owns would otherwise silently overwrite that
+ * install's row. `getInstallByCommand(finalCmd)` checks for that and
+ * refuses (registry-only, loudly logged) rather than clobbering -- the
+ * backfill has shown this BBS has commands claimed by up to nine archives.
+ */
+export interface ConsumerInstallDeps {
+  fetchManifest: (cfg: RepoClientConfig) => Promise<FetchManifestResult>;
+  downloadArchive: (cfg: RepoClientConfig, archiveName: string, destPath: string, expectedSha256: string) => Promise<void>;
+  extractArchiveTo: InstallDeps['extractArchiveTo'];
+  findExtractedBinary: InstallDeps['findExtractedBinary'];
+  writeInfoFile: InstallDeps['writeInfoFile'];
+  lookupLocal: LocalCatalogLookup;
+  /** Existence check ONLY -- detects a command collision before recording. */
+  getInstallByCommand: (command: string) => { archive_name: string } | null;
+  recordInstall: (entry: DoorInstallEntry) => void;
+  refreshDoorRegistry: () => Promise<boolean>;
+  mkdir: (dir: string) => void;
+  unlink: (path: string) => void;
+  /** Optional: the per-archive detail endpoint, for the one field the
+   *  manifest genuinely does not carry (version). A failure here never
+   *  fails the install -- the record is simply written without it, exactly
+   *  as it was before this call existed. */
+  fetchDoorDetail?: (cfg: RepoClientConfig, archiveName: string) => Promise<RepoDoorDetail | null>;
+}
+
+export type ConsumerInstallOutcome =
+  | { ok: true; doorType: string; fileCount: number; binaryRel: string; steps: InstallStep[]; registeredLocally: boolean }
+  | { ok: false; step: string; detail: string };
+
+export async function installConsumerDoor(
+  cfg: RepoClientConfig,
+  archiveName: string,
+  doorType: string,
+  binaryName: string | null,
+  finalCmd: string,
+  installDir: string,
+  infoPath: string,
+  tmpDir: string,
+  deps: ConsumerInstallDeps
+): Promise<ConsumerInstallOutcome> {
+  const destPath = path.join(tmpDir, archiveName);
+  try {
+    deps.mkdir(tmpDir);
+
+    let manifest: DoorRepoManifest;
+    try {
+      ({ manifest } = await deps.fetchManifest(cfg));
+    } catch (err: any) {
+      // This is a SEPARATE fetch from whatever populated the browse list
+      // (loadConsumerManifest, on view enter) -- normally a cheap 304 off
+      // repo-client's ETag cache, but if the on-disk cache file is gone or
+      // the network is down at this exact moment, an install that would
+      // otherwise have succeeded (the sysop already saw this door in the
+      // browse list moments ago) fails here instead. Said plainly, not
+      // just via repo-client's raw error text.
+      return {
+        ok: false, step: 'manifest-lookup',
+        detail: `could not re-fetch the central manifest to verify this download ` +
+          `(browsing and installing re-fetch independently -- this can fail even ` +
+          `right after a successful browse if the network or manifest cache ` +
+          `dropped out in between): ${err?.message ?? String(err)}`,
+      };
+    }
+    const manifestRow = manifest.doors.find(d => d.archiveName === archiveName);
+    if (!manifestRow || !manifestRow.sha256) {
+      return { ok: false, step: 'manifest-lookup', detail: `No sha256 for ${archiveName} in the central manifest` };
+    }
+
+    try {
+      await deps.downloadArchive(cfg, archiveName, destPath, manifestRow.sha256);
+    } catch (err: any) {
+      return { ok: false, step: 'download', detail: err?.message ?? String(err) };
+    }
+
+    let registeredLocally = false;
+    const localRow = deps.lookupLocal(archiveName);
+    // The manifest has no version; GET /doors/:archiveName does. The
+    // archive is already downloaded and verified at this point, so a
+    // detail fetch that fails or times out costs the record one field
+    // rather than the install.
+    let detail: RepoDoorDetail | null = null;
+    if (deps.fetchDoorDetail) {
+      try {
+        detail = await deps.fetchDoorDetail(cfg, archiveName);
+      } catch {
+        detail = null;
+      }
+    }
+    const outcome = await extractAndRegisterDoor(destPath, installDir, infoPath, doorType, binaryName, finalCmd, {
+      extractArchiveTo: deps.extractArchiveTo,
+      findExtractedBinary: deps.findExtractedBinary,
+      writeInfoFile: deps.writeInfoFile,
+      refreshDoorRegistry: deps.refreshDoorRegistry,
+      recordInstall: (installedCmd, installedDir) => {
+        // installedCmd, not finalCmd: the archive may name its own command,
+        // and the record has to describe what is actually on disk.
+        if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archiveName)) return;
+        deps.recordInstall({
+          id: `install-${installedCmd}`,
+          catalog_id: localRow?.id ?? null,
+          archive_name: archiveName,
+          command: installedCmd,
+          install_dir: installedDir,
+          door_type: doorType || 'XIM',
+          name: manifestRow.name ?? archiveName,
+          md5: manifestRow.md5 ?? null,
+          description: manifestRow.description ?? null,
+          category: manifestRow.category ?? null,
+          version: detail?.version ?? null, // only the detail endpoint carries a version
+          release_group: manifestRow.releaseGroup ?? null,
+          source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
+          source_revision: manifest.revision ?? null, // the revision this install actually came from
+        });
+        registeredLocally = true;
+      },
+    });
+
+    if (!outcome.ok) return outcome;
+    return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };
+  } finally {
+    deps.unlink(destPath);
+  }
 }
