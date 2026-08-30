@@ -31,6 +31,21 @@ describe('DOORMAN install path', () => {
     expect(appSrc).toMatch(/removeInstall/);
     expect(appSrc).not.toMatch(/markUninstalled/);
   });
+
+  // Uninstall used to remove the .info, the install_dir and the door_installs
+  // row, but never touched door_installed_files - a stale row then named a
+  // previous door's directory, and reusing that command later let a delete
+  // act on the wrong door's files. Both branches of doInstallUninstall
+  // (the successful delete and the "kept the files" refusal) call
+  // removeInstall, so both must also clear the file rows.
+  it('uninstall clears door_installed_files alongside every removeInstall call', () => {
+    const removeInstallCalls = appSrc.match(/getInstallsRepo\(\)\?\.removeInstall\([^)]*\)/g) ?? [];
+    // Excludes the function's own declaration line, matching only call sites.
+    const clearCalls = appSrc.match(/clearInstalledFilesViaRecorder\(e\.[^)]*\)/g) ?? [];
+
+    expect(removeInstallCalls.length).toBeGreaterThan(0);
+    expect(clearCalls.length).toBe(removeInstallCalls.length);
+  });
 });
 
 // Task 4: extractAndRegisterDoor threads the archive name through to

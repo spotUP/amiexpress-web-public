@@ -107,6 +107,22 @@ export function walkInstalledFiles(
  * failure. Each step is individually guarded so one step's failure cannot
  * take a later one down with it.
  */
+/**
+ * Clears this command's door_installed_files rows. Every uninstall path
+ * must call this alongside removing the door_installs row: the two tables
+ * are meant to move together, and a stale file-row left behind after an
+ * uninstall names a directory a later install under the SAME command may
+ * reuse for a completely different door - a later delete would then act on
+ * the previous door's file list.
+ */
+export function clearInstalledFiles(command: string): void {
+  try {
+    db.clearDoorFiles(command);
+  } catch (err) {
+    console.log(`[door-install] file list not cleared for ${command}: ${(err as Error).message}`);
+  }
+}
+
 export function recordDoorInstall(input: DoorInstallInput): void {
   let files: InstalledFileEntry[] = [];
   try {

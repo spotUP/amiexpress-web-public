@@ -119,6 +119,20 @@ function getInstallRecorder(): any {
 // one; owner mode's inline callback builds an equivalent shape inline).
 // No-op + warning, not a throw, when the recorder is unavailable in this
 // process.
+// Same require.cache discovery, for the counterpart of recordInstallViaRecorder
+// below: uninstall must clear door_installed_files alongside door_installs, or
+// a stale row survives naming the OLD door's files under a command a later
+// install reuses -- a delete could then act on the wrong door's file list.
+function clearInstalledFilesViaRecorder(command: string | null | undefined): void {
+  if (!command) return;
+  const recorder = getInstallRecorder();
+  if (!recorder) {
+    console.log('[DOORMAN] warning: install recorder unavailable -- installed-file rows not cleared');
+    return;
+  }
+  recorder.clearInstalledFiles(command);
+}
+
 function recordInstallViaRecorder(entry: DoorInstallEntry): void {
   const recorder = getInstallRecorder();
   if (!recorder) {
@@ -1202,6 +1216,7 @@ class RepoView extends BaseView {
             this.layout.setInfo(log.render());
             this.layout.render();
             getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
+            clearInstalledFilesViaRecorder(e.installed_as);
             void this.refreshAfterRegistry();
             return;
           }
@@ -1209,6 +1224,9 @@ class RepoView extends BaseView {
           // the command this door was installed as; archive_name is only a
           // fallback for a stale row where installed_as was never set.
           getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
+          // door_installed_files (this branch's fix) is keyed by command
+          // only -- there is nothing to clear against a bare archive_name.
+          clearInstalledFilesViaRecorder(e.installed_as);
           log.ok('dropped the install record');
           this.setStatus(`Uninstalled ${e.installed_as}: ${log.summary()}`, 'green', 6000);
           this.layout.setInfo(log.render());

@@ -4,15 +4,30 @@ import * as path from 'path';
 
 const tracked: Array<{ command: string; entries: any[] }> = [];
 const installs: any[] = [];
+// A minimal in-memory door_installed_files table, matching the real
+// trackDoorFiles/clearDoorFiles/getDoorFiles semantics (trackDoorFiles
+// replaces a command's rows entirely; clearDoorFiles empties them) - real
+// enough to prove the uninstall -> reinstall cycle leaves no stale rows.
+const fileTable = new Map<string, any[]>();
 
 jest.mock('../../src/database', () => ({
-  db: { trackDoorFiles: jest.fn((command: string, entries: any[]) => { tracked.push({ command, entries }); }) },
+  db: {
+    trackDoorFiles: jest.fn((command: string, entries: any[]) => {
+      tracked.push({ command, entries });
+      fileTable.set(command.toUpperCase(), entries);
+    }),
+    clearDoorFiles: jest.fn((command: string) => {
+      fileTable.delete(command.toUpperCase());
+    }),
+    getDoorFiles: jest.fn((command: string) => fileTable.get(command.toUpperCase()) ?? []),
+  },
 }));
 jest.mock('../../src/doors/door-installs.repository', () => ({
   recordInstall: jest.fn((entry: any) => { installs.push(entry); }),
 }));
 
-import { recordDoorInstall, walkInstalledFiles } from '../../src/doors/door-install-record';
+import { recordDoorInstall, walkInstalledFiles, clearInstalledFiles } from '../../src/doors/door-install-record';
+import { db } from '../../src/database';
 
 let root: string;
 
@@ -20,6 +35,7 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'install-record-'));
   tracked.length = 0;
   installs.length = 0;
+  fileTable.clear();
   fs.mkdirSync(path.join(root, 'Doors', 'AEHELP', 'data'), { recursive: true });
   fs.writeFileSync(path.join(root, 'Doors', 'AEHELP', 'AEHelp'), 'binary');
   fs.writeFileSync(path.join(root, 'Doors', 'AEHELP', 'data', 'help.txt'), 'text');
@@ -172,5 +188,76 @@ describe('recordDoorInstall', () => {
     });
 
     expect(tracked).toHaveLength(1);
+  });
+});
+
+describe('clearInstalledFiles', () => {
+  it('empties the file rows for a command', () => {
+    recordDoorInstall({
+      bbsRoot: root,
+      command: 'AEHELP',
+      archiveName: 'AEHELP.LHA',
+      installDir: path.join(root, 'Doors', 'AEHELP'),
+      infoPath: path.join(root, 'Commands', 'BBSCmd', 'AEHELP.info'),
+    });
+    expect(db.getDoorFiles('AEHELP').length).toBeGreaterThan(0);
+
+    clearInstalledFiles('AEHELP');
+
+    expect(db.getDoorFiles('AEHELP')).toEqual([]);
+  });
+
+  it('does not throw when the underlying clear fails', () => {
+    (db.clearDoorFiles as jest.Mock).mockImplementationOnce(() => { throw new Error('db locked'); });
+
+    expect(() => clearInstalledFiles('AEHELP')).not.toThrow();
+  });
+});
+
+describe('install -> uninstall -> reinstall under the same command', () => {
+  it('leaves no stale door_installed_files rows for a door installed in its place', () => {
+    // The exact scenario the fix targets: DOORMAN's uninstall used to remove
+    // the .info and the install_dir and drop the door_installs row, but
+    // never cleared door_installed_files - so a later delete could act on
+    // the PREVIOUS door's file list instead of the one actually installed
+    // under that command now.
+
+    // 1. Door A installed as WHO.
+    recordDoorInstall({
+      bbsRoot: root,
+      command: 'WHO',
+      archiveName: 'who-a.lha',
+      installDir: path.join(root, 'Doors', 'AEHELP'), // reuses the fixture tree
+      infoPath: path.join(root, 'Commands', 'BBSCmd', 'AEHELP.info'),
+    });
+    const filesFromA = db.getDoorFiles('WHO').map(f => f.filePath);
+    expect(filesFromA.length).toBeGreaterThan(0);
+
+    // 2. Uninstall: this is the call DOORMAN's uninstall now makes
+    // alongside removeInstall - the fix under test.
+    clearInstalledFiles('WHO');
+    expect(db.getDoorFiles('WHO')).toEqual([]);
+
+    // 3. A DIFFERENT door B is installed under the same reused command WHO,
+    // with a completely different file list.
+    const otherDir = path.join(root, 'Doors', 'OTHER');
+    fs.mkdirSync(otherDir, { recursive: true });
+    fs.writeFileSync(path.join(otherDir, 'DoorB'), 'binary-b');
+    recordDoorInstall({
+      bbsRoot: root,
+      command: 'WHO',
+      archiveName: 'who-b.lha',
+      installDir: otherDir,
+      infoPath: path.join(root, 'Commands', 'BBSCmd', 'AEHELP.info'),
+    });
+
+    const filesFromB = db.getDoorFiles('WHO').map(f => f.filePath);
+    // Nothing from door A survives under command WHO.
+    for (const staleFromA of filesFromA) {
+      if (staleFromA.startsWith(path.join('Doors', 'AEHELP'))) {
+        expect(filesFromB).not.toContain(staleFromA);
+      }
+    }
+    expect(filesFromB).toContain(path.join('Doors', 'OTHER', 'DoorB'));
   });
 });
