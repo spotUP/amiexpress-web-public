@@ -14,6 +14,8 @@
 
 import { db } from "../database";
 import { checkPasswordStrength } from "../utils/password-strength.util";
+import { getBoardConfig } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 export type ValidateOutcome =
   | { ok: true }
@@ -97,14 +99,9 @@ export async function validateNewPassword(
  */
 export function getMaxPasswordFails(): number {
   try {
-    if (db && typeof db.getConfigRepository === "function") {
-      const repo = db.getConfigRepository();
-      if (repo && typeof repo.getSystemConfig === "function") {
-        const sys = repo.getSystemConfig();
-        if (typeof sys?.max_password_fails === "number") {
-          return sys.max_password_fails;
-        }
-      }
+    const sys = getBoardConfig(appConfig.get('dataDir'));
+    if (typeof sys?.max_password_fails === "number") {
+      return sys.max_password_fails;
     }
   } catch (error) {
     console.warn(
@@ -125,7 +122,7 @@ export function loadPasswordPolicy(currentHash?: string): PasswordPolicy {
   let minLength = 0;
   let minStrength = 0;
   try {
-    const sysConf = db.getConfigRepository().getSystemConfig();
+    const sysConf = getBoardConfig(appConfig.get('dataDir'));
     if (sysConf) {
       minLength = sysConf.min_password_length ?? 0;
       minStrength = sysConf.min_password_strength ?? 0;

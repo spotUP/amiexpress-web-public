@@ -12,6 +12,8 @@
 
 import nodemailer from 'nodemailer';
 import { db } from '../database';
+import { loadBBSConfig } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
 
 export interface MailOptions {
@@ -51,6 +53,35 @@ export async function isSmtpConfigured(): Promise<boolean> {
  * Get mail configuration from database
  * express.e:31807-31815 - Read mail tooltypes
  */
+/**
+ * The board's configuration, from the file the BBS reads.
+ *
+ * This service used to ask the database. The admin writes everything that is
+ * not a secret to bbsConfig.info, so the SMTP host it showed and the SMTP
+ * host this read were two different values - the page said smtp.gmail.com
+ * and "Test SMTP Connection" answered "SMTP server not configured". Mail had
+ * never worked, and the MAIL_ON_* flags were read from the same wrong place.
+ *
+ * Disk first, with the database consulted only for the encrypted secret it
+ * genuinely holds.
+ */
+function readConfig(): Record<string, unknown> {
+  const disk = loadBBSConfig(appConfig.get('dataDir')) as Record<string, unknown>;
+
+  let secrets: Record<string, unknown> = {};
+  try {
+    // config-source-ok: only for the encrypted SMTP password, which is the
+    // one value bbsConfig.info does not hold in usable form.
+    secrets = (db.getConfigRepository().getSystemConfig() ?? {}) as Record<string, unknown>;
+  } catch {
+    // A board with no database row still has its configuration on disk.
+  }
+
+  // The password is the one value the disk does not hold in usable form.
+  const password = secrets.smtp_password;
+  return password ? { ...disk, smtp_password: password } : disk;
+}
+
 async function getMailOptions(): Promise<MailOptions | null> {
   const now = Date.now();
   if (cachedMailOptions && (now - cacheTime) < CACHE_TTL) {
@@ -58,8 +89,7 @@ async function getMailOptions(): Promise<MailOptions | null> {
   }
 
   try {
-    const configRepo = db.getConfigRepository();
-    const sysConfig = configRepo.getSystemConfig();
+    const sysConfig = readConfig() as any;
 
     if (!sysConfig?.smtp_server) {
       cachedMailOptions = null;
@@ -95,10 +125,9 @@ export async function isMailEventEnabled(event: MailEvent): Promise<boolean> {
   }
 
   try {
-    const configRepo = db.getConfigRepository();
-    const tooltypeKey = `mail_on_${event.toLowerCase()}` as keyof ReturnType<typeof configRepo.getSystemConfig>;
+    const tooltypeKey = `mail_on_${event.toLowerCase()}`;
 
-    const sysConfig = configRepo.getSystemConfig();
+    const sysConfig = readConfig();
     // Check for mail_on_* config key (stored as boolean, string 'true', or integer 1)
     const value = (sysConfig as any)?.[tooltypeKey];
     const enabled = value === true || value === 'true' || value === 1;
@@ -116,8 +145,7 @@ export async function isMailEventEnabled(event: MailEvent): Promise<boolean> {
  */
 async function getBbsName(): Promise<string> {
   try {
-    const configRepo = db.getConfigRepository();
-    const sysConfig = configRepo.getSystemConfig();
+    const sysConfig = readConfig() as { bbs_name?: string };
     return sysConfig?.bbs_name || 'AmiExpress BBS';
   } catch {
     return 'AmiExpress BBS';

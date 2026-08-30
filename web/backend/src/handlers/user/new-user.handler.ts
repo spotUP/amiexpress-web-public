@@ -26,7 +26,7 @@ import { beginLogoff } from '../../server/logoff';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
-import { loadBBSConfig } from '../../services/bbs-config-file.service';
+import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.service';
 import { parseInfoFile } from '../../utils/info-file.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
@@ -721,10 +721,9 @@ function promptForPassword(socket: Socket, session: any) {
 function getSecurityPolicy(): SecurityPolicy {
   const defaults: SecurityPolicy = { minLength: 4, minStrength: 0, strictPolicy: false };
   try {
-    if (db && typeof db.getConfigRepository === 'function') {
-      const repo = db.getConfigRepository();
-      if (repo && typeof repo.getSystemConfig === 'function') {
-        const sys = repo.getSystemConfig();
+    {
+      const sys = getBoardConfig(config.get('dataDir'));
+      {
         return {
           minLength: typeof sys?.min_password_length === 'number' ? sys.min_password_length : defaults.minLength,
           minStrength: typeof sys?.min_password_strength === 'number' ? sys.min_password_strength : defaults.minStrength,

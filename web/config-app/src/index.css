@@ -36,6 +36,29 @@
     @apply bg-surface-0 border border-border-strong text-content-primary rounded px-3 py-2 focus:outline-none focus:border-accent;
   }
 
+  /*
+   * Chrome paints an autofilled field with its own near-white background and
+   * near-black text, straight over the theme - so a remembered value turned a
+   * dark input into a light one, which is what a sysop sees on Website or
+   * Sysop name after the browser has saved them once.
+   *
+   * The background cannot be set directly on an autofilled input; an inset
+   * shadow the size of the field is the only thing that covers it, and the
+   * text colour needs -webkit-text-fill-color rather than color. The long
+   * transition delay stops the white flashing in before the shadow lands.
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface-0)) inset;
+    box-shadow: 0 0 0 1000px rgb(var(--surface-0)) inset;
+    -webkit-text-fill-color: rgb(var(--text-primary));
+    caret-color: rgb(var(--text-primary));
+    transition: background-color 100000s ease-in-out 0s;
+  }
+
   .card {
     @apply bg-surface-1 border border-border rounded-lg p-4;
   }

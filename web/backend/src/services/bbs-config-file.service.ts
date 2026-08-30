@@ -19,7 +19,6 @@ export interface BBSConfigData {
   bbs_name?: string;
   sysop_name?: string;
   location?: string;
-  phone?: string;
   email?: string;
   website?: string;
 
@@ -148,6 +147,23 @@ export interface BBSConfigData {
 }
 
 /**
+ * Fields the admin offers as a fixed list of lowercase values.
+ *
+ * A <select> whose value matches none of its options renders as though the
+ * first option were chosen while actually holding nothing - so a board with
+ * NEW_USER_PROTOCOL=ZMODEM looked like it had ZMODEM selected and had no
+ * value at all, and the same for PASSWORD_SECURITY. The case a sysop's Amiga
+ * wrote is not something the form should have to match, so it is normalised
+ * on the way in.
+ */
+const LOWERCASE_VALUE_FIELDS = new Set<string>([
+  'new_user_protocol',
+  'password_security',
+  'log_level',
+  'arexx_engine',
+]);
+
+/**
  * Tooltype name mapping (AmiExpress format → internal field name)
  */
 const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
@@ -155,7 +171,6 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'BBS_NAME': 'bbs_name',
   'SYSOP_NAME': 'sysop_name',
   'LOCATION': 'location',
-  'PHONE': 'phone',
   'EMAIL': 'email',
   'WEBSITE': 'website',
 
@@ -462,6 +477,9 @@ console.log('[BBSConfig] bbsConfig.info not found, using defaults');
         if (!isNaN(num)) {
           (config as any)[fieldName] = num;
         }
+      } else if (LOWERCASE_VALUE_FIELDS.has(fieldName)) {
+        // Matched against a fixed list of lowercase options in the form.
+        (config as any)[fieldName] = rawValue.toLowerCase();
       } else {
         // String value
         (config as any)[fieldName] = rawValue;
@@ -594,6 +612,7 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
     // line and the sysop's change was lost entirely while the form reported
     // a failure with nothing saved anywhere.
     fs.writeFileSync(configTextPath, content, 'utf-8');
+    invalidateBoardConfig();
 console.log('[BBSConfig] Saved configuration to bbsConfig.info.txt');
 
     if (!infoFile) {
@@ -628,6 +647,58 @@ console.error('[BBSConfig] Failed to save bbsConfig.info:', error);
 }
 
 /**
+ * The board's configuration, read from the file the BBS reads.
+ *
+ * Six runtime consumers - the password policy, the login post-check, new user
+ * defaults, the auth socket, the screen handler and the node manager - each
+ * asked the DATABASE for values the admin writes to disk. A sysop changing
+ * the minimum password length saw the form save it and the board carry on
+ * with the old one, because the writer and the reader were using different
+ * stores. This is the single place to ask.
+ *
+ * Cached, because the password policy is consulted on every login and this
+ * parses an Amiga icon; invalidated by saveBBSConfig, so a change made a
+ * moment ago is visible immediately.
+ */
+let boardConfigCache: { root: string; stamp: string; config: BBSConfigData } | null = null;
+
+/**
+ * When the two files were last written, cheaply.
+ *
+ * The cache cannot rely on saveBBSConfig being the only writer - a restore, a
+ * hand edit, or another process would all leave a stale value being served,
+ * which is the same "reader and writer disagree" bug this accessor exists to
+ * end. Comparing mtime and size is two stats, against parsing an Amiga icon.
+ */
+function configStamp(bbsRoot: string): string {
+  const parts: string[] = [];
+  for (const name of ['bbsConfig.info', 'bbsConfig.info.txt']) {
+    try {
+      const stats = fs.statSync(path.join(bbsRoot, name));
+      parts.push(`${name}:${stats.mtimeMs}:${stats.size}`);
+    } catch {
+      parts.push(`${name}:-`);
+    }
+  }
+  return parts.join('|');
+}
+
+export function getBoardConfig(bbsRoot: string): BBSConfigData {
+  const stamp = configStamp(bbsRoot);
+  if (boardConfigCache && boardConfigCache.root === bbsRoot && boardConfigCache.stamp === stamp) {
+    return boardConfigCache.config;
+  }
+  const config = loadBBSConfig(bbsRoot);
+  boardConfigCache = { root: bbsRoot, stamp, config };
+  return config;
+}
+
+/** Drop the cache. Called whenever the configuration is written. */
+export function invalidateBoardConfig(): void {
+  boardConfigCache = null;
+}
+
+/**
  * Get default configuration values
  */
 function getDefaultConfig(): BBSConfigData {
@@ -635,7 +706,6 @@ function getDefaultConfig(): BBSConfigData {
     bbs_name: 'AmiExpress BBS',
     sysop_name: 'Sysop',
     location: '',
-    phone: '',
     email: '',
     website: '',
     min_password_length: 8,
@@ -654,7 +724,7 @@ function getDefaultConfig(): BBSConfigData {
     new_user_lines_per_screen: 23,
     new_user_expert: false,
     new_user_ansi: true,
-    new_user_protocol: 'ZMODEM',
+    new_user_protocol: 'zmodem',
     new_user_screen_type: 'ANSI',
     new_user_editor: 'FULL',
     new_user_conf_access: 'XXX',

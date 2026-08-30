@@ -42,6 +42,8 @@ import { sessionLogManager } from "./SessionLogManager";
 import { emitUserLogin } from "./bbs-event-emitter";
 import { getSystemTime } from "../utils/date-time.util";
 import { beginLogoff } from "../server/logoff";
+import { getBoardConfig } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 export interface PostAuthContext {
   /**
@@ -345,7 +347,7 @@ export async function runPostAuthLogin(
   {
     let pwdExpiryDays = 0;
     try {
-      const sysConf = db.getConfigRepository().getSystemConfig();
+      const sysConf = getBoardConfig(appConfig.get('dataDir'));
       if (sysConf && typeof sysConf.password_expiry_days === "number") {
         pwdExpiryDays = sysConf.password_expiry_days;
       }
@@ -398,7 +400,7 @@ export async function runPostAuthLogin(
       let minPasswordLength = 0;
       let minPasswordStrength = 0;
       try {
-        const sysConf = db.getConfigRepository().getSystemConfig();
+        const sysConf = getBoardConfig(appConfig.get('dataDir'));
         if (sysConf) {
           minPasswordLength = sysConf.min_password_length ?? 0;
           minPasswordStrength = sysConf.min_password_strength ?? 0;

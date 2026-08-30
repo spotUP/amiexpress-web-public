@@ -4,6 +4,8 @@
 import { db } from '../database';
 import { NodeSession, NodeInfo } from '../types';
 import { getSystemTime } from '../utils/date-time.util';
+import { getBoardConfig } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 export class NodeManager {
   private nodes: Map<number, NodeInfo> = new Map();
@@ -28,7 +30,7 @@ export class NodeManager {
   private async initializeNodes(): Promise<void> {
     let maxNodes = 40;
     try {
-      const sysConfig = db.getConfigRepository().getSystemConfig();
+      const sysConfig = getBoardConfig(appConfig.get('dataDir'));
       if (sysConfig?.max_nodes && sysConfig.max_nodes > 0) {
         maxNodes = Math.min(sysConfig.max_nodes, 256);
       }

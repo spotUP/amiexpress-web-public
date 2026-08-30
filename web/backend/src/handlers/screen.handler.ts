@@ -37,6 +37,8 @@ import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer, type MciDispatchMap, type MciPrefixDispatchMap, applyMciWidth } from '../utils/mci-tokenizer.util';
+import { getBoardConfig } from '../services/bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 /**
  * Detect if content is an ANSI animation that should play at modem speed
@@ -599,7 +601,7 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   // Process %NODELIST before %N to avoid collision
   if (parsed.includes('%NODELIST')) {
     let nodeList = '';
-    const sysConfig = await db.getConfigRepository().getSystemConfig();
+    const sysConfig = await getBoardConfig(appConfig.get('dataDir'));
     const totalNodes = sysConfig?.max_nodes || 255;
     const currentNode = session.nodeId || 0;
     

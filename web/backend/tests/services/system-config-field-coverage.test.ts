@@ -33,6 +33,7 @@ import {
   loadBBSConfig,
   saveBBSConfig,
   getConfigTooltypeKeys,
+  getBoardConfig,
 } from '../../src/services/bbs-config-file.service';
 import type { BBSConfigData } from '../../src/services/bbs-config-file.service';
 import { SystemConfigSchema, describeValidationError } from '../../src/services/config.schemas';
@@ -258,6 +259,94 @@ describe('System Configuration field coverage', () => {
     it('says nothing for an error that is not a validation failure', () => {
       expect(describeValidationError(new Error('disk is full'))).toBeNull();
       expect(describeValidationError(undefined)).toBeNull();
+    });
+  });
+
+  describe('the values a dropdown has to match', () => {
+    it('reads a protocol back in the case the form offers', () => {
+      // The select's options are lowercase ("zmodem"); the default was
+      // "ZMODEM". A select whose value matches no option renders as though
+      // the first one were chosen while actually holding nothing, so the
+      // board looked like it had a default protocol and did not.
+      expect(loadBBSConfig(root).new_user_protocol).toBe('zmodem');
+
+      saveBBSConfig(root, { new_user_protocol: 'ZMODEM' });
+      expect(loadBBSConfig(root).new_user_protocol).toBe('zmodem');
+    });
+
+    it('reads the password hash setting back in the case the form offers', () => {
+      // Same shape: the options are bcrypt/sha256/md5/legacy, all lowercase.
+      saveBBSConfig(root, { password_security: 'BCRYPT' });
+      expect(loadBBSConfig(root).password_security).toBe('bcrypt');
+    });
+
+    it('leaves a value alone when it is not one of those lists', () => {
+      saveBBSConfig(root, { sysop_name: 'SpotUP' });
+      expect(loadBBSConfig(root).sysop_name).toBe('SpotUP');
+    });
+  });
+
+  describe('what the mail service reads', () => {
+    it('takes SMTP settings from the file the admin writes', () => {
+      // The admin writes SMTP_HOST to bbsConfig.info, because smtp_server is
+      // not a secret and the disk is where configuration lives. The mail
+      // service read configRepo.getSystemConfig() - the database - so the
+      // page showed smtp.gmail.com while "Test SMTP Connection" answered
+      // "SMTP server not configured", and mail had never worked.
+      saveBBSConfig(root, {
+        smtp_server: 'smtp.gmail.com',
+        smtp_port: 465,
+        smtp_ssl: true,
+        sysop_email: 'sysop@example.com',
+      });
+
+      const reloaded = loadBBSConfig(root);
+      expect(reloaded.smtp_server).toBe('smtp.gmail.com');
+      expect(reloaded.smtp_port).toBe(465);
+      expect(reloaded.smtp_ssl).toBe(true);
+      expect(reloaded.sysop_email).toBe('sysop@example.com');
+    });
+
+    it('takes the mail notification flags from that same file', () => {
+      // These were added to the tooltype map earlier today. If the mail
+      // service keeps reading the database, they are written correctly and
+      // still never fire.
+      saveBBSConfig(root, { mail_on_logon: true, mail_on_upload: false });
+
+      const reloaded = loadBBSConfig(root);
+      expect(reloaded.mail_on_logon).toBe(true);
+      expect(reloaded.mail_on_upload).toBe(false);
+    });
+  });
+
+  describe('the one place the board reads its configuration', () => {
+    it('serves what is on disk, and notices when it changes', () => {
+      // Six runtime consumers - the password policy, the login post-check,
+      // new user defaults, the auth socket, the screen handler and the node
+      // manager - each asked the DATABASE for values the admin writes to
+      // disk. A sysop changing them saw the form save and the board carry on
+      // with the old value, because the two stores never met.
+      //
+      // getBoardConfig is that single source. It caches, because the password
+      // policy is consulted on every login, and it has to see a change made a
+      // moment ago.
+      saveBBSConfig(root, { min_password_length: 9, max_nodes: 12 });
+
+      const first = getBoardConfig(root);
+      expect(first.min_password_length).toBe(9);
+      expect(first.max_nodes).toBe(12);
+
+      saveBBSConfig(root, { min_password_length: 4 });
+
+      expect(getBoardConfig(root).min_password_length).toBe(4);
+    });
+
+    it('answers repeatedly without re-reading the file every time', () => {
+      saveBBSConfig(root, { min_password_length: 7 });
+
+      for (let i = 0; i < 50; i++) {
+        expect(getBoardConfig(root).min_password_length).toBe(7);
+      }
     });
   });
 

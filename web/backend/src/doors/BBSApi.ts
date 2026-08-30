@@ -37,6 +37,8 @@ import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
  *  carries (description, version, release group) are user-visible in the
  *  door menu with no error path if they go missing. */
 import { applyRepoMetadata, getRepoMetadataIndex } from './door-repo-metadata';
+import { getBoardConfig } from '../services/bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 export function applyInstallMetadata<T extends Record<string, unknown>>(
   door: T,
@@ -766,7 +768,7 @@ console.error('[BBSApi] Error listing conferences:', error);
    * Get BBS system information
    */
   async getSystemInfo(): Promise<BBSSystemInfo> {
-    const sysConfig = await db.getConfigRepository().getSystemConfig();
+    const sysConfig = getBoardConfig(appConfig.get('dataDir'));
     return {
       bbsName: sysConfig?.bbs_name || 'AmiExpress-Web',
       sysopName: sysConfig?.sysop_name || 'Sysop',
