@@ -4,19 +4,13 @@ import { FileCode, Edit2, Save, X, RefreshCw, FolderOpen } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { infoFileNote } from './info-file-notes';
+import { toInfoFileItems, type InfoFileItem } from './info-file-list';
 
 interface Tooltype {
   key: string;
   value: string;
   commented: boolean;
   originalLine: string;
-}
-
-interface InfoFileItem {
-  path: string;
-  name: string;
-  size?: number;
-  category: string;
 }
 
 export function SystemFilesPage() {
@@ -37,30 +31,8 @@ export function SystemFilesPage() {
     queryFn: () => apiClient.getInfoFiles(),
   });
 
-  // Categorize files based on their location/name
-  const categorizeFile = (path: string): string => {
-    if (path.includes('Node')) return 'Nodes';
-    if (path.includes('Conf')) return 'Conferences';
-    if (path.startsWith('Commands/')) return 'Commands';
-    if (path.startsWith('doors/') || path.startsWith('Doors/')) return 'Doors';
-    if (path.startsWith('Protocols')) return 'Protocols';
-    if (path.startsWith('Languages')) return 'Languages';
-    if (path.startsWith('batch')) return 'Batch Processing';
-    if (path.startsWith('FCheck')) return 'File Management';
-    if (path.startsWith('bbsConfig')) return 'BBS Configuration';
-    if (path.startsWith('ConfConfig')) return 'Conferences';
-    if (path.startsWith('AmiXnet')) return 'AmiXnet Network';
-    return 'System';
-  };
-
   // Process and filter files
-  const files: InfoFileItem[] = (filesData?.data?.files || [])
-    .map((file: any) => ({
-      path: file.path || file,
-      name: file.name || file.split('/').pop() || file,
-      size: file.size,
-      category: categorizeFile(file.path || file),
-    }))
+  const files: InfoFileItem[] = toInfoFileItems(filesData?.data?.files)
     .filter((file: InfoFileItem) => {
       // Filter by search term
       if (searchTerm && !file.name.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -225,11 +197,6 @@ export function SystemFilesPage() {
                         {infoFileNote(file.path) && (
                           <p className="text-xs text-bbs-muted mt-1">
                             {infoFileNote(file.path)}
-                          </p>
-                        )}
-                        {file.size && (
-                          <p className="text-xs text-bbs-muted">
-                            {(file.size / 1024).toFixed(1)} KB
                           </p>
                         )}
                       </div>
