@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileCode, Edit2, Save, X, RefreshCw, FolderOpen } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { infoFileNote } from './info-file-notes';
 
 interface Tooltype {
   key: string;
@@ -221,6 +222,11 @@ export function SystemFilesPage() {
                         <p className="text-xs text-bbs-muted font-mono truncate" title={file.path}>
                           {file.path}
                         </p>
+                        {infoFileNote(file.path) && (
+                          <p className="text-xs text-bbs-muted mt-1">
+                            {infoFileNote(file.path)}
+                          </p>
+                        )}
                         {file.size && (
                           <p className="text-xs text-bbs-muted">
                             {(file.size / 1024).toFixed(1)} KB

@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { NAV_GROUPS, NAV_ITEMS, groupForPath, navItemForPath } from '../components/AppShell/nav-config';
 import { LEGACY_ROUTES } from '../routes/legacy-routes';
+import { WORKSPACE_TABS } from '../pages/workspaces';
 
 /**
  * Several admin pages are the only route to a piece of BBS configuration -
@@ -80,6 +81,24 @@ describe('legacy paths', () => {
       const [target, query] = route.to.split('?');
       expect(navPaths.has(target), `${route.from} redirects to ${target}, which is not a destination`).toBe(true);
       expect(query, `${route.from} must name the tab that carries "${route.capability}"`).toMatch(/^tab=[a-z-]+$/);
+    }
+  });
+
+  it('names a tab that the destination actually has', () => {
+    // Collapsing two tabs into one used to be invisible here: the redirects
+    // that named them kept pointing at ids that were gone, and a sysop
+    // following an old bookmark landed on the default tab with nothing
+    // saying the thing they wanted had moved.
+    for (const route of LEGACY_ROUTES) {
+      const [target, query] = route.to.split('?');
+      const tabs = WORKSPACE_TABS[target];
+      if (!tabs) continue; // A destination with no tabs takes no tab parameter.
+
+      const tab = query.replace('tab=', '');
+      expect(
+        tabs,
+        `${route.from} redirects to ${target}?${query}, but that destination has no "${tab}" tab`
+      ).toContain(tab);
     }
   });
 
