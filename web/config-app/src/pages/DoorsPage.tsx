@@ -85,7 +85,7 @@ export function DoorsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiClient.deleteDoor(id),
+    mutationFn: (command: string) => apiClient.deleteDoor(command),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doors'] });
       showSuccess('Door deleted successfully');
@@ -150,7 +150,7 @@ export function DoorsPage() {
       requireTypedConfirmation: door.door_command
     });
     if (confirmed) {
-      deleteMutation.mutate(door.id);
+      deleteMutation.mutate(door.door_command);
     }
   };
 

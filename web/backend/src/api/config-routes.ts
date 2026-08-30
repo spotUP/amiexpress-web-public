@@ -543,20 +543,62 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   });
 
   /**
-   * DELETE /api/config/doors/:id
-   * Delete door
+   * DELETE /api/config/doors/:command
+   * Delete a door, identified by its command.
+   *
+   * This used to take the :id from the door list and hand it to
+   * configService.deleteDoor(), which looked it up as a `doors` TABLE row.
+   * The list is loaded from disk and numbered by POSITION (`id: index + 1`
+   * above), so the two are unrelated namespaces: deleting the door at
+   * position N found nothing, or found an unrelated row and unlinked THAT
+   * door's Commands/BBSCmd/<command>.info. The PUT route was already fixed
+   * this way; this is the delete half.
+   *
+   * The removal itself goes through the same manager path DOORMAN uses,
+   * rather than a second implementation beside it - that path resolves and
+   * confines every path to Doors/ or Commands/ before touching it, verifies
+   * afterwards, and reports what survived. Those guards were written after a
+   * delete that trusted an unchecked string took the whole Doors/ tree out.
    */
-  router.delete('/doors/:id', async (req: any, res: Response) => {
+  router.delete('/doors/:command', async (req: any, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const command = req.params.command;
       const context = getRequestContext(req);
-      const deleted = await configService.deleteDoor(id, context);
 
-      if (!deleted) {
-        return handleError(res, new Error(`Door ${id} not found`));
+      const { getAmigaDoorManager, refreshDoorCache } = await import('../doors/amigaDoorManager');
+      const steps: string[] = [];
+      const result = await getAmigaDoorManager().deleteDoor(
+        command,
+        undefined,
+        step => steps.push(`[${step.kind.toUpperCase()}] ${step.text}`)
+      );
+
+      if (!result.success) {
+        return handleError(res, new Error(result.message));
       }
 
-      sendResponse(res, { deleted: true }, 'Door deleted');
+      // Both caches, for the same reason the door edit reloads: the BBS's own
+      // door cache, and the registry getDoors() answers the admin from.
+      await refreshDoorCache();
+      try {
+        const { initializeDoors } = require('../handlers/door.handler');
+        await initializeDoors();
+      } catch (reloadError) {
+        console.error('[config] door registry reload failed (delete succeeded):', reloadError);
+      }
+
+      // Mirror the removal into the database when a row for this command
+      // exists. A missing row is not an error: the door lived on disk.
+      try {
+        const existing = await configService.getDoorByCommand(command);
+        if (existing) {
+          await configService.deleteDoor(existing.id, context);
+        }
+      } catch (mirrorError) {
+        console.error('[config] door DB mirror delete failed (disk delete succeeded):', mirrorError);
+      }
+
+      sendResponse(res, { deleted: true, command, removed: result.removed, steps }, result.message);
     } catch (error) {
       handleError(res, error);
     }
