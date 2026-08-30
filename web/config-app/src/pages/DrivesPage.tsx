@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { HardDrive, Edit2, Trash2, Plus, X } from 'lucide-react';
+import { Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+
+/** A stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_DRIVES: DriveConfig[] = [];
 
 interface DriveConfig {
   id: number;
@@ -125,11 +129,50 @@ export function DrivesPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading drives...</div>;
-  }
+  const drives = data?.data || EMPTY_DRIVES;
 
-  const drives = data?.data || [];
+  const columns: DataTableColumn<DriveConfig>[] = [
+    {
+      id: 'enabled',
+      header: 'Status',
+      value: (drive) => (drive.enabled ? 1 : 0),
+      width: '8rem',
+      cell: (drive) => (
+        <span
+          className={`inline-flex items-center rounded px-2 py-0.5 text-xs ${
+            drive.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-surface-3 text-content-muted'
+          }`}
+        >
+          {drive.enabled ? 'Enabled' : 'Disabled'}
+        </span>
+      ),
+    },
+    {
+      id: 'drive_number',
+      header: 'Drive',
+      value: (drive) => drive.drive_number,
+      align: 'right',
+      mono: true,
+      width: '6rem',
+    },
+    {
+      id: 'drive_path',
+      header: 'Path',
+      value: (drive) => drive.drive_path,
+      mono: true,
+      cell: (drive) => (
+        <span className="block max-w-md truncate text-content-secondary">{drive.drive_path}</span>
+      ),
+    },
+    {
+      id: 'description',
+      header: 'Description',
+      value: (drive) => drive.description ?? '',
+      cell: (drive) => (
+        <span className="block max-w-sm truncate text-content-secondary">{drive.description || '-'}</span>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -140,69 +183,34 @@ export function DrivesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {drives.map((drive: DriveConfig) => (
-          <div key={drive.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <HardDrive className="text-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">Drive {drive.drive_number}</h3>
-                  <p className="text-xs text-bbs-muted font-mono">{drive.drive_path}</p>
-                </div>
-              </div>
-              <div
-                className={`px-2 py-1 rounded text-xs ${
-                  drive.enabled
-                    ? 'bg-status-ok/20 text-status-ok'
-                    : 'bg-bbs-muted/20 text-bbs-muted'
-                }`}
-              >
-                {drive.enabled ? 'Enabled' : 'Disabled'}
-              </div>
-            </div>
-
-            {drive.description && (
-              <p className="text-sm text-bbs-muted mb-4">{drive.description}</p>
-            )}
-
-            <div className="space-y-2 text-sm mb-4">
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Drive Number:</span>
-                <span className="text-bbs-text font-mono">{drive.drive_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Path:</span>
-                <span className="text-bbs-text font-mono text-xs">{drive.drive_path}</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(drive)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleDelete(drive)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {drives.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No drives configured. Add drive mappings to define BBS storage locations.
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={drives}
+        getRowId={(drive) => String(drive.id)}
+        initialSort={[{ id: 'drive_number', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No drives configured. Add drive mappings to define BBS storage locations."
+        rowActions={(drive) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(drive)}
+              aria-label={`Edit drive ${drive.drive_number}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(drive)}
+              aria-label={`Delete drive ${drive.drive_number}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
+      />
 
       {/* Add/Edit Modal */}
       {isModalOpen && (

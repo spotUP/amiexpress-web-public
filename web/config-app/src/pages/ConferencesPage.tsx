@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, Edit2, Trash2, Plus, X } from 'lucide-react';
+import { Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { ConferenceConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 
 interface ConferenceFormData {
   conference_id: number;
@@ -17,6 +18,9 @@ interface ConferenceFormData {
   private_conf: boolean;
   read_only: boolean;
 }
+
+/** A stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_CONFERENCES: ConferenceConfig[] = [];
 
 export function ConferencesPage() {
   const queryClient = useQueryClient();
@@ -140,11 +144,79 @@ export function ConferencesPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading conference configurations...</div>;
-  }
+  const conferences = data?.data || EMPTY_CONFERENCES;
 
-  const conferences = data?.data || [];
+  const columns: DataTableColumn<ConferenceConfig>[] = [
+    {
+      id: 'conference_id',
+      header: 'Conf',
+      value: (conf) => conf.conference_id,
+      align: 'right',
+      mono: true,
+      width: '5rem',
+    },
+    {
+      id: 'name',
+      header: 'Name',
+      value: (conf) => conf.name || `Conference ${conf.conference_id}`,
+      cell: (conf) => (
+        <span className="text-content-primary">{conf.name || `Conference ${conf.conference_id}`}</span>
+      ),
+    },
+    {
+      id: 'ndirs',
+      header: 'Directories',
+      value: (conf) => conf.ndirs,
+      align: 'right',
+      mono: true,
+      width: '7rem',
+    },
+    {
+      id: 'dlpath_1',
+      header: 'Download path',
+      value: (conf) => conf.dlpath_1 ?? '',
+      mono: true,
+      cell: (conf) => (
+        <span className="block max-w-xs truncate text-content-secondary">{conf.dlpath_1 || 'Not set'}</span>
+      ),
+    },
+    {
+      id: 'ulpath_1',
+      header: 'Upload path',
+      value: (conf) => conf.ulpath_1 ?? '',
+      mono: true,
+      cell: (conf) => (
+        <span className="block max-w-xs truncate text-content-secondary">{conf.ulpath_1 || 'Not set'}</span>
+      ),
+    },
+    {
+      id: 'access',
+      header: 'Access',
+      value: (conf) => conf.min_access_level,
+      align: 'right',
+      mono: true,
+      width: '7rem',
+      cell: (conf) => (
+        <span>{conf.min_access_level}-{conf.max_access_level}</span>
+      ),
+    },
+    {
+      id: 'flags',
+      header: 'Flags',
+      width: '10rem',
+      cell: (conf) => (
+        <span className="flex flex-wrap gap-1">
+          {conf.private_conf && (
+            <span className="rounded bg-accent/20 px-1.5 py-0.5 text-xs text-accent">Private</span>
+          )}
+          {conf.read_only && (
+            <span className="rounded bg-surface-3 px-1.5 py-0.5 text-xs text-content-muted">Read only</span>
+          )}
+          {!conf.private_conf && !conf.read_only && <span className="text-content-muted">-</span>}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -155,70 +227,34 @@ export function ConferencesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {conferences.map((conf: ConferenceConfig) => (
-          <div key={conf.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <MessageSquare className="text-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">{conf.name || `Conference ${conf.conference_id}`}</h3>
-                  <p className="text-xs text-bbs-muted">
-                    {conf.ndirs} director{conf.ndirs === 1 ? 'y' : 'ies'} configured
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm mb-4">
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Download Path:</span>
-                <span className="text-bbs-text font-mono text-xs">{conf.dlpath_1 || 'Not set'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Upload Path:</span>
-                <span className="text-bbs-text font-mono text-xs">{conf.ulpath_1 || 'Not set'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Access Level:</span>
-                <span className="text-bbs-text">{conf.min_access_level}-{conf.max_access_level}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Private:</span>
-                <span className="text-bbs-text">{conf.private_conf ? 'Yes' : 'No'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Read Only:</span>
-                <span className="text-bbs-text">{conf.read_only ? 'Yes' : 'No'}</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(conf)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleDelete(conf)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {conferences.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No conferences configured. Add conferences to organize messages and files.
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={conferences}
+        getRowId={(conf) => String(conf.id)}
+        initialSort={[{ id: 'conference_id', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No conferences configured. Add conferences to organize messages and files."
+        rowActions={(conf) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(conf)}
+              aria-label={`Edit ${conf.name || `conference ${conf.conference_id}`}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(conf)}
+              aria-label={`Delete ${conf.name || `conference ${conf.conference_id}`}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
+      />
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
