@@ -9,7 +9,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
-import { applyDoorFieldsToTooltypes, findDoorInfoFile, doorDisplayName } from '../services/config-services/door-info-file.service';
+import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel } from '../services/config-services/door-info-file.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
@@ -420,9 +420,13 @@ console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
         description: door.description || '',
         door_type: door.type || 'BBSCMD',
         runtime_env: door.type === 'typescript' ? 'nodejs' : door.type === 'XIM' ? 'vamos' : 'native',
-        min_security_level: door.accessLevel || 0,
+        min_security_level: doorNormalAccessLevel(door),
         time_limit: 30,
-        enabled: door.enabled !== false,
+        // Read from the door's own .info, not from the in-memory flag that
+        // used to answer this: that one is session-scoped and starts life
+        // undefined, so every door reported itself enabled whatever its
+        // .info said.
+        enabled: isDoorEnabled(door.toolTypes),
         door_path: door.path || '',
         door_args: door.args || '',
         working_directory: '',
@@ -504,7 +508,22 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
 
       const info = parseInfoFile(infoPath);
       info.tooltypes = applyDoorFieldsToTooltypes(info.tooltypes as any, req.body) as any;
+      // Fields first, then the switch: saving a new access level and taking
+      // the door offline in one edit has to remember the level just typed.
+      if (typeof req.body?.enabled === 'boolean') {
+        info.tooltypes = applyEnabledToTooltypes(info.tooltypes as any, req.body.enabled) as any;
+      }
       writeInfoFile(info);
+
+      // getDoors() answers from a list built at startup, so without this the
+      // door the sysop just edited reads back with its old tooltypes and the
+      // change looks lost until a restart. Same reload the delete path runs.
+      try {
+        const { initializeDoors } = require('../handlers/door.handler');
+        await initializeDoors();
+      } catch (reloadError) {
+        console.error('[config] door registry reload failed (disk write succeeded):', reloadError);
+      }
 
       // Mirror into the database when a row for this command exists. A missing
       // row is not an error: the door is defined on disk.

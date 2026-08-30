@@ -518,6 +518,12 @@ export function DoorsPage() {
                     />
                     <span className="text-bbs-text">Enabled</span>
                   </label>
+                  <p className="text-sm text-bbs-muted mt-2">
+                    AmiExpress has no on/off switch for a command, so turning a
+                    door off parks its access level at 255 and remembers the
+                    level above, restoring it when you switch the door back on.
+                    This is what DOORREPO does, and it reads the same door.
+                  </p>
                 </div>
               </div>
 
