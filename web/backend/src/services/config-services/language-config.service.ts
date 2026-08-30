@@ -72,13 +72,20 @@ console.warn('[LanguageConfigService] Languages/ directory not found');
 
         const languageName = infoFile.replace(/\.info$/i, '');
 
+        // Read the tooltypes the writer writes. They were ignored: the code
+        // came from the first two letters of the filename, the path was the
+        // .info file itself, and enabled was hardcoded true - so editing any
+        // of the three wrote a key nothing read back, and the form showed the
+        // derived value again. Where a tooltype is absent the old derivation
+        // still applies, so a language that has never been edited reads the
+        // same as before.
         languages.push({
           id: languageNum++,
           language_number: languageNum - 1,
           title: languageName,
-          language_code: languageName.substring(0, 2).toLowerCase(),
-          file_path: infoPath,
-          enabled: true,
+          language_code: toolTypes.get('CODE') || languageName.substring(0, 2).toLowerCase(),
+          file_path: toolTypes.get('PATH') || infoPath,
+          enabled: toolTypes.get('ENABLED') !== '0',
           created_at: stats.birthtime,
           updated_at: stats.mtime
         });
@@ -193,7 +200,16 @@ console.error('[LanguageConfigService] Error reading Languages/ directory:', err
         fs.mkdirSync(languagesDir, { recursive: true });
       }
 
+      // Start from what the file already holds, so a tooltype this form does
+      // not own survives an edit to one that it does.
       const toolTypes = new Map<string, string>();
+      if (fs.existsSync(infoPath)) {
+        const existing = new InfoFileParser().parse(fs.readFileSync(infoPath));
+        for (const [key, value] of existing.toolTypes.entries()) {
+          toolTypes.set(key.toUpperCase(), value);
+        }
+      }
+
       if (language.language_code) toolTypes.set('CODE', language.language_code);
       if (language.file_path) toolTypes.set('PATH', language.file_path);
       if (language.enabled !== undefined) toolTypes.set('ENABLED', language.enabled ? '1' : '0');

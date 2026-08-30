@@ -190,7 +190,18 @@ console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', err
         fs.mkdirSync(fcheckDir, { recursive: true });
       }
 
+      // Start from what the file already holds. Building the map from
+      // nothing dropped every tooltype this form does not own - the reader
+      // itself knows about SOPTIONS and the '&' prefix AmiExpress writes, and
+      // a checker's icon can carry more besides.
       const toolTypes = new Map<string, string>();
+      if (fs.existsSync(infoPath)) {
+        const existing = new InfoFileParser().parse(fs.readFileSync(infoPath));
+        for (const [key, value] of existing.toolTypes.entries()) {
+          toolTypes.set(key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase(), value);
+        }
+      }
+
       if (checker.checker_path) toolTypes.set('CHECKER', checker.checker_path);
       if (checker.options) toolTypes.set('OPTIONS', checker.options);
       if (checker.stack_size !== undefined) toolTypes.set('STACK', checker.stack_size.toString());
