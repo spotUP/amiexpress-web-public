@@ -1,11 +1,24 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Toast } from '../components/Toast';
-import { ConfirmModal } from '../components/ConfirmModal';
+import { createContext, useCallback, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Toast, ToastProvider } from '../components/ui/Toast';
+import type { ToastType } from '../components/ui/Toast';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import type { ConfirmType } from '../components/ui/ConfirmDialog';
+
+/**
+ * The public surface here is unchanged - showSuccess, showError, showInfo,
+ * showWarning, showToast and confirm keep their exact signatures, so none of
+ * the pages that call them change. Only the implementation moved onto Radix.
+ *
+ * `confirm` gains one optional field, `requireTypedConfirmation`. Callers that
+ * do not pass it behave exactly as before.
+ */
 
 interface ToastMessage {
   id: string;
   message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
+  type: ToastType;
+  open: boolean;
 }
 
 interface ConfirmOptions {
@@ -13,11 +26,16 @@ interface ConfirmOptions {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  type?: 'danger' | 'warning' | 'info';
+  type?: ConfirmType;
+  /**
+   * For an action that cannot be undone: the sysop types this value back
+   * before the confirm button becomes usable.
+   */
+  requireTypedConfirmation?: string;
 }
 
 interface NotificationContextType {
-  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
+  showToast: (message: string, type?: ToastType) => void;
   showSuccess: (message: string) => void;
   showError: (message: string) => void;
   showInfo: (message: string) => void;
@@ -27,21 +45,21 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+let toastSequence = 0;
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
     options: ConfirmOptions;
     resolve: (value: boolean) => void;
   } | null>(null);
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
-    const id = Math.random().toString(36).substring(7);
-    setToasts((prev) => [...prev, { id, message, type }]);
-
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((toast) => toast.id !== id));
-    }, 5000);
+  const showToast = useCallback((message: string, type: ToastType = 'info') => {
+    // A counter, not Math.random: two toasts raised in the same millisecond
+    // must not be able to collide on a key.
+    toastSequence += 1;
+    const id = `toast-${toastSequence}`;
+    setToasts((current) => [...current, { id, message, type, open: true }]);
   }, []);
 
   const showSuccess = useCallback((message: string) => showToast(message, 'success'), [showToast]);
@@ -49,72 +67,66 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const showInfo = useCallback((message: string) => showToast(message, 'info'), [showToast]);
   const showWarning = useCallback((message: string) => showToast(message, 'warning'), [showToast]);
 
-  const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setConfirmDialog({
-        isOpen: true,
-        options,
-        resolve,
-      });
-    });
-  }, []);
+  const confirm = useCallback(
+    (options: ConfirmOptions) =>
+      new Promise<boolean>((resolve) => {
+        setConfirmDialog({ options, resolve });
+      }),
+    []
+  );
 
-  const handleConfirm = useCallback(() => {
-    if (confirmDialog) {
-      confirmDialog.resolve(true);
+  const closeConfirm = useCallback(
+    (answer: boolean) => {
+      confirmDialog?.resolve(answer);
       setConfirmDialog(null);
-    }
-  }, [confirmDialog]);
+    },
+    [confirmDialog]
+  );
 
-  const handleCancel = useCallback(() => {
-    if (confirmDialog) {
-      confirmDialog.resolve(false);
-      setConfirmDialog(null);
+  // Radix animates the exit, so the toast is marked closed first and dropped
+  // once it is gone.
+  const setToastOpen = useCallback((id: string, open: boolean) => {
+    setToasts((current) =>
+      open ? current : current.map((toast) => (toast.id === id ? { ...toast, open: false } : toast))
+    );
+    if (!open) {
+      window.setTimeout(() => {
+        setToasts((current) => current.filter((toast) => toast.id !== id));
+      }, 300);
     }
-  }, [confirmDialog]);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
   return (
     <NotificationContext.Provider
-      value={{
-        showToast,
-        showSuccess,
-        showError,
-        showInfo,
-        showWarning,
-        confirm,
-      }}
+      value={{ showToast, showSuccess, showError, showInfo, showWarning, confirm }}
     >
-      {children}
+      <ToastProvider>
+        {children}
 
-      {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-md">
         {toasts.map((toast) => (
           <Toast
             key={toast.id}
             message={toast.message}
             type={toast.type}
-            onClose={() => removeToast(toast.id)}
+            open={toast.open}
+            onOpenChange={(open) => setToastOpen(toast.id, open)}
           />
         ))}
-      </div>
 
-      {/* Confirm Modal */}
-      {confirmDialog && (
-        <ConfirmModal
-          isOpen={confirmDialog.isOpen}
-          title={confirmDialog.options.title}
-          message={confirmDialog.options.message}
-          confirmText={confirmDialog.options.confirmText}
-          cancelText={confirmDialog.options.cancelText}
-          type={confirmDialog.options.type}
-          onConfirm={handleConfirm}
-          onCancel={handleCancel}
-        />
-      )}
+        {confirmDialog && (
+          <ConfirmDialog
+            open
+            title={confirmDialog.options.title}
+            message={confirmDialog.options.message}
+            confirmText={confirmDialog.options.confirmText}
+            cancelText={confirmDialog.options.cancelText}
+            type={confirmDialog.options.type}
+            requireTypedConfirmation={confirmDialog.options.requireTypedConfirmation}
+            onConfirm={() => closeConfirm(true)}
+            onCancel={() => closeConfirm(false)}
+          />
+        )}
+      </ToastProvider>
     </NotificationContext.Provider>
   );
 }

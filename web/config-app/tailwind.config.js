@@ -105,5 +105,6 @@ export default {
       },
     },
   },
-  plugins: [],
+  // The enter and exit keyframes the Radix data-state attributes expect.
+  plugins: [require('tailwindcss-animate')],
 }
