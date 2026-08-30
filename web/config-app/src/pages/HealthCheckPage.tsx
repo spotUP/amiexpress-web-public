@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Activity, AlertCircle, CheckCircle, Info, RefreshCw, Wrench, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, RefreshCw, Wrench, XCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -145,13 +145,6 @@ export function HealthCheckPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-accent mb-2 flex items-center gap-3">
-          <Activity size={32} />
-          BBS Health Check
-        </h1>
-        <p className="text-bbs-muted">Comprehensive validation of the entire BBS filesystem</p>
-      </div>
 
       {report && (
         <>

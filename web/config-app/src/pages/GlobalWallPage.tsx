@@ -151,10 +151,6 @@ export function GlobalWallPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-accent mb-2">Global Wall Management</h1>
-        <p className="text-bbs-muted">Manage Global Wall comments and settings</p>
-      </div>
 
       {/* Tabs */}
       <div className="flex space-x-2 mb-6 border-b border-bbs-border">

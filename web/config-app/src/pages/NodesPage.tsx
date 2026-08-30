@@ -306,14 +306,6 @@ export function NodesPage() {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-2">Node Configuration</h1>
-          <p className="text-bbs-muted">
-            Configure individual BBS nodes (1-{maxNodes}). Missing nodes can be created inline.
-          </p>
-        </div>
-      </div>
 
       <DataGrid
         columns={columns}

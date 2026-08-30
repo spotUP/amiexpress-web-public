@@ -201,7 +201,6 @@ export function NodeControlPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-content-primary mb-2">Live Node Control</h1>
         <p className="text-content-secondary">Monitor and control BBS nodes in real-time</p>
       </div>
 

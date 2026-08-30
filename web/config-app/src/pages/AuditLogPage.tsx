@@ -21,10 +21,6 @@ export function AuditLogPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-accent mb-2">Configuration Audit Log</h1>
-        <p className="text-bbs-muted">Track all configuration changes and modifications</p>
-      </div>
 
       {/* Filters */}
       <div className="card mb-6">

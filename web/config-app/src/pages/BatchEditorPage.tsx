@@ -147,10 +147,6 @@ export function BatchEditorPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-1">Batch Editor</h1>
-          <p className="text-bbs-muted">Edit logon/logoff batch files (batch0–batch6). Use with care.</p>
-        </div>
         <div className="flex items-center space-x-2">
           <select
             value={selectedBatch}

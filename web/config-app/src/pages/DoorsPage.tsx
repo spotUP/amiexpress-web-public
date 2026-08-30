@@ -268,11 +268,7 @@ export function DoorsPage() {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-2">Doors Configuration</h1>
-          <p className="text-bbs-muted">Manage BBS doors and external programs</p>
-        </div>
+      <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <input
             ref={uploadInputRef}

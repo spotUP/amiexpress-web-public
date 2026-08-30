@@ -165,10 +165,6 @@ export function LogsPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-accent mb-2">System Logs</h1>
-        <p className="text-bbs-muted">View and manage BBS system logs</p>
-      </div>
 
       {/* Platform Info Banner */}
       {logData?.environment && logData.environment !== 'local' && (

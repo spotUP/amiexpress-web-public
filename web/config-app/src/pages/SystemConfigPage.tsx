@@ -270,10 +270,8 @@ export function SystemConfigPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-accent mb-2">System Configuration</h1>
+      <div className="mb-4">
         <div className="flex items-center space-x-3">
-          <p className="text-bbs-muted">Global BBS settings and parameters</p>
           <span className="text-xs text-bbs-muted">
             {autoSaveStatus === 'saving' && 'Saving...'}
             {autoSaveStatus === 'saved' && 'Saved'}

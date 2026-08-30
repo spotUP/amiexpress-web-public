@@ -116,11 +116,7 @@ export function ComputersPage() {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-2">Computer Types</h1>
-          <p className="text-bbs-muted">Manage computer type selections (TOOLTYPE_COMPUTERLIST)</p>
-        </div>
+      <div className="mb-4 flex justify-between items-center">
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
           <Plus size={20} />
           <span>Add Computer Type</span>

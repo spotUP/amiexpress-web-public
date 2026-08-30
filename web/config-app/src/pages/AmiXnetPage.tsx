@@ -124,12 +124,10 @@ export function AmiXnetPage() {
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-4">
         <div className="flex items-center space-x-3 mb-2">
           <Network className="text-accent" size={32} />
-          <h1 className="text-3xl font-bold text-accent">AmiXnet Network</h1>
         </div>
-        <p className="text-bbs-muted">Configure AmiXnet BBS network settings and routing</p>
       </div>
 
       {/* Category Filter */}
@@ -151,7 +149,7 @@ export function AmiXnetPage() {
 
       {/* Files by Category */}
       {Object.entries(filesByCategory).map(([category, files]) => (
-        <div key={category} className="mb-8">
+        <div key={category} className="mb-4">
           <h2 className="text-xl font-semibold text-bbs-text mb-4 border-b border-bbs-border pb-2">
             {category}
           </h2>

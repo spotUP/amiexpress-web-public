@@ -145,14 +145,10 @@ export function SystemFilesPage() {
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-4">
         <div className="flex items-center space-x-3 mb-2">
           <FolderOpen className="text-accent" size={32} />
-          <h1 className="text-3xl font-bold text-accent">System Files</h1>
         </div>
-        <p className="text-bbs-muted">
-          Edit .info files for system utilities, protocols, and other BBS components
-        </p>
       </div>
 
       {/* Search and Filter Controls */}
@@ -206,7 +202,7 @@ export function SystemFilesPage() {
         </div>
       ) : (
         Object.entries(filesByCategory).map(([category, categoryFiles]) => (
-          <div key={category} className="mb-8">
+          <div key={category} className="mb-4">
             <h2 className="text-xl font-semibold text-bbs-text mb-4 border-b border-bbs-border pb-2">
               {category} ({categoryFiles.length})
             </h2>

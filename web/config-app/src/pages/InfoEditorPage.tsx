@@ -149,12 +149,6 @@ export function InfoEditorPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-accent mb-1">Info File Editor</h1>
-        <p className="text-bbs-muted">
-          Edit Amiga .info file tooltypes for commands, doors, and conferences
-        </p>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* File Browser */}

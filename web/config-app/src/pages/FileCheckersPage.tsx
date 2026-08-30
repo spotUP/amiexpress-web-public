@@ -188,11 +188,7 @@ export function FileCheckersPage() {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-2">File Checkers</h1>
-          <p className="text-bbs-muted">Manage file validation tools (TOOLTYPE_FCHECK)</p>
-        </div>
+      <div className="mb-4 flex justify-between items-center">
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
           <Plus size={20} />
           <span>Add File Checker</span>

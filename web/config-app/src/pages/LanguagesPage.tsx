@@ -197,11 +197,7 @@ export function LanguagesPage() {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-2">Languages Configuration</h1>
-          <p className="text-bbs-muted">Manage multi-language support (up to 10 languages)</p>
-        </div>
+      <div className="mb-4 flex justify-between items-center">
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
           <Plus size={20} />
           <span>Add Language</span>

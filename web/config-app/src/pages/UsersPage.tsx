@@ -319,11 +319,7 @@ export function UsersPage() {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-accent mb-2">User Management</h1>
-          <p className="text-bbs-muted">Manage BBS user accounts and permissions</p>
-        </div>
+      <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center space-x-3">
           <div className="flex items-center bg-bbs-background border border-bbs-border rounded px-2">
             <Search size={16} className="text-bbs-muted" />
