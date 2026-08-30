@@ -8,6 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { findArchiveCommand, isUsableCommand } from './archive-command';
 
 /**
  * The backend's shared archive extractor, if it is loaded in this process.
@@ -155,6 +156,25 @@ export type InstallOutcome =
   | { ok: true; doorType: string; fileCount: number; binaryRel: string; steps: InstallStep[] }
   | { ok: false; step: string; detail: string; steps: InstallStep[] };
 
+/**
+ * Move a freshly extracted door to the command the archive names.
+ *
+ * Returns the new directory, or null when the target already exists - an
+ * existing install is never overwritten by a rename.
+ */
+function renameInstallDir(installDir: string, command: string): string | null {
+  if (!isUsableCommand(command)) return null;
+  const target = path.join(path.dirname(installDir), command);
+  if (target === installDir) return installDir;
+  if (fs.existsSync(target)) return null;
+  try {
+    fs.renameSync(installDir, target);
+    return target;
+  } catch {
+    return null;
+  }
+}
+
 export async function extractAndRegisterDoor(
   archivePath: string,
   installDir: string,
@@ -165,6 +185,9 @@ export async function extractAndRegisterDoor(
   deps: InstallDeps
 ): Promise<InstallOutcome> {
   const steps: InstallStep[] = [];
+  let command = finalCmd;
+  let targetDir = installDir;
+  let targetInfoPath = infoPath;
 
   const result = await deps.extractArchiveTo(archivePath, installDir);
   if (!result.ok) {
@@ -173,21 +196,60 @@ export async function extractAndRegisterDoor(
   }
   steps.push({ kind: 'ok', text: `extracted ${result.fileCount} files to ${installDir}` });
 
+  // The archive names its own command. An AmiExpress door ships
+  // Commands/BBSCmd/<COMMAND>.info, and that file carries the tooltypes the
+  // door was built with - TYPE, LOCATION, STACK, PRIORITY, NAME. Asking the
+  // sysop to type a command instead is how a door ends up installed under a
+  // name it does not answer to, and writing a fresh four-line .info is how
+  // STACK and PRIORITY get lost.
+  const fromArchive = findArchiveCommand(installDir);
+  if (fromArchive.chosen && fromArchive.chosen.command.toUpperCase() !== finalCmd.toUpperCase()) {
+    const renamed = renameInstallDir(installDir, fromArchive.chosen.command);
+    if (renamed) {
+      steps.push({
+        kind: 'ok',
+        text: `the archive installs as ${fromArchive.chosen.command}, not ${finalCmd}`,
+      });
+      command = fromArchive.chosen.command;
+      targetDir = renamed;
+      targetInfoPath = path.join(path.dirname(infoPath), `${command}.info`);
+    } else {
+      steps.push({
+        kind: 'skip',
+        text: `archive names ${fromArchive.chosen.command}; kept ${finalCmd} (that directory already exists)`,
+      });
+    }
+  }
+  for (const other of fromArchive.others) {
+    steps.push({ kind: 'skip', text: `archive also carries the command ${other}` });
+  }
+
   const resolvedDoorType = doorType || 'XIM';
-  const binaryRel = deps.findExtractedBinary(installDir, binaryName) ?? (binaryName ?? finalCmd);
+  const binaryRel = deps.findExtractedBinary(targetDir, binaryName) ?? (binaryName ?? command);
   steps.push({ kind: 'ok', text: `binary ${binaryRel}, type ${resolvedDoorType}` });
 
   try {
-    deps.writeInfoFile(infoPath, buildDoorInfoContent(resolvedDoorType, finalCmd, binaryRel));
-    steps.push({ kind: 'ok', text: `wrote ${infoPath}` });
+    // Prefer the archive's own icon: it is the door author's configuration,
+    // tooltypes and all. Only fall back to a synthesised one when the
+    // archive has none.
+    const archiveInfo = fromArchive.chosen
+      ? findArchiveCommand(targetDir).chosen ?? fromArchive.chosen
+      : null;
+    if (archiveInfo && fs.existsSync(archiveInfo.infoPath)) {
+      fs.copyFileSync(archiveInfo.infoPath, targetInfoPath);
+      steps.push({ kind: 'ok', text: `installed the archive's own ${command}.info` });
+    } else {
+      deps.writeInfoFile(targetInfoPath, buildDoorInfoContent(resolvedDoorType, command, binaryRel));
+      steps.push({ kind: 'ok', text: `wrote ${targetInfoPath}` });
+    }
   } catch (err: any) {
-    steps.push({ kind: 'fail', text: `write ${infoPath}: ${err?.message ?? err}` });
-    return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}`, steps };
+    steps.push({ kind: 'fail', text: `write ${targetInfoPath}: ${err?.message ?? err}` });
+    return { ok: false, step: 'write-info', detail: `${targetInfoPath}: ${err?.message ?? err}`, steps };
   }
 
   try {
     deps.recordInstall();
-    steps.push({ kind: 'ok', text: `recorded the install as ${finalCmd}` });
+    steps.push({ kind: 'ok', text: `recorded the install as ${command}` });
   } catch (err: any) {
     steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
     // The door is on disk and the .info is written — it will run. The

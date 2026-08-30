@@ -46,6 +46,7 @@ exports.findExtractedBinary = findExtractedBinary;
 exports.extractAndRegisterDoor = extractAndRegisterDoor;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const archive_command_1 = require("./archive-command");
 /**
  * The backend's shared archive extractor, if it is loaded in this process.
  *
@@ -161,28 +162,93 @@ function findExtractedBinary(destDir, binaryName) {
     }
     return null;
 }
+/**
+ * Move a freshly extracted door to the command the archive names.
+ *
+ * Returns the new directory, or null when the target already exists - an
+ * existing install is never overwritten by a rename.
+ */
+function renameInstallDir(installDir, command) {
+    if (!(0, archive_command_1.isUsableCommand)(command))
+        return null;
+    const target = path.join(path.dirname(installDir), command);
+    if (target === installDir)
+        return installDir;
+    if (fs.existsSync(target))
+        return null;
+    try {
+        fs.renameSync(installDir, target);
+        return target;
+    }
+    catch {
+        return null;
+    }
+}
 async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorType, binaryName, finalCmd, deps) {
     const steps = [];
+    let command = finalCmd;
+    let targetDir = installDir;
+    let targetInfoPath = infoPath;
     const result = await deps.extractArchiveTo(archivePath, installDir);
     if (!result.ok) {
         steps.push({ kind: 'fail', text: `extract ${path.basename(archivePath)}: ${result.error ?? 'unknown error'}` });
         return { ok: false, step: 'extract', detail: result.error ?? 'unknown error', steps };
     }
     steps.push({ kind: 'ok', text: `extracted ${result.fileCount} files to ${installDir}` });
+    // The archive names its own command. An AmiExpress door ships
+    // Commands/BBSCmd/<COMMAND>.info, and that file carries the tooltypes the
+    // door was built with - TYPE, LOCATION, STACK, PRIORITY, NAME. Asking the
+    // sysop to type a command instead is how a door ends up installed under a
+    // name it does not answer to, and writing a fresh four-line .info is how
+    // STACK and PRIORITY get lost.
+    const fromArchive = (0, archive_command_1.findArchiveCommand)(installDir);
+    if (fromArchive.chosen && fromArchive.chosen.command.toUpperCase() !== finalCmd.toUpperCase()) {
+        const renamed = renameInstallDir(installDir, fromArchive.chosen.command);
+        if (renamed) {
+            steps.push({
+                kind: 'ok',
+                text: `the archive installs as ${fromArchive.chosen.command}, not ${finalCmd}`,
+            });
+            command = fromArchive.chosen.command;
+            targetDir = renamed;
+            targetInfoPath = path.join(path.dirname(infoPath), `${command}.info`);
+        }
+        else {
+            steps.push({
+                kind: 'skip',
+                text: `archive names ${fromArchive.chosen.command}; kept ${finalCmd} (that directory already exists)`,
+            });
+        }
+    }
+    for (const other of fromArchive.others) {
+        steps.push({ kind: 'skip', text: `archive also carries the command ${other}` });
+    }
     const resolvedDoorType = doorType || 'XIM';
-    const binaryRel = deps.findExtractedBinary(installDir, binaryName) ?? (binaryName ?? finalCmd);
+    const binaryRel = deps.findExtractedBinary(targetDir, binaryName) ?? (binaryName ?? command);
     steps.push({ kind: 'ok', text: `binary ${binaryRel}, type ${resolvedDoorType}` });
     try {
-        deps.writeInfoFile(infoPath, buildDoorInfoContent(resolvedDoorType, finalCmd, binaryRel));
-        steps.push({ kind: 'ok', text: `wrote ${infoPath}` });
+        // Prefer the archive's own icon: it is the door author's configuration,
+        // tooltypes and all. Only fall back to a synthesised one when the
+        // archive has none.
+        const archiveInfo = fromArchive.chosen
+            ? (0, archive_command_1.findArchiveCommand)(targetDir).chosen ?? fromArchive.chosen
+            : null;
+        if (archiveInfo && fs.existsSync(archiveInfo.infoPath)) {
+            fs.copyFileSync(archiveInfo.infoPath, targetInfoPath);
+            steps.push({ kind: 'ok', text: `installed the archive's own ${command}.info` });
+        }
+        else {
+            deps.writeInfoFile(targetInfoPath, buildDoorInfoContent(resolvedDoorType, command, binaryRel));
+            steps.push({ kind: 'ok', text: `wrote ${targetInfoPath}` });
+        }
     }
     catch (err) {
-        steps.push({ kind: 'fail', text: `write ${infoPath}: ${err?.message ?? err}` });
-        return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}`, steps };
+        steps.push({ kind: 'fail', text: `write ${targetInfoPath}: ${err?.message ?? err}` });
+        return { ok: false, step: 'write-info', detail: `${targetInfoPath}: ${err?.message ?? err}`, steps };
     }
     try {
         deps.recordInstall();
-        steps.push({ kind: 'ok', text: `recorded the install as ${finalCmd}` });
+        steps.push({ kind: 'ok', text: `recorded the install as ${command}` });
     }
     catch (err) {
         steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
