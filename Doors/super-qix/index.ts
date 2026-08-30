@@ -50,7 +50,6 @@ function createInitialGameData(): SuperQixData {
       x: Math.floor(FIELD_WIDTH / 2),
       y: FIELD_HEIGHT - 1,
       isDrawing: false,
-      drawSpeed: null,
       hasShield: false,
       speedBoost: false,
       speedBoostTimer: 0,
@@ -105,7 +104,6 @@ let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let engine: QixEngine | null = null;
 let isDrawKeyHeld: boolean = false;
-let currentDrawSpeed: "fast" | "slow" | null = null;
 let doorContext: any; // Will be set on start
 let inputManager: DoorInputManager | null = null;
 
@@ -130,6 +128,10 @@ function initScreen(): void {
     width: "100%",
     height: 1,
     tags: true,
+    // blessed.box() is a Panel here, and a Panel draws a blue line border
+    // unless one is asked for explicitly. On a one-row box that border IS
+    // the box, so the HUD never appeared at all.
+    border: undefined,
     content: formatHUD(),
   });
 
@@ -142,6 +144,16 @@ function initScreen(): void {
     width: "100%",
     height: SCREEN_HEIGHT - 4,
     tags: true,
+    // The engine lays the playfield out itself: one line per field row,
+    // exactly SCREEN_WIDTH characters wide. Word wrapping a line that
+    // already fills the box pushes a blank row in after every real row, so
+    // the field rendered on every OTHER line and its bottom half - the
+    // right and bottom borders included - fell off the visible area.
+    wrap: false,
+    // ...and the same Panel default stole two columns and two rows from
+    // the playfield, which is what wrapped every row and hid the right
+    // and bottom borders.
+    border: undefined,
     style: {
       bg: "black",
     },
@@ -160,7 +172,7 @@ function initScreen(): void {
       border: { fg: "gray" },
     },
     content:
-      "{gray-fg}Arrows: Move | Z: Slow Draw | X: Fast Draw | P: Pause | Q: Quit{/}",
+      "{gray-fg}Arrows: Move | Space: Draw | P: Pause | Q: Quit{/}",
   });
 }
 
@@ -540,12 +552,11 @@ function handleGameInput(key: InputKey): void {
       engine?.handleDirection(key as Direction);
       break;
 
+    // Super Qix has ONE draw button - no slow/fast choice (FAQ 2.5.3).
+    case "space":
     case "z":
-      engine?.handleSlowDraw();
-      break;
-
     case "x":
-      engine?.handleFastDraw();
+      engine?.handleDraw();
       break;
 
     case "p":

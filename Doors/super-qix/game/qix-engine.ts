@@ -9,7 +9,6 @@ import {
   CellState,
   Point,
   Direction,
-  DrawSpeed,
   Stix,
   ClaimResult
 } from './types';
@@ -22,8 +21,7 @@ import {
   STARTING_LIVES,
   DEFAULT_TARGET_PERCENT,
   EXTRA_LIFE_PERCENT,
-  FAST_DRAW_BASE_POINTS,
-  SLOW_DRAW_BASE_POINTS,
+  FILL_ANIMATION_FRAMES,
   POINTS_PER_BONUS_PERCENT,
   BONUS_PERCENT_START,
   CHARS,
@@ -58,6 +56,17 @@ export class QixEngine {
    * a flat colour and the game plays exactly as before.
    */
   private background: Background | null = null;
+
+  /**
+   * A claim that is still being painted in.
+   *
+   * The area is won the instant the shape closes - the score and the
+   * percentage are credited then - but the ground is filled in over several
+   * frames, sweeping RIGHT TO LEFT, so the player sees the area being taken
+   * rather than it appearing all at once. `columns` holds the cells grouped
+   * by x, ordered right to left, and each tick consumes a slice of them.
+   */
+  private pendingFill: { columns: Point[][]; perTick: number } | null = null;
 
   constructor(data: SuperQixData, renderCallback: RenderCallback) {
     this.data = data;
@@ -107,7 +116,6 @@ export class QixEngine {
       x: Math.floor(FIELD_WIDTH / 2),
       y: FIELD_HEIGHT - 1,
       isDrawing: false,
-      drawSpeed: null,
       hasShield: false,
       speedBoost: false,
       speedBoostTimer: 0
@@ -185,6 +193,9 @@ export class QixEngine {
     const now = Date.now();
     d.frameCount++;
 
+    // Paint in any claim still sweeping across the field
+    this.advanceFill();
+
     // Update active effects
     this.powerUpSystem.updateEffects();
 
@@ -224,6 +235,54 @@ export class QixEngine {
     }
 
     this.render();
+  }
+
+  /**
+   * Queue a won area to be painted in, sweeping right to left.
+   *
+   * Grouped by column and reversed so the highest x is filled first. The
+   * number of columns taken per tick is set so that any claim, from a
+   * two-cell sliver to most of the board, finishes in about the same time -
+   * a fixed per-column rate would make a big claim crawl.
+   */
+  private beginFill(points: Point[]): void {
+    if (points.length === 0) return;
+
+    const byColumn = new Map<number, Point[]>();
+    for (const point of points) {
+      const column = byColumn.get(point.x);
+      if (column) column.push(point);
+      else byColumn.set(point.x, [point]);
+    }
+
+    const columns = [...byColumn.keys()]
+      .sort((a, b) => b - a)          // right to left
+      .map(x => byColumn.get(x)!);
+
+    this.pendingFill = {
+      columns,
+      perTick: Math.max(1, Math.ceil(columns.length / FILL_ANIMATION_FRAMES)),
+    };
+  }
+
+  /** Paint the next slice of a sweeping claim. */
+  private advanceFill(): void {
+    const fill = this.pendingFill;
+    if (!fill) return;
+
+    for (let i = 0; i < fill.perTick && fill.columns.length > 0; i++) {
+      const column = fill.columns.shift()!;
+      for (const point of column) {
+        this.data.field[point.y][point.x] = 'claimed';
+      }
+    }
+
+    if (fill.columns.length === 0) this.pendingFill = null;
+  }
+
+  /** Is a claim still sweeping across the field? */
+  isFilling(): boolean {
+    return this.pendingFill !== null;
   }
 
   /**
@@ -272,10 +331,16 @@ export class QixEngine {
           d.marker.x = nextX;
           d.marker.y = nextY;
           d.marker.isDrawing = false;
-          d.marker.drawSpeed = null;
           d.currentStix = null;
           d.fuse = null;
           d.stopTimer = 0;
+
+          // The area is won now - score and percentage are credited
+          // immediately - but the ground is painted in over the next few
+          // frames, sweeping right to left.
+          if (result.filled) {
+            this.beginFill(result.filled);
+          }
 
           // Award points
           if (result.points) {
@@ -300,33 +365,40 @@ export class QixEngine {
         return;
       }
     } else {
-      // Not drawing - can only move on border or claimed area
-      if (nextCell === 'border' || nextCell === 'claimed') {
+      // Not drawing: the outer frame, and the EDGES of claimed ground only.
+      // The inside of a claimed region is not walkable - see isWalkable.
+      if (this.drawingSystem.isWalkable({ x: nextX, y: nextY })) {
+        d.marker.x = nextX;
+        d.marker.y = nextY;
+      } else if (
+        !this.drawingSystem.isWalkable({ x: d.marker.x, y: d.marker.y }) &&
+        (nextCell === 'border' || nextCell === 'claimed')
+      ) {
+        // Escape hatch: a claim can bury the cell the marker is standing on,
+        // and a marker with nowhere legal to go would be stuck for good. From
+        // a buried cell, any safe ground is allowed until it is back on an edge.
         d.marker.x = nextX;
         d.marker.y = nextY;
       }
-      // If trying to move into unclaimed without drawing, stay put
+      // Moving into unclaimed area without drawing: stay put
     }
   }
 
   /**
-   * Start drawing (slow)
+   * Detach from the edge and start drawing.
+   *
+   * Super Qix has a single Draw button - there is no slow/fast choice
+   * (FAQ 2.5.3: "There's no longer an option to complete lines quickly
+   * for safety or slowly for extra points"), so one entry point.
    */
-  handleSlowDraw(): void {
-    this.startDrawing('slow');
-  }
-
-  /**
-   * Start drawing (fast)
-   */
-  handleFastDraw(): void {
-    this.startDrawing('fast');
+  handleDraw(): void {
+    this.startDrawing();
   }
 
   /**
    * Start drawing in the current direction
    */
-  private startDrawing(speed: DrawSpeed): void {
+  private startDrawing(): void {
     const d = this.data;
 
     if (d.marker.isDrawing) return;
@@ -336,10 +408,8 @@ export class QixEngine {
     if (currentCell !== 'border' && currentCell !== 'claimed') return;
 
     d.marker.isDrawing = true;
-    d.marker.drawSpeed = speed;
     d.currentStix = {
       points: [{ x: d.marker.x, y: d.marker.y }],
-      speed,
       startTime: Date.now()
     };
     d.stopTimer = 0;
@@ -368,25 +438,13 @@ export class QixEngine {
         const cell = d.field[y][x];
         if (cell === 'border') {
           path.push({ x, y });
-        } else if (cell === 'claimed') {
-          // Check if adjacent to unclaimed (edge of claimed area)
-          const neighbors = [
-            { x: x - 1, y },
-            { x: x + 1, y },
-            { x, y: y - 1 },
-            { x, y: y + 1 }
-          ];
-          for (const n of neighbors) {
-            if (n.x >= 0 && n.x < FIELD_WIDTH && n.y >= 0 && n.y < FIELD_HEIGHT) {
-              if (d.field[n.y][n.x] === 'unclaimed') {
-                const key = `${x},${y}`;
-                if (!visited.has(key)) {
-                  visited.add(key);
-                  path.push({ x, y });
-                }
-                break;
-              }
-            }
+        } else if (cell === 'claimed' && this.drawingSystem.touchesUnclaimed(x, y)) {
+          // The edge of claimed ground. Same predicate the marker walks on,
+          // so the Sparx patrol and the player agree on what an edge is.
+          const key = `${x},${y}`;
+          if (!visited.has(key)) {
+            visited.add(key);
+            path.push({ x, y });
           }
         }
       }
@@ -449,7 +507,6 @@ export class QixEngine {
     }
     d.currentStix = null;
     d.marker.isDrawing = false;
-    d.marker.drawSpeed = null;
     d.fuse = null;
     d.stopTimer = 0;
 
@@ -551,19 +608,17 @@ export class QixEngine {
               ? { ch: ' ', art: artForCell(this.background, x, y) }
               : { ch: ' ', bg: BG_COLORS.claimed };
             break;
-          case 'stix': {
-            const slow = d.currentStix?.speed === 'slow';
-            buffer[y][x] = { ch: ' ', bg: slow ? BG_COLORS.stixSlow : BG_COLORS.stixFast };
+          case 'stix':
+            // The line being drawn is yellow (FAQ 2.1).
+            buffer[y][x] = { ch: ' ', bg: BG_COLORS.stix };
             break;
-          }
         }
       }
     }
 
     // Draw current stix
     if (d.currentStix) {
-      const slow = d.currentStix.speed === 'slow';
-      const bg = slow ? BG_COLORS.stixSlow : BG_COLORS.stixFast;
+      const bg = BG_COLORS.stix;
       for (const point of d.currentStix.points) {
         if (point.y >= 0 && point.y < FIELD_HEIGHT && point.x >= 0 && point.x < FIELD_WIDTH) {
           buffer[point.y][point.x] = { ch: ' ', bg };

@@ -5,7 +5,6 @@
 export type Direction = 'up' | 'down' | 'left' | 'right';
 export type GameState = 'menu' | 'playing' | 'paused' | 'levelComplete' | 'gameover' | 'highscores' | 'enterName' | 'levelTransition';
 export type CellState = 'unclaimed' | 'claimed' | 'border' | 'stix';
-export type DrawSpeed = 'fast' | 'slow';
 export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter';
 export interface Point {
     x: number;
@@ -15,7 +14,6 @@ export interface Marker {
     x: number;
     y: number;
     isDrawing: boolean;
-    drawSpeed: DrawSpeed | null;
     hasShield: boolean;
     speedBoost: boolean;
     speedBoostTimer: number;
@@ -64,7 +62,6 @@ export interface ActiveEffect {
 }
 export interface Stix {
     points: Point[];
-    speed: DrawSpeed;
     startTime: number;
 }
 export interface HighScore {
@@ -95,6 +92,8 @@ export interface ClaimResult {
     percent?: number;
     points?: number;
     splitBonus?: number;
+    /** Cells the claim won, for the engine to paint in over time. */
+    filled?: Point[];
 }
 export interface SuperQixData {
     state: GameState;

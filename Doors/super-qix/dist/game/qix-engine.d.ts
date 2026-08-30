@@ -21,6 +21,16 @@ export declare class QixEngine {
      * a flat colour and the game plays exactly as before.
      */
     private background;
+    /**
+     * A claim that is still being painted in.
+     *
+     * The area is won the instant the shape closes - the score and the
+     * percentage are credited then - but the ground is filled in over several
+     * frames, sweeping RIGHT TO LEFT, so the player sees the area being taken
+     * rather than it appearing all at once. `columns` holds the cells grouped
+     * by x, ordered right to left, and each tick consumes a slice of them.
+     */
+    private pendingFill;
     constructor(data: SuperQixData, renderCallback: RenderCallback);
     /**
      * Set the picture revealed as area is claimed.
@@ -46,17 +56,30 @@ export declare class QixEngine {
      */
     update(): void;
     /**
+     * Queue a won area to be painted in, sweeping right to left.
+     *
+     * Grouped by column and reversed so the highest x is filled first. The
+     * number of columns taken per tick is set so that any claim, from a
+     * two-cell sliver to most of the board, finishes in about the same time -
+     * a fixed per-column rate would make a big claim crawl.
+     */
+    private beginFill;
+    /** Paint the next slice of a sweeping claim. */
+    private advanceFill;
+    /** Is a claim still sweeping across the field? */
+    isFilling(): boolean;
+    /**
      * Handle direction input
      */
     handleDirection(dir: Direction): void;
     /**
-     * Start drawing (slow)
+     * Detach from the edge and start drawing.
+     *
+     * Super Qix has a single Draw button - there is no slow/fast choice
+     * (FAQ 2.5.3: "There's no longer an option to complete lines quickly
+     * for safety or slowly for extra points"), so one entry point.
      */
-    handleSlowDraw(): void;
-    /**
-     * Start drawing (fast)
-     */
-    handleFastDraw(): void;
+    handleDraw(): void;
     /**
      * Start drawing in the current direction
      */

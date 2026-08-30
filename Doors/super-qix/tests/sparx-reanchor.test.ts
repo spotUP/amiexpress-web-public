@@ -136,7 +136,7 @@ function move(engine: QixEngine, dir: 'up' | 'down' | 'left' | 'right'): void {
  * corner. Ends with the marker sitting on the border at the closing cell.
  */
 function drawAndCloseClaim(engine: QixEngine): void {
-  engine.handleFastDraw();
+  engine.handleDraw();
   move(engine, 'up'); move(engine, 'up'); move(engine, 'up');
   move(engine, 'right'); move(engine, 'right'); move(engine, 'right');
   move(engine, 'down'); move(engine, 'down'); move(engine, 'down');

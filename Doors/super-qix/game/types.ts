@@ -20,9 +20,6 @@ export type GameState =
 // Cell states for the playfield grid
 export type CellState = 'unclaimed' | 'claimed' | 'border' | 'stix';
 
-// Draw speed types
-export type DrawSpeed = 'fast' | 'slow';
-
 // Power-up types
 export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter';
 
@@ -37,7 +34,6 @@ export interface Marker {
   x: number;
   y: number;
   isDrawing: boolean;
-  drawSpeed: DrawSpeed | null;
   hasShield: boolean;
   speedBoost: boolean;
   speedBoostTimer: number;
@@ -98,7 +94,6 @@ export interface ActiveEffect {
 // Stix (line being drawn)
 export interface Stix {
   points: Point[];
-  speed: DrawSpeed;
   startTime: number;
 }
 
@@ -137,6 +132,8 @@ export interface ClaimResult {
   percent?: number;
   points?: number;
   splitBonus?: number;
+  /** Cells the claim won, for the engine to paint in over time. */
+  filled?: Point[];
 }
 
 // Main game data structure

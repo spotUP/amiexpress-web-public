@@ -54,8 +54,12 @@ export const BONUS_PERCENT_START = 76;  // Points start here
 export const POINTS_PER_BONUS_PERCENT = 1000;
 
 // Scoring
-export const FAST_DRAW_BASE_POINTS = 10;  // Per % claimed
-export const SLOW_DRAW_BASE_POINTS = 20;  // 2x for slow draw
+// Super Qix has no slow/fast draw (FAQ 2.5.3), so a claim has one rate.
+export const DRAW_BASE_POINTS = 10;  // Per % claimed
+
+// A completed claim is painted in over several frames, sweeping right
+// to left, rather than appearing all at once.
+export const FILL_ANIMATION_FRAMES = 12;
 export const LETTER_POINTS = 1000;
 export const WORD_COMPLETE_POINTS = 10000;
 export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on separation
@@ -141,8 +145,11 @@ export const BG_COLORS = {
   border: 'white',
   unclaimed: 'black',
   claimed: 'blue',
-  stixFast: 'cyan',
-  stixSlow: 'red',
+  // FAQ 2.1: the line you are drawing is YELLOW, and turns BLUE once it
+  // reconnects and becomes safe. There is no slow/fast draw in Super
+  // Qix, so there is one drawing colour, not two.
+  stix: 'yellow',
+  stixSafe: 'blue',
   qix: 'magenta',
   sparx: 'red',
   superSparx: 'red',
