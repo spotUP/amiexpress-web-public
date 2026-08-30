@@ -39,6 +39,115 @@ export const DOOR_FIELD_TOOLTYPES: Record<string, string> = {
   priority: 'PRIORITY',
 };
 
+/**
+ * Where a disabled door's normal access level is kept.
+ *
+ * AmiExpress has no ENABLED tooltype - express.e:4702 reads ACCESS and that
+ * is the only gate a door has - so taking one offline means parking its
+ * ACCESS out of reach, and the level it used to have has to be written down
+ * or turning it back on would be a guess.
+ *
+ * DOORREPO already settled this and already reads it back
+ * (examples/doorrepo-c/flow.c:975 writes the line, :899 parses it), so the
+ * admin uses the same two tooltypes rather than inventing a third answer.
+ * DRACCESS is DOORREPO's own bookkeeping: express.e never reads it, which is
+ * what makes it safe to leave sitting in a door's .info.
+ */
+export const PRIOR_ACCESS_TOOLTYPE = 'DRACCESS';
+
+/** The level a disabled door is parked at - the highest that exists. */
+export const DISABLED_ACCESS_LEVEL = 255;
+
+/**
+ * Is this door enabled?
+ *
+ * A remembered level is the marker: a door only carries one while it is
+ * parked. Every door installed before any of this has no DRACCESS and reads
+ * as enabled, which is what they are.
+ */
+export function isDoorEnabled(
+  toolTypes: Record<string, string> | undefined | null
+): boolean {
+  if (!toolTypes) return true;
+  return !Object.keys(toolTypes).some(
+    key => key.toUpperCase() === PRIOR_ACCESS_TOOLTYPE
+  );
+}
+
+/**
+ * The access level to SHOW for a door - its normal one, not its parked one.
+ *
+ * A disabled door's ACCESS is the parking level, so serving that as the
+ * door's access level would put 255 in the form. Saving it back would then
+ * record 255 as the level to restore, and enabling the door would leave it
+ * exactly as unreachable as it was.
+ */
+export function doorNormalAccessLevel(
+  door: { accessLevel?: number; toolTypes?: Record<string, string> | null }
+): number {
+  const tools = door.toolTypes ?? {};
+  const key = Object.keys(tools).find(k => k.toUpperCase() === PRIOR_ACCESS_TOOLTYPE);
+  if (key) {
+    const remembered = parseInt(tools[key], 10);
+    if (!isNaN(remembered)) return remembered;
+  }
+  return door.accessLevel || 0;
+}
+
+/** Read a tooltype's value out of a list, whatever case its key is written in. */
+function findTooltype(list: Tooltype[], key: string): Tooltype | undefined {
+  return list.find(t => t.key.toUpperCase() === key);
+}
+
+function setTooltype(list: Tooltype[], key: string, value: string): void {
+  const found = findTooltype(list, key);
+  if (found) {
+    found.value = value;
+    found.originalLine = `${found.commented ? '!' : ''}${found.key}=${value}`;
+  } else {
+    list.push({ key, value, commented: false, originalLine: `${key}=${value}` });
+  }
+}
+
+/**
+ * Turn a door on or off, in place, touching only ACCESS and DRACCESS.
+ *
+ * Disabling remembers the door's current level and parks ACCESS; enabling
+ * puts the remembered level back and drops the marker. Both directions are
+ * idempotent, and the remembered value is never overwritten by a second
+ * disable - it names the door's NORMAL level, not the most recent one, the
+ * same rule DOORREPO's flow_compute_prior_access() case 3 applies.
+ *
+ * Every other tooltype is passed through untouched: STACK, MULTINODE,
+ * RESIDENT and NAME all change how a door runs, and taking it offline for an
+ * afternoon has no business rewriting them.
+ */
+export function applyEnabledToTooltypes(
+  existing: Tooltype[],
+  enabled: boolean
+): Tooltype[] {
+  const out = existing.map(t => ({ ...t }));
+  const prior = findTooltype(out, PRIOR_ACCESS_TOOLTYPE);
+
+  if (enabled) {
+    // Not parked - nothing to restore, and nothing to change.
+    if (!prior) return out;
+
+    setTooltype(out, 'ACCESS', prior.value);
+    return out.filter(t => t.key.toUpperCase() !== PRIOR_ACCESS_TOOLTYPE);
+  }
+
+  // Already parked: leave the remembered level alone.
+  if (prior) return out;
+
+  // A door with no ACCESS at all is reachable by everyone, which is level 0.
+  // Recording that is what makes it possible to enable the door again.
+  const current = findTooltype(out, 'ACCESS')?.value ?? '0';
+  setTooltype(out, PRIOR_ACCESS_TOOLTYPE, current);
+  setTooltype(out, 'ACCESS', String(DISABLED_ACCESS_LEVEL));
+  return out;
+}
+
 export interface DoorFields {
   door_name?: string;
   door_path?: string;
@@ -71,9 +180,20 @@ export function applyDoorFieldsToTooltypes(
 ): Tooltype[] {
   const out = existing.map(t => ({ ...t }));
 
+  // A parked door's ACCESS is the parking level, not the door's own. An edit
+  // to the access level while it is off has to land on the remembered value,
+  // or enabling the door again would restore the old level and throw the
+  // sysop's edit away.
+  const parked = out.some(t => t.key.toUpperCase() === PRIOR_ACCESS_TOOLTYPE);
+
   for (const [field, key] of Object.entries(DOOR_FIELD_TOOLTYPES)) {
     const value = tooltypeValue(field, (fields as any)[field]);
     if (value === null) continue;
+
+    if (parked && key === 'ACCESS') {
+      setTooltype(out, PRIOR_ACCESS_TOOLTYPE, value);
+      continue;
+    }
 
     const found = out.find(t => t.key.toUpperCase() === key);
     if (found) {

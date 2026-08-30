@@ -5,7 +5,7 @@
 
 import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
-import { findDoorInfoFile, applyDoorFieldsToTooltypes, buildNewDoorTooltypes } from './door-info-file.service';
+import { findDoorInfoFile, applyDoorFieldsToTooltypes, applyEnabledToTooltypes, buildNewDoorTooltypes } from './door-info-file.service';
 import { parseInfoFile, writeInfoFile } from '../../utils/info-file.util';
 import type { Door } from '../../database/types';
 import { DoorSchema, type RequestContext } from '../config.schemas';
@@ -154,6 +154,12 @@ console.error(`[DoorConfigService] Failed to rename ${from}:`, error);
       if (existingPath) {
         const info = parseInfoFile(existingPath);
         info.tooltypes = applyDoorFieldsToTooltypes(info.tooltypes as any, door as any) as any;
+        // Fields first, then the switch. Saving a new access level and taking
+        // the door offline in one edit has to remember the level the sysop
+        // just typed, not the one it is replacing.
+        if (typeof door.enabled === 'boolean') {
+          info.tooltypes = applyEnabledToTooltypes(info.tooltypes as any, door.enabled) as any;
+        }
         writeInfoFile(info);
 console.log(`[DoorConfigService] Updated ${existingPath}`);
         return;
