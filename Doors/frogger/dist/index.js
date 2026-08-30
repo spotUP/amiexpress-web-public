@@ -128,9 +128,23 @@ function formatHUD() {
 /**
  * Show main menu
  */
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu() {
     gameData.state = "menu";
     gameData.menuSelection = 0;
+    renderMenu();
+}
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu() {
     gameArea.setContent("");
     if (menuBox) {
         menuBox.destroy();
@@ -342,11 +356,11 @@ function handleMenuInput(key) {
     switch (key) {
         case "up":
             gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-            showMenu();
+            renderMenu();
             break;
         case "down":
             gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
-            showMenu();
+            renderMenu();
             break;
         case "enter":
         case "space":
@@ -569,6 +583,10 @@ door.onStart(async (ctx) => {
         // Use defaults
     }
     initScreen();
+    screen.program.write('\x1b[2J');
+    screen.program.write('\x1b[H');
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     // Set up input management (enables mouse, keyboard routing)
     inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
         enableGameMode: true, // Game needs raw keyboard input
@@ -587,7 +605,7 @@ door.onStart(async (ctx) => {
         }
         else if (gameData.state === 'menu') {
             gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-            showMenu();
+            renderMenu();
         }
     });
     gamepadManager.on('dpad:down', () => {
@@ -596,7 +614,7 @@ door.onStart(async (ctx) => {
         }
         else if (gameData.state === 'menu') {
             gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
-            showMenu();
+            renderMenu();
         }
     });
     gamepadManager.on('dpad:left', () => {

@@ -5,7 +5,8 @@
 import { LevelConfig, PowerUpType } from './types';
 export declare const SCREEN_WIDTH = 80;
 export declare const SCREEN_HEIGHT = 24;
-export declare const FIELD_WIDTH = 76;
+export declare const CELL_WIDTH = 2;
+export declare const FIELD_WIDTH = 38;
 export declare const FIELD_HEIGHT = 18;
 export declare const FIELD_OFFSET_X = 2;
 export declare const FIELD_OFFSET_Y = 2;
@@ -73,6 +74,20 @@ export declare const COLORS: {
     lives: string;
     level: string;
     percent: string;
+};
+export declare const BG_COLORS: {
+    border: string;
+    unclaimed: string;
+    claimed: string;
+    stixFast: string;
+    stixSlow: string;
+    qix: string;
+    sparx: string;
+    superSparx: string;
+    fuse: string;
+    powerUp: string;
+    marker: string;
+    markerDrawing: string;
 };
 export declare const LEVEL_CONFIGS: LevelConfig[];
 /**

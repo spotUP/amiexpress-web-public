@@ -145,9 +145,24 @@ function formatHUD(): string {
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}STAGE: ${gameData.stage}{/}  {red-fg}LIVES: ${livesStr}{/}  {white-fg}HIT: ${accuracy}%{/}`;
 }
 
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
+
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
   gameArea.setContent("");
 
   if (menuBox) menuBox.destroy();
@@ -352,14 +367,14 @@ function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
       break;
     case "down":
       gameData.menuSelection = Math.min(
         MENU_OPTIONS.length - 1,
         gameData.menuSelection + 1
       );
-      showMenu();
+      renderMenu();
       break;
     case "enter":
     case "fire":
@@ -628,14 +643,14 @@ door.onStart(async (ctx: any) => {
   gamepadManager.on('dpad:up', () => {
     if (gameData.state === 'menu') {
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
     }
   });
 
   gamepadManager.on('dpad:down', () => {
     if (gameData.state === 'menu') {
       gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
-      showMenu();
+      renderMenu();
     }
   });
 

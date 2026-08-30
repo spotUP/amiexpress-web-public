@@ -34,6 +34,18 @@ export declare class EnemySystem {
      */
     private updateQix;
     /**
+     * Re-anchor every Sparx's pathIndex after d.borderPath has been rebuilt.
+     *
+     * updateBorderPath() rebuilds the array by re-scanning the field, so a
+     * claim can change both its length and the order of its points - the old
+     * pathIndex no longer names the same physical cell. Left unfixed, the next
+     * updateSparx() snaps sparx.x/y to whatever cell the stale index now
+     * lands on, which can be right on top of the marker that just finished
+     * drawing and trips checkSparxCollision. Re-anchoring to the nearest
+     * point keeps each Sparx where it visually was.
+     */
+    reanchorBorderPositions(): void;
+    /**
      * Update a single Sparx
      */
     private updateSparx;

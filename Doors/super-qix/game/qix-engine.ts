@@ -27,7 +27,8 @@ import {
   POINTS_PER_BONUS_PERCENT,
   BONUS_PERCENT_START,
   CHARS,
-  COLORS,
+  BG_COLORS,
+  CELL_WIDTH,
   getLevelConfig,
   DEFAULT_HIGHSCORES,
   FUSE_START_DELAY
@@ -268,8 +269,11 @@ export class QixEngine {
           // Spawn power-up chance
           this.powerUpSystem.trySpawnPowerUp();
 
-          // Update border path for Sparx
+          // Update border path for Sparx, then re-anchor existing Sparx to
+          // it - the rebuilt array reorders points, so a stale pathIndex
+          // would otherwise teleport a Sparx onto the marker's landing cell.
           d.borderPath = this.updateBorderPath();
+          this.enemySystem.reanchorBorderPositions();
         }
       } else if (nextCell === 'stix') {
         // Can't cross own stix - die!
@@ -493,12 +497,17 @@ export class QixEngine {
     const d = this.data;
     const lines: string[] = [];
 
-    // Create render buffer
-    const buffer: string[][] = [];
+    // Render buffer holds a glyph plus its own fg/bg, painted directly per
+    // layer - not a char code looked up afterwards. Terrain cells share the
+    // same space glyph (border/unclaimed/claimed/stix are all blocks), so a
+    // char->color lookup can no longer tell them apart; bg is now what
+    // carries the meaning.
+    type Cell = { ch: string; fg?: string; bg?: string };
+    const buffer: Cell[][] = [];
     for (let y = 0; y < FIELD_HEIGHT; y++) {
       buffer[y] = [];
       for (let x = 0; x < FIELD_WIDTH; x++) {
-        buffer[y][x] = ' ';
+        buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
       }
     }
 
@@ -508,27 +517,30 @@ export class QixEngine {
         const cell = d.field[y][x];
         switch (cell) {
           case 'border':
-            buffer[y][x] = CHARS.border;
+            buffer[y][x] = { ch: ' ', bg: BG_COLORS.border };
             break;
           case 'unclaimed':
-            buffer[y][x] = CHARS.unclaimed;
+            buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
             break;
           case 'claimed':
-            buffer[y][x] = CHARS.claimed;
+            buffer[y][x] = { ch: ' ', bg: BG_COLORS.claimed };
             break;
-          case 'stix':
-            buffer[y][x] = d.currentStix?.speed === 'slow' ? CHARS.stixSlow : CHARS.stixFast;
+          case 'stix': {
+            const slow = d.currentStix?.speed === 'slow';
+            buffer[y][x] = { ch: ' ', bg: slow ? BG_COLORS.stixSlow : BG_COLORS.stixFast };
             break;
+          }
         }
       }
     }
 
     // Draw current stix
     if (d.currentStix) {
-      const char = d.currentStix.speed === 'slow' ? CHARS.stixSlow : CHARS.stixFast;
+      const slow = d.currentStix.speed === 'slow';
+      const bg = slow ? BG_COLORS.stixSlow : BG_COLORS.stixFast;
       for (const point of d.currentStix.points) {
         if (point.y >= 0 && point.y < FIELD_HEIGHT && point.x >= 0 && point.x < FIELD_WIDTH) {
-          buffer[point.y][point.x] = char;
+          buffer[point.y][point.x] = { ch: ' ', bg };
         }
       }
     }
@@ -539,14 +551,14 @@ export class QixEngine {
       const qx = Math.floor(qix.x);
       const qy = Math.floor(qix.y);
       if (qy >= 0 && qy < FIELD_HEIGHT && qx >= 0 && qx < FIELD_WIDTH) {
-        buffer[qy][qx] = char;
+        buffer[qy][qx] = { ch: char, fg: 'white', bg: BG_COLORS.qix };
       }
       // Draw segments
       for (const seg of qix.segments) {
         const sx = Math.floor(seg.x);
         const sy = Math.floor(seg.y);
         if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-          buffer[sy][sx] = CHARS.qix;
+          buffer[sy][sx] = { ch: CHARS.qix, fg: 'white', bg: BG_COLORS.qix };
         }
       }
     }
@@ -556,7 +568,12 @@ export class QixEngine {
       const sx = Math.floor(sparx.x);
       const sy = Math.floor(sparx.y);
       if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-        buffer[sy][sx] = sparx.isSuper ? CHARS.superSparx : CHARS.sparx;
+        const isSuper = sparx.isSuper;
+        buffer[sy][sx] = {
+          ch: isSuper ? CHARS.superSparx : CHARS.sparx,
+          fg: isSuper ? 'yellow' : 'white',
+          bg: isSuper ? BG_COLORS.superSparx : BG_COLORS.sparx
+        };
       }
     }
 
@@ -565,7 +582,8 @@ export class QixEngine {
       const fx = Math.floor(d.fuse.x);
       const fy = Math.floor(d.fuse.y);
       if (fy >= 0 && fy < FIELD_HEIGHT && fx >= 0 && fx < FIELD_WIDTH) {
-        buffer[fy][fx] = d.frameCount % 2 === 0 ? CHARS.fuse : CHARS.fuseHead;
+        const char = d.frameCount % 2 === 0 ? CHARS.fuse : CHARS.fuseHead;
+        buffer[fy][fx] = { ch: char, fg: 'black', bg: BG_COLORS.fuse };
       }
     }
 
@@ -575,7 +593,7 @@ export class QixEngine {
         const px = Math.floor(powerUp.x);
         const py = Math.floor(powerUp.y);
         if (py >= 0 && py < FIELD_HEIGHT && px >= 0 && px < FIELD_WIDTH) {
-          buffer[py][px] = powerUp.letter || CHARS.powerUp;
+          buffer[py][px] = { ch: powerUp.letter || CHARS.powerUp, fg: 'white', bg: BG_COLORS.powerUp };
         }
       }
     }
@@ -584,40 +602,28 @@ export class QixEngine {
     const mx = d.marker.x;
     const my = d.marker.y;
     if (my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
-      buffer[my][mx] = d.marker.isDrawing ? CHARS.markerDrawing : CHARS.marker;
+      const drawing = d.marker.isDrawing;
+      buffer[my][mx] = {
+        ch: drawing ? CHARS.markerDrawing : CHARS.marker,
+        fg: 'black',
+        bg: drawing ? BG_COLORS.markerDrawing : BG_COLORS.marker
+      };
     }
 
-    // Convert buffer to tagged string
+    // Convert buffer to tagged string.
+    //
+    // Each logical cell is painted CELL_WIDTH characters wide so that a cell
+    // is as wide as it is tall on screen (see CELL_WIDTH in constants.ts).
+    // A glyph occupies the first column of its cell and the remainder is
+    // padded with spaces carrying the same colours, so the block stays solid.
     for (let y = 0; y < buffer.length; y++) {
       let line = '';
       for (let x = 0; x < buffer[y].length; x++) {
-        const char = buffer[y][x];
-
-        if (char === CHARS.marker) {
-          line += `{${COLORS.marker}-fg}${char}{/}`;
-        } else if (char === CHARS.markerDrawing) {
-          line += `{${COLORS.markerDrawing}-fg}${char}{/}`;
-        } else if (char === CHARS.qix || char === CHARS.qixAlt) {
-          line += `{${COLORS.qix}-fg}${char}{/}`;
-        } else if (char === CHARS.sparx) {
-          line += `{${COLORS.sparx}-fg}${char}{/}`;
-        } else if (char === CHARS.superSparx) {
-          line += `{${COLORS.superSparx}-fg}${char}{/}`;
-        } else if (char === CHARS.fuse || char === CHARS.fuseHead) {
-          line += `{${COLORS.fuse}-fg}${char}{/}`;
-        } else if (char === CHARS.border) {
-          line += `{${COLORS.border}-fg}${char}{/}`;
-        } else if (char === CHARS.unclaimed) {
-          line += `{${COLORS.unclaimed}-fg}${char}{/}`;
-        } else if (char === CHARS.stixFast) {
-          line += `{${COLORS.stixFast}-fg}${char}{/}`;
-        } else if (char === CHARS.stixSlow) {
-          line += `{${COLORS.stixSlow}-fg}${char}{/}`;
-        } else if (char === CHARS.powerUp || /[A-Z]/.test(char)) {
-          line += `{${COLORS.powerUp}-fg}${char}{/}`;
-        } else {
-          line += char;
-        }
+        const { ch, fg, bg } = buffer[y][x];
+        let cellStr = ch + ' '.repeat(CELL_WIDTH - 1);
+        if (fg) cellStr = `{${fg}-fg}${cellStr}{/${fg}-fg}`;
+        if (bg) cellStr = `{${bg}-bg}${cellStr}{/${bg}-bg}`;
+        line += cellStr;
       }
       lines.push(line);
     }

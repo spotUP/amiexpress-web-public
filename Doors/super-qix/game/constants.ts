@@ -10,7 +10,19 @@ export const SCREEN_WIDTH = 80;
 export const SCREEN_HEIGHT = 24;
 
 // Playfield dimensions (inside borders)
-export const FIELD_WIDTH = 76;
+//
+// A terminal character cell is about twice as tall as it is wide, so a
+// playfield measured in single characters is not square: one step up or
+// down covers roughly twice the visual distance of one step left or right,
+// which made horizontal movement feel half-speed.
+//
+// The fix is geometric, not a speed tweak: every logical cell is drawn
+// CELL_WIDTH characters wide, so one cell is ~2 units wide by ~2 units
+// tall on screen - square. The grid is therefore 38 logical columns
+// rendered as 76 characters, which still fits SCREEN_WIDTH (80).
+// All game logic works in logical cells and needs no aspect correction.
+export const CELL_WIDTH = 2;
+export const FIELD_WIDTH = 38;
 export const FIELD_HEIGHT = 18;
 export const FIELD_OFFSET_X = 2;
 export const FIELD_OFFSET_Y = 2;
@@ -94,6 +106,25 @@ export const COLORS = {
   lives: 'red',
   level: 'cyan',
   percent: 'green'
+};
+
+// Background-block colors for the playfield. A space glyph colored with
+// -fg is invisible (fg has no effect on a blank char) - the field must be
+// painted with -bg so claimed/border/stix area actually shows as filled
+// color blocks, the way the arcade original renders them.
+export const BG_COLORS = {
+  border: 'white',
+  unclaimed: 'black',
+  claimed: 'blue',
+  stixFast: 'cyan',
+  stixSlow: 'red',
+  qix: 'magenta',
+  sparx: 'red',
+  superSparx: 'red',
+  fuse: 'yellow',
+  powerUp: 'green',
+  marker: 'cyan',
+  markerDrawing: 'yellow'
 };
 
 // Level configurations (16 levels)
