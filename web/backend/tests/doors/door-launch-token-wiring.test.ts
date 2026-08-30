@@ -40,6 +40,7 @@ import {
 import { verifyLaunchToken } from '../../src/doors/door-launch-token';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
 import { config } from '../../src/config';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import type { Door } from '../../src/types';
 
 // executeDoor calls the module-level `callersLog` helper the live BBS
@@ -221,5 +222,43 @@ describe('executeDoor wiring: mint on launch, release on exit', () => {
     expect(fs.existsSync(tokenFilePath(root))).toBe(true);
     const token = tokenFromDisk();
     expect(verifyLaunchToken(token)).toBeNull();
+  });
+
+  // Round 1 fix, Important finding: a bookkeeping failure (the token mint)
+  // must never stop a sysop's door from running, and must never skip the
+  // catch block's session cleanup. Reproduce a real mint failure — not a
+  // mocked one — by putting a plain FILE where mintLaunchToken expects to
+  // mkdirSync a directory (<root>/Doors/DoorRepo), so fs.mkdirSync throws
+  // for real (ENOTDIR).
+  it('still launches the door, and still returns the session to the menu, when the token directory is unwritable', async () => {
+    fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Doors', 'DoorRepo'), 'not a directory');
+
+    const socket = makeSocket();
+    const session = sysopSession();
+
+    await expect(executeDoor(socket, session, doorRepoDoor())).resolves.toBeUndefined();
+
+    // No token could have been written — DoorRepo is a file, not a
+    // directory, so the token path can't exist underneath it.
+    expect(fs.existsSync(tokenFilePath(root))).toBe(false);
+    // The door still ran to completion and the existing post-door
+    // bookkeeping (never skipped by the mint failure) put the session
+    // back on the menu.
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  // Minor finding: session.user entirely absent must not throw when
+  // computing the mint session (session.user?.id ?? 0 / ?.secLevel ?? 0).
+  // secLevel then reads as 0, well under the sysop floor, so this also
+  // proves no token is minted for a guest-shaped session.
+  it('mints nothing and does not throw when session.user is entirely absent', async () => {
+    const socket = makeSocket();
+    const session = sysopSession();
+    delete session.user;
+
+    await expect(executeDoor(socket, session, doorRepoDoor())).resolves.toBeUndefined();
+
+    expect(fs.existsSync(tokenFilePath(root))).toBe(false);
   });
 });

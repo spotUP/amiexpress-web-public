@@ -48,7 +48,15 @@ export function launchTokenForDoor(
 ): string | null {
   if (command.toUpperCase() !== 'DOORREPO') return null;
   if (session.secLevel < 250) return null;
-  return mintLaunchToken(bbsRoot, session);
+  try {
+    return mintLaunchToken(bbsRoot, session);
+  } catch (err) {
+    // The door manager's token is bookkeeping. A board whose
+    // Doors/DoorRepo is not writable still gets to run its doors - it
+    // just cannot report installs back until that is fixed.
+    console.warn(`[door] management token not minted: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 export function releaseLaunchTokenForDoor(token: string | null): void {
@@ -1615,13 +1623,21 @@ console.log('Executing door:', door.name);
   const originalSubState = session.subState;
 
   const bbsRoot = config.get('dataDir');
-  const managementToken = launchTokenForDoor(door.command || door.id, bbsRoot, {
-    nodeId: session.nodeId || 0,
-    userId: session.user?.id ?? 0,
-    secLevel: session.user?.secLevel ?? 0,
-  });
+  let managementToken: string | null = null;
 
   try {
+    // Minted inside the try (not before it): launchTokenForDoor fails
+    // closed on its own, but a token is bookkeeping, not a launch
+    // precondition — this call must never be the reason a sysop's door
+    // doesn't start, and moving it here means the catch block's session
+    // cleanup below still runs even if something upstream of this changes
+    // that assumption later.
+    managementToken = launchTokenForDoor(door.command || door.id, bbsRoot, {
+      nodeId: session.nodeId || 0,
+      userId: session.user?.id ?? 0,
+      secLevel: session.user?.secLevel ?? 0,
+    });
+
     // Check if this is a client door (needs to detect runtime from manifest)
     const doorManifest = await loadDoorManifestForExecution(door);
 
