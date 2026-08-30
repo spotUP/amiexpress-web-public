@@ -112,7 +112,7 @@ AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c
 # 68K emulator and the two byte streams compared. See its header comment.
 PROBE_SOURCES = tools/probe_fetch.c config.c flow.c http.c md5.c sha256.c netio.c
 
-.PHONY: all native amiga amiga-stub test live clean probe-native probe-amiga
+.PHONY: all native amiga amiga-stub test live clean probe-native probe-amiga syntax
 
 all: native
 
@@ -151,6 +151,17 @@ doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
 	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
+# syntax (checks native C source files for compilation errors without
+# linking; catches issues like unterminated comments that would otherwise
+# ship undetected. Amiga-only files (aedoor_amiga.c, shell_amiga.c) are
+# excluded because they require Amiga system headers unavailable on Unix
+# hosts; the `amiga` and `amiga-stub` targets cover their compilation).
+# ---------------------------------------------------------------------
+
+syntax: $(NATIVE_SOURCES) $(HEADERS)
+	$(CC) -fsyntax-only $(NATIVE_CFLAGS) $(NATIVE_SOURCES)
+
+# ---------------------------------------------------------------------
 # probe (diagnostic; see tools/probe_fetch.c)
 # ---------------------------------------------------------------------
 
@@ -176,7 +187,7 @@ TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
 .PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite test-owner-auth
 
-test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite test-owner-auth
+test: syntax test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite test-owner-auth
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
