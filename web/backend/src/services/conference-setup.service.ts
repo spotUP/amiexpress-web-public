@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
+import { applyConferenceFields } from './config-services/conference-info-file.service';
 
 export interface ConferenceHealthCheck {
   conferenceId: number;
@@ -426,54 +427,23 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
       toolTypes.set(key.toUpperCase(), value);
     }
 
-    // Update basic fields
-    if (updates.name) toolTypes.set('NAME', updates.name);
-    if (updates.location) toolTypes.set('LOCATION', updates.location);
-    if (updates.ndirs !== undefined) toolTypes.set('NDIRS', updates.ndirs.toString());
-    if (updates.minAccessLevel !== undefined) toolTypes.set('MIN_ACCESS', updates.minAccessLevel.toString());
-    if (updates.maxAccessLevel !== undefined) toolTypes.set('MAX_ACCESS', updates.maxAccessLevel.toString());
-
-    // Update flags
-    if (updates.forceNewscan !== undefined) {
-      if (updates.forceNewscan) {
-        toolTypes.set('FORCE_NEWSCAN', '1');
-      } else {
-        toolTypes.delete('FORCE_NEWSCAN');
-      }
-    }
-    if (updates.excludeFTP !== undefined) {
-      if (updates.excludeFTP) {
-        toolTypes.set('EXCLUDE_FTP', '1');
-      } else {
-        toolTypes.delete('EXCLUDE_FTP');
-      }
-    }
-    if (updates.privateConf !== undefined) {
-      if (updates.privateConf) {
-        toolTypes.set('PRIVATE', '1');
-      } else {
-        toolTypes.delete('PRIVATE');
-      }
-    }
-    if (updates.readOnly !== undefined) {
-      if (updates.readOnly) {
-        toolTypes.set('READ_ONLY', '1');
-      } else {
-        toolTypes.delete('READ_ONLY');
-      }
-    }
-
-    // Update file area paths
-    if (updates.dlpaths) {
-      for (const [dirNum, path] of Object.entries(updates.dlpaths)) {
-        toolTypes.set(`DLPATH.${dirNum}`, path);
-      }
-    }
-    if (updates.ulpaths) {
-      for (const [dirNum, path] of Object.entries(updates.ulpaths)) {
-        toolTypes.set(`ULPATH.${dirNum}`, path);
-      }
-    }
+    // One shared map of field -> tooltype, used by the reader too, so the
+    // two cannot disagree about what a setting is called. They did: this
+    // wrote MIN_ACCESS and FORCE_NEWSCAN while the admin read MINACCESSLEVEL
+    // and FORCENEWSCAN, so six settings never came back.
+    applyConferenceFields(toolTypes, {
+      name: updates.name,
+      location: updates.location,
+      ndirs: updates.ndirs,
+      min_access_level: updates.minAccessLevel,
+      max_access_level: updates.maxAccessLevel,
+      force_newscan: updates.forceNewscan,
+      exclude_ftp: updates.excludeFTP,
+      private_conf: updates.privateConf,
+      read_only: updates.readOnly,
+      dlpaths: updates.dlpaths,
+      ulpaths: updates.ulpaths,
+    });
 
     // Write updated Conf{N}.info
     const infoData = parser.write(toolTypes);

@@ -5,6 +5,7 @@
 
 import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
+import { readConferenceFields } from './conference-info-file.service';
 import type { ConferenceConfig } from '../../database/types';
 import { ConferenceConfigSchema, type RequestContext } from '../config.schemas';
 import { ConferenceSetupService } from '../conference-setup.service';
@@ -58,60 +59,64 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
           toolTypes.set(key.toUpperCase(), value);
         }
 
-        const ndirs = parseInt(toolTypes.get('NDIRS') || '0', 10);
+        // Reader and writer share one map of field -> tooltype, so the two
+        // cannot drift apart again. They had: six settings were written under
+        // one spelling and read back from another.
+        const fromDisk = readConferenceFields(toolTypes);
 
         const config: ConferenceConfig = {
           id: i,
           conference_id: i,
           name: confConfig.entries[i - 1]?.name || `Conference ${i}`,
-          ndirs,
-          dlpath_1: toolTypes.get('DLPATH.1') || '',
-          dlpath_2: toolTypes.get('DLPATH.2') || '',
-          dlpath_3: toolTypes.get('DLPATH.3') || '',
-          dlpath_4: toolTypes.get('DLPATH.4') || '',
-          dlpath_5: toolTypes.get('DLPATH.5') || '',
-          dlpath_6: toolTypes.get('DLPATH.6') || '',
-          dlpath_7: toolTypes.get('DLPATH.7') || '',
-          dlpath_8: toolTypes.get('DLPATH.8') || '',
-          dlpath_9: toolTypes.get('DLPATH.9') || '',
-          dlpath_10: toolTypes.get('DLPATH.10') || '',
-          dlpath_11: toolTypes.get('DLPATH.11') || '',
-          dlpath_12: toolTypes.get('DLPATH.12') || '',
-          dlpath_13: toolTypes.get('DLPATH.13') || '',
-          dlpath_14: toolTypes.get('DLPATH.14') || '',
-          dlpath_15: toolTypes.get('DLPATH.15') || '',
-          dlpath_16: toolTypes.get('DLPATH.16') || '',
-          ulpath_1: toolTypes.get('ULPATH.1') || '',
-          ulpath_2: toolTypes.get('ULPATH.2') || '',
-          ulpath_3: toolTypes.get('ULPATH.3') || '',
-          ulpath_4: toolTypes.get('ULPATH.4') || '',
-          ulpath_5: toolTypes.get('ULPATH.5') || '',
-          ulpath_6: toolTypes.get('ULPATH.6') || '',
-          ulpath_7: toolTypes.get('ULPATH.7') || '',
-          ulpath_8: toolTypes.get('ULPATH.8') || '',
-          ulpath_9: toolTypes.get('ULPATH.9') || '',
-          ulpath_10: toolTypes.get('ULPATH.10') || '',
-          ulpath_11: toolTypes.get('ULPATH.11') || '',
-          ulpath_12: toolTypes.get('ULPATH.12') || '',
-          ulpath_13: toolTypes.get('ULPATH.13') || '',
-          ulpath_14: toolTypes.get('ULPATH.14') || '',
-          ulpath_15: toolTypes.get('ULPATH.15') || '',
-          ulpath_16: toolTypes.get('ULPATH.16') || '',
-          force_newscan: toolTypes.get('FORCENEWSCAN') === '1',
-          no_newscan: false,
-          show_new_files: true,
-          no_new_files: false,
+          ndirs: fromDisk.ndirs,
+          dlpath_1: fromDisk.dlpaths[1],
+          dlpath_2: fromDisk.dlpaths[2],
+          dlpath_3: fromDisk.dlpaths[3],
+          dlpath_4: fromDisk.dlpaths[4],
+          dlpath_5: fromDisk.dlpaths[5],
+          dlpath_6: fromDisk.dlpaths[6],
+          dlpath_7: fromDisk.dlpaths[7],
+          dlpath_8: fromDisk.dlpaths[8],
+          dlpath_9: fromDisk.dlpaths[9],
+          dlpath_10: fromDisk.dlpaths[10],
+          dlpath_11: fromDisk.dlpaths[11],
+          dlpath_12: fromDisk.dlpaths[12],
+          dlpath_13: fromDisk.dlpaths[13],
+          dlpath_14: fromDisk.dlpaths[14],
+          dlpath_15: fromDisk.dlpaths[15],
+          dlpath_16: fromDisk.dlpaths[16],
+          ulpath_1: fromDisk.ulpaths[1],
+          ulpath_2: fromDisk.ulpaths[2],
+          ulpath_3: fromDisk.ulpaths[3],
+          ulpath_4: fromDisk.ulpaths[4],
+          ulpath_5: fromDisk.ulpaths[5],
+          ulpath_6: fromDisk.ulpaths[6],
+          ulpath_7: fromDisk.ulpaths[7],
+          ulpath_8: fromDisk.ulpaths[8],
+          ulpath_9: fromDisk.ulpaths[9],
+          ulpath_10: fromDisk.ulpaths[10],
+          ulpath_11: fromDisk.ulpaths[11],
+          ulpath_12: fromDisk.ulpaths[12],
+          ulpath_13: fromDisk.ulpaths[13],
+          ulpath_14: fromDisk.ulpaths[14],
+          ulpath_15: fromDisk.ulpaths[15],
+          ulpath_16: fromDisk.ulpaths[16],
+          force_newscan: fromDisk.force_newscan,
+          no_newscan: fromDisk.no_newscan,
+          show_new_files: fromDisk.show_new_files,
+          no_new_files: fromDisk.no_new_files,
+          // No tooltype exists for these; they live in the database only.
           free_downloads: false,
-          exclude_ftp: toolTypes.get('EXCLUDEFTP') === '1',
-          private_conf: toolTypes.get('PRIVATECONF') === '1',
-          read_only: toolTypes.get('READONLY') === '1',
-          menu_prompt: toolTypes.get('MENUPROMPT') || '',
-          confdb_shared: 0,
+          exclude_ftp: fromDisk.exclude_ftp,
+          private_conf: fromDisk.private_conf,
+          read_only: fromDisk.read_only,
+          menu_prompt: fromDisk.menu_prompt,
+          confdb_shared: fromDisk.confdb_shared,
           use_username: true,
           use_realname: false,
           use_internetname: false,
-          min_access_level: parseInt(toolTypes.get('MINACCESSLEVEL') || '0', 10),
-          max_access_level: parseInt(toolTypes.get('MAXACCESSLEVEL') || '255', 10),
+          min_access_level: fromDisk.min_access_level,
+          max_access_level: fromDisk.max_access_level,
           created_at: stats.birthtime,
           updated_at: stats.mtime
         };
@@ -188,10 +193,13 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
     for (let i = 1; i <= 16; i++) {
       const dlKey = `dlpath_${i}`;
       const ulKey = `ulpath_${i}`;
-      if (validatedAny[dlKey] && typeof validatedAny[dlKey] === 'string') {
+      // An EMPTY path is a change: it clears the file area. Testing the
+      // string for truth meant a path could be set and never removed - the
+      // sysop cleared the field, the form said saved, the path stayed.
+      if (typeof validatedAny[dlKey] === 'string') {
         dlpaths[i] = validatedAny[dlKey];
       }
-      if (validatedAny[ulKey] && typeof validatedAny[ulKey] === 'string') {
+      if (typeof validatedAny[ulKey] === 'string') {
         ulpaths[i] = validatedAny[ulKey];
       }
     }

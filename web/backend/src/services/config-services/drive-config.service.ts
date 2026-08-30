@@ -8,6 +8,7 @@ import type { ConfigRepository } from '../../database/config-repository';
 import type { DriveConfig } from '../../database/types';
 import { DriveConfigSchema, type RequestContext } from '../config.schemas';
 import { InfoFileParser } from '../info-file-parser';
+import { mergeForWrite } from './config-merge.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -104,8 +105,8 @@ console.error('[DriveConfigService] Error reading Drives.info:', error);
       throw new Error('Failed to create drive');
     }
 
-    // DISK-BASED: Rewrite Drives.info with all drives
-    this.writeDrivesInfoFile();
+    // DISK-BASED: merge the new drive over what Drives.info already holds
+    await this.writeDrivesInfoFile({ entry: newDrive });
 
     // Log change
     this.configRepo.logConfigChange(
@@ -156,8 +157,8 @@ console.error('[DriveConfigService] Error reading Drives.info:', error);
       throw new Error('Failed to retrieve updated drive');
     }
 
-    // DISK-BASED: Rewrite Drives.info with all drives
-    this.writeDrivesInfoFile();
+    // DISK-BASED: merge the edited drive over what Drives.info already holds
+    await this.writeDrivesInfoFile({ entry: newDrive });
 
     // Log change
     this.configRepo.logConfigChange(
@@ -185,8 +186,8 @@ console.error('[DriveConfigService] Error reading Drives.info:', error);
     // Delete from database
     const deleted = this.configRepo.deleteDrive(id);
 
-    // DISK-BASED: Rewrite Drives.info without deleted drive
-    this.writeDrivesInfoFile();
+    // DISK-BASED: remove just this drive from what Drives.info already holds
+    await this.writeDrivesInfoFile({ removeNumber: oldDrive.drive_number });
 
     if (deleted) {
       // Log change
@@ -207,32 +208,65 @@ console.error('[DriveConfigService] Error reading Drives.info:', error);
   }
 
   /**
-   * Write all drives to Drives.info file
-   * DISK-BASED: Rewrites entire file with all current drives
+   * Rewrite Drives.info.
+   *
+   * Disk first. This built the file from configRepo.getAllDrives() alone
+   * while the page reads its list from Drives.info, which is the same
+   * asymmetry that erased screen types, computer types and transfer
+   * protocols: with a stale or empty drives table, saving one drive wiped
+   * every drive that existed only on disk. The database is a mirror, and a
+   * mirror that has fallen behind must not truncate what it mirrors.
+   *
+   * It also rebuilt the tooltype map from scratch, so any key in Drives.info
+   * that is not a DRIVE.n - anything the sysop or another tool put there -
+   * was dropped on every save.
+   *
+   * `change` describes what the caller just did: the drive they added or
+   * edited, and the number they removed.
    */
-  private writeDrivesInfoFile(): void {
+  private async writeDrivesInfoFile(
+    change: { entry?: DriveConfig; removeNumber?: number } = {}
+  ): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
     const drivesInfoPath = path.join(bbsRoot, 'Drives.info');
 
     try {
-      // Get all drives from database
-      const drives = this.configRepo.getAllDrives();
+      const onDisk = await this.getAllDrives();
+      const fromDb = this.configRepo.getAllDrives();
+      // The caller's entry goes last so it wins over a stale mirror row.
+      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
 
-      // Build tooltypes map with DRIVE.N entries
+      const merged = mergeForWrite(
+        onDisk,
+        changed,
+        (drive: DriveConfig) => String(drive.drive_number),
+        { remove: change.removeNumber !== undefined ? [String(change.removeNumber)] : [] }
+      );
+
+      // Start from what is already in the file so keys this service does not
+      // own survive.
       const toolTypes = new Map<string, string>();
+      if (fs.existsSync(drivesInfoPath)) {
+        const parsed = new InfoFileParser().parse(fs.readFileSync(drivesInfoPath));
+        for (const [key, value] of parsed.toolTypes.entries()) {
+          toolTypes.set(key.toUpperCase(), value);
+        }
+      }
+      for (const key of [...toolTypes.keys()]) {
+        if (/^DRIVE\.\d+$/.test(key)) toolTypes.delete(key);
+      }
 
-      for (const drive of drives) {
+      for (const drive of merged) {
         if (drive.enabled !== false) {
           toolTypes.set(`DRIVE.${drive.drive_number}`, drive.drive_path);
         }
       }
 
-      // Write .info file
       const parser = new InfoFileParser();
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(drivesInfoPath, infoData);
 
-console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${drives.length} drives`);
+console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${merged.length} drives`);
     } catch (error) {
 console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
     }
