@@ -30,7 +30,23 @@ import type { StatusTone } from '../types/ui';
 /** A busy board fills this in a few minutes; older entries fall off the end. */
 const MAX_ENTRIES = 500;
 
-interface ActivityEntry {
+/**
+ * Put the newest entry on the front and hold the buffer at its cap.
+ *
+ * A pure function rather than an inline setState body so a busy board can be
+ * simulated against it: the feed runs for as long as the tab is open, and
+ * "several events a second, indefinitely" is the one condition this page has
+ * never actually met.
+ */
+export function appendEntry(
+  current: ActivityEntry[],
+  entry: ActivityEntry,
+  max: number = MAX_ENTRIES
+): ActivityEntry[] {
+  return [entry, ...current].slice(0, max);
+}
+
+export interface ActivityEntry {
   id: string;
   type: BBSEventType;
   username: string;
@@ -117,7 +133,7 @@ export function ActivityPage() {
       timestamp: event.timestamp || Date.now(),
       detail: describe(event),
     };
-    setLive((current) => [entry, ...current].slice(0, MAX_ENTRIES));
+    setLive((current) => appendEntry(current, entry));
   });
 
   const seeded = useMemo<ActivityEntry[]>(() => {
