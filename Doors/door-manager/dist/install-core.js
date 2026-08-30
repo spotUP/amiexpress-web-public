@@ -247,7 +247,7 @@ async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorTyp
         return { ok: false, step: 'write-info', detail: `${targetInfoPath}: ${err?.message ?? err}`, steps };
     }
     try {
-        deps.recordInstall();
+        deps.recordInstall(command, `Doors/${command}`);
         steps.push({ kind: 'ok', text: `recorded the install as ${command}` });
     }
     catch (err) {

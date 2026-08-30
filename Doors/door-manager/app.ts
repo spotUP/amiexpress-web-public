@@ -311,14 +311,16 @@ export async function installConsumerDoor(
       findExtractedBinary: deps.findExtractedBinary,
       writeInfoFile: deps.writeInfoFile,
       refreshDoorRegistry: deps.refreshDoorRegistry,
-      recordInstall: () => {
-        if (commandClaimedByOtherArchive(deps.getInstallByCommand, finalCmd, archiveName)) return;
+      recordInstall: (installedCmd, installedDir) => {
+        // installedCmd, not finalCmd: the archive may name its own command,
+        // and the record has to describe what is actually on disk.
+        if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archiveName)) return;
         deps.recordInstall({
-          id: `install-${finalCmd}`,
+          id: `install-${installedCmd}`,
           catalog_id: localRow?.id ?? null,
           archive_name: archiveName,
-          command: finalCmd,
-          install_dir: `Doors/${finalCmd}`,
+          command: installedCmd,
+          install_dir: installedDir,
           door_type: doorType || 'XIM',
           name: manifestRow.name ?? archiveName,
           md5: null, // ManifestDoor carries no md5; the digest was already verified at download time
@@ -1289,15 +1291,16 @@ class RepoView extends BaseView {
                   writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                   // Same door_installs shape + collision guard as consumer
                   // mode, using the real local catalog row's id (e.id).
-                  recordInstall: () => {
+                  recordInstall: (installedCmd, installedDir) => {
+                    // The archive's own command wins, so record that one.
                     const chk = (cmd: string) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
-                    if (commandClaimedByOtherArchive(chk, finalCmd, e.archive_name)) return;
+                    if (commandClaimedByOtherArchive(chk, installedCmd, e.archive_name)) return;
                     recordInstallSafe({
-                      id: `install-${finalCmd}`,
+                      id: `install-${installedCmd}`,
                       catalog_id: e.id ?? null,
                       archive_name: e.archive_name,
-                      command: finalCmd,
-                      install_dir: `Doors/${finalCmd}`,
+                      command: installedCmd,
+                      install_dir: installedDir,
                       door_type: e.door_type ?? null,
                       name: e.name ?? null,
                       md5: null,

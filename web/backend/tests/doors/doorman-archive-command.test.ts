@@ -157,6 +157,25 @@ describe('installing a door the archive has named', () => {
     expect(installDeps.writeInfoFile).not.toHaveBeenCalled();
   });
 
+  it('records the command it actually installed, not the typed one', async () => {
+    // The install record is what an uninstall later deletes by. A record
+    // naming a directory that does not exist is how a delete goes wrong.
+    const typedDir = path.join(root, 'Doors', 'TYPEDNAME');
+    const installDeps = deps(() => makeArchiveTree(typedDir, 'CALC', Buffer.from('TYPE=XIM\n')));
+
+    await extractAndRegisterDoor(
+      '/archives/CALC.LHA',
+      typedDir,
+      path.join(root, 'Commands', 'BBSCmd', 'TYPEDNAME.info'),
+      'XIM',
+      'CALC',
+      'TYPEDNAME',
+      installDeps as never
+    );
+
+    expect(installDeps.recordInstall).toHaveBeenCalledWith('CALC', 'Doors/CALC');
+  });
+
   it('still writes its own .info when the archive has none', async () => {
     const typedDir = path.join(root, 'Doors', 'THING');
     const installDeps = deps(() => {

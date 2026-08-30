@@ -136,7 +136,17 @@ export interface InstallDeps {
    * Errors are caught and logged here, exactly like the pre-Task-5 inline
    * behavior: a bookkeeping failure never rolls back a working on-disk
    * install. */
-  recordInstall: () => void;
+  /**
+   * Persist the install.
+   *
+   * Takes the command and directory that were ACTUALLY used, which are not
+   * always the ones the caller asked for: when the archive names its own
+   * command the door is moved to it. A record written from the caller's
+   * original guess would point at a directory that no longer exists - and an
+   * install_dir that does not match reality is how an uninstall came to
+   * delete the wrong thing.
+   */
+  recordInstall: (command: string, installDirRelative: string) => void;
   refreshDoorRegistry: () => Promise<boolean>;
 }
 
@@ -248,7 +258,7 @@ export async function extractAndRegisterDoor(
   }
 
   try {
-    deps.recordInstall();
+    deps.recordInstall(command, `Doors/${command}`);
     steps.push({ kind: 'ok', text: `recorded the install as ${command}` });
   } catch (err: any) {
     steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
