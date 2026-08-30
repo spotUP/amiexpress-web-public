@@ -30,6 +30,8 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { beginLogoff } from './logoff';
+import { getBoardConfig } from '../services/bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 /**
  * Check password strength against MIN_PASSWORD_LENGTH and MIN_PASSWORD_STRENGTH tooltypes.
@@ -76,14 +78,9 @@ export function registerAuthHandlers(socket: Socket) {
 
   const getMaxPasswordFails = () => {
     try {
-      if (db && typeof db.getConfigRepository === 'function') {
-        const repo = db.getConfigRepository();
-        if (repo && typeof repo.getSystemConfig === 'function') {
-          const sys = repo.getSystemConfig();
-          if (typeof sys?.max_password_fails === 'number') {
-            return sys.max_password_fails;
-          }
-        }
+      const sys = getBoardConfig(appConfig.get('dataDir'));
+      if (typeof sys?.max_password_fails === 'number') {
+        return sys.max_password_fails;
       }
     } catch (error) {
 console.warn('[AUTH] Unable to load max_password_fails from config:', error);

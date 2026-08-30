@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XCircle } from 'lucide-react';
+import { Check, Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { TooltypeKey } from '../components/ui/TooltypeKey';
 import type { SystemConfig, Language, ScreenType } from '../types';
@@ -145,8 +145,10 @@ export function SystemConfigPage() {
   const {
     register,
     reset,
+    resetField,
+    getValues,
     handleSubmit,
-    formState: { isDirty, dirtyFields },
+    formState: { dirtyFields },
   } = useForm<SystemConfig>({
     values: {
       language_base: 'Languages',
@@ -164,6 +166,87 @@ export function SystemConfigPage() {
     }
   }, [data, reset]);
 
+  // A field saves when it is left, not while it is being typed.
+  //
+  // The alternative considered was a debounced write, which is what this page
+  // did before the redesign. bbsConfig.info is read by the RUNNING BBS, so
+  // that persists half-typed values - max_nodes briefly 2 on the way to 25 -
+  // and rewrites every tooltype, takes a backup and writes an audit entry on
+  // each burst. Leaving a field is the point at which the sysop has finished
+  // with it.
+  const [savedField, setSavedField] = useState<string | null>(null);
+  const [savingField, setSavingField] = useState<string | null>(null);
+
+  const fieldMutation = useMutation({
+    mutationFn: ({ name, value }: { name: string; value: unknown }) =>
+      apiClient.updateSystemConfig({ [name]: value } as Partial<SystemConfig>),
+    onSuccess: (resp, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
+      // Mark just this field clean. Resetting the whole form here would throw
+      // away anything else half-typed on screen.
+      resetField(variables.name as keyof SystemConfig & string, {
+        defaultValue: variables.value as never,
+      });
+      setSavingField(null);
+      setSavedField(variables.name);
+      window.setTimeout(
+        () => setSavedField((current) => (current === variables.name ? null : current)),
+        1500
+      );
+
+      const message = (resp as { message?: string } | undefined)?.message;
+      if (message && message !== 'System configuration updated') {
+        showWarning(message);
+      }
+    },
+    onError: (error: Error, variables) => {
+      setSavingField(null);
+      showError(`${variables.name} was not saved: ${error.message}`);
+    },
+  });
+
+  /** Save one field, if it changed and is worth sending. */
+  const saveField = (name: string) => {
+    if (!name || !(name in dirtyFields)) return;
+    if (name === 'created_at' || name === 'updated_at') return;
+
+    const value = getValues(name as keyof SystemConfig & string);
+
+    // An empty password field means "leave it alone": the server holds these
+    // encrypted and never sends them back.
+    if ((name === 'smtp_password' || name === 'reg_key') && !value) return;
+
+    setSavingField(name);
+    fieldMutation.mutate({ name, value });
+  };
+
+  /**
+   * One handler for the whole form rather than eighty.
+   *
+   * React's onBlur bubbles (the native event does not), so the form can see
+   * every field losing focus without each register() call being rewritten.
+   */
+  const handleFieldBlur = (event: React.FocusEvent<HTMLFormElement>) => {
+    const target = event.target as unknown as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    if (!target?.name) return;
+    if (target instanceof HTMLInputElement && target.type === 'checkbox') return;
+    saveField(target.name);
+  };
+
+  /** A checkbox or a select is finished the moment it changes; it may never blur. */
+  const handleFieldChange = (event: React.ChangeEvent<HTMLFormElement>) => {
+    const target = event.target as unknown as HTMLInputElement | HTMLSelectElement;
+    if (!target?.name) return;
+    const commitsOnChange =
+      (target instanceof HTMLInputElement && target.type === 'checkbox') ||
+      target instanceof HTMLSelectElement;
+    if (!commitsOnChange) return;
+    // The dirty flag is set after this handler runs, so let it land first.
+    window.setTimeout(() => saveField(target.name), 0);
+  };
+
+
+
   const onSubmit = (value: SystemConfig) => {
     // Named only to drop them from the payload.
     const { created_at: _created_at, updated_at: _updated_at, ...updates } = value as any;
@@ -180,7 +263,6 @@ export function SystemConfigPage() {
     mutation.mutate(updates);
   };
 
-  const changedFieldCount = Object.keys(dirtyFields).length;
 
   const handleGenerateSSHKey = async () => {
     if (sshKeyData?.data?.exists) {
@@ -284,7 +366,12 @@ export function SystemConfigPage() {
         ))}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-20">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        onBlur={handleFieldBlur}
+        onChange={handleFieldChange}
+        className="space-y-6 pb-20"
+      >
         {/* Basic Information */}
         {shouldShowSection('Basic Information') && (
         <div className="card">
@@ -325,19 +412,6 @@ export function SystemConfigPage() {
                 id="location"
                 type="text"
                 {...register('location')}
-                className="input-field w-full"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="phone" className="label">
-                Phone
-              </label>
-              <TooltypeKey field="phone" />
-              <input
-                id="phone"
-                type="text"
-                {...register('phone')}
                 className="input-field w-full"
               />
             </div>
@@ -1758,30 +1832,19 @@ export function SystemConfigPage() {
         </div>
         )}
 
-        {/* The save bar. It appears only when something has changed, names
-            how much, and is the only thing that writes bbsConfig.info. */}
-        {isDirty && (
-          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-2/95 px-5 py-3 backdrop-blur">
-            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
-              <span className="text-sm text-content-secondary">
-                {changedFieldCount === 1 ? '1 field changed' : `${changedFieldCount} fields changed`}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => reset(data?.data)}
-                  className="h-control rounded border border-border bg-surface-1 px-3 text-sm text-content-secondary transition-colors hover:bg-surface-3 hover:text-content-primary"
-                >
-                  Discard
-                </button>
-                <button
-                  type="submit"
-                  disabled={mutation.isPending}
-                  className="btn-primary h-control py-0 text-sm disabled:opacity-50"
-                >
-                  {mutation.isPending ? 'Saving...' : 'Save changes'}
-                </button>
-              </div>
+        {/* Fields save themselves when they are left, so there is no save
+            button. This only reports what just happened. */}
+        {(savingField || savedField) && (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-2/95 px-5 py-2 backdrop-blur">
+            <div className="mx-auto flex max-w-[1600px] items-center justify-end gap-2 text-sm">
+              {savingField ? (
+                <span className="text-content-secondary">Saving {savingField}...</span>
+              ) : (
+                <span className="flex items-center gap-1 text-status-ok">
+                  <Check size={14} aria-hidden="true" />
+                  {savedField} saved to bbsConfig.info
+                </span>
+              )}
             </div>
           </div>
         )}

@@ -15,7 +15,6 @@ export const SystemConfigSchema = z.object({
   bbs_name: z.string().min(1).max(100).optional(),
   sysop_name: z.string().min(1).max(100).optional(),
   location: z.string().max(200).optional(),
-  phone: z.string().max(50).optional(),
   email: z.string().email().max(200).optional().or(z.literal('')),
   website: z.string().url().max(200).optional().or(z.literal('')),
 

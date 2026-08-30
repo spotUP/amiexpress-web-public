@@ -1046,6 +1046,7 @@ setNewUserDependencies({
 // Import HTTP routes setup
 import { registerHttpRoutes } from "./server/routes-setup";
 import { getSystemTime } from './utils/date-time.util';
+import { getBoardConfig } from './services/bbs-config-file.service';
 
 // ===== HTTP Routes (now in server/routes-setup.ts) =====
 // Routes registered in startup section below
@@ -1734,6 +1735,8 @@ console.log("[OK] Operator chat handler initialized");
 
     // Initialize web push notifications with database config
     const { initWebPush } = await import("./utils/web-push.util");
+    // config-source-ok: the VAPID push keys are database-only - express.e has
+    // no tooltype for them, so there is nothing on disk to read.
     const sysConfigForPush = db.getConfigRepository().getSystemConfig();
     if (initWebPush(sysConfigForPush || undefined)) {
 console.log("[OK] Web push notifications enabled");
@@ -1754,7 +1757,7 @@ console.log("[OK] Database initialization complete");
 
     // Load system config for port overrides (env takes precedence)
     try {
-      const sysConfig = db.getConfigRepository().getSystemConfig();
+      const sysConfig = getBoardConfig(config.get('dataDir'));
       if (sysConfig) {
         if (!process.env.TELNET_PORT && sysConfig.telnet_port) {
           telnetPort = sysConfig.telnet_port;

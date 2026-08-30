@@ -130,6 +130,7 @@ import { checkSecurity, setEnvStat } from '../utils/security.util';
 import { getMailStatFile, loadMsgPointers, validatePointers, updateReadPointer } from '../utils/message-pointers.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { searchFileDescriptions } from './database-helpers';
+import { getBoardConfig } from '../services/bbs-config-file.service';
 
 const AROS_ROM_FILES = ['aros-rom.bin', 'aros-ext.bin'];
 
@@ -668,7 +669,7 @@ export async function initializeData(io?: SocketIOServer) {
     try {
       const dataDir = config.get('dataDir');
       const sysCfg = (() => {
-        try { return db.getConfigRepository().getSystemConfig(); } catch { return null; }
+        try { return getBoardConfig(config.get('dataDir')); } catch { return null; }
       })();
       const retentionDays = (sysCfg?.log_retention_days as number | undefined) ?? 90;
       // 10 MB per file caps size; retentionDays is the spiritual budget but
