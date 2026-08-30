@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { acsLabel, groupPermissions } from './acs-permission-groups';
 
 export function SecurityPage() {
   const queryClient = useQueryClient();
@@ -44,14 +45,23 @@ export function SecurityPage() {
     [levelsQuery.data]
   );
 
-  // A level carries well over a hundred ACS permissions, listed in the order
-  // the file gives them. Without a filter, changing one means reading the
-  // whole grid to find it.
-  const visiblePermissions = useMemo(() => {
+  // 87 permissions, in the order the bits sit in the file. Grouped by what
+  // they are for, and filtered on the description as well as the raw name -
+  // a sysop looking for "download" should not have to know it is spelled
+  // ACS.DOWNLOAD, or that ACS.ZOOM_MAIL is about mail.
+  const visibleGroups = useMemo(() => {
     const needle = permissionFilter.trim().toLowerCase();
-    if (!needle) return permissions;
-    return permissions.filter(name => name.toLowerCase().includes(needle));
+    const matches = (name: string) =>
+      !needle ||
+      name.toLowerCase().includes(needle) ||
+      acsLabel(name).toLowerCase().includes(needle);
+    return groupPermissions(permissions, matches);
   }, [permissions, permissionFilter]);
+
+  const visibleCount = useMemo(
+    () => visibleGroups.reduce((total, group) => total + group.permissions.length, 0),
+    [visibleGroups]
+  );
 
   // Select the first real level once we know what exists, rather than
   // defaulting to a number that may have no file at all.
@@ -165,9 +175,9 @@ export function SecurityPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">
-              Level {selectedLevel} - {visiblePermissions.length === permissions.length
+              Level {selectedLevel} - {visibleCount === permissions.length
                 ? `${permissions.length} permissions`
-                : `${visiblePermissions.length} of ${permissions.length} permissions`}
+                : `${visibleCount} of ${permissions.length} permissions`}
             </h2>
             <button
               onClick={() => saveMutation.mutate()}
@@ -193,27 +203,50 @@ export function SecurityPage() {
 
           {flagsQuery.isLoading ? (
             <p className="text-bbs-muted">Loading flags...</p>
-          ) : visiblePermissions.length === 0 ? (
+          ) : visibleCount === 0 ? (
             <p className="text-bbs-muted">No permission matches "{permissionFilter}".</p>
           ) : (
-            <div className="grid gap-1 md:grid-cols-2">
-              {visiblePermissions.map(name => {
-                const granted = !!flags[name];
-                return (
-                  <button
-                    key={name}
-                    onClick={() => toggle(name)}
-                    className="flex items-center gap-2 px-3 py-2 rounded border border-bbs-muted/20 hover:border-bbs-accent/50 text-left"
-                  >
-                    {granted ? (
-                      <ToggleRight className="text-status-ok shrink-0" size={20} />
-                    ) : (
-                      <ToggleLeft className="text-bbs-muted shrink-0" size={20} />
-                    )}
-                    <span className={granted ? '' : 'text-bbs-muted'}>{name}</span>
-                  </button>
-                );
-              })}
+            <div className="space-y-5">
+              {visibleGroups.map(group => (
+                <section key={group.title}>
+                  <h3 className="text-sm font-semibold text-content-primary">
+                    {group.title}
+                    <span className="ml-2 font-normal text-content-muted">
+                      {group.permissions.length}
+                    </span>
+                  </h3>
+                  <p className="mb-2 text-xs text-content-muted">{group.description}</p>
+
+                  <div className="grid gap-1 md:grid-cols-2">
+                    {group.permissions.map(name => {
+                      const granted = !!flags[name];
+                      return (
+                        <button
+                          key={name}
+                          onClick={() => toggle(name)}
+                          aria-pressed={granted}
+                          className="flex items-start gap-2 px-3 py-2 rounded border border-bbs-muted/20 hover:border-bbs-accent/50 text-left"
+                        >
+                          {granted ? (
+                            <ToggleRight className="mt-0.5 text-status-ok shrink-0" size={20} />
+                          ) : (
+                            <ToggleLeft className="mt-0.5 text-bbs-muted shrink-0" size={20} />
+                          )}
+                          <span className="min-w-0">
+                            <span className={`block ${granted ? 'text-content-primary' : 'text-bbs-muted'}`}>
+                              {acsLabel(name)}
+                            </span>
+                            {/* The raw flag is what is written in the .info
+                                file and what the AmiExpress documentation
+                                calls it, so it stays on screen. */}
+                            <span className="block font-mono text-xs text-content-muted">{name}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </div>

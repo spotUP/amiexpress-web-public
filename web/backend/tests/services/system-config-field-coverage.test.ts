@@ -350,6 +350,28 @@ describe('System Configuration field coverage', () => {
     });
   });
 
+  describe('the registration name shown at login', () => {
+    it('is configuration, not a secret', () => {
+      // express.e:31991 reads REGKEY straight out of bbsConfig.info, and
+      // prints it to every caller at login (express.e:25696, :29516). A value
+      // read from a plaintext tooltype and shown to everyone who connects is
+      // not a credential - but the substring rule caught nothing here, the
+      // explicit SENSITIVE_FIELDS list did, so the admin wrote it to the
+      // encrypted database while the login banner read the disk and found
+      // nothing. Filling the field in changed nothing on screen.
+      expect(isSensitiveField('reg_key')).toBe(false);
+    });
+
+    it('round-trips to the file express.e reads it from', () => {
+      saveBBSConfig(root, { reg_key: 'Up Rough' });
+
+      expect(loadBBSConfig(root).reg_key).toBe('Up Rough');
+
+      const text = fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8');
+      expect(text).toContain('REGKEY=Up Rough');
+    });
+  });
+
   describe('the contract that stops the fifteenth field', () => {
     it('persists every field the API accepts, or names why it does not', () => {
       // The existing round-trip suite iterates the tooltype map, so it can

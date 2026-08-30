@@ -145,6 +145,33 @@ function getFileType(relativePath: string): InfoFileMetadata['type'] {
  * GET /api/info-editor/files
  * List all .info files in the BBS directory (recursive)
  */
+/**
+ * The envelope every caller unwraps.
+ *
+ * This router replied with bare objects - `{ files }`, the metadata itself,
+ * `{ error }` - while apiClient types all four endpoints as ApiResponse and
+ * every page reads `.data`. So Configuration Files always showed zero files
+ * and both tooltype editors always showed none, with nothing failing
+ * anywhere: the server answered correctly in a shape the client could not
+ * read.
+ */
+function sendOk<T>(res: Response, data: T, message?: string): void {
+  res.json({
+    success: true,
+    data,
+    message,
+    timestamp: getSystemTime().toISOString(),
+  });
+}
+
+function sendFail(res: Response, status: number, message: string): void {
+  res.status(status).json({
+    success: false,
+    message,
+    timestamp: getSystemTime().toISOString(),
+  });
+}
+
 infoEditorRouter.get('/files', async (req: Request, res: Response) => {
   try {
     const bbsRoot = config.get('dataDir');
@@ -179,14 +206,11 @@ infoEditorRouter.get('/files', async (req: Request, res: Response) => {
 
     walk(bbsRoot);
 
-    res.json({ files });
+    sendOk(res, { files });
 
   } catch (error) {
 console.error('[InfoEditor] Error listing files:', error);
-    res.status(500).json({
-      error: 'Failed to list .info files',
-      message: (error as Error).message
-    });
+    sendFail(res, 500, `Failed to list .info files: ${(error as Error).message}`);
   }
 });
 
@@ -198,7 +222,7 @@ infoEditorRouter.get('/file', async (req: Request, res: Response) => {
   try {
     const relativePath = req.query.path as string;
     if (!relativePath) {
-      return res.status(400).json({ error: 'Missing path parameter' });
+      return sendFail(res, 400, 'Missing path parameter');
     }
 
     const bbsRoot = config.get('dataDir');
@@ -208,11 +232,11 @@ infoEditorRouter.get('/file', async (req: Request, res: Response) => {
     const resolvedPath = path.resolve(fullPath);
     const resolvedRoot = path.resolve(bbsRoot);
     if (!resolvedPath.startsWith(resolvedRoot)) {
-      return res.status(403).json({ error: 'Access denied' });
+      return sendFail(res, 403, 'Access denied');
     }
 
     if (!amigafs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' });
+      return sendFail(res, 404, 'File not found');
     }
 
     const tooltypes = parseTooltypes(fullPath);
@@ -224,14 +248,11 @@ infoEditorRouter.get('/file', async (req: Request, res: Response) => {
       tooltypes
     };
 
-    res.json(metadata);
+    sendOk(res, metadata);
 
   } catch (error) {
 console.error('[InfoEditor] Error reading file:', error);
-    res.status(500).json({
-      error: 'Failed to read .info file',
-      message: (error as Error).message
-    });
+    sendFail(res, 500, `Failed to read .info file: ${(error as Error).message}`);
   }
 });
 
@@ -246,7 +267,7 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
     const { path: relativePath, tooltypes } = req.body;
 
     if (!relativePath || !tooltypes) {
-      return res.status(400).json({ error: 'Missing path or tooltypes' });
+      return sendFail(res, 400, 'Missing path or tooltypes');
     }
 
     const bbsRoot = config.get('dataDir');
@@ -256,11 +277,11 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
     const resolvedPath = path.resolve(fullPath);
     const resolvedRoot = path.resolve(bbsRoot);
     if (!resolvedPath.startsWith(resolvedRoot)) {
-      return res.status(403).json({ error: 'Access denied' });
+      return sendFail(res, 403, 'Access denied');
     }
 
     if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' });
+      return sendFail(res, 404, 'File not found');
     }
 
     // Create backup
@@ -282,11 +303,7 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
       // Write back to file
       writeInfoFile(info);
 
-      res.json({
-        success: true,
-        message: 'Tooltypes saved successfully',
-        backupPath
-      });
+      sendOk(res, { backupPath }, 'Tooltypes saved successfully');
     } catch (parseError) {
 console.error('[InfoEditor] Error modifying binary .info file:', parseError);
 
@@ -303,22 +320,21 @@ console.error('[InfoEditor] Error modifying binary .info file:', parseError);
 
       fs.writeFileSync(tooltypesPath, content);
 
-      res.json({
-        success: true,
-        message: 'Tooltypes saved to text file (binary modification failed)',
-        backupPath,
-        tooltypesPath,
-        warning: 'Binary .info modification failed. Text file created for reference.',
-        error: (parseError as Error).message
-      });
+      sendOk(
+        res,
+        {
+          backupPath,
+          tooltypesPath,
+          warning: 'Binary .info modification failed. Text file created for reference.',
+          reason: (parseError as Error).message,
+        },
+        'Tooltypes saved to text file (binary modification failed)'
+      );
     }
 
   } catch (error) {
 console.error('[InfoEditor] Error updating file:', error);
-    res.status(500).json({
-      error: 'Failed to update .info file',
-      message: (error as Error).message
-    });
+    sendFail(res, 500, `Failed to update .info file: ${(error as Error).message}`);
   }
 });
 
@@ -333,7 +349,7 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
     const { path: relativePath, key } = req.body;
 
     if (!relativePath || !key) {
-      return res.status(400).json({ error: 'Missing path or key' });
+      return sendFail(res, 400, 'Missing path or key');
     }
 
     const bbsRoot = config.get('dataDir');
@@ -343,11 +359,11 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
     const resolvedPath = path.resolve(fullPath);
     const resolvedRoot = path.resolve(bbsRoot);
     if (!resolvedPath.startsWith(resolvedRoot)) {
-      return res.status(403).json({ error: 'Access denied' });
+      return sendFail(res, 403, 'Access denied');
     }
 
     if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' });
+      return sendFail(res, 404, 'File not found');
     }
 
     // Create backup
@@ -361,7 +377,7 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
       // Find and toggle the tooltype
       const tooltype = info.tooltypes.find(tt => tt.key.toUpperCase() === key.toUpperCase());
       if (!tooltype) {
-        return res.status(404).json({ error: 'Tooltype not found' });
+        return sendFail(res, 404, 'Tooltype not found');
       }
 
       // Toggle comment status
@@ -373,25 +389,19 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
       // Get updated tooltype
       const updatedTooltype = info.tooltypes.find(tt => tt.key.toUpperCase() === key.toUpperCase());
 
-      res.json({
-        success: true,
-        tooltype: updatedTooltype,
-        message: `${key} is now ${updatedTooltype?.commented ? 'disabled' : 'enabled'}`
-      });
+      sendOk(
+        res,
+        { tooltype: updatedTooltype },
+        `${key} is now ${updatedTooltype?.commented ? 'disabled' : 'enabled'}`
+      );
     } catch (parseError) {
 console.error('[InfoEditor] Error modifying binary .info file:', parseError);
-      res.status(500).json({
-        error: 'Failed to modify .info file',
-        message: (parseError as Error).message
-      });
+      sendFail(res, 500, `Failed to modify .info file: ${(parseError as Error).message}`);
     }
 
   } catch (error) {
 console.error('[InfoEditor] Error toggling tooltype:', error);
-    res.status(500).json({
-      error: 'Failed to toggle tooltype',
-      message: (error as Error).message
-    });
+    sendFail(res, 500, `Failed to toggle tooltype: ${(error as Error).message}`);
   }
 });
 

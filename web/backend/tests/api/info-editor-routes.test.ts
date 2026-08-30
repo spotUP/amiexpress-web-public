@@ -19,10 +19,17 @@ describe('Info Editor Routes', () => {
   describe('GET /api/info/files', () => {
     it('responds without crashing', async () => {
       const res = await request(app).get('/api/info/files');
-      // 200 with { files: [...] } when dataDir accessible, 500 when not
+      // 200 with the standard envelope when dataDir is readable, 500 when not.
+      //
+      // This asserted `res.body.files` - the shape the route used to send.
+      // Every caller types these endpoints as ApiResponse and reads `.data`,
+      // so the route agreed with this test and with nothing else: the file
+      // tree and both tooltype editors always showed zero files. The test was
+      // codifying the bug, so it moves to the contract the clients use.
       expect([200, 500]).toContain(res.status);
       if (res.status === 200) {
-        expect(Array.isArray(res.body.files)).toBe(true);
+        expect(res.body.success).toBe(true);
+        expect(Array.isArray(res.body.data.files)).toBe(true);
       }
     }, 30000); // Extended timeout: endpoint scans the BBS directory tree
   });

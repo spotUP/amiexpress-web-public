@@ -1654,9 +1654,14 @@ console.log(
   );
   socket.emit("ansi-output", `Web port ${webPortVersion} by Spot/Up Rough\r\n`);
 
-  // express.e:29516-29517 - Registration and node info
-  // Use reg_key from disk config (bbsConfig.info REG_KEY tooltype)
-  const regKey = diskConfig.reg_key || "UNREGISTERED";
+  // express.e:29516-29517 - Registration and node info.
+  //
+  // express.e:31991 reads REGKEY from bbsConfig.info and falls back to 'NONE'.
+  // AmiExpress is freeware now, so there is no registration name to print and
+  // "UNREGISTERED" - which this invented - says nothing useful to a caller.
+  // The sysop's name is who the board actually belongs to, and a board that
+  // does carry a REGKEY still shows it.
+  const regKey = diskConfig.reg_key || diskConfig.sysop_name || "NONE";
   socket.emit(
     "ansi-output",
     `\r\nRegistered to ${regKey}. You are connected to Node ${nodeSession.nodeId} via web connection`
