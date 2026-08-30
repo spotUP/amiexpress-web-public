@@ -15,9 +15,10 @@
  */
 
 import { watch, FSWatcher } from 'chokidar';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { startManaged, stopManaged, isAlive } from './lib/managed-process';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const PID_FILE = path.join(PROJECT_ROOT, '.watch-doors.pid');
@@ -26,6 +27,7 @@ const DEBOUNCE_MS = 1000; // Wait 1s after last change before restarting
 let backendProcess: ChildProcess | null = null;
 let restartTimer: NodeJS.Timeout | null = null;
 let isRestarting = false;
+let pendingRestart: string | null = null;
 let isShuttingDown = false;
 let watcher: FSWatcher | null = null;
 
@@ -98,20 +100,51 @@ function log(msg: string, color = colors.reset) {
   console.log(`${color}${msg}${colors.reset}`);
 }
 
+// The backend is started through the LOCAL tsx binary, never `npx tsx`.
+//
+// npx is a wrapper process: spawning it makes the watcher's handle the
+// wrapper, while the actual server runs as its child. Killing the wrapper
+// leaves that child alive and re-parented to launchd - unstoppable by the
+// watcher, still holding port 3001. 104 backends were found running at once
+// that way, every one of them `node .../.bin/tsx src/index.ts` with no
+// parent. Spawning the binary directly makes the handle the server itself.
+function backendCommand(): { command: string; args: string[] } {
+  const localTsx = path.join(PROJECT_ROOT, 'web/backend/node_modules/.bin/tsx');
+  if (fs.existsSync(localTsx)) return { command: localTsx, args: ['src/index.ts'] };
+  // No local install (a fresh checkout before npm install): npx is the only
+  // way to run at all, and a wrapper that can orphan beats not starting.
+  // Said out loud so the orphan risk is never silent.
+  log('[WARN] web/backend has no local tsx - falling back to npx (a restart may orphan the backend)', colors.yellow);
+  return { command: 'npx', args: ['tsx', 'src/index.ts'] };
+}
+
 function startBackend() {
   if (isShuttingDown) return;
 
+  // Never overwrite a live handle: that loses the only reference able to
+  // stop it, which is how an orphan is made.
+  if (backendProcess?.pid && isAlive(backendProcess.pid)) {
+    log('[WARN] Backend already running - not starting a second one', colors.yellow);
+    return;
+  }
+
   log('\n-> Starting backend...', colors.cyan);
 
-  backendProcess = spawn('npx', ['tsx', 'src/index.ts'], {
+  const { command, args } = backendCommand();
+  backendProcess = startManaged({
+    command,
+    args,
     cwd: path.join(PROJECT_ROOT, 'web/backend'),
-    stdio: 'inherit',
     env: { ...process.env },
-    // Don't detach - we want children to die with parent
-    detached: false,
+    stdio: 'inherit',
   });
 
-  backendProcess.on('exit', (code) => {
+  // `spawned`, not `backendProcess`: by the time these fire, a restart may
+  // have replaced the handle, and clearing it then would drop the live
+  // backend's only reference.
+  const spawned = backendProcess;
+
+  spawned.on('exit', (code) => {
     if (!isRestarting && !isShuttingDown) {
       if (code === 0) {
         log('[OK] Backend exited cleanly', colors.green);
@@ -119,62 +152,41 @@ function startBackend() {
         log(`[ERROR] Backend crashed with code ${code}`, colors.red);
       }
     }
-    backendProcess = null;
+    if (backendProcess === spawned) backendProcess = null;
   });
 
-  backendProcess.on('error', (err) => {
+  spawned.on('error', (err) => {
     log(`[ERROR] Backend spawn error: ${err.message}`, colors.red);
-    backendProcess = null;
+    if (backendProcess === spawned) backendProcess = null;
   });
 
   log('[OK] Backend started (PID: ' + backendProcess.pid + ')', colors.green);
 }
 
-function stopBackend(): Promise<void> {
-  return new Promise((resolve) => {
-    if (!backendProcess) {
-      resolve();
-      return;
-    }
+async function stopBackend(): Promise<void> {
+  const proc = backendProcess;
+  if (!proc) return;
 
-    log('-> Stopping backend...', colors.yellow);
+  log('-> Stopping backend...', colors.yellow);
 
-    const pid = backendProcess.pid;
-    let resolved = false;
-
-    const cleanup = () => {
-      if (!resolved) {
-        resolved = true;
-        backendProcess = null;
-        log('[OK] Backend stopped', colors.green);
-        resolve();
-      }
-    };
-
-    backendProcess.once('exit', cleanup);
-
-    // Try graceful shutdown first
-    try {
-      backendProcess.kill('SIGTERM');
-    } catch {
-      cleanup();
-      return;
-    }
-
-    // Force kill after 3 seconds
-    setTimeout(() => {
-      if (backendProcess && pid) {
-        log('[WARN] Force killing backend...', colors.yellow);
-        try {
-          backendProcess.kill('SIGKILL');
-        } catch {
-          // Process already gone
-        }
-        // Ensure we resolve even if exit event doesn't fire
-        setTimeout(cleanup, 500);
-      }
-    }, 3000);
+  // stopManaged is handed THE process to stop and signals its whole group.
+  // The previous version armed a 3-second timer that killed whatever
+  // `backendProcess` pointed at when it fired - which, after a graceful stop
+  // that finished quickly, was the replacement backend already started in
+  // the meantime. That orphaned one backend per restart.
+  const { stopped } = await stopManaged(proc, {
+    graceMs: 3000,
+    onForce: () => log('[WARN] Force killing backend...', colors.yellow),
   });
+
+  // Only clear the handle if it is still the process this call stopped.
+  if (backendProcess === proc) backendProcess = null;
+
+  if (stopped) {
+    log('[OK] Backend stopped', colors.green);
+  } else {
+    log(`[ERROR] Backend ${proc.pid} survived SIGKILL - a new one will collide with it`, colors.red);
+  }
 }
 
 // Comprehensive cleanup function
@@ -189,6 +201,7 @@ async function cleanup(): Promise<void> {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
+  pendingRestart = null;
 
   // Close watcher
   if (watcher) {
@@ -210,7 +223,14 @@ async function cleanup(): Promise<void> {
 }
 
 async function restartBackend(changedFile: string) {
-  if (isRestarting || isShuttingDown) {
+  if (isShuttingDown) return;
+  if (isRestarting) {
+    // A change that lands mid-restart used to be dropped on the floor: the
+    // restart in flight was already stopping a backend built from the
+    // PREVIOUS state, so the new file never reached a running process and
+    // the watcher looked like it had missed the edit. Remember it and run
+    // one more restart when this one finishes.
+    pendingRestart = changedFile;
     return;
   }
 
@@ -226,6 +246,12 @@ async function restartBackend(changedFile: string) {
   startBackend();
   log('----------------------------------------------------\n', colors.gray);
   isRestarting = false;
+
+  if (pendingRestart && !isShuttingDown) {
+    const next = pendingRestart;
+    pendingRestart = null;
+    scheduleRestart(next);
+  }
 }
 
 function scheduleRestart(changedFile: string) {
