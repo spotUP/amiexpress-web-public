@@ -9,6 +9,8 @@ import type { ComputerType } from '../../database/types';
 import { ComputerTypeSchema, type RequestContext } from '../config.schemas';
 import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
+import { getSystemTime } from '../../utils/date-time.util';
+import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -64,7 +66,21 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     }
   }
 
+  /**
+   * Resolve the computer the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position (COMPUTER.3 -> id 3). Looking that number up as a computer_types
+   * rowid is a different namespace entirely: with the table empty every edit
+   * threw "Computer type 3 not found", and with the table partly filled it
+   * would have edited a different computer. Same mistake the doors page made -
+   * see door-info-file.service.ts.
+   */
   async getComputerType(id: number): Promise<ComputerType | null> {
+    const onDisk = await this.getAllComputerTypes();
+    const fromDisk = onDisk.find(c => c.id === id);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getComputerTypeById(id);
   }
 
@@ -80,11 +96,21 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
       enabled: validated.enabled ?? true
     });
 
-    const newType = await this.getComputerType(id);
-    if (!newType) throw new Error('Failed to create computer type');
+    // Built from what was just validated, not read back through
+    // getComputerType - that resolves ids against DISK, where this id is some
+    // other computer's position.
+    const now = getSystemTime();
+    const newType: ComputerType = {
+      id,
+      computer_number: validated.computer_number,
+      computer_name: validated.computer_name,
+      enabled: validated.enabled ?? true,
+      created_at: now,
+      updated_at: now
+    };
 
-    this.writeComputerListInfoFile();
-    this.configRepo.logConfigChange('computer_types', id, 'CREATE', 
+    await this.writeComputerListInfoFile({ entry: newType });
+    this.configRepo.logConfigChange('computer_types', id, 'CREATE',
       context.userId, context.username, undefined, newType, 
       context.ipAddress, context.userAgent);
 
@@ -100,13 +126,26 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     const oldType = await this.getComputerType(id);
     if (!oldType) throw new Error(`Computer type ${id} not found`);
 
-    const success = this.configRepo.updateComputerType(id, validated);
-    if (!success) throw new Error(`Failed to update computer type ${id}`);
+    // The mirror is updated best-effort. It holds no row for a computer that
+    // only exists on disk, and that must not stop the edit from reaching
+    // ComputerList.info, which is what the BBS reads.
+    this.configRepo.updateComputerType(id, validated);
 
-    const newType = await this.getComputerType(id);
-    if (!newType) throw new Error('Failed to retrieve updated computer type');
+    const newType: ComputerType = {
+      ...oldType,
+      ...validated,
+      updated_at: getSystemTime()
+    };
 
-    this.writeComputerListInfoFile();
+    // The change itself is what gets merged over disk - not the database's
+    // copy of it. A renamed computer is still on disk under its old name, so
+    // name the rename or the merge keeps the old entry and appends the new one.
+    await this.writeComputerListInfoFile({
+      entry: newType,
+      ...(newType.computer_name !== oldType.computer_name
+        ? { rename: { from: oldType.computer_name, to: newType.computer_name } }
+        : {})
+    });
     this.configRepo.logConfigChange('computer_types', id, 'UPDATE',
       context.userId, context.username, oldType, newType,
       context.ipAddress, context.userAgent);
@@ -118,24 +157,54 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
     const oldType = await this.getComputerType(id);
     if (!oldType) return false;
 
-    const deleted = this.configRepo.deleteComputerType(id);
-    this.writeComputerListInfoFile();
+    this.configRepo.deleteComputerType(id);
+    await this.writeComputerListInfoFile({ remove: oldType.computer_name });
 
-    if (deleted) {
-      this.configRepo.logConfigChange('computer_types', id, 'DELETE',
-        context.userId, context.username, oldType, undefined,
-        context.ipAddress, context.userAgent);
-    }
+    // The entry existed and ComputerList.info no longer lists it. Reporting
+    // the mirror's row count instead made the page say "not found" for a
+    // computer it had just deleted from the file.
+    this.configRepo.logConfigChange('computer_types', id, 'DELETE',
+      context.userId, context.username, oldType, undefined,
+      context.ipAddress, context.userAgent);
 
-    return deleted;
+    return true;
   }
 
-  private writeComputerListInfoFile(): void {
+  /**
+   * Rewrite ComputerList.info.
+   *
+   * `change` describes what the caller just did: `entry` is the created or
+   * edited computer, `remove` a deletion, `rename` an edit that changed the
+   * computer name, which is the key this file is merged on. All three are
+   * needed because the merge starts from a DISK that still holds the old shape.
+   */
+  private async writeComputerListInfoFile(
+    change: { entry?: ComputerType; remove?: string; rename?: { from: string; to: string } } = {}
+  ): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
     const computerListPath = path.join(bbsRoot, 'ComputerList.info');
 
     try {
-      const computers = this.configRepo.getAllComputerTypes();
+      // Disk first. This used to rebuild the file from
+      // configRepo.getAllComputerTypes() alone, while the page reads its list
+      // from ComputerList.info - so with a stale or empty computer_types table,
+      // saving one computer erased every computer that only existed on disk.
+      // The database is a mirror; a mirror that has fallen behind must not
+      // truncate what it mirrors.
+      const onDisk = await this.getAllComputerTypes();
+      const fromDb = this.configRepo.getAllComputerTypes();
+      // The caller's entry goes last so it wins over a stale mirror row.
+      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
+      const computers = mergeForWrite(
+        onDisk,
+        changed,
+        (c: ComputerType) => String(c.computer_name ?? ''),
+        {
+          remove: change.remove ? [change.remove] : [],
+          ...(change.rename ? { rename: change.rename } : {})
+        }
+      );
+
       const toolTypes = new Map<string, string>();
       let computerNum = 0;
 
