@@ -154,8 +154,13 @@ export interface InstallDeps {
    * original guess would point at a directory that no longer exists - and an
    * install_dir that does not match reality is how an uninstall came to
    * delete the wrong thing.
+   *
+   * `archiveName` is the catalog key the caller resolved this install from
+   * (the archive on disk in owner mode, the manifest row's archive in
+   * consumer mode) -- passed through so the recorder can write the install
+   * as a link to that archive rather than reconstructing a guess.
    */
-  recordInstall: (command: string, installDirRelative: string) => void;
+  recordInstall: (command: string, installDirRelative: string, archiveName: string) => void;
   refreshDoorRegistry: () => Promise<boolean>;
 }
 
@@ -201,7 +206,8 @@ export async function extractAndRegisterDoor(
   doorType: string,
   binaryName: string | null,
   finalCmd: string,
-  deps: InstallDeps
+  deps: InstallDeps,
+  archiveName: string
 ): Promise<InstallOutcome> {
   const steps: InstallStep[] = [];
   let command = finalCmd;
@@ -267,7 +273,7 @@ export async function extractAndRegisterDoor(
   }
 
   try {
-    deps.recordInstall(command, `Doors/${command}`);
+    deps.recordInstall(command, `Doors/${command}`, archiveName);
     steps.push({ kind: 'ok', text: `recorded the install as ${command}` });
   } catch (err: any) {
     steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
@@ -430,18 +436,18 @@ export async function installConsumerDoor(
       findExtractedBinary: deps.findExtractedBinary,
       writeInfoFile: deps.writeInfoFile,
       refreshDoorRegistry: deps.refreshDoorRegistry,
-      recordInstall: (installedCmd, installedDir) => {
+      recordInstall: (installedCmd, installedDir, archive) => {
         // installedCmd, not finalCmd: the archive may name its own command,
         // and the record has to describe what is actually on disk.
-        if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archiveName)) return;
+        if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive)) return;
         deps.recordInstall({
           id: `install-${installedCmd}`,
           catalog_id: localRow?.id ?? null,
-          archive_name: archiveName,
+          archive_name: archive,
           command: installedCmd,
           install_dir: installedDir,
           door_type: doorType || 'XIM',
-          name: manifestRow.name ?? archiveName,
+          name: manifestRow.name ?? archive,
           md5: manifestRow.md5 ?? null,
           description: manifestRow.description ?? null,
           category: manifestRow.category ?? null,
@@ -452,7 +458,7 @@ export async function installConsumerDoor(
         });
         registeredLocally = true;
       },
-    });
+    }, archiveName);
 
     if (!outcome.ok) return outcome;
     return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };

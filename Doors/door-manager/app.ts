@@ -100,14 +100,49 @@ function getInstallsRepo(): any {
   return null;
 }
 
-// Shared by owner/consumer install sites: no-op + warning, not a throw, when unavailable.
-function recordInstallSafe(entry: DoorInstallEntry): void {
-  const repo = getInstallsRepo();
-  if (!repo) {
-    console.log('[DOORMAN] warning: door-installs repository unavailable -- install not recorded locally');
+/** The backend's install recorder, if this process has it loaded. Same
+ *  require.cache discovery as getInstallsRepo(): DOORMAN cannot import
+ *  web/backend source paths. recordDoorInstall writes BOTH halves of an
+ *  install -- the door_installs link (what getInstallsRepo().recordInstall
+ *  used to write alone) and door_installed_files (the on-disk file list a
+ *  delete needs) -- so both install call sites route through this instead
+ *  of getInstallsRepo() directly. */
+function getInstallRecorder(): any {
+  for (const k of Object.keys(require.cache))
+    if (k.includes('door-install-record')) return require.cache[k]?.exports ?? null;
+  return null;
+}
+
+// Shared by both install call sites below: builds the recordDoorInstall
+// input from a fully-populated DoorInstallEntry (consumer mode already has
+// one; owner mode's inline callback builds an equivalent shape inline).
+// No-op + warning, not a throw, when the recorder is unavailable in this
+// process.
+function recordInstallViaRecorder(entry: DoorInstallEntry): void {
+  const recorder = getInstallRecorder();
+  if (!recorder) {
+    console.log('[DOORMAN] warning: install recorder unavailable -- install not recorded locally');
     return;
   }
-  repo.recordInstall(entry);
+  recorder.recordDoorInstall({
+    bbsRoot: PROJECT_ROOT,
+    command: entry.command,
+    archiveName: entry.archive_name,
+    installDir: path.join(PROJECT_ROOT, entry.install_dir),
+    infoPath: path.join(PROJECT_ROOT, 'Commands', 'BBSCmd', `${entry.command}.info`),
+    metadata: {
+      catalogId: entry.catalog_id,
+      name: entry.name,
+      description: entry.description,
+      category: entry.category,
+      version: entry.version,
+      releaseGroup: entry.release_group,
+      md5: entry.md5,
+      doorType: entry.door_type,
+      sourceUrl: entry.source_url,
+      sourceRevision: entry.source_revision,
+    },
+  });
 }
 
 function getStripLib(): any {
@@ -1197,7 +1232,7 @@ class RepoView extends BaseView {
                   writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                   lookupLocal: buildLocalCatalogLookup(),
                   getInstallByCommand: (command) => getInstallsRepo()?.getInstallByCommand(command) ?? null,
-                  recordInstall: recordInstallSafe,
+                  recordInstall: recordInstallViaRecorder,
                   refreshDoorRegistry,
                   mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
                   unlink: (p) => { try { fs.unlinkSync(p); } catch { /* never existed, or already removed */ } },
@@ -1269,14 +1304,14 @@ class RepoView extends BaseView {
                   writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                   // Same door_installs shape + collision guard as consumer
                   // mode, using the real local catalog row's id (e.id).
-                  recordInstall: (installedCmd, installedDir) => {
+                  recordInstall: (installedCmd, installedDir, archive) => {
                     // The archive's own command wins, so record that one.
                     const chk = (cmd: string) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
-                    if (commandClaimedByOtherArchive(chk, installedCmd, e.archive_name)) return;
-                    recordInstallSafe({
+                    if (commandClaimedByOtherArchive(chk, installedCmd, archive)) return;
+                    recordInstallViaRecorder({
                       id: `install-${installedCmd}`,
                       catalog_id: e.id ?? null,
-                      archive_name: e.archive_name,
+                      archive_name: archive,
                       command: installedCmd,
                       install_dir: installedDir,
                       door_type: e.door_type ?? null,
@@ -1291,7 +1326,8 @@ class RepoView extends BaseView {
                     });
                   },
                   refreshDoorRegistry,
-                }
+                },
+                e.archive_name
               );
               if (!outcome.ok) {
                 this.reportInstallFailure(outcome.step, outcome.detail, resolvedArchive, e.archive_name);

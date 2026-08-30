@@ -149,7 +149,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
       extractArchiveTo: jest.fn().mockResolvedValue({ ok: false, fileCount: 0, error: 'bad archive' }),
     });
     const outcome = await extractAndRegisterDoor(
-      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
+      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(outcome).toMatchObject({ ok: false, step: 'extract', detail: 'bad archive' });
     // The install reports what it did for the sysop's panel; a failed
@@ -162,7 +162,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
   it('success: calls extractArchiveTo with the given archivePath, writes info, records the install, refreshes registry', async () => {
     const deps = baseDeps();
     const outcome = await extractAndRegisterDoor(
-      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'FIM', 'FOO', 'FOO', deps
+      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'FIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(deps.extractArchiveTo).toHaveBeenCalledWith('/archives/FOO.LHA', '/doors/FOO');
     expect(deps.writeInfoFile).toHaveBeenCalledWith('/cmd/FOO.info', expect.stringContaining('TYPE=FIM'));
@@ -178,7 +178,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
       recordInstall: jest.fn(() => { throw new Error('db locked'); }),
     });
     const outcome = await extractAndRegisterDoor(
-      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
+      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(outcome.ok).toBe(true);
     expect(deps.refreshDoorRegistry).toHaveBeenCalledTimes(1);
@@ -195,7 +195,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
   it('owner-mode parity: downloadArchive/fetchManifest are never called; the given archivePath is used as-is', async () => {
     const deps = baseDeps();
     const outcome = await extractAndRegisterDoor(
-      '/local/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
+      '/local/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(outcome.ok).toBe(true);
     expect(deps.extractArchiveTo).toHaveBeenCalledWith('/local/archives/FOO.LHA', '/doors/FOO');
