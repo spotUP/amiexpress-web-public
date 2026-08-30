@@ -4,15 +4,16 @@ import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Language } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
-import { DataGrid, type DataGridColumn } from '../components/DataGrid';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+
+/** Stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_LANGUAGES: Language[] = [];
 
 export function LanguagesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<Language | null>(null);
-  const [sortKey, setSortKey] = useState<string>('language_number');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<Omit<Language, 'id' | 'created_at' | 'updated_at'>>({
     language_number: 1,
     title: '',
@@ -107,90 +108,57 @@ export function LanguagesPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading languages...</div>;
-  }
+  const languages: Language[] = data?.data ?? EMPTY_LANGUAGES;
 
-  const languages = (data?.data || []).sort((a: Language, b: Language) => {
-    const dir = sortDir === 'asc' ? 1 : -1;
-    const aVal = a[sortKey as keyof Language];
-    const bVal = b[sortKey as keyof Language];
-
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return aVal.localeCompare(bVal) * dir;
-    }
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return (aVal - bVal) * dir;
-    }
-    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
-      return (aVal === bVal ? 0 : aVal ? -1 : 1) * dir;
-    }
-    return 0;
-  });
-
-  const columns: DataGridColumn<Language>[] = [
+  const columns: DataTableColumn<Language>[] = [
     {
-      key: 'enabled',
+      id: 'enabled',
       header: 'Status',
-      sortable: true,
-      render: (lang) => (
+      value: (lang) => (lang.enabled ? 1 : 0),
+      width: '9rem',
+      cell: (lang) => (
         <button
+          type="button"
           onClick={() => handleToggle(lang)}
-          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-            lang.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
+          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors ${
+            lang.enabled
+              ? 'bg-status-ok/20 text-status-ok hover:bg-status-ok/30'
+              : 'bg-surface-3 text-content-muted hover:bg-surface-2'
           }`}
         >
-          {lang.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-          <span>{lang.enabled ? 'Enabled' : 'Disabled'}</span>
+          {lang.enabled ? <ToggleRight size={12} aria-hidden="true" /> : <ToggleLeft size={12} aria-hidden="true" />}
+          {lang.enabled ? 'Enabled' : 'Disabled'}
         </button>
       ),
     },
     {
-      key: 'language_number',
+      id: 'language_number',
       header: 'Number',
-      sortable: true,
-      render: (lang) => <span className="text-bbs-text font-mono">{lang.language_number}</span>,
+      value: (lang) => lang.language_number,
+      align: 'right',
+      mono: true,
+      width: '6rem',
     },
     {
-      key: 'title',
+      id: 'title',
       header: 'Title',
-      sortable: true,
-      render: (lang) => <span className="text-bbs-text font-semibold">{lang.title}</span>,
+      value: (lang) => lang.title,
+      cell: (lang) => <span className="text-content-primary">{lang.title}</span>,
     },
     {
-      key: 'language_code',
+      id: 'language_code',
       header: 'Code',
-      sortable: true,
-      render: (lang) => <code className="text-bbs-text bg-bbs-bg px-2 py-0.5 rounded text-xs font-mono">{lang.language_code}</code>,
+      value: (lang) => lang.language_code,
+      mono: true,
+      width: '7rem',
     },
     {
-      key: 'file_path',
-      header: 'File Path',
-      render: (lang) => (
-        <span className="text-bbs-text text-xs font-mono truncate block max-w-xs">
-          {lang.file_path || '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      render: (lang) => (
-        <div className="flex space-x-2 justify-end">
-          <button
-            onClick={() => handleEdit(lang)}
-            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
-          >
-            <Edit2 size={14} />
-            <span>Edit</span>
-          </button>
-          <button
-            onClick={() => handleDelete(lang)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+      id: 'file_path',
+      header: 'File path',
+      value: (lang) => lang.file_path ?? '',
+      mono: true,
+      cell: (lang) => (
+        <span className="block max-w-md truncate text-content-secondary">{lang.file_path || '-'}</span>
       ),
     },
   ];
@@ -204,17 +172,33 @@ export function LanguagesPage() {
         </button>
       </div>
 
-      <DataGrid
+      <DataTable
         columns={columns}
         rows={languages}
-        sortKey={sortKey}
-        sortDir={sortDir}
-        onSort={(key) => {
-          setSortKey(key);
-          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
-        }}
-        emptyMessage="No languages configured. Add language files to support multi-language BBS operation."
-        getRowKey={(row) => row.id.toString()}
+        getRowId={(lang) => String(lang.id)}
+        initialSort={[{ id: 'language_number', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No languages configured. Language files are what let callers pick a language at login."
+        rowActions={(lang) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(lang)}
+              aria-label={`Edit ${lang.title}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(lang)}
+              aria-label={`Delete ${lang.title}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
       />
 
       {isModalOpen && (

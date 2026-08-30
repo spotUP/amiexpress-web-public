@@ -3,7 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
-import { DataGrid, type DataGridColumn } from '../components/DataGrid';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+
+/** Stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_SCREEN_TYPES: ScreenType[] = [];
 
 interface ScreenType {
   id: number;
@@ -20,8 +23,6 @@ export function ScreenTypesPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<ScreenType | null>(null);
-  const [sortKey, setSortKey] = useState<string>('screen_number');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<Omit<ScreenType, 'id' | 'created_at' | 'updated_at'>>({
     screen_number: 1,
     screen_type: '',
@@ -115,82 +116,49 @@ export function ScreenTypesPage() {
     updateMutation.mutate({ id: screenType.id, updates: { enabled: !screenType.enabled } });
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading screen types...</div>;
-  }
+  const screenTypes: ScreenType[] = data?.data ?? EMPTY_SCREEN_TYPES;
 
-  const screenTypes = (data?.data || []).sort((a: ScreenType, b: ScreenType) => {
-    const dir = sortDir === 'asc' ? 1 : -1;
-    const aVal = a[sortKey as keyof ScreenType];
-    const bVal = b[sortKey as keyof ScreenType];
-
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return aVal.localeCompare(bVal) * dir;
-    }
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return (aVal - bVal) * dir;
-    }
-    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
-      return (aVal === bVal ? 0 : aVal ? -1 : 1) * dir;
-    }
-    return 0;
-  });
-
-  const columns: DataGridColumn<ScreenType>[] = [
+  const columns: DataTableColumn<ScreenType>[] = [
     {
-      key: 'enabled',
+      id: 'enabled',
       header: 'Status',
-      sortable: true,
-      render: (screenType) => (
+      value: (screenType) => (screenType.enabled ? 1 : 0),
+      width: '9rem',
+      cell: (screenType) => (
         <button
+          type="button"
           onClick={() => handleToggle(screenType)}
-          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-            screenType.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
+          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors ${
+            screenType.enabled
+              ? 'bg-status-ok/20 text-status-ok hover:bg-status-ok/30'
+              : 'bg-surface-3 text-content-muted hover:bg-surface-2'
           }`}
         >
-          {screenType.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-          <span>{screenType.enabled ? 'Enabled' : 'Disabled'}</span>
+          {screenType.enabled ? <ToggleRight size={12} aria-hidden="true" /> : <ToggleLeft size={12} aria-hidden="true" />}
+          {screenType.enabled ? 'Enabled' : 'Disabled'}
         </button>
       ),
     },
     {
-      key: 'screen_number',
+      id: 'screen_number',
       header: 'Number',
-      sortable: true,
-      render: (screenType) => <span className="text-bbs-text font-mono">{screenType.screen_number}</span>,
+      value: (screenType) => screenType.screen_number,
+      align: 'right',
+      mono: true,
+      width: '6rem',
     },
     {
-      key: 'screen_title',
+      id: 'screen_title',
       header: 'Title',
-      sortable: true,
-      render: (screenType) => <span className="text-bbs-text font-semibold">{screenType.screen_title}</span>,
+      value: (screenType) => screenType.screen_title,
+      cell: (screenType) => <span className="text-content-primary">{screenType.screen_title}</span>,
     },
     {
-      key: 'screen_type',
-      header: 'Type Code',
-      sortable: true,
-      render: (screenType) => <code className="text-bbs-text bg-bbs-bg px-2 py-0.5 rounded text-xs font-mono">{screenType.screen_type}</code>,
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      render: (screenType) => (
-        <div className="flex space-x-2 justify-end">
-          <button
-            onClick={() => handleEdit(screenType)}
-            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
-          >
-            <Edit2 size={14} />
-            <span>Edit</span>
-          </button>
-          <button
-            onClick={() => handleDelete(screenType)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      ),
+      id: 'screen_type',
+      header: 'Type code',
+      value: (screenType) => screenType.screen_type,
+      mono: true,
+      width: '9rem',
     },
   ];
 
@@ -203,17 +171,33 @@ export function ScreenTypesPage() {
         </button>
       </div>
 
-      <DataGrid
+      <DataTable
         columns={columns}
         rows={screenTypes}
-        sortKey={sortKey}
-        sortDir={sortDir}
-        onSort={(key) => {
-          setSortKey(key);
-          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
-        }}
-        emptyMessage="No screen types configured. Add screen types to define terminal formats (ANSI, ASCII, etc.)."
-        getRowKey={(row) => row.id.toString()}
+        getRowId={(screenType) => String(screenType.id)}
+        initialSort={[{ id: 'screen_number', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No screen types configured. These are the terminal formats offered at login - ANSI, ASCII and the rest."
+        rowActions={(screenType) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(screenType)}
+              aria-label={`Edit ${screenType.screen_title}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(screenType)}
+              aria-label={`Delete ${screenType.screen_title}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
       />
 
       {isModalOpen && (

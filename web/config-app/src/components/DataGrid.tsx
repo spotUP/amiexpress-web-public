@@ -1,13 +1,13 @@
 /**
- * The grid the unconverted pages still use.
+ * The inline-edit grid, now used only by Node Configuration.
  *
- * Its props are unchanged - Users, Nodes, Screen Types, Protocols and
- * Languages pass these exact shapes and sort their own rows - but the markup
- * is now a real table on the design system's table conventions instead of a
- * CSS grid of equal columns.
+ * Everything sortable moved to `components/ui/DataTable`, which owns its own
+ * row model. Node Configuration stays here on purpose: its rows turn into
+ * input fields in place, and a row that is being edited must not be able to
+ * move under the cursor because a sort changed. Nodes are also inherently
+ * ordered by number, so there is nothing to sort by.
  *
- * New work uses `components/ui/DataTable`, which owns its sorted row model.
- * This file goes when the last of those five pages moves over.
+ * The markup follows the same table conventions as DataTable.
  */
 
 import type { ReactNode } from 'react';

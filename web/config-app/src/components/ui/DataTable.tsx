@@ -10,8 +10,9 @@
  * Filtering stays outside. Pages already hold their own filter state, and a
  * filtered array is a cheaper contract than a second feature registration.
  *
- * The older `DataGrid` remains for pages that have not been converted; it
- * sorts externally and will go as each of them moves here.
+ * `components/DataGrid` remains for Node Configuration alone, whose rows turn
+ * into input fields in place - a row being edited must not move because a sort
+ * changed.
  */
 
 import { useMemo } from 'react';
