@@ -6,6 +6,8 @@ describe('isPlausibleDoorName', () => {
     expect(isPlausibleDoorName('.______.')).toBe(false);
     expect(isPlausibleDoorName('|::  |____ \\:__:_')).toBe(false);
     expect(isPlausibleDoorName('-----------')).toBe(false);
+    expect(isPlausibleDoorName('XXXXXXXXXX')).toBe(false);
+    expect(isPlausibleDoorName('AAAA')).toBe(false);
   });
 
   it('rejects nothing at all', () => {
@@ -17,6 +19,8 @@ describe('isPlausibleDoorName', () => {
   it('rejects mojibake and high-bit runs', () => {
     expect(isPlausibleDoorName('���')).toBe(false);
     expect(isPlausibleDoorName('±±±±±')).toBe(false);
+    // Latin-1 shading blocks - art, and each one is a letter to no alphabet.
+    expect(isPlausibleDoorName('ÜÜÜÜ Cool Door ÜÜÜÜ')).toBe(false);
   });
 
   it('rejects an echo of the command or the archive', () => {

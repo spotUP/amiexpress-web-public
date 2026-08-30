@@ -31,12 +31,18 @@ export function isPlausibleDoorName(
   if (letters < 2) return false;
 
   // Art is mostly not letters and digits. Two thirds is generous: "AVH-BaudCheck
-  // v0.1" is 74% alphanumeric, "|::  |____ \:__:_" is 6%.
+  // v0.1" is 83% alphanumeric, "|::  |____ \:__:_" is 6%.
   const alphanumeric = (name.match(/[a-z0-9]/gi) ?? []).length;
   if (alphanumeric / name.length < 0.5) return false;
 
-  // A run of high-bit characters is Amiga art, not a title.
-  if (/[-ÿ]{3,}/.test(name)) return false;
+  // One character repeated is a rule or a border, not a title. "AAAA" is
+  // art; "Trivia" is not.
+  const distinct = new Set(name.replace(/\s/g, '').toLowerCase()).size;
+  if (distinct < 3) return false;
+
+  // A run of high-bit characters is Amiga art, not a title. U+00A0-U+00FF
+  // is where Latin-1 box drawing and shading blocks sit.
+  if (/[\xA0-\xFF]{3,}/.test(name)) return false;
 
   // An echo of what we already show beside it tells the sysop nothing, and
   // the catalog has a real title.
