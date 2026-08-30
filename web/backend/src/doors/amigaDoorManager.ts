@@ -1234,7 +1234,12 @@ console.error('Door installation error:', error);
 
   /** One install, recorded in both halves. The archive name is the catalog
    *  key: without it the board has files it cannot explain, which is how 370
-   *  commands ended up with zero tracked files between them. */
+   *  commands ended up with zero tracked files between them.
+   *
+   *  recordDoorInstall is itself total (no internal failure escapes it), but
+   *  this wraps the call anyway - the code this replaced had a try/catch
+   *  here, and a require() failure (e.g. a broken module cache) must not be
+   *  able to fail an install that has already written its files to disk. */
   private recordInstalled(
     command: string,
     archiveName: string,
@@ -1242,15 +1247,19 @@ console.error('Door installation error:', error);
     infoPath: string,
     extraFiles?: string[]
   ): void {
-    const { recordDoorInstall } = require('./door-install-record');
-    recordDoorInstall({
-      bbsRoot: this.bbsRoot,
-      command,
-      archiveName,
-      installDir,
-      infoPath,
-      extraFiles,
-    });
+    try {
+      const { recordDoorInstall } = require('./door-install-record');
+      recordDoorInstall({
+        bbsRoot: this.bbsRoot,
+        command,
+        archiveName,
+        installDir,
+        infoPath,
+        extraFiles,
+      });
+    } catch (err) {
+      console.log(`[amigaDoorManager] install bookkeeping failed for ${command}: ${(err as Error).message}`);
+    }
   }
 
   /**

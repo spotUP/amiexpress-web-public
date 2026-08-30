@@ -46,6 +46,41 @@ describe('walkInstalledFiles', () => {
     expect(entries.find(e => e.filePath.endsWith('AEHELP.info'))!.fileType).toBe('info');
   });
 
+  it('still walks the rest of the tree when a subdirectory cannot be read', () => {
+    // A real EACCES, not a mocked one - readdirSync must be guarded the same
+    // way statSync already is, so one unreadable subtree cannot throw out of
+    // the whole walk. Skipped when running as root: root ignores directory
+    // permission bits, so the precondition (readdirSync actually failing)
+    // cannot be created.
+    if (process.getuid && process.getuid() === 0) {
+      return;
+    }
+
+    const dataDir = path.join(root, 'Doors', 'AEHELP', 'data');
+    fs.chmodSync(dataDir, 0o000);
+
+    let entries: ReturnType<typeof walkInstalledFiles> = [];
+    try {
+      expect(() => {
+        entries = walkInstalledFiles(
+          root,
+          path.join(root, 'Doors', 'AEHELP'),
+          path.join(root, 'Commands', 'BBSCmd', 'AEHELP.info')
+        );
+      }).not.toThrow();
+    } finally {
+      // Restore so afterEach's recursive rmSync can enumerate it.
+      fs.chmodSync(dataDir, 0o755);
+    }
+
+    const paths = entries.map(e => e.filePath);
+    // The unreadable subdirectory is itself still recorded (its own stat
+    // succeeded) - only its contents are skipped.
+    expect(paths).toContain(path.join('Doors', 'AEHELP', 'data'));
+    expect(paths).toContain(path.join('Doors', 'AEHELP', 'AEHelp'));
+    expect(paths).not.toContain(path.join('Doors', 'AEHELP', 'data', 'help.txt'));
+  });
+
   it('marks a library as one, wherever it sits', () => {
     fs.mkdirSync(path.join(root, 'Libs'), { recursive: true });
     fs.writeFileSync(path.join(root, 'Libs', 'aehelp.library'), 'lib');
@@ -87,6 +122,39 @@ describe('recordDoorInstall', () => {
     expect(tracked[0].command).toBe('AEHELP');
     expect(tracked[0].entries.map((e: any) => e.filePath))
       .toContain(path.join('Doors', 'AEHELP', 'AEHelp'));
+  });
+
+  it('is total: a file-walk failure cannot escape and fail the install', () => {
+    // Before this fix, an unguarded readdirSync inside the walk (which runs
+    // OUTSIDE recordDoorInstall's own try blocks) would throw straight out
+    // of this function and into installDoor's try, reporting {success:
+    // false} for a door that had already installed correctly. A real
+    // EACCES on the install directory itself, not a mocked one.
+    if (process.getuid && process.getuid() === 0) {
+      return;
+    }
+
+    const installDir = path.join(root, 'Doors', 'AEHELP');
+    fs.chmodSync(installDir, 0o000);
+
+    try {
+      expect(() => {
+        recordDoorInstall({
+          bbsRoot: root,
+          command: 'AEHELP',
+          archiveName: 'AEHELP.LHA',
+          installDir,
+          infoPath: path.join(root, 'Commands', 'BBSCmd', 'AEHELP.info'),
+        });
+      }).not.toThrow();
+    } finally {
+      fs.chmodSync(installDir, 0o755);
+    }
+
+    // The install row must still be written even though the file walk
+    // could not enumerate the install directory's contents.
+    expect(installs).toHaveLength(1);
+    expect(installs[0]).toMatchObject({ command: 'AEHELP', archive_name: 'AEHELP.LHA' });
   });
 
   it('records the files even when the install row cannot be written', () => {

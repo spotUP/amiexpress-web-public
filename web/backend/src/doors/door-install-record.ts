@@ -72,7 +72,12 @@ export function walkInstalledFiles(
   if (fs.existsSync(installDir)) {
     add(installDir, 'dir');
     const walk = (dir: string): void => {
-      for (const name of fs.readdirSync(dir)) {
+      let names: string[];
+      // An unreadable subdirectory (EACCES) or one removed mid-walk must not
+      // abort the whole walk: a bookkeeping gap for that one subtree is far
+      // better than failing an install that otherwise succeeded.
+      try { names = fs.readdirSync(dir); } catch { return; }
+      for (const name of names) {
         const child = path.join(dir, name);
         let stats: fs.Stats;
         try { stats = fs.statSync(child); } catch { continue; }
@@ -94,8 +99,21 @@ export function walkInstalledFiles(
   return entries;
 }
 
+/**
+ * Total: no failure inside this function may escape to the caller. Every
+ * caller runs this at the tail of an install that otherwise already
+ * succeeded (files extracted, .info written, registry reloaded) - a
+ * bookkeeping failure here must never turn a good install into a reported
+ * failure. Each step is individually guarded so one step's failure cannot
+ * take a later one down with it.
+ */
 export function recordDoorInstall(input: DoorInstallInput): void {
-  const files = walkInstalledFiles(input.bbsRoot, input.installDir, input.infoPath, input.extraFiles);
+  let files: InstalledFileEntry[] = [];
+  try {
+    files = walkInstalledFiles(input.bbsRoot, input.installDir, input.infoPath, input.extraFiles);
+  } catch (err) {
+    console.log(`[door-install] file walk failed for ${input.command}: ${(err as Error).message}`);
+  }
 
   // Files first, deliberately. A delete needs the file list more than the
   // menu needs a description, so a failure writing the metadata row must not
