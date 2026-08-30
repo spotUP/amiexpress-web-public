@@ -51,7 +51,7 @@ backend serves both doors and outlives the transition.
 1. **One install recorder**, server-side, that writes both halves of what an
    install did: the link (`door_installs`: command -> archive) and the files
    (`door_installed_files`: what landed on disk).
-2. **A local door management API** (`/api/doors`) exposing everything DOORMAN
+2. **A local door management API** (`/api/door-admin`) exposing everything DOORMAN
    gets in-process, so a C89 door can do the same work. This is what makes 1:1
    parity possible at all.
 3. **Naming taken from the archive**, never typed by the sysop, in both doors.
@@ -110,20 +110,25 @@ documents.
 
 ### The API
 
-`web/backend/src/server/door-admin.routes.ts`, mounted at `/api/doors`.
-Deliberately NOT under `/api/door-repo/*`, which proxies out to the door
-server: this API manages THIS board's installed doors.
+`web/backend/src/server/door-admin.routes.ts`, mounted at `/api/door-admin`
+(moved here during implementation from the `/api/doors` this section
+originally specified, because `/api/doors` is already `door-api-routes.ts` -
+client door bundles/manifests/assets served to browsers with no door token at
+all - and this router's token-gated middleware would 401 every one of those
+requests if mounted on the same prefix). Deliberately NOT under
+`/api/door-repo/*` either, which proxies out to the door server: this API
+manages THIS board's installed doors.
 
 | method | path | purpose |
 |---|---|---|
-| GET | `/api/doors/installed` | installed doors: command, type, size, enabled, archive link, resolved metadata |
-| GET | `/api/doors/:cmd/files` | the door's directory listing |
-| GET | `/api/doors/:cmd/file?p=` | one file's contents |
-| GET | `/api/doors/:cmd/info` | the command's tooltypes |
-| PUT | `/api/doors/:cmd/info` | write tooltypes |
-| POST | `/api/doors/:cmd/enabled` | enable / disable |
-| DELETE | `/api/doors/:cmd` | delete, streaming the step log |
-| POST | `/api/doors/installed` | record an install (DOORREPO) |
+| GET | `/api/door-admin/installed` | installed doors: command, type, size, enabled, archive link, resolved metadata |
+| GET | `/api/door-admin/:cmd/files` | the door's directory listing |
+| GET | `/api/door-admin/:cmd/file?p=` | one file's contents |
+| GET | `/api/door-admin/:cmd/info` | the command's tooltypes |
+| PUT | `/api/door-admin/:cmd/info` | write tooltypes |
+| POST | `/api/door-admin/:cmd/enabled` | enable / disable |
+| DELETE | `/api/door-admin/:cmd` | delete, streaming the step log |
+| POST | `/api/door-admin/installed` | record an install (DOORREPO) |
 
 **Responses use the pipe-delimited text family the C door already parses**
 (`FILES|<count>|<junk>` then `<size>|<isJunk>|<path>`), not JSON. C89 JSON
@@ -145,12 +150,12 @@ the backend's environment. The token is rewritten on every launch and rejected
 by the server once that session ends.
 
 Every mutating route re-checks `secLevel >= 250` server-side rather than
-trusting that a token was presented, and `GET /api/doors/:cmd/file` resolves
+trusting that a token was presented, and `GET /api/door-admin/:cmd/file` resolves
 the requested path and refuses anything that escapes that door's own
 directory - the same guard `safe-install-dir.ts` applies to deletes.
 
 This is not ceremony. `RepoHost` on other people's boards is baked to
-`bbs.uprough.net`, so an unauthenticated `DELETE /api/doors/:cmd` on this host
+`bbs.uprough.net`, so an unauthenticated `DELETE /api/door-admin/:cmd` on this host
 would be a remote door-wipe button - and this codebase has already lost its
 entire `Doors/` tree once, on 2026-08-30, to an unchecked recursive delete.
 
@@ -171,7 +176,7 @@ Each phase ends reviewable, tested, and verified against the live container -
 reading `/app/.git-sha` and the running code, not the workflow's word for it.
 
 **A - the recorder and the link.**
-`recordDoorInstall`; every install path calling it; `POST /api/doors/installed`;
+`recordDoorInstall`; every install path calling it; `POST /api/door-admin/installed`;
 `isPlausibleDoorName` and exact-key matching in `getDoorList`; the naming
 change in both doors (no free-text command, archive-name fallback with a
 confirm). Done when a freshly installed door has rows in both tables, its
