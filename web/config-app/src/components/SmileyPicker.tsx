@@ -188,7 +188,7 @@ export function SmileyPicker({ onSelect }: SmileyPickerProps) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="px-2 py-1 text-sm font-mono bg-gray-700 hover:bg-gray-600 text-yellow-400 rounded border border-gray-600 transition-colors"
+        className="px-2 py-1 text-sm font-mono bg-surface-2 hover:bg-surface-3 text-status-warn rounded border border-border-strong transition-colors"
         title="Insert ASCII smiley"
       >
         [:)]
@@ -196,17 +196,17 @@ export function SmileyPicker({ onSelect }: SmileyPickerProps) {
 
       {/* Picker Modal */}
       {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50">
+        <div className="absolute bottom-full right-0 mb-2 w-80 bg-surface-1 border border-border-strong rounded-lg shadow-xl z-50">
           {/* Category Tabs */}
-          <div className="flex flex-wrap gap-1 p-2 border-b border-gray-700 bg-gray-900 rounded-t-lg">
+          <div className="flex flex-wrap gap-1 p-2 border-b border-border bg-surface-0 rounded-t-lg">
             {smileyCategories.map((category, index) => (
               <button
                 key={category.name}
                 onClick={() => setSelectedCategory(index)}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
                   selectedCategory === index
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-status-ok text-content-inverse'
+                    : 'bg-surface-2 text-content-secondary hover:bg-surface-3'
                 }`}
               >
                 {category.name}
@@ -221,12 +221,12 @@ export function SmileyPicker({ onSelect }: SmileyPickerProps) {
                 <button
                   key={smiley.text}
                   onClick={() => handleSmileyClick(smiley.text)}
-                  className="p-2 text-center font-mono text-lg bg-gray-700 hover:bg-gray-600 rounded transition-colors group relative"
+                  className="p-2 text-center font-mono text-lg bg-surface-2 hover:bg-surface-3 rounded transition-colors group relative"
                   title={smiley.label}
                 >
-                  <span className="text-yellow-300">{smiley.text}</span>
+                  <span className="text-status-warn">{smiley.text}</span>
                   {/* Tooltip */}
-                  <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 text-xs bg-black text-gray-300 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                  <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 text-xs bg-surface-0 text-content-secondary rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
                     {smiley.label}
                   </span>
                 </button>
@@ -235,7 +235,7 @@ export function SmileyPicker({ onSelect }: SmileyPickerProps) {
           </div>
 
           {/* Footer hint */}
-          <div className="px-2 py-1 text-xs text-gray-500 border-t border-gray-700 bg-gray-900 rounded-b-lg">
+          <div className="px-2 py-1 text-xs text-content-muted border-t border-border bg-surface-0 rounded-b-lg">
             Click to insert | Arrow keys to switch categories | Esc to close
           </div>
         </div>

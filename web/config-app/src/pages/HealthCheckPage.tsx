@@ -81,11 +81,11 @@ export function HealthCheckPage() {
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case 'error':
-        return <XCircle size={16} className="text-red-400" />;
+        return <XCircle size={16} className="text-status-danger" />;
       case 'warning':
-        return <AlertCircle size={16} className="text-yellow-400" />;
+        return <AlertCircle size={16} className="text-status-warn" />;
       case 'info':
-        return <Info size={16} className="text-blue-400" />;
+        return <Info size={16} className="text-status-info" />;
       default:
         return <Info size={16} className="text-bbs-muted" />;
     }
@@ -94,11 +94,11 @@ export function HealthCheckPage() {
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'error':
-        return 'text-red-400';
+        return 'text-status-danger';
       case 'warning':
-        return 'text-yellow-400';
+        return 'text-status-warn';
       case 'info':
-        return 'text-blue-400';
+        return 'text-status-info';
       default:
         return 'text-bbs-muted';
     }
@@ -108,21 +108,21 @@ export function HealthCheckPage() {
     switch (status) {
       case 'healthy':
         return (
-          <span className="px-3 py-1 rounded text-sm font-semibold bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-2">
+          <span className="px-3 py-1 rounded text-sm font-semibold bg-status-ok/20 text-status-ok border border-status-ok/30 flex items-center gap-2">
             <CheckCircle size={16} />
             Healthy
           </span>
         );
       case 'warnings':
         return (
-          <span className="px-3 py-1 rounded text-sm font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-2">
+          <span className="px-3 py-1 rounded text-sm font-semibold bg-status-warn/20 text-status-warn border border-status-warn/30 flex items-center gap-2">
             <AlertCircle size={16} />
             Warnings
           </span>
         );
       case 'errors':
         return (
-          <span className="px-3 py-1 rounded text-sm font-semibold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-2">
+          <span className="px-3 py-1 rounded text-sm font-semibold bg-status-danger/20 text-status-danger border border-status-danger/30 flex items-center gap-2">
             <XCircle size={16} />
             Errors
           </span>
@@ -136,7 +136,7 @@ export function HealthCheckPage() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex items-center gap-3">
-          <RefreshCw className="animate-spin text-bbs-accent" size={24} />
+          <RefreshCw className="animate-spin text-accent" size={24} />
           <span className="text-bbs-text">Running BBS health check...</span>
         </div>
       </div>
@@ -146,7 +146,7 @@ export function HealthCheckPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-bbs-accent mb-2 flex items-center gap-3">
+        <h1 className="text-3xl font-bold text-accent mb-2 flex items-center gap-3">
           <Activity size={32} />
           BBS Health Check
         </h1>
@@ -210,7 +210,7 @@ export function HealthCheckPage() {
 
               <div className="p-4 bg-bbs-background border border-bbs-border rounded">
                 <div className="text-sm text-bbs-muted mb-1">Auto-Fixable</div>
-                <div className="text-2xl font-bold text-green-400">{report.autoFixableIssues}</div>
+                <div className="text-2xl font-bold text-status-ok">{report.autoFixableIssues}</div>
               </div>
 
               <div className="p-4 bg-bbs-background border border-bbs-border rounded">
@@ -234,26 +234,26 @@ export function HealthCheckPage() {
                   >
                     <div className="flex items-center gap-3">
                       {category.passed ? (
-                        <CheckCircle size={24} className="text-green-400 flex-shrink-0" />
+                        <CheckCircle size={24} className="text-status-ok flex-shrink-0" />
                       ) : (
-                        <XCircle size={24} className="text-red-400 flex-shrink-0" />
+                        <XCircle size={24} className="text-status-danger flex-shrink-0" />
                       )}
                       <div>
                         <h3 className="text-lg font-semibold text-bbs-text">{category.category}</h3>
                         <div className="flex items-center gap-4 text-sm text-bbs-muted mt-1">
                           <span>Checked: {category.checkedCount}</span>
                           {category.errorCount > 0 && (
-                            <span className="text-red-400">{category.errorCount} errors</span>
+                            <span className="text-status-danger">{category.errorCount} errors</span>
                           )}
                           {category.warningCount > 0 && (
-                            <span className="text-yellow-400">{category.warningCount} warnings</span>
+                            <span className="text-status-warn">{category.warningCount} warnings</span>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {hasIssues && (
-                        <span className="px-2 py-1 rounded text-xs bg-bbs-accent/20 text-bbs-accent">
+                        <span className="px-2 py-1 rounded text-xs bg-bbs-accent/20 text-accent">
                           {category.issues.length} {category.issues.length === 1 ? 'issue' : 'issues'}
                         </span>
                       )}
@@ -285,7 +285,7 @@ export function HealthCheckPage() {
                                 <Wrench size={14} className="mt-0.5 flex-shrink-0" />
                                 <span>
                                   {issue.autoFixable ? (
-                                    <span className="text-green-400">Auto-fix: {issue.fixAction}</span>
+                                    <span className="text-status-ok">Auto-fix: {issue.fixAction}</span>
                                   ) : (
                                     <span>Manual: {issue.fixAction}</span>
                                   )}
@@ -300,7 +300,7 @@ export function HealthCheckPage() {
 
                   {isExpanded && !hasIssues && (
                     <div className="mt-4 pt-4 border-t border-bbs-border">
-                      <div className="text-center text-green-400 py-4">
+                      <div className="text-center text-status-ok py-4">
                         <CheckCircle size={32} className="mx-auto mb-2" />
                         <p>No issues found in this category</p>
                       </div>

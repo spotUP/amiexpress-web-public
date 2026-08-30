@@ -272,7 +272,7 @@ export function OperatorChatTerminal({
     <div className="relative w-full h-full">
       <div
         ref={terminalRef}
-        className="w-full h-full bg-black rounded-lg"
+        className="w-full h-full bg-surface-0 rounded-lg"
         style={{ minHeight: '500px' }}
       />
       {/* Smiley Picker - positioned at bottom right corner */}

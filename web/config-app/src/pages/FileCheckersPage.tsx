@@ -190,7 +190,7 @@ export function FileCheckersPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">File Checkers</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">File Checkers</h1>
           <p className="text-bbs-muted">Manage file validation tools (TOOLTYPE_FCHECK)</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
@@ -205,7 +205,7 @@ export function FileCheckersPage() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-start space-x-3">
                 <div className="p-2 bg-bbs-primary rounded">
-                  <Shield className="text-bbs-accent" size={20} />
+                  <Shield className="text-accent" size={20} />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-bbs-text">{checker.checker_name}</h3>
@@ -215,7 +215,7 @@ export function FileCheckersPage() {
               <button
                 onClick={() => handleToggle(checker)}
                 className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                  checker.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+                  checker.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
                 }`}
                 title="Toggle availability"
               >
@@ -272,7 +272,7 @@ export function FileCheckersPage() {
               </button>
               <button
                 onClick={() => handleDelete(checker)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
+                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
               >
                 <Trash2 size={16} />
               </button>
@@ -289,7 +289,7 @@ export function FileCheckersPage() {
 
       <div className="mt-6 card bg-bbs-secondary">
         <div className="flex items-start space-x-3">
-          <Shield className="text-bbs-accent mt-1" size={20} />
+          <Shield className="text-accent mt-1" size={20} />
           <div>
             <h3 className="text-sm font-semibold text-bbs-text mb-2">About File Checkers</h3>
             <p className="text-xs text-bbs-muted">

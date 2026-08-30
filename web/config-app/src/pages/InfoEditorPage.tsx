@@ -150,7 +150,7 @@ export function InfoEditorPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-bbs-accent mb-1">Info File Editor</h1>
+        <h1 className="text-3xl font-bold text-accent mb-1">Info File Editor</h1>
         <p className="text-bbs-muted">
           Edit Amiga .info file tooltypes for commands, doors, and conferences
         </p>
@@ -209,7 +209,7 @@ export function InfoEditorPage() {
                       onClick={() => handleFileSelect(file.relativePath)}
                       className={`w-full text-left px-3 py-2 rounded text-sm ${
                         selectedFile === file.relativePath
-                          ? 'bg-bbs-accent text-white'
+                          ? 'bg-bbs-accent text-content-inverse'
                           : 'hover:bg-bbs-border text-bbs-text'
                       }`}
                     >
@@ -290,9 +290,9 @@ export function InfoEditorPage() {
                     >
                       <div className="col-span-1 flex justify-center" title={tt.commented ? "Disabled" : "Enabled"}>
                         {tt.commented ? (
-                          <PowerOff size={16} className="text-red-400" />
+                          <PowerOff size={16} className="text-status-danger" />
                         ) : (
-                          <Power size={16} className="text-green-400" />
+                          <Power size={16} className="text-status-ok" />
                         )}
                       </div>
                       <div className="col-span-3">
@@ -327,7 +327,7 @@ export function InfoEditorPage() {
                         </button>
                         <button
                           onClick={() => handleRemove(tt.key)}
-                          className="btn-secondary p-2 text-red-400"
+                          className="btn-secondary p-2 text-status-danger"
                           title="Remove"
                         >
                           <Trash2 size={14} />
@@ -338,7 +338,7 @@ export function InfoEditorPage() {
                 </div>
               )}
 
-              <div className="mt-4 p-3 bg-green-900 bg-opacity-20 border border-green-600 rounded text-sm text-green-200">
+              <div className="mt-4 p-3 bg-status-ok/10 border border-status-ok/40 rounded text-sm text-status-ok">
                 <strong>Info:</strong> Tooltypes are written directly to the binary .info file.
                 A backup is created automatically before modifications.
               </div>

@@ -33,14 +33,14 @@ export function LoginPage() {
         <div className="card">
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-bbs-accent mb-2">AmiExpress</h1>
+            <h1 className="text-3xl font-bold text-accent mb-2">AmiExpress</h1>
             <p className="text-bbs-muted">BBS Configuration Portal</p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-bbs-accent/10 border border-bbs-accent text-bbs-accent px-4 py-3 rounded">
+              <div className="bg-bbs-accent/10 border border-bbs-accent text-accent px-4 py-3 rounded">
                 {error}
               </div>
             )}

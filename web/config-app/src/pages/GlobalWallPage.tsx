@@ -152,7 +152,7 @@ export function GlobalWallPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-bbs-accent mb-2">Global Wall Management</h1>
+        <h1 className="text-3xl font-bold text-accent mb-2">Global Wall Management</h1>
         <p className="text-bbs-muted">Manage Global Wall comments and settings</p>
       </div>
 
@@ -162,7 +162,7 @@ export function GlobalWallPage() {
           onClick={() => setActiveTab('comments')}
           className={`px-4 py-2 font-semibold transition-colors border-b-2 ${
             activeTab === 'comments'
-              ? 'border-bbs-accent text-bbs-accent'
+              ? 'border-bbs-accent text-accent'
               : 'border-transparent text-bbs-muted hover:text-bbs-text'
           }`}
         >
@@ -175,7 +175,7 @@ export function GlobalWallPage() {
           onClick={() => setActiveTab('settings')}
           className={`px-4 py-2 font-semibold transition-colors border-b-2 ${
             activeTab === 'settings'
-              ? 'border-bbs-accent text-bbs-accent'
+              ? 'border-bbs-accent text-accent'
               : 'border-transparent text-bbs-muted hover:text-bbs-text'
           }`}
         >
@@ -231,7 +231,7 @@ export function GlobalWallPage() {
                             </button>
                             <button
                               onClick={() => handleDeleteComment(comment)}
-                              className="p-2 bg-bbs-accent hover:bg-bbs-accent/90 text-white rounded transition-colors"
+                              className="p-2 bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse rounded transition-colors"
                               title="Delete comment"
                             >
                               <Trash2 size={16} />
@@ -280,7 +280,7 @@ export function GlobalWallPage() {
             <div className="text-bbs-text">Loading settings...</div>
           ) : (
             <form onSubmit={handleConfigSubmit} className="card max-w-2xl">
-              <h2 className="text-xl font-bold text-bbs-accent mb-6">Global Wall Settings</h2>
+              <h2 className="text-xl font-bold text-accent mb-6">Global Wall Settings</h2>
 
               <div className="space-y-6">
                 <div>
@@ -364,7 +364,7 @@ export function GlobalWallPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-bbs-accent">Edit Wall Comment</h2>
+              <h2 className="text-2xl font-bold text-accent">Edit Wall Comment</h2>
               <button
                 onClick={() => {
                   setIsEditModalOpen(false);

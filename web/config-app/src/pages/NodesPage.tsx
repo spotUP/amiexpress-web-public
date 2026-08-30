@@ -293,7 +293,7 @@ export function NodesPage() {
             </button>
             <button
               onClick={() => handleDelete(row.nodeNumber)}
-              className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors flex items-center space-x-2"
+              className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors flex items-center space-x-2"
             >
               <Trash2 size={16} />
               <span>Delete</span>
@@ -308,7 +308,7 @@ export function NodesPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Node Configuration</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Node Configuration</h1>
           <p className="text-bbs-muted">
             Configure individual BBS nodes (1-{maxNodes}). Missing nodes can be created inline.
           </p>

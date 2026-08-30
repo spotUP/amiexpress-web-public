@@ -145,7 +145,7 @@ export function ScreenTypesPage() {
         <button
           onClick={() => handleToggle(screenType)}
           className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-            screenType.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+            screenType.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
           }`}
         >
           {screenType.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
@@ -185,7 +185,7 @@ export function ScreenTypesPage() {
           </button>
           <button
             onClick={() => handleDelete(screenType)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs"
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs"
           >
             <Trash2 size={14} />
           </button>
@@ -198,7 +198,7 @@ export function ScreenTypesPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Screen Types</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Screen Types</h1>
           <p className="text-bbs-muted">Manage terminal format types (TOOLTYPE_SCREENTYPES)</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">

@@ -124,19 +124,19 @@ export function LogsPage() {
   const getLogLevelColor = (line: string): string => {
     const lower = line.toLowerCase();
     if (lower.includes('error') || lower.includes('[error]')) {
-      return 'text-red-400';
+      return 'text-status-danger';
     }
     if (lower.includes('warn') || lower.includes('[warn]')) {
-      return 'text-yellow-400';
+      return 'text-status-warn';
     }
     if (lower.includes('info') || lower.includes('[info]')) {
-      return 'text-blue-400';
+      return 'text-status-info';
     }
     if (lower.includes('debug') || lower.includes('[debug]')) {
-      return 'text-gray-400';
+      return 'text-content-secondary';
     }
     if (lower.includes('success') || lower.includes('[ok]')) {
-      return 'text-green-400';
+      return 'text-status-ok';
     }
     return 'text-bbs-text';
   };
@@ -151,7 +151,7 @@ export function LogsPage() {
       <span className={getLogLevelColor(line)}>
         {parts.map((part, i) =>
           part.toLowerCase() === searchTerm.toLowerCase() ? (
-            <mark key={i} className="bg-yellow-500/30 text-yellow-200">
+            <mark key={i} className="bg-status-warn/30 text-status-warn">
               {part}
             </mark>
           ) : (
@@ -166,17 +166,17 @@ export function LogsPage() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-bbs-accent mb-2">System Logs</h1>
+        <h1 className="text-3xl font-bold text-accent mb-2">System Logs</h1>
         <p className="text-bbs-muted">View and manage BBS system logs</p>
       </div>
 
       {/* Platform Info Banner */}
       {logData?.environment && logData.environment !== 'local' && (
-        <div className="card mb-4 bg-blue-500/10 border-blue-500/30">
+        <div className="card mb-4 bg-accent/10 border-accent/30">
           <div className="flex items-start gap-3">
-            <Info size={20} className="text-blue-400 mt-0.5 flex-shrink-0" />
+            <Info size={20} className="text-status-info mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-blue-400 mb-2">
+              <h3 className="text-sm font-semibold text-status-info mb-2">
                 Platform: {logData.environment.charAt(0).toUpperCase() + logData.environment.slice(1)}
               </h3>
               <p className="text-xs text-bbs-muted mb-3">
@@ -188,7 +188,7 @@ export function LogsPage() {
                     href="https://dashboard.render.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                    className="inline-flex items-center gap-1 text-xs text-status-info hover:text-accent-hover underline"
                   >
                     Open Render Dashboard <ExternalLink size={12} />
                   </a>
@@ -198,7 +198,7 @@ export function LogsPage() {
                     href="https://railway.app"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                    className="inline-flex items-center gap-1 text-xs text-status-info hover:text-accent-hover underline"
                   >
                     Open Railway Dashboard <ExternalLink size={12} />
                   </a>
@@ -208,7 +208,7 @@ export function LogsPage() {
                     href="https://fly.io/dashboard"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                    className="inline-flex items-center gap-1 text-xs text-status-info hover:text-accent-hover underline"
                   >
                     Open Fly.io Dashboard <ExternalLink size={12} />
                   </a>
@@ -218,7 +218,7 @@ export function LogsPage() {
                     href="https://dashboard.heroku.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                    className="inline-flex items-center gap-1 text-xs text-status-info hover:text-accent-hover underline"
                   >
                     Open Heroku Dashboard <ExternalLink size={12} />
                   </a>
@@ -228,7 +228,7 @@ export function LogsPage() {
                     href="https://vercel.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                    className="inline-flex items-center gap-1 text-xs text-status-info hover:text-accent-hover underline"
                   >
                     Open Vercel Dashboard <ExternalLink size={12} />
                   </a>
@@ -333,7 +333,7 @@ export function LogsPage() {
           <button
             onClick={handleDownload}
             disabled={!logData?.lines?.length}
-            className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className="px-4 py-2 bg-accent/20 hover:bg-accent/30 border border-accent/40 text-status-info rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             <Download size={18} />
             <span>Download</span>
@@ -342,7 +342,7 @@ export function LogsPage() {
           <button
             onClick={handleClearLog}
             disabled={clearMutation.isPending || !logData?.lines?.length}
-            className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className="px-4 py-2 bg-status-danger/20 hover:bg-status-danger/30 border border-status-danger/40 text-status-danger rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             <Trash2 size={18} />
             <span>Clear Log</span>
@@ -365,7 +365,7 @@ export function LogsPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4 text-sm">
             <div className="flex items-center space-x-2">
-              <Terminal size={16} className="text-bbs-accent" />
+              <Terminal size={16} className="text-accent" />
               <span className="text-bbs-muted">Log Type:</span>
               <span className="text-bbs-text font-semibold uppercase">{logType}</span>
             </div>
@@ -376,7 +376,7 @@ export function LogsPage() {
               </div>
             )}
             <div className="flex items-center space-x-2">
-              <Filter size={16} className="text-bbs-accent" />
+              <Filter size={16} className="text-accent" />
               <span className="text-bbs-muted">Total Lines:</span>
               <span className="text-bbs-text font-semibold">
                 {logData?.totalLines?.toLocaleString() || 0}
@@ -392,7 +392,7 @@ export function LogsPage() {
           {searchTerm && (
             <div className="flex items-center space-x-2 text-sm">
               <span className="text-bbs-muted">Filtered by:</span>
-              <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded">
+              <span className="px-2 py-1 bg-status-warn/20 text-status-warn rounded">
                 {searchTerm}
               </span>
               <button

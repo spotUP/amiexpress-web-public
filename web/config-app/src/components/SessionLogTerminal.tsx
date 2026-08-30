@@ -93,7 +93,7 @@ export function SessionLogTerminal({ content }: SessionLogTerminalProps) {
   return (
     <div
       ref={terminalRef}
-      className="w-full h-full bg-black rounded-lg"
+      className="w-full h-full bg-surface-0 rounded-lg"
       style={{ minHeight: '400px' }}
     />
   );

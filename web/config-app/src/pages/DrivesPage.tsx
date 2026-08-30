@@ -135,7 +135,7 @@ export function DrivesPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Drives Configuration</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Drives Configuration</h1>
           <p className="text-bbs-muted">Manage BBS drive assignments and paths (TOOLTYPE_DRIVES)</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
@@ -150,7 +150,7 @@ export function DrivesPage() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-start space-x-3">
                 <div className="p-2 bg-bbs-primary rounded">
-                  <HardDrive className="text-bbs-accent" size={20} />
+                  <HardDrive className="text-accent" size={20} />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-bbs-text">Drive {drive.drive_number}</h3>
@@ -160,7 +160,7 @@ export function DrivesPage() {
               <div
                 className={`px-2 py-1 rounded text-xs ${
                   drive.enabled
-                    ? 'bg-green-500/20 text-green-500'
+                    ? 'bg-status-ok/20 text-status-ok'
                     : 'bg-bbs-muted/20 text-bbs-muted'
                 }`}
               >
@@ -193,7 +193,7 @@ export function DrivesPage() {
               </button>
               <button
                 onClick={() => handleDelete(drive)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
+                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
               >
                 <Trash2 size={16} />
               </button>
@@ -213,7 +213,7 @@ export function DrivesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-md w-full m-4">
             <div className="border-b border-bbs-primary p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-bbs-accent">
+              <h2 className="text-2xl font-bold text-accent">
                 {editingDrive ? 'Edit Drive' : 'Add Drive'}
               </h2>
               <button
@@ -274,7 +274,7 @@ export function DrivesPage() {
                     type="checkbox"
                     checked={formData.enabled}
                     onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                    className="form-checkbox h-5 w-5 text-bbs-accent"
+                    className="form-checkbox h-5 w-5 text-accent"
                   />
                   <span className="text-bbs-text">Enabled</span>
                 </label>

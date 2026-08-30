@@ -118,7 +118,7 @@ export function ComputersPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Computer Types</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Computer Types</h1>
           <p className="text-bbs-muted">Manage computer type selections (TOOLTYPE_COMPUTERLIST)</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
@@ -132,13 +132,13 @@ export function ComputersPage() {
           <div key={computer.id} className="card">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-bbs-primary rounded">
-                <Monitor className="text-bbs-accent" size={20} />
+                <Monitor className="text-accent" size={20} />
               </div>
               <button
                 onClick={() => handleToggle(computer)}
                 className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
                   computer.enabled
-                    ? 'bg-green-500/20 text-green-500'
+                    ? 'bg-status-ok/20 text-status-ok'
                     : 'bg-bbs-muted/20 text-bbs-muted'
                 }`}
                 title="Toggle availability"
@@ -167,7 +167,7 @@ export function ComputersPage() {
               </button>
               <button
                 onClick={() => handleDelete(computer)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
+                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
               >
                 <Trash2 size={16} />
               </button>

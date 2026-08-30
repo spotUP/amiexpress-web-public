@@ -165,7 +165,7 @@ export function ProtocolsPage() {
         <button
           onClick={() => handleToggle(protocol)}
           className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-            protocol.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+            protocol.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
           }`}
         >
           {protocol.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
@@ -181,7 +181,7 @@ export function ProtocolsPage() {
         <div className="flex items-center space-x-2">
           <span className="text-bbs-text font-semibold">{protocol.protocol_name}</span>
           {protocol.is_default && (
-            <span className="px-2 py-0.5 bg-bbs-accent/20 text-bbs-accent rounded text-xs flex items-center space-x-1">
+            <span className="px-2 py-0.5 bg-bbs-accent/20 text-accent rounded text-xs flex items-center space-x-1">
               <Star size={12} />
               <span>Default</span>
             </span>
@@ -210,13 +210,13 @@ export function ProtocolsPage() {
       render: (protocol) => (
         <div className="flex flex-wrap gap-1">
           {protocol.batch_upload && (
-            <span className="px-1.5 py-0.5 bg-bbs-accent/20 text-bbs-accent rounded text-xs">Batch↑</span>
+            <span className="px-1.5 py-0.5 bg-bbs-accent/20 text-accent rounded text-xs">Batch↑</span>
           )}
           {protocol.batch_download && (
-            <span className="px-1.5 py-0.5 bg-bbs-accent/20 text-bbs-accent rounded text-xs">Batch↓</span>
+            <span className="px-1.5 py-0.5 bg-bbs-accent/20 text-accent rounded text-xs">Batch↓</span>
           )}
           {protocol.bidirectional && (
-            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-500 rounded text-xs">Bi-Dir</span>
+            <span className="px-1.5 py-0.5 bg-accent/20 text-status-info rounded text-xs">Bi-Dir</span>
           )}
         </div>
       ),
@@ -242,7 +242,7 @@ export function ProtocolsPage() {
           </button>
           <button
             onClick={() => handleDelete(protocol)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs"
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs"
           >
             <Trash2 size={14} />
           </button>
@@ -255,7 +255,7 @@ export function ProtocolsPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Transfer Protocols</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Transfer Protocols</h1>
           <p className="text-bbs-muted">Configure file transfer protocol handlers</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">

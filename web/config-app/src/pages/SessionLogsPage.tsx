@@ -101,7 +101,7 @@ export function SessionLogsPage() {
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`px-4 py-2 rounded flex items-center gap-2 ${
               autoRefresh
-                ? 'bg-green-600 text-white hover:bg-green-700'
+                ? 'bg-status-ok text-content-inverse hover:bg-status-ok/90'
                 : 'bg-bbs-surface text-bbs-text hover:bg-bbs-hover'
             }`}
           >
@@ -165,12 +165,12 @@ export function SessionLogsPage() {
                 onClick={() => setSelectedSessionId(session.sessionId)}
                 className={`bg-bbs-surface p-4 rounded-lg border text-left transition-all cursor-pointer ${
                   selectedSessionId === session.sessionId
-                    ? 'border-blue-500 bg-blue-500/10'
+                    ? 'border-accent bg-accent/10'
                     : 'border-bbs-border hover:border-bbs-text/30 hover:shadow-lg'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Eye className="w-4 h-4 text-bbs-accent" />
+                  <Eye className="w-4 h-4 text-accent" />
                   <h3 className="font-semibold text-bbs-text">
                     {session.username || 'Guest'}
                   </h3>
@@ -200,7 +200,7 @@ export function SessionLogsPage() {
                   onClick={() => setViewMode('raw')}
                   className={`px-3 py-2 rounded-l ${
                     viewMode === 'raw'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-accent text-content-inverse'
                       : 'text-bbs-text hover:bg-bbs-hover'
                   }`}
                 >
@@ -210,7 +210,7 @@ export function SessionLogsPage() {
                   onClick={() => setViewMode('terminal')}
                   className={`px-3 py-2 rounded-r ${
                     viewMode === 'terminal'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-accent text-content-inverse'
                       : 'text-bbs-text hover:bg-bbs-hover'
                   }`}
                 >
@@ -246,7 +246,7 @@ export function SessionLogsPage() {
               </div>
             ) : (
               <div
-                className="border border-bbs-border rounded-lg overflow-auto bg-black p-4 font-mono text-sm whitespace-pre text-green-400"
+                className="border border-bbs-border rounded-lg overflow-auto bg-surface-0 p-4 font-mono text-sm whitespace-pre text-status-ok"
                 style={{ height: '600px', maxWidth: '100%' }}
               >
                 <div style={{ width: '80ch' }}>
@@ -263,8 +263,8 @@ export function SessionLogsPage() {
       )}
 
       {/* Help Text */}
-      <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-lg">
-        <h3 className="font-semibold text-blue-400 mb-2">About Session Logs</h3>
+      <div className="bg-accent/10 border border-accent/30 p-4 rounded-lg">
+        <h3 className="font-semibold text-status-info mb-2">About Session Logs</h3>
         <ul className="text-sm text-bbs-muted space-y-1">
           <li>• Session logs capture all terminal output including door launches, screen displays, and MCI codes</li>
           <li>• Keypresses are shown with visual markers like [ENTER], [BACKSPACE], etc.</li>

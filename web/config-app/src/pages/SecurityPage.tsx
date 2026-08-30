@@ -93,7 +93,7 @@ export function SecurityPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <Shield className="text-bbs-accent" size={24} />
+        <Shield className="text-accent" size={24} />
         <div>
           <h1 className="text-xl font-semibold">Security Levels</h1>
           <p className="text-sm text-bbs-muted">
@@ -111,7 +111,7 @@ export function SecurityPage() {
             onClick={() => setSelectedLevel(level)}
             className={`px-3 py-1 rounded border ${
               level === selectedLevel
-                ? 'bg-bbs-accent/20 border-bbs-accent text-bbs-accent'
+                ? 'bg-bbs-accent/20 border-bbs-accent text-accent'
                 : 'border-bbs-muted/40 text-bbs-muted hover:border-bbs-accent/60'
             }`}
           >
@@ -155,7 +155,7 @@ export function SecurityPage() {
               disabled={!dirty || saveMutation.isPending}
               className={`flex items-center gap-2 px-3 py-1 rounded border ${
                 dirty
-                  ? 'border-bbs-accent text-bbs-accent hover:bg-bbs-accent/10'
+                  ? 'border-bbs-accent text-accent hover:bg-bbs-accent/10'
                   : 'border-bbs-muted/30 text-bbs-muted'
               }`}
             >
@@ -176,7 +176,7 @@ export function SecurityPage() {
                     className="flex items-center gap-2 px-3 py-2 rounded border border-bbs-muted/20 hover:border-bbs-accent/50 text-left"
                   >
                     {granted ? (
-                      <ToggleRight className="text-green-500 shrink-0" size={20} />
+                      <ToggleRight className="text-status-ok shrink-0" size={20} />
                     ) : (
                       <ToggleLeft className="text-bbs-muted shrink-0" size={20} />
                     )}

@@ -22,7 +22,7 @@ export function AuditLogPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-bbs-accent mb-2">Configuration Audit Log</h1>
+        <h1 className="text-3xl font-bold text-accent mb-2">Configuration Audit Log</h1>
         <p className="text-bbs-muted">Track all configuration changes and modifications</p>
       </div>
 
@@ -69,7 +69,7 @@ export function AuditLogPage() {
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-start space-x-3">
                 <div className="p-2 bg-bbs-primary rounded">
-                  <History className="text-bbs-accent" size={20} />
+                  <History className="text-accent" size={20} />
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
@@ -79,10 +79,10 @@ export function AuditLogPage() {
                     <span
                       className={`px-2 py-1 rounded text-xs ${
                         log.action === 'CREATE'
-                          ? 'bg-green-500/20 text-green-500'
+                          ? 'bg-status-ok/20 text-status-ok'
                           : log.action === 'UPDATE'
-                          ? 'bg-blue-500/20 text-blue-500'
-                          : 'bg-red-500/20 text-red-500'
+                          ? 'bg-accent/20 text-status-info'
+                          : 'bg-status-danger/20 text-status-danger'
                       }`}
                     >
                       {log.action}

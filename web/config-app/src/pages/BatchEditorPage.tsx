@@ -148,7 +148,7 @@ export function BatchEditorPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-1">Batch Editor</h1>
+          <h1 className="text-3xl font-bold text-accent mb-1">Batch Editor</h1>
           <p className="text-bbs-muted">Edit logon/logoff batch files (batch0–batch6). Use with care.</p>
         </div>
         <div className="flex items-center space-x-2">
@@ -225,9 +225,9 @@ export function BatchEditorPage() {
         {validation && (
           <div className="text-sm text-bbs-text flex items-center space-x-4">
             <span>Lines: {validation.summary.total}</span>
-            <span className="text-red-400">Errors: {validation.summary.errors}</span>
-            <span className="text-yellow-400">Warnings: {validation.summary.warnings}</span>
-            <span className="text-green-400">OK: {validation.summary.ok}</span>
+            <span className="text-status-danger">Errors: {validation.summary.errors}</span>
+            <span className="text-status-warn">Warnings: {validation.summary.warnings}</span>
+            <span className="text-status-ok">OK: {validation.summary.ok}</span>
           </div>
         )}
       </div>
@@ -245,10 +245,10 @@ export function BatchEditorPage() {
             const worst = issues.find((i) => i.status === 'error') || issues.find((i) => i.status === 'warning');
             const statusLabel = worst ? worst.status.toUpperCase() : 'OK';
             const statusClass = worst?.status === 'error'
-              ? 'text-red-400'
+              ? 'text-status-danger'
               : worst?.status === 'warning'
-                ? 'text-yellow-400'
-                : 'text-green-400';
+                ? 'text-status-warn'
+                : 'text-status-ok';
             return (
               <div key={idx} className="grid grid-cols-12 gap-2 py-1 items-center">
                 <div className="col-span-1 text-xs text-bbs-muted">{lineNo}</div>

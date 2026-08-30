@@ -262,7 +262,7 @@ export function SystemConfigPage() {
 
   if (error) {
     return (
-      <div className="bg-bbs-accent/10 border border-bbs-accent text-bbs-accent px-4 py-3 rounded">
+      <div className="bg-bbs-accent/10 border border-bbs-accent text-accent px-4 py-3 rounded">
         Error loading system configuration: {(error as Error).message}
       </div>
     );
@@ -271,7 +271,7 @@ export function SystemConfigPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-bbs-accent mb-2">System Configuration</h1>
+        <h1 className="text-3xl font-bold text-accent mb-2">System Configuration</h1>
         <div className="flex items-center space-x-3">
           <p className="text-bbs-muted">Global BBS settings and parameters</p>
           <span className="text-xs text-bbs-muted">
@@ -1124,7 +1124,7 @@ export function SystemConfigPage() {
             <div>
               <label htmlFor="smtp_password" className="label flex items-center gap-2">
                 SMTP Password
-                <span className="inline-flex items-center gap-1 text-xs text-green-400 font-normal">
+                <span className="inline-flex items-center gap-1 text-xs text-status-ok font-normal">
                   <Lock size={12} />
                   Encrypted
                 </span>
@@ -1233,14 +1233,14 @@ export function SystemConfigPage() {
               </button>
 
               {smtpTestStatus === 'success' && (
-                <div className="flex items-center gap-2 text-green-400">
+                <div className="flex items-center gap-2 text-status-ok">
                   <CheckCircle size={18} />
                   <span className="text-sm">{smtpTestMessage}</span>
                 </div>
               )}
 
               {smtpTestStatus === 'error' && (
-                <div className="flex items-center gap-2 text-red-400">
+                <div className="flex items-center gap-2 text-status-danger">
                   <XCircle size={18} />
                   <span className="text-sm">{smtpTestMessage}</span>
                 </div>
@@ -1513,8 +1513,8 @@ export function SystemConfigPage() {
                   <span className="text-sm font-semibold text-bbs-text">SSH Key Status:</span>
                   <span className={`px-3 py-1 rounded text-sm font-semibold ${
                     sshKeyData?.data?.exists
-                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      ? 'bg-status-ok/20 text-status-ok border border-status-ok/30'
+                      : 'bg-status-danger/20 text-status-danger border border-status-danger/30'
                   }`}>
                     {sshKeyData?.data?.exists ? 'Key Exists' : 'No Key Found'}
                   </span>
@@ -1582,7 +1582,7 @@ export function SystemConfigPage() {
                   type="button"
                   onClick={handleDeleteSSHKey}
                   disabled={isGeneratingKey || isDeletingKey}
-                  className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 bg-status-danger/20 hover:bg-status-danger/30 border border-status-danger/40 text-status-danger rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isDeletingKey ? (
                     <>
@@ -1600,8 +1600,8 @@ export function SystemConfigPage() {
             </div>
 
             {/* Info Box */}
-            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded">
-              <h3 className="text-sm font-semibold text-blue-400 mb-2">Important Information</h3>
+            <div className="p-4 bg-accent/10 border border-accent/30 rounded">
+              <h3 className="text-sm font-semibold text-status-info mb-2">Important Information</h3>
               <ul className="text-xs text-bbs-muted space-y-1 list-disc list-inside">
                 <li>SSH keys are required for the SSH server to function</li>
                 <li>Generated keys are stored in the data/ssh directory</li>

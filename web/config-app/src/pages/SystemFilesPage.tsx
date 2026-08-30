@@ -147,8 +147,8 @@ export function SystemFilesPage() {
     <div>
       <div className="mb-8">
         <div className="flex items-center space-x-3 mb-2">
-          <FolderOpen className="text-bbs-accent" size={32} />
-          <h1 className="text-3xl font-bold text-bbs-accent">System Files</h1>
+          <FolderOpen className="text-accent" size={32} />
+          <h1 className="text-3xl font-bold text-accent">System Files</h1>
         </div>
         <p className="text-bbs-muted">
           Edit .info files for system utilities, protocols, and other BBS components
@@ -216,7 +216,7 @@ export function SystemFilesPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start space-x-3 flex-1 min-w-0">
                       <div className="p-2 bg-bbs-primary rounded flex-shrink-0">
-                        <FileCode className="text-bbs-accent" size={20} />
+                        <FileCode className="text-accent" size={20} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="text-lg font-semibold text-bbs-text truncate">
@@ -252,12 +252,12 @@ export function SystemFilesPage() {
 
       {/* Info Editor Modal */}
       {isInfoEditorOpen && editingFile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-bbs-background border-2 border-bbs-border rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-bbs-border">
               <div>
-                <h2 className="text-2xl font-bold text-bbs-accent">{editingFile.name}</h2>
+                <h2 className="text-2xl font-bold text-accent">{editingFile.name}</h2>
                 <p className="text-sm text-bbs-muted font-mono">{editingFile.path}</p>
               </div>
               <button
@@ -283,7 +283,7 @@ export function SystemFilesPage() {
                     <div key={index} className="flex items-start space-x-2 bg-bbs-secondary p-3 rounded">
                       <button
                         onClick={() => handleTooltypeToggle(index)}
-                        className={`mt-1 ${tooltype.commented ? 'text-bbs-muted' : 'text-bbs-accent'}`}
+                        className={`mt-1 ${tooltype.commented ? 'text-bbs-muted' : 'text-accent'}`}
                         title={tooltype.commented ? 'Commented (click to enable)' : 'Active (click to comment)'}
                       >
                         {tooltype.commented ? '!' : '*'}
@@ -310,7 +310,7 @@ export function SystemFilesPage() {
                       </div>
                       <button
                         onClick={() => handleTooltypeRemove(index)}
-                        className="text-red-500 hover:text-red-400 mt-1"
+                        className="text-status-danger hover:text-status-danger mt-1"
                         title="Remove tooltype"
                       >
                         <X size={20} />
@@ -332,7 +332,7 @@ export function SystemFilesPage() {
             <div className="p-6 border-t border-bbs-border flex items-center justify-between">
               <div>
                 {infoDirty && (
-                  <span className="text-yellow-500 text-sm">* Unsaved changes</span>
+                  <span className="text-status-warn text-sm">* Unsaved changes</span>
                 )}
               </div>
               <div className="flex space-x-3">

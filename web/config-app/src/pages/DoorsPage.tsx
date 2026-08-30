@@ -270,7 +270,7 @@ export function DoorsPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Doors Configuration</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Doors Configuration</h1>
           <p className="text-bbs-muted">Manage BBS doors and external programs</p>
         </div>
         <div className="flex items-center gap-2">
@@ -334,7 +334,7 @@ export function DoorsPage() {
               <tr key={door.id} className="border-b border-bbs-border hover:bg-bbs-secondary/20 transition-colors">
                 <td className="py-3 px-4">
                   {door.enabled ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-green-500/20 text-green-500">
+                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-status-ok/20 text-status-ok">
                       <Power size={12} className="mr-1" /> Enabled
                     </span>
                   ) : (
@@ -361,14 +361,14 @@ export function DoorsPage() {
                     </button>
                     <button
                       onClick={() => handleEditInfo(door)}
-                      className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+                      className="p-2 bg-accent hover:bg-accent-hover text-content-inverse rounded transition-colors"
                       title="Edit .info file"
                     >
                       <FileCode size={16} />
                     </button>
                     <button
                       onClick={() => handleDelete(door)}
-                      className="p-2 bg-bbs-accent hover:bg-bbs-accent/90 text-white rounded transition-colors"
+                      className="p-2 bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse rounded transition-colors"
                       title="Delete door"
                     >
                       <Trash2 size={16} />
@@ -392,7 +392,7 @@ export function DoorsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-bbs-accent">
+              <h2 className="text-2xl font-bold text-accent">
                 {editingDoor ? 'Edit Door' : 'Add Door'}
               </h2>
               <button
@@ -521,7 +521,7 @@ export function DoorsPage() {
                       type="checkbox"
                       checked={formData.enabled}
                       onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-bbs-accent"
+                      className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-bbs-text">Enabled</span>
                   </label>
@@ -559,7 +559,7 @@ export function DoorsPage() {
           <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4">
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-bold text-bbs-accent">Edit .info File</h2>
+                <h2 className="text-2xl font-bold text-accent">Edit .info File</h2>
                 <p className="text-bbs-muted text-sm mt-1">
                   {editingInfoDoor.door_name} ({editingInfoDoor.door_command}.info)
                 </p>
@@ -621,7 +621,7 @@ export function DoorsPage() {
                             className={`p-1 rounded transition-colors ${
                               tt.commented
                                 ? 'text-bbs-muted hover:text-bbs-text'
-                                : 'text-green-500 hover:text-green-400'
+                                : 'text-status-ok hover:text-status-ok'
                             }`}
                             title={tt.commented ? 'Enable this tooltype' : 'Disable this tooltype'}
                           >
@@ -649,7 +649,7 @@ export function DoorsPage() {
                         <td className="p-3">
                           <button
                             onClick={() => handleTooltypeRemove(index)}
-                            className="text-bbs-accent hover:text-bbs-accent/90 transition-colors"
+                            className="text-accent hover:text-accent/90 transition-colors"
                             title="Remove this tooltype"
                           >
                             <Trash2 size={16} />

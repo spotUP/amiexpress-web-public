@@ -172,7 +172,7 @@ export function StatisticsPage() {
           <Activity className="w-6 h-6" />
           Statistics Dashboard
         </h1>
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-content-muted">
           Auto-refreshes every 10 seconds
         </div>
       </div>
@@ -180,85 +180,85 @@ export function StatisticsPage() {
       {/* System Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Total Users */}
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-surface-1 rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-500">Total Users</div>
+              <div className="text-sm text-content-muted">Total Users</div>
               <div className="text-2xl font-bold">
                 {systemStatsLoading ? '-' : systemData?.allTime.totalUsers.toLocaleString()}
               </div>
             </div>
-            <Users className="w-8 h-8 text-blue-500" />
+            <Users className="w-8 h-8 text-status-info" />
           </div>
         </div>
 
         {/* Total Messages */}
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-surface-1 rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-500">Total Messages</div>
+              <div className="text-sm text-content-muted">Total Messages</div>
               <div className="text-2xl font-bold">
                 {systemStatsLoading ? '-' : systemData?.allTime.totalMessages.toLocaleString()}
               </div>
             </div>
-            <Database className="w-8 h-8 text-green-500" />
+            <Database className="w-8 h-8 text-status-ok" />
           </div>
         </div>
 
         {/* Total Files */}
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-surface-1 rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-500">Total Files</div>
+              <div className="text-sm text-content-muted">Total Files</div>
               <div className="text-2xl font-bold">
                 {systemStatsLoading ? '-' : systemData?.allTime.totalFiles.toLocaleString()}
               </div>
-              <div className="text-xs text-gray-400">
+              <div className="text-xs text-content-secondary">
                 {systemStatsLoading ? '' : formatBytes(systemData?.allTime.totalBytes || 0)}
               </div>
             </div>
-            <FileDown className="w-8 h-8 text-purple-500" />
+            <FileDown className="w-8 h-8 text-accent" />
           </div>
         </div>
 
         {/* Total Calls */}
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-surface-1 rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-500">Total Calls</div>
+              <div className="text-sm text-content-muted">Total Calls</div>
               <div className="text-2xl font-bold">
                 {systemStatsLoading ? '-' : systemData?.allTime.totalCalls.toLocaleString()}
               </div>
-              <div className="text-xs text-gray-400">
+              <div className="text-xs text-content-secondary">
                 {systemStatsLoading ? '' : `${systemData?.today.calls || 0} today`}
               </div>
             </div>
-            <Activity className="w-8 h-8 text-orange-500" />
+            <Activity className="w-8 h-8 text-status-warn" />
           </div>
         </div>
       </div>
 
       {/* Session Statistics Card */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
+      <div className="bg-surface-1 rounded-lg shadow p-4 mb-6">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Clock className="w-5 h-5" />
           Current Session
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <div className="text-sm text-gray-500">Session Uptime</div>
+            <div className="text-sm text-content-muted">Session Uptime</div>
             <div className="text-xl font-bold">
               {sessionStatsLoading ? '-' : formatUptime(sessionData?.uptime || 0)}
             </div>
           </div>
           <div>
-            <div className="text-sm text-gray-500">Active Sessions</div>
+            <div className="text-sm text-content-muted">Active Sessions</div>
             <div className="text-xl font-bold">
               {sessionStatsLoading ? '-' : sessionData?.activeSessions}
             </div>
           </div>
           <div>
-            <div className="text-sm text-gray-500">Active Users</div>
+            <div className="text-sm text-content-muted">Active Users</div>
             <div className="text-xl font-bold">
               {sessionStatsLoading ? '-' : sessionData?.activeUsers.length}
             </div>
@@ -268,15 +268,15 @@ export function StatisticsPage() {
         {/* Active Users List */}
         {sessionData && sessionData.activeUsers.length > 0 && (
           <div className="mt-4">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Active Users:</div>
+            <div className="text-sm font-semibold text-content-secondary mb-2">Active Users:</div>
             <div className="space-y-2">
               {sessionData.activeUsers.map((user) => (
-                <div key={user.sessionId} className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded">
+                <div key={user.sessionId} className="flex items-center justify-between text-sm p-2 bg-surface-2 rounded">
                   <div>
                     <span className="font-medium">{user.username}</span>
-                    <span className="text-gray-500 ml-2">({user.location})</span>
+                    <span className="text-content-muted ml-2">({user.location})</span>
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-content-muted">
                     Conference {user.currentConference} • {user.timeRemaining}m left
                   </div>
                 </div>
@@ -289,8 +289,8 @@ export function StatisticsPage() {
       {/* Activity Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Last Callers */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b">
+        <div className="bg-surface-1 rounded-lg shadow overflow-hidden">
+          <div className="p-4 bg-surface-2 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Users className="w-5 h-5" />
               Last Callers
@@ -298,24 +298,24 @@ export function StatisticsPage() {
           </div>
           <div className="divide-y max-h-96 overflow-y-auto">
             {callersLoading ? (
-              <div className="p-4 text-center text-gray-500">Loading...</div>
+              <div className="p-4 text-center text-content-muted">Loading...</div>
             ) : callersList.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">No recent activity</div>
+              <div className="p-4 text-center text-content-muted">No recent activity</div>
             ) : (
               callersList.map((caller) => (
-                <div key={caller.id} className="p-3 hover:bg-gray-50">
+                <div key={caller.id} className="p-3 hover:bg-surface-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium">{caller.username}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-content-muted">
                         Node {caller.nodeId} • {caller.action}
                       </div>
                     </div>
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-content-secondary">
                       {formatTime(caller.timestamp)}
                     </div>
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">
+                  <div className="text-xs text-content-muted mt-1">
                     {caller.location}
                   </div>
                 </div>
@@ -325,8 +325,8 @@ export function StatisticsPage() {
         </div>
 
         {/* Last Downloads */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b">
+        <div className="bg-surface-1 rounded-lg shadow overflow-hidden">
+          <div className="p-4 bg-surface-2 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <FileDown className="w-5 h-5" />
               Last Downloads
@@ -334,19 +334,19 @@ export function StatisticsPage() {
           </div>
           <div className="divide-y max-h-96 overflow-y-auto">
             {downloadsLoading ? (
-              <div className="p-4 text-center text-gray-500">Loading...</div>
+              <div className="p-4 text-center text-content-muted">Loading...</div>
             ) : downloadsList.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">No recent downloads</div>
+              <div className="p-4 text-center text-content-muted">No recent downloads</div>
             ) : (
               downloadsList.map((file) => (
-                <div key={file.id} className="p-3 hover:bg-gray-50">
+                <div key={file.id} className="p-3 hover:bg-surface-2">
                   <div className="font-medium text-sm truncate">{file.filename}</div>
-                  <div className="text-xs text-gray-500 mt-1">{file.description}</div>
+                  <div className="text-xs text-content-muted mt-1">{file.description}</div>
                   <div className="flex items-center justify-between mt-2 text-xs">
-                    <span className="text-gray-600">
+                    <span className="text-content-muted">
                       {formatBytes(file.size)} • {file.downloadCount} downloads
                     </span>
-                    <span className="text-gray-400">{file.areaName}</span>
+                    <span className="text-content-secondary">{file.areaName}</span>
                   </div>
                 </div>
               ))
@@ -355,8 +355,8 @@ export function StatisticsPage() {
         </div>
 
         {/* Last Uploads */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b">
+        <div className="bg-surface-1 rounded-lg shadow overflow-hidden">
+          <div className="p-4 bg-surface-2 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <FileUp className="w-5 h-5" />
               Last Uploads
@@ -364,19 +364,19 @@ export function StatisticsPage() {
           </div>
           <div className="divide-y max-h-96 overflow-y-auto">
             {uploadsLoading ? (
-              <div className="p-4 text-center text-gray-500">Loading...</div>
+              <div className="p-4 text-center text-content-muted">Loading...</div>
             ) : uploadsList.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">No recent uploads</div>
+              <div className="p-4 text-center text-content-muted">No recent uploads</div>
             ) : (
               uploadsList.map((file) => (
-                <div key={file.id} className="p-3 hover:bg-gray-50">
+                <div key={file.id} className="p-3 hover:bg-surface-2">
                   <div className="font-medium text-sm truncate">{file.filename}</div>
-                  <div className="text-xs text-gray-500 mt-1">{file.description}</div>
+                  <div className="text-xs text-content-muted mt-1">{file.description}</div>
                   <div className="flex items-center justify-between mt-2 text-xs">
-                    <span className="text-gray-600">
+                    <span className="text-content-muted">
                       {formatBytes(file.size)} • by {file.uploader}
                     </span>
-                    <span className="text-gray-400">{file.areaName}</span>
+                    <span className="text-content-secondary">{file.areaName}</span>
                   </div>
                 </div>
               ))

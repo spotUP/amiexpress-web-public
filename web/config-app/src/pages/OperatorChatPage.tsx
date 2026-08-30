@@ -253,7 +253,7 @@ export function OperatorChatPage() {
     <div className="h-screen flex flex-col bg-bbs-bg">
       {/* Header */}
       <div className="bg-bbs-surface border-b border-bbs-border px-4 py-3">
-        <h1 className="text-2xl font-bold text-bbs-accent flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-accent flex items-center gap-2">
           <MessageSquare className="w-6 h-6" />
           Operator Chat
         </h1>
@@ -265,16 +265,16 @@ export function OperatorChatPage() {
 
       {/* Connection Error Banner */}
       {connectionError && (
-        <div className="bg-red-900/50 border-b border-red-600 px-4 py-3">
+        <div className="bg-status-danger/50 border-b border-status-danger px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-red-400 font-semibold">Connection Error:</span>
-              <span className="text-red-300">{connectionError}</span>
+              <span className="text-status-danger font-semibold">Connection Error:</span>
+              <span className="text-status-danger">{connectionError}</span>
             </div>
             {connectionError.includes('expired') && (
               <a
                 href="/login"
-                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+                className="px-3 py-1 bg-status-danger hover:bg-status-danger/90 text-content-inverse rounded text-sm"
               >
                 Log In Again
               </a>
@@ -294,7 +294,7 @@ export function OperatorChatPage() {
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-bbs-accent" />
+                      <User className="w-4 h-4 text-accent" />
                       <span className="font-bold text-bbs-text">{activeChat.userHandle}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-bbs-muted">
@@ -315,7 +315,7 @@ export function OperatorChatPage() {
                     onClick={() => setUseTerminalMode(!useTerminalMode)}
                     className={`px-3 py-1 rounded text-sm flex items-center gap-1 ${
                       useTerminalMode
-                        ? 'bg-bbs-accent text-white'
+                        ? 'bg-bbs-accent text-content-inverse'
                         : 'bg-bbs-surface border border-bbs-border text-bbs-muted hover:border-bbs-accent'
                     }`}
                   >
@@ -324,7 +324,7 @@ export function OperatorChatPage() {
                   </button>
                   <button
                     onClick={handleEndChat}
-                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+                    className="px-3 py-1 bg-status-danger hover:bg-status-danger/90 text-content-inverse rounded text-sm"
                   >
                     End Chat
                   </button>
@@ -334,7 +334,7 @@ export function OperatorChatPage() {
 
             {/* Terminal Mode */}
             {useTerminalMode ? (
-              <div className="flex-1 p-4 bg-black">
+              <div className="flex-1 p-4 bg-surface-0">
                 <OperatorChatTerminal
                   messages={messages}
                   userHandle={activeChat.userHandle}
@@ -355,27 +355,27 @@ export function OperatorChatPage() {
             ) : (
               <>
                 {/* Classic Messages Mode */}
-                <div className="flex-1 overflow-y-auto p-4 bg-black">
+                <div className="flex-1 overflow-y-auto p-4 bg-surface-0">
                   <div className="space-y-1" style={{ fontFamily: '"mOsOul", "Courier New", monospace' }}>
                     {messages.map((msg) => (
                       <div key={msg.id} className="text-sm">
-                        <span className={msg.senderType === 'sysop' ? 'text-cyan-400' : 'text-yellow-300'}>
+                        <span className={msg.senderType === 'sysop' ? 'text-status-info' : 'text-status-warn'}>
                           [{formatTime(msg.timestamp)}]
                         </span>
                         {' '}
-                        <span className={msg.senderType === 'sysop' ? 'text-green-400' : 'text-blue-400'}>
+                        <span className={msg.senderType === 'sysop' ? 'text-status-ok' : 'text-status-info'}>
                           {msg.senderHandle}:
                         </span>
                         {' '}
-                        <span className="text-white whitespace-pre-wrap break-words">
+                        <span className="text-content-primary whitespace-pre-wrap break-words">
                           {msg.message}
                         </span>
                       </div>
                     ))}
                     {(isTyping || userTypingBuffer) && (
-                      <div className="text-gray-500 text-xs">
+                      <div className="text-content-muted text-xs">
                         <span className="italic">{activeChat.userHandle} is typing: </span>
-                        <span className="text-yellow-600">{userTypingBuffer}</span>
+                        <span className="text-status-warn">{userTypingBuffer}</span>
                         <span className="animate-pulse">|</span>
                       </div>
                     )}
@@ -391,7 +391,7 @@ export function OperatorChatPage() {
                       <button
                         key={reply.label}
                         onClick={() => handleQuickReply(reply.message)}
-                        className="px-3 py-2 bg-bbs-accent/20 hover:bg-bbs-accent/30 text-bbs-accent rounded text-sm"
+                        className="px-3 py-2 bg-bbs-accent/20 hover:bg-bbs-accent/30 text-accent rounded text-sm"
                       >
                         {reply.label}
                       </button>
@@ -418,7 +418,7 @@ export function OperatorChatPage() {
                     <button
                       onClick={() => handleSendMessage()}
                       disabled={!inputMessage.trim()}
-                      className="px-6 py-3 bg-bbs-accent hover:bg-bbs-accent/80 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-6 py-3 bg-bbs-accent hover:bg-bbs-accent/80 text-content-inverse rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       Send
                     </button>
@@ -459,7 +459,7 @@ export function OperatorChatPage() {
                       </div>
                       <button
                         onClick={() => handleAcceptPage(page)}
-                        className="px-4 py-2 bg-bbs-accent hover:bg-bbs-accent/80 text-white rounded"
+                        className="px-4 py-2 bg-bbs-accent hover:bg-bbs-accent/80 text-content-inverse rounded"
                       >
                         Accept
                       </button>

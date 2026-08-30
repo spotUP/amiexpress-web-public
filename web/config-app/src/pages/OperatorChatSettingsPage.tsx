@@ -528,23 +528,23 @@ export function OperatorChatSettingsPage() {
               </h3>
 
               {!push.isSupported ? (
-                <div className="bg-gray-800/50 border border-gray-600 rounded p-3">
-                  <p className="text-sm text-gray-400 flex items-center gap-2">
+                <div className="bg-surface-1/50 border border-border-strong rounded p-3">
+                  <p className="text-sm text-content-secondary flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     Push notifications are not supported in this browser
                   </p>
                 </div>
               ) : !push.isEnabled ? (
-                <div className="bg-gray-800/50 border border-gray-600 rounded p-3">
-                  <p className="text-sm text-gray-400 flex items-center gap-2">
+                <div className="bg-surface-1/50 border border-border-strong rounded p-3">
+                  <p className="text-sm text-content-secondary flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     Push notifications not configured on server. Add VAPID keys to enable.
                   </p>
                 </div>
               ) : push.isSubscribed ? (
                 <div className="space-y-3">
-                  <div className="bg-green-900/20 border border-green-600/50 rounded p-3">
-                    <p className="text-sm text-green-200 flex items-center gap-2">
+                  <div className="bg-status-ok/10 border border-status-ok/50 rounded p-3">
+                    <p className="text-sm text-status-ok flex items-center gap-2">
                       <CheckCircle className="w-4 h-4" />
                       Push notifications enabled - you'll receive alerts on this device
                     </p>
@@ -553,7 +553,7 @@ export function OperatorChatSettingsPage() {
                     <button
                       type="button"
                       onClick={() => push.testNotification()}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
+                      className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-content-inverse text-sm rounded"
                     >
                       Test Notification
                     </button>
@@ -561,7 +561,7 @@ export function OperatorChatSettingsPage() {
                       type="button"
                       onClick={() => push.unsubscribe()}
                       disabled={push.loading}
-                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded disabled:opacity-50"
+                      className="px-3 py-1.5 bg-status-danger hover:bg-status-danger/90 text-content-inverse text-sm rounded disabled:opacity-50"
                     >
                       {push.loading ? 'Disabling...' : 'Disable Notifications'}
                     </button>
@@ -574,8 +574,8 @@ export function OperatorChatSettingsPage() {
                     even when the admin panel is closed.
                   </p>
                   {push.permission === 'denied' ? (
-                    <div className="bg-red-900/20 border border-red-600/50 rounded p-3">
-                      <p className="text-sm text-red-200 flex items-center gap-2">
+                    <div className="bg-status-danger/10 border border-status-danger/50 rounded p-3">
+                      <p className="text-sm text-status-danger flex items-center gap-2">
                         <AlertCircle className="w-4 h-4" />
                         Notification permission was denied. Please enable notifications in your browser settings.
                       </p>
@@ -585,14 +585,14 @@ export function OperatorChatSettingsPage() {
                       type="button"
                       onClick={() => push.subscribe()}
                       disabled={push.loading}
-                      className="px-4 py-2 bg-bbs-accent hover:bg-bbs-accent/80 text-white rounded flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 bg-bbs-accent hover:bg-bbs-accent/80 text-content-inverse rounded flex items-center gap-2 disabled:opacity-50"
                     >
                       <BellRing className="w-4 h-4" />
                       {push.loading ? 'Enabling...' : 'Enable Push Notifications'}
                     </button>
                   )}
                   {push.error && (
-                    <p className="text-sm text-red-400">{push.error}</p>
+                    <p className="text-sm text-status-danger">{push.error}</p>
                   )}
                 </div>
               )}
@@ -608,24 +608,24 @@ export function OperatorChatSettingsPage() {
           </h2>
 
           <div className="space-y-4">
-            <div className="bg-blue-900/20 border border-blue-600/50 rounded p-3">
-              <p className="text-sm text-blue-200">
+            <div className="bg-accent/10 border border-accent/50 rounded p-3">
+              <p className="text-sm text-status-info">
                 <strong>VAPID Keys:</strong> Required for Web Push notifications. Generate new keys or enter existing ones.
                 These keys are used to identify your server to push notification services.
               </p>
             </div>
 
             {/* Status indicator */}
-            <div className={`flex items-center gap-2 p-3 rounded ${vapidConfig.enabled ? 'bg-green-900/20 border border-green-600/50' : 'bg-yellow-900/20 border border-yellow-600/50'}`}>
+            <div className={`flex items-center gap-2 p-3 rounded ${vapidConfig.enabled ? 'bg-status-ok/10 border border-status-ok/50' : 'bg-status-warn/10 border border-status-warn/50'}`}>
               {vapidConfig.enabled ? (
                 <>
-                  <CheckCircle className="w-4 h-4 text-green-400" />
-                  <span className="text-sm text-green-200">Push notifications are enabled and working</span>
+                  <CheckCircle className="w-4 h-4 text-status-ok" />
+                  <span className="text-sm text-status-ok">Push notifications are enabled and working</span>
                 </>
               ) : (
                 <>
-                  <AlertCircle className="w-4 h-4 text-yellow-400" />
-                  <span className="text-sm text-yellow-200">Push notifications are not configured - add VAPID keys below</span>
+                  <AlertCircle className="w-4 h-4 text-status-warn" />
+                  <span className="text-sm text-status-warn">Push notifications are not configured - add VAPID keys below</span>
                 </>
               )}
             </div>
@@ -636,7 +636,7 @@ export function OperatorChatSettingsPage() {
                 type="button"
                 onClick={generateVapidKeys}
                 disabled={vapidLoading}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-content-inverse rounded flex items-center gap-2 disabled:opacity-50"
               >
                 {vapidLoading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -709,8 +709,8 @@ export function OperatorChatSettingsPage() {
 
             {/* Error message */}
             {vapidError && (
-              <div className="bg-red-900/20 border border-red-600/50 rounded p-3">
-                <p className="text-sm text-red-200 flex items-center gap-2">
+              <div className="bg-status-danger/10 border border-status-danger/50 rounded p-3">
+                <p className="text-sm text-status-danger flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
                   {vapidError}
                 </p>
@@ -723,7 +723,7 @@ export function OperatorChatSettingsPage() {
                 type="button"
                 onClick={saveVapidConfig}
                 disabled={vapidSaving || !vapidConfig.vapid_public_key || !vapidConfig.vapid_private_key}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-status-ok hover:bg-status-ok/90 text-content-inverse rounded flex items-center gap-2 disabled:opacity-50"
               >
                 {vapidSaving ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -744,8 +744,8 @@ export function OperatorChatSettingsPage() {
           </h2>
 
           <div className="space-y-4">
-            <div className="bg-yellow-900/20 border border-yellow-600/50 rounded p-3">
-              <p className="text-sm text-yellow-200">
+            <div className="bg-status-warn/10 border border-status-warn/50 rounded p-3">
+              <p className="text-sm text-status-warn">
                 <strong>Note:</strong> The grumpy bot automatically activates when a page times out.
                 It types naturally with occasional typos for a more human-like experience.
               </p>
@@ -811,7 +811,7 @@ export function OperatorChatSettingsPage() {
             </div>
           )}
           {!updateMutation.isPending && (
-            <div className="text-sm text-green-500 flex items-center gap-2">
+            <div className="text-sm text-status-ok flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>

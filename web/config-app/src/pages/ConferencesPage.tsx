@@ -150,7 +150,7 @@ export function ConferencesPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Conference Configuration</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Conference Configuration</h1>
           <p className="text-bbs-muted">Manage message and file conference settings</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
@@ -165,7 +165,7 @@ export function ConferencesPage() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-start space-x-3">
                 <div className="p-2 bg-bbs-primary rounded">
-                  <MessageSquare className="text-bbs-accent" size={20} />
+                  <MessageSquare className="text-accent" size={20} />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-bbs-text">{conf.name || `Conference ${conf.conference_id}`}</h3>
@@ -209,7 +209,7 @@ export function ConferencesPage() {
               </button>
               <button
                 onClick={() => handleDelete(conf)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
+                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
               >
                 <Trash2 size={16} />
               </button>
@@ -229,7 +229,7 @@ export function ConferencesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-bbs-accent">
+              <h2 className="text-2xl font-bold text-accent">
                 {editingConference ? 'Edit Conference' : 'Add Conference'}
               </h2>
               <button
@@ -335,7 +335,7 @@ export function ConferencesPage() {
                       type="checkbox"
                       checked={formData.force_newscan}
                       onChange={(e) => setFormData({ ...formData, force_newscan: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-bbs-accent"
+                      className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-bbs-text">Force Newscan</span>
                   </label>
@@ -345,7 +345,7 @@ export function ConferencesPage() {
                       type="checkbox"
                       checked={formData.exclude_ftp}
                       onChange={(e) => setFormData({ ...formData, exclude_ftp: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-bbs-accent"
+                      className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-bbs-text">Exclude FTP</span>
                   </label>
@@ -355,7 +355,7 @@ export function ConferencesPage() {
                       type="checkbox"
                       checked={formData.private_conf}
                       onChange={(e) => setFormData({ ...formData, private_conf: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-bbs-accent"
+                      className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-bbs-text">Private Conference</span>
                   </label>
@@ -365,7 +365,7 @@ export function ConferencesPage() {
                       type="checkbox"
                       checked={formData.read_only}
                       onChange={(e) => setFormData({ ...formData, read_only: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-bbs-accent"
+                      className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-bbs-text">Read Only</span>
                   </label>

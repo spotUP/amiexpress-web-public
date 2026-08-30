@@ -121,15 +121,15 @@ export function DeploymentPage() {
     switch (status) {
       case 'ok':
       case 'healthy':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+        return <CheckCircle className="w-5 h-5 text-status-ok" />;
       case 'warning':
       case 'degraded':
-        return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
+        return <AlertTriangle className="w-5 h-5 text-status-warn" />;
       case 'error':
       case 'unhealthy':
-        return <XCircle className="w-5 h-5 text-red-500" />;
+        return <XCircle className="w-5 h-5 text-status-danger" />;
       default:
-        return <Info className="w-5 h-5 text-gray-500" />;
+        return <Info className="w-5 h-5 text-content-muted" />;
     }
   };
 
@@ -137,15 +137,15 @@ export function DeploymentPage() {
     switch (status) {
       case 'ok':
       case 'healthy':
-        return 'text-green-500';
+        return 'text-status-ok';
       case 'warning':
       case 'degraded':
-        return 'text-yellow-500';
+        return 'text-status-warn';
       case 'error':
       case 'unhealthy':
-        return 'text-red-500';
+        return 'text-status-danger';
       default:
-        return 'text-gray-500';
+        return 'text-content-muted';
     }
   };
 
@@ -194,7 +194,7 @@ export function DeploymentPage() {
                   <p className="text-sm text-bbs-muted mt-1">{check.message}</p>
                   {check.details && (
                     <details className="mt-2">
-                      <summary className="text-xs text-bbs-accent cursor-pointer">View Details</summary>
+                      <summary className="text-xs text-accent cursor-pointer">View Details</summary>
                       <pre className="mt-2 text-xs bg-bbs-bg p-2 rounded overflow-auto">
                         {JSON.stringify(check.details, null, 2)}
                       </pre>
@@ -220,7 +220,7 @@ export function DeploymentPage() {
         {/* Node.js Information */}
         <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <Server className="w-5 h-5 text-bbs-accent" />
+            <Server className="w-5 h-5 text-accent" />
             <h3 className="text-lg font-semibold">Node.js Runtime</h3>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -246,7 +246,7 @@ export function DeploymentPage() {
         {/* Memory Information */}
         <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <HardDrive className="w-5 h-5 text-bbs-accent" />
+            <HardDrive className="w-5 h-5 text-accent" />
             <h3 className="text-lg font-semibold">Memory Usage</h3>
           </div>
           <div className="space-y-3">
@@ -274,7 +274,7 @@ export function DeploymentPage() {
         {/* BBS Configuration */}
         <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <Activity className="w-5 h-5 text-bbs-accent" />
+            <Activity className="w-5 h-5 text-accent" />
             <h3 className="text-lg font-semibold">BBS Configuration</h3>
           </div>
           <div className="space-y-2 text-sm">
@@ -300,7 +300,7 @@ export function DeploymentPage() {
         {/* Ports Configuration */}
         <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <Server className="w-5 h-5 text-bbs-accent" />
+            <Server className="w-5 h-5 text-accent" />
             <h3 className="text-lg font-semibold">Network Ports</h3>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -334,9 +334,9 @@ export function DeploymentPage() {
 
     if (!databaseStats.exists) {
       return (
-        <div className="bg-bbs-surface border border-red-500 rounded p-6">
+        <div className="bg-bbs-surface border border-status-danger rounded p-6">
           <div className="flex items-center space-x-3">
-            <XCircle className="w-6 h-6 text-red-500" />
+            <XCircle className="w-6 h-6 text-status-danger" />
             <div>
               <h3 className="text-lg font-semibold">Database Not Found</h3>
               <p className="text-sm text-bbs-muted mt-1">{databaseStats.error}</p>
@@ -352,15 +352,15 @@ export function DeploymentPage() {
         {/* Database Overview */}
         <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <Database className="w-5 h-5 text-bbs-accent" />
+            <Database className="w-5 h-5 text-accent" />
             <h3 className="text-lg font-semibold">Database Overview</h3>
           </div>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-bbs-muted">Status:</span>
               <span className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span className="text-green-500">Connected</span>
+                <CheckCircle className="w-4 h-4 text-status-ok" />
+                <span className="text-status-ok">Connected</span>
               </span>
             </div>
             <div className="flex justify-between">
@@ -384,19 +384,19 @@ export function DeploymentPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
             <div className="flex items-center space-x-3 mb-2">
-              <Users className="w-5 h-5 text-bbs-accent" />
+              <Users className="w-5 h-5 text-accent" />
               <h4 className="font-semibold">Users</h4>
             </div>
-            <p className="text-3xl font-bold text-bbs-accent">{databaseStats.users || 0}</p>
+            <p className="text-3xl font-bold text-accent">{databaseStats.users || 0}</p>
             <p className="text-xs text-bbs-muted mt-1">Total registered users</p>
           </div>
 
           <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
             <div className="flex items-center space-x-3 mb-2">
-              <MessageSquare className="w-5 h-5 text-bbs-accent" />
+              <MessageSquare className="w-5 h-5 text-accent" />
               <h4 className="font-semibold">Conferences</h4>
             </div>
-            <p className="text-3xl font-bold text-bbs-accent">{databaseStats.conferences || 0}</p>
+            <p className="text-3xl font-bold text-accent">{databaseStats.conferences || 0}</p>
             <p className="text-xs text-bbs-muted mt-1">Active conferences</p>
           </div>
         </div>
@@ -446,10 +446,10 @@ export function DeploymentPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500 rounded p-4">
+        <div className="bg-status-danger/10 border border-status-danger rounded p-4">
           <div className="flex items-center space-x-2">
-            <XCircle className="w-5 h-5 text-red-500" />
-            <span className="text-red-500">{error}</span>
+            <XCircle className="w-5 h-5 text-status-danger" />
+            <span className="text-status-danger">{error}</span>
           </div>
         </div>
       )}
@@ -460,7 +460,7 @@ export function DeploymentPage() {
           onClick={() => setActiveTab('health')}
           className={`px-4 py-2 font-medium transition-colors ${
             activeTab === 'health'
-              ? 'text-bbs-accent border-b-2 border-bbs-accent'
+              ? 'text-accent border-b-2 border-bbs-accent'
               : 'text-bbs-muted hover:text-bbs-text'
           }`}
         >
@@ -470,7 +470,7 @@ export function DeploymentPage() {
           onClick={() => setActiveTab('system')}
           className={`px-4 py-2 font-medium transition-colors ${
             activeTab === 'system'
-              ? 'text-bbs-accent border-b-2 border-bbs-accent'
+              ? 'text-accent border-b-2 border-bbs-accent'
               : 'text-bbs-muted hover:text-bbs-text'
           }`}
         >
@@ -480,7 +480,7 @@ export function DeploymentPage() {
           onClick={() => setActiveTab('database')}
           className={`px-4 py-2 font-medium transition-colors ${
             activeTab === 'database'
-              ? 'text-bbs-accent border-b-2 border-bbs-accent'
+              ? 'text-accent border-b-2 border-bbs-accent'
               : 'text-bbs-muted hover:text-bbs-text'
           }`}
         >

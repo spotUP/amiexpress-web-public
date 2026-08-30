@@ -197,10 +197,10 @@ export function UsersPage() {
   };
 
   const getSecurityLevelColor = (level: number) => {
-    if (level >= 255) return 'text-red-500';
-    if (level >= 200) return 'text-orange-500';
-    if (level >= 100) return 'text-yellow-500';
-    if (level >= 50) return 'text-green-500';
+    if (level >= 255) return 'text-status-danger';
+    if (level >= 200) return 'text-status-warn';
+    if (level >= 100) return 'text-status-warn';
+    if (level >= 50) return 'text-status-ok';
     return 'text-bbs-muted';
   };
 
@@ -307,7 +307,7 @@ export function UsersPage() {
           </button>
           <button
             onClick={() => handleDelete(user)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs flex items-center space-x-1"
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs flex items-center space-x-1"
           >
             <Trash2 size={14} />
             <span>Del</span>
@@ -321,7 +321,7 @@ export function UsersPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">User Management</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">User Management</h1>
           <p className="text-bbs-muted">Manage BBS user accounts and permissions</p>
         </div>
         <div className="flex items-center space-x-3">
@@ -389,7 +389,7 @@ export function UsersPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-bbs-accent">
+              <h2 className="text-2xl font-bold text-accent">
                 {editingUser ? 'Edit User' : 'Add User'}
               </h2>
               <button
@@ -559,7 +559,7 @@ export function UsersPage() {
                       type="checkbox"
                       checked={formData.expert}
                       onChange={(e) => setFormData({ ...formData, expert: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-bbs-accent"
+                      className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-bbs-text">Expert Mode (skip prompts and menus)</span>
                   </label>

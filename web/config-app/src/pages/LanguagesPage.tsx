@@ -137,7 +137,7 @@ export function LanguagesPage() {
         <button
           onClick={() => handleToggle(lang)}
           className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-            lang.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+            lang.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
           }`}
         >
           {lang.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
@@ -186,7 +186,7 @@ export function LanguagesPage() {
           </button>
           <button
             onClick={() => handleDelete(lang)}
-            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs"
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse px-2 py-1 rounded text-xs"
           >
             <Trash2 size={14} />
           </button>
@@ -199,7 +199,7 @@ export function LanguagesPage() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-bbs-accent mb-2">Languages Configuration</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">Languages Configuration</h1>
           <p className="text-bbs-muted">Manage multi-language support (up to 10 languages)</p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
