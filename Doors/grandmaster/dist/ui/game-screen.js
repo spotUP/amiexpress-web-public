@@ -476,6 +476,24 @@ class GameScreen {
             mouse: false,
             clickable: false,
         });
+        // Right of the SECTION column, which is otherwise unused. Only zone mode
+        // shows it.
+        this.zoneBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 8,
+            left: 56,
+            width: 20,
+            height: 6,
+            border: { type: 'line' },
+            style: { bg: 'black', border: { fg: 'cyan' } },
+            label: ' ZONE ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Hidden until a zone game starts; every other mode never sees it.
+        this.zoneBox.hide();
         this.sectionBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 16,
@@ -716,19 +734,35 @@ class GameScreen {
         const bar = '#'.repeat(filled) + '-'.repeat(remaining);
         return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
     }
-    getZoneHud(state) {
-        if (state.mode !== 'zone')
-            return '';
+    /**
+     * The zone meter, or the countdown while zone is running.
+     *
+     * Exported shape kept as a string builder so it can be tested without a
+     * Screen; the box only exists in zone mode.
+     */
+    static zoneHudContent(state) {
         if (state.zoneActive) {
             const s = Math.ceil(Math.max(0, state.zoneTimeRemaining) / 1000);
             const n = state.zoneBufferedLines ?? 0;
-            return `\n{cyan-fg}ZONE: ${s}s (${n} lines){/cyan-fg}`;
+            return `\n {cyan-fg}{bold}ACTIVE{/bold}{/cyan-fg}\n {cyan-fg}${s}s{/cyan-fg}\n {white-fg}${n} lines held{/white-fg}`;
         }
-        const pct = Math.round((state.zoneMeter ?? 0) * 100);
-        const filled = Math.round((state.zoneMeter ?? 0) * 10);
+        const meter = state.zoneMeter ?? 0;
+        const pct = Math.round(meter * 100);
+        const filled = Math.max(0, Math.min(10, Math.round(meter * 10)));
         const bar = '#'.repeat(filled) + '-'.repeat(10 - filled);
+        // 20% is the threshold activateZone() enforces; say so rather than
+        // leaving the player guessing why the key does nothing.
         const color = pct >= 100 ? 'yellow' : pct >= 20 ? 'cyan' : 'gray';
-        return `\n{${color}-fg}ZONE ${pct}%{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
+        const hint = pct >= 20 ? '{green-fg}FLIP to enter{/green-fg}' : '{gray-fg}needs 20%{/gray-fg}';
+        return `\n {${color}-fg}${String(pct).padStart(3)}%{/${color}-fg} {gray-fg}[${bar}]{/gray-fg}\n ${hint}`;
+    }
+    renderZone(state) {
+        if (state.mode !== 'zone') {
+            this.zoneBox.hide();
+            return;
+        }
+        this.zoneBox.show();
+        this.zoneBox.setContent(GameScreen.zoneHudContent(state));
     }
     getUltraTime(state) {
         if (state.mode !== 'ultra' || state.ultraTimeRemaining === undefined)
@@ -757,8 +791,9 @@ class GameScreen {
             `  Grav:  ${gravDisplay}G\n` +
             `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
             this.getUltraTime(state) +
-            this.getDigHud(state) +
-            this.getZoneHud(state);
+            this.getDigHud(state);
+        // Zone has its own box: the six stats above already fill this one.
+        this.renderZone(state);
         if (state.lastTSpin === 'full') {
             statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
         }

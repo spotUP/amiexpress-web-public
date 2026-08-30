@@ -38,6 +38,16 @@ export class GameScreen {
   private statsBox: any;
   private gradeBox: any;
   private sectionBox: any;
+  /**
+   * Zone mode's meter, in its own box.
+   *
+   * It used to be appended to the STATS box, which is 8 rows with a border -
+   * six usable lines, and the six stats already filled them. The meter was
+   * built on every frame and drawn past the bottom of the box, so zone mode
+   * ran with no meter at all: nothing told the player when they could
+   * activate it.
+   */
+  private zoneBox: any;
   private footerBox: any;
   // Board overlay compositor: effects rendered inline in board content
   // Each cell is a blessed-tagged 2-char string or null (no overlay)
@@ -548,6 +558,25 @@ export class GameScreen {
       clickable: false,
     });
 
+    // Right of the SECTION column, which is otherwise unused. Only zone mode
+    // shows it.
+    this.zoneBox = createBox({
+      parent: this.screen,
+      top: 8,
+      left: 56,
+      width: 20,
+      height: 6,
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      label: ' ZONE ',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+    // Hidden until a zone game starts; every other mode never sees it.
+    this.zoneBox.hide();
+
     this.sectionBox = createBox({
       parent: this.screen,
       top: 16,
@@ -810,18 +839,36 @@ export class GameScreen {
     return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
   }
 
-  private getZoneHud(state: any): string {
-    if (state.mode !== 'zone') return '';
+  /**
+   * The zone meter, or the countdown while zone is running.
+   *
+   * Exported shape kept as a string builder so it can be tested without a
+   * Screen; the box only exists in zone mode.
+   */
+  static zoneHudContent(state: any): string {
     if (state.zoneActive) {
       const s = Math.ceil(Math.max(0, state.zoneTimeRemaining) / 1000);
       const n = state.zoneBufferedLines ?? 0;
-      return `\n{cyan-fg}ZONE: ${s}s (${n} lines){/cyan-fg}`;
+      return `\n {cyan-fg}{bold}ACTIVE{/bold}{/cyan-fg}\n {cyan-fg}${s}s{/cyan-fg}\n {white-fg}${n} lines held{/white-fg}`;
     }
-    const pct = Math.round((state.zoneMeter ?? 0) * 100);
-    const filled = Math.round((state.zoneMeter ?? 0) * 10);
+    const meter = state.zoneMeter ?? 0;
+    const pct = Math.round(meter * 100);
+    const filled = Math.max(0, Math.min(10, Math.round(meter * 10)));
     const bar = '#'.repeat(filled) + '-'.repeat(10 - filled);
+    // 20% is the threshold activateZone() enforces; say so rather than
+    // leaving the player guessing why the key does nothing.
     const color = pct >= 100 ? 'yellow' : pct >= 20 ? 'cyan' : 'gray';
-    return `\n{${color}-fg}ZONE ${pct}%{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
+    const hint = pct >= 20 ? '{green-fg}FLIP to enter{/green-fg}' : '{gray-fg}needs 20%{/gray-fg}';
+    return `\n {${color}-fg}${String(pct).padStart(3)}%{/${color}-fg} {gray-fg}[${bar}]{/gray-fg}\n ${hint}`;
+  }
+
+  private renderZone(state: any): void {
+    if (state.mode !== 'zone') {
+      this.zoneBox.hide();
+      return;
+    }
+    this.zoneBox.show();
+    this.zoneBox.setContent(GameScreen.zoneHudContent(state));
   }
 
   private getUltraTime(state: any): string {
@@ -852,8 +899,10 @@ export class GameScreen {
       `  Grav:  ${gravDisplay}G\n` +
       `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
       this.getUltraTime(state) +
-      this.getDigHud(state) +
-      this.getZoneHud(state);
+      this.getDigHud(state);
+
+    // Zone has its own box: the six stats above already fill this one.
+    this.renderZone(state);
 
     if (state.lastTSpin === 'full') {
       statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;

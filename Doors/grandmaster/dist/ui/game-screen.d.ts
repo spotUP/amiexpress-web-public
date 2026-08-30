@@ -25,6 +25,16 @@ export declare class GameScreen {
     private statsBox;
     private gradeBox;
     private sectionBox;
+    /**
+     * Zone mode's meter, in its own box.
+     *
+     * It used to be appended to the STATS box, which is 8 rows with a border -
+     * six usable lines, and the six stats already filled them. The meter was
+     * built on every frame and drawn past the bottom of the box, so zone mode
+     * ran with no meter at all: nothing told the player when they could
+     * activate it.
+     */
+    private zoneBox;
     private footerBox;
     private boardOverlay;
     private lastRender;
@@ -112,7 +122,14 @@ export declare class GameScreen {
     private getBoardHash;
     private getPPS;
     private getDigHud;
-    private getZoneHud;
+    /**
+     * The zone meter, or the countdown while zone is running.
+     *
+     * Exported shape kept as a string builder so it can be tested without a
+     * Screen; the box only exists in zone mode.
+     */
+    static zoneHudContent(state: any): string;
+    private renderZone;
     private getUltraTime;
     private renderStats;
     /**
