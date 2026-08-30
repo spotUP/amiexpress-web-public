@@ -4,6 +4,17 @@
 typedef struct {
     char host[64];
     int port;
+    /* THIS board's own management API (Task 7's /api/door-admin), used ONLY
+     * by report_install_to_bbs() to tell the local BBS what DoorRepo just
+     * installed. Deliberately separate from host/port above: those name the
+     * REMOTE catalog server (RepoHost/RepoPort, e.g. bbs.uprough.net for a
+     * board that has not overridden it), and reusing them for a same-host
+     * report would send every non-uprough.net board's install report - and
+     * its bearer token - across the network to bbs.uprough.net instead of
+     * to itself. Defaults to localhost: the BBS and this door always run on
+     * the same host, the emulator's network stack included. */
+    char bbs_host[64];
+    int bbs_port;
     char path[128];
     char download_dir[128];
     /* Where an installed door's files are put, and where its BBS command
@@ -64,7 +75,8 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines);
  * one caller (doorrepo.c's sysop-facing message) currently needs.
  *
  * DownloadDir, LhaCommand, LogFile and RepoPath are checked (RepoHost/
- * RepoPort/PageSize/TimeoutSecs/ExtractAfterDownload are not - they are
+ * RepoPort/BbsHost/BbsPort/PageSize/TimeoutSecs/ExtractAfterDownload are
+ * not - they are
  * never interpolated into a shell command line or a raw HTTP request
  * line the way those four are). This exists because DownloadDir and
  * LhaCommand both flow, unescaped, into the archiver command line built

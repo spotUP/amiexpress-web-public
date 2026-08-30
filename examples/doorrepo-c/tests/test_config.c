@@ -99,6 +99,57 @@ TEST(parse_port)
     unlink("/tmp/test_config_port.cfg");
 }
 
+TEST(bbs_host_port_defaults)
+{
+    /* The local BBS's own management API, not the remote catalog server -
+     * a board that never overrides RepoHost must still report installs to
+     * ITSELF, not to bbs.uprough.net (cfg.host's default). */
+    dr_config cfg;
+    config_defaults(&cfg);
+    ASSERT_STR_EQ(cfg.bbs_host, "localhost", "default bbs_host");
+    ASSERT_EQ(cfg.bbs_port, 3001, "default bbs_port");
+    ASSERT_TRUE(strcmp(cfg.bbs_host, cfg.host) != 0, "bbs_host is distinct from host");
+}
+
+TEST(parse_bbs_host)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_bbs_host.cfg", "w");
+    fprintf(f, "BbsHost=bbs.internal\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_bbs_host.cfg", NULL);
+    ASSERT_STR_EQ(cfg.bbs_host, "bbs.internal", "BbsHost parsed");
+    /* RepoHost's own default is untouched by a BbsHost line. */
+    ASSERT_STR_EQ(cfg.host, "bbs.uprough.net", "RepoHost unaffected by BbsHost");
+    unlink("/tmp/test_config_bbs_host.cfg");
+}
+
+TEST(parse_bbs_port)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_bbs_port.cfg", "w");
+    fprintf(f, "BbsPort=9091\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_bbs_port.cfg", NULL);
+    ASSERT_EQ(cfg.bbs_port, 9091, "BbsPort parsed");
+    ASSERT_EQ(cfg.port, 80, "RepoPort unaffected by BbsPort");
+    unlink("/tmp/test_config_bbs_port.cfg");
+}
+
+TEST(bbs_port_out_of_range_keeps_default)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_bbs_port_bad.cfg", "w");
+    fprintf(f, "BbsPort=70000\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_bbs_port_bad.cfg", NULL);
+    ASSERT_EQ(cfg.bbs_port, 3001, "out-of-range BbsPort keeps default");
+    unlink("/tmp/test_config_bbs_port_bad.cfg");
+}
+
 TEST(parse_path)
 {
     dr_config cfg;
@@ -1216,6 +1267,10 @@ int main(void)
     RUN_TEST(missing_file_preserves_defaults);
     RUN_TEST(parse_host);
     RUN_TEST(parse_port);
+    RUN_TEST(bbs_host_port_defaults);
+    RUN_TEST(parse_bbs_host);
+    RUN_TEST(parse_bbs_port);
+    RUN_TEST(bbs_port_out_of_range_keeps_default);
     RUN_TEST(parse_path);
     RUN_TEST(parse_download_dir);
     RUN_TEST(parse_page_size);

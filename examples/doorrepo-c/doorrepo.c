@@ -3223,10 +3223,23 @@ static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
     const char *headers[2];
     http_response resp;
     int body_len;
+    dr_config local_cfg;
 
     if (!config_read_token(cfg, token, sizeof(token))) {
         return;
     }
+
+    /* http_request() always targets cfg->host:cfg->port, and those name the
+     * REMOTE catalog server (RepoHost/RepoPort - bbs.uprough.net by
+     * default). This report is for THIS board's own management API, so a
+     * local copy of cfg with host/port swapped for bbs_host/bbs_port is
+     * passed instead - on every board that has not overridden RepoHost,
+     * posting straight to cfg->host would send this board's launch token,
+     * in cleartext, to bbs.uprough.net. */
+    local_cfg = *cfg;
+    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
+    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
+    local_cfg.port = cfg->bbs_port;
 
     /* json_build_install_body(), not a bare sprintf("%s"): the catalog
      * this archive name comes from holds thousands of Latin-1 entries,
@@ -3245,7 +3258,7 @@ static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
     headers[1] = tokenhdr;
 
     memset(&resp, 0, sizeof(resp));
-    if (http_request(cfg, "POST", "/api/door-admin/installed",
+    if (http_request(&local_cfg, "POST", "/api/door-admin/installed",
                      body, (unsigned long) body_len,
                      headers, 2, &resp,
                      (int (*)(void *, const unsigned char *, unsigned long)) 0,
