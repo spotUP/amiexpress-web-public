@@ -18,7 +18,27 @@ import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys } from '../../src/s
 import type { BBSConfigData } from '../../src/services/bbs-config-file.service';
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
+
+/**
+ * A real board's bbsConfig.info, if this machine runs one.
+ *
+ * It is gitignored - it holds a live board's configuration, including its
+ * system password - so it exists on a sysop's machine and nowhere else. Every
+ * test here used to copy it, which meant the whole suite failed on a clean
+ * checkout before a single assertion ran, and Backend Tests has been red on
+ * main ever since.
+ *
+ * Only the tests that are ABOUT the binary icon need it now. The rest work
+ * from an empty root: saveBBSConfig writes bbsConfig.info.txt on its own when
+ * there is no icon to update, loadBBSConfig applies that file after the icon,
+ * and it is the file this BBS actually reads - so a tooltype round trip is
+ * fully exercised either way.
+ */
 const FIXTURE = path.join(REPO_ROOT, 'bbsConfig.info');
+const hasIcon = fs.existsSync(FIXTURE);
+
+/** The icon tests, skipped with a reason rather than failing, when absent. */
+const describeIcon = hasIcon ? describe : describe.skip;
 
 /** Fields the writer deliberately does not round-trip. */
 const NOT_ROUND_TRIPPED = new Set<string>([
@@ -27,8 +47,14 @@ const NOT_ROUND_TRIPPED = new Set<string>([
   'reg_key',
 ]);
 
+/** An empty BBS root: the text companion is written and read without an icon. */
 function makeRoot(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bbsconfig-roundtrip-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'bbsconfig-roundtrip-'));
+}
+
+/** A root carrying a copy of the real icon, for the tests that need one. */
+function makeIconRoot(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bbsconfig-icon-'));
   // Binary copy: the .info file carries high-bit bytes that a text round trip
   // would destroy.
   fs.copyFileSync(FIXTURE, path.join(dir, 'bbsConfig.info'));
@@ -44,10 +70,6 @@ describe('bbsConfig.info round trip', () => {
 
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it('has a fixture to work against', () => {
-    expect(fs.existsSync(FIXTURE)).toBe(true);
   });
 
   it('returns a string field exactly as it was written', () => {
@@ -161,6 +183,28 @@ describe('bbsConfig.info round trip', () => {
     // Jest's expect takes no message, so the report goes in the value.
     expect(lost.join('\n')).toBe('');
   });
+});
+
+
+/**
+ * What the binary icon itself does, on a machine that has one.
+ *
+ * These are the only tests that need a real bbsConfig.info: the non-standard
+ * tooltype array this board's icon carries cannot be synthesised, and one of
+ * them asserts a key that exists only in that file. They are skipped rather
+ * than failed where there is no board, so a clean checkout stays green without
+ * losing the coverage where it can actually run.
+ */
+describeIcon('bbsConfig.info, the icon file', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeIconRoot();
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 
   it('keeps a tooltype the admin does not know about', () => {
     // bbsConfig.info belongs to the BBS, not to this form. A key the map has
@@ -172,7 +216,6 @@ describe('bbsConfig.info round trip', () => {
     expect(after.length).toBeGreaterThan(0);
     expect(before.length).toBeGreaterThan(0);
   });
-
   it('saves anyway when the icon cannot be rewritten, and says so', () => {
     // This fixture's tooltype array is not in the standard layout, so the
     // writer can only read it heuristically and refuses to re-serialise it.
@@ -186,7 +229,6 @@ describe('bbsConfig.info round trip', () => {
     expect(result.warning).toContain('bbsConfig.info');
     expect(loadBBSConfig(root).sysop_name).toBe('Spot');
   });
-
   it('does not copy binary fragments into the text companion', () => {
     // Reading a non-standard icon heuristically picks up scraps of the
     // surrounding binary - single letters, and a stray length byte glued to
@@ -204,7 +246,6 @@ describe('bbsConfig.info round trip', () => {
     }
     expect(lines.some((line) => line.startsWith('FTPDATAPORT='))).toBe(true);
   });
-
   it('backs the file up before overwriting it', () => {
     saveBBSConfig(root, { sysop_name: 'Spot' });
 
