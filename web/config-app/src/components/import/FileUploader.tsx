@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef } from 'react';
+import { Package } from 'lucide-react';
 
 interface FileUploaderProps {
   onFileUploaded: (sessionId: string) => void;
@@ -121,7 +122,7 @@ export function FileUploader({ onFileUploaded }: FileUploaderProps) {
           </div>
         ) : (
           <>
-            <div className="upload-icon">📦</div>
+            <div className="upload-icon"><Package size={32} aria-hidden="true" /></div>
             <p className="upload-text">
               Drag and drop archive file here<br />
               or

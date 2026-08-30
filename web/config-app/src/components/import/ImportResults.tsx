@@ -4,6 +4,8 @@
  * Displays the results of a completed import.
  */
 
+import { CheckCircle, XCircle } from 'lucide-react';
+
 interface ImportResultsProps {
   result: {
     success: boolean;
@@ -23,11 +25,13 @@ export function ImportResults({ result, onReset }: ImportResultsProps) {
 
       {result.success ? (
         <div className="status-banner success">
-          ✓ Import completed successfully!
+          <CheckCircle size={16} aria-hidden="true" />
+          Import completed successfully
         </div>
       ) : (
         <div className="status-banner error">
-          ✗ Import completed with errors
+          <XCircle size={16} aria-hidden="true" />
+          Import completed with errors
         </div>
       )}
 

@@ -4,6 +4,8 @@
  * Displays validation results, conflicts, and import summary.
  */
 
+import { AlertTriangle, CheckCircle, Info, XCircle } from 'lucide-react';
+
 interface ValidationResultsProps {
   validation: any;
   conflicts: any;
@@ -62,23 +64,27 @@ export function ValidationResults({ validation, conflicts, summary }: Validation
       <div className="validation-status">
         {totalErrors === 0 && totalWarnings === 0 && !hasConflicts ? (
           <div className="status-banner success">
-            ✓ Archive validated successfully. No errors, warnings, or conflicts.
+            <CheckCircle size={16} aria-hidden="true" />
+            Archive validated successfully. No errors, warnings or conflicts.
           </div>
         ) : (
           <>
             {totalErrors > 0 && (
               <div className="status-banner error">
-                ✗ {totalErrors} validation error(s) found
+                <XCircle size={16} aria-hidden="true" />
+                {totalErrors} validation errors found
               </div>
             )}
             {totalWarnings > 0 && (
               <div className="status-banner warning">
-                ⚠ {totalWarnings} warning(s) found
+                <AlertTriangle size={16} aria-hidden="true" />
+                {totalWarnings} warnings found
               </div>
             )}
             {hasConflicts && (
               <div className="status-banner info">
-                ℹ Conflicts detected - review and select resolution strategies
+                <Info size={16} aria-hidden="true" />
+                Conflicts detected - review and select resolution strategies
               </div>
             )}
           </>
