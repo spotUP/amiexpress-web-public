@@ -73,3 +73,18 @@ export interface ImportProgressEvent {
  * rate. Nothing goes blank; the app keeps working, slower and dumber.
  */
 export type RealtimeStatus = 'live' | 'reconnecting' | 'offline';
+
+/** Emitted to the `sysops` room when a caller pages the operator. */
+export interface OperatorPageEvent {
+  id: string;
+  pageId: string;
+  userId: string;
+  userHandle: string;
+  nodeId: number;
+  conferenceId?: number;
+  conferenceName?: string;
+  timeOnline?: number;
+  lastCommand?: string;
+  status?: string;
+  createdAt: number;
+}

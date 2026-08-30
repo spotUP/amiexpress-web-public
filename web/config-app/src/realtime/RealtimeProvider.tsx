@@ -17,7 +17,8 @@ import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { createInvalidationScheduler } from './query-bridge';
-import type { BBSEvent, ImportProgressEvent, RealtimeStatus } from '../types/realtime';
+import { useNotification } from '../contexts/NotificationContext';
+import type { BBSEvent, ImportProgressEvent, OperatorPageEvent, RealtimeStatus } from '../types/realtime';
 
 type EventListener = (event: BBSEvent) => void;
 
@@ -27,6 +28,8 @@ interface RealtimeContextValue {
   lastEventAt: number | null;
   /** Subscribe to the live feed. Returns the unsubscribe function. */
   subscribe: (listener: EventListener) => () => void;
+  /** Callers waiting for a sysop, from anywhere in the app. */
+  pendingPages: number;
   socket: Socket | null;
 }
 
@@ -40,8 +43,10 @@ function socketOrigin(): string {
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const { showWarning } = useNotification();
   const [status, setStatus] = useState<RealtimeStatus>('offline');
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
+  const [pendingPages, setPendingPages] = useState(0);
   const socketRef = useRef<Socket | null>(null);
   const listenersRef = useRef(new Set<EventListener>());
 
@@ -78,6 +83,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     socket.on('connect', () => {
       setStatus('live');
+      // How many callers are already waiting. Answered per socket.
+      socket.emit('operator:get-pending-pages');
       // Everything may have moved while the socket was down.
       void queryClient.invalidateQueries({ queryKey: ['nodes'] });
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
@@ -93,6 +100,26 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       for (const listener of listenersRef.current) listener(event);
     });
 
+    // A caller paging the sysop is the single most time-critical thing the
+    // board can tell an operator, and until now it only reached them if they
+    // happened to be sitting on the Operator Chat page.
+    socket.on('operator:page', (page: OperatorPageEvent) => {
+      setPendingPages((current) => current + 1);
+      showWarning(`${page.userHandle} is paging you from node ${page.nodeId}`);
+    });
+
+    socket.on('operator:pending-pages', (pages: unknown) => {
+      setPendingPages(Array.isArray(pages) ? pages.length : 0);
+    });
+
+    socket.on('operator:page-accepted', () => {
+      socket.emit('operator:get-pending-pages');
+    });
+
+    socket.on('operator:chat-ended', () => {
+      socket.emit('operator:get-pending-pages');
+    });
+
     socket.on('import:progress', (progress: ImportProgressEvent) => {
       queryClient.setQueryData(['import', 'progress', progress.sessionId], progress);
     });
@@ -103,11 +130,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [queryClient]);
+  }, [queryClient, showWarning]);
 
   const value = useMemo<RealtimeContextValue>(
-    () => ({ status, lastEventAt, subscribe, socket: socketRef.current }),
-    [status, lastEventAt, subscribe]
+    () => ({ status, lastEventAt, pendingPages, subscribe, socket: socketRef.current }),
+    [status, lastEventAt, pendingPages, subscribe]
   );
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;

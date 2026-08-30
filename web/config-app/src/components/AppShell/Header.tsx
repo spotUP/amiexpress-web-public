@@ -1,14 +1,14 @@
 /**
- * Page title, the system pill, and the density control.
+ * Page title, the system pill, the waiting-callers badge and the density
+ * control.
  *
- * The pill is honest about where its numbers come from: this phase polls, so
- * it says "Polling" and shows when it last heard from the board. When the
- * realtime layer lands it becomes "Live" with the seconds since the last
- * event, and nothing else here changes.
+ * The pill is honest about where its numbers come from: Live means the socket
+ * is connected and events are arriving, and it shows how long ago the last one
+ * was; Polling means the numbers are only as fresh as the last poll.
  */
 
-import { useLocation } from 'react-router-dom';
-import { AlignJustify, Rows } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { AlignJustify, Rows, PhoneCall } from 'lucide-react';
 import { useDensity } from '../../hooks/useDensity';
 import { NODE_BACKGROUND_POLL_MS, useNodeStatus, useSessionStats } from '../../hooks/useBoardData';
 import { useRealtime } from '../../realtime/RealtimeProvider';
@@ -21,7 +21,7 @@ export function Header() {
   const { density, toggleDensity } = useDensity();
   const { data: nodeStatus, dataUpdatedAt, isError } = useNodeStatus(NODE_BACKGROUND_POLL_MS);
   const { data: sessionStats } = useSessionStats();
-  const { status, lastEventAt } = useRealtime();
+  const { status, lastEventAt, pendingPages } = useRealtime();
 
   const item = navItemForPath(location.pathname);
   const onlineNodes = nodeStatus?.onlineNodes ?? 0;
@@ -40,6 +40,17 @@ export function Header() {
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
+        {/* A caller waiting on the sysop follows you around the app. */}
+        {pendingPages > 0 && (
+          <Link
+            to="/admin/operator-chat"
+            className="flex h-control items-center gap-2 rounded border border-status-warn/40 bg-status-warn/10 px-3 text-xs text-content-primary transition-colors hover:bg-status-warn/20"
+          >
+            <PhoneCall size={14} aria-hidden="true" className="text-status-warn" />
+            {pendingPages === 1 ? '1 caller waiting' : `${pendingPages} callers waiting`}
+          </Link>
+        )}
+
         <div className="flex items-center gap-3 rounded border border-border bg-surface-2 px-3 py-1.5 text-xs">
           {/* Honest about where the numbers come from: Live means the socket
               is up and events are arriving, Polling means it is not. */}
