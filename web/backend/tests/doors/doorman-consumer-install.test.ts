@@ -99,12 +99,15 @@ beforeEach(() => {
 // Review finding (commit 6bc3b54cc): the original fix wired this guard into
 // installConsumerDoor's recordInstall closure but left owner-mode's install
 // call site (doInstallUninstall, RepoView -- not exported, requires a live
-// blessed Screen, so not unit-testable directly) calling recordInstallSafe
-// unconditionally. Since door_installs.recordInstall upserts ON
-// CONFLICT(command), an owner-mode install of a DIFFERENT archive under a
-// command another archive's install already owns would silently steal that
-// row. Fixed by extracting the guard into this one shared, exported,
-// directly-testable function and wiring it into BOTH install call sites.
+// blessed Screen, so not unit-testable directly) calling the local
+// install-recording helper (app.ts's recordInstallSafe at the time, since
+// renamed recordInstallViaRecorder when Task 4 rerouted it through the
+// backend's recordDoorInstall) unconditionally. Since door_installs.
+// recordInstall upserts ON CONFLICT(command), an owner-mode install of a
+// DIFFERENT archive under a command another archive's install already owns
+// would silently steal that row. Fixed by extracting the guard into this
+// one shared, exported, directly-testable function and wiring it into BOTH
+// install call sites.
 
 describe('DOORMAN app.ts: commandClaimedByOtherArchive (shared collision guard)', () => {
   it('no existing install under this command -> false, no log', () => {
