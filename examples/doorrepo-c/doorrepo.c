@@ -3005,14 +3005,118 @@ static void strip_installed_door(const dr_config *cfg, const char *archive,
     (void) ae_key();
 }
 
+/* Strip ad files from the REPOSITORY archive (owner mode). Unlike
+ * strip_installed_door() which deletes local files, this calls the server's
+ * POST /admin/doors/:archive/strip endpoint to rewrite the published archive. */
+static void strip_repo_archive(const dr_config *cfg, const char *archive,
+                               long junk, ansi_buf *b, char *frame, long framecap)
+{
+    char msg[320];
+    const char *line;
+    int found;
+    char body[4096];
+    unsigned long body_len;
+
+    if (junk == 0) {
+        ae_put("This archive has no ad files to strip.", 1);
+        return;
+    }
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    files_load(cfg, archive);
+    if (!g_files_ok) {
+        ae_put("Could not fetch file listing from server.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    sprintf(msg, "Ad files in %s:", archive);
+    ae_put(msg, 1);
+    found = ui_show_ad_files(g_files);
+
+    if (found == 0) {
+        ae_put("No ad files found in listing.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    ae_put("", 1);
+    ae_put("Strip these from the repository archive?  [Y/N] ", 0);
+    {
+        int key = ae_key();
+        ae_put("", 1);
+        if (key != 'y' && key != 'Y') {
+            ae_put("Nothing was stripped.", 1);
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+    }
+
+    /* Build JSON body: {"members":["path1","path2",...]} */
+    body_len = 0;
+    body[body_len++] = '{';
+    body[body_len++] = '"';
+    memcpy(body + body_len, "members", 7);
+    body_len += 7;
+    body[body_len++] = '"';
+    body[body_len++] = ':';
+    body[body_len++] = '[';
+
+    line = g_files;
+    if (strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+    {
+        int first = 1;
+        while (line != (const char *) 0 && body_len < sizeof(body) - 256) {
+            char rel[160];
+            int junk_flag = 0;
+
+            if (flow_files_parse_row(line, (unsigned long *) 0, &junk_flag,
+                                      rel, sizeof(rel)) == 0 && junk_flag) {
+                if (!first) body[body_len++] = ',';
+                body[body_len++] = '"';
+                /* Escape backslash and quote in path */
+                {
+                    const char *p;
+                    for (p = rel; *p != '\0' && body_len < sizeof(body) - 4; p++) {
+                        if (*p == '\\') { body[body_len++] = '\\'; body[body_len++] = '\\'; }
+                        else if (*p == '"') { body[body_len++] = '\\'; body[body_len++] = '"'; }
+                        else { body[body_len++] = *p; }
+                    }
+                }
+                body[body_len++] = '"';
+                first = 0;
+            }
+            line = flow_files_next_line(line);
+        }
+    }
+    body[body_len++] = ']';
+    body[body_len++] = '}';
+
+    if (owner_strip_archive(cfg, archive, body, body_len) == 0) {
+        char logmsg[256];
+        sprintf(logmsg, "STRIP REPO OK archive=%s files=%d", archive, found);
+        log_line(cfg, logmsg);
+    }
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
+}
+
 /* Task 4's non-ANSI (Ansi=no) counterpart to strip_installed_door() above -
- * same resolution and the same strip_installed_door_apply(), just without
- * the full-screen ANSI clear/cursor bracket, which would print as raw
- * escape bytes on a terminal that does not understand them. Unlike the ANSI
- * screen, which hides S entirely when a row has no ads (see
- * ui_draw_footer_installed()), this fallback's menu line is fixed text
- * (installed_loop_plain() offers S unconditionally), so a door with nothing
- * to strip gets a plain message here instead of doing nothing silently. */
 static void plain_strip_installed_door(const dr_config *cfg, const char *archive, long junk)
 {
     const char *cmdname = index_lookup(cfg, archive);
