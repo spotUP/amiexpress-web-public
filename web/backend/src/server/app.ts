@@ -6,6 +6,7 @@ import path from 'path';
 import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
+import { doorAdminRouter } from './door-admin.routes';
 import { doorRepoRouter, isDoorRepoProxyEnabled } from './door-repo.routes';
 import { doorRepoCors, isDoorRepoPath } from './door-repo-cors';
 import { getSystemTime } from '../utils/date-time.util';
@@ -243,6 +244,13 @@ app.use('/api', deploymentRouter);
 if (isDoorRepoProxyEnabled()) {
   app.use('/api/door-repo', doorRepoRouter);
 }
+
+// This board's own door management API — the DoorRepo C door reports what
+// it installed here, guarded by its per-launch token (door-launch-token.ts).
+// NOT /api/doors: that prefix is door-api-routes.ts above, which serves
+// browsers with no token at all, and this router's auth middleware would
+// 401 every one of those requests if mounted on the same path.
+app.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminRouter);
 
 // Debug-MCP routes — dev-only, read-only introspection for the MCP sidecar.
 // See mcp-server-debug/ and web/backend/src/debug/debug-mcp.routes.ts.
