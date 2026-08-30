@@ -15,7 +15,7 @@ import type { SystemConfig } from '../../database/types';
 import { SystemConfigSchema, type RequestContext } from '../config.schemas';
 import { loadBBSConfig, saveBBSConfig } from '../bbs-config-file.service';
 import { config as appConfig } from '../../config';
-import { isSensitiveField, SENSITIVE_FIELDS } from '../../utils/secrets-encryption.util';
+import { isSensitiveField, isDatabaseOnlyField, SENSITIVE_FIELDS } from '../../utils/secrets-encryption.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -55,9 +55,11 @@ export class SystemConfigService {
           (config as any)[field] = dbValue;
         }
       }
-      // Also check for other sensitive field patterns
+      // Also check for other sensitive field patterns, and for the fields
+      // that live in the database without being secret - both were written
+      // there, so both have to be read back or the form shows them empty.
       for (const key of Object.keys(dbConfig)) {
-        if (isSensitiveField(key)) {
+        if (isSensitiveField(key) || isDatabaseOnlyField(key)) {
           const dbValue = (dbConfig as any)[key];
           if (dbValue !== undefined && dbValue !== null && dbValue !== '') {
             (config as any)[key] = dbValue;
@@ -90,7 +92,11 @@ export class SystemConfigService {
     const diskUpdates: Partial<SystemConfig> = {};
 
     for (const [key, value] of Object.entries(validated)) {
-      if (isSensitiveField(key)) {
+      // Database-resident fields go the same way as the secrets - the
+      // difference between them is encryption, not destination. Without this
+      // the VAPID settings fell into the disk bucket, where the writer has no
+      // tooltype for them and dropped them silently.
+      if (isSensitiveField(key) || isDatabaseOnlyField(key)) {
         (sensitiveUpdates as any)[key] = value;
       } else {
         (diskUpdates as any)[key] = value;
