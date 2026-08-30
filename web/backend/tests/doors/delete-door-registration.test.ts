@@ -1,0 +1,186 @@
+/**
+ * A deleted door must stop being a door.
+ *
+ * Reported 2026-08-30: DOORMAN said "DD deleted" and DD stayed in the left
+ * panel. The live volume showed why - `Doors/DD` was gone, and
+ * `Commands/BBSCmd/DD.info` was still there at 1114 bytes. The `.info` IS
+ * the registration: every list the BBS draws is built from those files, so
+ * deleting a door's files while leaving its `.info` deletes the door's body
+ * and keeps its name.
+ *
+ * The cause was in deleteTrackedFiles: it treated the DB's tracked rows as
+ * an EXCLUSIVE list, and fell back to the caller's paths only when there
+ * were none. DD had tracked rows covering its directory but not its .info,
+ * so the fallbacks - which name the .info - were skipped entirely. And
+ * deleteAmigaDoor returned success without ever looking at what was left.
+ */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+const trackedRows: Array<{ filePath: string; fileType: string }> = [];
+const clearedCommands: string[] = [];
+
+jest.mock('../../src/database', () => ({
+  db: {
+    getDoorFiles: jest.fn(() => trackedRows),
+    clearDoorFiles: jest.fn((command: string) => { clearedCommands.push(command); }),
+    trackDoorFiles: jest.fn(),
+  },
+}));
+jest.mock('../../src/handlers/door.handler', () => ({
+  initializeDoors: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { AmigaDoorManager } from '../../src/doors/amigaDoorManager';
+
+let root: string;
+
+function write(relPath: string, content: string): string {
+  const abs = path.join(root, relPath);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content);
+  return abs;
+}
+
+/** A door as the live board had it: a command registration plus a directory. */
+function makeDoor(command: string): { infoPath: string; doorDir: string } {
+  const infoPath = write(
+    path.join('Commands', 'BBSCmd', `${command}.info`),
+    `TYPE=XIM\nLOCATION=Doors:${command}/${command}\nSTACK=65536\nACCESS=0\n`
+  );
+  const doorDir = path.join(root, 'Doors', command);
+  fs.mkdirSync(doorDir, { recursive: true });
+  fs.writeFileSync(path.join(doorDir, command), 'binary');
+  return { infoPath, doorDir };
+}
+
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'door-delete-'));
+  trackedRows.length = 0;
+  clearedCommands.length = 0;
+});
+
+afterEach(() => {
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+describe('deleteAmigaDoor', () => {
+  it('removes the command registration even when the DB tracks other files', async () => {
+    // The live shape: tracked rows name the directory, never the .info.
+    const { infoPath, doorDir } = makeDoor('DD');
+    trackedRows.push({ filePath: path.join('Doors', 'DD'), fileType: 'dir' });
+
+    const result = await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(doorDir)).toBe(false);
+    expect(fs.existsSync(infoPath)).toBe(false);
+  });
+
+  it('reports the paths it removed, so the door manager can show them', async () => {
+    makeDoor('DD');
+    trackedRows.push({ filePath: path.join('Doors', 'DD'), fileType: 'dir' });
+
+    const result = await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(result.removed).toEqual(
+      expect.arrayContaining([path.join('Doors', 'DD'), path.join('Commands', 'BBSCmd', 'DD.info')])
+    );
+  });
+
+  it('still deletes when the DB tracks nothing at all', async () => {
+    const { infoPath, doorDir } = makeDoor('DD');
+
+    const result = await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(infoPath)).toBe(false);
+    expect(fs.existsSync(doorDir)).toBe(false);
+  });
+
+  it('does not report success while the registration is still on disk', async () => {
+    // What the sysop actually saw: "deleted", next to a door still listed.
+    const { infoPath } = makeDoor('DD');
+    const spy = jest.spyOn(fs.promises, 'unlink').mockRejectedValue(new Error('EPERM'));
+
+    const result = await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    spy.mockRestore();
+    expect(fs.existsSync(infoPath)).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('DD.info');
+  });
+
+  it('refuses a tracked path that points outside Doors/ and Commands/', async () => {
+    // The DB is not more trustworthy than a caller's string: a recursive
+    // delete of an unchecked path is what took the whole Doors/ tree out.
+    makeDoor('DD');
+    const outside = write('outside-the-tree.txt', 'keep me');
+    trackedRows.push({ filePath: '../outside-the-tree.txt', fileType: 'file' });
+    trackedRows.push({ filePath: path.join('..', path.basename(root), 'outside-the-tree.txt'), fileType: 'file' });
+
+    await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
+  it('clears the tracking rows for the command it deleted', async () => {
+    makeDoor('DD');
+
+    await new AmigaDoorManager(root).deleteAmigaDoor('DD');
+
+    expect(clearedCommands).toContain('DD');
+  });
+
+  it('says so when there is no such door, rather than claiming a delete', async () => {
+    const result = await new AmigaDoorManager(root).deleteAmigaDoor('NOSUCH');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('not found');
+  });
+});
+
+describe('deleteTypeScriptDoor', () => {
+  it('removes the directory and the command .info, and reports both', async () => {
+    const { infoPath, doorDir } = makeDoor('arkanoid');
+    write(path.join('Doors', 'arkanoid', 'package.json'), JSON.stringify({ doorMetadata: { command: 'arkanoid' } }));
+
+    const result = await new AmigaDoorManager(root).deleteTypeScriptDoor('arkanoid');
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(doorDir)).toBe(false);
+    expect(fs.existsSync(infoPath)).toBe(false);
+    expect(result.removed?.length).toBeGreaterThan(0);
+  });
+
+  it('keeps refusing a name that would escape Doors/', async () => {
+    const manager = new AmigaDoorManager(root);
+
+    await expect(manager.deleteTypeScriptDoor('')).resolves.toMatchObject({ success: false });
+    await expect(manager.deleteTypeScriptDoor('..')).resolves.toMatchObject({ success: false });
+    await expect(manager.deleteTypeScriptDoor('a/b')).resolves.toMatchObject({ success: false });
+  });
+});
+
+describe('the delete does not block the event loop', () => {
+  it('lets a timer fire while the files are being removed', async () => {
+    // One process serves every node, so a synchronous recursive delete
+    // freezes the whole board - which is what the sysop reported as "the bbs
+    // freeze while deleting". A timer scheduled before the delete must still
+    // fire during it.
+    makeDoor('BIG');
+    const dir = path.join(root, 'Doors', 'BIG');
+    for (let i = 0; i < 400; i++) fs.writeFileSync(path.join(dir, `f${i}.dat`), 'x'.repeat(2048));
+    trackedRows.push({ filePath: path.join('Doors', 'BIG'), fileType: 'dir' });
+
+    let ticked = false;
+    const ticker = setInterval(() => { ticked = true; }, 1);
+
+    await new AmigaDoorManager(root).deleteAmigaDoor('BIG');
+    clearInterval(ticker);
+
+    expect(ticked).toBe(true);
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+});

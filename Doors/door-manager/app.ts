@@ -449,30 +449,65 @@ class InstalledView extends BaseView {
       `Delete {yellow-fg}${d.name}{/yellow-fg}?\n\n{red-fg}This cannot be undone.{/red-fg}`,
       'Delete', 'Cancel',
       async () => {
-        this.setStatus(`Deleting ${d.name}...`);
         const isTS = ['TS','typescript','SDK'].includes(d.type);
         const id = isTS ? (d.location?.replace(/^Doors[\\/]/i,'').split(/[\\/]/)[0] || d.command) : d.command;
+
+        // The delete used to run behind a single status line, and the
+        // backend did its filesystem work synchronously - so the board froze
+        // and the sysop watched a still screen with no idea how far along it
+        // was. The work is asynchronous now; this shows each stage as it
+        // happens, in the same panel an install reports into.
+        const log = new ActionLog(`Deleting ${d.name}`);
+        const paint = (extra = '') => {
+          this.layout.setInfo(log.render() + extra);
+          this.layout.render();
+        };
+        this.setStatus(`Deleting ${d.name}...`, 'yellow', 30000);
+        log.ok(`removing ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
+        paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+
         try {
           const r = await (this.bbs as any).deleteDoor(id, isTS);
+          for (const removed of (r.removed ?? []) as string[]) {
+            log.ok(`removed ${removed}`);
+          }
           if (r.success) {
             // Belt and braces: deleteDoor refreshes backend caches itself,
             // but a stale registry here left deleted doors visible with no
             // feedback (2026-08-15). Refresh again from our side, re-fetch,
             // and confirm persistently in the info panel.
+            log.ok('reloading the door registry');
+            paint('\n\n{yellow-fg}Reloading...{/yellow-fg}\n');
             await refreshDoorRegistry();
             this.doors = await fetchDoors(this.bbs);
             this.refresh(Math.max(0, idx - 1));
+
+            // The door is only deleted when it has left the list the sysop is
+            // looking at. Saying "deleted" while it is still on screen is the
+            // exact report this fix came from.
+            const stillListed = this.doors.some(other => other.command === d.command);
+            if (stillListed) {
+              log.fail(`${d.command} is still registered - the BBS still lists it`);
+              this.setStatus(`${d.name} still listed`, 'red', 8000);
+              paint(`\n\n{red-fg}Still registered{/red-fg}\n\n` +
+                `The files were removed but ${sanitizeForTags(d.command)} is still in the door list.\n`);
+              console.log(`[DOORMAN] delete incomplete: ${d.command} still in the registry after delete`);
+              return;
+            }
+
+            log.ok(`${d.command} is gone from the door list`);
             this.setStatus(`${d.name} deleted`, 'green', 8000);
-            this.layout.setInfo(`{green-fg}Deleted{/green-fg}\n\n${sanitizeForTags(d.name)} removed.`);
-            this.layout.render();
+            paint(`\n\n{green-fg}Deleted{/green-fg}\n`);
           } else {
+            log.fail(String(r.message ?? 'unknown error'));
             this.setStatus(`Failed: ${r.message}`, 'red', 8000);
-            this.layout.setInfo(`{red-fg}Delete failed{/red-fg}\n\n${sanitizeForTags(String(r.message ?? 'unknown error'))}`);
+            paint(`\n\n{red-fg}Delete failed{/red-fg}\n`);
             console.log(`[DOORMAN] delete failed: ${d.name}: ${r.message}`);
-            this.layout.render();
           }
         } catch (e: any) {
+          log.fail(e?.message ?? String(e));
           this.setStatus(`Error: ${e.message}`, 'red', 8000);
+          paint(`\n\n{red-fg}Delete failed{/red-fg}\n`);
           console.log(`[DOORMAN] delete error: ${d.name}: ${e?.message ?? e}`);
         }
       }

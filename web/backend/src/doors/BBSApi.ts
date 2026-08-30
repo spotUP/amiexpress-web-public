@@ -1408,7 +1408,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
    * @param isTypeScriptDoor - Set to true if this is a TypeScript/SDK door
    * @returns Result object with success status and message
    */
-  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string }> {
+  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string; removed?: string[] }> {
 console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
 
     // Check if user has sysop access

@@ -107,6 +107,19 @@ export interface DoorArchive {
 /**
  * AmigaDoor Manager Class
  */
+/**
+ * What a delete did, not just whether it threw.
+ *
+ * `removed` lists the paths that are actually gone, relative to the BBS
+ * root, so the door manager can show the sysop a log of the delete instead
+ * of a bare "deleted" - and so a partial delete can name what it left.
+ */
+export interface DoorDeleteResult {
+  success: boolean;
+  message: string;
+  removed?: string[];
+}
+
 export class AmigaDoorManager {
   public bbsRoot: string;
   private assigns: AmigaDOSAssigns;
@@ -1353,46 +1366,73 @@ console.error('Cleanup error:', error);
    * Delete all tracked + heuristic paths for a door command.
    * Used by both deleteAmigaDoor and deleteTypeScriptDoor.
    */
-  private deleteTrackedFiles(command: string, fallbackPaths: string[]): void {
+  private async deleteTrackedFiles(command: string, fallbackPaths: string[]): Promise<string[]> {
     const doorsDir = path.join(this.bbsRoot, 'Doors');
     const commandsDir = path.join(this.bbsRoot, 'Commands');
+    const removed: string[] = [];
 
-    // 1. Try DB-tracked paths
     let tracked: Array<{ filePath: string; fileType: string }> = [];
     try { tracked = db.getDoorFiles(command); } catch { /* db may not be ready */ }
 
-    const deletePath = (absPath: string) => {
+    // Every path is resolved and confined to Doors/ or Commands/ before it is
+    // touched - the DB's rows included. They are as capable of naming
+    // something outside the tree as a caller's fallback is, and a recursive
+    // delete that trusted a string is what took the whole Doors/ directory
+    // out on 2026-08-30.
+    const withinTree = (absPath: string): boolean => {
+      const resolved = path.resolve(absPath);
+      return (
+        (resolved.startsWith(doorsDir + path.sep) || resolved.startsWith(commandsDir + path.sep)) &&
+        resolved !== doorsDir &&
+        resolved !== commandsDir
+      );
+    };
+
+    const deletePath = async (absPath: string): Promise<void> => {
       try {
         if (!amigafs.existsSync(absPath)) return;
         const stats = amigafs.statSync(absPath);
+        // Asynchronous on purpose: this process serves every node, and the
+        // synchronous version froze the whole board for the length of the
+        // delete (a door with a few hundred files is a visible stall).
         if (stats.isDirectory()) {
-          amigafs.rmSync(absPath, { recursive: true, force: true });
+          await amigafs.rm(absPath, { recursive: true, force: true });
         } else {
-          amigafs.unlinkSync(absPath);
+          await amigafs.unlink(absPath);
         }
-      } catch { /* ignore */ }
+        removed.push(path.relative(this.bbsRoot, absPath));
+      } catch { /* ignore - a path that cannot be removed is reported by the caller's verification */ }
     };
 
-    if (tracked.length > 0) {
-      for (const entry of tracked) {
-        deletePath(path.join(this.bbsRoot, entry.filePath));
-      }
-    } else {
-      // Fallback: delete whatever we were passed
-      for (const p of fallbackPaths) {
-        // Safety: only delete inside Doors/ or Commands/
-        if (!p.startsWith(doorsDir) && !p.startsWith(commandsDir)) continue;
-        deletePath(p);
-      }
+    // Tracked rows AND the caller's fallbacks, not one or the other.
+    //
+    // Treating the DB as the exclusive list is what left `DD.info` on the
+    // live board after DOORMAN said "DD deleted": the door's tracked rows
+    // covered Doors/DD but not its Commands/BBSCmd/DD.info, and the
+    // fallbacks - which DO name the .info - were skipped entirely because
+    // the tracked list was non-empty. The .info IS the registration, so the
+    // door stayed in every list while its files were gone.
+    const candidates = [
+      ...tracked.map(entry => path.join(this.bbsRoot, entry.filePath)),
+      ...fallbackPaths,
+    ];
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+      const resolved = path.resolve(candidate);
+      if (seen.has(resolved)) continue;
+      seen.add(resolved);
+      if (!withinTree(resolved)) continue;
+      await deletePath(resolved);
     }
 
     try { db.clearDoorFiles(command); } catch { /* ignore */ }
+    return removed;
   }
 
   /**
    * Delete Amiga door (removes .info file and door directory)
    */
-  async deleteAmigaDoor(command: string): Promise<{ success: boolean; message: string }> {
+  async deleteAmigaDoor(command: string): Promise<DoorDeleteResult> {
     try {
       const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
       const infoPath = path.join(commandsPath, `${command}.info`);
@@ -1410,9 +1450,22 @@ console.error('Cleanup error:', error);
         fallbacks.push(path.dirname(metadata.resolvedPath));
       }
 
-      this.deleteTrackedFiles(command.toUpperCase(), fallbacks);
+      const removed = await this.deleteTrackedFiles(command.toUpperCase(), fallbacks);
 
-      return { success: true, message: `Door '${command}' deleted` };
+      // Verify, do not assume. The command's .info is what puts a door in
+      // every list the BBS draws, so a delete that leaves it behind has not
+      // deleted the door - and saying so is the difference between a sysop
+      // seeing an error and seeing "deleted" beside a door that is still
+      // there.
+      if (amigafs.existsSync(infoPath)) {
+        return {
+          success: false,
+          message: `Door '${command}' still registered: ${path.relative(this.bbsRoot, infoPath)} could not be removed`,
+          removed,
+        };
+      }
+
+      return { success: true, message: `Door '${command}' deleted`, removed };
     } catch (error) {
       console.error('Door deletion error:', error);
       return { success: false, message: `Deletion failed: ${(error as Error).message}` };
@@ -1424,7 +1477,7 @@ console.error('Cleanup error:', error);
    * @param doorName - The door name (directory name in Doors/)
    * @returns Result object with success status and message
    */
-  async deleteTypeScriptDoor(doorName: string): Promise<{ success: boolean; message: string }> {
+  async deleteTypeScriptDoor(doorName: string): Promise<DoorDeleteResult> {
     try {
       // Accept both 'arkanoid' and 'Doors/arkanoid' — strip any leading Doors/ prefix
       const name = (doorName || '').replace(/^Doors[\\/]/i, '').trim();
@@ -1579,8 +1632,10 @@ console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
         }
       }
 
-      // Delete door directory (also deletes any library files tracked under it)
-      amigafs.rmSync(doorPath, { recursive: true, force: true });
+      // Delete door directory (also deletes any library files tracked under it).
+      // Asynchronous: the synchronous version blocked the single process that
+      // serves every node, freezing the board for the whole delete.
+      await amigafs.rm(doorPath, { recursive: true, force: true });
       deletedFiles.push(doorPath);
 
       // Delete any library files tracked separately in DB (e.g. Libs/*.library)
@@ -1595,9 +1650,25 @@ console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
         db.clearDoorFiles(resolvedCommand);
       } catch { /* db may not be ready */ }
 
+      const removed = deletedFiles.map(f => path.relative(this.bbsRoot, f));
+
+      // Same verification as the Amiga path: what is still on disk decides
+      // whether this worked, not the fact that no call threw.
+      const leftover = [doorPath, ...deletedFiles].filter(f => amigafs.existsSync(f));
+      if (leftover.length > 0) {
+        return {
+          success: false,
+          message: `Door '${name}' not fully removed: ${leftover
+            .map(f => path.relative(this.bbsRoot, f))
+            .join(', ')} still present`,
+          removed,
+        };
+      }
+
       return {
         success: true,
-        message: `Door '${name}' deleted (${deletedFiles.length} items removed)`
+        message: `Door '${name}' deleted (${deletedFiles.length} items removed)`,
+        removed,
       };
     } catch (error) {
 console.error('TypeScript door deletion error:', error);
@@ -1614,7 +1685,7 @@ console.error('TypeScript door deletion error:', error);
    * @param isTypeScriptDoor - Optional flag to force TypeScript door deletion
    * @returns Result object with success status and message
    */
-  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string }> {
+  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<DoorDeleteResult> {
     // If explicitly marked as TypeScript door, delete as such
     if (isTypeScriptDoor === true) {
       return this.deleteTypeScriptDoor(identifier);

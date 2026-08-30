@@ -327,6 +327,31 @@ export function rmSync(filePath: string, options?: fs.RmOptions): void {
 }
 
 /**
+ * Case-insensitive rm, asynchronously.
+ *
+ * The sync version blocks the event loop for as long as the delete takes,
+ * and this process serves every BBS node at once - deleting a door with a
+ * few hundred files froze the whole board until it finished. fs.promises.rm
+ * does the work on libuv's threadpool instead, so the board keeps answering
+ * and the door's own progress display can actually paint.
+ *
+ * Resolves quietly when the path does not exist: removing something already
+ * removed is a success.
+ */
+export async function rm(filePath: string, options?: fs.RmOptions): Promise<void> {
+  const resolved = resolvePath(filePath);
+  if (!resolved) return;
+  await fs.promises.rm(resolved, options);
+}
+
+/** Case-insensitive unlink, asynchronously. See rm() for why async. */
+export async function unlink(filePath: string): Promise<void> {
+  const resolved = resolvePath(filePath);
+  if (!resolved) return;
+  await fs.promises.unlink(resolved);
+}
+
+/**
  * Case-insensitive openSync
  * Opens a file and returns a file descriptor
  */
