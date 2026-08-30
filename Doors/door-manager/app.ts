@@ -16,6 +16,7 @@ import {
 } from './install-core';
 import { commandClaimedByOtherArchive, installConsumerDoor } from './install-core';
 import type { InstallDeps, InstallStep, DoorInstallEntry } from './install-core';
+import { commandForArchive } from './archive-command';
 // Re-exported: the install core moved to its own module when app.ts passed
 // the 2000-line ceiling, and the tests import these from here.
 export {
@@ -31,7 +32,7 @@ export type {
 } from './install-core';
 import * as fs from 'fs';
 import {
-  Screen, Panel, List, ScrollableBox, ConfirmModal, Prompt, Textbox,
+  Screen, Panel, List, ScrollableBox, ConfirmModal, Textbox,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { FileExplorerOverlay } from './FileExplorerOverlay';
@@ -100,14 +101,63 @@ function getInstallsRepo(): any {
   return null;
 }
 
-// Shared by owner/consumer install sites: no-op + warning, not a throw, when unavailable.
-function recordInstallSafe(entry: DoorInstallEntry): void {
-  const repo = getInstallsRepo();
-  if (!repo) {
-    console.log('[DOORMAN] warning: door-installs repository unavailable -- install not recorded locally');
+/** The backend's install recorder, if this process has it loaded. Same
+ *  require.cache discovery as getInstallsRepo(): DOORMAN cannot import
+ *  web/backend source paths. recordDoorInstall writes BOTH halves of an
+ *  install -- the door_installs link (what getInstallsRepo().recordInstall
+ *  used to write alone) and door_installed_files (the on-disk file list a
+ *  delete needs) -- so both install call sites route through this instead
+ *  of getInstallsRepo() directly. */
+function getInstallRecorder(): any {
+  for (const k of Object.keys(require.cache))
+    if (k.includes('door-install-record')) return require.cache[k]?.exports ?? null;
+  return null;
+}
+
+// Shared by both install call sites below: builds the recordDoorInstall
+// input from a fully-populated DoorInstallEntry (consumer mode already has
+// one; owner mode's inline callback builds an equivalent shape inline).
+// No-op + warning, not a throw, when the recorder is unavailable in this
+// process.
+// Same require.cache discovery, for the counterpart of recordInstallViaRecorder
+// below: uninstall must clear door_installed_files alongside door_installs, or
+// a stale row survives naming the OLD door's files under a command a later
+// install reuses -- a delete could then act on the wrong door's file list.
+function clearInstalledFilesViaRecorder(command: string | null | undefined): void {
+  if (!command) return;
+  const recorder = getInstallRecorder();
+  if (!recorder) {
+    console.log('[DOORMAN] warning: install recorder unavailable -- installed-file rows not cleared');
     return;
   }
-  repo.recordInstall(entry);
+  recorder.clearInstalledFiles(command);
+}
+
+function recordInstallViaRecorder(entry: DoorInstallEntry): void {
+  const recorder = getInstallRecorder();
+  if (!recorder) {
+    console.log('[DOORMAN] warning: install recorder unavailable -- install not recorded locally');
+    return;
+  }
+  recorder.recordDoorInstall({
+    bbsRoot: PROJECT_ROOT,
+    command: entry.command,
+    archiveName: entry.archive_name,
+    installDir: path.join(PROJECT_ROOT, entry.install_dir),
+    infoPath: path.join(PROJECT_ROOT, 'Commands', 'BBSCmd', `${entry.command}.info`),
+    metadata: {
+      catalogId: entry.catalog_id,
+      name: entry.name,
+      description: entry.description,
+      category: entry.category,
+      version: entry.version,
+      releaseGroup: entry.release_group,
+      md5: entry.md5,
+      doorType: entry.door_type,
+      sourceUrl: entry.source_url,
+      sourceRevision: entry.source_revision,
+    },
+  });
 }
 
 function getStripLib(): any {
@@ -742,8 +792,8 @@ class RepoView extends BaseView {
   }
 
   /** Fetches + maps the central manifest once (guarded against overlapping
-   * calls — enter() re-runs every time a child view like ConfirmView/
-   * InputView pops back to RepoView, per ViewManager.pop()). Retries on a
+   * calls — enter() re-runs every time a child view like ConfirmView pops
+   * back to RepoView, per ViewManager.pop()). Retries on a
    * later enter() if the previous attempt failed (consumerEntries still
    * null) — a transient network blip should not permanently disable
    * browsing for the rest of the session. */
@@ -1107,6 +1157,24 @@ class RepoView extends BaseView {
     }
   }
 
+  // Neither install mode can read the archive's own .info before extracting
+  // it - owner mode has only a path, consumer mode has not downloaded yet -
+  // so the confirmation names the fallback, and extractAndRegisterDoor's
+  // existing rename applies the archive's real command afterwards and
+  // reports it in the install log ("the archive installs as X, not Y").
+  private confirmArchiveInstall(archiveName: string, onConfirm: (finalCmd: string) => void): void {
+    const chosen = commandForArchive(archiveName, null);
+    this.vm.push(new ConfirmView(this.layout,
+      `Install {yellow-fg}${sanitizeForTags(archiveName)}{/yellow-fg}?` +
+      `\n\nThe archive names no command yet; using ` +
+      `{yellow-fg}${chosen.command}{/yellow-fg} from the archive filename.` +
+      `\nIf the archive names its own command, the install uses that` +
+      `\ninstead and says so.`,
+      'Install', 'Cancel',
+      () => onConfirm(chosen.command)
+    ));
+  }
+
   private doInstallUninstall(): void {
     const e = this.entry(); if (!e) return;
     if (e.installed) {
@@ -1148,6 +1216,7 @@ class RepoView extends BaseView {
             this.layout.setInfo(log.render());
             this.layout.render();
             getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
+            clearInstalledFilesViaRecorder(e.installed_as);
             void this.refreshAfterRegistry();
             return;
           }
@@ -1155,6 +1224,9 @@ class RepoView extends BaseView {
           // the command this door was installed as; archive_name is only a
           // fallback for a stale row where installed_as was never set.
           getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
+          // door_installed_files (this branch's fix) is keyed by command
+          // only -- there is nothing to clear against a bare archive_name.
+          clearInstalledFilesViaRecorder(e.installed_as);
           log.ok('dropped the install record');
           this.setStatus(`Uninstalled ${e.installed_as}: ${log.summary()}`, 'green', 6000);
           this.layout.setInfo(log.render());
@@ -1168,15 +1240,9 @@ class RepoView extends BaseView {
       // check, and any failure surfaces from inside installConsumerDoor's
       // async callback below via the same reportInstallFailure panel.
       const repoUrl = this.repoMode.url;
-      const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
-        .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
-      this.vm.push(new InputView(this.layout,
-        `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested,
-        (cmd) => {
-          if (!cmd) return;
+      this.confirmArchiveInstall(e.archive_name, (finalCmd) => {
           if (this.installing) return; // an install is already in flight
           this.installing = true;
-          const finalCmd = cmd.trim().toUpperCase() || suggested;
           const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
           fs.mkdirSync(installDir, { recursive: true });
           this.setStatus('Downloading…', 'yellow', 30000);
@@ -1197,7 +1263,7 @@ class RepoView extends BaseView {
                   writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                   lookupLocal: buildLocalCatalogLookup(),
                   getInstallByCommand: (command) => getInstallsRepo()?.getInstallByCommand(command) ?? null,
-                  recordInstall: recordInstallSafe,
+                  recordInstall: recordInstallViaRecorder,
                   refreshDoorRegistry,
                   mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
                   unlink: (p) => { try { fs.unlinkSync(p); } catch { /* never existed, or already removed */ } },
@@ -1229,8 +1295,7 @@ class RepoView extends BaseView {
               this.installing = false;
             }
           })();
-        }
-      ));
+      });
     } else {
       const resolvedArchive = resolveArchivePath(e.archive_path);
       if (!resolvedArchive || !fs.existsSync(resolvedArchive)) {
@@ -1245,15 +1310,9 @@ class RepoView extends BaseView {
         this.layout.render();
         return;
       }
-      const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
-        .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
-      this.vm.push(new InputView(this.layout,
-        `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested,
-        (cmd) => {
-          if (!cmd) return;
+      this.confirmArchiveInstall(e.archive_name, (finalCmd) => {
           if (this.installing) return; // an install is already in flight
           this.installing = true;
-          const finalCmd = cmd.trim().toUpperCase() || suggested;
           const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
           fs.mkdirSync(installDir, { recursive: true });
           this.setStatus('Installing…', 'yellow', 30000);
@@ -1269,14 +1328,14 @@ class RepoView extends BaseView {
                   writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                   // Same door_installs shape + collision guard as consumer
                   // mode, using the real local catalog row's id (e.id).
-                  recordInstall: (installedCmd, installedDir) => {
+                  recordInstall: (installedCmd, installedDir, archive) => {
                     // The archive's own command wins, so record that one.
                     const chk = (cmd: string) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
-                    if (commandClaimedByOtherArchive(chk, installedCmd, e.archive_name)) return;
-                    recordInstallSafe({
+                    if (commandClaimedByOtherArchive(chk, installedCmd, archive)) return;
+                    recordInstallViaRecorder({
                       id: `install-${installedCmd}`,
                       catalog_id: e.id ?? null,
-                      archive_name: e.archive_name,
+                      archive_name: archive,
                       command: installedCmd,
                       install_dir: installedDir,
                       door_type: e.door_type ?? null,
@@ -1291,7 +1350,8 @@ class RepoView extends BaseView {
                     });
                   },
                   refreshDoorRegistry,
-                }
+                },
+                e.archive_name
               );
               if (!outcome.ok) {
                 this.reportInstallFailure(outcome.step, outcome.detail, resolvedArchive, e.archive_name);
@@ -1313,8 +1373,7 @@ class RepoView extends BaseView {
               this.installing = false;
             }
           })();
-        }
-      ));
+      });
     }
   }
 
@@ -1847,34 +1906,6 @@ class ConfirmView extends BaseView {
   }
 
   exit(): void { this.keys.release(); }
-}
-
-// ── Text Input ────────────────────────────────────────────────────────────────
-
-class InputView extends BaseView {
-  private layout: DoormanLayout;
-  private prompt: string; private defaultValue: string;
-  private onSubmit: (value: string | null) => void;
-
-  constructor(layout: DoormanLayout, prompt: string, defaultValue: string,
-              onSubmit: (value: string | null) => void) {
-    super(); this.layout = layout; this.prompt = prompt;
-    this.defaultValue = defaultValue; this.onSubmit = onSubmit;
-  }
-
-  enter(): void {
-    const p = new Prompt({ parent: this.layout.screen, top:'center', left:'center',
-      width: 50, height: 7, tags: true, style: { border:{ fg:'yellow' } }, overlay: true } as any);
-    (p as any).showInput(this.prompt, this.defaultValue, (_err: any, val?: string) => {
-      (p as any).destroy();
-      this.vm.pop();
-      this.onSubmit(val ?? null);
-    });
-    this.layout.render();
-  }
-
-  exit(): void { this.keys.release(); }
-  onEsc(): void { this.vm.pop(); this.onSubmit(null); }
 }
 
 // ── Info Editor Overlay ───────────────────────────────────────────────────────

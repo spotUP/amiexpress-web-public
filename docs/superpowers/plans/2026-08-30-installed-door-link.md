@@ -30,7 +30,7 @@
 |---|---|
 | `web/backend/src/doors/door-name-plausibility.ts` (create) | One pure predicate: does this `.info` NAME read like a name, or is it art/junk/an echo? |
 | `web/backend/src/doors/door-install-record.ts` (create) | The recorder: writes `door_installs` + `door_installed_files` in one transaction, walking the install directory. |
-| `web/backend/src/server/door-admin.routes.ts` (create) | `POST /api/doors/installed` plus the per-launch token check. Phase A adds only this route. |
+| `web/backend/src/server/door-admin.routes.ts` (create) | `POST /api/door-admin/installed` plus the per-launch token check. Phase A adds only this route. |
 | `web/backend/src/doors/door-launch-token.ts` (create) | Mint/verify the per-launch token the C door reads from `DoorRepo.token`. |
 | `web/backend/src/doors/door-repo-metadata.ts` (modify) | Exact `archive_name` matching, and the precedence rule via the new predicate. |
 | `web/backend/src/doors/amigaDoorManager.ts` (modify) | Its archive installer calls the recorder instead of `trackDoorFiles` alone. |
@@ -940,7 +940,14 @@ git commit -m "feat(doors): a per-launch token for the DoorRepo door"
 
 ---
 
-### Task 7: POST /api/doors/installed
+### Task 7: POST /api/door-admin/installed
+
+> **Correction (post-implementation):** every `app.use('/api/doors', ...)` and
+> `/api/doors` reference below in this task's original text was written
+> before implementation found that `/api/doors` already names
+> `door-api-routes.ts` (client door bundles served to browsers with no door
+> token); the router actually mounts at `/api/door-admin` instead, as the
+> heading and every route path above have been corrected to read.
 
 **Files:**
 - Create: `web/backend/src/server/door-admin.routes.ts`
@@ -972,7 +979,7 @@ import { doorAdminRouter } from '../../src/server/door-admin.routes';
 function app() {
   const a = express();
   a.use(express.json());
-  a.use('/api/doors', doorAdminRouter);
+  a.use('/api/door-admin', doorAdminRouter);
   return a;
 }
 
@@ -980,7 +987,7 @@ beforeEach(() => { recorded.length = 0; claims = { nodeId: '1', userId: 7, secLe
 
 it('records an install the door reports', async () => {
   const res = await request(app())
-    .post('/api/doors/installed')
+    .post('/api/door-admin/installed')
     .set('X-Door-Token', 'valid')
     .send({ command: 'AEHELP', archiveName: 'AEHELP.LHA' });
 
@@ -992,7 +999,7 @@ it('records an install the door reports', async () => {
 it('refuses without a token', async () => {
   claims = null;
   const res = await request(app())
-    .post('/api/doors/installed')
+    .post('/api/door-admin/installed')
     .send({ command: 'AEHELP', archiveName: 'AEHELP.LHA' });
 
   expect(res.status).toBe(401);
@@ -1002,7 +1009,7 @@ it('refuses without a token', async () => {
 it('refuses a user who is not a sysop, token or no token', async () => {
   claims = { nodeId: '1', userId: 9, secLevel: 100 };
   const res = await request(app())
-    .post('/api/doors/installed')
+    .post('/api/door-admin/installed')
     .set('X-Door-Token', 'valid')
     .send({ command: 'AEHELP', archiveName: 'AEHELP.LHA' });
 
@@ -1012,7 +1019,7 @@ it('refuses a user who is not a sysop, token or no token', async () => {
 
 it('refuses a command that is not a command', async () => {
   const res = await request(app())
-    .post('/api/doors/installed')
+    .post('/api/door-admin/installed')
     .set('X-Door-Token', 'valid')
     .send({ command: '../../etc', archiveName: 'AEHELP.LHA' });
 
@@ -1094,7 +1101,7 @@ Mount it in `web/backend/src/server/app.ts`, beside the door-repo proxy:
 ```ts
 import { doorAdminRouter } from './door-admin.routes';
 ...
-app.use('/api/doors', express.json({ limit: '16kb' }), doorAdminRouter);
+app.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminRouter);
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1427,7 +1434,7 @@ git commit -m "feat(doorrepo): the archive names the command, not the sysop"
 - Test: `examples/doorrepo-c/tests/test_config.c` (extend)
 
 **Interfaces:**
-- Consumes: `POST /api/doors/installed` (Task 7); `http_post` (existing in `http.c`).
+- Consumes: `POST /api/door-admin/installed` (Task 7); `http_post` (existing in `http.c`).
 - Produces: `int config_read_token(const dr_config *cfg, char *out, size_t outlen);`
 
 - [ ] **Step 1: Write the failing test**
@@ -1515,7 +1522,7 @@ install:
         headers[1] = tokenhdr;
 
         memset(&resp, 0, sizeof(resp));
-        if (http_request(cfg, "POST", "/api/doors/installed",
+        if (http_request(cfg, "POST", "/api/door-admin/installed",
                          body, (unsigned long) strlen(body),
                          headers, 2, &resp,
                          (int (*)(void *, const unsigned char *, unsigned long)) 0,
@@ -1587,7 +1594,7 @@ In `web/backend/src/handlers/door.handler.ts`:
 import { mintLaunchToken, revokeLaunchToken } from '../doors/door-launch-token';
 
 /** Only the DoorRepo door gets a management token, and only for a sysop.
- *  Every other door has no business calling /api/doors. */
+ *  Every other door has no business calling /api/door-admin. */
 export function launchTokenForDoor(
   command: string,
   bbsRoot: string,
@@ -1647,12 +1654,12 @@ shipping nothing):
 2. Delete that door. Every recorded path goes, the door leaves the list, and
    the panel's log names each path as it goes.
 3. Install a door through DOORREPO. The same two tables gain the same rows,
-   reported over `POST /api/doors/installed`.
+   reported over `POST /api/door-admin/installed`.
 4. Neither door offers a text field for the command; both confirm the name and
    say where it came from.
 5. A door whose `.info` NAME is ASCII art shows the catalog's name in the
    doors menu and in DOORMAN.
-6. `curl -X POST https://bbs.uprough.net/api/doors/installed` without a token
+6. `curl -X POST https://bbs.uprough.net/api/door-admin/installed` without a token
    returns 401.
 
 ## What is not in this plan

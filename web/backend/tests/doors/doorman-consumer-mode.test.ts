@@ -77,7 +77,8 @@ describe('DOORMAN repoDataSource: resolveDoorRepoMode', () => {
   });
 
   it('consumer: treats a blank learn key as no key at all', () => {
-    expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'https://mirror.example', DOORREPO_LEARN_KEY: '   ' }).learnKey ?? null).toBeNull();
+    const mode = resolveDoorRepoMode({ DOOR_REPO_URL: 'https://mirror.example', DOORREPO_LEARN_KEY: '   ' });
+    expect(mode.kind === 'consumer' ? mode.learnKey : undefined).toBeNull();
   });
 
   it('owner and disabled modes carry no learn key', () => {

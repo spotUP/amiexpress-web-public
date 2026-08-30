@@ -1379,13 +1379,23 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
       };
     });
 
+    // getInstallByCommand opens and closes its own better-sqlite3 connection
+    // per call (door-installs.repository.ts) - with 370 registered commands,
+    // calling it twice per door here meant 740 open/close cycles per render.
+    // Fetched once per door below and threaded into both overlays instead.
+    const installByCommand = new Map<string, DoorInstall | null>();
     const withMetadata = mapped.map((door: any) => {
       // Overlay the metadata captured when this door was installed. It used
       // to come from door_catalog; the shared catalog now lives in the door
       // server, and door_installs holds this node's snapshot of it (keyed by
       // command, so no installed_as matching is needed any more).
+      let installRow: DoorInstall | null = null;
       try {
-        return applyInstallMetadata(door, getInstallByCommand(door.command));
+        installRow = getInstallByCommand(door.command);
+      } catch { /* catalog not yet built */ }
+      installByCommand.set(door.command, installRow);
+      try {
+        return applyInstallMetadata(door, installRow);
       } catch { /* catalog not yet built — return door as-is */ }
       return door;
     });
@@ -1397,7 +1407,10 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     // always wins.
     try {
       const repoIndex = await getRepoMetadataIndex();
-      return withMetadata.map((door: any) => applyRepoMetadata(door, repoIndex));
+      return withMetadata.map((door: any) => {
+        const archiveName = installByCommand.get(door.command)?.archive_name ?? null;
+        return applyRepoMetadata(door, repoIndex, { archiveName });
+      });
     } catch {
       return withMetadata;
     }

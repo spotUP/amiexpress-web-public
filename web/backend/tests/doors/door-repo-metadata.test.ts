@@ -64,7 +64,14 @@ describe('applying repo metadata to a door', () => {
   const index = buildMetadataIndex([CALC]);
 
   it('fills a missing description from a name match', () => {
-    const door = applyRepoMetadata({ command: 'CALC', name: 'Calculator', description: '' }, index);
+    // applyRepoMetadata fills category from the repo match even when the
+    // input door didn't declare one; type the fixture to admit that field
+    // so this reads the real return contract instead of the narrower shape
+    // TS would otherwise infer from the literal.
+    const door = applyRepoMetadata<{ command: string; name: string; description: string; category?: string }>(
+      { command: 'CALC', name: 'Calculator', description: '' },
+      index
+    );
 
     expect(door.description).toBe('Today calculator');
     expect(door.category).toBe('Utility');
@@ -98,6 +105,100 @@ describe('applying repo metadata to a door', () => {
     const door = { command: 'CALC', name: 'Calculator', description: '' };
 
     expect(applyRepoMetadata(door, new Map())).toBe(door);
+  });
+});
+
+describe('applyRepoMetadata precedence', () => {
+  const HACKCHK: RepoDoorMetadata = {
+    archiveName: 'HACKCHK.LHA',
+    name: 'Hack Check',
+    description: 'Checks for known hacks',
+    category: 'Security',
+    author: null,
+    releaseGroup: null,
+    doorType: 'XIM',
+  };
+  const index = buildMetadataIndex([HACKCHK]);
+
+  it('replaces a NAME that is ASCII art with the catalog name', () => {
+    const door = { command: 'HACKCHECK', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'HACKCHK.LHA' })).toMatchObject({
+      name: 'Hack Check',
+      description: 'Checks for known hacks',
+    });
+  });
+
+  it('keeps a NAME the sysop plainly meant', () => {
+    const door = { command: 'HACKCHECK', name: 'My Hack Checker', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'HACKCHK.LHA' }).name)
+      .toBe('My Hack Checker');
+  });
+
+  it('matches on the linked archive exactly, not on a name that happens to look alike', () => {
+    // No name/command match exists here: the link is the only way in.
+    const door = { command: 'ZZ9', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'HACKCHK.LHA' }).name)
+      .toBe('Hack Check');
+  });
+
+  it('leaves an unlinked door to the old heuristic', () => {
+    const door = { command: 'ZZ9', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(door, index).name).toBe('.______.');
+  });
+
+  it('never touches an unlinked door that already has all three fields', () => {
+    // The 370 doors this plan leaves alone: no install record, so no
+    // precedence rule applies to them, whatever their NAME looks like.
+    const door = { command: 'HACKCHECK', name: '.______.', description: 'own text', category: 'Utility' };
+
+    expect(applyRepoMetadata(door, index)).toEqual(door);
+  });
+
+  it('applies the plausibility rule only to a linked door', () => {
+    const unlinked = { command: 'HACKCHECK', name: '.______.', description: '' };
+    const linked = { command: 'HACKCHECK', name: '.______.', description: '' };
+
+    expect(applyRepoMetadata(unlinked, index).name).toBe('.______.');
+    expect(applyRepoMetadata(linked, index, { archiveName: 'HACKCHK.LHA' }).name).toBe('Hack Check');
+  });
+
+  it('falls back to the name/command heuristic when the linked archive is missing from the index', () => {
+    // A door with an install record whose archive was re-indexed or removed
+    // from the catalog since. The exact-archive match misses, but the door's
+    // own command still matches HACKCHK's catalog entry by name/command -
+    // the heuristic must still fill the description rather than the door
+    // reaching the menu untouched, as it did before this fix.
+    const door = { command: 'HACKCHK', name: '', description: '' };
+
+    const result = applyRepoMetadata(door, index, { archiveName: 'NO-SUCH-ARCHIVE.LHA' });
+
+    expect(result).toMatchObject({
+      name: 'Hack Check',
+      description: 'Checks for known hacks',
+      category: 'Security',
+    });
+  });
+
+  it('keeps the NAME-override rule scoped to an exact archive match, even for a linked door', () => {
+    // The archive misses the index, so this falls to the heuristic path -
+    // which only FILLS empty fields, it never overwrites a NAME (however
+    // implausible) the way an exact archive match does.
+    const door = { command: 'HACKCHK', name: '.______.', description: '' };
+
+    const result = applyRepoMetadata(door, index, { archiveName: 'NO-SUCH-ARCHIVE.LHA' });
+
+    expect(result.name).toBe('.______.');
+    expect(result.description).toBe('Checks for known hacks');
+  });
+
+  it('leaves a linked door alone when neither the archive nor the heuristic matches anything', () => {
+    const door = { command: 'ZZ9', name: 'Something Else', description: '' };
+
+    expect(applyRepoMetadata(door, index, { archiveName: 'NO-SUCH-ARCHIVE.LHA' })).toEqual(door);
   });
 });
 

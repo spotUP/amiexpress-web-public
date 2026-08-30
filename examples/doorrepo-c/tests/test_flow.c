@@ -1212,6 +1212,87 @@ TEST(pick_binary_ignores_ad_files)
 }
 
 
+TEST(command_from_listing)
+{
+    char cmd[32];
+    const char *listing;
+    const char *lower;
+    const char *none;
+    const char *toolong;
+    const char *piped;
+    const char *nested;
+
+    /* The archive's own registration names the command. */
+    listing =
+        "FILES|3|0\n"
+        "950|0|Commands/BBSCmd/HACKCHECK.info\n"
+        "12|0|Doors/HackCheck/HackCheck\n"
+        "5|0|FILE_ID.DIZ\n";
+    ASSERT_EQ(flow_command_from_listing(listing, cmd, sizeof(cmd)), 1,
+              "the archive's own BBSCmd registration is found");
+    ASSERT_STR_EQ(cmd, "HACKCHECK", "command name matches the .info stem");
+
+    /* Case and separator variations still resolve. */
+    lower =
+        "FILES|1|0\n"
+        "950|0|commands\\bbscmd\\ozone.info\n";
+    ASSERT_EQ(flow_command_from_listing(lower, cmd, sizeof(cmd)), 1,
+              "lower-case names and backslash separators still resolve");
+    ASSERT_STR_EQ(cmd, "OZONE", "command name is upper-cased");
+
+    /* No registration in the archive. */
+    none =
+        "FILES|2|0\n"
+        "950|0|Ozone/Ozone\n"
+        "5|0|FILE_ID.DIZ\n";
+    ASSERT_EQ(flow_command_from_listing(none, cmd, sizeof(cmd)), 0,
+              "no Commands/BBSCmd entry means no command named");
+
+    /* A name too long for a BBS command is not a command. */
+    toolong =
+        "FILES|1|0\n"
+        "950|0|Commands/BBSCmd/THISNAMEISWAYTOOLONG.info\n";
+    cmd[0] = 'X'; cmd[1] = '\0'; /* poison, so a false pass can't hide behind a stale empty buffer */
+    ASSERT_EQ(flow_command_from_listing(toolong, cmd, sizeof(cmd)), 0,
+              "a stem over FLOW_MAX_BBS_COMMAND is refused, not truncated");
+    ASSERT_STR_EQ(cmd, "", "a 0 return always leaves out empty, never a rejected candidate");
+
+    /* The path may contain the separator: everything after the SECOND
+     * '|' is the path, which is what the server promises (and what the
+     * TypeScript client already does, Doors/door-manager/repo-client.ts's
+     * parts.slice(2).join('|')) - the path is never itself a delimited
+     * field. Before this fix, a naive field-based split truncated the
+     * path at this embedded '|', the match silently failed, and
+     * install_door() fell back to naming the door from the archive
+     * filename instead of from its own registration - exactly the
+     * silent, input-shape-dependent wrong-naming this task exists to
+     * remove. Once the WHOLE path ("Commands/BBSCmd/HACK|CHECK.info") is
+     * seen, the stem is "HACK|CHECK" - correctly rejected, since '|' is
+     * not a usable BBS command character, not silently dropped from a
+     * truncated field. */
+    piped =
+        "FILES|1|0\n"
+        "950|0|Commands/BBSCmd/HACK|CHECK.info\n";
+    cmd[0] = 'X'; cmd[1] = '\0';
+    ASSERT_EQ(flow_command_from_listing(piped, cmd, sizeof(cmd)), 0,
+              "the whole path is seen, and HACK|CHECK is not a usable BBS command");
+    ASSERT_STR_EQ(cmd, "", "the rejected pipe-bearing candidate is not left in out");
+
+    /* Same guarantee, the other direction: once the whole path is taken
+     * (rather than truncated at the embedded '|' inside the "ODD|PATH"
+     * directory segment), the .info still resolves as sitting under
+     * Commands/BBSCmd/ - nested one directory deeper - and the command
+     * name is the FINAL path segment's stem, not everything between the
+     * matched prefix and the extension. */
+    nested =
+        "FILES|1|0\n"
+        "950|0|Commands/BBSCmd/ODD|PATH/HACKCHECK.info\n";
+    ASSERT_EQ(flow_command_from_listing(nested, cmd, sizeof(cmd)), 1,
+              "a subdirectory under Commands/BBSCmd/ still resolves via the final path segment");
+    ASSERT_STR_EQ(cmd, "HACKCHECK", "the command name is the .info's own basename, not the whole tail");
+}
+
+
 TEST(eof_key_ends_the_session)
 {
     /* ae_key() returns -1 at EOF / carrier loss. Every other value is a
@@ -2433,6 +2514,7 @@ int main(void)
     RUN_TEST(pick_binary_prefers_an_exact_name_match);
     RUN_TEST(pick_binary_gives_up_when_everything_has_an_extension);
     RUN_TEST(pick_binary_ignores_ad_files);
+    RUN_TEST(command_from_listing);
 
     RUN_TEST(page_first_page_full);
     RUN_TEST(page_middle_page_full);

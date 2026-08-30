@@ -73,8 +73,13 @@ export interface InstallDeps {
      * original guess would point at a directory that no longer exists - and an
      * install_dir that does not match reality is how an uninstall came to
      * delete the wrong thing.
+     *
+     * `archiveName` is the catalog key the caller resolved this install from
+     * (the archive on disk in owner mode, the manifest row's archive in
+     * consumer mode) -- passed through so the recorder can write the install
+     * as a link to that archive rather than reconstructing a guess.
      */
-    recordInstall: (command: string, installDirRelative: string) => void;
+    recordInstall: (command: string, installDirRelative: string, archiveName: string) => void;
     refreshDoorRegistry: () => Promise<boolean>;
 }
 /**
@@ -100,7 +105,7 @@ export type InstallOutcome = {
     detail: string;
     steps: InstallStep[];
 };
-export declare function extractAndRegisterDoor(archivePath: string, installDir: string, infoPath: string, doorType: string, binaryName: string | null, finalCmd: string, deps: InstallDeps): Promise<InstallOutcome>;
+export declare function extractAndRegisterDoor(archivePath: string, installDir: string, infoPath: string, doorType: string, binaryName: string | null, finalCmd: string, deps: InstallDeps, archiveName: string): Promise<InstallOutcome>;
 export declare function commandClaimedByOtherArchive(getInstallByCommand: (command: string) => {
     archive_name: string;
 } | null, command: string, archiveName: string): boolean;

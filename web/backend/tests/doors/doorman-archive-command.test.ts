@@ -124,7 +124,8 @@ describe('installing a door the archive has named', () => {
       'XIM',
       'CALC',
       'TYPEDNAME',
-      deps(() => makeArchiveTree(typedDir, 'CALC', archiveInfo)) as never
+      deps(() => makeArchiveTree(typedDir, 'CALC', archiveInfo)) as never,
+      'CALC.LHA'
     );
 
     expect(outcome.ok).toBe(true);
@@ -147,7 +148,8 @@ describe('installing a door the archive has named', () => {
       'XIM',
       'CALC',
       'CALC',
-      installDeps as never
+      installDeps as never,
+      'CALC.LHA'
     );
 
     const installed = fs.readFileSync(path.join(root, 'Commands', 'BBSCmd', 'CALC.info'), 'utf8');
@@ -170,10 +172,14 @@ describe('installing a door the archive has named', () => {
       'XIM',
       'CALC',
       'TYPEDNAME',
-      installDeps as never
+      installDeps as never,
+      'CALC.LHA'
     );
 
-    expect(installDeps.recordInstall).toHaveBeenCalledWith('CALC', 'Doors/CALC');
+    // The archive name reaches the recorder too -- Task 4: this is what lets
+    // the recorder write the install as a link to the archive it actually
+    // came from, instead of a guess.
+    expect(installDeps.recordInstall).toHaveBeenCalledWith('CALC', 'Doors/CALC', 'CALC.LHA');
   });
 
   it('still writes its own .info when the archive has none', async () => {
@@ -190,7 +196,8 @@ describe('installing a door the archive has named', () => {
       'XIM',
       'THING',
       'THING',
-      installDeps as never
+      installDeps as never,
+      'THING.LHA'
     );
 
     expect(outcome.ok).toBe(true);
@@ -209,7 +216,8 @@ describe('installing a door the archive has named', () => {
       'XIM',
       'CALC',
       'TYPEDNAME',
-      deps(() => makeArchiveTree(typedDir, 'CALC', Buffer.from('TYPE=XIM\n'))) as never
+      deps(() => makeArchiveTree(typedDir, 'CALC', Buffer.from('TYPE=XIM\n'))) as never,
+      'CALC.LHA'
     );
 
     expect(outcome.ok).toBe(true);

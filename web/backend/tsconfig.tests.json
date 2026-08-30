@@ -1,8 +1,13 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
-    "types": ["node", "jest"]
+    "rootDir": "../..",
+    "types": ["node", "jest"],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "better-sqlite3": ["./node_modules/@types/better-sqlite3"]
+    }
   },
   "include": ["src/**/*", "tests/**/*"]
 }

@@ -99,12 +99,15 @@ beforeEach(() => {
 // Review finding (commit 6bc3b54cc): the original fix wired this guard into
 // installConsumerDoor's recordInstall closure but left owner-mode's install
 // call site (doInstallUninstall, RepoView -- not exported, requires a live
-// blessed Screen, so not unit-testable directly) calling recordInstallSafe
-// unconditionally. Since door_installs.recordInstall upserts ON
-// CONFLICT(command), an owner-mode install of a DIFFERENT archive under a
-// command another archive's install already owns would silently steal that
-// row. Fixed by extracting the guard into this one shared, exported,
-// directly-testable function and wiring it into BOTH install call sites.
+// blessed Screen, so not unit-testable directly) calling the local
+// install-recording helper (app.ts's recordInstallSafe at the time, since
+// renamed recordInstallViaRecorder when Task 4 rerouted it through the
+// backend's recordDoorInstall) unconditionally. Since door_installs.
+// recordInstall upserts ON CONFLICT(command), an owner-mode install of a
+// DIFFERENT archive under a command another archive's install already owns
+// would silently steal that row. Fixed by extracting the guard into this
+// one shared, exported, directly-testable function and wiring it into BOTH
+// install call sites.
 
 describe('DOORMAN app.ts: commandClaimedByOtherArchive (shared collision guard)', () => {
   it('no existing install under this command -> false, no log', () => {
@@ -149,7 +152,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
       extractArchiveTo: jest.fn().mockResolvedValue({ ok: false, fileCount: 0, error: 'bad archive' }),
     });
     const outcome = await extractAndRegisterDoor(
-      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
+      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(outcome).toMatchObject({ ok: false, step: 'extract', detail: 'bad archive' });
     // The install reports what it did for the sysop's panel; a failed
@@ -162,7 +165,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
   it('success: calls extractArchiveTo with the given archivePath, writes info, records the install, refreshes registry', async () => {
     const deps = baseDeps();
     const outcome = await extractAndRegisterDoor(
-      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'FIM', 'FOO', 'FOO', deps
+      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'FIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(deps.extractArchiveTo).toHaveBeenCalledWith('/archives/FOO.LHA', '/doors/FOO');
     expect(deps.writeInfoFile).toHaveBeenCalledWith('/cmd/FOO.info', expect.stringContaining('TYPE=FIM'));
@@ -178,7 +181,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
       recordInstall: jest.fn(() => { throw new Error('db locked'); }),
     });
     const outcome = await extractAndRegisterDoor(
-      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
+      '/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(outcome.ok).toBe(true);
     expect(deps.refreshDoorRegistry).toHaveBeenCalledTimes(1);
@@ -195,7 +198,7 @@ describe('DOORMAN app.ts: extractAndRegisterDoor (shared install core)', () => {
   it('owner-mode parity: downloadArchive/fetchManifest are never called; the given archivePath is used as-is', async () => {
     const deps = baseDeps();
     const outcome = await extractAndRegisterDoor(
-      '/local/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps
+      '/local/archives/FOO.LHA', '/doors/FOO', '/cmd/FOO.info', 'XIM', 'FOO', 'FOO', deps, 'FOO.LHA'
     );
     expect(outcome.ok).toBe(true);
     expect(deps.extractArchiveTo).toHaveBeenCalledWith('/local/archives/FOO.LHA', '/doors/FOO');

@@ -74,3 +74,26 @@ export function findArchiveCommand(extractedDir: string): { chosen: ArchiveComma
   if (matches.length === 0) return { chosen: null, others: [] };
   return { chosen: matches[0], others: matches.slice(1).map(m => m.command) };
 }
+
+/**
+ * The command a door will be installed as.
+ *
+ * Always the archive's own - a door installed under an invented name is a
+ * door that does not answer to it, and writing a fresh .info loses the STACK
+ * and PRIORITY the author set. When the archive names none (or names
+ * something that isn't a usable command), the archive's file name stands in,
+ * and the caller says so on screen rather than pretending it was chosen.
+ */
+export function commandForArchive(
+  archiveName: string,
+  archiveCommand: string | null
+): { command: string; source: 'archive' | 'archive-name' } {
+  const candidate = archiveCommand?.trim().toUpperCase() ?? '';
+  if (candidate && isUsableCommand(candidate)) {
+    return { command: candidate, source: 'archive' };
+  }
+  const base = archiveName.replace(/\.(lha|lzx|zip|lzh)$/i, '');
+  const derived = base.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  const fallback = isUsableCommand(derived) ? derived : 'DOOR';
+  return { command: fallback, source: 'archive-name' };
+}

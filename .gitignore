@@ -479,6 +479,11 @@ dev/scripts/door-corpus/corpus-progress.json
 Doors/DoorRepo/DoorRepo.log
 Doors/DoorRepo/downloads/*
 !Doors/DoorRepo/downloads/.keep
+# The per-launch bearer token the BBS mints and writes here every time a
+# sysop runs the door (door-launch-token.ts / config_read_token() in the C
+# door) - a live credential, never a fixture. Without this, the first
+# launch after a fresh checkout puts a real token in the worktree.
+Doors/DoorRepo/DoorRepo.token
 
 # Python bytecode from dev/scripts helpers
 __pycache__/

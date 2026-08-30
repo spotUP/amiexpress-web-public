@@ -11,17 +11,25 @@
  *
  * The repo knows what most of them are. This module asks it - once, cached -
  * and offers the answer to anything rendering a door list. It never
- * overwrites what a door's own .info says; it only fills what is empty.
+ * overwrites what a door's own .info says; it only fills what is empty - with
+ * one exception: a NAME that is not a name at all (ASCII art, mojibake, an
+ * echo of the command) loses to the catalog's title. See
+ * ./door-name-plausibility for that call.
  *
  * Matching is deliberately narrow, because a wrong description is worse than
  * none:
  *
- *   1. the door's name equals a catalog entry's name, ignoring case and
- *      punctuation
- *   2. the door's command equals an archive's base name, same comparison
+ *   1. a door with an install record is matched by its recorded archive name,
+ *      exactly - nothing else is trusted for it
+ *   2. otherwise, the door's name equals a catalog entry's name, ignoring
+ *      case and punctuation
+ *   3. otherwise, the door's command equals an archive's base name, same
+ *      comparison
  *
  * Anything less certain than that is left alone.
  */
+
+import { isPlausibleDoorName } from './door-name-plausibility';
 
 export interface RepoDoorMetadata {
   archiveName: string;
@@ -124,14 +132,49 @@ export interface EnrichableDoor {
 /**
  * Fill a door's empty fields from the repo.
  *
- * What the door itself says always wins: a sysop who set NAME in a door's
- * .info meant it.
+ * A door with an install record (a `link`) is the only one the plausibility
+ * rule applies to: its repo entry is known exactly, by archive, so a NAME
+ * that is not a name at all - art, mojibake, an echo of the command - loses
+ * to the catalog's title. See ./door-name-plausibility.
+ *
+ * Every other door - the 370 already on this board with no install record -
+ * gets the behaviour that shipped before this rule existed: fill what is
+ * empty, never overwrite, and skip the lookup entirely once all three fields
+ * are already set.
  */
 export function applyRepoMetadata<T extends EnrichableDoor>(
   door: T,
-  index: Map<string, RepoDoorMetadata>
+  index: Map<string, RepoDoorMetadata>,
+  link?: { archiveName: string | null }
 ): T {
   if (index.size === 0) return door;
+
+  if (link?.archiveName) {
+    const match = index.get(archiveKey(link.archiveName));
+    if (match) {
+      const keepOwnName = isPlausibleDoorName(door.name, {
+        command: door.command,
+        archiveName: link.archiveName,
+      });
+
+      return {
+        ...door,
+        name: keepOwnName ? door.name : (match.name || door.name),
+        description: door.description || match.description || '',
+        category: door.category || match.category || undefined,
+      };
+    }
+    // Linked, but the archive is not (or no longer) in the catalog index -
+    // fall through to the name/command heuristic below instead of leaving
+    // the door untouched. The NAME-override rule above stays scoped to an
+    // EXACT archive match: without one, we do not know the repo's entry for
+    // this door, so a heuristic match here is treated exactly like an
+    // unlinked door's (fill empty fields only, never overwrite NAME).
+  }
+
+  // No install record, or a linked one whose archive missed the index: the
+  // old heuristic, byte-for-byte. What the door itself says always wins
+  // here, whatever its NAME looks like.
   if (door.description && door.category && door.name) return door;
 
   const match =

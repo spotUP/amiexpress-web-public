@@ -7,6 +7,7 @@ import { registerDoor } from '../services/door-install.service';
 import { refreshDoorCache } from './amigaDoorManager';
 import { parseInfoFile } from '../utils/info-file.util';
 import * as amigafs from '../utils/amigafs';
+import { recordDoorInstall } from './door-install-record';
 
 const execAsync = promisify(exec);
 
@@ -80,13 +81,13 @@ export class DoorInstaller {
     }
 
     if (detection.type === 'typescript') {
-      return this.registerTypeScriptDoor(doorDir, doorName);
+      return this.registerTypeScriptDoor(doorDir, doorName, archivePath);
     } else {
-      return this.register68KDoor(doorDir, doorName, detection.infoEntryName!, strippedEntries);
+      return this.register68KDoor(doorDir, doorName, detection.infoEntryName!, strippedEntries, archivePath);
     }
   }
 
-  private async registerTypeScriptDoor(doorDir: string, doorName: string): Promise<InstallResult> {
+  private async registerTypeScriptDoor(doorDir: string, doorName: string, archivePath: string): Promise<InstallResult> {
     const bbsCommandsDir = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
 
     const pkgPath = path.join(doorDir, 'package.json');
@@ -116,6 +117,13 @@ export class DoorInstaller {
     const result = registerDoor({ doorPath: doorDir, bbsCommandsDir, force: false });
     if (result.status === 'created' || result.status === 'overwritten') {
       await this.reload();
+      recordDoorInstall({
+        bbsRoot: this.bbsRoot,
+        command: result.bbsCommand!,
+        archiveName: path.basename(archivePath),
+        installDir: doorDir,
+        infoPath: result.infoPath!,
+      });
       return {
         success: true,
         message: `Installed TypeScript door: ${result.bbsCommand}`,
@@ -132,6 +140,7 @@ export class DoorInstaller {
     doorName: string,
     infoEntryName: string,
     entries: ArchiveEntry[],
+    archivePath: string,
   ): Promise<InstallResult> {
     const bbsCommandsDir = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
     const infoPath = path.join(doorDir, infoEntryName);
@@ -196,6 +205,14 @@ export class DoorInstaller {
 
     fs.writeFileSync(outInfoPath, lines);
     await this.reload();
+    recordDoorInstall({
+      bbsRoot: this.bbsRoot,
+      command: cmdName,
+      archiveName: path.basename(archivePath),
+      installDir: doorDir,
+      infoPath: outInfoPath,
+      metadata: { doorType },
+    });
 
     return { success: true, message: `Installed 68K door: ${cmdName}`, doorName, command: cmdName, type: doorType };
   }

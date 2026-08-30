@@ -22,9 +22,10 @@ import { UserFileManager } from '../src/services/UserFileManager';
 
 describe('~UB / ~DB MCI BCD round-trip parity (G-UB-DB, express.e:5351-5358)', () => {
   // Access the private numberToBCD via a wrapper instance reflection.
-  // The function is deterministic and stateless — instantiating with
-  // a dummy dataDir is fine since we never call any I/O.
-  const mgr = new UserFileManager('/tmp');
+  // The function is deterministic and stateless — the constructor takes no
+  // arguments (it derives its data dir from env/__dirname) and we never
+  // call any I/O here.
+  const mgr = new UserFileManager();
   const numberToBCD = (mgr as any).numberToBCD.bind(mgr) as (n: number) => Buffer;
 
   function bcdToString(buf: Buffer): string {

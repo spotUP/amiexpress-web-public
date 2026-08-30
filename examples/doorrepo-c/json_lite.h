@@ -199,4 +199,27 @@ int json_next_array_object(const char *json, const char *array_key,
 int json_build_login_body(char *out, unsigned long outcap,
                            const char *username, const char *password);
 
+/* Builds `{"command":"...","archiveName":"..."}` into `out` - the install
+ * report DOORREPO POSTs to the BBS's own /api/door-admin/installed after a
+ * successful install (see doorrepo.c's install_door()). Same escaping,
+ * same helpers, and the exact same "returns byte count or -1, leaves out
+ * as \"\" on any failure" contract as json_build_login_body() above -
+ * built the same way for the same reason: the catalog this archiveName
+ * comes from holds thousands of Latin-1 names (e.g. archives containing a
+ * literal `"` or `\`), and a bare sprintf("%s") would let one break the
+ * JSON body and silently drop the install report. High-bit Latin-1 bytes
+ * (0x80-0xFF) pass through unescaped, matching json_build_login_body() and
+ * this door's Latin-1-everywhere assumption elsewhere. `command` is
+ * escaped with the exact same helper as `archive_name` even though this
+ * door's own BBS-command validation (flow_is_valid_bbs_command()) already
+ * restricts it to A-Z0-9 - one escaping code path for both fields, not a
+ * second "trusted" one that stops being trusted the day something upstream
+ * of this call changes.
+ *
+ * Returns the byte count written, or -1 if `out`/`command`/`archive_name`
+ * is NULL, or the escaped result would not fit `outcap` - in either
+ * failure case `out` is left as "". */
+int json_build_install_body(char *out, unsigned long outcap,
+                             const char *command, const char *archive_name);
+
 #endif /* DOORREPO_JSON_LITE_H */

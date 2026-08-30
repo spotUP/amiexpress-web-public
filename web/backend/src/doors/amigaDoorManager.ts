@@ -876,11 +876,11 @@ console.error('Error analyzing archive:', error);
 
       // Derive command name for tracking (package.json bbsCommand > doorName uppercased)
       const tsCommand = (analysis.packageJson?.bbsCommand || analysis.packageJson?.doorMetadata?.command || doorName).toUpperCase();
-      try {
-        db.trackDoorFiles(tsCommand, [
-          { filePath: path.relative(this.bbsRoot, doorInstallPath), fileType: 'dir' },
-        ]);
-      } catch { /* db may not be ready */ }
+      // TypeScript doors have no Commands/BBSCmd/<CMD>.info written by this
+      // installer; pass the path one would live at. recordInstalled/the
+      // recorder skips paths that do not exist.
+      const tsInfoPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd', `${tsCommand}.info`);
+      this.recordInstalled(tsCommand, path.basename(archivePath), doorInstallPath, tsInfoPath);
 
       return {
         success: true,
@@ -1162,6 +1162,7 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
 
         // Install Amiga library files (.library) to Libs/
         const libraryFiles = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
+        const installedLibraryPaths: string[] = [];
         if (libraryFiles.length > 0) {
           const libsDir = this.assigns['Libs:'];
           amigafs.mkdirSync(libsDir, { recursive: true });
@@ -1170,6 +1171,7 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
             const libraryName = path.basename(libraryFile);
             const destPath = path.join(libsDir, libraryName);
             amigafs.copyFileSync(libraryFile, destPath);
+            installedLibraryPaths.push(destPath);
           }
         }
 
@@ -1196,19 +1198,9 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
           }
         }
 
-        // Track installed files in DB so deletion is complete
-        const trackedEntries: Array<{ filePath: string; fileType: 'dir' | 'info' | 'library' | 'file' }> = [];
-        trackedEntries.push({ filePath: path.relative(this.bbsRoot, infoDestPath), fileType: 'info' });
-        if (doorName) {
-          const doorDestDir = path.join(this.assigns['Doors:'], doorName);
-          trackedEntries.push({ filePath: path.relative(this.bbsRoot, doorDestDir), fileType: 'dir' });
-        }
-        const libraryFiles2 = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
-        for (const lf of libraryFiles2) {
-          const destPath = path.join(this.assigns['Libs:'], path.basename(lf));
-          trackedEntries.push({ filePath: path.relative(this.bbsRoot, destPath), fileType: 'library' });
-        }
-        try { db.trackDoorFiles(commandName, trackedEntries); } catch { /* db may not be ready */ }
+        // Record the install: the archive link plus the file list, so a
+        // delete can find exactly what this install put on disk.
+        this.recordInstalled(commandName, path.basename(archivePath), doorDestDir, infoDestPath, installedLibraryPaths);
 
         installedCount++;
       }
@@ -1237,6 +1229,36 @@ console.error('Door installation error:', error);
         success: false,
         message: `Installation failed: ${(error as Error).message}`,
       };
+    }
+  }
+
+  /** One install, recorded in both halves. The archive name is the catalog
+   *  key: without it the board has files it cannot explain, which is how 370
+   *  commands ended up with zero tracked files between them.
+   *
+   *  recordDoorInstall is itself total (no internal failure escapes it), but
+   *  this wraps the call anyway - the code this replaced had a try/catch
+   *  here, and a require() failure (e.g. a broken module cache) must not be
+   *  able to fail an install that has already written its files to disk. */
+  private recordInstalled(
+    command: string,
+    archiveName: string,
+    installDir: string,
+    infoPath: string,
+    extraFiles?: string[]
+  ): void {
+    try {
+      const { recordDoorInstall } = require('./door-install-record');
+      recordDoorInstall({
+        bbsRoot: this.bbsRoot,
+        command,
+        archiveName,
+        installDir,
+        infoPath,
+        extraFiles,
+      });
+    } catch (err) {
+      console.log(`[amigaDoorManager] install bookkeeping failed for ${command}: ${(err as Error).message}`);
     }
   }
 
@@ -1395,18 +1417,44 @@ console.error('Cleanup error:', error);
     let tracked: Array<{ filePath: string; fileType: string }> = [];
     try { tracked = db.getDoorFiles(command); } catch { /* db may not be ready */ }
 
-    // Every path is resolved and confined to Doors/ or Commands/ before it is
-    // touched - the DB's rows included. They are as capable of naming
-    // something outside the tree as a caller's fallback is, and a recursive
-    // delete that trusted a string is what took the whole Doors/ directory
-    // out on 2026-08-30.
+    // A recorded 'library' entry lives under Libs:, not Doors/ or Commands/,
+    // so it needs its own narrow admission into the guard below - narrow
+    // because the guard exists specifically to stop an unchecked recursive
+    // delete from taking a whole tree out (Doors/ once, on 2026-08-30): only
+    // a path THIS install actually recorded as a library, under the Libs:
+    // assign, is admitted - never an arbitrary Libs: path, and nothing else
+    // about the guard widens.
+    const libsDir = this.assigns['Libs:'];
+    const resolvedLibsDir = libsDir ? path.resolve(libsDir) : null;
+    const recordedLibraryPaths = new Set(
+      tracked
+        .filter(entry => entry.fileType === 'library')
+        .map(entry => path.resolve(path.join(this.bbsRoot, entry.filePath)))
+    );
+
+    // Every path is resolved and confined to Doors/, Commands/, or a
+    // recorded library under Libs: before it is touched - the DB's rows
+    // included. They are as capable of naming something outside the tree as
+    // a caller's fallback is, and a recursive delete that trusted a string
+    // is what took the whole Doors/ directory out on 2026-08-30.
     const withinTree = (absPath: string): boolean => {
       const resolved = path.resolve(absPath);
-      return (
+      if (
         (resolved.startsWith(doorsDir + path.sep) || resolved.startsWith(commandsDir + path.sep)) &&
         resolved !== doorsDir &&
         resolved !== commandsDir
-      );
+      ) {
+        return true;
+      }
+      if (
+        resolvedLibsDir &&
+        recordedLibraryPaths.has(resolved) &&
+        resolved.startsWith(resolvedLibsDir + path.sep) &&
+        resolved !== resolvedLibsDir
+      ) {
+        return true;
+      }
+      return false;
     };
 
     const rel = (absPath: string): string => path.relative(this.bbsRoot, absPath);

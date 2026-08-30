@@ -99,6 +99,57 @@ TEST(parse_port)
     unlink("/tmp/test_config_port.cfg");
 }
 
+TEST(bbs_host_port_defaults)
+{
+    /* The local BBS's own management API, not the remote catalog server -
+     * a board that never overrides RepoHost must still report installs to
+     * ITSELF, not to bbs.uprough.net (cfg.host's default). */
+    dr_config cfg;
+    config_defaults(&cfg);
+    ASSERT_STR_EQ(cfg.bbs_host, "localhost", "default bbs_host");
+    ASSERT_EQ(cfg.bbs_port, 3001, "default bbs_port");
+    ASSERT_TRUE(strcmp(cfg.bbs_host, cfg.host) != 0, "bbs_host is distinct from host");
+}
+
+TEST(parse_bbs_host)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_bbs_host.cfg", "w");
+    fprintf(f, "BbsHost=bbs.internal\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_bbs_host.cfg", NULL);
+    ASSERT_STR_EQ(cfg.bbs_host, "bbs.internal", "BbsHost parsed");
+    /* RepoHost's own default is untouched by a BbsHost line. */
+    ASSERT_STR_EQ(cfg.host, "bbs.uprough.net", "RepoHost unaffected by BbsHost");
+    unlink("/tmp/test_config_bbs_host.cfg");
+}
+
+TEST(parse_bbs_port)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_bbs_port.cfg", "w");
+    fprintf(f, "BbsPort=9091\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_bbs_port.cfg", NULL);
+    ASSERT_EQ(cfg.bbs_port, 9091, "BbsPort parsed");
+    ASSERT_EQ(cfg.port, 80, "RepoPort unaffected by BbsPort");
+    unlink("/tmp/test_config_bbs_port.cfg");
+}
+
+TEST(bbs_port_out_of_range_keeps_default)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_bbs_port_bad.cfg", "w");
+    fprintf(f, "BbsPort=70000\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_bbs_port_bad.cfg", NULL);
+    ASSERT_EQ(cfg.bbs_port, 3001, "out-of-range BbsPort keeps default");
+    unlink("/tmp/test_config_bbs_port_bad.cfg");
+}
+
 TEST(parse_path)
 {
     dr_config cfg;
@@ -1124,6 +1175,89 @@ TEST(legitimate_amiga_paths_are_not_rejected)
     unlink("/tmp/test_legit_paths.cfg");
 }
 
+/* ---------------------------------------------------------------------
+ * config_read_token - the per-launch token the BBS writes to
+ * <doors_dir>/DoorRepo/DoorRepo.token, read back by doorrepo.c's
+ * install-report call to /api/door-admin/installed. Absent-file is the
+ * expected "this BBS does not offer the management API" case, not an
+ * error - covered explicitly below, not just as a side effect of the
+ * happy path.
+ * ------------------------------------------------------------------- */
+
+TEST(read_token)
+{
+    dr_config cfg;
+    char token[128];
+    FILE *f;
+
+    memset(&cfg, 0, sizeof(cfg));
+    strcpy(cfg.doors_dir, "build-test-tokendir");
+    (void) system("mkdir -p build-test-tokendir/DoorRepo");
+    f = fopen("build-test-tokendir/DoorRepo/DoorRepo.token", "wb");
+    ASSERT_TRUE(f != (FILE *) 0, "token file created for the test");
+    fputs("abc123\n", f);
+    fclose(f);
+
+    ASSERT_EQ(config_read_token(&cfg, token, sizeof(token)), 1, "token file present: returns 1");
+    ASSERT_STR_EQ(token, "abc123", "trailing newline trimmed from token");
+
+    (void) system("rm -rf build-test-tokendir");
+    ASSERT_EQ(config_read_token(&cfg, token, sizeof(token)), 0, "no token file: returns 0, not an error");
+    ASSERT_STR_EQ(token, "", "out left empty when the token file is absent");
+}
+
+TEST(read_token_trims_carriage_return_and_trailing_spaces)
+{
+    dr_config cfg;
+    char token[128];
+    FILE *f;
+
+    memset(&cfg, 0, sizeof(cfg));
+    strcpy(cfg.doors_dir, "build-test-tokendir2");
+    (void) system("mkdir -p build-test-tokendir2/DoorRepo");
+    f = fopen("build-test-tokendir2/DoorRepo/DoorRepo.token", "wb");
+    ASSERT_TRUE(f != (FILE *) 0, "token file created for the test");
+    fputs("tok-with-crlf  \r\n", f);
+    fclose(f);
+
+    ASSERT_EQ(config_read_token(&cfg, token, sizeof(token)), 1, "token read despite CRLF and trailing spaces");
+    ASSERT_STR_EQ(token, "tok-with-crlf", "CR, LF and trailing spaces all trimmed");
+
+    (void) system("rm -rf build-test-tokendir2");
+}
+
+TEST(read_token_empty_file_returns_zero)
+{
+    dr_config cfg;
+    char token[128];
+    FILE *f;
+
+    memset(&cfg, 0, sizeof(cfg));
+    strcpy(cfg.doors_dir, "build-test-tokendir3");
+    (void) system("mkdir -p build-test-tokendir3/DoorRepo");
+    f = fopen("build-test-tokendir3/DoorRepo/DoorRepo.token", "wb");
+    ASSERT_TRUE(f != (FILE *) 0, "token file created for the test");
+    fclose(f);
+
+    ASSERT_EQ(config_read_token(&cfg, token, sizeof(token)), 0, "an empty token file is treated as absent");
+    ASSERT_STR_EQ(token, "", "out left empty for an empty token file");
+
+    (void) system("rm -rf build-test-tokendir3");
+}
+
+TEST(read_token_refuses_null_args)
+{
+    dr_config cfg;
+    char token[128] = "xyz";
+
+    memset(&cfg, 0, sizeof(cfg));
+    strcpy(cfg.doors_dir, "build-test-tokendir4");
+
+    ASSERT_EQ(config_read_token((const dr_config *) 0, token, sizeof(token)), 0, "NULL cfg refused");
+    ASSERT_EQ(config_read_token(&cfg, (char *) 0, sizeof(token)), 0, "NULL out refused");
+    ASSERT_EQ(config_read_token(&cfg, token, 0), 0, "zero outlen refused");
+}
+
 int main(void)
 {
     printf("\n====== Config Module Tests ======\n\n");
@@ -1133,6 +1267,10 @@ int main(void)
     RUN_TEST(missing_file_preserves_defaults);
     RUN_TEST(parse_host);
     RUN_TEST(parse_port);
+    RUN_TEST(bbs_host_port_defaults);
+    RUN_TEST(parse_bbs_host);
+    RUN_TEST(parse_bbs_port);
+    RUN_TEST(bbs_port_out_of_range_keeps_default);
     RUN_TEST(parse_path);
     RUN_TEST(parse_download_dir);
     RUN_TEST(parse_page_size);
@@ -1206,6 +1344,11 @@ int main(void)
     RUN_TEST(legitimate_amiga_paths_are_not_rejected);
     RUN_TEST(keep_failed_downloads_defaults_to_off);
     RUN_TEST(keep_failed_downloads_yes_is_parsed);
+
+    RUN_TEST(read_token);
+    RUN_TEST(read_token_trims_carriage_return_and_trailing_spaces);
+    RUN_TEST(read_token_empty_file_returns_zero);
+    RUN_TEST(read_token_refuses_null_args);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

@@ -8,6 +8,19 @@ If an invalid value is specified, the default is used.
 The HTTP path prefix for the repository API endpoints.
 # RepoPath=/api/door-repo
 
+The hostname or IP address of THIS BBS's own management API - NOT the
+repository server above. Used only to report a completed install back to
+this board (POST /api/door-admin/installed) so door_installed_files stops
+being permanently empty. Left at its default, every board reports to
+itself; pointing it at RepoHost's value (or anything else remote) would
+send this board's install-report bearer token across the network in
+cleartext.
+# BbsHost=localhost
+
+The TCP port for this BBS's own management API. Valid range: 1-65535.
+If an invalid value is specified, the default is used.
+# BbsPort=3001
+
 The AmigaDOS directory where downloaded door archives are saved. Must exist
 before use. This door will not create the directory automatically. The
 install index (DoorRepo.idx, one line per installed door) is kept here too.

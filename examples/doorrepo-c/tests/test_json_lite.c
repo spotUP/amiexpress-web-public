@@ -717,6 +717,88 @@ TEST(build_login_body_refuses_null_args)
     ASSERT_TRUE(json_build_login_body(out, sizeof(out), "a", (const char *) 0) < 0, "NULL password");
 }
 
+/* ---------------------------------------------------------------------
+ * json_build_install_body - the DOORREPO install-report body posted to
+ * /api/door-admin/installed. Same escaping code path as
+ * json_build_login_body above; the case that actually matters here is a
+ * catalog archive name containing a quote or backslash (real catalog
+ * entries include ones like $CP-BUss1.LZX) - see json_lite.h's doc
+ * comment on why a bare sprintf("%s") would break the JSON body.
+ * ------------------------------------------------------------------- */
+
+TEST(build_install_body_basic_shape)
+{
+    char out[128];
+    int n = json_build_install_body(out, sizeof(out), "ACCV", "MyDoor.lha");
+    ASSERT_TRUE(n > 0, "positive length returned");
+    ASSERT_STR_EQ(out, "{\"command\":\"ACCV\",\"archiveName\":\"MyDoor.lha\"}", "built body");
+    ASSERT_EQ((unsigned long) n, strlen(out), "returned length matches strlen(out)");
+}
+
+TEST(build_install_body_escapes_double_quote_in_archive_name)
+{
+    char out[128];
+    char decoded[64];
+    int n = json_build_install_body(out, sizeof(out), "ACCV", "we\"ird.lha");
+    ASSERT_TRUE(n > 0, "positive length returned");
+    ASSERT_STR_EQ(out, "{\"command\":\"ACCV\",\"archiveName\":\"we\\\"ird.lha\"}",
+                  "double quote in archive name escaped");
+    ASSERT_EQ(json_extract_string(out, "archiveName", decoded, sizeof(decoded)), 0,
+              "archiveName decodes back out");
+    ASSERT_STR_EQ(decoded, "we\"ird.lha", "archiveName round-trips exactly");
+}
+
+TEST(build_install_body_escapes_backslash_in_archive_name)
+{
+    char out[128];
+    char decoded[64];
+    int n = json_build_install_body(out, sizeof(out), "ACCV", "back\\slash.lha");
+    ASSERT_TRUE(n > 0, "positive length returned");
+    ASSERT_STR_EQ(out, "{\"command\":\"ACCV\",\"archiveName\":\"back\\\\slash.lha\"}",
+                  "backslash in archive name escaped");
+    ASSERT_EQ(json_extract_string(out, "archiveName", decoded, sizeof(decoded)), 0,
+              "archiveName decodes back out");
+    ASSERT_STR_EQ(decoded, "back\\slash.lha", "archiveName round-trips exactly");
+}
+
+TEST(build_install_body_passes_high_bit_latin1_archive_name_through_unescaped)
+{
+    /* A high-bit Latin-1 byte (0xA1) inside the archive name, the same
+     * class of byte the real ~5932-entry catalog carries (this door's
+     * Latin-1-everywhere assumption - see listtxt.h and json_lite.h's
+     * file header). String-literal concatenation avoids C's hex-escape
+     * digit run-on (see tests/test_flow.c's identical \x01 precedent):
+     * "CP\xA1" ends the escape before the next literal's 'B' could be
+     * read as another hex digit. */
+    static const char archive[] = "CP\xA1" "BUSS1.LZX";
+    char out[128];
+    char decoded[64];
+    int n = json_build_install_body(out, sizeof(out), "ACCV", archive);
+    ASSERT_TRUE(n > 0, "positive length returned");
+    ASSERT_STR_EQ(out, "{\"command\":\"ACCV\",\"archiveName\":\"CP\xA1" "BUSS1.LZX\"}",
+                  "high-bit byte passed through unescaped, not \\u-escaped");
+    ASSERT_EQ(json_extract_string(out, "archiveName", decoded, sizeof(decoded)), 0,
+              "archiveName decodes back out");
+    ASSERT_STR_EQ(decoded, archive, "high-bit archive name round-trips exactly");
+}
+
+TEST(build_install_body_refuses_when_buffer_too_small)
+{
+    char out[8] = "xyz";
+    int n = json_build_install_body(out, sizeof(out), "ACCV", "MyDoor.lha");
+    ASSERT_TRUE(n < 0, "negative: does not fit outcap");
+    ASSERT_STR_EQ(out, "", "out cleared to empty on failure");
+}
+
+TEST(build_install_body_refuses_null_args)
+{
+    char out[64] = "xyz";
+    ASSERT_TRUE(json_build_install_body((char *) 0, sizeof(out), "ACCV", "a.lha") < 0, "NULL out");
+    ASSERT_TRUE(json_build_install_body(out, sizeof(out), (const char *) 0, "a.lha") < 0, "NULL command");
+    ASSERT_STR_EQ(out, "", "out cleared even for the NULL-command case");
+    ASSERT_TRUE(json_build_install_body(out, sizeof(out), "ACCV", (const char *) 0) < 0, "NULL archive_name");
+}
+
 int main(void)
 {
     RUN_TEST(extract_string_finds_token_in_wellformed_login_response);
@@ -768,6 +850,13 @@ int main(void)
     RUN_TEST(build_login_body_roundtrips_through_extract_string);
     RUN_TEST(build_login_body_refuses_when_buffer_too_small);
     RUN_TEST(build_login_body_refuses_null_args);
+
+    RUN_TEST(build_install_body_basic_shape);
+    RUN_TEST(build_install_body_escapes_double_quote_in_archive_name);
+    RUN_TEST(build_install_body_escapes_backslash_in_archive_name);
+    RUN_TEST(build_install_body_passes_high_bit_latin1_archive_name_through_unescaped);
+    RUN_TEST(build_install_body_refuses_when_buffer_too_small);
+    RUN_TEST(build_install_body_refuses_null_args);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

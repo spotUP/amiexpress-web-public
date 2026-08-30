@@ -30,6 +30,7 @@
  */
 
 import { LibraryTraps } from '../../src/amiga-emulation/api/LibraryTraps';
+import { ExecLibrary } from '../../src/amiga-emulation/api/ExecLibrary';
 
 // We reach into the dispatcher with a hand-rolled fake emulator so we can
 // observe register state across `handleTrap` without spinning up MOIRA.
@@ -115,7 +116,7 @@ function makeFake(): {
 describe('LibraryTraps.handleTrap — A6 preservation across library calls (regression)', () => {
   test('DOORSMENU shape: A6 holds application pointer through utility.library SMult32', () => {
     const { regs, mem, emu } = makeFake();
-    const lt = new LibraryTraps(emu);
+    const lt = new LibraryTraps(emu, new ExecLibrary(emu));
 
     // Stand up a minimal utility.library trap: just SMult32 (LVO -138).
     // Pretend the library base is 0xF0000 and the trap address is 0xeff76.
@@ -162,7 +163,7 @@ describe('LibraryTraps.handleTrap — A6 preservation across library calls (regr
 
   test('Standard caller pattern: A6 = lib base on entry stays = lib base on exit', () => {
     const { regs, mem, emu } = makeFake();
-    const lt = new LibraryTraps(emu);
+    const lt = new LibraryTraps(emu, new ExecLibrary(emu));
 
     const utilityBase = 0xf0000;
     const smultTrapAddr = utilityBase - 0x8a;
@@ -191,7 +192,7 @@ describe('LibraryTraps.handleTrap — A6 preservation across library calls (regr
 
   test('Dispatcher does not clobber any callee-saved data register (D2-D7)', () => {
     const { regs, mem, emu } = makeFake();
-    const lt = new LibraryTraps(emu);
+    const lt = new LibraryTraps(emu, new ExecLibrary(emu));
 
     const utilityBase = 0xf0000;
     const smultTrapAddr = utilityBase - 0x8a;

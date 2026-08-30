@@ -32,7 +32,7 @@ import type { DoorRepoMode } from '../../../../Doors/door-manager/repoDataSource
 
 const OWNER: DoorRepoMode = { kind: 'owner' };
 const DISABLED: DoorRepoMode = { kind: 'disabled' };
-const CONSUMER: DoorRepoMode = { kind: 'consumer', url: 'https://bbs.uprough.net' };
+const CONSUMER: DoorRepoMode = { kind: 'consumer', url: 'https://bbs.uprough.net', learnKey: null };
 
 // ─── repoViewCurationAllowed ─────────────────────────────────────────────────
 

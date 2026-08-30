@@ -10,6 +10,12 @@ void config_defaults(dr_config *cfg)
     strncpy(cfg->host, "bbs.uprough.net", sizeof(cfg->host) - 1);
     cfg->host[sizeof(cfg->host) - 1] = '\0';
     cfg->port = 80;
+    /* The local BBS's own management API, not the remote catalog - see
+     * config.h's field comment. localhost:3001 matches this door's actual
+     * deployment (the door and the BBS backend always share a host). */
+    strncpy(cfg->bbs_host, "localhost", sizeof(cfg->bbs_host) - 1);
+    cfg->bbs_host[sizeof(cfg->bbs_host) - 1] = '\0';
+    cfg->bbs_port = 3001;
     strncpy(cfg->path, "/api/door-repo", sizeof(cfg->path) - 1);
     cfg->path[sizeof(cfg->path) - 1] = '\0';
     strncpy(cfg->download_dir, "T:", sizeof(cfg->download_dir) - 1);
@@ -238,6 +244,16 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
             } else {
                 local_skipped++;
             }
+        } else if (str_icmp(key, "BbsHost") == 0) {
+            strncpy(cfg->bbs_host, value, sizeof(cfg->bbs_host) - 1);
+            cfg->bbs_host[sizeof(cfg->bbs_host) - 1] = '\0';
+        } else if (str_icmp(key, "BbsPort") == 0) {
+            parsed_value = validate_port(value);
+            if (parsed_value > 0) {
+                cfg->bbs_port = parsed_value;
+            } else {
+                local_skipped++;
+            }
         } else if (str_icmp(key, "RepoPath") == 0) {
             if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
                 local_skipped++;
@@ -368,4 +384,46 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
         *skipped_lines = local_skipped;
 
     return 0;
+}
+
+int config_read_token(const dr_config *cfg, char *out, unsigned long outlen)
+{
+    char tokenpath[512];
+    FILE *f;
+    unsigned long len;
+
+    if (out != (char *) 0 && outlen > 0) {
+        out[0] = '\0';
+    }
+
+    if (cfg == (const dr_config *) 0 || out == (char *) 0 || outlen == 0) {
+        return 0;
+    }
+
+    /* Joined with flow_build_local_path() rather than a bare sprintf("%s/...")
+     * so a doors_dir already ending in ':' or '/' (the default, "Doors/")
+     * never produces a doubled separator - the same join every other
+     * doors_dir-relative path in this door already goes through (see
+     * flow_build_install_dir()). */
+    if (flow_build_local_path(tokenpath, sizeof(tokenpath), cfg->doors_dir,
+                               "DoorRepo/DoorRepo.token") < 0) {
+        return 0;
+    }
+
+    f = fopen(tokenpath, "rb");
+    if (f == (FILE *) 0) {
+        return 0;
+    }
+
+    if (fgets(out, (int) outlen, f) == (char *) 0) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+
+    len = (unsigned long) strlen(out);
+    while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' ')) {
+        out[--len] = '\0';
+    }
+    return len > 0 ? 1 : 0;
 }

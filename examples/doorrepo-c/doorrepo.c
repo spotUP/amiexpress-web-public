@@ -3116,7 +3116,7 @@ static void strip_repo_archive(const dr_config *cfg, const char *archive,
     (void) ae_key();
 }
 
-/* Task 4's non-ANSI (Ansi=no) counterpart to strip_installed_door() above -
+/* Task 4's non-ANSI (Ansi=no) counterpart to strip_installed_door() above. */
 static void plain_strip_installed_door(const dr_config *cfg, const char *archive, long junk)
 {
     const char *cmdname = index_lookup(cfg, archive);
@@ -3199,6 +3199,75 @@ static int write_info_file_atomic(const dr_config *cfg, const char *info_path,
     return 1;
 }
 
+/* Tells THIS BBS (not the door repo) what was just installed, by POSTing
+ * to its own /api/door-admin/installed - the route the recorder Task 7
+ * added exists to answer, from disk, "what did DoorRepo actually put
+ * where" once door_installed_files stops being permanently empty. Called
+ * ONLY after install_door() has already declared success below: a failed
+ * install reports nothing here, and nothing this function does ever rolls
+ * an already-successful install back.
+ *
+ * config_read_token() returning 0 means this BBS does not offer the
+ * management API at all (no <doors_dir>/DoorRepo/DoorRepo.token was ever
+ * written) - silent no-op, not an error, per config_read_token()'s own
+ * contract. Any other failure (the body would not fit, the POST itself
+ * failed, or the BBS answered something other than 200) is reported to
+ * the sysop plainly: the door is on disk and will run either way, this
+ * BBS simply will not remember it was DoorRepo that put it there. */
+static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
+                                  const char *archive)
+{
+    char token[128];
+    char body[640];
+    char tokenhdr[160];
+    const char *headers[2];
+    http_response resp;
+    int body_len;
+    dr_config local_cfg;
+
+    if (!config_read_token(cfg, token, sizeof(token))) {
+        return;
+    }
+
+    /* http_request() always targets cfg->host:cfg->port, and those name the
+     * REMOTE catalog server (RepoHost/RepoPort - bbs.uprough.net by
+     * default). This report is for THIS board's own management API, so a
+     * local copy of cfg with host/port swapped for bbs_host/bbs_port is
+     * passed instead - on every board that has not overridden RepoHost,
+     * posting straight to cfg->host would send this board's launch token,
+     * in cleartext, to bbs.uprough.net. */
+    local_cfg = *cfg;
+    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
+    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
+    local_cfg.port = cfg->bbs_port;
+
+    /* json_build_install_body(), not a bare sprintf("%s"): the catalog
+     * this archive name comes from holds thousands of Latin-1 entries,
+     * some containing '"' or '\\' - unescaped, either would break this
+     * JSON body and the server's express.json would reject the whole
+     * request, silently losing the install report this function exists
+     * to send. See json_lite.h for the escaping contract. */
+    body_len = json_build_install_body(body, sizeof(body), cmdname, archive);
+    if (body_len < 0) {
+        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
+        return;
+    }
+
+    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
+    headers[0] = "Content-Type: application/json\r\n";
+    headers[1] = tokenhdr;
+
+    memset(&resp, 0, sizeof(resp));
+    if (http_request(&local_cfg, "POST", "/api/door-admin/installed",
+                     body, (unsigned long) body_len,
+                     headers, 2, &resp,
+                     (int (*)(void *, const unsigned char *, unsigned long)) 0,
+                     (void *) 0) != HTTP_OK
+        || resp.status != 200) {
+        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
+    }
+}
+
 /* The whole install, from an entry in the list to a runnable BBS command.
  * Reports every step to the user, because on a real node this is the one
  * action that changes what the BBS itself will do. */
@@ -3220,6 +3289,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     int listed_checked;
     int listed_present;
     int verdict;
+    int named_by_archive;
 
     /* The archive name has already passed the CWE-22 filename check at
      * catalog-parse time; re-checked here for the same reason the
@@ -3230,13 +3300,25 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    cmdname[0] = '\0';
-    (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+    /* The listing is this door's only way to see what a Commands/BBSCmd/
+     * <CMD>.info entry INSIDE the archive names - C89 has no directory
+     * enumeration, so the /files listing doubles as the manifest an
+     * extracted directory would otherwise answer (see flow.h's
+     * flow_command_from_listing() comment). files_load() is idempotent
+     * and cached per archive - the same call the archive pane itself
+     * makes - so calling it here, before deriving a command at all, costs
+     * nothing on a cache hit and means the derived command never depends
+     * on whether the sysop happened to browse the archive pane first. */
+    files_load(cfg, entry->archive);
 
-    if (!ui_text_prompt(b, frame, framecap, g, "Install as BBS command:",
-                        cmdname, FLOW_MAX_BBS_COMMAND)) {
-        return; /* empty answer = changed their mind */
+    cmdname[0] = '\0';
+    if (g_files_ok && flow_command_from_listing(g_files, cmdname, sizeof(cmdname))) {
+        named_by_archive = 1;
+    } else {
+        named_by_archive = 0;
+        (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
     }
+
     if (!flow_is_valid_bbs_command(cmdname)) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
@@ -3249,6 +3331,19 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         ae_put("Press any key to return to the list.", 1);
         (void) ae_key();
         return;
+    }
+
+    /* No free-text field any more (Task 8 removed DOORMAN's equivalent
+     * prompt for the same reason): a door installed under an invented
+     * name does not answer to the Commands/BBSCmd/<CMD>.info its own
+     * archive ships. The sysop confirms or cancels, nothing more. */
+    if (named_by_archive) {
+        sprintf(msg, "Install as %s (named by the archive)?  [Y/N]", cmdname);
+    } else {
+        sprintf(msg, "Archive names no command; install as %s?  [Y/N]", cmdname);
+    }
+    if (!ui_confirm(b, frame, framecap, g, msg)) {
+        return; /* sysop cancelled */
     }
 
     if (flow_build_local_path(local_path, sizeof(local_path), cfg->download_dir, entry->archive) < 0
@@ -3561,6 +3656,11 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         sprintf(logmsg, "INSTALL OK archive=%s cmd=%s binary=%s", entry->archive, cmdname, binary_rel);
         log_line(cfg, logmsg);
     }
+
+    /* Report the install to this BBS's own management API - after
+     * everything above has already declared success, and never able to
+     * undo it: see report_install_to_bbs()'s own comment. */
+    report_install_to_bbs(cfg, cmdname, entry->archive);
 
     ae_put("", 1);
     ae_put("Press any key to return to the list.", 1);

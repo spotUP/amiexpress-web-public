@@ -192,7 +192,7 @@ function renameInstallDir(installDir, command) {
         return null;
     }
 }
-async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorType, binaryName, finalCmd, deps) {
+async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorType, binaryName, finalCmd, deps, archiveName) {
     const steps = [];
     let command = finalCmd;
     let targetDir = installDir;
@@ -255,7 +255,7 @@ async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorTyp
         return { ok: false, step: 'write-info', detail: `${targetInfoPath}: ${err?.message ?? err}`, steps };
     }
     try {
-        deps.recordInstall(command, `Doors/${command}`);
+        deps.recordInstall(command, `Doors/${command}`, archiveName);
         steps.push({ kind: 'ok', text: `recorded the install as ${command}` });
     }
     catch (err) {
@@ -341,19 +341,19 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
             findExtractedBinary: deps.findExtractedBinary,
             writeInfoFile: deps.writeInfoFile,
             refreshDoorRegistry: deps.refreshDoorRegistry,
-            recordInstall: (installedCmd, installedDir) => {
+            recordInstall: (installedCmd, installedDir, archive) => {
                 // installedCmd, not finalCmd: the archive may name its own command,
                 // and the record has to describe what is actually on disk.
-                if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archiveName))
+                if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive))
                     return;
                 deps.recordInstall({
                     id: `install-${installedCmd}`,
                     catalog_id: localRow?.id ?? null,
-                    archive_name: archiveName,
+                    archive_name: archive,
                     command: installedCmd,
                     install_dir: installedDir,
                     door_type: doorType || 'XIM',
-                    name: manifestRow.name ?? archiveName,
+                    name: manifestRow.name ?? archive,
                     md5: manifestRow.md5 ?? null,
                     description: manifestRow.description ?? null,
                     category: manifestRow.category ?? null,
@@ -364,7 +364,7 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
                 });
                 registeredLocally = true;
             },
-        });
+        }, archiveName);
         if (!outcome.ok)
             return outcome;
         return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, steps: outcome.steps, registeredLocally };
