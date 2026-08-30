@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Edit2, Trash2, Plus, AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 
 interface FileChecker {
   id: number;
@@ -23,6 +24,9 @@ interface FileCheckerError {
   error_number: number;
   error_pattern: string;
 }
+
+/** A stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_CHECKERS: FileChecker[] = [];
 
 export function FileCheckersPage() {
   const queryClient = useQueryClient();
@@ -179,12 +183,78 @@ export function FileCheckersPage() {
     });
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading file checkers...</div>;
-  }
-
-  const checkers = data?.data || [];
+  const checkers = data?.data || EMPTY_CHECKERS;
   const errors = errorsQuery.data?.data || [];
+
+  const columns: DataTableColumn<FileChecker>[] = [
+    {
+      id: 'enabled',
+      header: 'Status',
+      value: (checker) => (checker.enabled ? 1 : 0),
+      width: '9rem',
+      cell: (checker) => (
+        <button
+          type="button"
+          onClick={() => handleToggle(checker)}
+          aria-label={`${checker.enabled ? 'Disable' : 'Enable'} ${checker.checker_name}`}
+          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors ${
+            checker.enabled
+              ? 'bg-status-ok/20 text-status-ok hover:bg-status-ok/30'
+              : 'bg-surface-3 text-content-muted hover:bg-surface-2'
+          }`}
+        >
+          {checker.enabled ? <ToggleRight size={12} aria-hidden="true" /> : <ToggleLeft size={12} aria-hidden="true" />}
+          {checker.enabled ? 'Enabled' : 'Disabled'}
+        </button>
+      ),
+    },
+    {
+      id: 'checker_name',
+      header: 'Name',
+      value: (checker) => checker.checker_name,
+      cell: (checker) => <span className="text-content-primary">{checker.checker_name}</span>,
+    },
+    {
+      id: 'checker_path',
+      header: 'Path',
+      value: (checker) => checker.checker_path ?? '',
+      mono: true,
+      cell: (checker) => (
+        <span className="block max-w-sm truncate text-content-secondary">{checker.checker_path || '-'}</span>
+      ),
+    },
+    {
+      id: 'options',
+      header: 'Options',
+      value: (checker) => checker.options ?? '',
+      mono: true,
+      cell: (checker) => (
+        <span className="block max-w-xs truncate text-content-secondary">{checker.options || '-'}</span>
+      ),
+    },
+    {
+      id: 'stack_size',
+      header: 'Stack',
+      value: (checker) => checker.stack_size ?? 0,
+      align: 'right',
+      mono: true,
+      width: '7rem',
+      cell: (checker) => (
+        <span>{checker.stack_size === undefined || checker.stack_size === null ? '-' : checker.stack_size}</span>
+      ),
+    },
+    {
+      id: 'priority',
+      header: 'Priority',
+      value: (checker) => checker.priority ?? 0,
+      align: 'right',
+      mono: true,
+      width: '6rem',
+      cell: (checker) => (
+        <span>{checker.priority === undefined || checker.priority === null ? '-' : checker.priority}</span>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -195,93 +265,42 @@ export function FileCheckersPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {checkers.map((checker: FileChecker) => (
-          <div key={checker.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <Shield className="text-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">{checker.checker_name}</h3>
-                  <p className="text-xs text-bbs-muted font-mono">{checker.checker_path}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleToggle(checker)}
-                className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                  checker.enabled ? 'bg-status-ok/20 text-status-ok' : 'bg-bbs-muted/20 text-bbs-muted'
-                }`}
-                title="Toggle availability"
-              >
-                {checker.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                <span>{checker.enabled ? 'Enabled' : 'Disabled'}</span>
-              </button>
-            </div>
-
-            <div className="space-y-2 text-sm mb-4">
-              {checker.options && (
-                <div>
-                  <span className="text-bbs-muted">Options:</span>
-                  <p className="text-bbs-text font-mono text-xs mt-1">{checker.options}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-2">
-                {checker.stack_size !== undefined && checker.stack_size !== null && (
-                  <div>
-                    <span className="text-bbs-muted block">Stack Size:</span>
-                    <span className="text-bbs-text font-mono">{checker.stack_size} bytes</span>
-                  </div>
-                )}
-                {checker.priority !== undefined && checker.priority !== null && (
-                  <div>
-                    <span className="text-bbs-muted block">Priority:</span>
-                    <span className="text-bbs-text font-mono">{checker.priority}</span>
-                  </div>
-                )}
-              </div>
-
-              {checker.script_path && (
-                <div>
-                  <span className="text-bbs-muted">Script:</span>
-                  <p className="text-bbs-text font-mono text-xs mt-1">{checker.script_path}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(checker)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleOpenErrors(checker)}
-                className="btn-secondary flex items-center justify-center space-x-2"
-              >
-                <AlertCircle size={16} />
-                <span>Errors</span>
-              </button>
-              <button
-                onClick={() => handleDelete(checker)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {checkers.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No file checkers configured. Add file checkers to validate uploads (virus scanning, archive testing, etc.).
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={checkers}
+        getRowId={(checker) => String(checker.id)}
+        initialSort={[{ id: 'checker_name', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No file checkers configured. Add file checkers to validate uploads (virus scanning, archive testing, etc.)."
+        rowActions={(checker) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(checker)}
+              aria-label={`Edit ${checker.checker_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenErrors(checker)}
+              aria-label={`Errors for ${checker.checker_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <AlertCircle size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(checker)}
+              aria-label={`Delete ${checker.checker_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
+      />
 
       <div className="mt-6 card bg-bbs-secondary">
         <div className="flex items-start space-x-3">

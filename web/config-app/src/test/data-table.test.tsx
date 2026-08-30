@@ -87,6 +87,24 @@ describe('DataTable', () => {
     expect(rowOrder()).toEqual(['ARCHIE', 'WALL', 'MEGA']);
   });
 
+  it('sorts a copy, leaving the array it was given alone', async () => {
+    // ProtocolsPage used to sort its rows by hand with `(data?.data || []).sort(...)`,
+    // which sorts IN PLACE - and the array it was given belongs to the query
+    // cache, so sorting the page reordered the cached data underneath every
+    // other reader of it. The table must never do that to what it is passed.
+    const rows: Door[] = [
+      { command: 'WALL', name: 'Global Wall', level: 20 },
+      { command: 'ARCHIE', name: 'Archie', level: 10 },
+      { command: 'MEGA', name: 'Megaboard', level: 30 },
+    ];
+    const original = [...rows];
+
+    renderTable({ rows });
+    await userEvent.click(screen.getByRole('button', { name: /command/i }));
+
+    expect(rows).toEqual(original);
+  });
+
   it('says so when there is nothing to show', () => {
     renderTable({ rows: [], emptyMessage: 'No doors are installed.' });
     expect(screen.getByText('No doors are installed.')).toBeInTheDocument();

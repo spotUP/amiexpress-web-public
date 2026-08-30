@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Monitor, Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+
+/** A stable fallback: a fresh array each render invalidates the row model. */
+const EMPTY_COMPUTERS: ComputerType[] = [];
 
 interface ComputerType {
   id: number;
@@ -108,11 +112,45 @@ export function ComputersPage() {
     updateMutation.mutate({ id: computer.id, updates: { enabled: !computer.enabled } });
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading computer types...</div>;
-  }
+  const computers = data?.data || EMPTY_COMPUTERS;
 
-  const computers = data?.data || [];
+  const columns: DataTableColumn<ComputerType>[] = [
+    {
+      id: 'enabled',
+      header: 'Status',
+      value: (computer) => (computer.enabled ? 1 : 0),
+      width: '9rem',
+      cell: (computer) => (
+        <button
+          type="button"
+          onClick={() => handleToggle(computer)}
+          aria-label={`${computer.enabled ? 'Disable' : 'Enable'} ${computer.computer_name}`}
+          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors ${
+            computer.enabled
+              ? 'bg-status-ok/20 text-status-ok hover:bg-status-ok/30'
+              : 'bg-surface-3 text-content-muted hover:bg-surface-2'
+          }`}
+        >
+          {computer.enabled ? <ToggleRight size={12} aria-hidden="true" /> : <ToggleLeft size={12} aria-hidden="true" />}
+          {computer.enabled ? 'Enabled' : 'Disabled'}
+        </button>
+      ),
+    },
+    {
+      id: 'computer_number',
+      header: 'Number',
+      value: (computer) => computer.computer_number,
+      align: 'right',
+      mono: true,
+      width: '6rem',
+    },
+    {
+      id: 'computer_name',
+      header: 'Name',
+      value: (computer) => computer.computer_name,
+      cell: (computer) => <span className="text-content-primary">{computer.computer_name}</span>,
+    },
+  ];
 
   return (
     <div>
@@ -123,60 +161,34 @@ export function ComputersPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {computers.map((computer: ComputerType) => (
-          <div key={computer.id} className="card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-bbs-primary rounded">
-                <Monitor className="text-accent" size={20} />
-              </div>
-              <button
-                onClick={() => handleToggle(computer)}
-                className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                  computer.enabled
-                    ? 'bg-status-ok/20 text-status-ok'
-                    : 'bg-bbs-muted/20 text-bbs-muted'
-                }`}
-                title="Toggle availability"
-              >
-                {computer.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                <span>{computer.enabled ? 'Enabled' : 'Disabled'}</span>
-              </button>
-            </div>
-
-            <h3 className="text-lg font-semibold text-bbs-text mb-2">{computer.computer_name}</h3>
-
-            <div className="space-y-2 text-sm mb-4">
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Number:</span>
-                <span className="text-bbs-text font-mono">{computer.computer_number}</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(computer)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleDelete(computer)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {computers.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No computer types configured. Add computer types for user selection during signup.
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={computers}
+        getRowId={(computer) => String(computer.id)}
+        initialSort={[{ id: 'computer_number', desc: false }]}
+        isLoading={isLoading}
+        emptyMessage="No computer types configured. Add computer types for user selection during signup."
+        rowActions={(computer) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handleEdit(computer)}
+              aria-label={`Edit ${computer.computer_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(computer)}
+              aria-label={`Delete ${computer.computer_name}`}
+              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
+      />
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

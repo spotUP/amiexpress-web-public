@@ -27,6 +27,7 @@ export function SecurityPage() {
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [dirty, setDirty] = useState(false);
   const [newLevel, setNewLevel] = useState('');
+  const [permissionFilter, setPermissionFilter] = useState('');
 
   const levelsQuery = useQuery({
     queryKey: ['acs-levels'],
@@ -36,7 +37,21 @@ export function SecurityPage() {
   // Memoised: the effect below depends on it, and a fresh [] each render
   // would re-run it every time.
   const levels: number[] = useMemo(() => levelsQuery.data?.data?.levels ?? [], [levelsQuery.data]);
-  const permissions: string[] = levelsQuery.data?.data?.permissions ?? [];
+  // Memoised for the same reason as `levels`: a fresh [] each render would
+  // re-run the filter below on every render.
+  const permissions: string[] = useMemo(
+    () => levelsQuery.data?.data?.permissions ?? [],
+    [levelsQuery.data]
+  );
+
+  // A level carries well over a hundred ACS permissions, listed in the order
+  // the file gives them. Without a filter, changing one means reading the
+  // whole grid to find it.
+  const visiblePermissions = useMemo(() => {
+    const needle = permissionFilter.trim().toLowerCase();
+    if (!needle) return permissions;
+    return permissions.filter(name => name.toLowerCase().includes(needle));
+  }, [permissions, permissionFilter]);
 
   // Select the first real level once we know what exists, rather than
   // defaulting to a number that may have no file at all.
@@ -150,7 +165,9 @@ export function SecurityPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">
-              Level {selectedLevel} - {permissions.length} permissions
+              Level {selectedLevel} - {visiblePermissions.length === permissions.length
+                ? `${permissions.length} permissions`
+                : `${visiblePermissions.length} of ${permissions.length} permissions`}
             </h2>
             <button
               onClick={() => saveMutation.mutate()}
@@ -165,11 +182,22 @@ export function SecurityPage() {
             </button>
           </div>
 
+          <input
+            type="search"
+            value={permissionFilter}
+            onChange={e => setPermissionFilter(e.target.value)}
+            placeholder="Filter permissions"
+            aria-label="Filter permissions"
+            className="w-full max-w-xs px-2 py-1 bg-transparent border border-bbs-muted/40 rounded text-sm"
+          />
+
           {flagsQuery.isLoading ? (
             <p className="text-bbs-muted">Loading flags...</p>
+          ) : visiblePermissions.length === 0 ? (
+            <p className="text-bbs-muted">No permission matches "{permissionFilter}".</p>
           ) : (
             <div className="grid gap-1 md:grid-cols-2">
-              {permissions.map(name => {
+              {visiblePermissions.map(name => {
                 const granted = !!flags[name];
                 return (
                   <button
