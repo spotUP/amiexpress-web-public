@@ -79,4 +79,19 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines);
  * the brief specifies it. */
 int config_last_unsafe_value_count(void);
 
+/* The per-launch token the BBS wrote for this session, at
+ * <doors_dir>/DoorRepo/DoorRepo.token - a 68K door under the emulator
+ * never sees the backend's environment, so a file beside the
+ * configuration is how the token arrives. Copies it, trimmed of its
+ * trailing newline/CR/spaces, into `out`.
+ *
+ * Returns 1 and fills `out` when the token file exists and yields a
+ * non-empty token after trimming; returns 0 (with `out` left as "") when
+ * `cfg`/`out` is NULL, `outlen` is 0, the file does not exist, or the
+ * line it contains is empty once trimmed. Absent is not an error - it
+ * means this BBS does not offer the management API this token would
+ * authenticate against (see doorrepo.c's install-report caller, the only
+ * one this function has). */
+int config_read_token(const dr_config *cfg, char *out, unsigned long outlen);
+
 #endif

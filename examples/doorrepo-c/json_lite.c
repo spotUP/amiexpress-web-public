@@ -645,3 +645,43 @@ int json_build_login_body(char *out, unsigned long outcap,
 
     return (int) pos;
 }
+
+int json_build_install_body(char *out, unsigned long outcap,
+                             const char *command, const char *archive_name)
+{
+    static const char prefix[] = "{\"command\":\"";
+    static const char mid[] = "\",\"archiveName\":\"";
+    static const char suffix[] = "\"}";
+    unsigned long need;
+    unsigned long pos;
+
+    if (out == (char *) 0 || outcap == 0
+        || command == (const char *) 0 || archive_name == (const char *) 0) {
+        if (out != (char *) 0 && outcap > 0) {
+            out[0] = '\0';
+        }
+        return -1;
+    }
+    out[0] = '\0';
+
+    need = (unsigned long) (sizeof(prefix) - 1) + json_escaped_len(command)
+         + (unsigned long) (sizeof(mid) - 1) + json_escaped_len(archive_name)
+         + (unsigned long) (sizeof(suffix) - 1);
+
+    if (need + 1 > outcap) {
+        return -1;
+    }
+
+    pos = 0;
+    memcpy(out + pos, prefix, sizeof(prefix) - 1);
+    pos += (unsigned long) (sizeof(prefix) - 1);
+    json_escape_into(out, &pos, command);
+    memcpy(out + pos, mid, sizeof(mid) - 1);
+    pos += (unsigned long) (sizeof(mid) - 1);
+    json_escape_into(out, &pos, archive_name);
+    memcpy(out + pos, suffix, sizeof(suffix) - 1);
+    pos += (unsigned long) (sizeof(suffix) - 1);
+    out[pos] = '\0';
+
+    return (int) pos;
+}

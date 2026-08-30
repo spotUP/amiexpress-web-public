@@ -3199,6 +3199,62 @@ static int write_info_file_atomic(const dr_config *cfg, const char *info_path,
     return 1;
 }
 
+/* Tells THIS BBS (not the door repo) what was just installed, by POSTing
+ * to its own /api/door-admin/installed - the route the recorder Task 7
+ * added exists to answer, from disk, "what did DoorRepo actually put
+ * where" once door_installed_files stops being permanently empty. Called
+ * ONLY after install_door() has already declared success below: a failed
+ * install reports nothing here, and nothing this function does ever rolls
+ * an already-successful install back.
+ *
+ * config_read_token() returning 0 means this BBS does not offer the
+ * management API at all (no <doors_dir>/DoorRepo/DoorRepo.token was ever
+ * written) - silent no-op, not an error, per config_read_token()'s own
+ * contract. Any other failure (the body would not fit, the POST itself
+ * failed, or the BBS answered something other than 200) is reported to
+ * the sysop plainly: the door is on disk and will run either way, this
+ * BBS simply will not remember it was DoorRepo that put it there. */
+static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
+                                  const char *archive)
+{
+    char token[128];
+    char body[640];
+    char tokenhdr[160];
+    const char *headers[2];
+    http_response resp;
+    int body_len;
+
+    if (!config_read_token(cfg, token, sizeof(token))) {
+        return;
+    }
+
+    /* json_build_install_body(), not a bare sprintf("%s"): the catalog
+     * this archive name comes from holds thousands of Latin-1 entries,
+     * some containing '"' or '\\' - unescaped, either would break this
+     * JSON body and the server's express.json would reject the whole
+     * request, silently losing the install report this function exists
+     * to send. See json_lite.h for the escaping contract. */
+    body_len = json_build_install_body(body, sizeof(body), cmdname, archive);
+    if (body_len < 0) {
+        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
+        return;
+    }
+
+    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
+    headers[0] = "Content-Type: application/json\r\n";
+    headers[1] = tokenhdr;
+
+    memset(&resp, 0, sizeof(resp));
+    if (http_request(cfg, "POST", "/api/door-admin/installed",
+                     body, (unsigned long) body_len,
+                     headers, 2, &resp,
+                     (int (*)(void *, const unsigned char *, unsigned long)) 0,
+                     (void *) 0) != HTTP_OK
+        || resp.status != 200) {
+        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
+    }
+}
+
 /* The whole install, from an entry in the list to a runnable BBS command.
  * Reports every step to the user, because on a real node this is the one
  * action that changes what the BBS itself will do. */
@@ -3587,6 +3643,11 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         sprintf(logmsg, "INSTALL OK archive=%s cmd=%s binary=%s", entry->archive, cmdname, binary_rel);
         log_line(cfg, logmsg);
     }
+
+    /* Report the install to this BBS's own management API - after
+     * everything above has already declared success, and never able to
+     * undo it: see report_install_to_bbs()'s own comment. */
+    report_install_to_bbs(cfg, cmdname, entry->archive);
 
     ae_put("", 1);
     ae_put("Press any key to return to the list.", 1);
