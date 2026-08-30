@@ -36,6 +36,8 @@ import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
  *  testable: it lives inside a large builder method, and the fields it
  *  carries (description, version, release group) are user-visible in the
  *  door menu with no error path if they go missing. */
+import { applyRepoMetadata, getRepoMetadataIndex } from './door-repo-metadata';
+
 export function applyInstallMetadata<T extends Record<string, unknown>>(
   door: T,
   match: DoorInstall | null
@@ -1331,7 +1333,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     const allDoors = getDoors();
     const bbsRoot = (this.session as any)?.dataDir || process.env.BBS_DATA_DIR || process.cwd();
 
-    return allDoors.map((door: any) => {
+    const mapped = allDoors.map((door: any) => {
       const amigafs = require('../utils/amigafs');
       const pathMod = require('path');
 
@@ -1373,7 +1375,9 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
         location: doorPath,
         resolvedPath,
       };
-    }).map((door: any) => {
+    });
+
+    const withMetadata = mapped.map((door: any) => {
       // Overlay the metadata captured when this door was installed. It used
       // to come from door_catalog; the shared catalog now lives in the door
       // server, and door_installs holds this node's snapshot of it (keyed by
@@ -1383,6 +1387,18 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
       } catch { /* catalog not yet built — return door as-is */ }
       return door;
     });
+
+    // Doors put on disk any other way have no install record - and on this
+    // board door_installs does not exist at all, so every command reaches
+    // the doors menu with an empty description. Ask the repo for the ones it
+    // recognises. Only empty fields are filled: what a door's own .info says
+    // always wins.
+    try {
+      const repoIndex = await getRepoMetadataIndex();
+      return withMetadata.map((door: any) => applyRepoMetadata(door, repoIndex));
+    } catch {
+      return withMetadata;
+    }
   }
 
   /**
