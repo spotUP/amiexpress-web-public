@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 /* eslint-disable no-console */
 const TEST_MODULES = [
     './sprites.test',
+    './menu.test',
 ];
 (async () => {
     let passed = 0;

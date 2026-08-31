@@ -120,44 +120,31 @@ function renderMenu() {
     gameArea.setContent("");
     if (menuBox)
         menuBox.destroy();
-    const menuList = new blessed_1.List({
-        parent: gameArea,
+    // Parented to the SCREEN, not gameArea. gameArea is only GRID_WIDTH * 2
+    // columns - the width of the board - so a 40-column menu centred inside it
+    // resolved to left: -5 and hung five columns off the left edge, which is
+    // exactly how it was reported: the title showing as "ngo" and the items
+    // clipped.
+    const lines = ["{cyan-fg}P E N G O{/}", ""];
+    constants_1.MENU_OPTIONS.forEach((option, index) => {
+        const selected = index === gameData.menuSelection;
+        lines.push(selected
+            ? `{blue-bg}{white-fg}> ${option} <{/}`
+            : `{white-fg}  ${option}  {/}`);
+    });
+    lines.push("");
+    lines.push("{gray-fg}UP/DOWN to choose, ENTER to confirm{/}");
+    menuBox = new blessed_1.Box({
+        parent: screen,
         top: "center",
         left: "center",
-        width: 40,
-        height: constants_1.MENU_OPTIONS.length + 4,
+        width: 44,
+        height: lines.length + 2,
         tags: true,
         border: { type: "line" },
-        style: {
-            fg: "white",
-            bg: "black",
-            border: { fg: "cyan" },
-            selected: { bg: "blue", fg: "white" }
-        },
-        label: " Pengo ",
-        items: constants_1.MENU_OPTIONS,
-        keys: true,
-        vi: true,
-        mouse: true
+        style: { border: { fg: "cyan" }, bg: "black", fg: "white" },
+        content: lines.map(l => `  ${l}`).join("\n"),
     });
-    menuList.on('select', (item, index) => {
-        if (index === 0)
-            startGame();
-        else if (index === 1)
-            showHighscores();
-        else if (index === 2)
-            showHelp();
-        else {
-            cleanup();
-            doorContext?.close();
-        }
-    });
-    menuList.key(['escape', 'q'], () => {
-        cleanup();
-        doorContext?.close();
-    });
-    menuList.focus();
-    menuBox = menuList;
     screen.render();
 }
 async function showHighscores() {
@@ -181,33 +168,19 @@ async function showHighscores() {
     });
     if (menuBox)
         menuBox.destroy();
-    const list = new blessed_1.List({
-        parent: gameArea,
+    const body = [...items, "", "{gray-fg}Press any key to return{/}"];
+    menuBox = new blessed_1.Box({
+        parent: screen,
         top: "center",
         left: "center",
-        width: 40,
-        height: items.length + 4,
+        width: 48,
+        height: body.length + 2,
         tags: true,
         border: { type: "line" },
         style: { border: { fg: "yellow" }, bg: "black", fg: "white" },
         label: " HIGH SCORES ",
-        items: items,
-        interactive: false // Just display
+        content: body.map(l => `  ${l}`).join("\n"),
     });
-    // Footer
-    new blessed_1.Box({
-        parent: list,
-        bottom: 0,
-        width: "100%-2",
-        height: 1,
-        content: "{gray-fg}Press any key to return{/}",
-        tags: true
-    });
-    list.on('keypress', () => {
-        showMenu();
-    });
-    menuBox = list;
-    list.focus(); // Focus to catch keys
     screen.render();
 }
 function showHelp() {
@@ -228,43 +201,18 @@ function showHelp() {
     ].join("\n");
     if (menuBox)
         menuBox.destroy();
-    const box = new blessed_1.ScrollableBox({
-        parent: gameArea,
+    const body = content.split("\n").concat(["", "{gray-fg}Press any key to return{/}"]);
+    menuBox = new blessed_1.Box({
+        parent: screen,
         top: "center",
         left: "center",
-        width: 45,
-        height: 16,
+        width: 48,
+        height: body.length + 2,
         tags: true,
         border: { type: "line" },
         style: { border: { fg: "cyan" }, bg: "black", fg: "white" },
-        content: content,
-        scrollable: true,
-        alwaysScroll: true,
-        scrollbar: { ch: " " },
-        keys: true,
-        vi: true,
-        mouse: true
+        content: body.map(l => `  ${l}`).join("\n"),
     });
-    // Footer
-    new blessed_1.Box({
-        parent: box,
-        bottom: 0,
-        width: "100%-2",
-        height: 1,
-        content: "{gray-fg}Press any key to return{/}",
-        tags: true
-    });
-    box.on('keypress', (_ch, key) => {
-        // ScrollableBox uses keys for scrolling. Only exit on specific keys or non-nav keys?
-        // "Press any key to return" implies any.
-        // But we want scrolling.
-        // Let's exit on Enter, Space, Escape.
-        if (['enter', 'space', 'escape'].includes(key.name)) {
-            showMenu();
-        }
-    });
-    menuBox = box;
-    box.focus();
     screen.render();
 }
 function startGame() {
@@ -290,24 +238,17 @@ function startGame() {
 }
 function handleInput(key) {
     const inputKey = normalizeKey(key);
-    // Route to widgets for UI states
-    if (["menu", "highscores", "help", "paused", "enterName"].includes(gameData.state)) {
-        const k = { name: inputKey, full: inputKey, shift: false, ctrl: false, meta: false };
-        screen.emit('keypress', key, k);
-        // Fallthrough to manual handlers if widgets don't consume it?
-        // Actually, if using Widgets, we shouldn't call manual handlers.
-        // But we haven't refactored all states yet.
-        // 'menu' is refactored. 'highscores' and 'help' will be.
-        // 'paused' and 'enterName' are next.
-        // For now, let's only return for 'menu'.
-        if (gameData.state === "menu")
-            return;
-    }
+    // The screen is created with `input: null` - blessed never receives a real
+    // key, so a widget's own keys:true and focus() can never fire. Every screen
+    // is driven from gameData here instead, the way the other arcade doors do
+    // it. This used to re-emit 'keypress' at the screen and hope a widget
+    // caught it, which is why the menu could not be navigated at all.
     switch (gameData.state) {
         case "menu":
-            // Handled by widget
+            handleMenuInput(inputKey);
             break;
         case "highscores":
+        case "help":
             showMenu();
             break;
         case "playing":
