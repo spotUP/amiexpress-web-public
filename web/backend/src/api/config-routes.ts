@@ -10,7 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel } from '../services/config-services/door-info-file.service';
-import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes } from '../services/config-services/acs-level-file.service';
+import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
@@ -900,7 +900,15 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       }
 
       const info = parseInfoFile(file);
-      sendResponse(res, { level, file, flags: tooltypesToFlags(info.tooltypes as any) });
+      sendResponse(res, {
+        level,
+        file,
+        flags: tooltypesToFlags(info.tooltypes as any),
+        // Flags this port denies and a real AmiExpress grants - see
+        // ambiguouslyDeniedFlags. Saving the level rewrites them into the
+        // parenthesised form, which denies on both.
+        ambiguous: ambiguouslyDeniedFlags(info.tooltypes as any),
+      });
     } catch (error) {
       handleError(res, error);
     }

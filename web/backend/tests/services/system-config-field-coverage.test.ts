@@ -202,14 +202,14 @@ describe('System Configuration field coverage', () => {
       saveBBSConfig(root, {
         min_password_length: 6,
         max_password_fails: 3,
-        password_security: 'sha256',
+        password_security: 'PBKDF2_10000',
         strict_password_policy: true,
       });
 
       const reloaded = loadBBSConfig(root);
       expect(reloaded.min_password_length).toBe(6);
       expect(reloaded.max_password_fails).toBe(3);
-      expect(reloaded.password_security).toBe('sha256');
+      expect(reloaded.password_security).toBe('PBKDF2_10000');
       expect(reloaded.strict_password_policy).toBe(true);
     });
 
@@ -275,9 +275,11 @@ describe('System Configuration field coverage', () => {
     });
 
     it('reads the password hash setting back in the case the form offers', () => {
-      // Same shape: the options are bcrypt/sha256/md5/legacy, all lowercase.
-      saveBBSConfig(root, { password_security: 'BCRYPT' });
-      expect(loadBBSConfig(root).password_security).toBe('bcrypt');
+      // Same shape, the other way up: express.e:938-952 spells these in
+      // CAPITALS, so that is the case the form offers and the case a value
+      // comes back in.
+      saveBBSConfig(root, { password_security: 'pbkdf2_1000' });
+      expect(loadBBSConfig(root).password_security).toBe('PBKDF2_1000');
     });
 
     it('leaves a value alone when it is not one of those lists', () => {

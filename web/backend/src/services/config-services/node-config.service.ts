@@ -55,7 +55,7 @@ export class NodeConfigService {
           door_log: false,
           ud_log: toolTypes.has('UD_LOG'),
           log_host: false,
-          telnet: !toolTypes.has('NO_TELNET'),
+          telnet: toolTypes.has('TELNET'),  // ACP.e:2675 - presence enables it
           ftp: toolTypes.has('FTP'),
           disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
           view_password: toolTypes.has('VIEW_PASSWORD'),
@@ -112,7 +112,7 @@ console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
         door_log: false,
         ud_log: toolTypes.has('UD_LOG'),
         log_host: false,
-        telnet: !toolTypes.has('NO_TELNET'),
+        telnet: toolTypes.has('TELNET'),  // ACP.e:2675 - presence enables it
         ftp: toolTypes.has('FTP'),
         disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
         view_password: toolTypes.has('VIEW_PASSWORD'),
@@ -290,7 +290,9 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       // else a node's icon carries is left untouched.
       const OWNED_FLAGS = [
         'CAPITOL_FILES', 'DEF_SCREENS', 'SENTBY_FILES', 'CALLERS_LOG', 'START_LOG',
-        'UD_LOG', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
+        // NO_TELNET is not a tooltype AmiExpress has ever read; it is dropped
+        // so a node written by the previous admin stops carrying it.
+        'UD_LOG', 'TELNET', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
       ];
 
       const toolTypes = new Map<string, string>();
@@ -306,7 +308,11 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       if (config.callers_log) toolTypes.set('CALLERS_LOG', '1');
       if (config.start_log) toolTypes.set('START_LOG', '1');
       if (config.ud_log) toolTypes.set('UD_LOG', '1');
-      if (!config.telnet) toolTypes.set('NO_TELNET', '1');
+      // ACP.e:2675 - `IF FindToolType(oldtooltypes,'TELNET') THEN telnetNode[i]:=1`.
+      // Presence enables telnet on the node. This wrote NO_TELNET when it was
+      // off and NOTHING when it was on, so saving a node with telnet enabled
+      // REMOVED its TELNET tooltype. FTP on the next line was already right.
+      if (config.telnet) toolTypes.set('TELNET', '1');
       if (config.ftp) toolTypes.set('FTP', '1');
       if (config.disable_quick_logons) toolTypes.set('DISABLE_QUICK_LOGONS', '1');
       if (config.view_password) toolTypes.set('VIEW_PASSWORD', '1');

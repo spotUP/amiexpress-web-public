@@ -158,10 +158,35 @@ export interface BBSConfigData {
  */
 const LOWERCASE_VALUE_FIELDS = new Set<string>([
   'new_user_protocol',
-  'password_security',
   'log_level',
   'arexx_engine',
 ]);
+
+/**
+ * The same idea, for values express.e spells in CAPITALS.
+ *
+ * PASSWORD_SECURITY is compared against LEGACY / PBKDF2_5 / PBKDF2_50 /
+ * PBKDF2_100 / PBKDF2_1000 / PBKDF2_10000 (express.e:938-952), so those are
+ * the spellings that go in the file and the options the form offers.
+ */
+const UPPERCASE_VALUE_FIELDS = new Set<string>([
+  'password_security',
+]);
+
+/**
+ * The case a field's value is read back in.
+ *
+ * A <select> whose value matches none of its options renders as though the
+ * first were chosen while holding nothing, so the case a sysop's Amiga wrote
+ * must not be something the form has to match. Exported because the
+ * round-trip sweep has to apply the same rule rather than keep its own copy
+ * of the two lists.
+ */
+export function normalizeConfigValueCase(field: string, value: string): string {
+  if (LOWERCASE_VALUE_FIELDS.has(field)) return value.toLowerCase();
+  if (UPPERCASE_VALUE_FIELDS.has(field)) return value.toUpperCase();
+  return value;
+}
 
 /**
  * Tooltype name mapping (AmiExpress format → internal field name)
@@ -477,12 +502,8 @@ console.log('[BBSConfig] bbsConfig.info not found, using defaults');
         if (!isNaN(num)) {
           (config as any)[fieldName] = num;
         }
-      } else if (LOWERCASE_VALUE_FIELDS.has(fieldName)) {
-        // Matched against a fixed list of lowercase options in the form.
-        (config as any)[fieldName] = rawValue.toLowerCase();
       } else {
-        // String value
-        (config as any)[fieldName] = rawValue;
+        (config as any)[fieldName] = normalizeConfigValueCase(fieldName, rawValue);
       }
     }
 
@@ -715,7 +736,10 @@ function getDefaultConfig(): BBSConfigData {
     password_expiry_days: 0,
     min_password_strength: 0,
     max_password_fails: -1,
-    password_security: 'bcrypt',
+    // What a board with NO PASSWORD_SECURITY tooltype actually does:
+    // express.e:951 falls through to PWD_LEGACY. Showing 'bcrypt' claimed a
+    // hashing mode AmiExpress has never had.
+    password_security: 'LEGACY',
     strict_password_policy: false,
     auto_validate: false,
     confirm_deletions: true,

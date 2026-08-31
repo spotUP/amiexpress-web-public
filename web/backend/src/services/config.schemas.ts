@@ -22,8 +22,15 @@ export const SystemConfigSchema = z.object({
   min_password_length: z.number().int().min(0).max(32).optional(),
   min_password_strength: z.number().int().min(0).max(4).optional(),
   max_password_fails: z.number().int().min(-1).optional(),
-  password_security: z.string().transform(v => v?.toLowerCase()).pipe(
-    z.enum(['bcrypt', 'sha256', 'md5', 'legacy'])
+  // The six values express.e:938-952 actually tests for. It compares the
+  // tooltype against these literals and falls through to PWD_LEGACY for
+  // anything else - so bcrypt, sha256 and md5 all quietly degraded the board
+  // to legacy hashing while the admin reported bcrypt.
+  //
+  // Upper-cased rather than lower: these are express.e's own spellings, so
+  // they are right whether icon.library's MatchToolValue folds case or not.
+  password_security: z.string().transform(v => v?.toUpperCase()).pipe(
+    z.enum(['LEGACY', 'PBKDF2_5', 'PBKDF2_50', 'PBKDF2_100', 'PBKDF2_1000', 'PBKDF2_10000'])
   ).optional(),
   strict_password_policy: z.boolean().optional(),
   // express.e:29785 - 0 disables expiry. Mapped in TOOLTYPE_MAP and served by

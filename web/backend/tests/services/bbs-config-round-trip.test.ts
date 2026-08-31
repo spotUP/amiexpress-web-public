@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys } from '../../src/services/bbs-config-file.service';
+import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys, normalizeConfigValueCase } from '../../src/services/bbs-config-file.service';
 import type { BBSConfigData } from '../../src/services/bbs-config-file.service';
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
@@ -172,8 +172,13 @@ describe('bbsConfig.info round trip', () => {
       try {
         saveBBSConfig(fresh, { [field]: written } as Partial<BBSConfigData>);
         const reloaded = loadBBSConfig(fresh) as Record<string, unknown>;
-        if (reloaded[field] !== written) {
-          lost.push(`${field} (${keys[field]}): wrote ${JSON.stringify(written)}, read ${JSON.stringify(reloaded[field])}`);
+        // Two fields are normalised to a fixed case on read, so the form's
+        // <select> can match them. The sweep asks the service what case it
+        // will use rather than keeping a second copy of the rule.
+        const expected =
+          typeof written === 'string' ? normalizeConfigValueCase(field, written) : written;
+        if (reloaded[field] !== expected) {
+          lost.push(`${field} (${keys[field]}): wrote ${JSON.stringify(expected)}, read ${JSON.stringify(reloaded[field])}`);
         }
       } finally {
         fs.rmSync(fresh, { recursive: true, force: true });

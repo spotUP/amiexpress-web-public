@@ -510,10 +510,16 @@ export function SystemConfigPage() {
                 {...register('password_security')}
                 className="input-field w-full"
               >
-                <option value="bcrypt">bcrypt</option>
-                <option value="sha256">SHA256</option>
-                <option value="md5">MD5</option>
-                <option value="legacy">Legacy (imported)</option>
+                {/* express.e:938-952 tests the tooltype against exactly
+                    these six and falls through to PWD_LEGACY for anything
+                    else, so bcrypt / SHA256 / MD5 all degraded the board to
+                    legacy hashing while this said otherwise. */}
+                <option value="LEGACY">Legacy (weakest, and the default)</option>
+                <option value="PBKDF2_5">PBKDF2, 5 rounds</option>
+                <option value="PBKDF2_50">PBKDF2, 50 rounds</option>
+                <option value="PBKDF2_100">PBKDF2, 100 rounds</option>
+                <option value="PBKDF2_1000">PBKDF2, 1000 rounds</option>
+                <option value="PBKDF2_10000">PBKDF2, 10000 rounds (strongest)</option>
               </select>
             </div>
 

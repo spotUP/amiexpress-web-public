@@ -201,6 +201,22 @@ export function SecurityPage() {
             className="w-full max-w-xs px-2 py-1 bg-transparent border border-bbs-muted/40 rounded text-sm"
           />
 
+          {(flagsQuery.data?.data?.ambiguous?.length ?? 0) > 0 && (
+            <div className="px-3 py-2 rounded border border-status-warn/50 text-sm text-content-primary">
+              <p className="font-semibold">
+                {flagsQuery.data!.data!.ambiguous!.length} permission(s) written =NO in this
+                file mean opposite things on the two systems.
+              </p>
+              <p className="text-content-muted">
+                AmiExpress reads a tooltype's PRESENCE and never its value
+                (tooltypes.e:204-218), so ACS.DOWNLOAD=NO grants download on a real
+                board. This BBS denies it. Saving the level rewrites them into the
+                parenthesised form, which denies on both:{' '}
+                {flagsQuery.data!.data!.ambiguous!.join(', ')}
+              </p>
+            </div>
+          )}
+
           {flagsQuery.isLoading ? (
             <p className="text-bbs-muted">Loading flags...</p>
           ) : visibleCount === 0 ? (
