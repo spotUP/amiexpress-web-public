@@ -25,6 +25,7 @@ import {
 } from './browser-model';
 import { previewLines } from './preview';
 import { readSprite } from './assets';
+import { EditScreen } from './edit-screen';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
@@ -48,6 +49,7 @@ export class StudioApp {
   private tick = 0;
   /** The loaded sheet for the current selection, cached per selection. */
   private loaded: { key: string; sprite: Sprite } | null = null;
+  private editScreen: EditScreen | null = null;
 
   constructor(ctx: DoorContext) {
     this.ctx = ctx;
@@ -158,8 +160,29 @@ export class StudioApp {
     this.screen.key(['tab', 'right'], () => this.apply(cyclePane(this.state, 1)));
     this.screen.key(['S-tab', 'left'], () => this.apply(cyclePane(this.state, -1)));
     this.screen.key(['q', 'escape', 'C-c'], () => {
+      if (this.editScreen) return;
       this.destroy();
       void this.ctx.close();
+    });
+    this.screen.key(['e'], () => {
+      const sel = selection(this.state);
+      const sprite = this.currentSprite();
+      if (!sel.door || !sel.sprite || !sprite || this.editScreen) return;
+      // The browser sleeps while the editor owns the screen: its panes
+      // hide and its playback pauses, so two timers never fight over
+      // render() and the browser's keys are the EDITOR's problem to
+      // avoid (it removes its own on destroy).
+      if (this.playback) { clearInterval(this.playback); this.playback = null; }
+      for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                       this.previewBox, this.statusBar]) w.hide();
+      this.editScreen = new EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
+        this.editScreen = null;
+        for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                         this.previewBox, this.statusBar]) w.show();
+        this.loaded = null; // the sprite may have been saved - reload it
+        this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
+        this.refresh();
+      });
     });
   }
 
@@ -259,6 +282,8 @@ export class StudioApp {
       clearInterval(this.playback);
       this.playback = null;
     }
+    this.editScreen?.destroy();
+    this.editScreen = null;
     if (this.inputManager) { this.inputManager.disable(); this.inputManager = null; }
     if (this.screen) {
       // removeAllListeners would also strip the stay-alive 'destroy'
