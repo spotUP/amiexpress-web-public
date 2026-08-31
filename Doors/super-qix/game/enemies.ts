@@ -605,39 +605,31 @@ export class EnemySystem {
   checkQixCollision(marker: Point, stix: Point[]): boolean {
     const d = this.data;
 
+    // Same cell, not merely near it.
+    //
+    // This used to kill at a Manhattan distance under 1.5, which is every
+    // orthogonally ADJACENT cell as well as the cell itself - so the
+    // Gremlin killed the player while visibly one square away, and a death
+    // with nothing touching the line is exactly what was reported. A cell
+    // is the smallest thing on this board; touching means occupying.
+    const touches = (a: Point, b: Point) =>
+      Math.round(a.x) === Math.round(b.x) && Math.round(a.y) === Math.round(b.y);
+
     for (const qix of d.qixList) {
-      // Check marker collision
-      const markerDist = Math.abs(qix.x - marker.x) + Math.abs(qix.y - marker.y);
-      if (markerDist < 1.5) {
-        return true;
-      }
+      const parts: Point[] = [{ x: qix.x, y: qix.y }, ...qix.segments];
 
-      // Check stix collision
-      for (const point of stix) {
-        const stixDist = Math.abs(qix.x - point.x) + Math.abs(qix.y - point.y);
-        if (stixDist < 1.5) {
-          return true;
-        }
-      }
-
-      // Check segment collisions
-      for (const seg of qix.segments) {
-        const segMarkerDist = Math.abs(seg.x - marker.x) + Math.abs(seg.y - marker.y);
-        if (segMarkerDist < 1.5) {
-          return true;
-        }
+      for (const part of parts) {
+        if (touches(part, marker)) return true;
 
         for (const point of stix) {
-          const segStixDist = Math.abs(seg.x - point.x) + Math.abs(seg.y - point.y);
-          if (segStixDist < 1.5) {
-            return true;
-          }
+          if (touches(part, point)) return true;
         }
       }
     }
 
     return false;
   }
+
 
   /**
    * The Skull touching the marker, if any.

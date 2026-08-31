@@ -36,13 +36,16 @@ export class PowerUpSystem {
   /**
    * Try to spawn a power-up after claiming area
    */
-  trySpawnPowerUp(): void {
+  /**
+   * @param filled the cells the claim just took, if any. FAQ 2.3 releases a
+   *   bonus from the area you have just filled, so that is where it starts.
+   */
+  trySpawnPowerUp(filled?: Point[]): void {
     if (Math.random() > POWERUP_SPAWN_CHANCE) return;
 
     const d = this.data;
 
-    // Find a valid spawn position (on claimed area near edge)
-    const position = this.findSpawnPosition();
+    const position = this.findSpawnPosition(filled);
     if (!position) return;
 
     // Determine power-up type
@@ -224,34 +227,61 @@ export class PowerUpSystem {
   /**
    * Find a valid position to spawn a power-up
    */
-  private findSpawnPosition(): { x: number; y: number } | null {
+  /**
+   * Where a released bonus starts.
+   *
+   * FAQ 2.3: "Every time you fill an area of the picture (no matter how
+   * small), there's a chance a random Letter or heart-shaped Power-up will
+   * be released" - so it is released from the ground just filled.
+   *
+   * This used to scan the whole board for a claimed cell touching open
+   * field, and only between x,y of 2 and FIELD-2. A claim hugging an edge -
+   * which is what almost every claim is, and what FAQ 5.2's strategy is
+   * built on - lands on the row that scan excludes, so it found nothing and
+   * no bonus was ever released. Nobody had seen a letter.
+   */
+  private findSpawnPosition(filled?: Point[]): { x: number; y: number } | null {
     const d = this.data;
 
-    // Find claimed cells that are near unclaimed (edge of claimed area)
-    const candidates: { x: number; y: number }[] = [];
+    const inField = (p: Point) =>
+      p.x > 0 && p.x < FIELD_WIDTH - 1 && p.y > 0 && p.y < FIELD_HEIGHT - 1;
 
-    for (let y = 2; y < FIELD_HEIGHT - 2; y++) {
-      for (let x = 2; x < FIELD_WIDTH - 2; x++) {
-        if (d.field[y][x] === 'claimed') {
-          // Check if adjacent to unclaimed
-          const hasUnclaimedNeighbor = [
-            d.field[y - 1]?.[x],
-            d.field[y + 1]?.[x],
-            d.field[y]?.[x - 1],
-            d.field[y]?.[x + 1]
-          ].some(cell => cell === 'unclaimed');
+    // The ground just taken, preferring an edge of it so the bonus is out
+    // where it can be chased rather than buried in the middle.
+    if (filled && filled.length > 0) {
+      const inside = filled.filter(inField);
+      const pool = inside.length > 0 ? inside : filled;
 
-          if (hasUnclaimedNeighbor) {
-            candidates.push({ x, y });
-          }
-        }
+      const edges = pool.filter(p =>
+        [
+          d.field[p.y - 1]?.[p.x], d.field[p.y + 1]?.[p.x],
+          d.field[p.y]?.[p.x - 1], d.field[p.y]?.[p.x + 1],
+        ].some(cell => cell === 'unclaimed')
+      );
+
+      const from = edges.length > 0 ? edges : pool;
+      return { ...from[Math.floor(Math.random() * from.length)] };
+    }
+
+    // Nothing was handed in: fall back to any claimed edge on the board.
+    const candidates: Point[] = [];
+    for (let y = 1; y < FIELD_HEIGHT - 1; y++) {
+      for (let x = 1; x < FIELD_WIDTH - 1; x++) {
+        if (d.field[y][x] !== 'claimed') continue;
+
+        const touchesOpen = [
+          d.field[y - 1]?.[x], d.field[y + 1]?.[x],
+          d.field[y]?.[x - 1], d.field[y]?.[x + 1],
+        ].some(cell => cell === 'unclaimed');
+
+        if (touchesOpen) candidates.push({ x, y });
       }
     }
 
     if (candidates.length === 0) return null;
-
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
+
 
   /**
    * Select a random power-up type

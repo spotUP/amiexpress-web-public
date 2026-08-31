@@ -15,6 +15,7 @@ import assert from 'assert';
 import { QixEngine } from '../game/qix-engine';
 import { EnemySystem } from '../game/enemies';
 import { DrawingSystem } from '../game/drawing';
+import { PowerUpSystem } from '../game/powerups';
 import { SuperQixData, Direction } from '../game/types';
 import {
   FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES, FUSE_START_DELAY, GAME_TICK_MS,
@@ -404,4 +405,167 @@ export async function cuttingBetweenTwoGremlinsClaimsTheSmallerSideAndTrapsIt():
   // And the Gremlin sealed into the claimed side is gone.
   assert.strictEqual(data.qixList.length, 1, 'the trapped Gremlin should disappear');
   assert.strictEqual(data.qixList[0].id, 2, 'the one in the larger area survives');
+}
+
+/**
+ * A claim along the edge releases bonuses like any other.
+ *
+ * Reported live 2026-08-31: "i have never seen any flying letters at all in
+ * qix. not plumbed?" They were plumbed - and unreachable. The spawn scan
+ * only looked at claimed cells between 2 and FIELD-2 on both axes, and a
+ * claim hugging an edge lands on exactly the row that excludes. Edge-hugging
+ * claims are almost every claim, and are what FAQ 5.2's strategy is built
+ * on, so no bonus was ever released.
+ */
+export async function anEdgeClaimCanReleaseABonus(): Promise<void> {
+  let released = 0;
+  const claims = 80;
+
+  for (let i = 0; i < claims; i++) {
+    const data = createData();
+    const engine = new QixEngine(data, () => { /* no display */ });
+    engine.initLevel(1);
+    data.state = 'playing';
+    data.sparxList = [];
+    data.qixList = [{
+      id: 1, x: 5, y: 5, vx: 0, vy: 0, speed: 0,
+      segments: [], frozen: true, frozenTimer: 1e6,
+    }];
+
+    const step = (dir: Direction) => {
+      (engine as unknown as { lastMoveTime: number }).lastMoveTime = 0;
+      engine.handleDirection(dir);
+    };
+
+    // A small box out of the bottom edge and back: the ordinary claim.
+    step('up'); step('right'); step('right'); step('down');
+
+    if (data.powerUps.length > 0) released++;
+  }
+
+  // The chance is one in four, so eighty claims releasing none would be a
+  // one-in-ten-billion coincidence - or, as it was, an unreachable spawn.
+  assert.ok(
+    released > 0,
+    `no bonus in ${claims} edge claims; they cannot be released at all`
+  );
+}
+
+/** A bonus starts on ground the claim actually took. */
+export async function aBonusStartsOnTheGroundJustClaimed(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display */ });
+  engine.initLevel(1);
+  data.state = 'playing';
+
+  const system = new PowerUpSystem(data);
+
+  // Claimed ground far away, so the fall-back scan has somewhere else it
+  // could pick. Without this the test cannot tell the two paths apart.
+  for (let x = 4; x < 10; x++) data.field[2][x] = 'claimed';
+
+  const filled = [
+    { x: 20, y: FIELD_HEIGHT - 2 },
+    { x: 21, y: FIELD_HEIGHT - 2 },
+  ];
+  for (const cell of filled) data.field[cell.y][cell.x] = 'claimed';
+
+  // Ask enough times that the one-in-four chance has certainly fired.
+  for (let i = 0; i < 200 && data.powerUps.length === 0; i++) {
+    system.trySpawnPowerUp(filled);
+  }
+
+  assert.ok(data.powerUps.length > 0, 'nothing was ever released');
+
+  const bonus = data.powerUps[0];
+  assert.ok(
+    filled.some(c => c.x === Math.round(bonus.x) && c.y === Math.round(bonus.y)),
+    `a bonus should start on the claim, not at ${bonus.x},${bonus.y}`
+  );
+}
+
+/**
+ * The Gremlin kills what it is standing on, not what it is beside.
+ *
+ * Reported live 2026-08-31: "i died now but no enemy was touching my active
+ * line". The test was a Manhattan distance under 1.5, which is every
+ * orthogonally adjacent cell as well as the cell itself - so it killed from
+ * a square away, which on this board is plainly "not touching".
+ */
+export async function theGremlinKillsOnlyWhatItStandsOn(): Promise<void> {
+  const withGremlin = () => {
+    const data = createData();
+    data.qixList = [{
+      id: 1, x: 10, y: 10, vx: 0, vy: 0, speed: 0,
+      segments: [], frozen: true, frozenTimer: 1e6,
+    }];
+    return new EnemySystem(data);
+  };
+
+  assert.ok(
+    withGremlin().checkQixCollision({ x: 20, y: 20 }, [{ x: 10, y: 10 }]),
+    'standing on the line has to kill'
+  );
+  assert.ok(
+    !withGremlin().checkQixCollision({ x: 20, y: 20 }, [{ x: 11, y: 10 }]),
+    'one cell away must not'
+  );
+  assert.ok(
+    !withGremlin().checkQixCollision({ x: 11, y: 11 }, []),
+    'nor diagonally beside the marker'
+  );
+}
+
+/**
+ * A bonus is released from the area the claim just took, not from anywhere
+ * on the board that happens to be claimed.
+ *
+ * FAQ 2.3: "Every time you fill an area of the picture (no matter how
+ * small), there's a chance a random Letter or Power-up will be released" -
+ * it comes out of the ground you just filled.
+ */
+export async function aBonusComesOutOfTheNewClaimNotOldGround(): Promise<void> {
+  let spawns = 0;
+  let onOldGround = 0;
+
+  for (let trial = 0; trial < 120; trial++) {
+    const data = createData();
+    const engine = new QixEngine(data, () => { /* no display */ });
+    engine.initLevel(1);
+    data.state = 'playing';
+    data.sparxList = [];
+    data.qixList = [{
+      id: 1, x: 5, y: 5, vx: 0, vy: 0, speed: 0,
+      segments: [], frozen: true, frozenTimer: 1e6,
+    }];
+
+    // Ground claimed long ago, at the other end of the board.
+    const old = [];
+    for (let x = 25; x < 34; x++) {
+      data.field[18][x] = 'claimed';
+      old.push({ x, y: 18 });
+    }
+
+    const step = (dir: Direction) => {
+      (engine as unknown as { lastMoveTime: number }).lastMoveTime = 0;
+      engine.handleDirection(dir);
+    };
+
+    // A fresh claim down at the left.
+    data.marker.x = 8;
+    step('up'); step('right'); step('down');
+
+    for (const bonus of data.powerUps) {
+      spawns++;
+      if (old.some(c => c.x === Math.round(bonus.x) && c.y === Math.round(bonus.y))) {
+        onOldGround++;
+      }
+    }
+  }
+
+  assert.ok(spawns > 0, 'nothing was released in 120 claims');
+  assert.strictEqual(
+    onOldGround, 0,
+    `${onOldGround} of ${spawns} bonuses came out of ground claimed earlier`
+  );
 }
