@@ -111,6 +111,17 @@
               # which revision it was built from. fetch-live-logs.yml reads
               # /app/.git-sha to surface this — answers "is the live deploy
               # actually fresh?" without having to inspect mtimes.
+              # Remember the image that is serving RIGHT NOW, so a deploy
+              # that builds fine and then cannot start has somewhere to go
+              # back to. Tagged rather than remembered by ID: an untagged
+              # image whose tag has moved is a prune away from being gone.
+              if docker image inspect amiexpress-bbs:latest >/dev/null 2>&1; then
+                docker tag amiexpress-bbs:latest amiexpress-bbs:rollback
+                echo "== previous image tagged amiexpress-bbs:rollback =="
+              else
+                echo "== no previous image to tag (first deploy) =="
+              fi
+
               echo "== docker compose build (with GIT_SHA) =="
               GIT_SHA="$ACTUAL_SHA" docker compose build
 
@@ -169,6 +180,33 @@
                 if [ "$i" = "30" ]; then
                   echo "ERROR: /health never responded after 60s" >&2
                   docker logs amiexpress-bbs --tail 100 >&2
+
+                  # Put the board back up before failing.
+                  #
+                  # Everything above this point is safe: the build happens
+                  # before the swap, so a build that fails leaves the running
+                  # container alone. This is the case that is NOT safe - the
+                  # image built, the container was recreated from it, and it
+                  # will not serve. Without this the deploy reports failure
+                  # and the BBS simply stays down until somebody notices,
+                  # which is what happened on 2026-08-30.
+                  if docker image inspect amiexpress-bbs:rollback >/dev/null 2>&1; then
+                    echo "== rolling back to the previous image ==" >&2
+                    docker tag amiexpress-bbs:rollback amiexpress-bbs:latest
+                    GIT_SHA="rollback" docker compose up -d --force-recreate --no-build || true
+                    for j in $(seq 1 30); do
+                      if curl -fsS http://localhost:3001/health >/dev/null 2>&1; then
+                        echo "OK: board is back up on the previous image after ${j}*2s" >&2
+                        break
+                      fi
+                      sleep 2
+                    done
+                    if ! curl -fsS http://localhost:3001/health >/dev/null 2>&1; then
+                      echo "ERROR: rollback did not come up either - the board is DOWN" >&2
+                    fi
+                  else
+                    echo "ERROR: no rollback image available - the board is DOWN" >&2
+                  fi
                   exit 1
                 fi
                 sleep 2
@@ -242,24 +280,5 @@
                 exit 1
               fi
               echo "OK: doors on the volume match the image"
-
-              # Reclaim dangling images, and ONLY those.
-              #
-              # This step used to run `docker builder prune` on every deploy
-              # as well. Within the hour that followed its first runs the
-              # daemon began dying on every build - `panic: page 4708 already
-              # freed` in bbolt, buildkit's cache database - six times in ten
-              # minutes, and each time it took every container on the host
-              # down with it, the board included. Rewriting buildkit's
-              # metadata on a schedule is not a safe thing to do to a 4 GB
-              # host that builds its own images; the cache is reclaimed by
-              # hand, with the daemon idle, when the disk actually needs it.
-              #
-              # `docker image prune` without -a touches image records only:
-              # nothing tagged, nothing a stopped container needs, and never
-              # a volume - the board's data is one of them.
-              echo "== reclaim: dangling images =="
-              docker image prune -f 2>&1 | tail -2 || true
-              df -h / | tail -1
 
               echo "Deploy complete: HEAD=$ACTUAL_SHA at $(date)"
