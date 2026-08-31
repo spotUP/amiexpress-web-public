@@ -97,7 +97,8 @@ export const TURTLE_DIVE_DURATION = 2000;    // ms under, and deadly
 export const GAME_OVER_BLINK_FRAMES = 12;
 
 /** A turtle on its way down, drawn lower than one riding high. */
-export const TURTLE_SINKING_GLYPH = '.o.';
+/** The same turtle going under: the shell dips below its flippers. */
+export const TURTLE_SINKING_GLYPH = '(-)';
 
 /**
  * Widths in grid cells.
@@ -233,7 +234,14 @@ export const LOG_END_LEFT = '(';
 export const LOG_END_RIGHT = ')';
 
 /** One turtle of a set. */
-export const TURTLE_GLYPH = ':O:';
+/**
+ * One turtle of a set, seen from above: a shell between two flippers.
+ *
+ * ':O:' was the reference art's, and at this size it reads as punctuation
+ * rather than as an animal - reported live as "the turtles dont look like
+ * turtles at all".
+ */
+export const TURTLE_GLYPH = '(o)';
 
 /** The jaws of a crocodile or an otter, and the bodies behind them. */
 export const MOUTH_GLYPH = '><';
