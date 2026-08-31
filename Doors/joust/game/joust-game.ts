@@ -4,6 +4,10 @@
  */
 
 import {
+  Cell, EMPTY, paint, playerCell, enemyCell, eggCell,
+  pterodactylCell, platformCell, lavaCell,
+} from './sprites';
+import {
   JoustData,
   Player,
   Enemy,
@@ -631,104 +635,68 @@ export class JoustGame {
   }
 
   render(): void {
-    const buffer: string[][] = [];
-
-    // Initialize buffer with empty space
+    // A cell carries its own colour, written by the code that draws it.
+    // Colour used to be worked out afterwards by matching the glyph in the
+    // buffer - which meant looking an enemy back up by position to find out
+    // what colour it should have been, and could not tell two things drawn
+    // with the same character apart at all.
+    const buffer: Cell[][] = [];
     for (let y = 0; y < GAME_HEIGHT; y++) {
       buffer[y] = [];
-      for (let x = 0; x < GAME_WIDTH; x++) {
-        buffer[y][x] = ' ';
-      }
+      for (let x = 0; x < GAME_WIDTH; x++) buffer[y][x] = EMPTY;
     }
 
-    // Draw platforms
+    const put = (x: number, y: number, cell: Cell): void => {
+      const cx = Math.floor(x);
+      const cy = Math.floor(y);
+      if (cx < 0 || cx >= GAME_WIDTH || cy < 0 || cy >= GAME_HEIGHT) return;
+      buffer[cy][cx] = cell;
+    };
+
+    // Platforms
     for (const platform of this.data.platforms) {
       for (let x = platform.x; x < platform.x + platform.width && x < GAME_WIDTH; x++) {
-        if (x >= 0 && platform.y < GAME_HEIGHT) {
-          buffer[Math.floor(platform.y)][x] = SPRITES.platform;
-        }
+        put(x, platform.y, platformCell());
       }
     }
 
-    // Draw lava
+    // Lava along the floor
     const lavaY = GAME_HEIGHT - 1;
     for (const pit of this.data.lavaPits) {
       for (let x = pit.x; x < pit.x + pit.width && x < GAME_WIDTH; x++) {
-        if (x >= 0 && lavaY < GAME_HEIGHT) {
-          buffer[lavaY][x] = this.data.frameCount % 10 < 5 ? SPRITES.lava : SPRITES.lavaHand;
-        }
+        put(x, lavaY, lavaCell(this.data.frameCount));
       }
     }
 
-    // Draw eggs
+    // Eggs
     for (const egg of this.data.eggs) {
-      const ex = Math.floor(egg.x);
-      const ey = Math.floor(egg.y);
-      if (ex >= 0 && ex < GAME_WIDTH && ey >= 0 && ey < GAME_HEIGHT) {
-        buffer[ey][ex] = egg.state === 'hatching' ? SPRITES.eggHatching : SPRITES.egg;
-      }
+      put(egg.x, egg.y, eggCell(egg.state === 'hatching'));
     }
 
-    // Draw enemies
+    // Buzzards, each in the colour of its own kind
     for (const enemy of this.data.enemies) {
       if (enemy.state === 'dead') continue;
-      const ex = Math.floor(enemy.x);
-      const ey = Math.floor(enemy.y);
-      if (ex >= 0 && ex < GAME_WIDTH && ey >= 0 && ey < GAME_HEIGHT) {
-        buffer[ey][ex] = enemy.direction === 'right' ? SPRITES.enemyRight : SPRITES.enemyLeft;
-      }
+      put(enemy.x, enemy.y, enemyCell(enemy.direction, ENEMY_COLORS[enemy.type]));
     }
 
-    // Draw pterodactyl
+    // The pterodactyl
     if (this.data.pterodactyl.isActive) {
-      const px = Math.floor(this.data.pterodactyl.x);
-      const py = Math.floor(this.data.pterodactyl.y);
-      if (px >= 0 && px < GAME_WIDTH && py >= 0 && py < GAME_HEIGHT) {
-        buffer[py][px] = SPRITES.pterodactyl;
-      }
+      put(this.data.pterodactyl.x, this.data.pterodactyl.y, pterodactylCell());
     }
 
-    // Draw player
+    // The player, blinking while invincible
     const player = this.data.player;
     if (player.isAlive && (player.invincibleTimer === 0 || this.data.frameCount % 4 < 2)) {
-      const px = Math.floor(player.x);
-      const py = Math.floor(player.y);
-      if (px >= 0 && px < GAME_WIDTH && py >= 0 && py < GAME_HEIGHT) {
-        let sprite: string;
-        if (player.isFlapping || player.vy < -0.3) {
-          sprite = SPRITES.playerFlap;
-        } else {
-          sprite = player.direction === 'right' ? SPRITES.playerRight : SPRITES.playerLeft;
-        }
-        buffer[py][px] = sprite;
-      }
+      put(player.x, player.y, playerCell(
+        player.direction,
+        player.isFlapping || player.vy < -0.3
+      ));
     }
 
-    // Build output with colors
     let output = '';
     for (let y = 0; y < GAME_HEIGHT; y++) {
       for (let x = 0; x < GAME_WIDTH; x++) {
-        const char = buffer[y][x];
-        if (char === SPRITES.platform) {
-          output += `{green-fg}${char}{/}`;
-        } else if (char === SPRITES.lava || char === SPRITES.lavaHand) {
-          output += `{red-fg}${char}{/}`;
-        } else if (char === SPRITES.playerRight || char === SPRITES.playerLeft || char === SPRITES.playerFlap) {
-          output += `{cyan-fg}${char}{/}`;
-        } else if (char === SPRITES.enemyRight || char === SPRITES.enemyLeft) {
-          // Color by enemy type at this position
-          const enemyHere = this.data.enemies.find(e =>
-            Math.floor(e.x) === x && Math.floor(e.y) === y
-          );
-          const color = enemyHere ? ENEMY_COLORS[enemyHere.type] || 'red' : 'red';
-          output += `{${color}-fg}${char}{/}`;
-        } else if (char === SPRITES.egg || char === SPRITES.eggHatching) {
-          output += `{white-fg}${char}{/}`;
-        } else if (char === SPRITES.pterodactyl) {
-          output += `{magenta-fg}${char}{/}`;
-        } else {
-          output += char;
-        }
+        output += paint(buffer[y][x]);
       }
       if (y < GAME_HEIGHT - 1) output += '\n';
     }
