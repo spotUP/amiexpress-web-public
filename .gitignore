@@ -505,3 +505,9 @@ Doors/DoorRepo/DoorRepo.token
 # Python bytecode from dev/scripts helpers
 __pycache__/
 *.pyc
+
+# What a sysop set on a door in the admin, secrets among them. The
+# DECLARATION (Doors/<door>/door.settings.json) ships with the door; the
+# VALUES never do - the deploy syncs a door's directory without deleting,
+# so a file the image does not carry is what survives a deploy.
+Doors/*/settings.json

@@ -2,7 +2,7 @@
   "name": "bbslink-door",
   "version": "1.0.0",
   "description": "BBSLink InterBBS Games Client",
-  "bbsCommand": "LINKMENU",
+  "bbsCommand": "BBSLINK",
   "main": "dist/index.js",
   "author": "AmiExpress Team",
   "license": "MIT",

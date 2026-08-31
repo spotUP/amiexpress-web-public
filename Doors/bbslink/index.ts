@@ -18,8 +18,7 @@
  */
 
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
-import * as fs from 'fs';
-import * as path from 'path';
+import { BBSLinkConfig, loadConfig } from './config';
 import * as crypto from 'crypto';
 import * as http from 'http';
 import * as net from 'net';
@@ -33,18 +32,6 @@ export const metadata = {
   command: 'BBSLINK',
   category: 'Games'
 };
-
-interface BBSLinkConfig {
-  serverHost: string;
-  httpPort: number;
-  telnetPort: number;
-  timeout: number;
-  syscode: string;
-  authcode: string;
-  schemecode: string;
-  doorcode?: string;
-  [key: string]: string | number | undefined;
-}
 
 interface TelnetConnection {
   socket: net.Socket;
@@ -159,51 +146,6 @@ function getMD5(text: string): string {
 }
 
 /**
- * Trim spaces from both ends of string
- */
-function fullTrim(str: string): string {
-  let result = str.trim();
-  while (result.length > 0 && result[result.length - 1] === ' ') {
-    result = result.substring(0, result.length - 1);
-  }
-  return result;
-}
-
-/**
- * Parse bbslink.cfg file
- */
-function parseConfigFile(configPath: string, config: BBSLinkConfig, doorCode?: string): void {
-  try {
-    if (!fs.existsSync(configPath)) return;
-    const fileContent = fs.readFileSync(configPath, 'utf-8');
-    const lines = fileContent.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('#') || trimmed.startsWith(';') || !trimmed) continue;
-      if (!trimmed.includes('=')) continue;
-      const [key, ...valueParts] = trimmed.split('=');
-      const value = fullTrim(valueParts.join('='));
-      const upperKey = fullTrim(key).toUpperCase();
-      switch (upperKey) {
-        case 'SERVERHOST': config.serverHost = value; break;
-        case 'TELNETPORT': config.telnetPort = parseInt(value) || 23; break;
-        case 'HTTPPORT': config.httpPort = parseInt(value) || 80; break;
-        case 'TIMEOUT': config.timeout = parseInt(value) || 10; break;
-        case 'SYSCODE': config.syscode = value; break;
-        case 'AUTHCODE': config.authcode = value; break;
-        case 'SCHEMECODE': config.schemecode = value; break;
-        case 'DOORCODE': config.doorcode = value; break;
-        default:
-          if (doorCode && upperKey === doorCode.toUpperCase()) config.doorcode = value;
-          break;
-      }
-    }
-  } catch (err) {
-    console.error('[BBSLink] Error parsing config:', err);
-  }
-}
-
-/**
  * HTTP GET request
  */
 function httpGet(host: string, port: number, path: string, timeout: number): Promise<string> {
@@ -262,14 +204,13 @@ door.onStart(async (ctx: DoorContext) => {
   const { socket, user, bbsSession, params } = ctx;
   try {
     let doorCodeParam = params?.[0]?.trim().toUpperCase();
-    const config: BBSLinkConfig = { serverHost: 'games.bbslink.net', httpPort: 80, telnetPort: 23, timeout: 10, syscode: '', authcode: '', schemecode: '' };
-    // Find config file - same location as 68K door for compatibility
-    // Config is in same directory as door (Doors/bbslink/bbslink.cfg)
-    const configPath = path.resolve(__dirname, 'bbslink.cfg');
-    parseConfigFile(configPath, config, doorCodeParam);
+    // Defaults, then bbslink.cfg, then what the sysop set in the admin - see
+    // config.ts. __dirname is the door's directory in development and its
+    // dist/ in production, so the door root is resolved rather than assumed.
+    const config: BBSLinkConfig = loadConfig(__dirname, doorCodeParam);
     const doorCode = (doorCodeParam || config.doorcode || 'MENU').toLowerCase();
     if (!config.syscode || !config.authcode || !config.schemecode) {
-      throw new Error('syscode/authcode/schemecode missing from bbslink.cfg');
+      throw new Error('syscode/authcode/schemecode missing - set them in the admin (Doors -> BBSLINK -> Settings) or in bbslink.cfg');
     }
     const xkey = randomString(6);
     socket.emit('ansi-output', '\x1b[36mAuthenticating with BBSLink...\x1b[0m\r\n');
