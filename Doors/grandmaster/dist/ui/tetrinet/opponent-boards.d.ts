@@ -48,6 +48,8 @@ export declare class OpponentBoards {
     private boardWidth;
     private boardHeight;
     private perRow;
+    /** True while a single opponent is being shown at full size. */
+    private solo;
     constructor(options: OpponentBoardsOptions);
     /**
      * Update all opponent boards
@@ -61,6 +63,17 @@ export declare class OpponentBoards {
      * Create a mini-board widget
      */
     private createMiniBoard;
+    /**
+     * The lone opponent, drawn at full size across the whole panel.
+     *
+     * No inner border and no name strip: the panel's own frame is the only
+     * frame, and the name goes in its label. That is what buys the 22 rows a
+     * full field needs - an inner border plus a name row leaves only 19, which
+     * is why the tiled layout has to scale at all.
+     */
+    private createFullBoard;
+    /** Usable space inside the panel's border. */
+    private innerSize;
     /**
      * Render a mini-board with scaled content
      */

@@ -162,6 +162,95 @@ function miniBoardLines(fill: (board: any) => void): string[] {
   }
 }
 
+/**
+ * Build a real panel and hand it N opponents, returning each board widget.
+ */
+function opponentWidgets(count: number): { widgets: any[]; destroy: () => void } {
+  const screen: any = new Screen({ title: 'tnet-opp', width: 80, height: 30 });
+  const boards: any = new OpponentBoards({ parent: screen, top: 0, left: 52, width: 28, height: 24 });
+
+  const opponents = Array.from({ length: count }, (_, i) => ({
+    id: `bot-${i}`,
+    name: `CPU${i}`,
+    board: createTetriNetBoard(12, 22),
+    level: 1,
+    alive: true,
+    hasImmunity: false,
+  }));
+
+  boards.updateBoards(opponents);
+  return {
+    widgets: [...boards.miniBoards.values()],
+    destroy: () => screen.destroy(),
+  };
+}
+
+/**
+ * A lone opponent gets the whole panel, not a thumbnail.
+ *
+ * Reported 2026-08-30: "in TetriNet mode the opponent's board is drawn as a
+ * minimap even when there is only ONE bot", where there is room to draw it
+ * properly and the minimap costs readability for nothing. The panel's 26x22
+ * interior fits a 12x22 field exactly, so a single opponent needs no scaling
+ * at all - but only if it gives up its own inner border and name strip,
+ * which together cost three of the rows the field needs.
+ */
+export async function aLoneOpponentIsDrawnFullSize(): Promise<void> {
+  const { widgets, destroy } = opponentWidgets(1);
+  try {
+    assert.strictEqual(widgets.length, 1, 'one opponent, one board');
+
+    const only = widgets[0];
+    assert.strictEqual(only.cols, 12, 'a full field is twelve columns');
+    assert.strictEqual(only.rows, 22, 'and twenty-two rows - nothing scaled away');
+  } finally {
+    destroy();
+  }
+}
+
+/** Two or more still share the space as minimaps. */
+export async function twoOpponentsFallBackToMinimaps(): Promise<void> {
+  const { widgets, destroy } = opponentWidgets(2);
+  try {
+    assert.strictEqual(widgets.length, 2, 'two opponents, two boards');
+    for (const widget of widgets) {
+      assert.strictEqual(widget.cols, 6, 'a tiled board is six columns');
+      assert.strictEqual(widget.rows, 8, 'and eight rows');
+    }
+  } finally {
+    destroy();
+  }
+}
+
+/**
+ * Going from one opponent to two - a bot joining - must relay the panel
+ * rather than leaving a full-size board tiled against thumbnails.
+ */
+export async function theLayoutRelaysWhenTheOpponentCountChanges(): Promise<void> {
+  const screen: any = new Screen({ title: 'tnet-relay', width: 80, height: 30 });
+  const boards: any = new OpponentBoards({ parent: screen, top: 0, left: 52, width: 28, height: 24 });
+  const make = (n: number) => Array.from({ length: n }, (_, i) => ({
+    id: `bot-${i}`, name: `CPU${i}`, board: createTetriNetBoard(12, 22),
+    level: 1, alive: true, hasImmunity: false,
+  }));
+
+  try {
+    boards.updateBoards(make(1));
+    assert.strictEqual([...boards.miniBoards.values()][0].rows, 22, 'one is full size');
+
+    boards.updateBoards(make(2));
+    for (const widget of boards.miniBoards.values()) {
+      assert.strictEqual(widget.rows, 8, 'a second opponent drops both to minimaps');
+    }
+
+    boards.updateBoards(make(1));
+    assert.strictEqual([...boards.miniBoards.values()][0].rows, 22,
+      'and dropping back to one restores full size');
+  } finally {
+    screen.destroy();
+  }
+}
+
 export async function theMiniBoardFitsItsBox(): Promise<void> {
   // The scaler wrote board.width (12) characters into a SIX column box.
   const lines = miniBoardLines((b: any) => { b.grid[21][0].filled = true; });

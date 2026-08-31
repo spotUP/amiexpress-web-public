@@ -47,10 +47,17 @@ export interface OpponentBoardsOptions {
  * Individual mini-board widget
  */
 interface MiniBoardWidget {
+  /** How many field columns and rows this widget's box shows. */
+  cols: number;
+  rows: number;
   container: any;
   boardBox: any;
   nameLabel: any;
 }
+
+/** A TetriNET field is 12 columns by 22 rows. */
+const FULL_FIELD_COLS = 12;
+const FULL_FIELD_ROWS = 22;
 
 /**
  * Opponent Boards component
@@ -65,6 +72,9 @@ export class OpponentBoards {
   private boardWidth: number = 8;
   private boardHeight: number = 11;
   private perRow: number = 3;
+
+  /** True while a single opponent is being shown at full size. */
+  private solo = false;
 
   constructor(options: OpponentBoardsOptions) {
     this.maxOpponents = options.maxOpponents || 5;
@@ -99,6 +109,21 @@ export class OpponentBoards {
    * Update all opponent boards
    */
   updateBoards(opponents: OpponentBoardData[]): void {
+    // One opponent gets the whole panel at 1:1; minimaps only from two.
+    //
+    // Reported 2026-08-30: "in TetriNet mode the opponent's board is drawn
+    // as a minimap even when there is only ONE bot", where there is room to
+    // draw it properly and the minimap costs readability for nothing. The
+    // panel's 26x22 interior fits a 12x22 field exactly, so nothing has to
+    // be scaled away - the area scaler below degenerates to 1:1 when its
+    // box matches the field.
+    const solo = opponents.length === 1;
+    if (solo !== this.solo) {
+      this.solo = solo;
+      for (const [, widget] of this.miniBoards) widget.container.destroy();
+      this.miniBoards.clear();
+    }
+
     // Remove boards for players who left
     const currentIds = new Set(opponents.map(o => o.id));
     for (const [id, widget] of this.miniBoards) {
@@ -135,6 +160,8 @@ export class OpponentBoards {
    * Create a mini-board widget
    */
   private createMiniBoard(id: string, index: number): MiniBoardWidget {
+    if (this.solo) return this.createFullBoard();
+
     // Calculate position (3 columns, 2 rows layout)
     // Tile inside the panel's border: 3 across, 2 down, no gap at the bottom.
     // The old +1 offsets pushed the second row to top 13, so with a 24-row
@@ -186,7 +213,78 @@ export class OpponentBoards {
       clickable: false,
     });
 
-    return { container, boardBox, nameLabel };
+    return {
+      container,
+      boardBox,
+      nameLabel,
+      cols: this.boardWidth - 2,
+      rows: this.boardHeight - 3,
+    };
+  }
+
+  /**
+   * The lone opponent, drawn at full size across the whole panel.
+   *
+   * No inner border and no name strip: the panel's own frame is the only
+   * frame, and the name goes in its label. That is what buys the 22 rows a
+   * full field needs - an inner border plus a name row leaves only 19, which
+   * is why the tiled layout has to scale at all.
+   */
+  private createFullBoard(): MiniBoardWidget {
+    const inner = this.innerSize();
+    const cols = FULL_FIELD_COLS;
+    const rows = Math.min(FULL_FIELD_ROWS, inner.height);
+
+    const container = createBox({
+      parent: this.container,
+      top: 0,
+      left: 0,
+      width: inner.width,
+      height: inner.height,
+      // createBox() draws a border by default; the panel already has one.
+      border: { type: 'none' },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    const boardBox = createBox({
+      parent: container,
+      top: 0,
+      left: Math.max(0, Math.floor((inner.width - cols) / 2)),
+      width: cols,
+      height: rows,
+      content: '',
+      border: { type: 'none' },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // A zero-height strip: the name lives in the panel label instead, but the
+    // widget shape stays the same so renderMiniBoard needs no special case.
+    const nameLabel = createBox({
+      parent: container,
+      top: 0,
+      left: 0,
+      width: inner.width,
+      height: 1,
+      content: '',
+      border: { type: 'none' },
+      hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    return { container, boardBox, nameLabel, cols, rows };
+  }
+
+  /** Usable space inside the panel's border. */
+  private innerSize(): { width: number; height: number } {
+    const width = (this.container.width ?? this.boardWidth * this.perRow + 4) - 2;
+    const height = (this.container.height ?? this.boardHeight * 2 + 2) - 2;
+    return { width, height };
   }
 
   /**
@@ -195,21 +293,32 @@ export class OpponentBoards {
   private renderMiniBoard(widget: MiniBoardWidget, opponent: OpponentBoardData): void {
     // Update name label with status
     let nameContent = opponent.name.substring(0, 10);
+    let frame = 'white';
     if (!opponent.alive) {
       nameContent = `{red-fg}[X] ${nameContent}{/red-fg}`;
-      widget.container.style.border.fg = 'red';
+      frame = 'red';
     } else if (opponent.hasImmunity) {
       nameContent = `{cyan-fg}[I] ${nameContent}{/cyan-fg}`;
-      widget.container.style.border.fg = 'cyan';
-    } else {
+      frame = 'cyan';
+    }  else {
       nameContent = `{white-fg}${nameContent}{/white-fg}`;
-      widget.container.style.border.fg = 'white';
     }
     nameContent += ` {gray-fg}L${opponent.level}{/gray-fg}`;
-    widget.nameLabel.setContent(nameContent);
+
+    if (this.solo) {
+      // The full-size board has no frame of its own - the panel's is the
+      // only one - so the name goes in the panel's label and the status
+      // colour on the panel's border.
+      const status = !opponent.alive ? ' [X]' : opponent.hasImmunity ? ' [I]' : '';
+      this.container.setLabel?.(` ${opponent.name.substring(0, 12)}${status} L${opponent.level} `);
+      if (this.container.style?.border) this.container.style.border.fg = frame;
+    } else {
+      if (widget.container.style?.border) widget.container.style.border.fg = frame;
+      widget.nameLabel.setContent(nameContent);
+    }
 
     // Render scaled board
-    const boardContent = this.renderScaledBoard(opponent.board, opponent.alive);
+    const boardContent = this.renderScaledBoard(opponent.board, opponent.alive, widget);
     widget.boardBox.setContent(boardContent);
   }
 
@@ -217,7 +326,7 @@ export class OpponentBoards {
    * Render board scaled to mini size
    * Full board is 12x22, mini is 12x8 (every 3 rows -> 1 row)
    */
-  private renderScaledBoard(board: TetriNetBoard, alive: boolean): string {
+  private renderScaledBoard(board: TetriNetBoard, alive: boolean, widget?: MiniBoardWidget): string {
     if (!alive) {
       return '\n\n{red-fg} DEAD{/red-fg}';
     }
@@ -229,8 +338,11 @@ export class OpponentBoards {
     // box, and sampled rows 4 + n*3 - reading past the end of a 22-row field
     // and never showing the bottom of the stack, which is the part that
     // matters. Both dimensions now derive from the box.
-    const miniRows = this.boardHeight - 3;
-    const miniCols = this.boardWidth - 2;
+    // From the widget when there is one, so a full-size board renders 1:1 -
+    // the area scaler below degenerates to a copy when the box matches the
+    // field. Falls back to the tiled figures for direct callers (tests).
+    const miniRows = widget ? widget.rows : this.boardHeight - 3;
+    const miniCols = widget ? widget.cols : this.boardWidth - 2;
     const lines: string[] = [];
 
     for (let my = 0; my < miniRows; my++) {
