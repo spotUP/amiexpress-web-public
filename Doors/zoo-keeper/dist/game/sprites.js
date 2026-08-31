@@ -20,7 +20,17 @@
  * is drawing. Deliberately ASCII: this goes down a BBS line where high-bit
  * glyphs depend on the client's font.
  */
-export const EMPTY = { ch: ' ', fg: 'white' };
+/**
+ * How many characters wide one logical cell is drawn.
+ *
+ * A terminal character is about twice as tall as it is wide, so a board
+ * measured in single characters is not square: one step up covers roughly
+ * twice the visual distance of one step sideways. Super Qix solves this by
+ * drawing every logical cell CELL_WIDTH characters wide, and this door now
+ * does the same - 40 logical columns rendered as 80 characters.
+ */
+export const CELL_WIDTH = 2;
+export const EMPTY = { ch: ' ', fg: 'white', bg: 'black' };
 /**
  * A colour per animal.
  *
@@ -86,7 +96,15 @@ export const TERMINAL_COLORS = new Set([
     'lightblack', 'lightred', 'lightgreen', 'lightyellow',
     'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
 ]);
-export const cell = (ch, fg, bg) => ({ ch, fg, bg });
+export const cell = (ch, fg, bg = 'black') => ({ ch, fg, bg });
+/**
+ * A solid block of colour with a glyph on it.
+ *
+ * This is what makes the board read as sprites rather than as text: the
+ * CELL is the colour, and the character sits on it. Drawing a bright glyph
+ * on the terminal's own background gives thin coloured letters instead.
+ */
+const block = (ch, colour) => ({ ch, fg: 'black', bg: colour });
 /**
  * Zeke, and whether he is holding the net.
  *
@@ -94,30 +112,28 @@ export const cell = (ch, fg, bg) => ({ ch, fg, bg });
  * a glance whether he can catch anything right now.
  */
 export function zekeCell(hasNet) {
-    return { ch: '@', fg: hasNet ? COLORS.zekeWithNet : COLORS.zeke };
+    return block('@', hasNet ? COLORS.zekeWithNet : COLORS.zeke);
 }
 /** An animal, in the colour of its own kind. */
 export function animalCell(ch, type) {
-    return { ch, fg: ANIMAL_COLORS[type] || 'white' };
+    return block(ch, ANIMAL_COLORS[type] || 'white');
 }
 /** A section of cage wall, redder as it takes damage. */
 export function wallCell(ch, damaged = false) {
-    return { ch, fg: damaged ? COLORS.wallDamaged : COLORS.wall };
+    return block(ch, damaged ? COLORS.wallDamaged : COLORS.wall);
 }
 export function zeldaCell() {
-    return { ch: 'Z', fg: COLORS.zelda };
+    return block('Z', COLORS.zelda);
 }
 export function monkeyCell() {
-    return { ch: 'm', fg: COLORS.monkey };
+    return block('m', COLORS.monkey);
 }
 export function coconutCell() {
-    return { ch: 'o', fg: COLORS.coconut };
+    return block('o', COLORS.coconut);
 }
 /** The burning fuse, and its lit head. */
 export function fuseCell(isEnd) {
-    return isEnd
-        ? { ch: '*', fg: COLORS.fuseEnd }
-        : { ch: '=', fg: COLORS.fuse };
+    return isEnd ? block('*', COLORS.fuseEnd) : block('=', COLORS.fuse);
 }
 /**
  * A bonus letter or digit floating on the board.
@@ -126,7 +142,7 @@ export function fuseCell(isEnd) {
  * are not the same yellow.
  */
 export function bonusCell(ch, kind) {
-    return { ch, fg: (kind && BONUS_COLORS[kind]) || COLORS.bonus };
+    return block(ch, (kind && BONUS_COLORS[kind]) || COLORS.bonus);
 }
 /**
  * Paint one cell.
@@ -135,8 +151,10 @@ export function bonusCell(ch, kind) {
  * every space multiplies the bytes going down the line for no difference.
  */
 export function paint(c) {
-    if (c.ch === ' ' && !c.bg)
-        return ' ';
-    const bg = c.bg ? `{${c.bg}-bg}` : '';
-    return `${bg}{${c.fg}-fg}${c.ch}{/}`;
+    // The glyph, padded to the full cell, so the whole cell carries the colour
+    // and the board is made of square blocks rather than thin letters.
+    const body = c.ch.padEnd(CELL_WIDTH).slice(0, CELL_WIDTH);
+    if (c.bg === 'black' && c.ch === ' ')
+        return ' '.repeat(CELL_WIDTH);
+    return `{${c.bg}-bg}{${c.fg}-fg}${body}{/}`;
 }
