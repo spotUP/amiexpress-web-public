@@ -20,8 +20,9 @@ import { recordDoorInstall } from '../doors/door-install-record';
 import { verifyLaunchToken } from '../doors/door-launch-token';
 import { buildDoorList } from '../doors/door-list';
 import * as amigafs from '../utils/amigafs';
-import { parseInfoFile } from '../utils/info-file.util';
+import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { isAllowed, resolveDoorDir, resolveDoorFile, walkDoorDir } from '../doors/door-path-guard';
+import { deleteDoorAndRefresh } from '../doors/door-delete';
 import { FIELD_CAPS, renderRows, sanitizeField } from './door-admin-text';
 
 export const doorAdminRouter = express.Router();
@@ -264,6 +265,192 @@ doorAdminRouter.get('/installed/:cmd/info', (req: Request, res: Response) => {
   ]);
 
   res.status(200).type('text/plain').send(renderRows('INFO', rows));
+});
+
+/**
+ * POST /installed/:cmd/rescan - the door changed a .info; reload the registry.
+ *
+ * NOT an enable/disable route, and deliberately so. The C door already owns
+ * that rule and must: on a real AmiExpress board there is no API at all, so
+ * disable has to work by writing the .info directly. It does - ACCESS=255 with
+ * DRACCESS remembering the prior level, the ruling in
+ * examples/doorrepo-c/flow.h:618 marked "do not redesign", with
+ * flow_rewrite_access_lines editing the file in place. Implementing that here
+ * as well would put one ruling in two languages, which is exactly what the
+ * spec's "two front ends must never carry two rules" forbids.
+ *
+ * What the door cannot do from outside this process is make the BBS notice.
+ * getDoors() is an in-memory registry, so a door disabled by a direct write
+ * stays live until a rescan - the same reason deleteDoor already calls
+ * refreshDoorCache() and initializeDoors() when it finishes.
+ *
+ * The reply reports whether the command is registered after the reload, which
+ * is what the door needs to tell the sysop the board has picked the change up.
+ */
+doorAdminRouter.post('/installed/:cmd/rescan', async (req: Request, res: Response) => {
+  const { cmd } = req.params;
+  if (!isCommandName(cmd)) {
+    res.status(400).type('text/plain').send('BAD REQUEST\r\n');
+    return;
+  }
+
+  try {
+    const { refreshDoorCache } = await import('../doors/amigaDoorManager');
+    await refreshDoorCache();
+    const { initializeDoors } = require('../handlers/door.handler');
+    await initializeDoors();
+  } catch {
+    res.status(500).type('text/plain').send('ERROR\r\n');
+    return;
+  }
+
+  let found = false;
+  try {
+    const { getDoors } = require('../handlers/door.handler');
+    const wanted = cmd.toUpperCase();
+    found = (getDoors() as any[]).some(
+      (d) => String(d.command || d.id || '').toUpperCase() === wanted,
+    );
+  } catch { /* a registry that will not answer is reported as not found */ }
+
+  res.status(200).type('text/plain').send(`RESCAN|${found ? '1' : '0'}\r\n`);
+});
+
+/** A door's .info is a handful of tooltypes; a request carrying hundreds is
+ *  not an edit, and the writer rebuilds the whole array from what it is given. */
+const MAX_TOOLTYPES = 64;
+
+/**
+ * PUT /installed/:cmd/info - replace the command's tooltypes.
+ *
+ * Reads the existing file with parseInfoFile, swaps the tooltype array, and
+ * writes it back through writeInfoFile - which keeps the DiskObject header and
+ * the icon imagery around the array. The board's .info files are binary Amiga
+ * DiskObjects; rebuilding one from a template would throw its icon away, which
+ * is the mistake caf489708 fixed in the C door for the same reason.
+ *
+ * The whole array is replaced, not merged: a partial update has no way to
+ * express "delete this tooltype", and the editor calling this always holds the
+ * full list it just read from GET .../info.
+ *
+ * Does not rescan. Editing a registration and making the board notice are
+ * separate acts - POST .../rescan is the second one - so a caller making
+ * several edits pays for one reload, not one per field.
+ */
+doorAdminRouter.put('/installed/:cmd/info', (req: Request, res: Response) => {
+  const { cmd } = req.params;
+  if (!isCommandName(cmd)) {
+    res.status(400).type('text/plain').send('BAD REQUEST\r\n');
+    return;
+  }
+
+  const incoming = (req.body ?? {}).tooltypes;
+  if (!Array.isArray(incoming) || incoming.length > MAX_TOOLTYPES) {
+    res.status(400).type('text/plain').send('BAD REQUEST\r\n');
+    return;
+  }
+
+  // A key with '=' or a line break in it would not read back as the same
+  // tooltype, and a key that is empty is not a tooltype at all.
+  const clean: Array<{ key: string; value: string; commented: boolean }> = [];
+  for (const entry of incoming) {
+    const key = typeof entry?.key === 'string' ? entry.key.trim() : '';
+    const value = typeof entry?.value === 'string' ? entry.value : '';
+    if (key === '' || /[=\r\n]/.test(key) || /[\r\n]/.test(value)) {
+      res.status(400).type('text/plain').send('BAD REQUEST\r\n');
+      return;
+    }
+    clean.push({ key, value, commented: entry?.commented === true });
+  }
+
+  const command = cmd.toUpperCase();
+  const infoPath = path.join(resolveBbsRoot(), 'Commands', 'BBSCmd', `${command}.info`);
+  if (!amigafs.existsSync(infoPath)) {
+    res.status(404).type('text/plain').send('NOT FOUND\r\n');
+    return;
+  }
+
+  try {
+    const resolved = amigafs.resolvePath(infoPath) ?? infoPath;
+    const info = parseInfoFile(resolved);
+    info.tooltypes = clean.map((t) => ({
+      key: t.key,
+      value: t.value,
+      commented: t.commented,
+      prefix: '',
+      originalLine: '',
+    }));
+    writeInfoFile(info);
+  } catch {
+    res.status(500).type('text/plain').send('ERROR\r\n');
+    return;
+  }
+
+  res.status(200).type('text/plain').send(`INFOWRITE|${clean.length}\r\n`);
+});
+
+/**
+ * DELETE /installed/:cmd - remove a door, streaming the log as it happens.
+ *
+ * The steps are written to the socket as they occur, not collected and sent
+ * at the end: a door with a few hundred files takes long enough that a silent
+ * pause followed by a finished log is what the sysop reads as a hang. This is
+ * the same onStep contract DOORMAN already consumes in-process.
+ *
+ *     STEP|ok|removed Doors/AEHELP/aehelp.data
+ *     STEP|skip|Doors/AEHELP/missing was not there
+ *     DONE|1|Deleted AEHELP
+ *
+ * Because the first STEP flushes the headers, the status code is decided
+ * BEFORE anything is removed. Whether the delete then succeeded is in the
+ * DONE line, not in the status - a client must read to DONE.
+ *
+ * The removal is amigaDoorManager's, whose guard confines every path it
+ * touches - the tracked database rows included - to Doors/, Commands/ or a
+ * recorded library, and never to one of those roots. That guard was written
+ * after an unchecked recursive delete took the whole Doors/ tree out on
+ * 2026-08-30, which is also why this route exists rather than any path
+ * assembly of its own.
+ */
+doorAdminRouter.delete('/installed/:cmd', async (req: Request, res: Response) => {
+  const { cmd } = req.params;
+  if (!isCommandName(cmd)) {
+    res.status(400).type('text/plain').send('BAD REQUEST\r\n');
+    return;
+  }
+
+  const command = cmd.toUpperCase();
+  const bbsRoot = resolveBbsRoot();
+  const hasInfo = amigafs.existsSync(
+    path.join(bbsRoot, 'Commands', 'BBSCmd', `${command}.info`),
+  );
+  const hasDir = amigafs.existsSync(path.join(bbsRoot, 'Doors', cmd));
+  if (!hasInfo && !hasDir) {
+    // Nothing to delete and nothing to stream: say so with a status, while
+    // one still can.
+    res.status(404).type('text/plain').send('NOT FOUND\r\n');
+    return;
+  }
+
+  res.status(200).type('text/plain');
+  res.setHeader('Cache-Control', 'no-store');
+  if (typeof (res as any).flushHeaders === 'function') (res as any).flushHeaders();
+
+  const line = (parts: string[]): void => { res.write(parts.join('|') + '\r\n'); };
+
+  let result;
+  try {
+    result = await deleteDoorAndRefresh(command, undefined, (step) => {
+      line(['STEP', step.kind, sanitizeField(step.text, FIELD_CAPS.step)]);
+    });
+  } catch (err) {
+    line(['DONE', '0', sanitizeField((err as Error).message, FIELD_CAPS.step)]);
+    res.end();
+    return;
+  }
+
+  line(['DONE', result.success ? '1' : '0', sanitizeField(result.message, FIELD_CAPS.step)]);
+  res.end();
 });
 
 doorAdminRouter.post('/installed', (req: Request, res: Response) => {

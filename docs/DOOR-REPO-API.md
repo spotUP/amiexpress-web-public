@@ -951,3 +951,73 @@ Note: which syntax marks a tooltype as disabled depends on the file's form. In
 a binary DiskObject `.info` - what the board actually holds - both `(KEY)` and
 `!KEY` are recognised. In the plain-text variant, only `!KEY` is; a `(KEY)`
 there is returned as a literal key named `(KEY)`.
+### POST /api/door-admin/installed/&lt;CMD&gt;/rescan
+
+Tells the board to reload its door registry after the door changed a `.info` on
+disk. Reply:
+
+```
+RESCAN|<found>
+```
+
+`found` is `1` when the command is registered after the reload - which is how
+the door tells the sysop the board has picked the change up.
+
+**This is not an enable/disable route, deliberately.** Enable and disable are
+the door's own job and always have been: it writes `ACCESS=255` with
+`DRACCESS=<prior>` remembering the normal level, the rule in `flow.h`'s
+`flow_compute_prior_access`. That has to keep working with no server at all,
+because a real AmiExpress board has none. Implementing the same rule again on
+the server would put one ruling in two languages. So the door edits the file as
+it always did, then calls this to make the board notice.
+
+### PUT /api/door-admin/installed/&lt;CMD&gt;/info
+
+Replaces the command's tooltypes. JSON body:
+
+```json
+{"tooltypes": [{"key": "ACCESS", "value": "255"},
+               {"key": "DRACCESS", "value": "0"},
+               {"key": "INTERNAL", "value": "1", "commented": true}]}
+```
+
+```
+INFOWRITE|<count>
+```
+
+The whole array is replaced, not merged - a partial update has no way to say
+"remove this tooltype", and the caller always holds the full list it just read
+from `GET .../info`. At most 64 entries. A key containing `=` or a line break,
+an empty key, or a value containing a line break is `400 BAD REQUEST` and the
+file is left untouched.
+
+The icon survives: the file is read, its tooltype array swapped, and written
+back, so the DiskObject header and imagery of a binary `.info` are preserved.
+
+Does not rescan. Editing a registration and making the board notice are
+separate calls, so several edits cost one reload rather than one each.
+
+### DELETE /api/door-admin/installed/&lt;CMD&gt;
+
+Removes the door, streaming the log as it happens rather than after it:
+
+```
+STEP|ok|removed Doors/AEHELP/aehelp.data
+STEP|skip|Doors/AEHELP/missing was not there
+STEP|fail|Doors/AEHELP/locked: EBUSY
+DONE|1|Deleted AEHELP
+```
+
+`kind` is `ok`, `skip` or `fail`. Read to the `DONE` line: because the first
+`STEP` has already flushed the headers, the HTTP status was fixed before
+anything was removed, so **success is in `DONE`, not in the status**. `DONE|1`
+succeeded, `DONE|0` did not and carries the reason.
+
+`404 NOT FOUND` when the command has neither a `Commands/BBSCmd/<CMD>.info` nor
+a `Doors/<CMD>/` directory - checked before the stream opens, while a status can
+still be sent.
+
+Every path the delete touches, including the rows it reads from the board's own
+database, is confined to `Doors/`, `Commands/` or a recorded library, and never
+to one of those roots itself. That guard exists because an unchecked recursive
+delete removed this board's entire `Doors/` tree on 2026-08-30.

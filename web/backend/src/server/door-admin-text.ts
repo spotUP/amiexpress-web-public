@@ -30,6 +30,7 @@ export const FIELD_CAPS = {
   key: 64,
   value: 256,
   path: 255,
+  step: 200,
 } as const;
 
 /**
