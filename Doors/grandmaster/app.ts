@@ -1006,7 +1006,15 @@ export class GrandmasterApp {
       // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
       // waiting lobby with the same mode, or creates one the next player will join.
       // 'custom' would make every player create their own private lobby (each sees only themselves).
-      const localPlayerId = this.session.user?.id || this.state.playerName;
+      // The id the NETWORK MANAGER uses, not one derived here a second time.
+      // The lobby widget decides who is host by comparing this against the
+      // ids of the players the broker reports, and identity became
+      // <user>@<node> when a player stopped being an account and became a
+      // session - so a second derivation from session.user.id matched
+      // nothing, nobody was host, and both sides sat on "Waiting for host to
+      // start..." forever (reported 2026-08-31).
+      const localPlayerId = this.network?.getLocalPlayerId()
+        ?? this.session.user?.id ?? this.state.playerName;
       const lobbyScreen = new LobbyScreen(
         this.screen,
         this.state,
@@ -1192,7 +1200,9 @@ export class GrandmasterApp {
     // could talk.
     this.startVoice(`tnet-${this.session.user?.id ?? Date.now()}`);
 
-    const localPlayerId = this.session.user?.id || this.state.playerName;
+    // Same rule as showLobby: ask the network manager, never re-derive.
+    const localPlayerId = this.network?.getLocalPlayerId()
+      ?? this.session.user?.id ?? this.state.playerName;
     const adapter = new TetriNetLobbyAdapter(
       this.network,
       String(localPlayerId),

@@ -917,7 +917,15 @@ class GrandmasterApp {
             // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
             // waiting lobby with the same mode, or creates one the next player will join.
             // 'custom' would make every player create their own private lobby (each sees only themselves).
-            const localPlayerId = this.session.user?.id || this.state.playerName;
+            // The id the NETWORK MANAGER uses, not one derived here a second time.
+            // The lobby widget decides who is host by comparing this against the
+            // ids of the players the broker reports, and identity became
+            // <user>@<node> when a player stopped being an account and became a
+            // session - so a second derivation from session.user.id matched
+            // nothing, nobody was host, and both sides sat on "Waiting for host to
+            // start..." forever (reported 2026-08-31).
+            const localPlayerId = this.network?.getLocalPlayerId()
+                ?? this.session.user?.id ?? this.state.playerName;
             const lobbyScreen = new lobby_screen_1.LobbyScreen(this.screen, this.state, this.sounds, this.network, localPlayerId);
             // Register C key inside lobby to trigger mode change (without leaving voice)
             const onChangeMode = () => { changingMode = true; };
@@ -1074,7 +1082,9 @@ class GrandmasterApp {
         // lobby - TetriNET players sat in a silent room while versus players
         // could talk.
         this.startVoice(`tnet-${this.session.user?.id ?? Date.now()}`);
-        const localPlayerId = this.session.user?.id || this.state.playerName;
+        // Same rule as showLobby: ask the network manager, never re-derive.
+        const localPlayerId = this.network?.getLocalPlayerId()
+            ?? this.session.user?.id ?? this.state.playerName;
         const adapter = new tetrinet_lobby_adapter_1.TetriNetLobbyAdapter(this.network, String(localPlayerId), selectedMode);
         // Seed the Winlist tab from this BBS's own TetriNET high scores. Without
         // this the tab is fed only by an external server's winlist message, so a

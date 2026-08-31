@@ -76,6 +76,8 @@ export declare class GrandmasterNetworkManager extends EventEmitter {
     private network;
     private matchState;
     private localPlayerId;
+    /** Distinguishes sessions that have neither a user nor a node. */
+    private static anonymousSeq;
     private localPlayerName;
     private localPlayerNumericId;
     private opponentStates;

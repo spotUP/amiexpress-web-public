@@ -82,6 +82,9 @@ export class GrandmasterNetworkManager extends EventEmitter {
   private network: NetworkEngine;
   private matchState: MatchState | null = null;
   private localPlayerId: string | null = null;
+  /** Distinguishes sessions that have neither a user nor a node. */
+  private static anonymousSeq = 0;
+
   private localPlayerName: string = 'Player';
   private localPlayerNumericId: number = 0;
   private opponentStates: Map<string, OpponentState> = new Map();
@@ -99,7 +102,17 @@ export class GrandmasterNetworkManager extends EventEmitter {
     super();
     this.network = new NetworkEngine();
     // Get player info from session
-    const nodeId = bbsSession.bbsSession?.nodeNumber ?? bbsSession.nodeNumber ?? 1;
+    // A BBSSession calls it `nodeId`; only the Amiga door session wrapper
+    // calls it `nodeNumber`. Reading just the latter meant every session
+    // fell through to 1 - so "one node per session" was a fiction and two
+    // windows of one account still collided. Both spellings, then the
+    // fallback, and the fallback is now unique per construction rather than
+    // a constant.
+    const nodeId = bbsSession.bbsSession?.nodeNumber
+      ?? bbsSession.bbsSession?.nodeId
+      ?? bbsSession.nodeNumber
+      ?? bbsSession.nodeId
+      ?? 1;
 
     // A PLAYER IS A SESSION, not an account.
     //
@@ -115,7 +128,12 @@ export class GrandmasterNetworkManager extends EventEmitter {
     // scores and the reconnect all need.
     this.localPlayerId = bbsSession.user?.id
       ? `${bbsSession.user.id}@${nodeId}`
-      : `player-${nodeId}-${Date.now()}`;
+      // No user and no node: still two players, so the fallback carries a
+      // counter as well as a clock. Date.now() alone gave two managers
+      // built in the same millisecond the same identity, which is the very
+      // collision this id exists to avoid.
+      : `player-${nodeId}-${Date.now()}-${++GrandmasterNetworkManager.anonymousSeq}`;
+    console.log(`[GrandmasterNetworkManager] local player ${this.localPlayerId} on node ${nodeId}`);
     this.localPlayerName = bbsSession.user?.username || 'Player';
     this.localPlayerNumericId = this.hashStringToNumber(this.localPlayerId);
 

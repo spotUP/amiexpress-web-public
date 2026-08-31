@@ -17,10 +17,14 @@ const DOOR = path.resolve(__dirname, '../../../../Doors/grandmaster');
 
 /** The shape GrandmasterNetworkManager reads out of a door session. */
 function fakeSession(userId: number | string, username: string, node: number) {
+  // A real BBSSession carries `nodeId`; only the Amiga door wrapper says
+  // `nodeNumber`. The door read only the latter, so every live session fell
+  // through to node 1 - which is why this fixture now uses the REAL field
+  // name. A fixture that says nodeNumber proves nothing about production.
   return {
     user: { id: userId, username },
-    bbsSession: { nodeNumber: node },
-    nodeNumber: node,
+    bbsSession: { nodeId: node },
+    nodeId: node,
   };
 }
 
@@ -146,5 +150,72 @@ describe('starting a match', () => {
     // The match begins; what must NOT happen is a multi-second lobby clock
     // ticking before it. 400ms is far below the 3s countdown this replaced.
     expect(started.length).toBeGreaterThan(0);
+  });
+});
+
+describe('who is the host', () => {
+  let Manager: any;
+
+  beforeAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    Manager = require(path.join(DOOR, 'dist/network/network-manager')).GrandmasterNetworkManager;
+  });
+
+  beforeEach(() => {
+    delete (globalThis as any)[Symbol.for('aex-lobby-broker')];
+  });
+
+  it('puts the local player id IN the player list it reports', async () => {
+    // The lobby widget decides who may start by comparing its own idea of
+    // the local player against the ids of the players in the lobby. If
+    // those two are computed differently - and they were, once identity
+    // became <user>@<node> - the comparison matches nobody, no one is host,
+    // and both sides sit on "Waiting for host to start..." with a full
+    // lobby. Two users, neither able to begin, reported 2026-08-31.
+    const host = new Manager(fakeSession(700, 'sysop', 1));
+    const guest = new Manager(fakeSession(701, 'spot', 2));
+
+    await host.joinQueue('versus_1v1');
+    await guest.joinQueue('versus_1v1');
+
+    for (const [who, manager] of [['host', host], ['guest', guest]] as const) {
+      const state = manager.getMatchState();
+      const mine = manager.getLocalPlayerId();
+      expect({ who, found: state.players.some((p: any) => p.id === mine) })
+        .toEqual({ who, found: true });
+    }
+  });
+});
+
+describe('identity on a real session shape', () => {
+  let Manager: any;
+
+  beforeAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    Manager = require(path.join(DOOR, 'dist/network/network-manager')).GrandmasterNetworkManager;
+  });
+
+  beforeEach(() => {
+    delete (globalThis as any)[Symbol.for('aex-lobby-broker')];
+  });
+
+  it('reads the node from a BBSSession, which spells it nodeId', () => {
+    // The door only ever read `nodeNumber`, a name the Amiga door wrapper
+    // uses and a BBSSession does not - so every session fell through to
+    // node 1 and "a player is a session" was a fiction. Live logs showed
+    // nodeId undefined all the way to the browser.
+    const one = new Manager({ user: { id: 'uuid-a', username: 'sysop' }, nodeId: 3 });
+    const two = new Manager({ user: { id: 'uuid-a', username: 'sysop' }, nodeId: 4 });
+
+    expect(one.getLocalPlayerId()).toBe('uuid-a@3');
+    expect(two.getLocalPlayerId()).toBe('uuid-a@4');
+  });
+
+  it('still separates two sessions when the node is missing entirely', () => {
+    // Whatever else is broken, two windows must not become one player.
+    const one = new Manager({ user: null });
+    const two = new Manager({ user: null });
+
+    expect(one.getLocalPlayerId()).not.toBe(two.getLocalPlayerId());
   });
 });
