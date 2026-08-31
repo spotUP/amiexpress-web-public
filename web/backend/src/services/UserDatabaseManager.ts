@@ -117,7 +117,13 @@ export class UserDatabaseManager {
   private userMiscPath: string;
 
   constructor() {
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, "../../../..");
+    // BBS_DATA_DIR FIRST, as UserFileManager reads it. Docker sets
+    // BBS_DATA_DIR=/app/data/bbs and leaves BBS_ROOT empty, so this resolved
+    // to /app and created an empty user.data/keys/misc there while the board's
+    // real files - the ones UserFileManager reads and express.e reads - sat in
+    // /app/data/bbs. Everything appended through here, including a new user
+    // signing up (new-user.handler.ts:1475), went to a file nothing reads.
+    this.bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, "../../../..");
     this.userDataPath = path.join(this.bbsRoot, "user.data");
     this.userKeysPath = path.join(this.bbsRoot, "user.keys");
     this.userMiscPath = path.join(this.bbsRoot, "user.misc");

@@ -1612,6 +1612,14 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
       };
 
       const id = await database.createUser(newUserData);
+
+      // user.data is where the BBS looks - GET /users reads it through
+      // userFileManager.readAllUsers, and so does express.e. Creating the row
+      // and stopping there produced a user that answered 200, never appeared
+      // in the list, and did not exist to the board. The new-user handler has
+      // always finished the job this way (new-user.handler.ts:1475).
+      await database.appendUserToDisk(id);
+
       const createdUser = await database.getUserById(id);
 
       // Remove password hash from response
