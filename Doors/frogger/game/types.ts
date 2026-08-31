@@ -5,6 +5,7 @@
 
 // Game states
 export type GameState =
+  | "attract"
   | "menu"
   | "playing"
   | "dying"

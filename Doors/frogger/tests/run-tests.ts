@@ -12,6 +12,10 @@ const TEST_MODULES = [
   './levels.test',
   './scoring.test',
   './hazards.test',
+  './attract.test',
+  './render.test',
+  './layout.test',
+  './highscore-name.test',
 ];
 
 (async () => {

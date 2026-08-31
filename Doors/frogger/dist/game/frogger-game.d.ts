@@ -150,11 +150,51 @@ export declare class FroggerGame {
      */
     private resetFrogPosition;
     /**
-     * Render the game
+     * One move of the machine playing itself, for attract mode.
+     *
+     * Deliberately cautious rather than clever: it only hops when the row it
+     * is hopping into has something to land on, edges towards a free home on
+     * the last row, and otherwise waits. A demo that dies every few seconds
+     * reads as a broken game rather than an invitation to play.
+     */
+    demoStep(): void;
+    /** Is the cell the demo wants to hop into free of traffic? */
+    private roadIsClear;
+    /** Is there something to stand on where the demo wants to hop? */
+    private footingAt;
+    /** Line the demo up with a free home, then hop in. */
+    private demoAimForHome;
+    /**
+     * Render the board.
+     *
+     * Coloured lanes with character sprites laid over them, in the style of
+     * Philippe Majerus's Frogger ANSI. Each logical cell is CELL_WIDTH
+     * characters wide, so a cell comes out roughly square and forty of them
+     * fill the eighty-column screen exactly.
      */
     render(): void;
-    /** The character for one cell of an object. */
-    private glyphFor;
-    private paint;
+    /** The ground: road, water, the banks and the median, and the hedge. */
+    private paintLanes;
+    /** The five homes cut into the hedge. */
+    private paintHomes;
+    /** Everything travelling in a lane. */
+    private paintObjects;
+    /** The snakes patrolling the median. */
+    private paintSnakes;
+    /** The player. */
+    private paintFrog;
+    /**
+     * The sprite for one moving thing, built to exactly fill its cells.
+     *
+     * `mouthAt` is where the jaws of a crocodile or otter go: the leading end,
+     * whichever way it is swimming. The player has to be able to see which end
+     * eats them.
+     */
+    private spriteFor;
+    /**
+     * A vehicle: a body with a nose on the end it is travelling towards, so
+     * you can see which way the traffic is coming from.
+     */
+    private vehicleSprite;
 }
 //# sourceMappingURL=frogger-game.d.ts.map

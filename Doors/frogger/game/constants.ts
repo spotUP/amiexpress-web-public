@@ -126,6 +126,118 @@ export const SCORES = {
   timeBonus: 10,
 };
 
+/**
+ * How wide one grid cell is drawn, in characters.
+ *
+ * A terminal cell is about twice as tall as it is wide, so a logical cell
+ * two characters across comes out roughly square - the same trick Super Qix
+ * and Grandmaster use. Forty cells at two characters fills the 80-column
+ * screen exactly.
+ */
+export const CELL_WIDTH = 2;
+
+/**
+ * The board is drawn as blocks of background colour rather than as ASCII
+ * sprites. A '#' for a car and an '=' for a log read as text; a solid red
+ * block and a solid brown one read as a car and a log.
+ */
+export const BG_COLORS = {
+  road: 'black',
+  water: 'blue',
+  // The banks and the median are magenta, as they are in the reference
+  // ANSI. They used to be green, and the frog is green: a frog standing on
+  // the bank was invisible, which is exactly what was reported.
+  bank: 'magenta',
+  hedge: 'green',
+
+  car: 'red',
+  truck: 'white',
+  racecar: 'magenta',
+
+  log: 'yellow',          // dark yellow reads as wood
+  turtle: 'green',
+  turtleDiving: 'blue',
+  crocodile: 'cyan',     // told apart from the turtles by colour and mouth
+  crocodileMouth: 'lightred',
+  otter: 'lightcyan',
+  otterMouth: 'lightred',
+
+  snake: 'lightmagenta',
+  ladyFrog: 'lightmagenta',
+
+  frog: 'lightgreen',
+  frogDying: 'lightred',
+
+  homeEmpty: 'black',
+  homeOccupied: 'lightgreen',
+  homeFly: 'lightyellow',
+  homeCrocodile: 'lightred',
+};
+
+/**
+ * The characters the board is drawn with.
+ *
+ * Adapted from the style of Philippe Majerus's Frogger ANSI: coloured lanes
+ * with character sprites laid over them, rather than the solid blocks this
+ * door drew before. A log with rounded ends and a grain along it reads as a
+ * log; a brown rectangle reads as a brown rectangle.
+ *
+ * Every sprite is built to exactly `width * CELL_WIDTH` characters, so it
+ * covers its cells and no more.
+ */
+export const SPRITE_FG = {
+  log: 'gray',
+  turtle: 'lightgreen',
+  crocodile: 'lightgreen',
+  crocodileMouth: 'lightred',
+  otter: 'lightcyan',
+  otterMouth: 'lightred',
+  car: 'lightred',
+  truck: 'white',
+  racecar: 'lightcyan',
+  snake: 'lightmagenta',
+  ladyFrog: 'lightmagenta',
+  frog: 'lightgreen',
+  frogDying: 'lightred',
+  hedge: 'green',
+  home: 'blue',
+  homeFrog: 'lightgreen',
+  homeFly: 'lightyellow',
+  homeCrocodile: 'lightred',
+  bank: 'red',
+};
+
+/** The frog, and the frog you carry home. */
+// ASCII only, everywhere in this door. The board is drawn through blessed
+// with fullUnicode off, so anything outside 7-bit ASCII arrives mangled or
+// not at all - which is why the sprites showed as nothing.
+export const FROG_GLYPH = '@';
+
+/** The grain along a log, and the ends that round it off. */
+export const LOG_GRAIN = '-.';
+export const LOG_END_LEFT = '(';
+export const LOG_END_RIGHT = ')';
+
+/** One turtle of a set. */
+export const TURTLE_GLYPH = ':O:';
+
+/** The jaws of a crocodile or an otter, and the bodies behind them. */
+export const MOUTH_GLYPH = '><';
+export const CROCODILE_BODY = '=';
+export const OTTER_BODY = '~';
+
+/** The snake, riding a log or patrolling the median. */
+export const SNAKE_GLYPH = 'S';
+
+/** The texture of the banks and the median, and of the hedge up top. */
+export const BANK_TEXTURE = '.:';
+export const HEDGE_TEXTURE = '#';
+
+/** The sides of a home, and what can be sitting in one. */
+export const HOME_LEFT = '[';
+export const HOME_RIGHT = ']';
+export const FLY_GLYPH = '*';
+
 // Colors for rendering
 export const COLORS = {
   frog: 'green',
@@ -223,6 +335,15 @@ export const LADY_FROG_INTERVAL_MS = 12000;
 
 /** The otter turns up on a water lane at random (FAQ 6.4 note). */
 export const OTTER_INTERVAL_MS = 15000;
+
+/**
+ * How long a name in the score table may be.
+ *
+ * The arcade took three initials because that is what a coin-op with a
+ * joystick can ask for. A BBS knows its caller's handle, so the table holds
+ * a handle - and when one has to be typed, it can be a whole one.
+ */
+export const MAX_NAME_LENGTH = 16;
 
 // Menu options
 export const MENU_OPTIONS = ['Start Game', 'Lives', 'High Scores', 'Help', 'Quit'];

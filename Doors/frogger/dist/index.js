@@ -15,6 +15,7 @@ const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-
 const frogger_game_1 = require("./game/frogger-game");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
+const attract_1 = require("./game/attract");
 const constants_1 = require("./game/constants");
 /**
  * Create initial game data
@@ -79,6 +80,14 @@ let gameLoop = null;
 /** How long the finished board stays up between levels, in ticks. */
 const LEVEL_COMPLETE_FRAMES = 40;
 let levelCompleteFrames = 0;
+/** Attract mode state: which panel is up, and the demo game behind it. */
+let attractLoop = null;
+let attractPhase = "points";
+let attractFrames = 0;
+let demoGame = null;
+let demoData = null;
+/** How often the demo player takes a hop, in ticks. */
+const DEMO_HOP_FRAMES = 6;
 let game = null;
 let doorContext; // Will be set on start
 let inputManager = null;
@@ -103,6 +112,9 @@ function initScreen() {
         width: "100%",
         height: 1,
         tags: true,
+        // One row tall, so an injected Panel border WOULD BE the whole box and
+        // the score line would never appear at all.
+        border: undefined,
         content: formatHUD(),
     });
     // Main game area
@@ -114,6 +126,16 @@ function initScreen() {
         width: "100%",
         height: constants_1.GAME_AREA_HEIGHT,
         tags: true,
+        // The engine lays the board out itself: one line per lane, exactly
+        // GRID_WIDTH * CELL_WIDTH characters wide. Word wrapping a line that
+        // already fills the box pushes a blank row in after every real row, so
+        // the board rendered on every OTHER line.
+        wrap: false,
+        // blessed.box() here returns a Panel, which injects a border of its own
+        // unless told not to. That border stole two columns - which is what made
+        // the full-width lines wrap - and its bottom edge showed as a stray line
+        // across the top of the screen.
+        border: undefined,
         style: { bg: "black" },
     });
     // Footer with controls
@@ -163,7 +185,96 @@ function formatHUD() {
  * reset menuSelection back to 0 on every keypress, which is exactly the
  * bug that made arrow up/down appear to do nothing.
  */
+/**
+ * Attract mode: what the cabinet does when nobody is playing.
+ *
+ * Title over the point table, then the score ranking, then the invitation to
+ * play, then the machine playing itself, round and round. Any key drops into
+ * the menu - on the cabinet that is the coin slot.
+ */
+function startAttract() {
+    stopAttract();
+    gameData.state = "attract";
+    attractPhase = attract_1.ATTRACT_ORDER[0];
+    attractFrames = 0;
+    if (menuBox) {
+        menuBox.destroy();
+        menuBox = null;
+    }
+    footerBox.setContent("{gray-fg}Press any key to play{/}");
+    renderAttract();
+    attractLoop = setInterval(() => {
+        attractFrames++;
+        if (attractPhase === "demo")
+            runDemoFrame();
+        else
+            renderAttract();
+        if (attractFrames >= attract_1.ATTRACT_FRAMES[attractPhase]) {
+            attractPhase = (0, attract_1.nextPhase)(attractPhase);
+            attractFrames = 0;
+            if (attractPhase === "demo")
+                startDemo();
+            else
+                stopDemo();
+        }
+    }, constants_1.GAME_TICK_MS);
+}
+/** Tear the attract loop down, whether or not it is running. */
+function stopAttract() {
+    if (attractLoop) {
+        clearInterval(attractLoop);
+        attractLoop = null;
+    }
+    stopDemo();
+}
+/** Paint the current attract panel. */
+function renderAttract() {
+    const width = gameArea.width || 80;
+    const lines = (0, attract_1.attractScreen)(attractPhase, gameData, width, attractFrames);
+    gameArea.setContent(lines.join("\n"));
+    hudBox.setContent(formatHUD());
+    screen.render();
+}
+/**
+ * Start the machine playing itself.
+ *
+ * On its OWN game state, so a demo can never touch the player's score, the
+ * high score table or the lives setting.
+ */
+function startDemo() {
+    demoData = createInitialGameData();
+    demoData.highscores = gameData.highscores;
+    demoData.state = "playing";
+    demoGame = new frogger_game_1.FroggerGame(demoData, (content) => {
+        gameArea.setContent(content);
+        screen.render();
+    });
+    demoGame.initLevel();
+}
+function stopDemo() {
+    demoGame = null;
+    demoData = null;
+}
+/** One tick of the demo game. */
+function runDemoFrame() {
+    if (!demoGame || !demoData) {
+        startDemo();
+        return;
+    }
+    // The demo hops at a human pace rather than every tick.
+    if (attractFrames % DEMO_HOP_FRAMES === 0)
+        demoGame.demoStep();
+    demoGame.update();
+    // A demo that has run out of frogs goes back to the title.
+    if (demoData.state !== "playing") {
+        attractPhase = (0, attract_1.nextPhase)("demo");
+        attractFrames = 0;
+        stopDemo();
+    }
+}
 function showMenu() {
+    stopAttract();
+    footerBox.setContent("{gray-fg}Arrow Keys: Hop | P: Pause | Q: Quit{/}");
     gameData.state = "menu";
     gameData.menuSelection = 0;
     renderMenu();
@@ -176,43 +287,78 @@ function renderMenu() {
     if (menuBox) {
         menuBox.destroy();
     }
-    const menuContent = [
-        "{green-fg}",
-        "  _____                                 ",
-        " |  ___| __ ___   __ _  __ _  ___ _ __  ",
-        " | |_ | '__/ _ \\ / _` |/ _` |/ _ \\ '__| ",
-        " |  _|| | | (_) | (_| | (_| |  __/ |    ",
-        " |_|  |_|  \\___/ \\__, |\\__, |\\___|_|    ",
-        "                 |___/ |___/            ",
-        "{/}",
-        "",
-        "{white-fg}Classic 1981 Konami Arcade Game{/}",
-        "",
-    ];
+    // Wide enough for the block title, which is what it is: sizing this by
+    // eye is what made every title row wrap and show as a doubled, broken
+    // letterform with a black line through it.
+    const width = Math.max(54, (0, attract_1.titleWidth)());
+    // The same block title the attract screen uses, so the door has one look
+    // rather than two - the menu used to carry a figlet in slashes.
+    const menuContent = [...(0, attract_1.titleLines)(width)];
+    menuContent.push("");
+    menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
+    menuContent.push("");
+    // A strip of the board itself: the traffic, the river and its footing,
+    // in the colours the game draws them in.
+    menuContent.push(laneStrip(width));
+    menuContent.push("");
     constants_1.MENU_OPTIONS.forEach((option, index) => {
         const selected = index === gameData.menuSelection;
-        const prefix = selected ? "> " : "  ";
-        const color = selected ? "cyan" : "white";
         // The lives row shows its setting and Enter steps through them. On the
         // cabinet this was an operator switch (FAQ 6.3).
         const label = option === "Lives"
             ? `${option}: ${gameData.startingLives}`
             : option;
-        menuContent.push(`{${color}-fg}${prefix}${label}{/}`);
+        const text = selected ? `> ${label} <` : `  ${label}  `;
+        const pad = Math.max(0, Math.floor((width - text.length) / 2));
+        menuContent.push(selected
+            ? `${" ".repeat(pad)}{blue-bg}{lightyellow-fg}${text}{/lightyellow-fg}{/blue-bg}`
+            : `${" ".repeat(pad)}{white-fg}${text}{/white-fg}`);
     });
+    menuContent.push("");
+    menuContent.push(centred("UP/DOWN to choose, ENTER to confirm", width, "gray"));
     menuBox = blessed_1.default.box({
         fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
-        width: 50,
+        width: width + 2,
         height: menuContent.length + 2,
         tags: true,
+        // The content is laid out to `width` already; re-wrapping it is what
+        // broke the title.
+        wrap: false,
         border: { type: "line" },
         style: { fg: "white", bg: "black", border: { fg: "green" } },
         content: menuContent.join("\n"),
     });
     screen.render();
+}
+/** Centre a plain string and colour it. */
+function centred(text, width, colour) {
+    const pad = Math.max(0, Math.floor((width - text.length) / 2));
+    return `${" ".repeat(pad)}{${colour}-fg}${text}{/${colour}-fg}`;
+}
+/**
+ * A strip of the board, drawn in the game's own colours: the road, a car,
+ * the river, a log, a turtle set and the bank.
+ */
+function laneStrip(width) {
+    const run = [
+        { bg: constants_1.BG_COLORS.road, cells: 3 },
+        { bg: constants_1.BG_COLORS.car, cells: 2 },
+        { bg: constants_1.BG_COLORS.road, cells: 3 },
+        { bg: constants_1.BG_COLORS.water, cells: 2 },
+        { bg: constants_1.BG_COLORS.log, cells: 4 },
+        { bg: constants_1.BG_COLORS.water, cells: 2 },
+        { bg: constants_1.BG_COLORS.turtle, cells: 3 },
+        { bg: constants_1.BG_COLORS.water, cells: 2 },
+        { bg: constants_1.BG_COLORS.bank, cells: 3 },
+    ];
+    const drawn = run.reduce((n, part) => n + part.cells, 0);
+    const pad = Math.max(0, Math.floor((width - drawn) / 2));
+    return " ".repeat(pad) + run
+        .map(part => `{${part.bg}-bg}${" ".repeat(part.cells)}{/${part.bg}-bg}`)
+        .join("");
 }
 /**
  * Show high scores
@@ -370,6 +516,11 @@ function handleInput(key) {
             break;
         case "enterName":
             handleNameEntryInput(inputKey);
+            break;
+        case "attract":
+            // Any key at all leaves the attract loop and opens the menu, which is
+            // this cabinet's coin slot.
+            showMenu();
             break;
         case "levelComplete":
             // Wait for transition
@@ -537,18 +688,39 @@ function handlePausedInput(key) {
 function handleGameOverInput(key) {
     if (key === "enter" || key === "space") {
         const lowestScore = gameData.highscores[gameData.highscores.length - 1]?.score || 0;
-        if (gameData.score > lowestScore || gameData.highscores.length < 10) {
-            gameData.state = "enterName";
-            gameData.playerName = "";
-            showNameEntry();
-        }
-        else {
+        const madeTheTable = gameData.score > lowestScore || gameData.highscores.length < 10;
+        if (!madeTheTable) {
             showMenu();
+            return;
         }
+        // The BBS knows the caller. Only ask for a name when it somehow does
+        // not - typing initials is a coin-op ritual, not something a BBS user
+        // should have to do.
+        if (gameData.playerName) {
+            void saveScoreAndReturn(gameData.playerName);
+            return;
+        }
+        gameData.state = "enterName";
+        showNameEntry();
     }
     else if (key === "q" || key === "escape") {
         showMenu();
     }
+}
+/** Record the score under `name`, then go back to the menu either way. */
+async function saveScoreAndReturn(name) {
+    try {
+        await server_1.rpcHandlers.saveHighscore({
+            name,
+            score: gameData.score,
+            level: gameData.level,
+        });
+        gameData.highscores = await server_1.rpcHandlers.getHighscores();
+    }
+    catch {
+        // A high score that cannot be written is not worth losing the door over.
+    }
+    showMenu();
 }
 /**
  * Show name entry screen
@@ -561,7 +733,7 @@ function showNameEntry() {
         "",
         "{cyan-fg}Enter your initials:{/}",
         "",
-        `{white-fg}[ ${gameData.playerName.padEnd(3, "_")} ]{/}`,
+        `{white-fg}[ ${gameData.playerName.padEnd(constants_1.MAX_NAME_LENGTH, "_")} ]{/}`,
         "",
         "{gray-fg}Press ENTER when done{/}",
     ];
@@ -587,17 +759,7 @@ function showNameEntry() {
 async function handleNameEntryInput(key) {
     if (key === "enter") {
         if (gameData.playerName.length > 0) {
-            try {
-                await server_1.rpcHandlers.saveHighscore({
-                    name: gameData.playerName,
-                    score: gameData.score,
-                    level: gameData.level,
-                });
-            }
-            catch {
-                // Continue anyway
-            }
-            showMenu();
+            await saveScoreAndReturn(gameData.playerName);
         }
     }
     else if (key === "backspace") {
@@ -611,9 +773,12 @@ async function handleNameEntryInput(key) {
     }
     else if (typeof key === "string" &&
         key.length === 1 &&
-        /[A-Za-z0-9]/.test(key)) {
-        if (gameData.playerName.length < 3) {
-            gameData.playerName += key.toUpperCase();
+        key >= " " && key <= "~") {
+        // Any printable character, and a handle's worth of them. It used to
+        // take three letters or digits and nothing else, so a BBS handle with a
+        // symbol in it could not be typed at all.
+        if (gameData.playerName.length < constants_1.MAX_NAME_LENGTH) {
+            gameData.playerName += key;
             showNameEntry();
         }
     }
@@ -624,6 +789,7 @@ async function handleNameEntryInput(key) {
 let keepAlive = null;
 // doorContext already declared above
 function cleanup() {
+    stopAttract();
     if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;
@@ -651,6 +817,9 @@ function cleanup() {
 door.onStart(async (ctx) => {
     doorContext = ctx;
     gameData = createInitialGameData();
+    // The BBS already knows who is playing, so a high score does not need to
+    // be typed in three letters at a time - the same thing Grandmaster does.
+    gameData.playerName = ctx?.session?.user?.username || "";
     // Prevent event loop from emptying
     keepAlive = setInterval(() => { }, 60000);
     try {
@@ -775,7 +944,7 @@ door.onStart(async (ctx) => {
             showMenu();
         }
     });
-    showMenu();
+    startAttract();
 });
 door.onInput((ctx, key) => {
     handleInput(key.raw || key.key || key);
