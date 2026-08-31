@@ -25,7 +25,21 @@ export class ConferenceConfigService {
     this.conferenceSetup = new ConferenceSetupService(bbsRoot);
   }
 
+  /**
+   * Resolve the conference the admin is pointing at.
+   *
+   * The list comes from ConfConfig.info and Conf<N>.info, where the id is the
+   * conference NUMBER. Looking that up as a conference_config rowid is a
+   * different namespace: this board has Conf1..14.info against three rows, so
+   * conferences 4-14 could not be edited at all. Disk first, mirror as the
+   * fallback - the same resolution the computer, language, file checker,
+   * screen type and drive services use.
+   */
   async getConferenceConfig(conferenceId: number): Promise<ConferenceConfig | null> {
+    const onDisk = await this.getConferenceConfigs();
+    const fromDisk = onDisk.find(c => c.conference_id === conferenceId || c.id === conferenceId);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getConferenceConfig(conferenceId);
   }
 
@@ -203,7 +217,17 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
       await this.conferenceSetup.updateConferenceInfoFile(conferenceId, confInfoUpdates);
     }
 
-    const newConfig = this.configRepo.updateConferenceConfig(conferenceId, validated);
+    // The mirror is best-effort and comes AFTER the disk write: a conference
+    // that only exists on disk has no row, and that must not turn a
+    // successful save into an error.
+    let mirrored: ConferenceConfig | null = null;
+    try {
+      mirrored = this.configRepo.updateConferenceConfig(conferenceId, validated);
+    } catch (mirrorError) {
+console.error(`[ConferenceConfigService] Mirror update failed for conference ${conferenceId} (disk write succeeded):`, mirrorError);
+    }
+
+    const newConfig: ConferenceConfig = mirrored ?? { ...oldConfig, ...validated };
 
     this.configRepo.logConfigChange('conference_config', newConfig.id, 'UPDATE',
       context.userId, context.username, oldConfig, newConfig,

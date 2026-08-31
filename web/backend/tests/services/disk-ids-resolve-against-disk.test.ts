@@ -27,6 +27,7 @@ import { FileCheckerConfigService } from '../../src/services/config-services/fil
 import { ScreenConfigService } from '../../src/services/config-services/screen-config.service';
 import { DriveConfigService } from '../../src/services/config-services/drive-config.service';
 import { NodeConfigService } from '../../src/services/config-services/node-config.service';
+import { ConferenceConfigService } from '../../src/services/config-services/conference-config.service';
 import { config as appConfig } from '../../src/config';
 
 const CONTEXT = { userId: '1', username: 'sysop' } as never;
@@ -54,6 +55,9 @@ function emptyMirror(overrides: Record<string, unknown> = {}) {
     getDriveById: () => null,
     getDriveByNumber: () => null,
     updateDrive: () => false,
+    getConferenceConfig: () => null,
+    getConferenceConfigs: () => [],
+    updateConferenceConfig: () => { throw new Error('no such conference row'); },
     getNodeConfig: () => null,
     getNodeConfigs: () => [],
     updateNodeConfig: () => { throw new Error('no such node row'); },
@@ -137,6 +141,28 @@ describe('an entry that exists only on disk can be edited', () => {
     const after = readTooltypeMap(path.join(root, 'Drives.info'));
     expect(after.get('DRIVE.2')).toBe('DH2:Uploads');
     expect(after.get('DRIVE.1')).toBe('DH1:Files');
+  });
+
+  it('conferences: the fourteenth conference is editable with three rows', async () => {
+    // Conf1..14.info on disk, three rows in conference_config, so conferences
+    // 4-14 answered "not found" on every save.
+    seed(path.join(root, 'ConfConfig.info'), {
+      NCONFS: '14',
+      ...Object.fromEntries(
+        Array.from({ length: 14 }, (_, i) => [`NAME.${i + 1}`, `Conference ${i + 1}`])
+      ),
+      ...Object.fromEntries(
+        Array.from({ length: 14 }, (_, i) => [`LOCATION.${i + 1}`, `BBS:Conf${i + 1}`])
+      ),
+    });
+    for (let i = 1; i <= 14; i++) {
+      seed(path.join(root, `Conf${i}.info`), { NDIRS: '1', 'DLPATH.1': `BBS:Conf${i}/Files` });
+    }
+
+    const service = new ConferenceConfigService(emptyMirror());
+    await service.updateConferenceConfig(14, { ndirs: 3 } as never, CONTEXT);
+
+    expect(readTooltypeMap(path.join(root, 'Conf14.info')).get('NDIRS')).toBe('3');
   });
 
   it('nodes: a node with no row still reaches its .info', async () => {
