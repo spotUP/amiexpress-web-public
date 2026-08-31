@@ -11,6 +11,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ATTRACT_BLINK_FRAMES = exports.ATTRACT_FRAMES = exports.ATTRACT_ORDER = void 0;
+exports.titleWidth = titleWidth;
 exports.titleGrid = titleGrid;
 exports.titleLines = titleLines;
 exports.pointTablePanel = pointTablePanel;
@@ -46,6 +47,15 @@ const LETTERS = {
 const TITLE = 'FROGGER';
 const LETTER_WIDTH = 6;
 const LETTER_GAP = 3; // two clear columns once the shading has taken one
+/**
+ * How many columns the block title needs.
+ *
+ * Anything drawing the title has to make room for exactly this much, or the
+ * lines wrap and the letters come apart across doubled rows.
+ */
+function titleWidth() {
+    return Math.max(...titleGrid().map(row => row.length));
+}
 /**
  * The title as a grid of cells: '#' for the face of the letter, '+' for the
  * shaded edge, ' ' for nothing.

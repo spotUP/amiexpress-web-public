@@ -28,9 +28,12 @@ exports.theGameAreaFitsTheBoardExactly = theGameAreaFitsTheBoardExactly;
 exports.theBoardFillsTheScreenWidth = theBoardFillsTheScreenWidth;
 exports.theHudKeepsItsSingleRow = theHudKeepsItsSingleRow;
 exports.theThreePanesTileTheScreen = theThreePanesTileTheScreen;
+exports.theMenuBoxFitsTheTitle = theMenuBoxFitsTheTitle;
+exports.theTitleFitsTheWidthItIsGiven = theTitleFitsTheWidthItIsGiven;
 const assert_1 = __importDefault(require("assert"));
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const constants_1 = require("../game/constants");
+const attract_1 = require("../game/attract");
 function makeScreen() {
     return blessed_1.default.screen({
         smartCSR: true,
@@ -92,5 +95,38 @@ async function theThreePanesTileTheScreen() {
     const hudRows = 1;
     const footerRows = 3;
     assert_1.default.ok(hudRows + constants_1.GAME_AREA_HEIGHT + footerRows <= constants_1.SCREEN_HEIGHT, `the panes need ${hudRows + constants_1.GAME_AREA_HEIGHT + footerRows} rows of ${constants_1.SCREEN_HEIGHT}`);
+}
+/**
+ * The menu box has to be wide enough for the block title.
+ *
+ * Reported live 2026-08-31 with a screenshot: "menu broken every second line
+ * black". The title is 61 columns; the box was sized to 54 by eye, so every
+ * title row wrapped and each letter came apart across two rows with a black
+ * line through it. Same fault as the board's, in a second place.
+ */
+async function theMenuBoxFitsTheTitle() {
+    const screen = makeScreen();
+    const width = Math.max(54, (0, attract_1.titleWidth)());
+    const menuBox = blessed_1.default.box({
+        fixed: true,
+        parent: screen,
+        top: 'center',
+        left: 'center',
+        width: width + 2,
+        height: 20,
+        tags: true,
+        wrap: false,
+        border: { type: 'line' },
+    });
+    assert_1.default.ok(menuBox.iwidth >= (0, attract_1.titleWidth)(), `the title needs ${(0, attract_1.titleWidth)()} columns; the menu offers ${menuBox.iwidth}`);
+    assert_1.default.ok(menuBox.width <= constants_1.SCREEN_WIDTH, `the menu is ${menuBox.width} wide on an ${constants_1.SCREEN_WIDTH}-column screen`);
+}
+/** Every line of the title fits the width it is centred into. */
+async function theTitleFitsTheWidthItIsGiven() {
+    const width = Math.max(54, (0, attract_1.titleWidth)());
+    for (const line of (0, attract_1.titleLines)(width)) {
+        const visible = line.replace(/\{[^}]*\}/g, '');
+        assert_1.default.ok(visible.length <= width, `a title line is ${visible.length} columns in a ${width}-column space`);
+    }
 }
 //# sourceMappingURL=layout.test.js.map

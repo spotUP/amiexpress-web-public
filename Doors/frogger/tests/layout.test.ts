@@ -25,6 +25,7 @@ import {
   SCREEN_WIDTH, SCREEN_HEIGHT, GAME_AREA_HEIGHT,
   GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH,
 } from '../game/constants';
+import { titleWidth, titleLines } from '../game/attract';
 
 function makeScreen(): any {
   return blessed.screen({
@@ -114,4 +115,51 @@ export async function theThreePanesTileTheScreen(): Promise<void> {
     hudRows + GAME_AREA_HEIGHT + footerRows <= SCREEN_HEIGHT,
     `the panes need ${hudRows + GAME_AREA_HEIGHT + footerRows} rows of ${SCREEN_HEIGHT}`
   );
+}
+
+/**
+ * The menu box has to be wide enough for the block title.
+ *
+ * Reported live 2026-08-31 with a screenshot: "menu broken every second line
+ * black". The title is 61 columns; the box was sized to 54 by eye, so every
+ * title row wrapped and each letter came apart across two rows with a black
+ * line through it. Same fault as the board's, in a second place.
+ */
+export async function theMenuBoxFitsTheTitle(): Promise<void> {
+  const screen = makeScreen();
+  const width = Math.max(54, titleWidth());
+
+  const menuBox: any = blessed.box({
+    fixed: true,
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: width + 2,
+    height: 20,
+    tags: true,
+    wrap: false,
+    border: { type: 'line' },
+  });
+
+  assert.ok(
+    menuBox.iwidth >= titleWidth(),
+    `the title needs ${titleWidth()} columns; the menu offers ${menuBox.iwidth}`
+  );
+  assert.ok(
+    (menuBox.width as number) <= SCREEN_WIDTH,
+    `the menu is ${menuBox.width} wide on an ${SCREEN_WIDTH}-column screen`
+  );
+}
+
+/** Every line of the title fits the width it is centred into. */
+export async function theTitleFitsTheWidthItIsGiven(): Promise<void> {
+  const width = Math.max(54, titleWidth());
+
+  for (const line of titleLines(width)) {
+    const visible = line.replace(/\{[^}]*\}/g, '');
+    assert.ok(
+      visible.length <= width,
+      `a title line is ${visible.length} columns in a ${width}-column space`
+    );
+  }
 }

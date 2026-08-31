@@ -17,6 +17,13 @@ export declare const ATTRACT_FRAMES: Record<AttractPhase, number>;
 /** How fast the invitation blinks, in ticks per state. */
 export declare const ATTRACT_BLINK_FRAMES = 10;
 /**
+ * How many columns the block title needs.
+ *
+ * Anything drawing the title has to make room for exactly this much, or the
+ * lines wrap and the letters come apart across doubled rows.
+ */
+export declare function titleWidth(): number;
+/**
  * The title as a grid of cells: '#' for the face of the letter, '+' for the
  * shaded edge, ' ' for nothing.
  */
