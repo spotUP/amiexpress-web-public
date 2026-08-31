@@ -117,6 +117,11 @@ export function ConferencesPage() {
 
   const handleAdd = () => {
     resetForm();
+    // The number is not a choice. NCONFS is a COUNT and a conference is a
+    // POSITION, so a new one goes on the end - typing 7 on a 12-conference
+    // board asks for something the format cannot hold, and typing 14 asks the
+    // BBS to walk past two conferences that are not there.
+    setFormData((current) => ({ ...current, conference_id: conferences.length + 1 }));
     setEditingConference(null);
     setIsModalOpen(true);
   };
@@ -337,19 +342,20 @@ export function ConferencesPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="conference_id" className="label">Conference ID *</label>
+                  <label htmlFor="conference_id" className="label">Conference Number</label>
                   <input
                     id="conference_id"
                     type="number"
-                    min="1"
-                    max="99"
                     value={formData.conference_id}
-                    onChange={(e) => setFormData({ ...formData, conference_id: parseInt(e.target.value) })}
                     className="input-field w-full"
-                    required
-                    disabled={!!editingConference}
+                    readOnly
+                    aria-readonly="true"
                   />
-                  <p className="text-xs text-bbs-muted mt-1">Conference number (1-99)</p>
+                  <p className="text-xs text-bbs-muted mt-1">
+                    {editingConference
+                      ? 'A conference is a position on the board and keeps its number.'
+                      : `Assigned automatically - a new conference goes on the end, after ${conferences.length}.`}
+                  </p>
                 </div>
 
                 <div>

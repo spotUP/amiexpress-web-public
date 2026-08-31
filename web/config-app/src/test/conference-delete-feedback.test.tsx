@@ -68,6 +68,21 @@ async function openAndConfirm(tickTheBox = false) {
   await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 }
 
+describe('adding a conference', () => {
+  it('assigns the number instead of asking the sysop to invent one', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /add conference/i }));
+
+    // Two conferences on this board, so the new one is 3. NCONFS is a COUNT
+    // and a conference is a POSITION: typing 7 here asks for something the
+    // format cannot hold.
+    const number = (await screen.findByLabelText(/conference number/i)) as HTMLInputElement;
+    expect(number.value).toBe('3');
+    expect(number).toHaveAttribute('readonly');
+    expect(screen.getByText(/after 2/i)).toBeInTheDocument();
+  });
+});
+
 describe('deleting a conference from the page', () => {
   beforeEach(() => deleteConferenceConfig.mockClear());
 

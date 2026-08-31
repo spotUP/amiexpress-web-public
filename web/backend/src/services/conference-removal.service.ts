@@ -70,9 +70,10 @@ export interface ConferenceRemovalDeps {
     readAllUsers(): AccessCarrier[];
     updateUserDataFile(user: AccessCarrier, slotNumber: number): void;
   };
-  /** SQLite, for the mirror and the per-user read pointers. */
+  /** SQLite, for the mirror tables that are keyed by conference id. */
   sqlite?: {
     prepare(sql: string): { run(...params: unknown[]): unknown };
+    exec?(sql: string): unknown;
   };
   /** Conf.DB, the Amiga-side conference list. */
   confDb?: {
@@ -134,7 +135,7 @@ export class ConferenceRemovalService {
     this.shiftConfConfig(conferenceId, nconfs, toolTypes, confConfigPath);
     this.shiftConferenceIcons(conferenceId, nconfs);
     const usersMigrated = this.migrateUserAccess(conferenceId);
-    this.migrateReadPointers(conferenceId);
+    this.migrateMirrorTables(conferenceId);
     this.removeConfDbSlot(conferenceId);
 
     let filesRemoved: string | null = null;
@@ -253,17 +254,60 @@ console.error('[ConferenceRemoval] users mirror not migrated (disk is correct):'
     return migrated;
   }
 
-  /** Read pointers for the removed conference go; the ones above shift down. */
-  private migrateReadPointers(conferenceId: number): void {
+  /**
+   * Every SQLite table keyed by conference id moves with the disk.
+   *
+   * Six of them reference conferences(id), and this first shifted only
+   * conf_base - so the removed conference stayed in the `conferences` table
+   * and went on being listed by everything that reads the mirror, which is
+   * how a deleted conference kept showing up.
+   *
+   * Foreign keys are ON (database.ts:116), so parent and children cannot be
+   * moved one at a time: the shift runs inside a transaction with
+   * `defer_foreign_keys`, which holds the checks until commit. Children go
+   * first anyway, so a database without deferral still gets a valid order.
+   */
+  private migrateMirrorTables(conferenceId: number): void {
     const sqlite = this.deps.sqlite;
     if (!sqlite) return;
+
+    /** table, and the column that names a conference in it. */
+    const keyedByConference: Array<[string, string]> = [
+      ['message_bases', 'conferenceid'],
+      ['messages', 'conferenceid'],
+      ['file_areas', 'conferenceid'],
+      ['bulletins', 'conferenceid'],
+      ['mail_stats', 'conference_id'],
+      ['conf_base', 'conference_id'],
+    ];
+
+    const exec = (sql: string) => {
+      if (sqlite.exec) return sqlite.exec(sql);
+      return sqlite.prepare(sql).run();
+    };
+
     try {
-      sqlite.prepare('DELETE FROM conf_base WHERE conference_id = ?').run(conferenceId);
-      sqlite
-        .prepare('UPDATE conf_base SET conference_id = conference_id - 1 WHERE conference_id > ?')
-        .run(conferenceId);
+      exec('BEGIN IMMEDIATE');
+      exec('PRAGMA defer_foreign_keys = ON');
+
+      for (const [table, column] of keyedByConference) {
+        sqlite.prepare(`DELETE FROM ${table} WHERE ${column} = ?`).run(conferenceId);
+        sqlite
+          .prepare(`UPDATE ${table} SET ${column} = ${column} - 1 WHERE ${column} > ?`)
+          .run(conferenceId);
+      }
+
+      sqlite.prepare('DELETE FROM conferences WHERE id = ?').run(conferenceId);
+      sqlite.prepare('UPDATE conferences SET id = id - 1 WHERE id > ?').run(conferenceId);
+
+      exec('COMMIT');
     } catch (error) {
-console.error('[ConferenceRemoval] conf_base not migrated (disk is correct):', error);
+      try {
+        exec('ROLLBACK');
+      } catch {
+        // Nothing to roll back, or the connection is already clear.
+      }
+console.error('[ConferenceRemoval] mirror tables not migrated (disk is correct):', error);
     }
   }
 

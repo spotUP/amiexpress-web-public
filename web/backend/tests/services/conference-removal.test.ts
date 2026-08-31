@@ -56,8 +56,14 @@ function makeUsers(access: string[]) {
 /** Records the SQL the migration runs, so the shift can be asserted. */
 function makeSqlite() {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const statements: string[] = [];
   return {
     calls,
+    statements,
+    exec: (sql: string) => {
+      statements.push(sql);
+      return undefined;
+    },
     prepare: (sql: string) => ({
       run: (...params: unknown[]) => {
         calls.push({ sql: sql.replace(/\s+/g, ' ').trim(), params });
@@ -122,16 +128,51 @@ describe('removing a conference from the middle', () => {
     expect(users.users[2].confAccess).toBe('__________');
   });
 
-  it('drops the read pointers for it and shifts the ones above', async () => {
+  it('moves every mirror table keyed by conference, not just one', async () => {
     const sqlite = makeSqlite();
     const service = new ConferenceRemovalService(root, { sqlite });
 
     await service.remove(3);
 
-    const deleted = sqlite.calls.find((c) => c.sql.startsWith('DELETE FROM conf_base'));
-    const shifted = sqlite.calls.find((c) => c.sql.startsWith('UPDATE conf_base'));
-    expect(deleted?.params).toEqual([3]);
-    expect(shifted?.params).toEqual([3]);
+    // Six tables reference conferences(id), and the conferences row itself.
+    // Shifting only conf_base left the deleted conference in the mirror,
+    // where everything that reads it went on offering it.
+    for (const [table, column] of [
+      ['message_bases', 'conferenceid'],
+      ['messages', 'conferenceid'],
+      ['file_areas', 'conferenceid'],
+      ['bulletins', 'conferenceid'],
+      ['mail_stats', 'conference_id'],
+      ['conf_base', 'conference_id'],
+    ]) {
+      const deleted = sqlite.calls.find((c) => c.sql === `DELETE FROM ${table} WHERE ${column} = ?`);
+      const shifted = sqlite.calls.find(
+        (c) => c.sql === `UPDATE ${table} SET ${column} = ${column} - 1 WHERE ${column} > ?`
+      );
+      expect(deleted?.params).toEqual([3]);
+      expect(shifted?.params).toEqual([3]);
+    }
+
+    expect(
+      sqlite.calls.find((c) => c.sql === 'DELETE FROM conferences WHERE id = ?')?.params
+    ).toEqual([3]);
+    expect(
+      sqlite.calls.find((c) => c.sql === 'UPDATE conferences SET id = id - 1 WHERE id > ?')?.params
+    ).toEqual([3]);
+  });
+
+  it('moves them together, with the foreign keys deferred until commit', async () => {
+    const sqlite = makeSqlite();
+    const service = new ConferenceRemovalService(root, { sqlite });
+
+    await service.remove(3);
+
+    // Foreign keys are ON, so parent and children cannot move one at a time.
+    expect(sqlite.statements).toEqual([
+      'BEGIN IMMEDIATE',
+      'PRAGMA defer_foreign_keys = ON',
+      'COMMIT',
+    ]);
   });
 
   it('splices the slot out of the Amiga-side conference list', async () => {

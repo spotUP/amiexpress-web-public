@@ -275,18 +275,41 @@ console.error('[Webhook Init] Error initializing default webhook:', error);
  * conference has neither until something loads them, and ensureConferenceStructure
  * is idempotent.
  */
+/**
+ * Swap an array's CONTENTS, keeping the array itself.
+ *
+ * The conference list is handed to eight consumers at boot - the screen
+ * handler, the conference handler, the command handler's DI container, the
+ * message scan, the file handlers - and every one of them keeps the reference
+ * it was given (`_conferences = deps.conferences`). Rebinding the module-level
+ * variable therefore updates nothing but the variable: the board went on
+ * listing a conference the sysop had deleted, because every handler was still
+ * holding the array from boot.
+ *
+ * Replacing the contents reaches all of them at once, including the ones this
+ * function has never heard of.
+ */
+function replaceInPlace<T>(target: T[], next: T[]): T[] {
+  target.splice(0, target.length, ...next);
+  return target;
+}
+
 export async function refreshConferencesFromDisk(bbsRootOverride?: string): Promise<any[]> {
   const bbsRoot = bbsRootOverride || process.env.BBS_ROOT || config.get('dataDir');
 
   const confConfig = loadConfConfig(bbsRoot);
 
+  // Built here, then spliced into the module arrays below. See replaceInPlace:
+  // reassigning them strands every handler that already holds the old array.
+  let next: any[] = [];
+
   if (confConfig && confConfig.confCount > 0) {
     console.log(`[INIT] Found ${confConfig.confCount} conferences in ConfConfig.info`);
     // Create conferences array from ConfConfig.info (express.e:8499-8512 uses cmds.numConf from this file)
-    conferences = [];
+    next = [];
     for (let i = 0; i < confConfig.confCount; i++) {
       const entry = confConfig.entries[i];
-      conferences.push({
+      next.push({
         id: i + 1,
         name: entry.name || `Conference ${i + 1}`,
         location: entry.location || `BBS:Conf${i + 1}/`
@@ -296,7 +319,7 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
     // Fallback: check for Conf.DB headers (original AmiExpress format)
     const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
     if (confDbHeaders.length > 0) {
-      conferences = confDbHeaders.map((header: any, i: number) => ({
+      next = confDbHeaders.map((header: any, i: number) => ({
         id: i + 1,
         name: header.name || `Conference ${i + 1}`,
         location: `BBS:Conf${i + 1}/`
@@ -307,9 +330,9 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
       const confNumbers = confFiles.map((f: string) => parseInt(f.match(/\d+/)?.[0] || '0')).filter((n: number) => n > 0).sort((a: number, b: number) => a - b);
       if (confNumbers.length > 0) {
         const maxConf = Math.max(...confNumbers);
-        conferences = [];
+        next = [];
         for (let i = 1; i <= maxConf; i++) {
-          conferences.push({
+          next.push({
             id: i,
             name: `Conference ${i}`,
             location: `BBS:Conf${i}/`
@@ -317,14 +340,16 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
         }
       } else {
         // Absolute fallback: use database
-        conferences = await db.getConferences();
-        if (conferences.length === 0) {
+        next = await db.getConferences();
+        if (next.length === 0) {
           await db.initializeDefaultData();
-          conferences = await db.getConferences();
+          next = await db.getConferences();
         }
       }
     }
   }
+
+  replaceInPlace(conferences, next);
 
   // Mirror disk conferences into the SQLite `conferences` table so
   // web paths that resolve by conf-id (db.getFileAreas,
@@ -336,11 +361,14 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
   // a one-way mirror, not a reverse sync.
   try {
     const syncResult = await db.syncConferencesFromDisk(
-      conferences.map((c: any) => ({ id: c.id, name: c.name, location: c.location }))
+      conferences.map((c: any) => ({ id: c.id, name: c.name, location: c.location })),
+      // This IS the whole board, read out of ConfConfig.info a few lines up,
+      // so a row the list does not mention is a conference that is gone.
+      { complete: true }
     );
-    if (syncResult && (syncResult.inserted > 0 || syncResult.renamed > 0)) {
+    if (syncResult && (syncResult.inserted > 0 || syncResult.renamed > 0 || syncResult.pruned > 0)) {
       console.log(
-        `[INIT] Synced conferences table from disk: ${syncResult.inserted} inserted, ${syncResult.renamed} renamed`
+        `[INIT] Synced conferences table from disk: ${syncResult.inserted} inserted, ${syncResult.renamed} renamed, ${syncResult.pruned} pruned`
       );
     }
   } catch (e: any) {
@@ -354,14 +382,14 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
   // express.e:2048-2112 - Reads from {ConfLocation}/MsgBases.info or defaults to 1 base per conference
   const { MessageBaseLoaderService } = await import('../services/message-base-loader.service.js');
   const messageBaseLoader = new MessageBaseLoaderService(bbsRoot);
-  messageBases = messageBaseLoader.loadAllMessageBases(conferences);
+  replaceInPlace(messageBases, messageBaseLoader.loadAllMessageBases(conferences));
 
   // Inject dependencies into conference handler
   setConferencesForConferenceHandler(conferences);
   setMessageBases(messageBases);
 
   // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
-  fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
+  replaceInPlace(fileAreas, loadFileAreasFromDisk(bbsRoot, conferences));
   await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
 
   // Inject dependencies into file handler. The live F-command path reads

@@ -122,9 +122,23 @@ console.error(`[Database] Failed to sync conference to disk:`, error);
    * existing createConference / updateConference Conf.DB write paths.
    * We're syncing FROM disk, not back to it.
    */
-  async syncConferencesFromDisk(diskConfs: { id: number; name: string; location?: string }[]): Promise<{ inserted: number; renamed: number }> {
+  async syncConferencesFromDisk(
+    diskConfs: { id: number; name: string; location?: string }[],
+    options: {
+      /**
+       * True when `diskConfs` is the WHOLE board, which is the only case in
+       * which a row missing from it means the conference is gone.
+       *
+       * The boot and admin-write paths pass the complete list read out of
+       * ConfConfig.info. Callers that sync a fragment - the repository's own
+       * tests do, with ids well outside any real board - must not have the
+       * rest of the table deleted underneath them.
+       */
+      complete?: boolean;
+    } = {}
+  ): Promise<{ inserted: number; renamed: number; pruned: number }> {
     if (!Array.isArray(diskConfs) || diskConfs.length === 0) {
-      return { inserted: 0, renamed: 0 };
+      return { inserted: 0, renamed: 0, pruned: 0 };
     }
     let inserted = 0;
     let renamed = 0;
@@ -183,7 +197,63 @@ console.error(`[Database] Failed to sync conference to disk:`, error);
         }
       }
     }
-    return { inserted, renamed };
+    const pruned = options.complete ? this.pruneConferencesMissingFrom(diskConfs) : 0;
+    return { inserted, renamed, pruned };
+  }
+
+  /**
+   * Drop mirror rows for conferences the disk no longer has.
+   *
+   * This sync inserted and renamed and never removed, so a board that went
+   * from fourteen conferences to twelve kept fourteen rows - and everything
+   * reading the mirror went on offering two conferences that had been
+   * deleted. "my deleted conf still shows in the bbs" was exactly that.
+   *
+   * By membership rather than by "id above the count": a board is normally
+   * numbered 1..NCONFS, but the rule that matters is that the mirror holds
+   * what the disk holds, and counting assumes a contiguity nothing enforces.
+   *
+   * The rows that reference a pruned conference go with it: foreign keys are
+   * ON and four of the six referencing tables have no cascade, so otherwise
+   * the DELETE simply fails and the stale conference stays. They describe a
+   * conference that no longer exists; the messages and files themselves are
+   * on disk, where the removal left them.
+   */
+  private pruneConferencesMissingFrom(diskConfs: { id: number }[]): number {
+    const keyedByConference: Array<[string, string]> = [
+      ['message_bases', 'conferenceid'],
+      ['messages', 'conferenceid'],
+      ['file_areas', 'conferenceid'],
+      ['bulletins', 'conferenceid'],
+      ['mail_stats', 'conference_id'],
+      ['conf_base', 'conference_id'],
+    ];
+
+    const keep = diskConfs.map(c => c.id).filter(id => Number.isInteger(id));
+    if (keep.length === 0) return 0;
+    const placeholders = keep.map(() => '?').join(',');
+
+    try {
+      const stale = this.prepare(
+        `SELECT id FROM conferences WHERE id NOT IN (${placeholders})`
+      ).all(...keep) as Array<{ id: number }>;
+      if (stale.length === 0) return 0;
+
+      for (const [table, column] of keyedByConference) {
+        try {
+          this.prepare(`DELETE FROM ${table} WHERE ${column} NOT IN (${placeholders})`).run(...keep);
+        } catch (childError) {
+console.warn(`[ConferenceRepository] could not prune ${table}:`, childError);
+        }
+      }
+
+      this.prepare(`DELETE FROM conferences WHERE id NOT IN (${placeholders})`).run(...keep);
+console.log(`[ConferenceRepository] Pruned ${stale.length} conference row(s) the disk no longer has: ${stale.map(r => r.id).join(', ')}`);
+      return stale.length;
+    } catch (error) {
+console.warn('[ConferenceRepository] conference prune failed (disk is still the truth):', error);
+      return 0;
+    }
   }
 
   async getConferences(): Promise<Conference[]> {
