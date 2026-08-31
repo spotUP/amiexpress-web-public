@@ -196,6 +196,27 @@
               done
               echo "code sync completed at $(docker exec amiexpress-bbs cat /app/data/bbs/.sync-complete 2>/dev/null)"
 
+              # Tracked files: did the sync that protects sysop edits run?
+              #
+              # The entrypoint's own output goes to the container log, not to
+              # this one, so a deploy could report success while the tracked
+              # pass silently did nothing - and nobody would find out until a
+              # sysop's saved settings came back reverted. Surface it here.
+              echo "== tracked-file sync =="
+              if docker exec amiexpress-bbs test -f /app/data/bbs/.deployed-manifest; then
+                TRACKED_COUNT=$(docker exec amiexpress-bbs sh -c 'wc -l < /app/data/bbs/.deployed-manifest' | tr -d ' ')
+                echo "manifest: $TRACKED_COUNT files tracked"
+                docker logs amiexpress-bbs 2>&1 | grep -E '\[Entrypoint\].*Tracked:' | tail -1 || true
+                if [ "$TRACKED_COUNT" -lt 100 ]; then
+                  echo "ERROR: only $TRACKED_COUNT files tracked; Commands/ alone should be 150+" >&2
+                  exit 1
+                fi
+              else
+                echo "ERROR: no /app/data/bbs/.deployed-manifest - the tracked sync did not run" >&2
+                docker logs amiexpress-bbs 2>&1 | tail -40 >&2
+                exit 1
+              fi
+
               # NO `| head` on this pipeline. head closes the pipe as soon as
               # it has enough, the producer takes SIGPIPE, and under `set -o
               # pipefail` that fails the whole deploy - which is exactly what
