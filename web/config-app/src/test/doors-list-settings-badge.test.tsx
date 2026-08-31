@@ -10,6 +10,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -32,10 +33,21 @@ const DOORS = [
   },
 ];
 
+const SETTINGS_VIEW = {
+  manifest: {
+    command: 'LIVECHAT',
+    settings: [{ key: 'defaultChannel', label: 'Default channel', type: 'string', default: 'general' }],
+  },
+  values: { defaultChannel: 'general' },
+  secretsSet: [] as string[],
+};
+
 vi.mock('../api/client', () => ({
   apiClient: {
     getDoors: vi.fn(async () => ({ success: true, data: DOORS })),
     getInfoFile: vi.fn(async () => ({ success: true, data: { tooltypes: [] } })),
+    getDoorSettings: vi.fn(async (_command: string) => ({ success: true, data: SETTINGS_VIEW })),
+    saveDoorSettings: vi.fn(async (_command: string, _values: Record<string, unknown>) => ({ success: true, data: SETTINGS_VIEW })),
   },
 }));
 
@@ -68,5 +80,28 @@ describe('the doors list', () => {
 
     const grandmaster = await screen.findByText('Grandmaster');
     expect(within(grandmaster.closest('td') as HTMLElement).queryByText('Settings')).toBeNull();
+  });
+
+  // The badge sent sysops to the screen they open to configure a door - the
+  // pencil - and the form was only in the .info editor behind another icon,
+  // so the door looked exactly like every other one.
+  it('shows the door settings on the screen the badge sends a sysop to', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit BBSLink'));
+
+    expect(await screen.findByText('Door settings')).toBeTruthy();
+    await waitFor(() => expect(screen.getByLabelText('Default channel')).toBeTruthy());
+  });
+
+  it('leaves the edit screen of a door with no settings as it was', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit Grandmaster'));
+
+    await screen.findByDisplayValue('Grandmaster');
+    expect(screen.queryByText('Door settings')).toBeNull();
   });
 });
