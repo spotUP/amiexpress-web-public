@@ -55,6 +55,8 @@ export type {
 
 // Core types (for engines) - re-export AnsiColor from core to override common version
 export { AnsiColor } from './core/types';
+export type { DoorSetting, DoorSettingsManifest, DoorSettingValues } from './core/types';
+export { readDoorSettings, readManifest as readDoorSettingsManifest, readValues as readDoorSettingValues, DoorSettingsError, MANIFEST_FILE as DOOR_SETTINGS_MANIFEST_FILE, VALUES_FILE as DOOR_SETTINGS_VALUES_FILE } from './core/settings';
 
 // Core utilities - ANSI string manipulation
 export * from './core/ansi-string-utils';

@@ -418,6 +418,18 @@ class ApiClient {
     });
   }
 
+  // Door settings - what a door declares it can be configured with
+  async getDoorSettings(command: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/settings`);
+  }
+
+  async saveDoorSettings(command: string, values: Record<string, string | number | boolean>) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ values }),
+    });
+  }
+
   // Security Level Access
   async getSecurityAccessForLevel(level: number) {
     return this.request<ApiResponse>(`${API_BASE}/config/security/${level}`);

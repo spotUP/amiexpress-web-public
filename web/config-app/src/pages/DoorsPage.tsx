@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Modal } from '../components/ui/Modal';
+import { DoorSettingsForm } from '../components/DoorSettingsForm';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -577,6 +578,19 @@ export function DoorsPage() {
             </div>
 
             <div className="p-6">
+              {/*
+                What the DOOR says it can be configured with, when it says
+                anything - Doors/<door>/door.settings.json. Renders nothing for
+                a door that declares none, which is most of them. Above the
+                tooltypes because a door's own settings are what a sysop is
+                usually looking for; the tooltypes underneath are what
+                AmiExpress reads.
+              */}
+              <div className="mb-6 border-b border-bbs-primary/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">Door settings</h3>
+                <DoorSettingsForm command={editingInfoDoor.door_command} />
+              </div>
+
               <div className="mb-4 flex justify-between items-center">
                 <p className="text-bbs-muted text-sm">
                   Edit tooltypes for this door. Changes are saved back to the .info file.

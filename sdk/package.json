@@ -146,6 +146,12 @@
     "./ncurses": {
       "types": "./dist/engines/ui/ncurses/index.d.ts",
       "default": "./dist/engines/ui/ncurses/index.js"
+    },
+    "./settings": {
+      "types": "./dist/core/settings.d.ts",
+      "import": "./dist/core/settings.js",
+      "require": "./dist/core/settings.js",
+      "default": "./dist/core/settings.js"
     }
   },
   "scripts": {

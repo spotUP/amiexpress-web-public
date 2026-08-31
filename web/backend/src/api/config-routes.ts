@@ -10,6 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel } from '../services/config-services/door-info-file.service';
+import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
@@ -471,6 +472,64 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
    * POST /api/config/doors
    * Create new door
    */
+  /**
+   * GET /api/config/doors/:command/settings
+   *
+   * What this door says it can be configured with, and what the sysop set.
+   * 404 when the door declares nothing - which is most of them, and is not an
+   * error. Secrets come back empty with their keys listed in secretsSet.
+   */
+  router.get('/doors/:command/settings', async (req: Request, res: Response) => {
+    try {
+      const command = String(req.params.command).toUpperCase();
+      const { getDoors } = require('../handlers/door.handler');
+      const door = getDoors().find((d: any) => String(d.command).toUpperCase() === command);
+      if (!door) return res.status(404).json({ success: false, message: `No door ${command}` });
+
+      const doorDir = doorDirectoryFor(config.get('dataDir'), door);
+      if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
+
+      const view = readDoorSettingsView(doorDir);
+      if (!view) return res.status(404).json({ success: false, message: `${command} declares no settings` });
+
+      sendResponse(res, view);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * PUT /api/config/doors/:command/settings
+   *
+   * Writes Doors/<door>/settings.json. A key the door does not declare is
+   * refused by name rather than written: a file full of keys nothing reads is
+   * how ACS files came to hold tooltypes AmiExpress ignores.
+   */
+  router.put('/doors/:command/settings', async (req: any, res: Response) => {
+    try {
+      const command = String(req.params.command).toUpperCase();
+      const { getDoors } = require('../handlers/door.handler');
+      const door = getDoors().find((d: any) => String(d.command).toUpperCase() === command);
+      if (!door) return res.status(404).json({ success: false, message: `No door ${command}` });
+
+      const doorDir = doorDirectoryFor(config.get('dataDir'), door);
+      if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
+
+      const incoming = req.body?.values ?? req.body;
+      if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+        return handleError(res, new Error('Expected an object of setting values'));
+      }
+
+      writeDoorSettings(doorDir, incoming);
+      sendResponse(res, readDoorSettingsView(doorDir), `${command} settings saved`);
+    } catch (error) {
+      if (error instanceof UnknownDoorSettingError) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+      handleError(res, error);
+    }
+  });
+
   router.post('/doors', async (req: any, res: Response) => {
     try {
       const context = getRequestContext(req);

@@ -27,5 +27,10 @@ module.exports = {
   // Strip them so jest's resolver finds the underlying `.ts` source.
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // The SDK's settings module, from source. The package root pulls in the
+    // server bundle and its audio engine (Tone.js is ESM and jest cannot parse
+    // it), and the installed package is a symlink to a built dist that a
+    // worktree does not rebuild.
+    '^@amiexpress/bbs-door-sdk/settings$': '<rootDir>/../../sdk/core/settings',
   },
 };

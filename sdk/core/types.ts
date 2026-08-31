@@ -34,6 +34,44 @@ export interface BBSUser {
  * Door Configuration
  * Settings for initializing a BBS door
  */
+/**
+ * One thing a sysop can set on a door, from the admin.
+ *
+ * A door declares these in `door.settings.json` beside its package.json - as
+ * DATA, not as exported code, because the backend has to learn what a door can
+ * be asked without executing it. Importing 34 door modules to build an admin
+ * page runs each door's top-level code, and a door that is broken or halfway
+ * through development would take the page down with it. JSON is also readable
+ * before a door has ever been built.
+ */
+export interface DoorSetting {
+  /** Stable key. What lands in settings.json and what the door reads. */
+  key: string;
+  /** What the sysop sees. */
+  label: string;
+  type: 'string' | 'number' | 'boolean' | 'choice';
+  /** Required when type is 'choice', ignored otherwise. */
+  choices?: Array<{ value: string; label: string }>;
+  default?: string | number | boolean;
+  /** One line under the control. */
+  help?: string;
+  /** Numbers only. */
+  min?: number;
+  max?: number;
+  /** Stored, but never returned by the API - a password field in the admin. */
+  secret?: boolean;
+}
+
+/** A door's whole declaration: `Doors/<door>/door.settings.json`. */
+export interface DoorSettingsManifest {
+  /** The door's command, matching `bbsCommand` in its package.json. */
+  command: string;
+  settings: DoorSetting[];
+}
+
+/** What a door gets back: its declared keys, with the sysop's values applied. */
+export type DoorSettingValues = Record<string, string | number | boolean>;
+
 export interface DoorConfig {
   /** Door name (displayed to users) */
   name: string;

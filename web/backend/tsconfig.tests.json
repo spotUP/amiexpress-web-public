@@ -2,12 +2,23 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": "../..",
-    "types": ["node", "jest"],
+    "types": [
+      "node",
+      "jest"
+    ],
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "better-sqlite3": ["./node_modules/@types/better-sqlite3"]
+      "better-sqlite3": [
+        "./node_modules/@types/better-sqlite3"
+      ],
+      "@amiexpress/bbs-door-sdk/settings": [
+        "../../sdk/core/settings"
+      ]
     }
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": [
+    "src/**/*",
+    "tests/**/*"
+  ]
 }
