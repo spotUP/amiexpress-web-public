@@ -3,6 +3,7 @@
  * Main game logic and state management
  */
 import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, LEVEL_CLEAR_WIPE_COLUMNS, BONUS_PANEL_FRAMES, INTRO_PANEL_FRAMES, LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, MARKER_CYCLE, MARKER_CYCLE_FRAMES, SKULL_CHEW_FRAMES, GAME_OVER_BLINK_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, CAPTURE_POINTS, grantLife, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY, SKILL_LEVELS, LEVELS_PER_LAP, FINAL_LAP_MESSAGE, HURRY_SPEED_SCALE, MULTIPLIER_REJOIN_CELLS, MULTIPLIER_FIRST, MULTIPLIER_CHAINED, MULTIPLIER_CHAIN_MS, WARP_OPENING_MS, WARP_OPEN_MS, SKULL_STUN_MS, RESPAWN_INVULNERABLE_MS, INVULNERABLE_BLINK_FRAMES, } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 import { artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
@@ -13,6 +14,14 @@ import { PowerUpSystem } from './powerups';
 export class QixEngine {
     constructor(data, renderCallback) {
         this.lastMoveTime = 0;
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The one queue the door drains. PowerUpSystem keeps its own and this
+         * engine empties it into here each tick, so the door has a single place
+         * to look rather than one per subsystem.
+         */
+        this.cues = new SfxCues();
         /**
          * The picture hidden behind the playfield, revealed as area is claimed.
          * Null when the board has no art, in which case claimed area is drawn as
@@ -184,6 +193,10 @@ export class QixEngine {
         this.enemySystem.update(this.enemySpeedScale());
         // Released letters and power-ups travel the field on their own.
         this.powerUpSystem.updateMovement();
+        // Everything the power-up system queued this tick becomes the engine's,
+        // so the door drains one queue rather than hunting for subsystems.
+        for (const cue of this.powerUpSystem.cues.drain())
+            this.cues.push(cue);
         // Update fuse if drawing and stopped
         if (d.marker.isDrawing && d.currentStix) {
             d.stopTimer += GAME_TICK_MS;
@@ -243,6 +256,7 @@ export class QixEngine {
         const thresholds = (SKILL_LEVELS[d.skill] ?? SKILL_LEVELS.medium).bonusLives;
         while (d.bonusLivesAwarded < thresholds.length &&
             d.score >= thresholds[d.bonusLivesAwarded]) {
+            this.cues.push('1up');
             grantLife(d);
             d.bonusLivesAwarded++;
         }
@@ -283,6 +297,7 @@ export class QixEngine {
             return false;
         }
         d.warp = null;
+        this.cues.push('warp');
         d.state = 'levelTransition';
         d.transitionMessage = 'WARP';
         d.transitionTimer = 30;
@@ -312,6 +327,10 @@ export class QixEngine {
         const now = Date.now();
         const chained = d.lastMultiplier >= MULTIPLIER_FIRST &&
             now - d.lastMultiplierAt <= MULTIPLIER_CHAIN_MS;
+        // A rejoin is a deliberate piece of skill worth 20x or 30x, and it is
+        // invisible on the board - the sound is the only way the player learns
+        // they managed one.
+        this.cues.push('powerup');
         d.lastMultiplier = chained ? MULTIPLIER_CHAINED : MULTIPLIER_FIRST;
         d.lastMultiplierAt = now;
         d.scoreMultiplier = d.lastMultiplier;
@@ -330,6 +349,9 @@ export class QixEngine {
         const config = getLevelConfig(d.level);
         d.timeMeter += GAME_TICK_MS / config.timeMeterMs;
         if (d.timeMeter >= 1) {
+            // Two more Skulls on the field. The player needs to know without
+            // watching the border.
+            this.cues.push('boop');
             d.timeMeter = 0;
             this.enemySystem.releaseSkulls(SKULLS_PER_RELEASE, config.sparxSpeed);
         }
@@ -345,6 +367,8 @@ export class QixEngine {
     beginFill(points) {
         if (points.length === 0)
             return;
+        // Ground claimed. The single sound the whole game is played for.
+        this.cues.push('success');
         const byColumn = new Map();
         for (const point of points) {
             const column = byColumn.get(point.x);
@@ -831,6 +855,9 @@ export class QixEngine {
             return;
         if (d.stopTimer < FUSE_START_DELAY)
             d.stopTimer = FUSE_START_DELAY;
+        // Gapped hard by the door: the fuse relights every tick it burns, and
+        // the warning is meant to be a warning, not a siren.
+        this.cues.push('alarm');
         this.enemySystem.updateFuse(d.currentStix.points);
     }
     /**
@@ -854,6 +881,7 @@ export class QixEngine {
         const currentCell = d.field[d.marker.y][d.marker.x];
         if (currentCell !== 'border' && currentCell !== 'claimed')
             return;
+        this.cues.push('switch');
         d.marker.isDrawing = true;
         d.currentStix = {
             points: [{ x: d.marker.x, y: d.marker.y }],
@@ -973,6 +1001,7 @@ export class QixEngine {
      */
     handleDeath() {
         const d = this.data;
+        this.cues.push('death');
         d.lives--;
         d.invulnerableUntil = Date.now() + RESPAWN_INVULNERABLE_MS;
         // Where the marker goes back to.
@@ -997,6 +1026,7 @@ export class QixEngine {
         d.fuse = null;
         d.stopTimer = 0;
         if (d.lives <= 0) {
+            this.cues.push('gameover');
             d.state = 'gameover';
         }
         else if (retreat && this.drawingSystem.isWalkable(retreat)) {
@@ -1052,8 +1082,10 @@ export class QixEngine {
         // startLevelOutro, which also owns the tally the player is shown.
         // There was a second area bonus here as well, so every cleared level
         // paid for the same percentage twice.
+        this.cues.push('level-up');
         // Extra life for 98%+
         if (d.claimedPercent >= EXTRA_LIFE_PERCENT) {
+            this.cues.push('1up');
             grantLife(d);
         }
         this.startLevelOutro();

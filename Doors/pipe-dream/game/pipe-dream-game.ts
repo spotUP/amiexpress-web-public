@@ -24,12 +24,22 @@ import {
   getLevelConfig,
   getPipesForLevel,
 } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 
 export class PipeDreamGame {
   private data: PipeDreamData;
   private renderCallback: (content: string) => void;
   private onGameOver: () => void;
   private onLevelComplete: () => void;
+
+  /**
+   * What just happened, for whoever is listening.
+   *
+   * The game names the moment; the door decides whether anybody hears it.
+   * Nothing in here touches a socket, so the sound design is assertable in
+   * a test with no audio anywhere near it.
+   */
+  readonly cues = new SfxCues();
 
   constructor(
     data: PipeDreamData,
@@ -161,6 +171,7 @@ export class PipeDreamGame {
   }
 
   private startFlow(): void {
+    this.cues.push('alarm');
     this.data.flowStarted = true;
     this.data.flowState = {
       x: this.data.startX,
@@ -208,11 +219,13 @@ export class PipeDreamGame {
         this.data.score += SCORES.pipeFilled;
       }
 
+      this.cues.push('blip');
       this.data.pipesUsed++;
 
       // Check for end goal
       if (flow.x === this.data.endX && flow.y === this.data.endY && this.data.hasEnd) {
         this.data.reachedEnd = true;
+        this.cues.push('powerup');
         this.data.score += SCORES.reachedEnd;
       }
 
@@ -332,10 +345,14 @@ export class PipeDreamGame {
       const levelBonus = this.data.level * SCORES.levelBonus;
       const endBonus = this.data.reachedEnd ? SCORES.reachedEnd : 0;
 
+      this.cues.push('level-up');
       this.data.score += unusedBonus + levelBonus + endBonus;
       this.data.state = 'levelComplete';
       this.onLevelComplete();
     } else {
+      // The water ran out of pipe. One sound, not a death and a game over:
+      // Pipe Dream has no lives, so the leak IS the end.
+      this.cues.push('gameover');
       this.data.state = 'gameover';
       this.onGameOver();
     }
@@ -381,6 +398,7 @@ export class PipeDreamGame {
     cell.pipe = pipe;
     cell.fillLevel = 0;
 
+    this.cues.push('switch');
     this.data.score += SCORES.pipeUsed;
 
     // Refill queue
@@ -394,6 +412,7 @@ export class PipeDreamGame {
     if (this.data.pipeQueue.length === 0) return;
 
     // Discard current pipe (small penalty)
+    this.cues.push('boop');
     this.data.pipeQueue.shift();
     this.data.pipeQueue.push(this.getRandomPipe());
 

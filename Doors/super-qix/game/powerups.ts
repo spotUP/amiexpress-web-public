@@ -23,11 +23,20 @@ import {
   POWERUP_DRIFT_SPEED,
   grantLife
 } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 
 /**
  * Power-up system for spawning and managing power-ups
  */
 export class PowerUpSystem {
+  /**
+   * What just happened here, drained by QixEngine each tick.
+   *
+   * The engine owns the one queue the door reads, so this system keeps its
+   * own and hands it over rather than reaching for a socket it cannot see.
+   */
+  readonly cues = new SfxCues();
+
   private data: SuperQixData;
 
   constructor(data: SuperQixData) {
@@ -433,14 +442,17 @@ export class PowerUpSystem {
 
     switch (powerUp.type) {
       case 'speed':
+        this.cues.push('dash');
         this.applySpeedBoost();
         break;
 
       case 'shield':
+        this.cues.push('powerup');
         d.marker.hasShield = true;
         break;
 
       case 'freeze':
+        this.cues.push('switch');
         this.applyFreeze();
         break;
 
@@ -448,12 +460,14 @@ export class PowerUpSystem {
         // FAQ 2.3.1: the Warp "opens a small doorway at the point you picked
         // it up". Reaching it while open is what advances the level; picking
         // the power-up up does not by itself.
+        this.cues.push('teleport');
         d.warp = { x: powerUp.x, y: powerUp.y, openedAt: Date.now() };
         break;
 
       case 'oneUp':
         // FAQ 2.3.1: "An extremely rare bonus, which gives you one free life."
         // Through grantLife, so the ceiling holds however the life arrives.
+        this.cues.push('1up');
         grantLife(d);
         break;
 
@@ -480,10 +494,12 @@ export class PowerUpSystem {
 
     if (needed && !alreadyHave) {
       // Banked, not paid. The end-of-level bonus settles it.
+      this.cues.push('pickup');
       d.collectedLetters.push(letter);
       return;
     }
 
+    this.cues.push('coin');
     d.score += SPARE_LETTER_POINTS;
   }
 

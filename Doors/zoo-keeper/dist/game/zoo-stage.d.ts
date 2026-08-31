@@ -3,6 +3,7 @@
  * The main gameplay where Zeke runs around the perimeter building walls
  */
 import { ZooKeeperData, Direction } from './types';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 type RenderCallback = (content: string) => void;
 /**
  * Main game engine class
@@ -13,6 +14,14 @@ export declare class ZooKeeperGame {
     private moveTimer;
     private animalMoveTimer;
     private lastExtraLifeScore;
+    /**
+     * What just happened, for whoever is listening.
+     *
+     * The game names the moment; the door decides whether anybody hears it.
+     * Nothing in here touches a socket, so the sound design is assertable in
+     * a test with no audio anywhere near it.
+     */
+    readonly cues: SfxCues;
     constructor(data: ZooKeeperData, renderCallback: RenderCallback);
     /**
      * Initialize a new zoo stage
@@ -81,7 +90,12 @@ export declare class ZooKeeperGame {
     /**
      * Check collisions between Zeke and animals
      */
-    private checkCollisions;
+    /**
+     * Public because the door's own tests drive them, the way Frogger's do:
+     * a test needs to take one step without letting a whole update() move
+     * everything it just placed.
+     */
+    checkCollisions(): void;
     /**
      * Capture escaped animal with net
      */
@@ -89,11 +103,21 @@ export declare class ZooKeeperGame {
     /**
      * Check bonus item collection
      */
-    private checkBonusItems;
+    /**
+     * Public because the door's own tests drive them, the way Frogger's do:
+     * a test needs to take one step without letting a whole update() move
+     * everything it just placed.
+     */
+    checkBonusItems(): void;
     /**
      * Check for extra life
      */
-    private checkExtraLife;
+    /**
+     * Public because the door's own tests drive them, the way Frogger's do:
+     * a test needs to take one step without letting a whole update() move
+     * everything it just placed.
+     */
+    checkExtraLife(): void;
     /**
      * Level complete
      */

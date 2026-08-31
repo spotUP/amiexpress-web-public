@@ -6,9 +6,20 @@
  * way of getLevelConfig; nothing here invents a count or a direction.
  */
 import { FroggerData, Direction } from './types';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 export declare class FroggerGame {
     private data;
     private renderCallback;
+    /**
+     * What just happened, for whoever is listening.
+     *
+     * The game never touches a socket: it names the moment and the door
+     * decides whether anybody hears it. That keeps the sound design
+     * assertable - a test can step the game and check that drowning sounds
+     * different from being run over - and it keeps attract mode silent, since
+     * the demo's cues are simply never drained.
+     */
+    readonly cues: SfxCues;
     constructor(data: FroggerData, onRender: (content: string) => void);
     /**
      * The game's own clock, in milliseconds of play.

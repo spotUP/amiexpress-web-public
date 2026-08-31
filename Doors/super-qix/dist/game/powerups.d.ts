@@ -3,10 +3,18 @@
  * Handles power-up spawning, effects, and letter collection
  */
 import { SuperQixData, PowerUp, Marker, Point } from './types';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 /**
  * Power-up system for spawning and managing power-ups
  */
 export declare class PowerUpSystem {
+    /**
+     * What just happened here, drained by QixEngine each tick.
+     *
+     * The engine owns the one queue the door reads, so this system keeps its
+     * own and hands it over rather than reaching for a socket it cannot see.
+     */
+    readonly cues: SfxCues;
     private data;
     constructor(data: SuperQixData);
     /**

@@ -4,8 +4,17 @@
  */
 import { EMPTY, paint, playerCell, enemyCell, eggCell, pterodactylCell, platformCell, lavaCell, } from './sprites';
 import { GAME_WIDTH, GAME_HEIGHT, GRAVITY, FLAP_POWER, MAX_FALL_SPEED, MAX_RISE_SPEED, HORIZONTAL_SPEED, HORIZONTAL_DRAG, GROUND_FRICTION, LANCE_HEIGHT_ADVANTAGE, COLLISION_DISTANCE, SCORES, RESPAWN_TIME, INVINCIBLE_TIME, STANDARD_PLATFORMS, LAVA_PITS, ENEMY_COLORS, getWaveConfig, } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 export class JoustGame {
     constructor(data, renderCallback, onGameOver, onWaveComplete) {
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The game names the moment; the door decides whether anybody hears it.
+         * Nothing in here touches a socket, so the sound design is assertable in
+         * a test with no audio anywhere near it.
+         */
+        this.cues = new SfxCues();
         this.data = data;
         this.renderCallback = renderCallback;
         this.onGameOver = onGameOver;
@@ -106,6 +115,7 @@ export class JoustGame {
         this.checkCollisions();
         // Check wave complete
         if (this.data.enemies.length === 0 && this.data.eggs.length === 0) {
+            this.cues.push('level-up');
             this.data.score += SCORES.survivalBonus;
             this.data.state = 'waveComplete';
             this.onWaveComplete();
@@ -342,6 +352,7 @@ export class JoustGame {
         return false;
     }
     hatchEgg(egg) {
+        this.cues.push('blip');
         this.spawnEnemy(egg.enemyType);
         const newEnemy = this.data.enemies[this.data.enemies.length - 1];
         newEnemy.x = egg.x;
@@ -413,6 +424,11 @@ export class JoustGame {
             }
         }
     }
+    /**
+     * Public because the door's own tests drive it, the way Frogger's do: a
+     * collision is a step a test needs to take on its own without letting a
+     * whole update() move everything it just placed.
+     */
     checkCollisions() {
         const player = this.data.player;
         if (!player.isAlive || player.invincibleTimer > 0)
@@ -427,6 +443,7 @@ export class JoustGame {
                 const heightDiff = enemy.y - player.y;
                 if (heightDiff > LANCE_HEIGHT_ADVANTAGE) {
                     // Player wins (player is higher)
+                    this.cues.push('hit');
                     this.defeatEnemy(enemy);
                 }
                 else if (heightDiff < -LANCE_HEIGHT_ADVANTAGE) {
@@ -434,7 +451,9 @@ export class JoustGame {
                     this.killPlayer();
                 }
                 else {
-                    // Bounce off
+                    // Bounce off - lances level, nobody won. A different sound from
+                    // a win or a death, because the player needs to know which it was.
+                    this.cues.push('boop');
                     player.vx = -player.vx * 1.5;
                     player.vy = -1;
                     enemy.vx = -enemy.vx * 1.5;
@@ -446,6 +465,7 @@ export class JoustGame {
         for (const egg of this.data.eggs) {
             const dist = Math.sqrt(Math.pow(player.x - egg.x, 2) + Math.pow(player.y - egg.y, 2));
             if (dist < 2) {
+                this.cues.push('coin');
                 this.data.score += SCORES.egg;
                 this.data.eggs = this.data.eggs.filter(e => e.id !== egg.id);
             }
@@ -457,6 +477,7 @@ export class JoustGame {
             if (dist < 3) {
                 if (player.y < ptero.y - 1) {
                     // Player kills pterodactyl
+                    this.cues.push('explosion');
                     this.data.score += SCORES.pterodactyl;
                     ptero.isActive = false;
                 }
@@ -485,9 +506,13 @@ export class JoustGame {
         this.data.enemies = this.data.enemies.filter(e => e.id !== enemy.id);
     }
     killPlayer() {
+        if (!this.data.player.isAlive)
+            return;
+        this.cues.push('death');
         this.data.player.isAlive = false;
         this.data.lives--;
         if (this.data.lives <= 0) {
+            this.cues.push('gameover');
             this.data.state = 'gameover';
             this.onGameOver();
         }
@@ -503,6 +528,7 @@ export class JoustGame {
             return;
         player.vy += FLAP_POWER;
         player.isFlapping = true;
+        this.cues.push('jump');
     }
     handleDirection(direction) {
         if (this.data.state !== 'playing')

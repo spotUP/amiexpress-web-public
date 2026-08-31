@@ -3,6 +3,7 @@
  * Main game logic and state management
  */
 import { SuperQixData, Point, Direction } from './types';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 import { Background } from './background';
 type RenderCallback = (content: string) => void;
 /**
@@ -15,6 +16,14 @@ export declare class QixEngine {
     private enemySystem;
     private powerUpSystem;
     private lastMoveTime;
+    /**
+     * What just happened, for whoever is listening.
+     *
+     * The one queue the door drains. PowerUpSystem keeps its own and this
+     * engine empties it into here each tick, so the door has a single place
+     * to look rather than one per subsystem.
+     */
+    readonly cues: SfxCues;
     /**
      * The picture hidden behind the playfield, revealed as area is claimed.
      * Null when the board has no art, in which case claimed area is drawn as

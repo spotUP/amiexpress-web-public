@@ -9,6 +9,7 @@
 const TEST_MODULES = [
     './layout.test',
     './sprites.test',
+    './sfx.test',
 ];
 (async () => {
     let passed = 0;

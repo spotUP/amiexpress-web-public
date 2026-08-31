@@ -7,10 +7,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GalagaGame = void 0;
 const sprites_1 = require("./sprites");
 const constants_1 = require("./constants");
+const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 class GalagaGame {
     constructor(data, onRender) {
         this.lastDiveTime = 0;
         this.heldKeys = new Set();
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The game names the moment; the door decides whether anybody hears it.
+         * Nothing in here touches a socket, so the sound design is assertable in
+         * a test with no audio anywhere near it.
+         */
+        this.cues = new arcade_1.SfxCues();
         this.data = data;
         this.renderCallback = onRender;
     }
@@ -127,6 +136,7 @@ class GalagaGame {
         if (playerBullets.length >= constants_1.MAX_PLAYER_BULLETS)
             return;
         this.data.shotsFired++;
+        this.cues.push('laser');
         // Create bullet(s)
         if (this.data.player.hasDualFighter) {
             // Dual fighter shoots two bullets
@@ -344,6 +354,11 @@ class GalagaGame {
     /**
      * Check all collisions
      */
+    /**
+     * Public because the door's own tests drive it, the way Frogger's do: a
+     * collision is a step a test needs to take on its own without letting a
+     * whole update() move everything it just placed.
+     */
     checkCollisions() {
         // Player bullets vs aliens
         for (const bullet of this.data.bullets.filter(b => !b.isEnemy)) {
@@ -358,6 +373,9 @@ class GalagaGame {
                     if (alien.health <= 0) {
                         this.killAlien(alien);
                         this.data.shotsHit++;
+                    }
+                    else {
+                        this.cues.push('hit');
                     }
                     // Remove bullet
                     bullet.y = -100;
@@ -391,6 +409,7 @@ class GalagaGame {
      * Kill an alien
      */
     killAlien(alien) {
+        this.cues.push('explosion');
         const wasFormationed = alien.state === 'formation';
         alien.state = 'dead';
         // Score based on alien type and state
@@ -407,6 +426,7 @@ class GalagaGame {
                 if (alien.capturedFighter && !this.data.player.hasDualFighter) {
                     // Rescue captured fighter!
                     this.data.player.hasDualFighter = true;
+                    this.cues.push('powerup');
                     this.data.score += constants_1.SCORES.dualFighter;
                 }
                 break;
@@ -438,6 +458,7 @@ class GalagaGame {
             return;
         this.data.player.isDead = true;
         this.data.player.deathFrame = 0;
+        this.cues.push('death');
         if (this.data.player.hasDualFighter) {
             // Lose dual fighter first
             this.data.player.hasDualFighter = false;
@@ -460,6 +481,7 @@ class GalagaGame {
     respawnPlayer() {
         if (this.data.lives <= 0) {
             this.data.state = 'gameover';
+            this.cues.push('gameover');
             return;
         }
         this.data.player.isDead = false;
@@ -483,6 +505,7 @@ class GalagaGame {
                 }
             }
             this.data.state = 'stageComplete';
+            this.cues.push('level-up');
             setTimeout(() => {
                 this.data.stage++;
                 this.initStage();

@@ -4,8 +4,17 @@
  */
 import { cellSprite, paint, asCursor } from './sprites';
 import { QUEUE_SIZE, SCORES, PIPE_CONNECTIONS, PIPE_CHARS, OPPOSITE, DIRECTION_VECTORS, getLevelConfig, getPipesForLevel, } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 export class PipeDreamGame {
     constructor(data, renderCallback, onGameOver, onLevelComplete) {
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The game names the moment; the door decides whether anybody hears it.
+         * Nothing in here touches a socket, so the sound design is assertable in
+         * a test with no audio anywhere near it.
+         */
+        this.cues = new SfxCues();
         this.data = data;
         this.renderCallback = renderCallback;
         this.onGameOver = onGameOver;
@@ -113,6 +122,7 @@ export class PipeDreamGame {
         this.render();
     }
     startFlow() {
+        this.cues.push('alarm');
         this.data.flowStarted = true;
         this.data.flowState = {
             x: this.data.startX,
@@ -155,10 +165,12 @@ export class PipeDreamGame {
             else {
                 this.data.score += SCORES.pipeFilled;
             }
+            this.cues.push('blip');
             this.data.pipesUsed++;
             // Check for end goal
             if (flow.x === this.data.endX && flow.y === this.data.endY && this.data.hasEnd) {
                 this.data.reachedEnd = true;
+                this.cues.push('powerup');
                 this.data.score += SCORES.reachedEnd;
             }
             // Move to next cell
@@ -262,11 +274,15 @@ export class PipeDreamGame {
             const unusedBonus = this.data.pipeQueue.length * SCORES.unusedQueue;
             const levelBonus = this.data.level * SCORES.levelBonus;
             const endBonus = this.data.reachedEnd ? SCORES.reachedEnd : 0;
+            this.cues.push('level-up');
             this.data.score += unusedBonus + levelBonus + endBonus;
             this.data.state = 'levelComplete';
             this.onLevelComplete();
         }
         else {
+            // The water ran out of pipe. One sound, not a death and a game over:
+            // Pipe Dream has no lives, so the leak IS the end.
+            this.cues.push('gameover');
             this.data.state = 'gameover';
             this.onGameOver();
         }
@@ -304,6 +320,7 @@ export class PipeDreamGame {
         const pipe = this.data.pipeQueue.shift();
         cell.pipe = pipe;
         cell.fillLevel = 0;
+        this.cues.push('switch');
         this.data.score += SCORES.pipeUsed;
         // Refill queue
         this.data.pipeQueue.push(this.getRandomPipe());
@@ -315,6 +332,7 @@ export class PipeDreamGame {
         if (this.data.pipeQueue.length === 0)
             return;
         // Discard current pipe (small penalty)
+        this.cues.push('boop');
         this.data.pipeQueue.shift();
         this.data.pipeQueue.push(this.getRandomPipe());
         this.render();
