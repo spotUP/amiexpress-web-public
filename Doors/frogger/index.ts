@@ -15,13 +15,13 @@ import {
   attractScreen,
   titleLines,
   titleWidth,
+  LOGO_HEIGHT,
   nextPhase,
   ATTRACT_ORDER,
   ATTRACT_FRAMES,
   AttractPhase,
 } from "./game/attract";
 import {
-  SCREEN_WIDTH,
   SCREEN_HEIGHT,
   GAME_AREA_HEIGHT,
   GAME_TICK_MS,
@@ -29,6 +29,7 @@ import {
   INITIAL_TIME,
   MENU_OPTIONS,
   LIVES_OPTIONS,
+  SCREEN_WIDTH,
   MAX_NAME_LENGTH,
   BG_COLORS,
   DEFAULT_HIGHSCORES,
@@ -105,7 +106,7 @@ let gameData: FroggerData;
 let screen: ReturnType<typeof blessed.screen>;
 let gameArea: ReturnType<typeof blessed.box>;
 let hudBox: ReturnType<typeof blessed.box>;
-let footerBox: ReturnType<typeof blessed.box>;
+let logoBox: ReturnType<typeof blessed.box>;
 let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 
@@ -140,10 +141,25 @@ function initScreen(): void {
     input: null as any,
   } as any);
 
-  // HUD at top
-  hudBox = blessed.box({
+  // The title, at the top of the screen for the whole session. It used to
+  // be redrawn inside the menu and the attract panels; one permanent logo
+  // is both tidier and one less thing to keep in step.
+  logoBox = blessed.box({
     parent: screen,
     top: 0,
+    left: 0,
+    width: "100%",
+    height: LOGO_HEIGHT,
+    tags: true,
+    wrap: false,
+    border: undefined,
+    content: titleLines(SCREEN_WIDTH).join("\n"),
+  });
+
+  // HUD under it
+  hudBox = blessed.box({
+    parent: screen,
+    top: LOGO_HEIGHT,
     left: 0,
     width: "100%",
     height: 1,
@@ -158,7 +174,7 @@ function initScreen(): void {
   gameArea = blessed.box({
     fixed: true,
     parent: screen,
-    top: 1,
+    top: LOGO_HEIGHT + 1,
     left: 0,
     width: "100%",
     height: GAME_AREA_HEIGHT,
@@ -175,24 +191,8 @@ function initScreen(): void {
     border: undefined,
     style: { bg: "black" },
   });
-
-  // Footer with controls
-  footerBox = blessed.box({
-    parent: screen,
-    bottom: 0,
-    left: 0,
-    width: "100%",
-    height: 3,
-    tags: true,
-    border: { type: "line" },
-    style: { border: { fg: "gray" } },
-    content: "{gray-fg}Arrow Keys: Hop | P: Pause | Q: Quit{/}",
-  });
 }
 
-/**
- * Format HUD display
- */
 /**
  * The status line, laid out like the cabinet's (FAQ 6.2): the player's score
  * with the high score beside it, the level, and how many frogs are left.
@@ -213,12 +213,19 @@ function formatHUD(): string {
 
   const homesStr = gameData.homesCompleted.toString();
 
+  // The clock is a number here rather than a bar on a row of its own under
+  // the board. It turns red at ten seconds, which is the only thing the bar
+  // was really telling anybody.
+  const seconds = Math.max(0, Math.ceil(gameData.timeRemaining));
+  const timeColour = seconds <= 10 ? "lightred" : "lightgreen";
+
   return (
     `{yellow-fg}1-UP ${scoreStr}{/}  ` +
     `{white-fg}HI-SCORE ${hiStr}{/}  ` +
     `{cyan-fg}LEVEL ${gameData.level}{/}  ` +
     `{green-fg}HOMES ${homesStr}/5{/}  ` +
-    `{red-fg}FROGS ${livesStr}{/}`
+    `{red-fg}FROGS ${livesStr}{/}  ` +
+    `{${timeColour}-fg}TIME ${seconds.toString().padStart(2, "0")}{/}`
   );
 }
 
@@ -252,7 +259,6 @@ function startAttract(): void {
     menuBox = null;
   }
 
-  footerBox.setContent("{gray-fg}Press any key to play{/}");
   renderAttract();
 
   attractLoop = setInterval(() => {
@@ -334,7 +340,6 @@ function runDemoFrame(): void {
 
 function showMenu(): void {
   stopAttract();
-  footerBox.setContent("{gray-fg}Arrow Keys: Hop | P: Pause | Q: Quit{/}");
   gameData.state = "menu";
   gameData.menuSelection = 0;
   renderMenu();
@@ -357,9 +362,8 @@ function renderMenu(): void {
 
   // The same block title the attract screen uses, so the door has one look
   // rather than two - the menu used to carry a figlet in slashes.
-  const menuContent: string[] = [...titleLines(width)];
-
-  menuContent.push("");
+  // No title: the logo is already at the top of the screen.
+  const menuContent: string[] = [];
   menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
   menuContent.push("");
 

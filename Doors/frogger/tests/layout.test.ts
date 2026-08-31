@@ -25,7 +25,7 @@ import {
   SCREEN_WIDTH, SCREEN_HEIGHT, GAME_AREA_HEIGHT,
   GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH,
 } from '../game/constants';
-import { titleWidth, titleLines } from '../game/attract';
+import { titleWidth, titleLines, LOGO_HEIGHT } from '../game/attract';
 
 function makeScreen(): any {
   return blessed.screen({
@@ -160,6 +160,41 @@ export async function theTitleFitsTheWidthItIsGiven(): Promise<void> {
     assert.ok(
       visible.length <= width,
       `a title line is ${visible.length} columns in a ${width}-column space`
+    );
+  }
+}
+
+/**
+ * The screen is logo, status line, board - and nothing else.
+ *
+ * Reported live 2026-08-31: the clock had a row of its own under the board,
+ * there were blank rows after it, and a footer spelled out what the arrow
+ * keys do. The clock is a number in the status line now, the board ends
+ * where the board ends, and the title fills the space at the top.
+ */
+export async function theScreenIsLogoStatusAndBoard(): Promise<void> {
+  const used = LOGO_HEIGHT + 1 + GAME_AREA_HEIGHT;
+
+  assert.strictEqual(
+    GAME_AREA_HEIGHT, GRID_HEIGHT,
+    'the game area should be exactly the board, with no spare rows'
+  );
+  assert.ok(
+    used <= SCREEN_HEIGHT,
+    `logo + status + board is ${used} rows of ${SCREEN_HEIGHT}`
+  );
+}
+
+/** The logo fits the screen it is drawn across. */
+export async function theLogoFitsTheScreen(): Promise<void> {
+  const lines = titleLines(SCREEN_WIDTH);
+
+  assert.strictEqual(lines.length, LOGO_HEIGHT, 'the logo box is the right height');
+  for (const line of lines) {
+    const visible = line.replace(/\{[^}]*\}/g, '');
+    assert.ok(
+      visible.length <= SCREEN_WIDTH,
+      `a logo line is ${visible.length} columns on an ${SCREEN_WIDTH}-column screen`
     );
   }
 }

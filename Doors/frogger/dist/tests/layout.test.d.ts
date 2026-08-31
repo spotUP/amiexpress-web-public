@@ -43,4 +43,15 @@ export declare function theThreePanesTileTheScreen(): Promise<void>;
 export declare function theMenuBoxFitsTheTitle(): Promise<void>;
 /** Every line of the title fits the width it is centred into. */
 export declare function theTitleFitsTheWidthItIsGiven(): Promise<void>;
+/**
+ * The screen is logo, status line, board - and nothing else.
+ *
+ * Reported live 2026-08-31: the clock had a row of its own under the board,
+ * there were blank rows after it, and a footer spelled out what the arrow
+ * keys do. The clock is a number in the status line now, the board ends
+ * where the board ends, and the title fills the space at the top.
+ */
+export declare function theScreenIsLogoStatusAndBoard(): Promise<void>;
+/** The logo fits the screen it is drawn across. */
+export declare function theLogoFitsTheScreen(): Promise<void>;
 //# sourceMappingURL=layout.test.d.ts.map

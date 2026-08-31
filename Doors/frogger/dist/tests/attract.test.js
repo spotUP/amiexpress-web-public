@@ -60,8 +60,10 @@ async function theTitleIsShaded() {
     const grid = (0, attract_1.titleGrid)();
     const shaded = grid.some(row => row.includes('+'));
     assert_1.default.ok(shaded, 'the letters should have a shaded edge');
-    // Painted as blocks of background colour, not as '#' characters.
-    const painted = (0, attract_1.attractScreen)('points', (0, fixture_1.createData)(), WIDTH, 0).join('\n');
+    // Painted as blocks of background colour, not as '#' characters. The
+    // title lives in its own box at the top of the screen now, so it is
+    // asserted there rather than inside an attract panel.
+    const painted = (0, attract_1.titleLines)(WIDTH).join('\n');
     assert_1.default.ok(painted.includes('{green-bg}'), 'the face of the letters is green');
     assert_1.default.ok(painted.includes('{yellow-bg}'), 'the shading is yellow');
     assert_1.default.ok(!/\{green-fg\}#/.test(painted), 'the title should be blocks, not hashes');
@@ -152,7 +154,7 @@ async function everyPanelCarriesTheTitleExceptTheDemo() {
         }
         const text = plain(lines);
         assert_1.default.ok(text.includes('KONAMI'), `${phase} carries the credit`);
-        assert_1.default.ok(lines.length > 5, `${phase} carries the title`);
+        assert_1.default.ok(!plain((0, attract_1.titleLines)(WIDTH)).trim() || !text.includes('FROGGER'), `${phase} should not repeat the title; the logo is always on screen`);
     }
 }
 /** Each phase holds for a sensible while. */

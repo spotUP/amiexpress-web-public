@@ -30,6 +30,8 @@ exports.theHudKeepsItsSingleRow = theHudKeepsItsSingleRow;
 exports.theThreePanesTileTheScreen = theThreePanesTileTheScreen;
 exports.theMenuBoxFitsTheTitle = theMenuBoxFitsTheTitle;
 exports.theTitleFitsTheWidthItIsGiven = theTitleFitsTheWidthItIsGiven;
+exports.theScreenIsLogoStatusAndBoard = theScreenIsLogoStatusAndBoard;
+exports.theLogoFitsTheScreen = theLogoFitsTheScreen;
 const assert_1 = __importDefault(require("assert"));
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const constants_1 = require("../game/constants");
@@ -127,6 +129,28 @@ async function theTitleFitsTheWidthItIsGiven() {
     for (const line of (0, attract_1.titleLines)(width)) {
         const visible = line.replace(/\{[^}]*\}/g, '');
         assert_1.default.ok(visible.length <= width, `a title line is ${visible.length} columns in a ${width}-column space`);
+    }
+}
+/**
+ * The screen is logo, status line, board - and nothing else.
+ *
+ * Reported live 2026-08-31: the clock had a row of its own under the board,
+ * there were blank rows after it, and a footer spelled out what the arrow
+ * keys do. The clock is a number in the status line now, the board ends
+ * where the board ends, and the title fills the space at the top.
+ */
+async function theScreenIsLogoStatusAndBoard() {
+    const used = attract_1.LOGO_HEIGHT + 1 + constants_1.GAME_AREA_HEIGHT;
+    assert_1.default.strictEqual(constants_1.GAME_AREA_HEIGHT, constants_1.GRID_HEIGHT, 'the game area should be exactly the board, with no spare rows');
+    assert_1.default.ok(used <= constants_1.SCREEN_HEIGHT, `logo + status + board is ${used} rows of ${constants_1.SCREEN_HEIGHT}`);
+}
+/** The logo fits the screen it is drawn across. */
+async function theLogoFitsTheScreen() {
+    const lines = (0, attract_1.titleLines)(constants_1.SCREEN_WIDTH);
+    assert_1.default.strictEqual(lines.length, attract_1.LOGO_HEIGHT, 'the logo box is the right height');
+    for (const line of lines) {
+        const visible = line.replace(/\{[^}]*\}/g, '');
+        assert_1.default.ok(visible.length <= constants_1.SCREEN_WIDTH, `a logo line is ${visible.length} columns on an ${constants_1.SCREEN_WIDTH}-column screen`);
     }
 }
 //# sourceMappingURL=layout.test.js.map

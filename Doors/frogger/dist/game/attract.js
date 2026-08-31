@@ -10,7 +10,7 @@
  * asserted without a terminal attached.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ATTRACT_BLINK_FRAMES = exports.ATTRACT_FRAMES = exports.ATTRACT_ORDER = void 0;
+exports.LOGO_HEIGHT = exports.ATTRACT_BLINK_FRAMES = exports.ATTRACT_FRAMES = exports.ATTRACT_ORDER = void 0;
 exports.titleWidth = titleWidth;
 exports.titleGrid = titleGrid;
 exports.titleLines = titleLines;
@@ -53,6 +53,8 @@ const LETTER_GAP = 3; // two clear columns once the shading has taken one
  * Anything drawing the title has to make room for exactly this much, or the
  * lines wrap and the letters come apart across doubled rows.
  */
+/** How many rows the block title needs. */
+exports.LOGO_HEIGHT = 5;
 function titleWidth() {
     return Math.max(...titleGrid().map(row => row.length));
 }
@@ -195,7 +197,9 @@ function attractScreen(phase, data, width, frame) {
     const body = phase === 'points' ? pointTablePanel(width) :
         phase === 'ranking' ? rankingPanel(data, width) :
             invitePanel(data, width, blinkOn);
-    return [...titleLines(width), '', ...body, '', creditLine(width)];
+    // No title here: the logo sits at the top of the screen for the whole
+    // session, so a panel that drew its own would show it twice.
+    return [...body, '', creditLine(width)];
 }
 /** The phase that follows this one. */
 function nextPhase(phase) {

@@ -12,7 +12,6 @@ import { LevelConfig, HighScore } from './types';
 // Screen dimensions
 export const SCREEN_WIDTH = 80;
 export const SCREEN_HEIGHT = 24;
-export const GAME_AREA_HEIGHT = 18;
 
 // Game timing
 export const GAME_TICK_MS = 50;  // 20 FPS
@@ -40,6 +39,14 @@ export const EXTRA_LIFE_SCORE = 20000;
 // Grid settings (logical grid, not screen)
 export const GRID_WIDTH = 40;   // 2 chars per cell
 export const GRID_HEIGHT = 13;  // Total lanes including safe zones
+
+/**
+ * The board is exactly as tall as it is: no spare rows underneath it.
+ *
+ * The clock used to have a row of its own below the board, with blank rows
+ * after that; it is a number in the status line now.
+ */
+export const GAME_AREA_HEIGHT = GRID_HEIGHT;
 
 /**
  * The lanes, bottom to top.
@@ -221,6 +228,44 @@ export const SPRITE_FG = {
   homeCrocodile: 'lightred',
   bank: 'red',
 };
+
+/**
+ * The opposite of each of the sixteen colours, for the frog.
+ *
+ * The frog is drawn on whatever it is standing on - road, water, a log, a
+ * turtle, the bank, a home - and a fixed colour is bound to collide with
+ * one of them; it was invisible on the green banks until those went
+ * magenta. Rather than pick a colour and hope, the frog takes the opposite
+ * of the ground under it for its background, and the opposite of THAT for
+ * itself, so it stands out wherever it is.
+ *
+ * Opposite here means the far side of the sixteen-colour wheel: red against
+ * cyan, green against magenta, blue against yellow, black against white,
+ * and the bright half mirrored onto the dark.
+ */
+export const COLOR_COMPLEMENT: Record<string, string> = {
+  black: 'lightwhite',
+  red: 'lightcyan',
+  green: 'lightmagenta',
+  yellow: 'lightblue',
+  blue: 'lightyellow',
+  magenta: 'lightgreen',
+  cyan: 'lightred',
+  white: 'black',
+  gray: 'lightwhite',
+  lightred: 'cyan',
+  lightgreen: 'magenta',
+  lightyellow: 'blue',
+  lightblue: 'yellow',
+  lightmagenta: 'green',
+  lightcyan: 'red',
+  lightwhite: 'black',
+};
+
+/** The opposite of `colour`, falling back to white on anything unknown. */
+export function complementOf(colour: string): string {
+  return COLOR_COMPLEMENT[colour] ?? 'lightwhite';
+}
 
 /** The frog, and the frog you carry home. */
 // ASCII only, everywhere in this door. The board is drawn through blessed

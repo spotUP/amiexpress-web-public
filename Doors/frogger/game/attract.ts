@@ -52,6 +52,9 @@ const LETTER_GAP = 3;   // two clear columns once the shading has taken one
  * Anything drawing the title has to make room for exactly this much, or the
  * lines wrap and the letters come apart across doubled rows.
  */
+/** How many rows the block title needs. */
+export const LOGO_HEIGHT = 5;
+
 export function titleWidth(): number {
   return Math.max(...titleGrid().map(row => row.length));
 }
@@ -217,7 +220,9 @@ export function attractScreen(
     phase === 'ranking' ? rankingPanel(data, width) :
     invitePanel(data, width, blinkOn);
 
-  return [...titleLines(width), '', ...body, '', creditLine(width)];
+  // No title here: the logo sits at the top of the screen for the whole
+  // session, so a panel that drew its own would show it twice.
+  return [...body, '', creditLine(width)];
 }
 
 /** The phase that follows this one. */

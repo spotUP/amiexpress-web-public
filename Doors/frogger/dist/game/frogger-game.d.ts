@@ -193,7 +193,15 @@ export declare class FroggerGame {
     private paintObjects;
     /** The snakes patrolling the median. */
     private paintSnakes;
-    /** The player. */
+    /**
+     * The player.
+     *
+     * Drawn as the opposite of the ground it is standing on, with itself the
+     * opposite of that again: the frog is never the same colour as what is
+     * under it, whatever that happens to be. A fixed colour always collides
+     * with something - green on the green banks is what was reported - and
+     * the frog is the one thing on the board that must never be hard to find.
+     */
     private paintFrog;
     /**
      * The sprite for one moving thing, built to exactly fill its cells.
