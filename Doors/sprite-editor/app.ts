@@ -196,7 +196,14 @@ export class StudioApp {
     };
     this.doorsList.setItems(this.state.doors);
     this.doorsList.select(this.state.doorIndex);
-    this.spritesList.setItems(this.state.sprites);
+    // Display the sprite NAMES - 'diamond', not 'diamond.sprite.json'.
+    // The filenames are 19+ characters and the pane's inner width at 80
+    // columns is 18, so the full names wrapped and every row went ragged
+    // (reported with a screenshot). The model keeps real filenames; only
+    // the display strips the suffix.
+    this.spritesList.setItems(
+      this.state.sprites.map(f => f.replace(/\.sprite\.json$/, ''))
+    );
     this.spritesList.select(this.state.spriteIndex);
     this.animationsList.setItems(this.state.animations);
     this.animationsList.select(this.state.animationIndex);
@@ -211,8 +218,15 @@ export class StudioApp {
       `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
     const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
     const visible = (tagged: string) => tagged.replace(/\{[^}]*\}/g, '').length;
-    const gap = Math.max(1, (this.screen.width as number) - visible(left) - visible(right));
-    this.statusBar.setContent(left + ' '.repeat(gap) + right);
+    // Clamp to the real width: if the two segments cannot fit on one row,
+    // drop the hint rather than let the row wrap into the panes above.
+    const width = Number(this.screen.width) || 80;
+    const both = visible(left) + visible(right);
+    if (both < width) {
+      this.statusBar.setContent(left + ' '.repeat(width - both) + right);
+    } else {
+      this.statusBar.setContent(left);
+    }
     this.paintPreview();
   }
 
@@ -228,9 +242,11 @@ export class StudioApp {
     const lines = previewLines(sprite, sel.animation, this.tick, 2);
     const inner = Math.max(1, (this.previewBox.width as number) - 2);
     const pad = ' '.repeat(Math.max(0, Math.floor((inner - sprite.cellW * 2) / 2)));
+    // ASCII separators, short words: the middle dot rendered as a quote
+    // on the live terminal, and the long form wrapped inside the pane.
     const meta =
-      `{gray-fg}${sprite.name} · ${sel.animation} · ` +
-      `${anim.frames.length} frame(s) · ${anim.ticksPerFrame} tpf · ` +
+      `{gray-fg}${sprite.name} - ${sel.animation} - ` +
+      `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
       `${anim.loop ? 'loop' : 'hold'}{/}`;
     this.previewBox.setContent(
       '\n' + lines.map(l => pad + l).join('\n') + '\n\n ' + meta
