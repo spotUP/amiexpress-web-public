@@ -217,6 +217,19 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
       await this.conferenceSetup.updateConferenceInfoFile(conferenceId, confInfoUpdates);
     }
 
+    // The NAME is not in Conf<N>.info: express.e:31852 reads it as NAME.n out
+    // of ConfConfig.info. It was not declared by the schema, so it was
+    // stripped before reaching any writer and renaming a conference in the
+    // admin did nothing. The LOCATION is carried through unchanged - the same
+    // call writes both, and passing an empty one would erase the conference's
+    // directory (express.e:31861).
+    const renamed = (validated as { name?: string }).name;
+    if (renamed !== undefined && renamed !== oldConfig.name) {
+      const bbsRoot = appConfig.get('dataDir');
+      const location = loadConfConfig(bbsRoot)?.entries[conferenceId - 1]?.location ?? '';
+      await this.conferenceSetup.updateConfConfig(conferenceId, renamed, location);
+    }
+
     // The mirror is best-effort and comes AFTER the disk write: a conference
     // that only exists on disk has no row, and that must not turn a
     // successful save into an error.

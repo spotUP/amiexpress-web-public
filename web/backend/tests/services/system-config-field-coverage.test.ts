@@ -464,3 +464,60 @@ describe('System Configuration field coverage', () => {
     });
   });
 });
+
+/**
+ * The MIRROR of the coverage test above.
+ *
+ * That one walks the SCHEMA and checks each field is mapped, so a field the
+ * FORM offers and the schema lacks is invisible to it - which is exactly how
+ * hold_access_level and password_expiry_days survived. This walks the form.
+ *
+ * Same shape as users-acs-write-contract.test.ts, which asks the question for
+ * the two domains that have no schema at all.
+ */
+describe('every field the System Configuration form offers is in the schema', () => {
+  const REPO_ROOT_FOR_PAGE = path.join(__dirname, '..', '..', '..', '..');
+  const SYSTEM_CONFIG_PAGE = path.join(
+    REPO_ROOT_FOR_PAGE, 'web', 'config-app', 'src', 'pages', 'SystemConfigPage.tsx'
+  );
+
+  /**
+   * Names the form registers that are not configuration fields.
+   *
+   * Each has to earn its place: anything else here would be a control the
+   * sysop can change and cannot save.
+   */
+  const NOT_A_CONFIG_FIELD = new Set<string>([]);
+
+  it('registers nothing the schema will strip', () => {
+    const page = fs.readFileSync(SYSTEM_CONFIG_PAGE, 'utf8');
+    const registered = new Set(
+      [...page.matchAll(/register\('([a-z_0-9]+)'/g)].map(m => m[1])
+    );
+    expect(registered.size).toBeGreaterThan(50);
+
+    const declared = new Set(Object.keys(SystemConfigSchema.shape));
+    const stripped = [...registered].filter(
+      field => !declared.has(field) && !NOT_A_CONFIG_FIELD.has(field)
+    );
+
+    // Jest's expect takes no message, so the report goes in the value.
+    expect(stripped.join(', ')).toBe('');
+  });
+
+  it('names a tooltype for every field it registers', () => {
+    const page = fs.readFileSync(SYSTEM_CONFIG_PAGE, 'utf8');
+    const registered = [...page.matchAll(/register\('([a-z_0-9]+)'/g)].map(m => m[1]);
+
+    const mapped = getConfigTooltypeKeys();
+    const unwritable = registered.filter(
+      field =>
+        !(field in mapped) &&
+        !isSensitiveField(field) &&
+        !isDatabaseOnlyField(field) &&
+        !NOT_A_CONFIG_FIELD.has(field)
+    );
+
+    expect(unwritable.join(', ')).toBe('');
+  });
+});

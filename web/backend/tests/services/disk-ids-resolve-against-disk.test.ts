@@ -165,6 +165,29 @@ describe('an entry that exists only on disk can be edited', () => {
     expect(readTooltypeMap(path.join(root, 'Conf14.info')).get('NDIRS')).toBe('3');
   });
 
+  it('conferences: a rename reaches ConfConfig.info, where express.e reads it', async () => {
+    // NAME.n lives in ConfConfig.info (express.e:31852), not in Conf<N>.info.
+    // ConferenceConfigSchema did not declare `name` at all, so zod stripped it
+    // and the rename never reached a writer.
+    seed(path.join(root, 'ConfConfig.info'), {
+      NCONFS: '2',
+      'NAME.1': 'Amiga', 'LOCATION.1': 'BBS:Conf1',
+      'NAME.2': 'Lamer Zone', 'LOCATION.2': 'BBS:Conf2',
+    });
+    seed(path.join(root, 'Conf1.info'), { NDIRS: '1' });
+    seed(path.join(root, 'Conf2.info'), { NDIRS: '1' });
+
+    const service = new ConferenceConfigService(emptyMirror());
+    await service.updateConferenceConfig(2, { name: 'Elite Zone' } as never, CONTEXT);
+
+    const after = readTooltypeMap(path.join(root, 'ConfConfig.info'));
+    expect(after.get('NAME.2')).toBe('Elite Zone');
+    // The location must survive: the same call writes both, and an empty one
+    // would erase the conference's directory (express.e:31861).
+    expect(after.get('LOCATION.2')).toBe('BBS:Conf2');
+    expect(after.get('NAME.1')).toBe('Amiga');
+  });
+
   it('nodes: a node with no row still reaches its .info', async () => {
     // The mirror throws for every node but the one row it holds, and it used
     // to throw BEFORE the .info write - so nothing reached disk, and the page

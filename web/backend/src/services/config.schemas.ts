@@ -197,6 +197,11 @@ export const NodeConfigSchema = z.object({
 
 export const ConferenceConfigSchema = z.object({
   conference_id: z.number().int().min(1),
+  // The name the API serves for every conference, and the admin's own list
+  // shows. It was not declared, so zod stripped it and renaming a conference
+  // did nothing at all. express.e:31852 reads it as NAME.n out of
+  // ConfConfig.info - not out of Conf<N>.info.
+  name: z.string().min(1).max(54).optional(),
   ndirs: z.number().int().min(0).max(16).optional(),
   dlpath_1: z.string().max(200).optional(),
   dlpath_2: z.string().max(200).optional(),

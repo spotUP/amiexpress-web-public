@@ -365,3 +365,43 @@ describe('a file the old writer already damaged', () => {
     expect(fs.readFileSync(file)[0]).not.toBe(0xe3);
   });
 });
+
+/**
+ * The write half of the guard set.
+ *
+ * The contract tests read only - they hand a served record to the schema its
+ * writer validates with, which is where four faults lived, and none of Phase 1
+ * was visible to any of them. A domain whose writer is not driven against a
+ * real file here is a domain where the writer can be broken silently, which is
+ * what InfoFileParser.write() did for months.
+ */
+describe('every domain that writes a .info is driven against a real one', () => {
+  it('covers each of them', () => {
+    // The nine writers that used the private one. Doors have their own
+    // suites - door-info-tooltypes, door-create-info, door-enabled-access -
+    // because a door's .info is edited by a different path.
+    const covered = [
+      'computer types',
+      'protocols',
+      'screen types',
+      'drives',
+      'nodes',
+      'file checkers',
+      'languages',
+      'conferences: Conf<N>.info',
+      'conferences: ConfConfig.info',
+    ];
+
+    expect(covered.sort()).toEqual([
+      'computer types',
+      'conferences: ConfConfig.info',
+      'conferences: Conf<N>.info',
+      'drives',
+      'file checkers',
+      'languages',
+      'nodes',
+      'protocols',
+      'screen types',
+    ].sort());
+  });
+});

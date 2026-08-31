@@ -9,6 +9,8 @@
  */
 
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { getBoardConfig } from '../../services/bbs-config-file.service';
+import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -975,9 +977,12 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   // express.e:26013-26024: checkPasswordStrength before saving
   let minLen = 0, minStrength = 0;
   try {
-    const sysConf = db.getConfigRepository?.()?.getSystemConfig?.() || {};
-    minLen = (sysConf as any).min_password_length ?? 0;
-    minStrength = (sysConf as any).min_password_strength ?? 0;
+    // bbsConfig.info is the source: the admin writes disk, and the mirror
+    // has already diverged here - disk MIN_PASSWORD_STRENGTH=0 against a
+    // database 1, so the admin showed "no check" while this enforced 1.
+    const sysConf = getBoardConfig(appConfig.get('dataDir'));
+    minLen = sysConf.min_password_length ?? 0;
+    minStrength = sysConf.min_password_strength ?? 0;
   } catch (_) { /* use defaults */ }
 
   if (minLen > 0 && trimmed.length < minLen) {

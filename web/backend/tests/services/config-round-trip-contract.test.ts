@@ -90,6 +90,40 @@ function exempt(domain: string, field: string): boolean {
 }
 
 /**
+ * Report every served field the schema DOES NOT DECLARE.
+ *
+ * This is the half `rejectedFields` cannot see. Zod strips an unknown key and
+ * reports success, so `schema.partial().safeParse({ unknownField: x })`
+ * passes - which is why the sweep, on its first run, caught three wrong
+ * RANGES on declared keys and none of the fourteen System Configuration
+ * fields that were being silently dropped.
+ *
+ * A field the API serves and the schema does not declare is a field the sysop
+ * can see, can type into, and cannot save.
+ */
+function strippedFields(domain: string, schema: ZodTypeAny, record: unknown): string[] {
+  if (!record || typeof record !== 'object') return [];
+
+  const declared = new Set(Object.keys((schema as any).shape ?? {}));
+  const stripped: string[] = [];
+
+  for (const [field, value] of Object.entries(record as Record<string, unknown>)) {
+    if (exempt(domain, field)) continue;
+    if (!declared.has(field)) {
+      stripped.push(`${domain}.${field}: served ${JSON.stringify(value)} - not declared by the schema, so a save DROPS it`);
+      continue;
+    }
+
+    // Declared is not enough: the value has to come out the other side too.
+    const result = (schema as any).partial().safeParse({ [field]: value });
+    if (result.success && !(field in result.data)) {
+      stripped.push(`${domain}.${field}: parsed away`);
+    }
+  }
+  return stripped;
+}
+
+/**
  * Hand one served record to the schema its writer validates with, and report
  * every field the schema will not take.
  */
@@ -155,12 +189,14 @@ describe('what the admin serves, the admin accepts', () => {
       }
 
       const rejected: string[] = [];
+      const stripped: string[] = [];
       for (const record of records.slice(0, 5)) {
         rejected.push(...rejectedFields(domain.name, domain.schema, record));
+        stripped.push(...strippedFields(domain.name, domain.schema, record));
       }
 
       // Jest's expect takes no message, so the report goes in the value.
-      expect([...new Set(rejected)].join('\n')).toBe('');
+      expect([...new Set([...rejected, ...stripped])].join('\n')).toBe('');
     }, 30000);
   }
 

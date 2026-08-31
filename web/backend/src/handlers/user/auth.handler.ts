@@ -11,6 +11,8 @@
  */
 
 import { Request, Response } from 'express';
+import { getBoardConfig } from '../../services/bbs-config-file.service';
+import { config as appConfig } from '../../config';
 import { Database } from '../../database';
 import { sanitizeInput } from '../../utils/input-normalizer.util';
 import { AuthRequest } from '../../middleware/auth.middleware';
@@ -146,7 +148,7 @@ console.error('Me error:', error);
       // 'XXX' saw only the first 3).
       let newUserConfAccess = 'XXX';
       try {
-        const cfg = this.db.getConfigRepository?.()?.getSystemConfig?.();
+        const cfg = getBoardConfig(appConfig.get('dataDir'));
         if (cfg?.new_user_conf_access && typeof cfg.new_user_conf_access === 'string' && cfg.new_user_conf_access.length > 0) {
           newUserConfAccess = cfg.new_user_conf_access;
         }
@@ -159,7 +161,7 @@ console.error('Me error:', error);
       // new_user_time_limit is MINUTES; users.timelimit is SECONDS.
       let newUserTimeLimitSeconds = 1440 * 60;
       try {
-        const cfg = this.db.getConfigRepository?.()?.getSystemConfig?.();
+        const cfg = getBoardConfig(appConfig.get('dataDir'));
         const minutes = Number(cfg?.new_user_time_limit);
         if (Number.isFinite(minutes) && minutes > 0) {
           newUserTimeLimitSeconds = Math.floor(minutes) * 60;
