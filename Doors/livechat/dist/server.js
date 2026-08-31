@@ -78,6 +78,7 @@ const settings_overlay_1 = require("./overlays/settings-overlay");
 const profile_overlay_1 = require("./overlays/profile-overlay");
 // createDialogs now imported from SDK blessed-helpers
 // Features
+const settings_1 = require("./settings");
 const input_history_1 = require("./features/input-history");
 const file_sharing_1 = require("./features/file-sharing");
 const drawing_canvas_1 = require("./features/drawing-canvas");
@@ -150,6 +151,11 @@ async function createApp(session) {
     const ctx = (0, initialization_1.initializeLiveChat)(session, screen);
     const { username, userId, nodeId, secLevel, state, registry, socketEmitter, presenceService, eventBus, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
     let { currentRoomLabel } = ctx;
+    // What the sysop set in the admin (Doors -> LIVECHAT -> Settings), read once
+    // per launch - see settings.ts. Handlers read the same values through
+    // settings().
+    const doorSettings = (0, settings_1.loadSettings)();
+    audio.setEnabled(doorSettings.soundEffects);
     // Room state
     const initialRoomId = session.bbsSession?.currentRoomId;
     const initialRoomName = session.bbsSession?.currentRoomName;
@@ -201,7 +207,8 @@ async function createApp(session) {
     }
     // ========== LOADING SCREEN ==========
     // Layout constants for 80x24 terminal
-    const SIDEBAR_WIDTH = 15; // Minimum sidebar width (will auto-expand via fitContent to fit content)
+    // Minimum sidebar width - it still auto-expands via fitContent to fit content.
+    const SIDEBAR_WIDTH = doorSettings.sidebarWidth;
     // Track which tab is active in the sidebar
     let sidebarTab = 'channels';
     // ========== MENU BAR (at top) ==========
@@ -547,7 +554,7 @@ async function createApp(session) {
     });
     // Default channels to show when server hasn't responded
     const defaultChannels = [
-        { id: 'general', name: 'general', type: 'public' },
+        { id: doorSettings.defaultChannel, name: doorSettings.defaultChannel, type: 'public' },
         { id: 'random', name: 'random', type: 'public' },
         { id: 'help', name: 'help', type: 'public' },
     ];
@@ -1991,7 +1998,7 @@ async function createApp(session) {
     // ========== CONNECTION ERROR HANDLING ==========
     let reconnectAttempts = 0;
     let userCancelled = false; // Track if user clicked cancel
-    const MAX_RECONNECT_ATTEMPTS = 3;
+    const MAX_RECONNECT_ATTEMPTS = doorSettings.reconnectAttempts;
     // Create disconnection modal (will be shown when needed)
     const disconnectionModal = (0, disconnection_modal_1.createDisconnectionModal)({
         screen,
@@ -2283,7 +2290,7 @@ async function createApp(session) {
         },
         onLeaveChannel: () => {
             const ch = state.currentChannel;
-            if (!ch || ch === 'general' || ch === 'lobby') {
+            if (!ch || ch === doorSettings.defaultChannel || ch === 'lobby') {
                 addSystemMessage('{yellow-fg}Cannot leave the default channel.{/yellow-fg}');
                 return;
             }

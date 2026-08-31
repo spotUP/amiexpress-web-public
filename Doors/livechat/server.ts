@@ -75,6 +75,7 @@ import { createProfileOverlay } from './overlays/profile-overlay';
 // createDialogs now imported from SDK blessed-helpers
 
 // Features
+import { loadSettings } from './settings';
 import { createInputHistory } from './features/input-history';
 import { createFileSharing } from './features/file-sharing';
 import { createDrawingCanvas } from './features/drawing-canvas';
@@ -177,6 +178,12 @@ export async function createApp(session: DoorSession) {
     eventBus, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
   let { currentRoomLabel } = ctx;
 
+  // What the sysop set in the admin (Doors -> LIVECHAT -> Settings), read once
+  // per launch - see settings.ts. Handlers read the same values through
+  // settings().
+  const doorSettings = loadSettings();
+  audio.setEnabled(doorSettings.soundEffects);
+
   // Room state
   const initialRoomId = session.bbsSession?.currentRoomId as string | undefined;
   const initialRoomName = session.bbsSession?.currentRoomName as string | undefined;
@@ -233,7 +240,8 @@ export async function createApp(session: DoorSession) {
 
   // ========== LOADING SCREEN ==========
   // Layout constants for 80x24 terminal
-  const SIDEBAR_WIDTH = 15;  // Minimum sidebar width (will auto-expand via fitContent to fit content)
+  // Minimum sidebar width - it still auto-expands via fitContent to fit content.
+  const SIDEBAR_WIDTH = doorSettings.sidebarWidth;
 
   // Track which tab is active in the sidebar
   let sidebarTab: 'channels' | 'users' = 'channels';
@@ -628,7 +636,7 @@ export async function createApp(session: DoorSession) {
 
   // Default channels to show when server hasn't responded
   const defaultChannels = [
-    { id: 'general', name: 'general', type: 'public' as const },
+    { id: doorSettings.defaultChannel, name: doorSettings.defaultChannel, type: 'public' as const },
     { id: 'random', name: 'random', type: 'public' as const },
     { id: 'help', name: 'help', type: 'public' as const },
   ];
@@ -2288,7 +2296,7 @@ export async function createApp(session: DoorSession) {
 
   let reconnectAttempts = 0;
   let userCancelled = false;  // Track if user clicked cancel
-  const MAX_RECONNECT_ATTEMPTS = 3;
+  const MAX_RECONNECT_ATTEMPTS = doorSettings.reconnectAttempts;
 
   // Create disconnection modal (will be shown when needed)
   const disconnectionModal = createDisconnectionModal({
@@ -2660,7 +2668,7 @@ export async function createApp(session: DoorSession) {
     },
     onLeaveChannel: () => {
       const ch = state.currentChannel;
-      if (!ch || ch === 'general' || ch === 'lobby') {
+      if (!ch || ch === doorSettings.defaultChannel || ch === 'lobby') {
         addSystemMessage('{yellow-fg}Cannot leave the default channel.{/yellow-fg}');
         return;
       }

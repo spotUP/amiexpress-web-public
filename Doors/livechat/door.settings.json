@@ -1,0 +1,37 @@
+{
+  "command": "LIVECHAT",
+  "settings": [
+    {
+      "key": "defaultChannel",
+      "label": "Default channel",
+      "type": "string",
+      "default": "general",
+      "help": "The channel users land in, and the one the door creates on a board with no rooms yet. It cannot be left."
+    },
+    {
+      "key": "soundEffects",
+      "label": "Sound effects",
+      "type": "boolean",
+      "default": true,
+      "help": "Clicks, joins and message tones. Off silences the door for everyone; each user can still mute their own."
+    },
+    {
+      "key": "sidebarWidth",
+      "label": "Sidebar width (columns)",
+      "type": "number",
+      "default": 15,
+      "min": 8,
+      "max": 40,
+      "help": "Minimum width of the channel list. It still grows to fit long channel names."
+    },
+    {
+      "key": "reconnectAttempts",
+      "label": "Reconnect attempts",
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "help": "How many times a user may retry after losing the connection before the door closes."
+    }
+  ]
+}

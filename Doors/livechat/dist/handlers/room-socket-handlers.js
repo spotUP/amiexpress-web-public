@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupRoomHandlers = setupRoomHandlers;
+const settings_1 = require("../settings");
 function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, aa, aud, hl, sc, setCrl, smd, ib, s) {
     sock.on('room:list', (d) => {
         const rs = Array.isArray(d?.rooms) ? d.rooms : [];
@@ -10,7 +11,8 @@ function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, a
             usb();
             asm(`Found ${rs.length} room${rs.length === 1 ? '' : 's'}`);
             if (!st.currentChannel) {
-                const dr = st.channels.find((c) => c.name === 'general' && c.type === 'public') || st.channels.find((c) => c.type === 'public') || st.channels[0];
+                const defaultChannel = (0, settings_1.settings)().defaultChannel;
+                const dr = st.channels.find((c) => c.name === defaultChannel && c.type === 'public') || st.channels.find((c) => c.type === 'public') || st.channels[0];
                 if (dr) {
                     sock.emit('room:join', { roomName: dr.name });
                     asm(`Auto-joining #${dr.name}...`);
@@ -18,8 +20,9 @@ function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, a
             }
         }
         else if (!st.currentChannel) {
-            asm('No rooms found - creating #general...');
-            sock.emit('room:create', { roomName: 'general', topic: 'General chat', isPublic: true });
+            const defaultChannel = (0, settings_1.settings)().defaultChannel;
+            asm(`No rooms found - creating #${defaultChannel}...`);
+            sock.emit('room:create', { roomName: defaultChannel, topic: 'General chat', isPublic: true });
         }
         hl();
     });
