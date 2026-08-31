@@ -33,6 +33,12 @@ export function compilePixels(pixels: PixelGrid): CellBuffer {
       else if (t !== null && b === null) row.push({ char: '▀', fg: t, bg: 0 });
       else if (t === null && b !== null) row.push({ char: '▄', fg: b, bg: 0 });
       else if (t === b) row.push({ char: '█', fg: t as number, bg: t as number });
+      // A BLACK bottom pixel must not collide with a TRANSPARENT one -
+      // both would be {▀, fg, bg:0}. The lower-half glyph with swapped
+      // roles paints identically (top = bg colour, bottom = fg black) and
+      // decompiles distinctly. Review-caught before the pixel editor
+      // could silently drop painted black on every save/reload.
+      else if (b === 0) row.push({ char: '▄', fg: 0, bg: t as number });
       else row.push({ char: '▀', fg: t as number, bg: b as number });
     }
     out.push(row);
@@ -43,9 +49,10 @@ export function compilePixels(pixels: PixelGrid): CellBuffer {
 /**
  * The inverse - or null when the frame is not pure half-blocks.
  *
- * The ▀-with-bg-0 ambiguity is resolved the way compilePixels writes it:
- * bg 0 under ▀ means TRANSPARENT lower pixel, not black. Black-on-black
- * art therefore uses █ with fg 0, which the compiler emits for t === b.
+ * Transparency vs black: bg 0 under ▀ or ▄ means TRANSPARENT other half.
+ * An explicit black half-pixel is encoded with the OTHER half-block glyph
+ * and swapped roles ({▄, fg:0, bg:colour} for black-under-colour), so
+ * every pixel grid round-trips exactly - including painted black.
  */
 export function decompilePixels(frame: CellBuffer): PixelGrid | null {
   const top: Array<number | null> = [];
@@ -62,6 +69,7 @@ export function decompilePixels(frame: CellBuffer): PixelGrid | null {
       if (char === '▀' && bg === 0) { top.push(fg); bottom.push(null); continue; }
       if (char === '▄' && bg === 0) { top.push(null); bottom.push(fg); continue; }
       if (char === '▀') { top.push(fg); bottom.push(bg); continue; }
+      if (char === '▄') { top.push(bg); bottom.push(fg); continue; }
       return null; // anything else is cell-mode-only art
     }
     out.push([...top], [...bottom]);

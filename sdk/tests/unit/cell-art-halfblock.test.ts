@@ -36,6 +36,17 @@ describe('compilePixels', () => {
   it('rejects an odd pixel-row count - half a cell row cannot exist', () => {
     expect(() => compilePixels([[9]])).toThrow(/even/);
   });
+
+  it('keeps painted black distinct from transparency, both orientations', () => {
+    const pairs: PixelGrid = [
+      [9, 0],
+      [0, 9],
+    ];
+    const frame = compilePixels(pairs);
+    expect(frame[0][0]).toEqual({ char: '▄', fg: 0, bg: 9 });  // black UNDER colour
+    expect(frame[0][1]).toEqual({ char: '▀', fg: 0, bg: 9 });  // black OVER colour
+    expect(decompilePixels(frame)).toEqual(pairs);
+  });
 });
 
 describe('decompilePixels', () => {
