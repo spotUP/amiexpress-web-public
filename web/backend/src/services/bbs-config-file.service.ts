@@ -379,7 +379,18 @@ function normalizeTooltypeKey(rawKey: string): string {
   }
 
   const stripped = upper.replace(/^[^A-Z0-9]+/, '');
-  return CANONICAL_TOOLTYPE_KEY[stripped] ?? upper;
+  if (CANONICAL_TOOLTYPE_KEY[stripped]) {
+    return CANONICAL_TOOLTYPE_KEY[stripped];
+  }
+
+  // A digit is alphanumeric, so the strip above leaves a length byte that
+  // happened to print as one glued to the front of the key. bbsConfig.info
+  // carries "6FTPDATAPORT=50101,..." that way - 0x36 is the entry's own
+  // length - and the port list has never reached the config because of it.
+  // Only accepted when what remains is a tooltype this BBS knows, so a key
+  // that genuinely starts with a digit is left alone.
+  const digitsStripped = upper.replace(/^[0-9]+(?=[A-Z])/, '');
+  return CANONICAL_TOOLTYPE_KEY[digitsStripped] ?? upper;
 }
 
 function parseTooltypesTextFile(filePath: string): Map<string, string> {
@@ -443,6 +454,11 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
       const parsed = parser.parse(buffer);
       for (const [rawKey, rawValue] of parsed.toolTypes.entries()) {
         const key = normalizeTooltypeKey(rawKey);
+        // FindToolType answers with the first match (tooltypes.e:215-218), and
+        // this file repeats keys: FTPDATAPORT appears as "6FTPDATAPORT=50101,
+        // ..." and again as a bare flag. Overwriting left the flag's empty
+        // value, so the ports the sysop configured read as unset.
+        if (mergedToolTypes.has(key)) continue;
         mergedToolTypes.set(key, rawValue);
       }
 console.log('[BBSConfig] Loaded configuration from bbsConfig.info');

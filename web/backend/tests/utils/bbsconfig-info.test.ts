@@ -27,6 +27,7 @@ import os from 'os';
 import path from 'path';
 import { parseInfoFile, writeInfoFile, readTooltypeMap, updateTooltype } from '../../src/utils/info-file.util';
 import { extractTooltypesFromInfoFile } from '../../src/utils/amiga-command-parser.util';
+import { loadBBSConfig } from '../../src/services/bbs-config-file.service';
 
 const BBSCONFIG_INFO_B64 =
   '4xAAAQAAAAABTwAPADQAFgAEAAEAAautyv4AAAAAAAAAAAFPAAcAAAAAAACAAAABBACrrcr+q63K/gAAAH4AAABdAAAAAAAA' +
@@ -111,6 +112,18 @@ describe('bbsConfig.info', () => {
       if (key === 'IDLE_TIMEOUT') continue;
       expect(after.get(key)).toBe(value);
     }
+  });
+
+  it('reaches the config with the ports the sysop set, glued length byte and all', () => {
+    // The file spells the key "6FTPDATAPORT" - 0x36 is the entry's own length,
+    // baked into the key by an older round trip - and then repeats FTPDATAPORT
+    // as a bare flag. The loader used to normalise the first to nothing and let
+    // the second overwrite it, so a configured port list read as unset.
+    const config = loadBBSConfig(testDir);
+
+    expect(config.ftp_data_ports).toBe('40101,40102,40103,40104,40105,40106,40107');
+    expect(config.bbs_name).toBe('Boards');
+    expect(config.telnet_port).toBe(60000);
   });
 
   it('answers a repeated key the way FindToolType does, with the first', () => {
