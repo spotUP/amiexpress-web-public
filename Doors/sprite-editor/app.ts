@@ -170,8 +170,8 @@ export class StudioApp {
       if (!sel.door || !sel.sprite || !sprite || this.editScreen) return;
       // The browser sleeps while the editor owns the screen: its panes
       // hide and its playback pauses, so two timers never fight over
-      // render() and the browser's keys are the EDITOR's problem to
-      // avoid (it removes its own on destroy).
+      // render() and apply() ignores keys while the editor is open, so
+      // the browser's own bindings cannot drift the selection underneath it.
       if (this.playback) { clearInterval(this.playback); this.playback = null; }
       for (const w of [this.doorsList, this.spritesList, this.animationsList,
                        this.previewBox, this.statusBar]) w.hide();
@@ -187,6 +187,11 @@ export class StudioApp {
   }
 
   private apply(next: BrowserState): void {
+    // Blessed fires EVERY handler bound to a key, so while the edit
+    // screen owns the arrows and tab, the browser's own bindings still
+    // run - and were mutating the selection underneath the editor.
+    // Every navigation key funnels through here; one guard covers them.
+    if (this.editScreen) return;
     if (next === this.state) return;
     const before = selection(this.state);
     this.state = next;

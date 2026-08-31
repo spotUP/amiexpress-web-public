@@ -10,7 +10,7 @@
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
-  Cell, Sprite, PALETTE, bufferToTags,
+  Cell, Sprite, PALETTE,
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import {
   EditDoc, openDoc, currentFrame, selectAnimation, selectFrame, addFrame,

@@ -14,6 +14,9 @@ const raw = readFileSync(join(__dirname, '..', 'edit-screen.ts'), 'utf8');
 /** The source with line and block comments removed. */
 const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
+const appRaw = readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
+const appCode = appRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
 export async function theScreenUsesTheDocumentModel(): Promise<void> {
   for (const op of ['openDoc', 'addFrame', 'deleteFrame', 'moveFrame',
                     'setCell', 'setPixel', 'setTicksPerFrame', 'toggleLoop',
@@ -38,4 +41,15 @@ export async function teardownClearsItsTimerAndKeys(): Promise<void> {
 export async function escapeIsGuardedWhenDirty(): Promise<void> {
   assert.ok(/dirty/.test(code) && /escape/i.test(code),
     'a dirty document must not be silently discarded by one keypress');
+}
+
+/**
+ * While the editor owns the screen, the browser must be deaf: blessed
+ * fires every handler bound to a key, and unguarded navigation mutated
+ * the selection underneath the editor on every arrow press.
+ */
+export async function theBrowserIsDeafWhileTheEditorIsOpen(): Promise<void> {
+  const applyBody = appCode.slice(appCode.indexOf('private apply('));
+  assert.ok(/if \(this\.editScreen\) return;/.test(applyBody.slice(0, 400)),
+    'apply() must ignore navigation while the edit screen is open');
 }

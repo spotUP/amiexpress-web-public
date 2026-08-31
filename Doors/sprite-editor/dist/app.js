@@ -161,8 +161,8 @@ class StudioApp {
                 return;
             // The browser sleeps while the editor owns the screen: its panes
             // hide and its playback pauses, so two timers never fight over
-            // render() and the browser's keys are the EDITOR's problem to
-            // avoid (it removes its own on destroy).
+            // render() and apply() ignores keys while the editor is open, so
+            // the browser's own bindings cannot drift the selection underneath it.
             if (this.playback) {
                 clearInterval(this.playback);
                 this.playback = null;
@@ -182,6 +182,12 @@ class StudioApp {
         });
     }
     apply(next) {
+        // Blessed fires EVERY handler bound to a key, so while the edit
+        // screen owns the arrows and tab, the browser's own bindings still
+        // run - and were mutating the selection underneath the editor.
+        // Every navigation key funnels through here; one guard covers them.
+        if (this.editScreen)
+            return;
         if (next === this.state)
             return;
         const before = (0, browser_model_1.selection)(this.state);
