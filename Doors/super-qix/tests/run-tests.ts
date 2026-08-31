@@ -21,6 +21,7 @@ const TEST_MODULES = [
   './level-outro.test',
   './levels-and-skill.test',
   './powerups.test',
+  './controls.test',
 ];
 
 (async () => {

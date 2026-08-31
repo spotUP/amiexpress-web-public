@@ -98,6 +98,14 @@ export class DrawingSystem {
                 d.field[point.y][point.x] = 'claimed';
             }
         }
+        // How much there was to dodge, counted BEFORE the claim resolves.
+        //
+        // QUIX pays (area / 2) * quixnum (qarea.c:192): the same ground is worth
+        // more when more Gremlins were loose on it. The count has to be taken
+        // here rather than after, because claimAreaWithoutQix removes any Gremlin
+        // this claim seals in - and a claim that catches one should be paid for
+        // the board it was drawn on, not the emptier one it leaves behind.
+        const gremlinsOnBoard = Math.max(1, d.qixList.length);
         // Find and claim the area without Qix
         const claimResult = this.claimAreaWithoutQix();
         // Points scale with the size of the section claimed (FAQ 2.4.1).
@@ -110,7 +118,10 @@ export class DrawingSystem {
         // arcade does - FAQ 2.2, on trapping half of a divided Gremlin: "I
         // don't think this gets you any bonus points, unfortunately" - nor
         // compatible with the multiplier meaning what FAQ 2.4.1 says it means.
-        const points = Math.floor(claimResult.percent * DRAW_BASE_POINTS * d.scoreMultiplier);
+        const points = Math.floor(claimResult.percent * DRAW_BASE_POINTS * d.scoreMultiplier * gremlinsOnBoard);
+        // Gremlins this claim sealed in. Banked for the level's end rather than
+        // paid now: the tally belongs beside AREA and WORD on the BONUS panel.
+        d.gremlinsCaptured += claimResult.captured;
         // The line just drawn stays on the board. The player cannot walk it
         // once it is buried, but the Skulls can (FAQ 2.2).
         d.internalLines.push(d.currentStix.points.map(p => ({ ...p })));
@@ -169,14 +180,19 @@ export class DrawingSystem {
             totalClaimed += region.points.length;
         }
         // A Gremlin sealed into ground that is being claimed disappears with it.
+        // It used to disappear silently; the count goes back to the caller now,
+        // because trapping one is a play worth paying for (see CAPTURE_POINTS).
+        let captured = 0;
         if (outside) {
             const claimedCells = new Set(filled.map(p => `${p.x},${p.y}`));
-            d.qixList = d.qixList.filter(q => !claimedCells.has(`${Math.floor(q.x)},${Math.floor(q.y)}`));
+            const survivors = d.qixList.filter(q => !claimedCells.has(`${Math.floor(q.x)},${Math.floor(q.y)}`));
+            captured = d.qixList.length - survivors.length;
+            d.qixList = survivors;
         }
         // Calculate percentage of total field
         const fieldArea = (FIELD_WIDTH - 2) * (FIELD_HEIGHT - 2); // Exclude borders
         const percent = (totalClaimed / fieldArea) * 100;
-        return { percent, filled };
+        return { percent, filled, captured };
     }
     /**
      * Find all unclaimed regions using flood fill

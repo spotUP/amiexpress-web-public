@@ -13,7 +13,8 @@ user-agreed reason)
 A tick requires Gate 3 evidence: a test that drives the door's top-level entry
 point, proves the new code ran, and asserts the spec's stated numbers.
 
-**Total: 74 · DONE: 74 · EXEMPT: 9 · OPEN: 0**  _(last updated 2026-08-31)_
+**FAQ total: 74 · DONE: 74 · EXEMPT: 9 · OPEN: 0**
+**QUIX total: 30 · DONE: 30 · OPEN: 0**  _(last updated 2026-08-31)_
 
 ---
 
@@ -166,6 +167,97 @@ point, proves the new code ran, and asserts the spec's stated numbers.
    from the menu, with the high-score table recording the mode.
 4. **Credit mechanics are EXEMPT** — a BBS door has no coin slot. The 98%
    milestone is kept as a reward (an extra life) rather than a free credit.
+
+---
+
+## QUIX reference comparison (Q-*)
+
+A second pass, against the QUIX reference implementation
+(`https://codeberg.org/SirWumpus/quix` @ `1e1d40dbeb`) rather than the FAQ.
+Research: `thoughts/shared/research/2026-08-31_quix-reference-comparison.md`.
+Plan: `thoughts/shared/plans/2026-08-31-super-qix-quix-gaps.md`.
+
+Every item below was verified by reverting the change and watching the named
+test fail. Where a revert could not fail a test - a negative assertion, or new
+code with nothing to revert to - the opposite mutation was applied instead and
+is noted.
+
+### Your own line stops you, it does not kill you
+
+| ID | Item | Status |
+|----|------|--------|
+| Q-1a | Walking into your own line refuses the move and costs no life | DONE (tests/gremlin-and-fuse.test.ts `theMarkerCannotCrossItsOwnLine`) |
+| Q-1b | A refused crossing lights the Fuse | DONE (tests/gremlin-and-fuse.test.ts `aRefusedCrossingLightsTheFuse`) |
+| Q-1c | Backtracking one cell still works and still does not reset the stall timer | DONE (tests/gremlin-and-fuse.test.ts `theMarkerCanBacktrackAlongItsOwnLine`, `backtrackingDoesNotResetTheFuseTimer`) |
+| Q-1d | The Fuse still kills when it reaches the marker | DONE (tests/gremlin-and-fuse.test.ts `theFuseStillKillsWhenItReachesTheMarker`) |
+
+### More Gremlins, and a fill worth more because of them
+
+| ID | Item | Status |
+|----|------|--------|
+| Q-2a | Level 1 starts with one Gremlin | DONE (tests/enemies.test.ts `levelOneStartsWithOneGremlin`) |
+| Q-2b | A Gremlin is added every fourth level | DONE (tests/enemies.test.ts `aGremlinIsAddedEveryFourthLevel`) |
+| Q-2c | The count never exceeds MAX_GREMLINS | DONE (tests/enemies.test.ts `theGremlinCountStopsAtTheCap`) |
+| Q-2d | The same claim scores more with more Gremlins on the board | DONE (tests/drawing.test.ts `theSameClaimIsWorthMoreWithMoreGremlins`) |
+| Q-2e | Tick speed does NOT change with the count (recorded as a departure) | DONE (tests/enemies.test.ts `theGremlinCountDoesNotChangeTheGamesSpeed`) |
+
+### Capturing a Gremlin pays
+
+| ID | Item | Status |
+|----|------|--------|
+| Q-3a | Sealing a Gremlin into a claim counts as a capture | DONE (tests/gremlin-and-fuse.test.ts `sealingAGremlinIntoAClaimCountsAsACapture`) |
+| Q-3b | A Gremlin left outside the claim does not | DONE (tests/gremlin-and-fuse.test.ts `aGremlinLeftOutsideTheClaimIsNotACapture`) |
+| Q-3c | The level-end tally pays CAPTURE_POINTS for each | DONE (tests/level-outro.test.ts `theLevelEndPaysForEachCapturedGremlin`) |
+| Q-3d | The BONUS panel shows a CAPTURE row when there were captures | DONE (tests/level-outro.test.ts `theBonusPanelShowsACaptureRow`) |
+| Q-3e | ...and omits it when there were none | DONE (tests/level-outro.test.ts `theBonusPanelOmitsTheCaptureRowWhenThereWereNone`; a negative assertion, so verified by making the row unconditional and watching it fail) |
+| Q-3f | The count resets between levels | DONE (tests/level-outro.test.ts `theCaptureCountResetsBetweenLevels`) |
+
+### A ceiling on lives
+
+| ID | Item | Status |
+|----|------|--------|
+| Q-4a | Lives stop at MAX_LIVES however they are earned | DONE (tests/levels-and-skill.test.ts `livesStopAtTheCeilingHoweverTheyAreEarned`, all three award routes) |
+| Q-4b | All three award sites go through one function | DONE (tests/levels-and-skill.test.ts `everyLifeAwardGoesThroughOneFunction`, asserted against the source so a FOURTH site added later is caught) |
+
+### The door's conveniences
+
+| ID | Item | Status |
+|----|------|--------|
+| Q-5a | Help lists every binding, generated from the live map | DONE (tests/controls.test.ts `theHelpScreenListsEveryBinding`, `theHelpScreenFollowsARemap`, `theDoorGeneratesItsHelpFromTheKeyMap`) |
+| Q-5b | Ctrl-D repaints the board | DONE (tests/controls.test.ts `ctrlDIsRecognisedAsTheRedrawKey`, `theDoorRepaintsOnCtrlD`) |
+| Q-5c | A remapped key moves the marker | DONE (tests/controls.test.ts `aRemappedKeyMovesTheMarker`, `theDoorDispatchesMovementThroughTheKeyMap`) |
+| Q-5d | The arrow keys keep working after a remap | DONE (tests/controls.test.ts `theArrowKeysKeepWorkingAfterARemap`, `aRemapRefusesKeysTheGameAlreadyNeeds`) |
+| Q-5e | A remap survives leaving and re-entering the door | DONE (tests/controls.test.ts `aRemapSurvivesLeavingAndReenteringTheDoor`, `theDoorLoadsAndSavesTheBindings`) |
+| Q-5f | High scores are written outside `dist/` and survive a deploy | DONE (tests/controls.test.ts `highScoresAreWrittenOutsideDist`) |
+| Q-5g | A full BBS handle can be recorded as a high score | DONE (tests/controls.test.ts `aFullBbsHandleCanBeRecorded`) |
+| Q-5h | The high score name is taken from the session, not typed | DONE (tests/controls.test.ts `theHighScoreNameComesFromTheSession`) |
+
+### The ledger
+
+| ID | Item | Status |
+|----|------|--------|
+| Q-6a | CHECKLIST.md carries the QUIX section and the deliberate departures | DONE (this section) |
+
+### Two defects found while reading our own source
+
+Neither came from the reference; both were found while comparing against it,
+and both were live faults on the board.
+
+| What | Where it was | Why it mattered |
+|------|--------------|-----------------|
+| High scores were written into `dist/` | `server.ts:12`, `path.join(__dirname, 'highscores.json')` | `__dirname` is `dist/` under the compiled door, and every deploy rebuilds it - so the board was wiped on each deploy. Arkanoid was fixed for exactly this; Super Qix never was. |
+| The save RPC rejected any name longer than three characters | `server.ts:63` | A BBS handle is not three initials, so a player called SPOTUP could not get onto the board at all - the same fault Frogger had. `MAX_NAME_LENGTH` already existed at 3 and was ignored: `index.ts` and `server.ts` both hardcoded the figure. |
+
+### Deliberate departures from the QUIX reference (user-agreed)
+
+| Departure | Reason |
+|-----------|--------|
+| Tick speed is not scaled by the Gremlin count | The reference's `udelay((10 - quixnum) * 30)` is an 1980s terminal's pacing; ours was measured against BBS keypress timing (~660ms between taps) and retuning it would undo that work |
+| Captures pay 250, though FAQ 2.2 says they pay nothing | Agreed with the user: it rewards the trapping play the FAQ itself calls the most spectacular in the game, and the reference pays for it (`quix.c:299`) |
+| The filled side is chosen by area, not by Gremlin counts | FAQ 2.1 and 2.2 settle this the other way, and ours follows the FAQ |
+| The Gremlin count is capped at four, not the reference's ten | Ten Gremlins on a 38x18 field leaves nowhere to draw. One arrives every fourth level, so a 16-level lap ends at the cap exactly as it ends. |
+| The Gremlin count does NOT reset when a lap does | Noted here because it contradicts a FAQ 3 quote already carried in `getLevelConfig`: "there are no changes between the initial L.1 and the L.1 you come back to". That quote is about enemy SPEEDS, which still hold; handing back three Gremlins at level 17 would undo the lap the player just finished, and the reference never resets its count either. `theSecondLapIsIdenticalToTheFirst` still checks the speeds and the level word. |
+
 
 ### Exemptions agreed
 

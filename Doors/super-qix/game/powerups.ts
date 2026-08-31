@@ -20,7 +20,8 @@ import {
   POWERUP_EFFECTS,
   SPARE_LETTER_POINTS,
   ONE_UP_CHANCE,
-  POWERUP_DRIFT_SPEED
+  POWERUP_DRIFT_SPEED,
+  grantLife
 } from './constants';
 
 /**
@@ -452,7 +453,8 @@ export class PowerUpSystem {
 
       case 'oneUp':
         // FAQ 2.3.1: "An extremely rare bonus, which gives you one free life."
-        d.lives++;
+        // Through grantLife, so the ceiling holds however the life arrives.
+        grantLife(d);
         break;
 
       case 'letter':

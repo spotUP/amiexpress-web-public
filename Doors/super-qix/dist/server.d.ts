@@ -2,7 +2,38 @@
  * Super Qix - Server RPC Handlers
  * Handles persistence operations for hybrid door mode
  */
-import { HighScore } from './game/types';
+import { HighScore, KeyMap } from './game/types';
+/**
+ * The door's own directory, wherever it is running from.
+ *
+ * __dirname is Doors/super-qix when the door runs from TypeScript source
+ * (dev - door.handler.ts prefers the .ts entry outside production) and
+ * Doors/super-qix/dist when it runs compiled. Walking up to the directory
+ * holding package.json gives the door root in both cases, so dev and the
+ * live board use ONE file instead of drifting apart.
+ *
+ * This is what HIGHSCORES_PATH used to get wrong: it was
+ * path.join(__dirname, 'highscores.json'), which under the compiled door is
+ * inside dist/ - and every deploy rebuilds dist/, so the board was wiped
+ * each time. Arkanoid was fixed for exactly this; Super Qix never was.
+ *
+ * It must NOT be derived from process.cwd() either: the backend runs with
+ * cwd web/backend, which is outside the Doors volume entirely.
+ *
+ * startAt exists so a test can prove the walk actually climbs out of dist/.
+ * Under tsx, __dirname already IS the door root, so a test that only looked
+ * at the resolved path would pass just as happily on the broken version.
+ */
+export declare function getDoorRoot(startAt?: string): string;
+/**
+ * Where the high scores live.
+ *
+ * Exported so a regression test can assert it resolves inside the door's own
+ * directory rather than into the dist/ a deploy replaces.
+ */
+export declare function getHighscorePath(): string;
+/** Where per-player settings live, beside the high scores. */
+export declare function getSettingsPath(): string;
 /**
  * RPC Handlers for client-server communication
  */
@@ -27,6 +58,26 @@ export declare const rpcHandlers: {
      * Reset high scores to defaults (admin function)
      */
     resetHighscores: () => Promise<{
+        success: boolean;
+    }>;
+    /**
+     * This player's saved key bindings, or the defaults if they have none.
+     *
+     * Keyed by BBS handle so two players on the same board keep their own,
+     * and stored outside dist/ so a deploy does not throw them away.
+     */
+    getSettings: (params: {
+        user: string;
+    }) => Promise<{
+        keyMap: KeyMap;
+    }>;
+    /**
+     * Remember this player's key bindings.
+     */
+    saveSettings: (params: {
+        user: string;
+        keyMap: KeyMap;
+    }) => Promise<{
         success: boolean;
     }>;
 };

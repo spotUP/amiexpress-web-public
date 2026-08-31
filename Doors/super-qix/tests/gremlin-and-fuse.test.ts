@@ -1,7 +1,9 @@
 /**
  * Backtracking, the Fuse, and the Gremlin's temperament.
  *
- * Covers FAQ-2.1f (crossing your own line is fatal), FAQ-2.1g and FAQ-2.5.3e
+ * Covers FAQ-2.1f (crossing your own line is REFUSED, not fatal - "you are not
+ * allowed to cross your own line", and the refusal lights the fuse the way
+ * QUIX's qmoves.c does), FAQ-2.1g and FAQ-2.5.3e
  * (backtracking along the line IS allowed), FAQ-2.2n/2.2o/2.2p (the fuse
  * starts when you stop, resumes where it left off, and treats backtracking
  * as not moving), FAQ-2.2a (the Gremlin leans towards the marker), FAQ-2.2d
@@ -37,7 +39,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
+    stopTimer: 0, gremlinsCaptured: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
 
@@ -111,6 +113,113 @@ export async function crossingTheLineElsewhereIsStillRefused(): Promise<void> {
     drawing.extendStix(farBack), false,
     'the line must refuse to be drawn across itself'
   );
+}
+
+/**
+ * Walk the marker into an earlier part of its own line, and nothing happens
+ * except that the move is refused.
+ *
+ * Q-1a. FAQ 2.1: "You are not allowed to cross your own line, which can result
+ * in painting yourself into a corner if you're not careful." Not allowed means
+ * refused - and painting yourself into a corner is only worth warning about if
+ * it does not kill you outright. QUIX agrees: qmoves.c:226-230 refuses the move.
+ *
+ * The geometry: up three, right one, down one puts the head one cell to the
+ * RIGHT of the line's own vertical run, so stepping left is a crossing rather
+ * than a backtrack.
+ */
+export async function theMarkerCannotCrossItsOwnLine(): Promise<void> {
+  const { engine, data } = startedEngine();
+  const drawing: any = (engine as any).drawingSystem;
+
+  engine.handleDraw();
+  for (let i = 0; i < 3; i++) move(engine, 'up');
+  move(engine, 'right');
+  move(engine, 'down');
+
+  const head = { x: data.marker.x, y: data.marker.y };
+  const target = { x: head.x - 1, y: head.y };
+  assert.strictEqual(
+    data.field[target.y][target.x], 'stix',
+    'the cell to the left should be an earlier part of the line'
+  );
+  assert.strictEqual(
+    drawing.isBacktrack(target), false,
+    'it must be a crossing, not the backtrack cell, or this proves nothing'
+  );
+
+  const livesBefore = data.lives;
+  const lengthBefore = data.currentStix!.points.length;
+  move(engine, 'left');
+
+  assert.strictEqual(
+    data.lives, livesBefore,
+    'crossing your own line must not cost a life'
+  );
+  assert.deepStrictEqual(
+    { x: data.marker.x, y: data.marker.y }, head,
+    'the marker should stay where it was - the move is refused, not taken'
+  );
+  assert.ok(data.currentStix, 'the line must survive a refused crossing');
+  assert.strictEqual(
+    data.currentStix!.points.length, lengthBefore,
+    'a refused crossing must not extend or shorten the line'
+  );
+}
+
+/**
+ * Q-1b. QUIX lights the fuse when the player is wedged (qmoves.c:214-219), so
+ * a marker painted into a corner is on the clock rather than merely stuck.
+ * Without this, refusing the move would turn a death into a safe haven.
+ */
+export async function aRefusedCrossingLightsTheFuse(): Promise<void> {
+  const { engine, data } = startedEngine();
+
+  engine.handleDraw();
+  for (let i = 0; i < 3; i++) move(engine, 'up');
+  move(engine, 'right');
+  move(engine, 'down');
+  assert.strictEqual(data.fuse, null, 'no fuse yet - the player has been moving');
+
+  move(engine, 'left');   // refused: into its own line
+
+  assert.ok(data.fuse, 'a refused crossing should light the fuse at once');
+  assert.strictEqual(data.fuse!.active, true, 'and it should be burning');
+  assert.ok(
+    data.stopTimer >= FUSE_START_DELAY,
+    `the stop timer should be past the delay, was ${data.stopTimer}`
+  );
+}
+
+/**
+ * Q-1d. The fuse is the whole reason refusing the move is not a free pass:
+ * stand still while drawing and it burns the length of the line and kills.
+ */
+export async function theFuseStillKillsWhenItReachesTheMarker(): Promise<void> {
+  const { engine, data } = startedEngine();
+  const enemies: any = (engine as any).enemySystem;
+
+  const realFuse = enemies.checkFuseCollision.bind(enemies);
+  let cause = '';
+  enemies.checkFuseCollision = (...a: any[]) => {
+    const r = realFuse(...a);
+    if (r) cause = 'fuse';
+    return r;
+  };
+
+  engine.handleDraw();
+  for (let i = 0; i < 8; i++) move(engine, 'up');
+
+  const livesBefore = data.lives;
+  const ticks = Math.ceil(FUSE_START_DELAY / GAME_TICK_MS) + 500;
+  let died = false;
+  for (let i = 0; i < ticks; i++) {
+    engine.update();
+    if (data.lives < livesBefore) { died = true; break; }
+  }
+
+  assert.ok(died, 'standing still while drawing should let the fuse catch the marker');
+  assert.strictEqual(cause, 'fuse', `the fuse should be what killed, not ${cause || 'something else'}`);
 }
 
 /**
@@ -405,6 +514,79 @@ export async function cuttingBetweenTwoGremlinsClaimsTheSmallerSideAndTrapsIt():
   // And the Gremlin sealed into the claimed side is gone.
   assert.strictEqual(data.qixList.length, 1, 'the trapped Gremlin should disappear');
   assert.strictEqual(data.qixList[0].id, 2, 'the one in the larger area survives');
+}
+
+/**
+ * Set up a board already walled into a narrow left strip and a wider right
+ * side, with one frozen Gremlin in each, and draw a line that closes.
+ *
+ * The wall makes the narrow strip a region of its own before a line is ever
+ * drawn; the line then splits the right side again. Outside is the largest
+ * region holding a Gremlin - the middle - so the narrow strip is claimed with
+ * its Gremlin inside it, and the other one is left loose.
+ *
+ * Neither Gremlin sits in the marker's column: a Gremlin standing on the line
+ * would be paved over rather than sealed in, and no region would hold it.
+ */
+function trapOneGremlinOfTwo(): { data: SuperQixData; engine: QixEngine } {
+  const data = createData();
+  const engine = new QixEngine(data, () => {});
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.sparxList = [];
+
+  const wall = 6;
+  for (let y = 1; y < FIELD_HEIGHT - 1; y++) data.field[y][wall] = 'claimed';
+
+  data.qixList = [
+    { id: 1, x: 3, y: 5, vx: 0, vy: 0, speed: 0,
+      segments: [{ x: 3, y: 5 }], frozen: true, frozenTimer: 999999 },
+    { id: 2, x: 12, y: 5, vx: 0, vy: 0, speed: 0,
+      segments: [{ x: 12, y: 5 }], frozen: true, frozenTimer: 999999 },
+  ];
+
+  // Straight up from the bottom frame to the top one, at the marker's own
+  // column (20) - clear of both Gremlins.
+  engine.handleDraw();
+  for (let i = 0; i < FIELD_HEIGHT; i++) move(engine, 'up');
+
+  return { data, engine };
+}
+
+/**
+ * Q-3a. Sealing a Gremlin into ground you claim is a capture, and the game
+ * counts it. It used to drop the Gremlin silently, so the most spectacular
+ * play in the game left no trace at all.
+ */
+export async function sealingAGremlinIntoAClaimCountsAsACapture(): Promise<void> {
+  const { data } = trapOneGremlinOfTwo();
+
+  assert.strictEqual(
+    data.qixList.length, 1,
+    'exactly one of the two Gremlins should have been sealed in'
+  );
+  assert.strictEqual(
+    data.gremlinsCaptured, 1,
+    `the capture should have been counted, got ${data.gremlinsCaptured}`
+  );
+}
+
+/**
+ * Q-3b. Only the Gremlin actually inside the claimed ground is caught. The
+ * one left in Outside is still on the board and must not be paid for.
+ */
+export async function aGremlinLeftOutsideTheClaimIsNotACapture(): Promise<void> {
+  const { data } = trapOneGremlinOfTwo();
+
+  assert.strictEqual(data.qixList.length, 1, 'one Gremlin should survive');
+  assert.strictEqual(
+    data.qixList[0].id, 2,
+    'the survivor should be the one in Outside, not the one in the claim'
+  );
+  assert.strictEqual(
+    data.gremlinsCaptured, 1,
+    'the surviving Gremlin must not be counted as captured as well'
+  );
 }
 
 /**

@@ -2,7 +2,7 @@
  * Super Qix - Power-Up System
  * Handles power-up spawning, effects, and letter collection
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, POWERUP_SPAWN_CHANCE, SPEED_BOOST_DURATION, FREEZE_DURATION, SPARE_LETTER_POINTS, ONE_UP_CHANCE, POWERUP_DRIFT_SPEED } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, POWERUP_SPAWN_CHANCE, SPEED_BOOST_DURATION, FREEZE_DURATION, SPARE_LETTER_POINTS, ONE_UP_CHANCE, POWERUP_DRIFT_SPEED, grantLife } from './constants';
 /**
  * Power-up system for spawning and managing power-ups
  */
@@ -373,7 +373,8 @@ export class PowerUpSystem {
                 break;
             case 'oneUp':
                 // FAQ 2.3.1: "An extremely rare bonus, which gives you one free life."
-                d.lives++;
+                // Through grantLife, so the ceiling holds however the life arrives.
+                grantLife(d);
                 break;
             case 'letter':
                 this.collectLetter(powerUp.letter);

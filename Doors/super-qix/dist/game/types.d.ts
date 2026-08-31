@@ -5,7 +5,20 @@
 /** The three skill levels the operator could set (FAQ 4). */
 export type SkillLevel = 'easy' | 'medium' | 'hard';
 export type Direction = 'up' | 'down' | 'left' | 'right';
-export type GameState = 'menu' | 'playing' | 'paused' | 'levelComplete' | 'gameover' | 'highscores' | 'enterName' | 'levelTransition';
+export type GameState = 'menu' | 'playing' | 'paused' | 'levelComplete' | 'gameover' | 'highscores' | 'enterName' | 'remapKeys' | 'levelTransition';
+/**
+ * Which key moves the marker which way.
+ *
+ * A value is whatever normalizeKey produces, so the four direction tokens
+ * ('up'..'right') stand for the arrow keys and WASD together. Those always
+ * work; the map is consulted on top of them, never instead.
+ */
+export interface KeyMap {
+    up: string;
+    down: string;
+    left: string;
+    right: string;
+}
 export type CellState = 'unclaimed' | 'claimed' | 'border' | 'stix';
 export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter' | 'oneUp';
 export interface Point {
@@ -166,6 +179,19 @@ export interface SuperQixData {
      * Skulls are released and it resets.
      */
     timeMeter: number;
+    /**
+     * How many Gremlins have been sealed into claimed ground this level.
+     *
+     * Paid at the end of the level, one CAPTURE_POINTS each. Reset by
+     * initLevel, so it is what THIS level caught and not a running total.
+     */
+    gremlinsCaptured: number;
+    /** The player's movement bindings, loaded from their saved settings. */
+    keyMap: KeyMap;
+    /** Which direction the remap screen is currently asking for, if it is open. */
+    remapDirection: number;
+    /** What the remap screen last refused, so it can say why. */
+    remapMessage: string;
     /** An open Warp doorway, if one has been released (FAQ 2.3.1). */
     warp: {
         x: number;

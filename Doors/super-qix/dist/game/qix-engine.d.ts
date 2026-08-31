@@ -204,6 +204,19 @@ export declare class QixEngine {
      */
     handleDirection(dir: Direction): void;
     /**
+     * Light the Fuse on the line being drawn, and advance it a step.
+     *
+     * QUIX lights the fuse from two places: the player standing still
+     * (qmoves.c:214-219) and a move it has just refused. Both routes share this
+     * one implementation so the fuse cannot behave differently depending on
+     * which of them started it.
+     *
+     * A route that lights it early has to carry the stop timer with it, or the
+     * next tick would find the timer below the delay and stop advancing the
+     * fuse it just lit.
+     */
+    private lightFuse;
+    /**
      * Detach from the edge and start drawing.
      *
      * Super Qix has a single Draw button - there is no slow/fast choice
