@@ -1,0 +1,26 @@
+{
+  "name": "sprite-editor",
+  "version": "1.0.0",
+  "description": "Sprite studio - browse, preview and (2b) edit door sprite sheets",
+  "main": "dist/index.js",
+  "bbsCommand": "SPRITED",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 255,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx --watch index.ts",
+    "start": "node dist/index.js",
+    "test": "tsx tests/run-tests.ts"
+  },
+  "author": "AmiExpress BBS",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.0.0"
+  }
+}
