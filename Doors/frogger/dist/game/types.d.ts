@@ -2,7 +2,7 @@
  * Frogger - Game Types
  * 1981 Konami arcade game port
  */
-export type GameState = "menu" | "playing" | "dying" | "levelComplete" | "gameover" | "highscores" | "enterName" | "paused";
+export type GameState = "attract" | "menu" | "playing" | "dying" | "levelComplete" | "gameover" | "highscores" | "enterName" | "paused";
 export type Direction = "up" | "down" | "left" | "right";
 export type LaneType = "safe" | "road" | "water" | "home";
 export type VehicleType = "car" | "truck" | "racecar";

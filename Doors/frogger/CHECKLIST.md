@@ -104,7 +104,7 @@ FAQ says it should not) · `EXEMPT` (needs a written, agreed reason).
 
 | ID | Reason |
 |----|--------|
-| FAQ-8a | The door has no demo/attract mode to steer a frog around in |
+| FAQ-8a | There IS an attract demo now, but its keys open the menu rather than steering the frog - in a door the keyboard is how you start a game, and the arcade's steerable demo is a quirk of the coin slot |
 | FAQ-8b | Being credited for a home AND losing a frog is a bug in the arcade ROM, not behaviour worth reproducing |
 | FAQ-8c | Dangling off one side of a turtle but not the other needs sub-cell positions; a terminal cell is the smallest thing there is here |
 | FAQ-8d | Sluggish side-to-side movement in water lane 5 is a defect of the original hardware |
