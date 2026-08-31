@@ -183,7 +183,11 @@ export const BG_COLORS = {
     // FAQ 2.1: the line you are drawing is YELLOW, and turns BLUE once it
     // reconnects and becomes safe. There is no slow/fast draw in Super
     // Qix, so there is one drawing colour, not two.
-    stix: 'yellow',
+    // The line being drawn is BRIGHT yellow, not the dark yellow the arcade's
+    // palette calls yellow. Most of the ANSI backgrounds are drawn in browns
+    // and dark yellows - level 3's skull is almost entirely colour 3 - and a
+    // dark yellow line laid over one is invisible.
+    stix: 'lightyellow',
     stixSafe: 'blue',
     qix: 'magenta',
     sparx: 'red',

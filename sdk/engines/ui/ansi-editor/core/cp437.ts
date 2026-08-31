@@ -124,3 +124,35 @@ export function charToCP437Byte(char: string): number {
   if (codePoint <= 0xff) return codePoint;
   return 0x20;
 }
+
+/**
+ * Amiga ANSI art is Latin-1, not CP437.
+ *
+ * The Amiga had no code page 437: Topaz, mOsOul, MicroKnight and P0T-NOoDLE
+ * are ISO-8859-1 fonts, so byte 0xD8 is a slashed capital O and not the
+ * box-drawing piece CP437 puts there. Decoding an Amiga piece as CP437
+ * replaces every accented letter and symbol in it with line-drawing, which
+ * is why such art comes out as a lattice.
+ *
+ * Latin-1 maps one to one onto the first 256 Unicode code points, so the
+ * conversion is the identity.
+ */
+export function latin1ByteToChar(byte: number): string {
+  return String.fromCharCode(byte & 0xff);
+}
+
+/**
+ * Which of the two a piece is drawn in, from its SAUCE font name.
+ *
+ * SAUCE records the font an artist drew with (field TInfoS). Anything whose
+ * name starts with "Amiga" is Latin-1; everything else - the IBM VGA family
+ * and an absent name - is CP437.
+ */
+export function isAmigaFont(fontName: string | undefined): boolean {
+  return /^amiga/i.test((fontName || '').trim());
+}
+
+/** The byte-to-character conversion a piece in this font needs. */
+export function decoderForFont(fontName: string | undefined): (byte: number) => string {
+  return isAmigaFont(fontName) ? latin1ByteToChar : cp437ByteToChar;
+}

@@ -83,7 +83,13 @@ export async function theLineBeingDrawnIsVisibleAndYellow(): Promise<void> {
     painted.includes(`{${BG_COLORS.stix}-bg}`),
     `the drawn line must be painted in ${BG_COLORS.stix}; it was not in the frame at all`
   );
-  assert.strictEqual(BG_COLORS.stix, 'yellow', 'FAQ 2.1: the line you draw is yellow');
+  // FAQ 2.1 says the line is yellow. It is the BRIGHT yellow of the two the
+  // palette offers - see theDrawnLineIsBrighterThanTheArtItCrosses, which
+  // says why the dark one cannot be used.
+  assert.ok(
+    BG_COLORS.stix.endsWith('yellow'),
+    `FAQ 2.1: the line you draw is yellow, not ${BG_COLORS.stix}`
+  );
 }
 
 /**
@@ -203,4 +209,22 @@ export async function thereIsOnlyOneDrawButton(): Promise<void> {
     !('speed' in (data.currentStix as any)),
     'a stix should no longer carry a draw speed'
   );
+}
+
+/**
+ * The line being drawn has to stand out from the picture underneath it.
+ *
+ * Reported live 2026-08-31: "i still dont see my drawn yellow lines in
+ * superqix they are overwritten by the ansi images". The line was drawn in
+ * the arcade palette's dark yellow, and most of the backgrounds are drawn in
+ * browns and dark yellows - level 3's skull is almost entirely colour 3 - so
+ * the line disappeared into the art.
+ */
+export async function theDrawnLineIsBrighterThanTheArtItCrosses(): Promise<void> {
+  assert.strictEqual(
+    BG_COLORS.stix, 'lightyellow',
+    'the line has to be bright yellow, not the dark yellow the art uses'
+  );
+  assert.notStrictEqual(BG_COLORS.stix, BG_COLORS.claimed);
+  assert.notStrictEqual(BG_COLORS.stix, BG_COLORS.unclaimed);
 }
