@@ -3,10 +3,12 @@
  *
  * Real files, and one of them a real binary DiskObject: tests/fixtures/wall.info,
  * checked in. It has to be - reading the board's own Commands/BBSCmd copy is
- * untracked runtime state, which passed locally and died with ENOENT in CI. The assertion that matters is that the icon survives:
- * an .info is an icon with a tooltype array inside it, and a writer that
- * rebuilt the file from a template would silently throw the imagery away. That
- * is the mistake caf489708 fixed in the C door for the same reason.
+ * untracked runtime state, which passed locally and died with ENOENT in CI.
+ *
+ * The assertion that matters is that the icon survives: an .info is an icon
+ * with a tooltype array inside it, and a writer that rebuilt the file from a
+ * template would silently throw the imagery away. That is the mistake
+ * caf489708 fixed in the C door for the same reason.
  */
 import * as fs from 'fs';
 import * as os from 'os';
