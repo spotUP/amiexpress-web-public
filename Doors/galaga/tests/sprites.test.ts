@@ -31,17 +31,17 @@ export async function anEnemyBulletDoesNotLookLikeAStar(): Promise<void> {
 
   assert.strictEqual(bullet.ch, dimStar.ch, 'they share a glyph - that is the problem');
   assert.notStrictEqual(
-    bullet.fg, dimStar.fg,
+    bullet.bg, dimStar.fg,
     'the thing that kills you must not be painted like scenery'
   );
-  assert.strictEqual(bullet.fg, COLORS.enemyBullet);
+  assert.strictEqual(bullet.bg, COLORS.enemyBullet);
 }
 
 /** An explosion's last frame is also a dot, and also must not be a star. */
 export async function anExplosionIsNotAStarEither(): Promise<void> {
   const ember = explosionCell('.');
   assert.strictEqual(ember.ch, starCell(0).ch);
-  assert.notStrictEqual(ember.fg, starCell(0).fg);
+  assert.notStrictEqual(ember.bg, starCell(0).fg);
 }
 
 /** The player's shot and the enemy's are told apart at a glance. */
@@ -50,7 +50,7 @@ export async function theTwoBulletsAreDistinguishable(): Promise<void> {
   const theirs = bulletCell(true);
 
   assert.notStrictEqual(mine.ch, theirs.ch);
-  assert.notStrictEqual(mine.fg, theirs.fg);
+  assert.notStrictEqual(mine.bg, theirs.bg);
 }
 
 /** Each kind of alien has its own colour. */
@@ -59,7 +59,7 @@ export async function eachAlienKindHasItsOwnColour(): Promise<void> {
   const butterfly = alienCell('M', 'butterfly', false);
   const boss = alienCell('@', 'boss', false);
 
-  const colours = new Set([bee.fg, butterfly.fg, boss.fg]);
+  const colours = new Set([bee.bg, butterfly.bg, boss.bg]);
   assert.strictEqual(colours.size, 3, 'three kinds of alien, three colours');
 }
 
@@ -69,10 +69,10 @@ export async function aBossWithACapturedFighterIsMarked(): Promise<void> {
   const holding = alienCell('@', 'boss', true);
 
   assert.notStrictEqual(
-    plain.fg, holding.fg,
+    plain.bg, holding.bg,
     'the boss worth shooting for your fighter back must be visibly different'
   );
-  assert.strictEqual(holding.fg, COLORS.captured);
+  assert.strictEqual(holding.bg, COLORS.captured);
 }
 
 /** Bright stars read as bright. */
@@ -107,4 +107,22 @@ export async function theRendererPaintsCellsNotGlyphMatches(): Promise<void> {
     !/char === '\.'/.test(game),
     'colour must not be recovered by comparing the glyph after the fact'
   );
+}
+
+/**
+ * The things that matter are blocks of colour; the starfield is not.
+ *
+ * Reported: "i see no bg ansi colors". Every sprite was a bright character on
+ * the terminal's own background. The stars stay plain on purpose - they are
+ * scenery, and blocking them would bury the game under a wall of colour.
+ */
+export async function theGameIsBlocksAndTheSkyIsNot(): Promise<void> {
+  for (const c of [playerCell('A'), alienCell('w', 'bee', false), bulletCell(true), explosionCell('*')]) {
+    assert.ok(c.bg, `${JSON.stringify(c.ch)} should be a block of colour`);
+    assert.ok(/-bg\}/.test(paint(c)), 'the painted cell must carry a background');
+  }
+
+  for (const star of [starCell(0), starCell(1), starCell(2)]) {
+    assert.ok(!star.bg, 'the starfield must stay scenery, not a block');
+  }
 }

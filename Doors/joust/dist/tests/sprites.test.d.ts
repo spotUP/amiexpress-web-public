@@ -44,3 +44,5 @@ export declare function lavaChurnsAndIsHot(): Promise<void>;
 export declare function emptySkyCostsNothing(): Promise<void>;
 /** The renderer paints cells rather than matching characters afterwards. */
 export declare function theRendererDoesNotRecoverColourFromGlyphs(): Promise<void>;
+/** The game is blocks of colour; the sky stays empty. */
+export declare function theGameIsBlocksAndTheSkyIsNot(): Promise<void>;

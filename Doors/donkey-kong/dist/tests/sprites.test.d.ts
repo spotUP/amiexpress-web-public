@@ -28,3 +28,5 @@ export declare function blankSpaceIsNotTagged(): Promise<void>;
 export declare function noGlyphIsABrace(): Promise<void>;
 /** The renderer no longer recovers colour by comparing glyphs. */
 export declare function theRendererPaintsCellsNotGlyphMatches(): Promise<void>;
+/** Everything drawn is a block of colour; empty space is not. */
+export declare function everythingDrawnIsABlockOfColour(): Promise<void>;

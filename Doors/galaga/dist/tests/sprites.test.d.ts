@@ -30,4 +30,12 @@ export declare function paintingKeepsCellsOneColumn(): Promise<void>;
 export declare function emptySkyIsNotTagged(): Promise<void>;
 /** The renderer paints cells rather than matching glyphs. */
 export declare function theRendererPaintsCellsNotGlyphMatches(): Promise<void>;
+/**
+ * The things that matter are blocks of colour; the starfield is not.
+ *
+ * Reported: "i see no bg ansi colors". Every sprite was a bright character on
+ * the terminal's own background. The stars stay plain on purpose - they are
+ * scenery, and blocking them would bury the game under a wall of colour.
+ */
+export declare function theGameIsBlocksAndTheSkyIsNot(): Promise<void>;
 //# sourceMappingURL=sprites.test.d.ts.map

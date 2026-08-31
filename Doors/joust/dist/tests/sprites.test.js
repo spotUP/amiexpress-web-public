@@ -51,15 +51,15 @@ export async function everySpriteIsOneColumn() {
 export async function eachBuzzardCarriesItsOwnColour() {
     const bounder = enemyCell('right', 'lightred');
     const hunter = enemyCell('right', 'lightyellow');
-    assert.strictEqual(bounder.fg, 'lightred');
-    assert.strictEqual(hunter.fg, 'lightyellow');
-    assert.notStrictEqual(bounder.fg, hunter.fg, 'two kinds of buzzard must not share a colour');
+    assert.strictEqual(bounder.bg, 'lightred');
+    assert.strictEqual(hunter.bg, 'lightyellow');
+    assert.notStrictEqual(bounder.bg, hunter.bg, 'two kinds of buzzard must not share a colour');
 }
 /** An enemy with no colour still gets drawn rather than vanishing. */
 export async function anUnknownBuzzardStillHasAColour() {
     const cell = enemyCell('left', undefined);
-    assert.ok(cell.fg, 'a buzzard of unknown type must still be visible');
-    assert.strictEqual(cell.fg, COLORS.enemyFallback);
+    assert.ok(cell.bg, 'a buzzard of unknown type must still be visible');
+    assert.strictEqual(cell.bg, COLORS.enemyFallback);
 }
 /** The rider faces where it is going, and flapping overrides facing. */
 export async function theRiderFacesItsDirection() {
@@ -71,7 +71,7 @@ export async function theRiderFacesItsDirection() {
 /** A hatching egg is visibly different from a settled one. */
 export async function aHatchingEggLooksDifferent() {
     assert.notStrictEqual(eggCell(true).ch, eggCell(false).ch);
-    assert.notStrictEqual(eggCell(true).fg, eggCell(false).fg);
+    assert.notStrictEqual(eggCell(true).bg, eggCell(false).bg);
 }
 /** Lava churns, and sits on a hot background rather than bare sky. */
 export async function lavaChurnsAndIsHot() {
@@ -96,4 +96,14 @@ export async function theRendererDoesNotRecoverColourFromGlyphs() {
     assert.ok(/put\(/.test(game), 'the renderer should place cells that carry their colour');
     assert.ok(!/char === SPRITES\.platform/.test(game), 'colour must not be recovered by comparing the glyph after the fact');
     assert.ok(!/this\.data\.enemies\.find\(e =>\s*\n?\s*Math\.floor\(e\.x\) === x/.test(game), 'an enemy should not have to be looked up by position to find its colour');
+}
+/** The game is blocks of colour; the sky stays empty. */
+export async function theGameIsBlocksAndTheSkyIsNot() {
+    for (const c of [playerCell('right', false), enemyCell('left', 'lightred'),
+        eggCell(false), pterodactylCell(), platformCell(), lavaCell(0)]) {
+        assert.ok(c.bg, `${JSON.stringify(c.ch)} should be a block of colour`);
+        assert.ok(/-bg\}/.test(paint(c)), 'the painted cell must carry a background');
+    }
+    assert.ok(!EMPTY.bg, 'empty sky must stay empty');
+    assert.strictEqual(paint(EMPTY), ' ');
 }

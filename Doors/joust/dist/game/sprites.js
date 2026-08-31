@@ -20,6 +20,18 @@
  */
 /** The empty sky. */
 export const EMPTY = { ch: ' ', fg: 'white' };
+/**
+ * A solid block of colour with a glyph on it.
+ *
+ * Reported: "i see no bg ansi colors". Everything was a bright character on
+ * the terminal's own background, which reads as coloured text rather than as
+ * a sprite. The CELL carries the colour now and the glyph sits on it.
+ *
+ * The SKY stays empty and untagged - a board that is mostly air should not
+ * be a wall of colour, and tagging every space multiplies the bytes on a BBS
+ * line for no visible difference.
+ */
+const block = (ch, colour) => ({ ch, fg: 'black', bg: colour });
 /** Glyphs. None of them may be a brace - see the note above. */
 export const GLYPHS = {
     playerRight: '>',
@@ -50,32 +62,29 @@ export function playerCell(direction, flapping) {
     const ch = flapping
         ? GLYPHS.playerFlap
         : direction === 'right' ? GLYPHS.playerRight : GLYPHS.playerLeft;
-    return { ch, fg: COLORS.player };
+    return block(ch, COLORS.player);
 }
 /** A buzzard, in the colour of its own kind. */
 export function enemyCell(direction, colour) {
-    return {
-        ch: direction === 'right' ? GLYPHS.enemyRight : GLYPHS.enemyLeft,
-        fg: colour || COLORS.enemyFallback,
-    };
+    return block(direction === 'right' ? GLYPHS.enemyRight : GLYPHS.enemyLeft, colour || COLORS.enemyFallback);
 }
 /** An egg, brighter once it is hatching so it reads as a warning. */
 export function eggCell(hatching) {
     return hatching
-        ? { ch: GLYPHS.eggHatching, fg: COLORS.eggHatching }
-        : { ch: GLYPHS.egg, fg: COLORS.egg };
+        ? block(GLYPHS.eggHatching, COLORS.eggHatching)
+        : block(GLYPHS.egg, COLORS.egg);
 }
 export function pterodactylCell() {
-    return { ch: GLYPHS.pterodactyl, fg: COLORS.pterodactyl };
+    return block(GLYPHS.pterodactyl, COLORS.pterodactyl);
 }
 export function platformCell() {
-    return { ch: GLYPHS.platform, fg: COLORS.platform };
+    return block(GLYPHS.platform, COLORS.platform);
 }
 /** Lava, which churns between two glyphs and sits on a hot background. */
 export function lavaCell(frame) {
     return {
         ch: frame % 10 < 5 ? GLYPHS.lava : GLYPHS.lavaHand,
-        fg: COLORS.lava,
+        fg: 'black',
         bg: COLORS.lavaBg,
     };
 }
