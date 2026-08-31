@@ -38,7 +38,9 @@ interface BBSFileInfo {
   size: number;
 }
 
-class ANSIEditorDoor {
+// Exported for the regression tests; the door instance below stays the
+// default export the BBS loads.
+export class ANSIEditorDoor {
   private ctx!: DoorContext;
   private screen!: Screen;
   private inputManager!: DoorInputManager;
@@ -489,8 +491,13 @@ class ANSIEditorDoor {
    * Show open dialog (from editor menu)
    */
   private async showOpenDialog(): Promise<void> {
-    // Hide editor temporarily
-    this.editor.hide();
+    // No hide here: showFileBrowser hides the editor itself, and only
+    // AFTER it knows there are files to show. Hiding first meant the
+    // no-files path - message dialog, early return - left the editor
+    // hidden with nothing to restore it: reported live 2026-08-31 as
+    // "a dialog said that and then i got a black screen". The widget
+    // that hides the editor owns showing it again; nobody hides it on
+    // that widget's behalf.
     await this.showFileBrowser();
   }
 
