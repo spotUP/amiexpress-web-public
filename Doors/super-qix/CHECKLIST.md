@@ -13,7 +13,7 @@ user-agreed reason)
 A tick requires Gate 3 evidence: a test that drives the door's top-level entry
 point, proves the new code ran, and asserts the spec's stated numbers.
 
-**Total: 74 · DONE: 40 · EXEMPT: 0 · OPEN: 34**  _(last updated 2026-08-31)_
+**Total: 74 · DONE: 55 · EXEMPT: 7 · OPEN: 12**  _(last updated 2026-08-31)_
 
 ---
 
@@ -82,23 +82,23 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | FAQ-2.3a | Every fill, however small, has a chance to release a letter or power-up | PARTIAL |
 | FAQ-2.3b | Letters drift in a straight line to the far wall, then travel back around the edges | MISSING |
 | FAQ-2.3c | Power-ups follow the nearest already-drawn lines | MISSING |
-| FAQ-2.3d | Word letters award no points until the level completes | MISSING |
-| FAQ-2.3e | 1,000 points per key letter if the word is incomplete at the threshold | MISSING |
-| FAQ-2.3f | 10,000 points per key letter AND instant level completion if the word is spelled | PARTIAL |
-| FAQ-2.3g | A duplicate or non-word letter is an instant 500 points | MISSING |
+| FAQ-2.3d | Word letters award no points until the level completes | DONE |
+| FAQ-2.3e | 1,000 points per key letter if the word is incomplete at the threshold | DONE |
+| FAQ-2.3f | 10,000 points per key letter AND instant level completion if the word is spelled | DONE |
+| FAQ-2.3g | A duplicate or non-word letter is an instant 500 points | DONE |
 | FAQ-2.3h | Collected letters are lost on continue | MISSING |
 
 ## 2.3.1 Power-up behaviour
 
 | ID | Item | Status |
 |----|------|--------|
-| FAQ-2.3.1a | Power-ups are mutually exclusive — a new one cancels the current | MISSING |
-| FAQ-2.3.1b | Hurry stacks; another power-up cancels only the LAST Hurry | MISSING |
+| FAQ-2.3.1a | Power-ups are mutually exclusive — a new one cancels the current | DONE |
+| FAQ-2.3.1b | Hurry stacks; another power-up cancels only the LAST Hurry | DONE |
 | FAQ-2.3.1c | HURRY speeds up everything for ~10 seconds, cumulative | PARTIAL |
 | FAQ-2.3.1d | SHIELD absorbs one Skull hit and stuns it ~1s; does NOT protect from the Gremlin | PARTIAL |
 | FAQ-2.3.1e | FREEZE stops all enemies 5s; they remain deadly to touch | PARTIAL |
-| FAQ-2.3.1f | WARP opens a doorway (~1-2s to open, ~1s open); entering advances the level with no end-of-level bonus | MISSING |
-| FAQ-2.3.1g | 1-UP is a rare bonus granting a free life | MISSING |
+| FAQ-2.3.1f | WARP opens a doorway (~1-2s to open, ~1s open); entering advances the level with no end-of-level bonus - the doorway opens but entering it does nothing yet | PARTIAL |
+| FAQ-2.3.1g | 1-UP is a rare bonus granting a free life | DONE |
 
 ## 2.4 Scoring
 
@@ -106,13 +106,13 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 |----|------|--------|
 | FAQ-2.4.1a | Points scale with the size of the section completed | DONE (verify) |
 | FAQ-2.4.1b | A section can be small enough to score zero yet still trigger a bonus release | MISSING |
-| FAQ-2.4.1c | 500 points for an unneeded letter | MISSING |
+| FAQ-2.4.1c | 500 points for an unneeded letter | DONE |
 | FAQ-2.4.1d | Rejoining within ~2 cells of the departure point scores 20x | MISSING |
 | FAQ-2.4.1e | A second multiplier within a second or two raises it to 30x | MISSING |
-| FAQ-2.4.2a | End of level: 1,000 points per 1% above the fill threshold | PARTIAL |
-| FAQ-2.4.2b | End of level: 1,000 per key letter if the word is incomplete | MISSING |
-| FAQ-2.4.2c | End of level: 10,000 per key letter if the word is complete | PARTIAL |
-| FAQ-2.4.2d | One extra credit for filling 98% or more | PARTIAL |
+| FAQ-2.4.2a | End of level: 1,000 points per 1% above the fill threshold | DONE |
+| FAQ-2.4.2b | End of level: 1,000 per key letter if the word is incomplete | DONE |
+| FAQ-2.4.2c | End of level: 10,000 per key letter if the word is complete | DONE |
+| FAQ-2.4.2d | One extra credit for filling 98% or more (granted as an extra life - a BBS door has no credits) | DONE |
 
 ## 2.5 Miscellaneous
 
@@ -180,3 +180,11 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | FAQ-5.1 | Emergent strategy, no separate code |
 | FAQ-5.2 | Emergent strategy, no separate code |
 | FAQ-5.3 | Restates FAQ-2.4.1d |
+
+### Deliberate departures from the arcade (user-agreed)
+
+| Departure | Reason |
+|-----------|--------|
+| Arrow keys alone draw; no hold-to-draw key | In a terminal the arrows are the whole controller, and stepping off safe ground into open field has no other meaning. User: "we can skip holding a key for drawing arrow keys is enough in a bbs context" |
+| Enemy pacing retuned (fuse 3000ms, Sparx 0.55, Qix 1.1) | Measured ~660ms between keypresses at BBS pace: people tap arrow keys, they do not hold them. At arcade timings an ordinary draw died 30 times out of 30, always to the fuse, which lit in less time than the gap between two taps. Retuned to 6/30. |
+| Death does not return the marker to the spawn point | It retreats to where its line began; a death on safe ground leaves it standing. The arcade's respawn point is a fixed board position the player can see coming; here it read as the game throwing away your progress. |
