@@ -21,6 +21,7 @@ exports.starsHaveDepth = starsHaveDepth;
 exports.paintingKeepsCellsOneColumn = paintingKeepsCellsOneColumn;
 exports.emptySkyIsNotTagged = emptySkyIsNotTagged;
 exports.theRendererPaintsCellsNotGlyphMatches = theRendererPaintsCellsNotGlyphMatches;
+exports.theGameIsBlocksAndTheSkyIsNot = theGameIsBlocksAndTheSkyIsNot;
 const assert_1 = __importDefault(require("assert"));
 const fs_1 = require("fs");
 const path_1 = require("path");
@@ -38,36 +39,36 @@ async function anEnemyBulletDoesNotLookLikeAStar() {
     const bullet = (0, sprites_1.bulletCell)(true);
     const dimStar = (0, sprites_1.starCell)(0);
     assert_1.default.strictEqual(bullet.ch, dimStar.ch, 'they share a glyph - that is the problem');
-    assert_1.default.notStrictEqual(bullet.fg, dimStar.fg, 'the thing that kills you must not be painted like scenery');
-    assert_1.default.strictEqual(bullet.fg, sprites_1.COLORS.enemyBullet);
+    assert_1.default.notStrictEqual(bullet.bg, dimStar.fg, 'the thing that kills you must not be painted like scenery');
+    assert_1.default.strictEqual(bullet.bg, sprites_1.COLORS.enemyBullet);
 }
 /** An explosion's last frame is also a dot, and also must not be a star. */
 async function anExplosionIsNotAStarEither() {
     const ember = (0, sprites_1.explosionCell)('.');
     assert_1.default.strictEqual(ember.ch, (0, sprites_1.starCell)(0).ch);
-    assert_1.default.notStrictEqual(ember.fg, (0, sprites_1.starCell)(0).fg);
+    assert_1.default.notStrictEqual(ember.bg, (0, sprites_1.starCell)(0).fg);
 }
 /** The player's shot and the enemy's are told apart at a glance. */
 async function theTwoBulletsAreDistinguishable() {
     const mine = (0, sprites_1.bulletCell)(false);
     const theirs = (0, sprites_1.bulletCell)(true);
     assert_1.default.notStrictEqual(mine.ch, theirs.ch);
-    assert_1.default.notStrictEqual(mine.fg, theirs.fg);
+    assert_1.default.notStrictEqual(mine.bg, theirs.bg);
 }
 /** Each kind of alien has its own colour. */
 async function eachAlienKindHasItsOwnColour() {
     const bee = (0, sprites_1.alienCell)('w', 'bee', false);
     const butterfly = (0, sprites_1.alienCell)('M', 'butterfly', false);
     const boss = (0, sprites_1.alienCell)('@', 'boss', false);
-    const colours = new Set([bee.fg, butterfly.fg, boss.fg]);
+    const colours = new Set([bee.bg, butterfly.bg, boss.bg]);
     assert_1.default.strictEqual(colours.size, 3, 'three kinds of alien, three colours');
 }
 /** A boss holding your captured fighter is marked out. */
 async function aBossWithACapturedFighterIsMarked() {
     const plain = (0, sprites_1.alienCell)('@', 'boss', false);
     const holding = (0, sprites_1.alienCell)('@', 'boss', true);
-    assert_1.default.notStrictEqual(plain.fg, holding.fg, 'the boss worth shooting for your fighter back must be visibly different');
-    assert_1.default.strictEqual(holding.fg, sprites_1.COLORS.captured);
+    assert_1.default.notStrictEqual(plain.bg, holding.bg, 'the boss worth shooting for your fighter back must be visibly different');
+    assert_1.default.strictEqual(holding.bg, sprites_1.COLORS.captured);
 }
 /** Bright stars read as bright. */
 async function starsHaveDepth() {
@@ -94,5 +95,21 @@ async function theRendererPaintsCellsNotGlyphMatches() {
     const game = (0, fs_1.readFileSync)((0, path_1.join)(__dirname, '..', 'game', 'galaga-game.ts'), 'utf8');
     assert_1.default.ok(/line \+= paint\(buffer\[y\]\[x\]\)/.test(game));
     assert_1.default.ok(!/char === '\.'/.test(game), 'colour must not be recovered by comparing the glyph after the fact');
+}
+/**
+ * The things that matter are blocks of colour; the starfield is not.
+ *
+ * Reported: "i see no bg ansi colors". Every sprite was a bright character on
+ * the terminal's own background. The stars stay plain on purpose - they are
+ * scenery, and blocking them would bury the game under a wall of colour.
+ */
+async function theGameIsBlocksAndTheSkyIsNot() {
+    for (const c of [(0, sprites_1.playerCell)('A'), (0, sprites_1.alienCell)('w', 'bee', false), (0, sprites_1.bulletCell)(true), (0, sprites_1.explosionCell)('*')]) {
+        assert_1.default.ok(c.bg, `${JSON.stringify(c.ch)} should be a block of colour`);
+        assert_1.default.ok(/-bg\}/.test((0, sprites_1.paint)(c)), 'the painted cell must carry a background');
+    }
+    for (const star of [(0, sprites_1.starCell)(0), (0, sprites_1.starCell)(1), (0, sprites_1.starCell)(2)]) {
+        assert_1.default.ok(!star.bg, 'the starfield must stay scenery, not a block');
+    }
 }
 //# sourceMappingURL=sprites.test.js.map

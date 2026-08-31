@@ -47,6 +47,18 @@ export const COLORS = {
 export const cell = (ch: string, fg: string, bg?: string): Cell => ({ ch, fg, bg });
 
 /**
+ * A solid block of colour with a glyph on it.
+ *
+ * Reported: "i see no bg ansi colors". Everything was a bright character on
+ * the terminal's own background, which reads as coloured text rather than as
+ * a sprite. The CELL carries the colour now and the glyph sits on it.
+ *
+ * Empty space stays untagged - the screen is mostly air, and tagging every
+ * space multiplies the bytes on a BBS line for no visible difference.
+ */
+export const block = (ch: string, colour: string): Cell => ({ ch, fg: 'black', bg: colour });
+
+/**
  * Paint one cell.
  *
  * Blank space is emitted untagged: the board is mostly empty and tagging

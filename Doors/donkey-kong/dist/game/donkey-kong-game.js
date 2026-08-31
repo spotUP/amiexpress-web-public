@@ -2,7 +2,7 @@
  * Donkey Kong - Game Engine
  * 1981 Nintendo arcade classic
  */
-import { EMPTY, COLORS as SPRITE_COLORS, cell, paint } from './sprites';
+import { EMPTY, COLORS as SPRITE_COLORS, block, paint } from './sprites';
 import { GAME_WIDTH, GAME_HEIGHT, GRAVITY, JUMP_POWER, PLAYER_SPEED, CLIMB_SPEED, MAX_FALL_SPEED, BARREL_SPEED, FIREBALL_SPEED, HAMMER_DURATION, BARREL_SPAWN_RATE, FIREBALL_SPAWN_RATE, BONUS_DECREMENT, BONUS_INTERVAL, RESPAWN_TIME, INVINCIBLE_TIME, SCORES, SPRITES, getStageData, } from './constants';
 export class DonkeyKongGame {
     constructor(data, renderCallback, onGameOver, onStageComplete) {
@@ -559,7 +559,7 @@ export class DonkeyKongGame {
                 const relX = x - girder.x;
                 const y = Math.floor(girder.y - relX * girder.slope);
                 if (x >= 0 && y >= 0 && y < GAME_HEIGHT) {
-                    buffer[y][x] = cell(SPRITES.girder, SPRITE_COLORS.girder);
+                    buffer[y][x] = block(SPRITES.girder, SPRITE_COLORS.girder);
                 }
             }
         }
@@ -568,51 +568,51 @@ export class DonkeyKongGame {
             for (let y = ladder.y - ladder.height; y <= ladder.y; y++) {
                 if (ladder.x >= 0 && ladder.x < GAME_WIDTH && y >= 0 && y < GAME_HEIGHT) {
                     buffer[y][ladder.x] = ladder.isBroken
-                        ? cell(SPRITES.ladderBroken, SPRITE_COLORS.ladderBroken)
-                        : cell(SPRITES.ladder, SPRITE_COLORS.ladder);
+                        ? block(SPRITES.ladderBroken, SPRITE_COLORS.ladderBroken)
+                        : block(SPRITES.ladder, SPRITE_COLORS.ladder);
                 }
             }
         }
         // Draw rivets
         for (const rivet of this.data.rivets) {
             if (!rivet.isRemoved && rivet.x >= 0 && rivet.x < GAME_WIDTH && rivet.y >= 0 && rivet.y < GAME_HEIGHT) {
-                buffer[rivet.y][rivet.x] = cell(SPRITES.rivet, SPRITE_COLORS.rivet);
+                buffer[rivet.y][rivet.x] = block(SPRITES.rivet, SPRITE_COLORS.rivet);
             }
         }
         // Draw hammers
         for (const hammer of this.data.hammers) {
             if (!hammer.isCollected && hammer.x >= 0 && hammer.x < GAME_WIDTH && hammer.y >= 0 && hammer.y < GAME_HEIGHT) {
-                buffer[hammer.y][hammer.x] = cell(SPRITES.hammer, SPRITE_COLORS.hammer);
+                buffer[hammer.y][hammer.x] = block(SPRITES.hammer, SPRITE_COLORS.hammer);
             }
         }
         // Draw elevators
         for (const elevator of this.data.elevators) {
             const ey = Math.floor(elevator.y);
             if (elevator.x >= 0 && elevator.x < GAME_WIDTH && ey >= 0 && ey < GAME_HEIGHT) {
-                buffer[ey][elevator.x] = cell(SPRITES.elevator, SPRITE_COLORS.elevator);
+                buffer[ey][elevator.x] = block(SPRITES.elevator, SPRITE_COLORS.elevator);
                 if (elevator.x + 1 < GAME_WIDTH)
-                    buffer[ey][elevator.x + 1] = cell(']', SPRITE_COLORS.elevator);
+                    buffer[ey][elevator.x + 1] = block(']', SPRITE_COLORS.elevator);
             }
         }
         // Draw conveyors
         for (const conveyor of this.data.conveyors) {
             for (let x = conveyor.x; x < conveyor.x + conveyor.width && x < GAME_WIDTH; x++) {
                 if (x >= 0 && conveyor.y >= 0 && conveyor.y < GAME_HEIGHT) {
-                    buffer[conveyor.y][x] = cell(conveyor.direction === 'right' ? '>' : '<', SPRITE_COLORS.conveyor);
+                    buffer[conveyor.y][x] = block(conveyor.direction === 'right' ? '>' : '<', SPRITE_COLORS.conveyor);
                 }
             }
         }
         // Draw Pauline
         if (this.data.paulineY >= 0 && this.data.paulineY < GAME_HEIGHT &&
             this.data.paulineX >= 0 && this.data.paulineX < GAME_WIDTH) {
-            buffer[this.data.paulineY][this.data.paulineX] = cell(SPRITES.pauline, SPRITE_COLORS.pauline);
+            buffer[this.data.paulineY][this.data.paulineX] = block(SPRITES.pauline, SPRITE_COLORS.pauline);
         }
         // Draw DK
         if (this.data.dkY >= 0 && this.data.dkY < GAME_HEIGHT &&
             this.data.dkX >= 0 && this.data.dkX < GAME_WIDTH) {
-            buffer[this.data.dkY][this.data.dkX] = cell(SPRITES.dk, SPRITE_COLORS.dk);
+            buffer[this.data.dkY][this.data.dkX] = block(SPRITES.dk, SPRITE_COLORS.dk);
             if (this.data.dkX + 1 < GAME_WIDTH)
-                buffer[this.data.dkY][this.data.dkX + 1] = cell(SPRITES.dk, SPRITE_COLORS.dk);
+                buffer[this.data.dkY][this.data.dkX + 1] = block(SPRITES.dk, SPRITE_COLORS.dk);
         }
         // Draw barrels
         for (const barrel of this.data.barrels) {
@@ -620,8 +620,8 @@ export class DonkeyKongGame {
             const by = Math.floor(barrel.y);
             if (bx >= 0 && bx < GAME_WIDTH && by >= 0 && by < GAME_HEIGHT) {
                 buffer[by][bx] = barrel.type === 'blue'
-                    ? cell(SPRITES.blueBarrel, SPRITE_COLORS.blueBarrel)
-                    : cell(SPRITES.barrel, SPRITE_COLORS.barrel);
+                    ? block(SPRITES.blueBarrel, SPRITE_COLORS.blueBarrel)
+                    : block(SPRITES.barrel, SPRITE_COLORS.barrel);
             }
         }
         // Draw fireballs
@@ -629,7 +629,7 @@ export class DonkeyKongGame {
             const fx = Math.floor(fireball.x);
             const fy = Math.floor(fireball.y);
             if (fx >= 0 && fx < GAME_WIDTH && fy >= 0 && fy < GAME_HEIGHT) {
-                buffer[fy][fx] = cell(SPRITES.fireball, SPRITE_COLORS.fireball);
+                buffer[fy][fx] = block(SPRITES.fireball, SPRITE_COLORS.fireball);
             }
         }
         // Draw player
@@ -643,10 +643,10 @@ export class DonkeyKongGame {
                 // the ladder tested first, so climbing Mario was painted in the
                 // ladder's colour and vanished into it for the whole climb.
                 buffer[py][px] = player.hasHammer
-                    ? cell(SPRITES.playerHammer, SPRITE_COLORS.playerHammer)
+                    ? block(SPRITES.playerHammer, SPRITE_COLORS.playerHammer)
                     : player.isClimbing
-                        ? cell(SPRITES.playerClimb, SPRITE_COLORS.player)
-                        : cell(SPRITES.player, SPRITE_COLORS.player);
+                        ? block(SPRITES.playerClimb, SPRITE_COLORS.player)
+                        : block(SPRITES.player, SPRITE_COLORS.player);
             }
         }
         // Build output with colors (double width)

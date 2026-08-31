@@ -10,7 +10,7 @@
 import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { EMPTY, COLORS, cell, paint } from '../game/sprites';
+import { EMPTY, COLORS, cell, block, paint } from '../game/sprites';
 import { SPRITES } from '../game/constants';
 function visible(text) {
     return text.replace(/\{[^}]*\}/g, '');
@@ -24,10 +24,10 @@ export async function marioAndTheLadderStillShareAGlyph() {
 }
 /** A climbing Mario is NOT drawn in the ladder colour. */
 export async function aClimbingMarioIsNotTheColourOfTheLadder() {
-    const climbing = cell(SPRITES.playerClimb, COLORS.player);
-    const ladder = cell(SPRITES.ladder, COLORS.ladder);
+    const climbing = block(SPRITES.playerClimb, COLORS.player);
+    const ladder = block(SPRITES.ladder, COLORS.ladder);
     assert.strictEqual(climbing.ch, ladder.ch, 'same glyph - that is the whole problem');
-    assert.notStrictEqual(climbing.fg, ladder.fg, 'Mario must not be painted the ladder colour, or he vanishes while climbing');
+    assert.notStrictEqual(climbing.bg, ladder.bg, 'Mario must not be painted the ladder colour, or he vanishes while climbing');
 }
 /** Every drawn thing has a colour of its own. */
 export async function everythingHasItsOwnColour() {
@@ -77,4 +77,20 @@ export async function theRendererPaintsCellsNotGlyphMatches() {
     const game = readFileSync(join(__dirname, '..', 'game', 'donkey-kong-game.ts'), 'utf8');
     assert.ok(/output \+= paint\(buffer\[y\]\[x\]\)/.test(game), 'it should paint the cell it stored');
     assert.ok(!/char === SPRITES\./.test(game), 'colour must not be recovered by comparing the glyph after the fact');
+}
+/** Everything drawn is a block of colour; empty space is not. */
+export async function everythingDrawnIsABlockOfColour() {
+    const drawn = [
+        block(SPRITES.girder, COLORS.girder),
+        block(SPRITES.ladder, COLORS.ladder),
+        block(SPRITES.player, COLORS.player),
+        block(SPRITES.barrel, COLORS.barrel),
+        block(SPRITES.dk, COLORS.dk),
+    ];
+    for (const c of drawn) {
+        assert.ok(c.bg, `${JSON.stringify(c.ch)} should be a block of colour`);
+        assert.ok(/-bg\}/.test(paint(c)), 'the painted cell must carry a background');
+    }
+    assert.ok(!EMPTY.bg, 'empty space stays empty');
+    assert.strictEqual(paint(EMPTY), ' ');
 }
