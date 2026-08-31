@@ -18,6 +18,7 @@
  */
 
 import type { DoorDeleteProgress, DoorDeleteResult } from './amigaDoorManager';
+import { reloadDoorRegistry } from './reload-door-registry';
 
 /**
  * Delete a door and reload the caches that would otherwise keep serving it.
@@ -35,25 +36,17 @@ export async function deleteDoorAndRefresh(
   onStep?: DoorDeleteProgress,
 ): Promise<DoorDeleteResult> {
   try {
-    const { getAmigaDoorManager, refreshDoorCache } = await import('./amigaDoorManager');
+    const { getAmigaDoorManager } = await import('./amigaDoorManager');
     const manager = getAmigaDoorManager();
     const result = await manager.deleteDoor(identifier, isTypeScriptDoor, onStep);
 
     if (result.success) {
-      // Both registries are in memory. Without these, the door keeps being
-      // offered on the menu until the next restart.
-      onStep?.({ kind: 'ok', text: 'rescanning the door definitions' });
-      await refreshDoorCache();
-      try {
-        const { initializeDoors } = require('../handlers/door.handler');
-        onStep?.({ kind: 'ok', text: 'reloading the door registry' });
-        await initializeDoors();
-      } catch (e) {
-        // The files are gone either way; say so rather than reporting a
-        // failed delete.
-        onStep?.({ kind: 'fail', text: `door registry reload failed: ${(e as Error).message}` });
-        console.warn('[deleteDoorAndRefresh] Could not reload door registry:', e);
-      }
+      // Every cache between the .info files and the door list, in order.
+      // This used to refresh amigaDoorManager's scan and rebuild the
+      // registry - but the registry is built from commandCache, which
+      // nothing invalidated, so a deleted door stayed in the list while
+      // both steps reported OK. See reload-door-registry.ts.
+      await reloadDoorRegistry(onStep);
     }
 
     return result;
