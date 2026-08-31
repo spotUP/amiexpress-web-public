@@ -18,7 +18,7 @@ import { ExecLibrary } from '../api/ExecLibrary';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { resolveAssignPath } from '../../utils/path-util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
-import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
+import { looksLikeAsciiArt, positionsCursorAbsolutely } from '../../utils/ascii-art.util';
 import { wrapLine } from './line-wrap.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
@@ -1440,8 +1440,19 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
       const shouldAddLineBreak = !isLastLine || hasTrailingNewline;
 
       const visibleLine = AnsiUtil.stripAnsiForPlainText(line);
+      // A door that moves the cursor to a row and column is PAINTING a
+      // screen, not printing a line, and has no lines to wrap. Breaking
+      // one moves everything after the break somewhere the door never
+      // asked for: DOORREPO's /help came out with every row cut short and
+      // its remainder starting the row below (screenshot, 2026-09-01).
+      //
+      // The door's own bytes were captured and replayed and render
+      // perfectly, and processRawText passes them through byte-identical -
+      // the break was inserted here. looksLikeAsciiArt() was the only
+      // exemption and asks whether the text LOOKS like art; a help row of
+      // ordinary words does not, so it was wrapped.
       const lineLooksLikeArt = looksLikeAsciiArt(visibleLine);
-      const segments = lineLooksLikeArt
+      const segments = (lineLooksLikeArt || positionsCursorAbsolutely(line))
         ? [line]
         : wrapLine(line, this.state.lineWrap);
 
