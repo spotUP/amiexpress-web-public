@@ -3202,6 +3202,30 @@ TEST(the_ghost_stays_empty_when_it_would_be_a_guess)
     ASSERT_STR_EQ(flow_command_ghost((const char *) 0), "", "no line at all");
 }
 
+
+TEST(strip_says_why_it_did_nothing)
+{
+    /* "/strip seems to do nothing when i browse an archive." It returned in
+     * silence in three places. The footer only offers the S KEY when the
+     * door is installed and has ads, so silence there was at least
+     * consistent - but the command bar lists /strip always, and a command
+     * typed on purpose that answers with nothing reads as broken. */
+    ASSERT_EQ(flow_strip_verdict(0, 3), FLOW_STRIP_NOT_INSTALLED,
+              "no directory on this board to strip from");
+    ASSERT_EQ(flow_strip_verdict(1, 0), FLOW_STRIP_NO_ADS,
+              "installed, but the repository counted no ads");
+    ASSERT_EQ(flow_strip_verdict(1, 3), FLOW_STRIP_OK, "installed and dirty");
+}
+
+TEST(strip_treats_an_unknown_ad_count_as_worth_a_look)
+{
+    /* -1 is an older server that reports no count. The footer already
+     * treats that as "might have some" rather than hiding the key, and the
+     * listing is fetched before anything is deleted, so the worst case is
+     * a screen saying there was nothing after all. */
+    ASSERT_EQ(flow_strip_verdict(1, -1), FLOW_STRIP_OK, "unknown is not zero");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -3496,6 +3520,8 @@ int main(void)
     RUN_TEST(autocomplete_never_writes_past_the_callers_array);
     RUN_TEST(the_ghost_is_the_rest_of_the_best_match);
     RUN_TEST(the_ghost_stays_empty_when_it_would_be_a_guess);
+    RUN_TEST(strip_says_why_it_did_nothing);
+    RUN_TEST(strip_treats_an_unknown_ad_count_as_worth_a_look);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

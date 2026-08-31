@@ -1708,6 +1708,17 @@ int flow_build_extract_command(char *out, unsigned long outsize,
     return (int) need;
 }
 
+int flow_strip_verdict(int installed, long junk)
+{
+    if (!installed) {
+        return FLOW_STRIP_NOT_INSTALLED;
+    }
+    if (junk == 0) {
+        return FLOW_STRIP_NO_ADS;
+    }
+    return FLOW_STRIP_OK;
+}
+
 int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
                          int listed_checked, int listed_present)
 {

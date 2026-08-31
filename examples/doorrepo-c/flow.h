@@ -207,6 +207,23 @@ int flow_build_local_path(char *out, unsigned long outsize,
 #define FLOW_INSTALL_REFUSE_ARCHIVER_AND_MISSING 4
 #define FLOW_INSTALL_REFUSE_NOTHING_EXTRACTED    5
 
+/* Why a strip did or did not happen.
+ *
+ * The footer only offers S when the door is installed AND its archive
+ * carries ads, so the KEY could return in silence and be honest about it.
+ * The command bar offers /strip whatever is selected - and answered with
+ * nothing at all, which reads as a broken command. Same gate, but now it
+ * has to be able to SAY which case it hit. */
+#define FLOW_STRIP_OK             0
+#define FLOW_STRIP_NOT_INSTALLED  1
+#define FLOW_STRIP_NO_ADS         2
+
+/* @param installed non-zero when this board has the door on disk
+ * @param junk      ad files the repository counted; -1 when the server is
+ *                  too old to report one, which counts as "might have some"
+ *                  exactly as the footer treats it */
+int flow_strip_verdict(int installed, long junk);
+
 int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
                          int listed_checked, int listed_present);
 

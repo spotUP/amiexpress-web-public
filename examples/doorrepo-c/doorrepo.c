@@ -3058,18 +3058,43 @@ static void strip_installed_door_apply(const dr_config *cfg, const char *archive
  * install index existed: which command the archive was installed as, and
  * therefore which directory to delete from. */
 static void strip_installed_door(const dr_config *cfg, const char *archive,
-                                 long junk, ansi_buf *b, char *frame, long framecap)
+                                 long junk, ansi_buf *b, char *frame, long framecap,
+                                 const ui_geometry *g)
 {
     const char *cmdname = index_lookup(cfg, archive);
     char install_dir[256];
 
-    if (cmdname == (const char *) 0) {
-        return; /* not installed by this door - S does nothing, per the footer */
+    /* Every one of these used to be a bare return.
+     *
+     * "/strip seems to do nothing when i browse an archive" - and it did
+     * nothing, in silence, for two ordinary reasons. That was defensible
+     * for the S KEY, which the footer only offers when the door is
+     * installed and has ads, and is not defensible for a command typed out
+     * in full: the bar lists /strip whatever is selected, so a silent
+     * return is indistinguishable from a broken command.
+     *
+     * The gate itself is unchanged and lives in flow.c now, so the two
+     * halves of it are tested rather than read.
+     */
+    switch (flow_strip_verdict(cmdname != (const char *) 0, junk)) {
+    case FLOW_STRIP_NOT_INSTALLED:
+        ui_notice(b, frame, framecap, g, "Not installed",
+                  "Stripping deletes ad files from a door on THIS board,",
+                  "and this archive has no directory here yet.");
+        return;
+    case FLOW_STRIP_NO_ADS:
+        ui_notice(b, frame, framecap, g, "Nothing to strip",
+                  "The repository counts no ad files in this archive.",
+                  "Use /archive to see everything inside it.");
+        return;
+    default:
+        break;
     }
-    if (junk == 0) {
-        return; /* the server says there is nothing to strip */
-    }
+
     if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
+        ui_notice(b, frame, framecap, g, "Cannot strip",
+                  "The path to this door's directory does not fit.",
+                  "Check DOORSDIR in the door's configuration.");
         return;
     }
 
@@ -3206,14 +3231,21 @@ static void plain_strip_installed_door(const dr_config *cfg, const char *archive
     const char *cmdname = index_lookup(cfg, archive);
     char install_dir[256];
 
-    if (cmdname == (const char *) 0) {
-        return; /* not installed by this door */
-    }
-    if (junk == 0) {
+    /* Same gate as the ANSI screen, and it has to answer here too - this
+     * is what a teletype terminal gets when it types /strip. */
+    switch (flow_strip_verdict(cmdname != (const char *) 0, junk)) {
+    case FLOW_STRIP_NOT_INSTALLED:
+        ae_put("This archive has no directory on this board, so there is nothing", 1);
+        ae_put("to strip. Install it first.", 1);
+        return;
+    case FLOW_STRIP_NO_ADS:
         ae_put("This archive has no ad files to strip.", 1);
         return;
+    default:
+        break;
     }
     if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
+        ae_put("The path to this door's directory does not fit. Check DOORSDIR.", 1);
         return;
     }
 
@@ -4956,7 +4988,7 @@ static int ui_dispatch_row_command(const dr_config *cfg, dr_catalog *cat,
         uninstall_door(cfg, sel->archive, b, frame, framecap, g);
         break;
     case FLOW_CMD_STRIP:
-        strip_installed_door(cfg, sel->archive, sel->junk, b, frame, framecap);
+        strip_installed_door(cfg, sel->archive, sel->junk, b, frame, framecap, g);
         break;
     case FLOW_CMD_ACCESS:
         do_edit_access(cfg, sel, b, frame, framecap, g);
@@ -5437,7 +5469,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             if (view.count > 0) {
                 strip_installed_door(cfg, cat->rows[view.index[selected]].archive,
                                      cat->rows[view.index[selected]].junk, &buf, frame,
-                                     (long) sizeof(frame));
+                                     (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
                 ansi_flush(&buf);
@@ -6825,7 +6857,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             if (view.count > 0) {
                 strip_installed_door(cfg, cat->rows[view.index[selected]].archive,
                                      cat->rows[view.index[selected]].junk, &buf, frame,
-                                     (long) sizeof(frame));
+                                     (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
                 ansi_flush(&buf);
