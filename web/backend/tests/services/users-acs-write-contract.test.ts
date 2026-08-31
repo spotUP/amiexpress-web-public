@@ -81,6 +81,7 @@ describe('Access Levels: every flag survives being written and read back', () =>
       key,
       value: '',
       commented: !granted(key),
+      prefix: '',
       originalLine: key,
     }));
   }
@@ -119,7 +120,7 @@ describe('Access Levels: every flag survives being written and read back', () =>
     // A level file may carry more than ACS flags, and an edit to a permission
     // has no business rewriting the rest.
     const withExtra = [
-      { key: 'NAME', value: 'Level 20', commented: false, originalLine: 'NAME=Level 20' },
+      { key: 'NAME', value: 'Level 20', commented: false, prefix: '', originalLine: 'NAME=Level 20' },
       ...levelTooltypes(() => false),
     ];
 

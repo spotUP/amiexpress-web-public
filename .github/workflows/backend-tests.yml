@@ -82,6 +82,24 @@ jobs:
         working-directory: Doors/door-manager
         run: npm install --ignore-scripts --no-audit --no-fund
 
+      # The tests typecheck reaches further than the tests import at runtime:
+      # tsconfig.tests.json pulls in the door sources those suites reference,
+      # and grandmaster and livechat resolve the SDK through their OWN
+      # file:../../sdk symlink, exactly as door-manager does. grandmaster also
+      # has a real dependency of its own, tone.
+      #
+      # Without these two, "Type-check tests" fails with a page of TS2307 -
+      # Cannot find module '@amiexpress/bbs-door-sdk/...' and 'tone' - which
+      # is a missing install in CI, not a fault in the doors. It reads as a
+      # broken SDK export, and cost a while to see otherwise.
+      - name: Install grandmaster deps (SDK symlink and tone)
+        working-directory: Doors/grandmaster
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Install livechat deps (SDK symlink)
+        working-directory: Doors/livechat
+        run: npm install --ignore-scripts --no-audit --no-fund
+
       - name: Type-check
         working-directory: web/backend
         run: npx tsc --noEmit
