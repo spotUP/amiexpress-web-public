@@ -23,6 +23,7 @@ const TEST_MODULES = [
   './powerups.test',
   './controls.test',
   './attract.test',
+  './music.test',
 ];
 
 (async () => {
