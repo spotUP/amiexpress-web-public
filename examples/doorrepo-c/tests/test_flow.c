@@ -2457,6 +2457,93 @@ TEST(footer_bar_too_small_buffer_returns_error)
     ASSERT_EQ(len, -1, "outcap too small for even the mandatory parts returns -1");
 }
 
+
+/* ---- flow_doors_parse_row: the BBS's own installed list --------------- */
+
+TEST(doors_row_parses_the_fields_the_screen_renders)
+{
+    char cmd[16], name[64], archive[64];
+    unsigned long size = 0;
+    int rc = flow_doors_parse_row(
+        "AEHELP|XIM|4096|1|10|AEHELP.LHA|AE Help|Utility|Online help",
+        cmd, sizeof(cmd), name, sizeof(name), archive, sizeof(archive), &size);
+
+    ASSERT_EQ(rc, 0, "row accepted");
+    ASSERT_STR_EQ(cmd, "AEHELP", "command");
+    ASSERT_STR_EQ(name, "AE Help", "name");
+    ASSERT_STR_EQ(archive, "AEHELP.LHA", "archive");
+    ASSERT_EQ((long) size, 4096, "size");
+}
+
+TEST(doors_row_accepts_an_empty_archive)
+{
+    /* Every door installed before the recorder existed has no archive
+     * link - which is most of the board. Those rows must still list. */
+    char cmd[16], name[64], archive[64];
+    int rc = flow_doors_parse_row("WALL|XIM|100|0|0||The Wall||",
+                                  cmd, sizeof(cmd), name, sizeof(name),
+                                  archive, sizeof(archive), (unsigned long *) 0);
+
+    ASSERT_EQ(rc, 0, "row accepted");
+    ASSERT_STR_EQ(cmd, "WALL", "command");
+    ASSERT_STR_EQ(archive, "", "archive empty");
+    ASSERT_STR_EQ(name, "The Wall", "name still read");
+}
+
+TEST(doors_header_line_is_not_a_row)
+{
+    char cmd[16];
+    ASSERT_EQ(flow_doors_parse_row("DOORS|368", cmd, sizeof(cmd),
+                                   (char *) 0, 0, (char *) 0, 0,
+                                   (unsigned long *) 0),
+              1, "header rejected");
+}
+
+TEST(doors_row_rejects_a_truncated_body)
+{
+    char cmd[16];
+    /* A body cut mid-transfer must skip the partial line, not render
+     * whatever fields did arrive. */
+    ASSERT_EQ(flow_doors_parse_row("AEHELP|XIM", cmd, sizeof(cmd),
+                                   (char *) 0, 0, (char *) 0, 0,
+                                   (unsigned long *) 0),
+              1, "short row rejected");
+}
+
+TEST(doors_row_rejects_an_empty_command)
+{
+    char cmd[16];
+    ASSERT_EQ(flow_doors_parse_row("|XIM|0|1|0||x||", cmd, sizeof(cmd),
+                                   (char *) 0, 0, (char *) 0, 0,
+                                   (unsigned long *) 0),
+              1, "empty command rejected");
+}
+
+TEST(doors_row_ignores_extra_trailing_columns)
+{
+    /* The API promises append-only growth: a column added later must not
+     * shift the ones this door already reads. */
+    char cmd[16], name[64];
+    int rc = flow_doors_parse_row(
+        "AEHELP|XIM|1|1|0|A.LHA|AE Help|Utility|desc|somethingnew|andmore",
+        cmd, sizeof(cmd), name, sizeof(name), (char *) 0, 0,
+        (unsigned long *) 0);
+
+    ASSERT_EQ(rc, 0, "row still accepted");
+    ASSERT_STR_EQ(name, "AE Help", "name unshifted");
+}
+
+TEST(doors_row_tolerates_crlf)
+{
+    char cmd[16], name[64];
+    int rc = flow_doors_parse_row("AEHELP|XIM|1|1|0|A.LHA|AE Help|U|d\r\n",
+                                  cmd, sizeof(cmd), name, sizeof(name),
+                                  (char *) 0, 0, (unsigned long *) 0);
+
+    ASSERT_EQ(rc, 0, "row accepted");
+    ASSERT_STR_EQ(name, "AE Help", "name clean of CR");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -2699,6 +2786,14 @@ int main(void)
     RUN_TEST(footer_bar_browse_screen_fits_the_documented_cols_40_floor);
     RUN_TEST(footer_bar_empty_list_case_is_just_the_suffix);
     RUN_TEST(footer_bar_too_small_buffer_returns_error);
+
+        RUN_TEST(doors_row_parses_the_fields_the_screen_renders);
+    RUN_TEST(doors_row_accepts_an_empty_archive);
+    RUN_TEST(doors_header_line_is_not_a_row);
+    RUN_TEST(doors_row_rejects_a_truncated_body);
+    RUN_TEST(doors_row_rejects_an_empty_command);
+    RUN_TEST(doors_row_ignores_extra_trailing_columns);
+    RUN_TEST(doors_row_tolerates_crlf);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

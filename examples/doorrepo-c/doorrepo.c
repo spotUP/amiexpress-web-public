@@ -4241,6 +4241,11 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
  * here so this loop's 'l'/'L' case (Task 4) can call it before its own
  * definition appears in the file. */
 static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat);
+/* The board's own doors, read from the BBS - see the block above
+ * board_load() for why L needs both this and the screen above. */
+static int board_load(const dr_config *cfg);
+static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                            const ui_geometry *g);
 
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
@@ -4613,7 +4618,19 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             }
             break;
         case 'l': case 'L':
-            installed_loop_ansi(cfg, cat);
+            /* The BOARD's doors when the BBS can be asked, DoorRepo's own
+             * install receipts when it cannot. On a real AmiExpress board
+             * there is no /api/door-admin and no token, so board_load()
+             * returns 0 and the original screen opens - which is the only
+             * one that could ever have worked there. On this board the
+             * receipts file is empty (nothing here was installed BY
+             * DoorRepo), so without this the screen was correctly, and
+             * uselessly, blank. */
+            if (board_load(cfg) > 0) {
+                board_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+            } else {
+                installed_loop_ansi(cfg, cat);
+            }
             need_full_redraw = 1;
             break;
         case 'b': case 'B':
@@ -4839,6 +4856,281 @@ static void ui_draw_installed_empty_message(ansi_buf *b, const ui_geometry *g)
     ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 0);
     ansi_center(b, row, g->list_left + 1, g->list_width - 2, "No doors are installed.");
     ansi_reset(b);
+}
+
+/* ---------------------------------------------------------------------
+ * The BOARD's installed doors (as opposed to DoorRepo's own)
+ *
+ * DoorRepo.idx records what THIS door installed. On a board where the
+ * doors were put there by anything else - which is every existing board -
+ * that file is empty, and the installed screen built from it correctly
+ * shows nothing. Measured on the live board: no DoorRepo.idx at all, and
+ * 368 registered commands.
+ *
+ * The board's own registry is not readable from inside a door: it is an
+ * in-memory list on the BBS plus a sqlite table. So this is one of the two
+ * things the door-admin API exists for (the other is asking the BBS to
+ * reload after a .info edit). GET /api/door-admin/installed answers with
+ * the DOORS| family, and flow_doors_parse_row reads a row of it.
+ *
+ * On a real AmiExpress board there is no such API and no token file, so
+ * board_load() finds nothing, returns 0, and the caller falls back to the
+ * DoorRepo.idx view. That fallback is the whole reason this is additive
+ * rather than a replacement.
+ *
+ * The response is consumed through http_request's SINK, one line at a
+ * time, so a 368-row body never exists in memory. Only the four fields the
+ * list renders are kept.
+ * ------------------------------------------------------------------- */
+
+/* Defined below, next to the browser itself. */
+static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
+                            char *frame, long framecap, const ui_geometry *g);
+
+#define BOARD_MAX_DOORS 400
+#define BOARD_CMD_MAX    16
+#define BOARD_NAME_MAX   40
+
+typedef struct {
+    char cmd[BOARD_CMD_MAX];
+    char name[BOARD_NAME_MAX];
+    unsigned long size;
+    int has_archive;
+} board_door;
+
+static board_door g_board[BOARD_MAX_DOORS];
+static int g_board_count = 0;
+
+typedef struct {
+    char line[320];
+    int len;
+    int overflowed;   /* a line longer than the buffer: skip to its end */
+} board_sink_ctx;
+
+static void board_add_line(const char *line)
+{
+    char cmd[BOARD_CMD_MAX];
+    char name[BOARD_NAME_MAX];
+    char archive[80];
+    unsigned long size = 0;
+
+    if (g_board_count >= BOARD_MAX_DOORS) {
+        return;
+    }
+    if (flow_doors_parse_row(line, cmd, sizeof(cmd), name, sizeof(name),
+                             archive, sizeof(archive), &size) != 0) {
+        return;   /* header, or a row this door cannot read */
+    }
+
+    strcpy(g_board[g_board_count].cmd, cmd);
+    strcpy(g_board[g_board_count].name, name);
+    g_board[g_board_count].size = size;
+    g_board[g_board_count].has_archive = (archive[0] != '\0');
+    g_board_count++;
+}
+
+static int board_sink(void *ctx, const unsigned char *buf, unsigned long len)
+{
+    board_sink_ctx *st = (board_sink_ctx *) ctx;
+    unsigned long i;
+
+    for (i = 0; i < len; i++) {
+        char c = (char) buf[i];
+
+        if (c == '\n') {
+            if (!st->overflowed) {
+                st->line[st->len] = '\0';
+                board_add_line(st->line);
+            }
+            st->len = 0;
+            st->overflowed = 0;
+        } else if (c == '\r') {
+            continue;
+        } else if (st->len + 1 < (int) sizeof(st->line)) {
+            st->line[st->len++] = c;
+        } else {
+            /* Longer than any row the server should send. Drop the whole
+             * line rather than parse its first 320 bytes as if complete. */
+            st->overflowed = 1;
+        }
+    }
+    return 0;
+}
+
+/* Fills g_board from the BBS. Returns the number of doors read, or 0 when
+ * there is no API to ask - which is the normal case on a real board and
+ * must never be reported as an error. */
+static int board_load(const dr_config *cfg)
+{
+    char token[128];
+    char tokenhdr[160];
+    const char *headers[1];
+    http_response resp;
+    board_sink_ctx sink;
+    dr_config local_cfg;
+
+    g_board_count = 0;
+
+    if (!config_read_token(cfg, token, sizeof(token))) {
+        return 0;
+    }
+
+    /* http_request targets cfg->host, which is the REMOTE catalog server.
+     * This board's own API is bbs_host/bbs_port - posting to cfg->host
+     * would send this board's launch token to bbs.uprough.net in
+     * cleartext, the same trap report_install_to_bbs() documents. */
+    local_cfg = *cfg;
+    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
+    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
+    local_cfg.port = cfg->bbs_port;
+
+    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
+    headers[0] = tokenhdr;
+
+    memset(&resp, 0, sizeof(resp));
+    sink.len = 0;
+    sink.overflowed = 0;
+
+    if (http_request(&local_cfg, "GET", "/api/door-admin/installed",
+                     (const char *) 0, 0UL, headers, 1, &resp,
+                     board_sink, &sink) != HTTP_OK
+        || resp.status != 200) {
+        g_board_count = 0;
+        return 0;
+    }
+
+    /* A body with no trailing newline still has a last row in it. */
+    if (sink.len > 0 && !sink.overflowed) {
+        sink.line[sink.len] = '\0';
+        board_add_line(sink.line);
+    }
+
+    return g_board_count;
+}
+
+/* The board's doors, listed. Deliberately plainer than
+ * installed_loop_ansi(): those rows are catalog entries with a DIZ and a
+ * document to show, these are whatever the board has registered, most of
+ * which this repo has never heard of. F opens the file browser, which is
+ * the thing that works for all of them. */
+static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                            const ui_geometry *g)
+{
+    ansi_buf buf;
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    int rows = g->visible_rows;
+    int need_redraw = 1;
+
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    for (;;) {
+        int key;
+        int i;
+
+        if (need_redraw) {
+            char title[96];
+
+            ansi_begin(&buf, frame, framecap);
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+
+            strcpy(title, "Doors on this board   ");
+            ui_append_ulong(title, (unsigned long) g_board_count);
+            strcat(title, " installed");
+            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+
+            if (g_board_count == 0) {
+                ansi_text(&buf, 3, 3, "The BBS reported no installed doors.",
+                          g->cols - 6);
+            } else {
+                for (i = 0; i < rows; i++) {
+                    unsigned long r = top_index + (unsigned long) i;
+                    char line[BOARD_CMD_MAX + BOARD_NAME_MAX + 24];
+                    int is_sel;
+
+                    if (r >= (unsigned long) g_board_count) {
+                        break;
+                    }
+                    is_sel = (r == selected);
+                    sprintf(line, "%-12.12s %-40.40s %s",
+                            g_board[r].cmd, g_board[r].name,
+                            g_board[r].has_archive ? "+" : " ");
+                    ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
+                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+                }
+                ansi_reset(&buf);
+            }
+
+            ansi_color(&buf, 3, 0, 0);
+            ansi_text(&buf, g->rows - 1, 3, "F=Files  Q=Quit", g->cols - 6);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            need_redraw = 0;
+        }
+
+        key = ui_read_key();
+        need_redraw = 1;
+
+        switch (key) {
+        case UI_KEY_UP:
+            if (selected > 0) {
+                selected--;
+                if (selected < top_index) top_index = selected;
+            }
+            break;
+        case UI_KEY_DOWN:
+            if (selected + 1 < (unsigned long) g_board_count) {
+                selected++;
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_PGUP: case 'p': case 'P':
+            selected = (selected > (unsigned long) rows)
+                ? selected - (unsigned long) rows : 0;
+            top_index = (selected < (unsigned long) rows) ? 0 : selected;
+            break;
+        case UI_KEY_PGDN: case 'n': case 'N':
+            if (g_board_count > 0) {
+                selected += (unsigned long) rows;
+                if (selected >= (unsigned long) g_board_count) {
+                    selected = (unsigned long) g_board_count - 1;
+                }
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_HOME:
+            selected = 0; top_index = 0;
+            break;
+        case UI_KEY_END:
+            if (g_board_count > 0) {
+                selected = (unsigned long) g_board_count - 1;
+                top_index = ((unsigned long) g_board_count > (unsigned long) rows)
+                    ? (unsigned long) g_board_count - (unsigned long) rows : 0;
+            }
+            break;
+        case 'f': case 'F':
+            if (g_board_count > 0 && selected < (unsigned long) g_board_count) {
+                files_loop_ansi(cfg, g_board[selected].cmd, frame, framecap, g);
+            }
+            break;
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, framecap);
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
+        default:
+            break;
+        }
+    }
 }
 
 /* ---------------------------------------------------------------------

@@ -722,6 +722,20 @@ const char *flow_files_next_line(const char *p);
 int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
                           char *path_out, unsigned long path_outsize);
 
+/* One "DOORS|" row from the BBS's own /api/door-admin/installed (see
+ * docs/DOOR-REPO-API.md section 11), which is the only place this door can
+ * learn what the BOARD has installed - as opposed to what DoorRepo itself
+ * installed, which is all DoorRepo.idx knows. On a real AmiExpress board
+ * that endpoint does not exist and this is never called.
+ *
+ * Fills only the fields the installed screen renders. Returns 0 on a row,
+ * non-zero for the header line or a malformed one. */
+int flow_doors_parse_row(const char *line,
+                         char *cmd_out, unsigned long cmd_outsize,
+                         char *name_out, unsigned long name_outsize,
+                         char *archive_out, unsigned long archive_outsize,
+                         unsigned long *size_out);
+
 /* Chooses which extracted file is the door's executable, from the /files
  * body. Preference order:
  *   1. a non-junk file whose name equals the archive's base name or the
