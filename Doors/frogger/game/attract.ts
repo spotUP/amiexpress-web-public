@@ -75,17 +75,25 @@ export function titleGrid(): string[] {
   return grid.map(row => row.join('').replace(/\s+$/, ''));
 }
 
-/** The title painted green with its yellow shading, centred to `width`. */
+/**
+ * The title, painted as blocks of background colour rather than as '#'
+ * characters: a green face with the arcade logo's yellow shading beside it.
+ *
+ * Drawn the way the board is drawn, so the letters read as solid shapes on
+ * a terminal instead of as a wall of punctuation.
+ */
 export function titleLines(width: number): string[] {
   return titleGrid().map(row => {
     let out = '';
-    let run = '';
+    let run = 0;
     let colour = '';
 
     const flush = () => {
       if (!run) return;
-      out += colour ? `{${colour}-fg}${run}{/}` : run;
-      run = '';
+      out += colour
+        ? `{${colour}-bg}${' '.repeat(run)}{/${colour}-bg}`
+        : ' '.repeat(run);
+      run = 0;
     };
 
     for (const cell of row) {
@@ -94,7 +102,7 @@ export function titleLines(width: number): string[] {
         cell === '+' ? 'yellow' : '';
 
       if (next !== colour) { flush(); colour = next; }
-      run += cell === ' ' ? ' ' : '#';
+      run++;
     }
     flush();
 

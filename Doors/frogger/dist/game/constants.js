@@ -133,7 +133,10 @@ exports.CELL_WIDTH = 2;
 exports.BG_COLORS = {
     road: 'black',
     water: 'blue',
-    bank: 'green',
+    // The banks and the median are magenta, as they are in the reference
+    // ANSI. They used to be green, and the frog is green: a frog standing on
+    // the bank was invisible, which is exactly what was reported.
+    bank: 'magenta',
     hedge: 'green',
     car: 'red',
     truck: 'white',
@@ -187,7 +190,10 @@ exports.SPRITE_FG = {
     bank: 'red',
 };
 /** The frog, and the frog you carry home. */
-exports.FROG_GLYPH = '\u03a9';
+// ASCII only, everywhere in this door. The board is drawn through blessed
+// with fullUnicode off, so anything outside 7-bit ASCII arrives mangled or
+// not at all - which is why the sprites showed as nothing.
+exports.FROG_GLYPH = '@';
 /** The grain along a log, and the ends that round it off. */
 exports.LOG_GRAIN = '-.';
 exports.LOG_END_LEFT = '(';
@@ -196,16 +202,16 @@ exports.LOG_END_RIGHT = ')';
 exports.TURTLE_GLYPH = ':O:';
 /** The jaws of a crocodile or an otter, and the bodies behind them. */
 exports.MOUTH_GLYPH = '><';
-exports.CROCODILE_BODY = '\u2261';
+exports.CROCODILE_BODY = '=';
 exports.OTTER_BODY = '~';
 /** The snake, riding a log or patrolling the median. */
-exports.SNAKE_GLYPH = '\u00a7';
+exports.SNAKE_GLYPH = 'S';
 /** The texture of the banks and the median, and of the hedge up top. */
-exports.BANK_TEXTURE = '\u00b7:';
-exports.HEDGE_TEXTURE = '\u2591';
+exports.BANK_TEXTURE = '.:';
+exports.HEDGE_TEXTURE = '#';
 /** The sides of a home, and what can be sitting in one. */
-exports.HOME_LEFT = '\u2590';
-exports.HOME_RIGHT = '\u258c';
+exports.HOME_LEFT = '[';
+exports.HOME_RIGHT = ']';
 exports.FLY_GLYPH = '*';
 // Colors for rendering
 exports.COLORS = {

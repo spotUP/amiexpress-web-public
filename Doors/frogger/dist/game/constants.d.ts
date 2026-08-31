@@ -234,7 +234,7 @@ export declare const SPRITE_FG: {
     bank: string;
 };
 /** The frog, and the frog you carry home. */
-export declare const FROG_GLYPH = "\u03A9";
+export declare const FROG_GLYPH = "@";
 /** The grain along a log, and the ends that round it off. */
 export declare const LOG_GRAIN = "-.";
 export declare const LOG_END_LEFT = "(";
@@ -243,16 +243,16 @@ export declare const LOG_END_RIGHT = ")";
 export declare const TURTLE_GLYPH = ":O:";
 /** The jaws of a crocodile or an otter, and the bodies behind them. */
 export declare const MOUTH_GLYPH = "><";
-export declare const CROCODILE_BODY = "\u2261";
+export declare const CROCODILE_BODY = "=";
 export declare const OTTER_BODY = "~";
 /** The snake, riding a log or patrolling the median. */
-export declare const SNAKE_GLYPH = "\u00A7";
+export declare const SNAKE_GLYPH = "S";
 /** The texture of the banks and the median, and of the hedge up top. */
-export declare const BANK_TEXTURE = "\u00B7:";
-export declare const HEDGE_TEXTURE = "\u2591";
+export declare const BANK_TEXTURE = ".:";
+export declare const HEDGE_TEXTURE = "#";
 /** The sides of a home, and what can be sitting in one. */
-export declare const HOME_LEFT = "\u2590";
-export declare const HOME_RIGHT = "\u258C";
+export declare const HOME_LEFT = "[";
+export declare const HOME_RIGHT = "]";
 export declare const FLY_GLYPH = "*";
 export declare const COLORS: {
     frog: string;

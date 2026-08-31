@@ -60,9 +60,11 @@ async function theTitleIsShaded() {
     const grid = (0, attract_1.titleGrid)();
     const shaded = grid.some(row => row.includes('+'));
     assert_1.default.ok(shaded, 'the letters should have a shaded edge');
+    // Painted as blocks of background colour, not as '#' characters.
     const painted = (0, attract_1.attractScreen)('points', (0, fixture_1.createData)(), WIDTH, 0).join('\n');
-    assert_1.default.ok(painted.includes('{green-fg}'), 'the face of the letters is green');
-    assert_1.default.ok(painted.includes('{yellow-fg}'), 'the shading is yellow');
+    assert_1.default.ok(painted.includes('{green-bg}'), 'the face of the letters is green');
+    assert_1.default.ok(painted.includes('{yellow-bg}'), 'the shading is yellow');
+    assert_1.default.ok(!/\{green-fg\}#/.test(painted), 'the title should be blocks, not hashes');
 }
 /**
  * The point table quotes the four scoring rules, and quotes the numbers the
