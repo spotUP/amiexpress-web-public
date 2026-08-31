@@ -1536,6 +1536,55 @@ console.error('Cleanup error:', error);
   /**
    * Delete Amiga door (removes .info file and door directory)
    */
+  /**
+   * Every command registration whose LOCATION points inside `doorDir`.
+   *
+   * A door's registration is NOT reliably named after the door. 5D-LogOff is
+   * registered as G (Commands/BBSCmd/G.info, LOCATION=Doors:5D-LogOff/...),
+   * so deleting the door looked for 5D-LogOff.info, found nothing, and left
+   * G.info pointing at a directory that no longer existed. On the live board
+   * that orphan shadowed the internal goodbye command and made it impossible
+   * to log off - the door was gone and its command still answered.
+   *
+   * The whole Commands tree is scanned, not just BBSCmd: this board also has
+   * Conf3/6/7/9/11/12/13/14Cmd and Node0Cmd, and a registration in any of
+   * them keeps a deleted door alive just as well.
+   *
+   * Returns absolute .info paths. Callers pass them through the same
+   * containment guard as every other delete - nothing here removes anything.
+   */
+  findRegistrationsPointingInto(doorDir: string): string[] {
+    const commandsRoot = path.join(this.bbsRoot, 'Commands');
+    const target = path.resolve(doorDir);
+    const hits: string[] = [];
+
+    const walk = (dir: string): void => {
+      let entries: string[] = [];
+      try { entries = amigafs.readdirSync(dir); } catch { return; }
+      for (const name of entries) {
+        const abs = path.join(dir, name);
+        let stats;
+        try { stats = amigafs.lstatSync(abs); } catch { continue; }
+        if (stats.isDirectory()) { walk(abs); continue; }
+        if (!/\.info$/i.test(name)) continue;
+
+        let resolved: string | undefined;
+        try { resolved = this.parseInfoFile(abs)?.resolvedPath; } catch { continue; }
+        if (!resolved) continue;
+
+        // The registration counts as pointing into the door when its
+        // resolved LOCATION is the directory itself or anything beneath it.
+        const rel = path.relative(target, path.resolve(resolved));
+        if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+          hits.push(abs);
+        }
+      }
+    };
+
+    walk(commandsRoot);
+    return hits;
+  }
+
   async deleteAmigaDoor(command: string, onStep?: DoorDeleteProgress): Promise<DoorDeleteResult> {
     try {
       const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
@@ -1553,6 +1602,20 @@ console.error('Cleanup error:', error);
       if (metadata?.resolvedPath) {
         fallbacks.push(metadata.resolvedPath);
         fallbacks.push(path.dirname(metadata.resolvedPath));
+
+        // Any OTHER command that points into the same door directory. A
+        // door is not always registered under its own name - 5D-LogOff is
+        // registered as G - and leaving that behind is what made a deleted
+        // door go on answering, shadowing the internal goodbye command.
+        const doorDir = path.dirname(metadata.resolvedPath);
+        for (const other of this.findRegistrationsPointingInto(doorDir)) {
+          if (path.resolve(other) === path.resolve(infoPath)) continue;
+          onStep?.({
+            kind: 'ok',
+            text: `also registered as ${path.basename(other, '.info')} (${path.relative(this.bbsRoot, other)})`,
+          });
+          fallbacks.push(other);
+        }
       }
 
       const removed = await this.deleteTrackedFiles(command.toUpperCase(), fallbacks, onStep);
