@@ -3234,55 +3234,47 @@ static int write_info_file_atomic(const dr_config *cfg, const char *info_path,
 static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
                                   const char *archive)
 {
-    char token[128];
-    char body[640];
-    char tokenhdr[160];
-    const char *headers[2];
-    http_response resp;
-    int body_len;
-    dr_config local_cfg;
+    char path[300];
+    FILE *f;
 
-    if (!config_read_token(cfg, token, sizeof(token))) {
+    /* Written to a file, not POSTed.
+     *
+     * This used to POST to the BBS's own management API, and it has never
+     * worked on this board: the 68K emulator runs INSIDE the backend's Node
+     * process, so a door blocking on a reply starves the event loop that
+     * would produce it. The request times out after 30 seconds and the
+     * answer arrives afterwards, unread. Measured on the live board and
+     * written up in web/backend/src/doors/door-list-snapshot.ts, which is
+     * where the door LIST solved the same problem the same way - the BBS
+     * writes a file at launch, the door reads it, no socket.
+     *
+     * This is the return direction: the door appends a line, and the BBS
+     * reads it when the door exits (door.handler.ts). That is late enough
+     * to be sure the install finished, and early enough that the sysop's
+     * next screen already knows about it.
+     *
+     * On a REAL AmiExpress board nothing reads this file, which is correct:
+     * door_installs is a table in this project's database, not something an
+     * Amiga has. The install is complete without it - the door is on disk
+     * and its .info is written - so a failure here is silent by design,
+     * exactly as the POST version was.
+     */
+    if (flow_build_local_path(path, sizeof(path), cfg->doors_dir,
+                              "DoorRepo/DoorRepo.installs") < 0) {
         return;
     }
 
-    /* http_request() always targets cfg->host:cfg->port, and those name the
-     * REMOTE catalog server (RepoHost/RepoPort - bbs.uprough.net by
-     * default). This report is for THIS board's own management API, so a
-     * local copy of cfg with host/port swapped for bbs_host/bbs_port is
-     * passed instead - on every board that has not overridden RepoHost,
-     * posting straight to cfg->host would send this board's launch token,
-     * in cleartext, to bbs.uprough.net. */
-    local_cfg = *cfg;
-    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
-    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
-    local_cfg.port = cfg->bbs_port;
-
-    /* json_build_install_body(), not a bare sprintf("%s"): the catalog
-     * this archive name comes from holds thousands of Latin-1 entries,
-     * some containing '"' or '\\' - unescaped, either would break this
-     * JSON body and the server's express.json would reject the whole
-     * request, silently losing the install report this function exists
-     * to send. See json_lite.h for the escaping contract. */
-    body_len = json_build_install_body(body, sizeof(body), cmdname, archive);
-    if (body_len < 0) {
-        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
+    f = fopen(path, "a");
+    if (f == (FILE *) 0) {
         return;
     }
 
-    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
-    headers[0] = "Content-Type: application/json\r\n";
-    headers[1] = tokenhdr;
-
-    memset(&resp, 0, sizeof(resp));
-    if (http_request(&local_cfg, "POST", "/api/door-admin/installed",
-                     body, (unsigned long) body_len,
-                     headers, 2, &resp,
-                     (int (*)(void *, const unsigned char *, unsigned long)) 0,
-                     (void *) 0) != HTTP_OK
-        || resp.status != 200) {
-        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
-    }
+    /* One line per install, in the "|" family every other file this door
+     * exchanges with the BBS uses. The command name is validated before it
+     * reaches here and an archive name comes from the catalog, so neither
+     * can carry the separator. */
+    fprintf(f, "INSTALL|%s|%s\n", cmdname, archive);
+    fclose(f);
 }
 
 /* The whole install, from an entry in the list to a runnable BBS command.

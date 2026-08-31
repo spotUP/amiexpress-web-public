@@ -33,6 +33,7 @@ import { dateTimeToDateStamp } from '../utils/date-time.util';
 import { joinVoiceChannel, leaveVoiceChannel, setVoiceMute, setVoiceVideo } from './voice-channel.handler';
 import { mintLaunchToken, revokeLaunchToken } from '../doors/door-launch-token';
 import { writeDoorListSnapshot, clearDoorListSnapshot } from '../doors/door-list-snapshot';
+import { applyDoorInstallReports } from '../doors/door-install-reports';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -1859,7 +1860,20 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
     // The snapshot is as session-scoped as the token: a listing left behind
     // would be read by the next launch before it is rewritten, and it
     // describes a board that may have changed since.
-    if (managementToken) clearDoorListSnapshot(bbsRoot);
+    if (managementToken) {
+      clearDoorListSnapshot(bbsRoot);
+
+      // Anything the door installed, recorded now that it has exited. It
+      // cannot tell us while it runs - a 68K door blocking on our own reply
+      // starves the event loop that would produce it, which is why
+      // report_install_to_bbs never worked and door_installs has no row for
+      // anything DoorRepo installed. It writes a file instead; this reads it.
+      try {
+        applyDoorInstallReports(bbsRoot);
+      } catch (err) {
+        console.log(`[door-install] reports not applied: ${(err as Error).message}`);
+      }
+    }
   }
 }
 
