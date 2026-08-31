@@ -118,11 +118,105 @@ describe('info-file.util', () => {
       expect(result.diskObject.length).toBe(0);
     });
 
-    it('should extract FORM trailer from text file', () => {
-      const filePath = writeTestFile('door.info', Buffer.from('KEY=VALUE\nFORM', 'utf8'));
+    it('should extract a real FORM chunk from a text file', () => {
+      // A FORM chunk carries its size: four big-endian bytes accounting for
+      // everything after them.
+      const payload = Buffer.from('ICON....', 'latin1');
+      const size = Buffer.alloc(4);
+      size.writeUInt32BE(payload.length, 0);
+      const filePath = writeTestFile(
+        'door.info',
+        Buffer.concat([Buffer.from('KEY=VALUE\n', 'utf8'), Buffer.from('FORM', 'latin1'), size, payload])
+      );
+
       const result = parseInfoFile(filePath);
-      expect(result.iconData.length).toBeGreaterThan(0);
-      expect(result.iconData.toString()).toContain('FORM');
+      expect(result.iconData.length).toBe(4 + 4 + payload.length);
+      expect(result.iconData.toString('latin1')).toContain('FORM');
+    });
+
+    it('does not mistake the WORD "FORM" for an icon', () => {
+      // Commands/BBSCmd/TC.info is plain text whose FIRST LINE is the word
+      // FORM. Matching on the word alone made the whole file "icon data", and
+      // since the writer emits the tooltypes AND THEN the icon data, saving
+      // that door would have written the file out twice over.
+      const text = 'FORM\nICON\nLOCATION=Doors/telnet\nACCESS=0\nNAME=TC\n';
+      const filePath = writeTestFile('door.info', Buffer.from(text, 'utf8'));
+
+      const result = parseInfoFile(filePath);
+      expect(result.iconData.length).toBe(0);
+
+      // The round trip is the point: it must not grow.
+      writeInfoFile(result);
+      expect(readTestFile(filePath).toString('utf8')).toBe(text);
+    });
+
+    it('keeps a value with a non-ASCII byte in it', () => {
+      // Every DayDream door on this board has a DESCRIPTION containing an em
+      // dash. The scanner accepted only 0x20-0x7e, so it cut the string there
+      // - and because the writer emits what the parser produced, saving any
+      // OTHER field on that door wrote the truncation to disk. 62 icons were
+      // damaged this way before the guard on the migration caught it.
+      // The bytes are what matter - this is a file an Amiga reads - so the
+      // assertion is on bytes, not on how a UTF-8 terminal renders them.
+      const before = Buffer.from('DESCRIPTION=AddBBS door (untested \u2014 batch-registered)\nACCESS=0\n', 'utf8');
+      const filePath = writeTestFile('door.info', before);
+
+      const result = parseInfoFile(filePath);
+      const description = result.tooltypes.find((t: Tooltype) => t.key === 'DESCRIPTION');
+      // Three bytes of em dash, not a string cut short at the first of them.
+      expect(Buffer.from(description!.value, 'latin1'))
+        .toEqual(Buffer.from('AddBBS door (untested \u2014 batch-registered)', 'utf8'));
+
+      removeTooltype(result, 'ACCESS');
+      writeInfoFile(result);
+
+      // The file lost exactly the ACCESS line and nothing else, byte for byte.
+      const after = readTestFile(filePath);
+      expect(after).toEqual(Buffer.from('DESCRIPTION=AddBBS door (untested \u2014 batch-registered)\n', 'utf8'));
+    });
+
+    it('keeps the line ending the file already uses', () => {
+      // 28 of this board's door icons are CRLF. The writer joined with '\n'
+      // unconditionally, so removing one tooltype rewrote every line in the
+      // file - a diff the sysop did not ask for, on a save they did.
+      const before = Buffer.from('NAME=TC\r\nACCESS=0\r\nSTACK=65536\r\n', 'latin1');
+      const filePath = writeTestFile('door.info', before);
+
+      const result = parseInfoFile(filePath);
+      expect(result.lineEnding).toBe('\r\n');
+
+      removeTooltype(result, 'ACCESS');
+      writeInfoFile(result);
+
+      expect(readTestFile(filePath))
+        .toEqual(Buffer.from('NAME=TC\r\nSTACK=65536\r\n', 'latin1'));
+    });
+
+    it('does not add a trailing newline to a file that had none', () => {
+      const before = Buffer.from('NAME=LiveChat\nACCESS=0\nPRELOADER=YES', 'latin1');
+      const filePath = writeTestFile('door.info', before);
+
+      const result = parseInfoFile(filePath);
+      removeTooltype(result, 'ACCESS');
+      writeInfoFile(result);
+
+      expect(readTestFile(filePath))
+        .toEqual(Buffer.from('NAME=LiveChat\nPRELOADER=YES', 'latin1'));
+    });
+
+    it('keeps a value the parser would otherwise trim', () => {
+      // The text writer re-rendered every line from key and value, and the
+      // parser trims - so a trailing space in a DESCRIPTION was lost every
+      // time the sysop saved anything else on that door.
+      const text = 'DESCRIPTION=Absolute Pool file-listing door (untested \nACCESS=100\n';
+      const filePath = writeTestFile('door.info', Buffer.from(text, 'utf8'));
+
+      const result = parseInfoFile(filePath);
+      removeTooltype(result, 'ACCESS');
+      writeInfoFile(result);
+
+      expect(readTestFile(filePath).toString('utf8'))
+        .toBe('DESCRIPTION=Absolute Pool file-listing door (untested \n');
     });
 
     it('should handle text file without FORM trailer', () => {

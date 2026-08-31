@@ -40,6 +40,22 @@ export interface Tooltype {
 export interface InfoFile {
   filePath: string;
   isBinary: boolean;
+  /**
+   * The line ending a TEXT .info already uses.
+   *
+   * The writer joined with '\n' unconditionally, so editing one field of a
+   * CRLF door icon rewrote every line in it. Harmless to a parser and not the
+   * writer's business: a save should change what the sysop changed.
+   */
+  lineEnding?: '\n' | '\r\n';
+  /**
+   * Did the TEXT file end with a line ending?
+   *
+   * Two door icons on this board do not, and the writer appended one - so a
+   * save that removed a tooltype also grew the file by a byte it had never
+   * had. Same rule as lineEnding: change what was asked for.
+   */
+  trailingNewline?: boolean;
   diskObject: Buffer;   // Everything before the tooltype array's count field
   iconData: Buffer;     // Everything after the last tooltype entry
   tooltypes: Tooltype[];
@@ -118,11 +134,17 @@ function looksLikeTooltypeBytes(buf: Buffer, start: number, len: number): boolea
   // Allow up to one trailing null (the normal terminator)
   const endByte = buf[start + len - 1];
   const payloadEnd = endByte === 0 ? start + len - 1 : start + len;
-  // Body must be printable ASCII (plus ESC 0x1b for ANSI in values)
+  // Body must be printable (plus ESC 0x1b for ANSI in values).
+  //
+  // "Printable" includes the high half. A tooltype value is Amiga text, which
+  // is Latin-1, and this repo's own .info files carry UTF-8 too - the DayDream
+  // door descriptions contain an em dash. Rejecting anything above 0x7e made
+  // those files fail to parse as structured icons.
   for (let i = start; i < payloadEnd; i++) {
     const c = buf[i];
     if (c === 0x1b) continue;
-    if (c < 0x20 || c > 0x7e) return false;
+    if (c >= 0x80) continue;
+    if (c < 0x20 || c === 0x7f) return false;
   }
   // Must contain at least one letter or digit (not all whitespace/punct)
   let hasAlpha = false;
@@ -181,6 +203,33 @@ function locateTooltypeArray(buf: Buffer): { countOffset: number; entriesEnd: nu
 }
 
 /**
+ * The trailing IFF payload of a text .info, if it genuinely has one.
+ *
+ * This used to be `buffer.indexOf('FORM')` and everything after it, on the
+ * theory that a text .info might carry an icon image on the end. The theory
+ * does not survive the files: `Commands/BBSCmd/TC.info` is plain text whose
+ * FIRST LINE is the word FORM, so the match landed at offset 0 and the whole
+ * file became "icon data" - and since the writer emits the tooltypes AND
+ * then the icon data, saving that door through the admin would have written
+ * the file out twice over.
+ *
+ * A real FORM chunk carries its size: four bytes of big-endian length that
+ * account for everything after them. Requiring that is the difference
+ * between finding an IFF payload and finding the word.
+ */
+function locateIffPayload(buffer: Buffer): Buffer {
+  let at = buffer.indexOf('FORM');
+  while (at !== -1) {
+    if (at + 8 <= buffer.length) {
+      const declared = buffer.readUInt32BE(at + 4);
+      if (declared === buffer.length - at - 8) return buffer.slice(at);
+    }
+    at = buffer.indexOf('FORM', at + 1);
+  }
+  return Buffer.alloc(0);
+}
+
+/**
  * Fallback extraction: scan the whole file for ASCII blobs that look
  * like tooltypes. Used for non-binary .info files or as a last resort
  * when the structured parse fails.
@@ -191,7 +240,14 @@ function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
   let current = '';
   for (let i = 0; i < buffer.length; i++) {
     const c = buffer[i];
-    if (c >= 0x20 && c <= 0x7e) {
+    // Anything above 0x7e is text, not a delimiter: a tooltype VALUE is Amiga
+    // Latin-1, and these files carry UTF-8 as well. Cutting the string at the
+    // first high byte truncated every DayDream door's DESCRIPTION at its em
+    // dash - and because the writer emits what the parser produced, saving
+    // any other field on that door wrote the truncation to disk. Keys stay
+    // ASCII: VALID_KEY_RE rejects a key with a high byte, so the extra bytes
+    // can only ever land in a value.
+    if (c >= 0x20 && c !== 0x7f) {
       current += String.fromCharCode(c);
     } else {
       if (current.length >= 2) extracted.push(current);
@@ -259,12 +315,13 @@ export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
   const isBinary = buffer.length > 2 && buffer[0] === 0xe3 && buffer[1] === 0x10;
 
   if (!isBinary) {
-    const formIdx = buffer.indexOf('FORM');
-    const iconData = formIdx !== -1 ? buffer.slice(formIdx) : Buffer.alloc(0);
+    const iconData = locateIffPayload(buffer);
     const tooltypes = extractTooltypesFallback(buffer);
     return {
       filePath,
       isBinary: false,
+      lineEnding: buffer.includes('\r\n') ? '\r\n' : '\n',
+      trailingNewline: buffer.length === 0 || buffer[buffer.length - 1] === 0x0a,
       diskObject: Buffer.alloc(0),
       iconData,
       tooltypes,
@@ -401,8 +458,21 @@ export function writeInfoFile(info: InfoFile): void {
   }
 
   // Text mode: emit each tooltype on its own line, then any trailing FORM data.
-  const lines = info.tooltypes.map(renderTooltype).join('\n');
-  const textBuf = Buffer.from(lines + (lines ? '\n' : ''), 'utf8');
+  //
+  // An untouched entry keeps its exact on-disk text, the same rule the binary
+  // branch above follows. Re-rendering every line from key and value looks
+  // equivalent and is not: the parser trims, so a description written
+  // "DESCRIPTION=Absolute Pool file-listing door (untested " came back a byte
+  // shorter every time the sysop saved anything else on that door.
+  const eol = info.lineEnding ?? '\n';
+  const lines = info.tooltypes.map(tt => tt.originalLine || renderTooltype(tt)).join(eol);
+  // latin1, not utf8. The parser builds these strings with
+  // String.fromCharCode over the raw bytes, so each char IS a byte; encoding
+  // them back as UTF-8 turned every byte above 0x7e into two and corrupted
+  // the file. The binary branch above has always used latin1 for the same
+  // reason.
+  const ends = info.trailingNewline ?? true;
+  const textBuf = Buffer.from(lines + (lines && ends ? eol : ''), 'latin1');
   fs.writeFileSync(info.filePath, Buffer.concat([textBuf, info.iconData]));
 }
 
@@ -421,6 +491,8 @@ export function parseOrCreateInfoFile(filePath: string): InfoFile {
   return {
     filePath,
     isBinary: false,
+    lineEnding: '\n',
+    trailingNewline: true,
     diskObject: Buffer.alloc(0),
     iconData: Buffer.alloc(0),
     tooltypes: [],

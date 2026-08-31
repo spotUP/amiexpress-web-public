@@ -256,3 +256,61 @@ describe('door enabled state', () => {
     });
   });
 });
+
+describe('editing a door that is open to everyone', () => {
+  // express.e:4703 - ACCESS=0 denies the door to EVERYBODY, and a door open
+  // to everyone carries no ACCESS tooltype at all. The API serves 0 for such
+  // a door and the form posts back what it was given, so editing ANY other
+  // field wrote ACCESS=0 and locked it. buildNewDoorTooltypes already knew
+  // this; the edit path did not, which is how 63 icons on this board ended up
+  // denying themselves to everyone.
+  const open = (): Tooltype[] => [
+    { key: 'LOCATION', value: 'BBS:Doors/Wall/Wall', commented: false, originalLine: 'LOCATION=BBS:Doors/Wall/Wall' },
+    { key: 'TYPE', value: 'XIM', commented: false, originalLine: 'TYPE=XIM' },
+  ];
+
+  it('does not write ACCESS=0 when the level is 0', () => {
+    const out = applyDoorFieldsToTooltypes(open(), { door_name: 'Wall', min_security_level: 0 });
+
+    expect(out.find(t => t.key === 'ACCESS')).toBeUndefined();
+    expect(out.find(t => t.key === 'NAME')?.value).toBe('Wall');
+  });
+
+  it('removes an ACCESS that is already there when the level is set to 0', () => {
+    const withAccess: Tooltype[] = [
+      ...open(),
+      { key: 'ACCESS', value: '100', commented: false, originalLine: 'ACCESS=100' },
+    ];
+
+    const out = applyDoorFieldsToTooltypes(withAccess, { min_security_level: 0 });
+
+    expect(out.find(t => t.key === 'ACCESS')).toBeUndefined();
+    // Everything else survives.
+    expect(out.find(t => t.key === 'LOCATION')?.value).toBe('BBS:Doors/Wall/Wall');
+    expect(out.find(t => t.key === 'TYPE')?.value).toBe('XIM');
+  });
+
+  it('still writes a real level', () => {
+    const out = applyDoorFieldsToTooltypes(open(), { min_security_level: 100 });
+    expect(out.find(t => t.key === 'ACCESS')?.value).toBe('100');
+  });
+
+  it('remembers "everyone" as an absence while the door is parked', () => {
+    // A parked door's edit lands on DRACCESS. Recording 0 there would make
+    // re-enabling write ACCESS=0 and lock the door permanently - the exact
+    // fault 2b65f8455 fixed for the disable path.
+    const parked: Tooltype[] = [
+      ...open(),
+      { key: 'ACCESS', value: '32767', commented: false, originalLine: 'ACCESS=32767' },
+      { key: 'DRACCESS', value: '100', commented: false, originalLine: 'DRACCESS=100' },
+    ];
+
+    const edited = applyDoorFieldsToTooltypes(parked, { min_security_level: 0 });
+    expect(edited.find(t => t.key === 'DRACCESS')?.value).toBe('-1');
+
+    // And enabling it restores an ABSENCE, not a zero.
+    const enabled = applyEnabledToTooltypes(edited, true);
+    expect(enabled.find(t => t.key === 'ACCESS')).toBeUndefined();
+    expect(enabled.find(t => t.key === 'DRACCESS')).toBeUndefined();
+  });
+});

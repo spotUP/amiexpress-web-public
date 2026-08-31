@@ -197,6 +197,23 @@ function tooltypeValue(field: string, raw: unknown): string | null {
 }
 
 /**
+ * Is this the access level that means "everyone"?
+ *
+ * express.e:4703 is `IF access=0 THEN RETURN TRUE`, and TRUE is
+ * RESULT_NOT_ALLOWED - so `ACCESS=0` denies the door to EVERYBODY. A door
+ * open to everyone carries no ACCESS tooltype at all: readToolTypeInt answers
+ * -1 for an absent one (tooltypes.e:176-180), and -1 is never above a
+ * caller's level.
+ *
+ * The API serves 0 for a door with no ACCESS, and the form posts back what it
+ * was given, so an edit to any OTHER field on such a door wrote ACCESS=0 and
+ * locked it. buildNewDoorTooltypes already knew this; the edit path did not.
+ */
+function meansEveryone(field: string, value: string): boolean {
+  return field === 'min_security_level' && value === '0';
+}
+
+/**
  * Apply the admin form's fields to a door's tooltypes.
  *
  * Every tooltype the form does not own is passed through untouched, including
@@ -219,8 +236,20 @@ export function applyDoorFieldsToTooltypes(
     const value = tooltypeValue(field, (fields as any)[field]);
     if (value === null) continue;
 
+    // Level 0 is an ABSENCE, not a value - see meansEveryone.
+    const everyone = meansEveryone(field, value);
+
     if (parked && key === 'ACCESS') {
-      setTooltype(out, PRIOR_ACCESS_TOOLTYPE, value);
+      // The door is off, so the level is remembered rather than applied. An
+      // absence has its own sentinel, or enabling the door would write
+      // ACCESS=0 and lock it exactly as it was before.
+      setTooltype(out, PRIOR_ACCESS_TOOLTYPE, everyone ? NO_ACCESS_RECORDED : value);
+      continue;
+    }
+
+    if (everyone) {
+      const at = out.findIndex(t => t.key.toUpperCase() === key);
+      if (at !== -1) out.splice(at, 1);
       continue;
     }
 
