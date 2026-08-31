@@ -5,7 +5,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { HighScore, KeyMap } from './game/types';
+import { HighScore, KeyMap, GameState } from './game/types';
+import { trackForState } from './music-select';
 import {
   DEFAULT_HIGHSCORES,
   MAX_HIGHSCORES,
@@ -85,6 +86,20 @@ function saveHighscores(scores: HighScore[]): void {
   } catch (error) {
     console.error('[Super Qix] Error saving highscores:', error);
   }
+}
+
+/**
+ * What the door is showing right now, for getMusicTrack to answer with.
+ *
+ * A module-level value rather than session state: a TypeScript door is
+ * loaded per launch, so this belongs to the one game being played through
+ * it, which is the same thing the client is asking about.
+ */
+let currentState: GameState = 'menu';
+
+/** Told by the door whenever the screen changes. */
+export function setMusicState(state: GameState): void {
+  currentState = state;
 }
 
 /** Every player's settings, keyed by BBS handle. */
@@ -197,6 +212,22 @@ export const rpcHandlers = {
   resetHighscores: async (): Promise<{ success: boolean }> => {
     saveHighscores([...DEFAULT_HIGHSCORES]);
     return { success: true };
+  },
+
+  /**
+   * Which tracker module should be playing right now.
+   *
+   * The door's client is a stub - the game runs here, server-side, so the
+   * browser has no way to know what is on screen. Arkanoid's client can
+   * drive its own music because Arkanoid's client IS the game; this one
+   * cannot, so it asks.
+   *
+   * Answered from the same pure trackForState the tests cover, so the music
+   * cannot drift from the screen. setMusicState is called by the door
+   * whenever the state changes.
+   */
+  getMusicTrack: async (): Promise<{ track: string }> => {
+    return { track: trackForState(currentState) };
   },
 
   /**

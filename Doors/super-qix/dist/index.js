@@ -12,7 +12,7 @@ import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers
 import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
 import { attractScreen, nextPhase, ATTRACT_ORDER, ATTRACT_FRAMES, ATTRACT_IDLE_FRAMES, } from "./game/attract";
-import { rpcHandlers } from "./server";
+import { rpcHandlers, setMusicState } from "./server";
 import { normalizeKey, directionForKey, canBindKey, keyLabel, helpControlLines, } from "./game/controls";
 import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, SKILL_LEVELS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, } from "./game/constants";
 // Export RPC handlers for hybrid mode
@@ -622,6 +622,7 @@ async function startGame() {
                 }
             }
             engine?.update();
+            syncMusicState();
         }
         else if (gameData.state === "gameover") {
             // Keep painting so the GAME OVER prompt blinks. Nothing drew this
@@ -651,11 +652,24 @@ async function startGame() {
 /**
  * Handle input
  */
+/**
+ * Keep the server's idea of the current screen in step.
+ *
+ * The client polls getMusicTrack to know what to play, and it can only be
+ * right if this is told every time the screen changes. Called from the input
+ * handler and the game loop rather than from each individual transition,
+ * because there are a dozen of those and one of them would eventually be
+ * missed.
+ */
+function syncMusicState() {
+    setMusicState(gameData.state);
+}
 function handleInput(key) {
     const inputKey = normalizeKey(key);
     // Any key at all wakes the cabinet up.
     if (gameData.state === "attract") {
         showMenu();
+        syncMusicState();
         return;
     }
     menuIdleFrames = 0;
@@ -700,6 +714,7 @@ function handleInput(key) {
             // An unknown state should not throw the player out of their game.
             break;
     }
+    syncMusicState();
 }
 /**
  * Handle menu input

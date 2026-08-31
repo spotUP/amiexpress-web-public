@@ -89,3 +89,65 @@ export async function theTwoTracksAreDifferent(): Promise<void> {
   const b = readFileSync(join(ASSETS, EVERYWHERE_ELSE_TRACK));
   assert.ok(!a.equals(b), 'both names point at the same music');
 }
+
+/**
+ * The door tells the server what is on screen, and the RPC answers with it.
+ *
+ * This is the transport, and it is the part that was missing: Arkanoid's
+ * client drives its own music because Arkanoid's client IS the game. Super
+ * Qix runs server-side and its client is a stub, so the client has to ask.
+ */
+export async function theRpcAnswersWithTheTrackForTheCurrentScreen(): Promise<void> {
+  const { rpcHandlers, setMusicState } = await import('../server');
+
+  setMusicState('menu');
+  assert.strictEqual((await rpcHandlers.getMusicTrack()).track, EVERYWHERE_ELSE_TRACK);
+
+  setMusicState('playing');
+  assert.strictEqual((await rpcHandlers.getMusicTrack()).track, IN_GAME_TRACK);
+
+  setMusicState('paused');
+  assert.strictEqual(
+    (await rpcHandlers.getMusicTrack()).track, IN_GAME_TRACK,
+    'a pause is inside the round; the music must not restart'
+  );
+
+  setMusicState('attract');
+  assert.strictEqual((await rpcHandlers.getMusicTrack()).track, EVERYWHERE_ELSE_TRACK);
+}
+
+/**
+ * ...and the door actually reports its state.
+ *
+ * An RPC that always answers "menu" would play the wrong music forever, and
+ * nothing about it would look broken. Asserted against the source, because
+ * the alternative is standing up blessed and a door context.
+ */
+export async function theDoorReportsItsStateForTheMusic(): Promise<void> {
+  const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+
+  assert.ok(/setMusicState\(gameData\.state\)/.test(index),
+    'the door should publish its live state, not a fixed one');
+  assert.ok(/syncMusicState\(\);/.test(index), 'and call it');
+
+  // Input alone is not enough: the level hand-over and game over happen on
+  // the clock, with no keypress to hang a sync off.
+  const loopSynced = /engine\?\.update\(\);\s*\n\s*syncMusicState\(\);/.test(index);
+  assert.ok(loopSynced, 'the game loop must sync too, or a level clear keeps the wrong track');
+}
+
+/** The client asks for its music, and plays real modules. */
+export async function theClientAsksForAndPlaysTheTrack(): Promise<void> {
+  const client = readFileSync(join(__dirname, '..', 'client.ts'), 'utf8');
+
+  assert.ok(/door\.rpc\("getMusicTrack"/.test(client), 'the client should ask what to play');
+  assert.ok(/new TrackerEngine\(/.test(client), 'and play it with the tracker engine');
+  assert.ok(/audioContext: trackerContext/.test(client),
+    'TrackerEngine takes audioContext - "context" is silently ignored');
+  assert.ok(
+    /api\/doors\/SUPERQIX\/assets\//.test(client),
+    'and fetch the module from the door assets endpoint'
+  );
+  assert.ok(/clearInterval\(musicPoll\)/.test(client),
+    'the poll must stop with the door, or it outlives the session');
+}
