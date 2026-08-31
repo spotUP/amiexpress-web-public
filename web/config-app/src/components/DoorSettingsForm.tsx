@@ -86,10 +86,10 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
   };
 
   return (
-    <form
-      className="space-y-4 p-1"
-      onSubmit={e => { e.preventDefault(); saveMutation.mutate(); }}
-    >
+    // A div, not a form: this renders inside the Edit Door modal's form, and
+    // nesting forms is invalid HTML - the browser discards the inner one, and
+    // its submit button would then save the DOOR instead of its settings.
+    <div className="space-y-4 p-1">
       {view.manifest.settings.map(setting => {
         const value = values[setting.key];
         const id = `door-setting-${setting.key}`;
@@ -144,7 +144,8 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
       })}
 
       <button
-        type="submit"
+        type="button"
+        onClick={() => saveMutation.mutate()}
         disabled={!dirty || saveMutation.isPending}
         className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-bbs-accent/20 border border-bbs-accent/50 text-sm disabled:opacity-50"
       >
@@ -153,6 +154,6 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
           : <Save className="h-4 w-4" />}
         Save settings
       </button>
-    </form>
+    </div>
   );
 }

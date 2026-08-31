@@ -104,4 +104,35 @@ describe('the doors list', () => {
     await screen.findByDisplayValue('Grandmaster');
     expect(screen.queryByText('Door settings')).toBeNull();
   });
+
+  // The first attempt put the section after the footer. The modal is capped at
+  // 90vh and scrolls, so on a door with a full form the settings were below
+  // the Cancel/Update buttons and off-screen - reported as "nope, still not
+  // there". Order is the assertion: settings before the buttons.
+  it('puts the settings above the modal buttons, not below them', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit BBSLink'));
+
+    const heading = await screen.findByText('Door settings');
+    const update = screen.getByRole('button', { name: /update door/i });
+    expect(heading.compareDocumentPosition(update) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // A form inside a form is dropped by the browser, and the inner save button
+  // then submits the OUTER one - saving the door instead of its settings.
+  it('does not nest the settings form inside the door form', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPage();
+
+    await user.click(await screen.findByLabelText('Edit BBSLink'));
+    await screen.findByText('Door settings');
+
+    const forms = document.querySelectorAll('form');
+    for (const form of Array.from(forms)) {
+      expect(form.querySelector('form')).toBeNull();
+    }
+    expect(container).toBeTruthy();
+  });
 });

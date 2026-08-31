@@ -547,6 +547,29 @@ export function DoorsPage() {
                 </div>
               </div>
 
+              {/*
+                The door's OWN settings, above the buttons rather than below
+                them: the modal is capped at 90vh and scrolls, so a section
+                after the footer is off-screen for a door with a full form -
+                which is how the first attempt at this shipped and showed a
+                sysop nothing.
+
+                Everything above is the door's REGISTRATION - command, path,
+                access level, what AmiExpress reads from the .info file. What
+                the door itself can be told is a separate file it ships
+                (door.settings.json) with its own save button, so a door that
+                declares none sees no change here at all.
+              */}
+              {editingDoor?.has_settings && (
+                <div className="border-t border-bbs-primary pt-6">
+                  <h3 className="text-lg text-accent mb-1">Door settings</h3>
+                  <p className="text-bbs-muted text-sm">
+                    What this door says it can be configured with. Saved to the door, not to its registration.
+                  </p>
+                  <DoorSettingsForm command={editingDoor.door_command} />
+                </div>
+              )}
+
               <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary">
                 <button
                   type="button"
@@ -568,30 +591,6 @@ export function DoorsPage() {
                 </button>
               </div>
             </form>
-
-            {/*
-              The door's OWN settings, on the screen a sysop opens to configure
-              a door. Everything above is the door's REGISTRATION - the command,
-              the path, the access level, what AmiExpress reads from the .info
-              file. What the door itself can be told is a separate file it
-              ships (door.settings.json) and a separate save, so it sits below
-              the registration rather than inside its form.
-
-              Rendered only for a door that declares any, so the other forty
-              doors' modals are unchanged. Reported 2026-09-01: the list badged
-              LIVECHAT and BBSLINK as configurable and this modal showed the
-              same six fields as every other door, because the form lived only
-              in the .info editor behind a different icon.
-            */}
-            {editingDoor?.has_settings && (
-              <div className="border-t border-bbs-primary p-6">
-                <h3 className="text-lg text-accent mb-1">Door settings</h3>
-                <p className="text-bbs-muted text-sm">
-                  What this door says it can be configured with. Saved to the door, not to its registration.
-                </p>
-                <DoorSettingsForm command={editingDoor.door_command} />
-              </div>
-            )}
         </Modal>
       )}
 
