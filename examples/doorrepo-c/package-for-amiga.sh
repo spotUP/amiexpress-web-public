@@ -40,6 +40,26 @@ mkdir -p "$PKG/bin" "$PKG/src/tests" "$PKG/src/tools" "$PKG/docs" "$PKG/samples"
 echo "[INFO] assembling"
 cp "$HERE/doorrepo.amiga"       "$PKG/bin/DoorRepo"
 chmod 755                        "$PKG/bin/DoorRepo"
+
+# Shrinkler-packed, because the recipients are Amiga sysops on real hardware
+# and slow links: 121,608 bytes becomes ~46,000, and the door decrunches
+# itself on startup. See .claude/skills/shrinkler-door-releases.
+#
+# The PLAIN binary is what this board runs and is NOT replaced here. A
+# crunched executable is smaller on disk and BIGGER in memory while it
+# decrunches - both images are resident - and DoorRepo crunched needs 513 KB
+# against the 500 KB the emulator gives a door, so our own board refuses it
+# (memory-map.ts, assertDoorSegmentsFit). A real Amiga has the RAM; the
+# emulator's door region does not.
+if command -v shrinkler >/dev/null; then
+  shrinkler "$HERE/doorrepo.amiga" "$PKG/bin/DoorRepo.shrinkled" >/dev/null
+  chmod 755 "$PKG/bin/DoorRepo.shrinkled"
+  PLAIN_SIZE=$(wc -c < "$PKG/bin/DoorRepo" | tr -d ' ')
+  PACKED_SIZE=$(wc -c < "$PKG/bin/DoorRepo.shrinkled" | tr -d ' ')
+  echo "[INFO] shrinkler: $PLAIN_SIZE -> $PACKED_SIZE bytes"
+else
+  echo "[WARN] shrinkler not found - the archive carries only the plain binary"
+fi
 # The cover letter names the build it describes, so the commit is stamped in
 # here rather than typed by hand into a file that then goes stale. A dirty
 # source tree is refused outright: an archive whose "Built: git <sha>" line
