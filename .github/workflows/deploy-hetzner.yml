@@ -243,23 +243,22 @@
               fi
               echo "OK: doors on the volume match the image"
 
-              # Reclaim what building on the host leaves behind.
+              # Reclaim dangling images, and ONLY those.
               #
-              # Every push builds the image here, and buildkit keeps every
-              # layer it has ever built. On 2026-08-31 that was 11.8 GB of
-              # build cache and 16.3 GB of images against a 75 GB disk - 60%
-              # full, climbing with each deploy, and nothing ever removing
-              # any of it. A full board volume is a dead BBS, so this runs on
-              # every deploy rather than waiting for someone to notice.
+              # This step used to run `docker builder prune` on every deploy
+              # as well. Within the hour that followed its first runs the
+              # daemon began dying on every build - `panic: page 4708 already
+              # freed` in bbolt, buildkit's cache database - six times in ten
+              # minutes, and each time it took every container on the host
+              # down with it, the board included. Rewriting buildkit's
+              # metadata on a schedule is not a safe thing to do to a 4 GB
+              # host that builds its own images; the cache is reclaimed by
+              # hand, with the daemon idle, when the disk actually needs it.
               #
-              # Deliberately conservative: cache older than a week goes (a
-              # deploy an hour from now still has yesterday's layers to build
-              # on), and only DANGLING images - `docker image prune` without
-              # -a, so nothing that is tagged or that a stopped container
-              # still needs can be taken. Volumes are never touched: the
-              # board's data is one of them.
-              echo "== reclaim: build cache older than a week, dangling images =="
-              docker builder prune -f --filter until=168h 2>&1 | tail -2 || true
+              # `docker image prune` without -a touches image records only:
+              # nothing tagged, nothing a stopped container needs, and never
+              # a volume - the board's data is one of them.
+              echo "== reclaim: dangling images =="
               docker image prune -f 2>&1 | tail -2 || true
               df -h / | tail -1
 
