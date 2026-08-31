@@ -94,10 +94,15 @@ describe('buildNewDoorTooltypes', () => {
     expect(valueOf(buildNewDoorTooltypes(fields), 'MULTINODE')).toBe('YES');
   });
 
-  it('defaults access to 0 when none was given', () => {
+  it('writes no ACCESS at all when none was given', () => {
+    // This asserted ACCESS=0, which reads as "no restriction" and is the
+    // opposite: express.e:4703 is `IF access=0 THEN RETURN TRUE`, and TRUE is
+    // RESULT_NOT_ALLOWED (axenums.e:23). Every door created through the admin
+    // without a level was denied to everybody, sysop included. A door open to
+    // all simply carries no ACCESS tooltype.
     const tts = buildNewDoorTooltypes({ door_command: 'X', door_type: 'XIM', door_path: 'p' });
 
-    expect(valueOf(tts, 'ACCESS')).toBe('0');
+    expect(valueOf(tts, 'ACCESS')).toBeUndefined();
   });
 
   it('omits NAME rather than inventing one from the command', () => {
@@ -105,5 +110,30 @@ describe('buildNewDoorTooltypes', () => {
     const tts = buildNewDoorTooltypes({ door_command: 'X', door_type: 'XIM', door_path: 'p' });
 
     expect(tts.find(t => t.key === 'NAME')).toBeUndefined();
+  });
+
+  it('gives a door with no access level no ACCESS tooltype at all', () => {
+    // express.e:4703 - `IF access=0 THEN RETURN TRUE`, and TRUE is
+    // RESULT_NOT_ALLOWED. Writing ACCESS=0 for "no level given" created doors
+    // that nobody, including the sysop, could run. Absence is what "everyone"
+    // looks like: readToolTypeInt answers -1 for a missing tooltype.
+    const tooltypes = buildNewDoorTooltypes({
+      door_command: 'WALL',
+      door_type: 'XIM',
+      door_path: 'DOORS:Wall/wall',
+    });
+
+    expect(tooltypes.some(t => t.key.toUpperCase() === 'ACCESS')).toBe(false);
+  });
+
+  it('writes the level when one is actually asked for', () => {
+    const tooltypes = buildNewDoorTooltypes({
+      door_command: 'WALL',
+      door_type: 'XIM',
+      door_path: 'DOORS:Wall/wall',
+      min_security_level: 30,
+    });
+
+    expect(tooltypes.find(t => t.key.toUpperCase() === 'ACCESS')?.value).toBe('30');
   });
 });
