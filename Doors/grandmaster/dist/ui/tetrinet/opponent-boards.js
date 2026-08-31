@@ -11,9 +11,20 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpponentBoards = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-/** A TetriNET field is 12 columns by 22 rows. */
-const FULL_FIELD_COLS = 12;
-const FULL_FIELD_ROWS = 22;
+/**
+ * A field drawn at FULL size, as the player's own board is drawn.
+ *
+ * The played board is a 22x22 box with a border - 20x20 inside - and its
+ * cells are two characters wide, so a full field is the board's own column
+ * count at CELL_WIDTH each. TGM fields are 10 wide, TetriNET's are 12, so
+ * the width is taken from the board rather than assumed.
+ */
+const CELL_WIDTH = 2;
+/** How many full-size fields fit side by side in the panel. */
+function fullBoardsThatFit(innerWidth, boardCols) {
+    const each = boardCols * CELL_WIDTH + 2; // + its own frame
+    return Math.max(0, Math.floor(innerWidth / each));
+}
 /**
  * Opponent Boards component
  */
@@ -28,6 +39,17 @@ class OpponentBoards {
         this.perRow = 3;
         /** True while a single opponent is being shown at full size. */
         this.solo = false;
+        /**
+         * Which opponent the viewer has focused.
+         *
+         * Only matters once there are more fields than fit at full size: the
+         * focused one is drawn full and the rest as minimaps. Tab moves it.
+         */
+        this.focusIndex = 0;
+        /** How many boards were drawn full last time, for the layout to stay put. */
+        this.fullCount = 0;
+        /** The ceiling on full-size boards for this panel. */
+        this.maxFullBoards = 1;
         this.maxOpponents = options.maxOpponents || 5;
         // The spectator view has the whole screen and lays six fields out in a
         // single row; the in-game panel is a narrow column and keeps its 3x2.
@@ -37,6 +59,8 @@ class OpponentBoards {
             this.boardHeight = options.boardHeight;
         if (options.perRow)
             this.perRow = options.perRow;
+        if (options.maxFullBoards !== undefined)
+            this.maxFullBoards = options.maxFullBoards;
         // Calculate container size
         const width = options.width || (this.boardWidth * this.perRow + 4);
         const height = options.height || (this.boardHeight * 2 + 2); // 2 rows
@@ -59,6 +83,26 @@ class OpponentBoards {
     /**
      * Update all opponent boards
      */
+    /** Move the viewer's focus on by one, wrapping. */
+    cycleFocus(total) {
+        if (total <= 0)
+            return 0;
+        this.focusIndex = (this.focusIndex + 1) % total;
+        // The layout is rebuilt on the next update, because which board is drawn
+        // full has changed.
+        for (const [, widget] of this.miniBoards)
+            widget.container.destroy();
+        this.miniBoards.clear();
+        return this.focusIndex;
+    }
+    /** Who the viewer is focused on. */
+    getFocus() {
+        return this.focusIndex;
+    }
+    /** True when every field is being shown at full size. */
+    isShowingAllFull() {
+        return this.fullCount > 0 && this.fullCount === this.miniBoards.size;
+    }
     updateBoards(opponents) {
         // One opponent gets the whole panel at 1:1; minimaps only from two.
         //
@@ -68,9 +112,36 @@ class OpponentBoards {
         // panel's 26x22 interior fits a 12x22 field exactly, so nothing has to
         // be scaled away - the area scaler below degenerates to 1:1 when its
         // box matches the field.
-        const solo = opponents.length === 1;
-        if (solo !== this.solo) {
+        // How many of these can be shown at FULL size, side by side.
+        //
+        // A full field is the board's own columns at two characters each plus its
+        // frame; three of them come to 66 of the panel's 78, so up to three fit.
+        // Beyond that the focused one is drawn full and the rest as minimaps.
+        const cols = opponents[0]?.board?.width ?? 10;
+        const fits = Math.min(fullBoardsThatFit(this.innerSize().width, cols), this.maxFullBoards);
+        // All of them, or none - except a panel that allows several full boards,
+        // which falls back to showing the FOCUSED one full with the rest as
+        // minimaps. The in-game side panel has room for one, so it goes straight
+        // from a lone bot at full size to all-minimaps the moment a second
+        // arrives; promoting one of two there would just make the other look
+        // broken.
+        const full = opponents.length <= fits ? opponents.length :
+            this.maxFullBoards > 1 && fits > 0 ? 1 :
+                0;
+        if (this.focusIndex >= Math.max(1, opponents.length))
+            this.focusIndex = 0;
+        // The focused player is drawn FIRST, so when only some fit at full size
+        // the focused one is the one that gets it. Tab moves the focus.
+        if (this.focusIndex > 0 && this.focusIndex < opponents.length) {
+            opponents = [
+                opponents[this.focusIndex],
+                ...opponents.filter((_, i) => i !== this.focusIndex),
+            ];
+        }
+        const solo = full > 0;
+        if (solo !== this.solo || full !== this.fullCount) {
             this.solo = solo;
+            this.fullCount = full;
             for (const [, widget] of this.miniBoards)
                 widget.container.destroy();
             this.miniBoards.clear();
@@ -96,7 +167,7 @@ class OpponentBoards {
         let widget = this.miniBoards.get(opponent.id);
         // Create widget if doesn't exist
         if (!widget) {
-            widget = this.createMiniBoard(opponent.id, index);
+            widget = this.createMiniBoard(opponent.id, index, opponent.board?.width ?? 10);
             this.miniBoards.set(opponent.id, widget);
         }
         // Update content
@@ -105,9 +176,9 @@ class OpponentBoards {
     /**
      * Create a mini-board widget
      */
-    createMiniBoard(id, index) {
-        if (this.solo)
-            return this.createFullBoard();
+    createMiniBoard(id, index, boardCols = 10) {
+        if (index < this.fullCount)
+            return this.createFullBoard(index, boardCols);
         // Calculate position (3 columns, 2 rows layout)
         // Tile inside the panel's border: 3 across, 2 down, no gap at the bottom.
         // The old +1 offsets pushed the second row to top 13, so with a 24-row
@@ -161,6 +232,7 @@ class OpponentBoards {
             nameLabel,
             cols: this.boardWidth - 2,
             rows: this.boardHeight - 3,
+            cellWidth: 1,
         };
     }
     /**
@@ -171,15 +243,18 @@ class OpponentBoards {
      * full field needs - an inner border plus a name row leaves only 19, which
      * is why the tiled layout has to scale at all.
      */
-    createFullBoard() {
+    createFullBoard(index, boardCols) {
         const inner = this.innerSize();
-        const cols = FULL_FIELD_COLS;
-        const rows = Math.min(FULL_FIELD_ROWS, inner.height);
+        const cols = boardCols;
+        const rows = inner.height;
+        const boxWidth = cols * CELL_WIDTH + 2;
+        // Side by side, in the order the fields arrive, so a board does not jump
+        // about as other players top out.
         const container = (0, blessed_helpers_1.createBox)({
             parent: this.container,
             top: 0,
-            left: 0,
-            width: inner.width,
+            left: index * boxWidth,
+            width: boxWidth,
             height: inner.height,
             // createBox() draws a border by default; the panel already has one.
             border: { type: 'none' },
@@ -190,8 +265,8 @@ class OpponentBoards {
         const boardBox = (0, blessed_helpers_1.createBox)({
             parent: container,
             top: 0,
-            left: Math.max(0, Math.floor((inner.width - cols) / 2)),
-            width: cols,
+            left: 0,
+            width: cols * CELL_WIDTH,
             height: rows,
             content: '',
             border: { type: 'none' },
@@ -214,7 +289,7 @@ class OpponentBoards {
             mouse: false,
             clickable: false,
         });
-        return { container, boardBox, nameLabel, cols, rows };
+        return { container, boardBox, nameLabel, cols, rows, cellWidth: CELL_WIDTH };
     }
     /** Usable space inside the panel's border. */
     innerSize() {
@@ -297,12 +372,15 @@ class OpponentBoards {
                         }
                     }
                 }
+                const pad = widget ? widget.cellWidth : 1;
                 if (hit) {
                     const color = this.getCellColor(hit);
-                    line += `{${color}-fg}#{/${color}-fg}`;
+                    // At full size the cell is a solid block, as the played board draws
+                    // it; a minimap keeps one character so six fields still fit.
+                    line += `{${color}-bg}{${color}-fg}${'#'.repeat(pad)}{/}`;
                 }
                 else {
-                    line += ' ';
+                    line += ' '.repeat(pad);
                 }
             }
             lines.push(line);

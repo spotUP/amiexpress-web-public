@@ -467,3 +467,106 @@ export async function aBlockedSpecialIsAnnouncedTheSameWay(): Promise<void> {
       'a blocked special must not cover the field either');
   } finally { screen.destroy(); }
 }
+
+
+/**
+ * A watched game is shown at the size it is played at.
+ *
+ * Reported while spectating: "the game i play is on the left, the watched
+ * game is a cut down preview on the right - the watched game should look like
+ * the played game". The played board is a 22x22 box with a border, so 20x20
+ * inside, and its cells are two characters wide: a full field is the board's
+ * own columns at two characters each.
+ */
+function spectatorBoards(count: number, boardCols = 10): { widgets: any[]; boards: any; destroy: () => void } {
+  const screen: any = new Screen({ title: 'spectate-size', width: 80, height: 30 });
+  const boards: any = new OpponentBoards({
+    parent: screen, top: 1, left: 0, width: 80, height: 22,
+    maxOpponents: 6, boardWidth: 13, boardHeight: 17, perRow: 6,
+    maxFullBoards: 3,
+  });
+
+  boards.updateBoards(Array.from({ length: count }, (_, i) => ({
+    id: `p-${i}`, name: `P${i}`, board: createTetriNetBoard(boardCols, 22),
+    level: 1, alive: true, hasImmunity: false,
+  })));
+
+  return { widgets: [...boards.miniBoards.values()], boards, destroy: () => screen.destroy() };
+}
+
+/** One, two and three watched games are all drawn full size. */
+export async function upToThreeWatchedGamesAreFullSize(): Promise<void> {
+  for (const count of [1, 2, 3]) {
+    const { widgets, destroy } = spectatorBoards(count);
+    try {
+      assert.strictEqual(widgets.length, count);
+      for (const w of widgets) {
+        assert.strictEqual(w.cellWidth, 2, `${count} watched: cells must be two columns, as played`);
+        assert.strictEqual(w.cols, 10, `${count} watched: the field keeps its own width`);
+      }
+    } finally { destroy(); }
+  }
+}
+
+/**
+ * Three full fields fit across the screen.
+ *
+ * 3 x (10 columns x 2 characters + its frame) = 66 of the 78 available.
+ */
+export async function threeFullFieldsFitSideBySide(): Promise<void> {
+  const { widgets, destroy } = spectatorBoards(3);
+  try {
+    const each = 10 * 2 + 2;
+    assert.ok(3 * each <= 78, `three fields need ${3 * each} columns of 78`);
+    assert.strictEqual(widgets.length, 3, 'all three are drawn');
+  } finally { destroy(); }
+}
+
+/** A fourth does not fit, so the focused one is full and the rest minimaps. */
+export async function afourthWatchedGameFallsBackToMinimaps(): Promise<void> {
+  const { widgets, destroy } = spectatorBoards(4);
+  try {
+    const full = widgets.filter((w: any) => w.cellWidth === 2);
+    const mini = widgets.filter((w: any) => w.cellWidth === 1);
+
+    assert.strictEqual(full.length, 1, 'exactly one full board - the focused one');
+    assert.strictEqual(mini.length, 3, 'the rest are minimaps');
+  } finally { destroy(); }
+}
+
+/** Tab moves which watched game is the full one. */
+export async function tabMovesWhichGameIsFullSize(): Promise<void> {
+  const { boards, destroy } = spectatorBoards(4);
+  try {
+    assert.strictEqual(boards.getFocus(), 0, 'starts on the first');
+    assert.strictEqual(boards.cycleFocus(4), 1, 'tab moves on');
+    assert.strictEqual(boards.cycleFocus(4), 2);
+    boards.cycleFocus(4);
+    assert.strictEqual(boards.cycleFocus(4), 0, 'and wraps round');
+  } finally { destroy(); }
+}
+
+/**
+ * The in-game side panel is NOT affected.
+ *
+ * OpponentBoards draws both the spectator and the 26-column in-game panel.
+ * Raising the spectator's ceiling silently promoted boards in the in-game
+ * panel too - the routing tests caught it - so the ceiling is per panel.
+ */
+export async function theInGamePanelKeepsItsOwnRules(): Promise<void> {
+  const screen: any = new Screen({ title: 'ingame', width: 80, height: 30 });
+  const boards: any = new OpponentBoards({
+    parent: screen, top: 0, left: 52, width: 28, height: 24,
+  });
+  try {
+    boards.updateBoards([1, 2].map(i => ({
+      id: `b-${i}`, name: `CPU${i}`, board: createTetriNetBoard(12, 22),
+      level: 1, alive: true, hasImmunity: false,
+    })));
+
+    for (const w of boards.miniBoards.values()) {
+      assert.strictEqual((w as any).cellWidth, 1,
+        'two opponents in the side panel are minimaps, as they always were');
+    }
+  } finally { screen.destroy(); }
+}

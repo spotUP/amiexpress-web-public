@@ -37,6 +37,18 @@ export interface OpponentBoardsOptions {
     boardHeight?: number;
     /** Tiles per row. Defaults to three, as the side panel uses. */
     perRow?: number;
+    /**
+     * How many fields may be drawn at FULL size, side by side.
+     *
+     * The in-game side panel leaves this at 1: it is 26 columns wide, so one
+     * full field is all that fits, and a lone bot gets it. The SPECTATOR passes
+     * 3, because it has the whole 80-column screen and a viewer watching two or
+     * three games wants to see them the size they are played at.
+     *
+     * Scoped rather than global on purpose - raising it for the spectator
+     * silently changed the in-game panel too, and the routing tests caught it.
+     */
+    maxFullBoards?: number;
 }
 /**
  * Opponent Boards component
@@ -50,10 +62,27 @@ export declare class OpponentBoards {
     private perRow;
     /** True while a single opponent is being shown at full size. */
     private solo;
+    /**
+     * Which opponent the viewer has focused.
+     *
+     * Only matters once there are more fields than fit at full size: the
+     * focused one is drawn full and the rest as minimaps. Tab moves it.
+     */
+    private focusIndex;
+    /** How many boards were drawn full last time, for the layout to stay put. */
+    private fullCount;
+    /** The ceiling on full-size boards for this panel. */
+    private maxFullBoards;
     constructor(options: OpponentBoardsOptions);
     /**
      * Update all opponent boards
      */
+    /** Move the viewer's focus on by one, wrapping. */
+    cycleFocus(total: number): number;
+    /** Who the viewer is focused on. */
+    getFocus(): number;
+    /** True when every field is being shown at full size. */
+    isShowingAllFull(): boolean;
     updateBoards(opponents: OpponentBoardData[]): void;
     /**
      * Update a single opponent's board

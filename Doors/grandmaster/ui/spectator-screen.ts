@@ -89,20 +89,29 @@ export class SpectatorScreen {
       top: 1,
       left: 0,
       width: 80,
-      height: 19,
+      // 22 rows: a full field is 20 rows plus its frame, which is what the
+      // played board shows. That leaves exactly one row for Table talk on a
+      // 24-row terminal - the trade for seeing a watched game at the size it
+      // is actually played at.
+      height: 22,
       maxOpponents: 6,
       label: ' Fields ',
       boardWidth: 13,
       boardHeight: 17,
       perRow: 6,
+      // Up to three at full size: a full field is the board's columns at two
+      // characters each plus its frame - 22 for a 10-wide board - so three
+      // come to 66 of the 78 available. A fourth would not fit, and falls
+      // back to the focused one full with the rest as minimaps.
+      maxFullBoards: 3,
     });
 
     this.chatBox = createBox({
       parent: this.screen,
-      top: 20,
+      top: 23,
       left: 0,
       width: 80,
-      height: 4,
+      height: 1,
       border: { type: 'line' },
       style: { border: { fg: 'gray' } },
       label: ' Table talk ',
@@ -161,6 +170,7 @@ export class SpectatorScreen {
         this.running = false;
         clearInterval(timer);
         this.screen.unkey(['escape', 'q', 'Q'], finish);
+        this.screen.unkey(['tab'], shiftFocus);
         this.sounds.playSfx('menu_select');
         resolve();
       };
@@ -170,7 +180,19 @@ export class SpectatorScreen {
         this.render();
       }, 200);
 
+      // Tab moves the viewer's focus. It only changes what you see once
+      // there are more fields than fit at full size: the focused one is drawn
+      // full and the rest as minimaps, so this is how you choose which game
+      // you are really watching without leaving and re-joining.
+      const shiftFocus = () => {
+        if (!this.running) return;
+        this.boards.cycleFocus(this.players.size);
+        this.sounds.playSfx('menu_select');
+        this.render();
+      };
+
       this.screen.key(['escape', 'q', 'Q'], finish);
+      this.screen.key(['tab'], shiftFocus);
     });
   }
 
@@ -189,7 +211,8 @@ export class SpectatorScreen {
     const living = watched.filter(p => p.alive).length;
     this.headerBox.setContent(
       `{cyan-fg}Watching:{/cyan-fg} ${this.title}  ` +
-      `{gray-fg}${watched.length} players, ${living} alive - ESC to stop watching{/gray-fg}`
+      `{gray-fg}${watched.length} players, ${living} alive - ` +
+      `${watched.length > 1 ? 'TAB to change focus, ' : ''}ESC to stop watching{/gray-fg}`
     );
 
     this.chatBox.setContent(
