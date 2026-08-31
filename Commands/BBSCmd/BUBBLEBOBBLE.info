@@ -1,7 +1,0 @@
-BBSCMD=BUBBLEBOBBLE
-TYPE=TS
-LOCATION=Doors/bubble-bobble
-DESCRIPTION=Classic Bubble Bobble arcade game - trap enemies in bubbles
-MULTINODE=YES
-PRIORITY=SAME
-CATEGORY=Games/Arcade
