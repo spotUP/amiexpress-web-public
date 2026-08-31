@@ -19,12 +19,12 @@
 
 import type { DoorContext } from '@amiexpress/bbs-door-sdk/core/types';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { ANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
   BrowserState, initialState, moveSelection, cyclePane, selection,
 } from './browser-model';
 import { previewLines } from './preview';
-import { readSprite } from './assets';
+import { readSprite, listArt, readArt, writeArt } from './assets';
 import { EditScreen } from './edit-screen';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 
@@ -50,6 +50,7 @@ export class StudioApp {
   /** The loaded sheet for the current selection, cached per selection. */
   private loaded: { key: string; sprite: Sprite } | null = null;
   private editScreen: EditScreen | null = null;
+  private artSession: ArtSession | null = null;
 
   constructor(ctx: DoorContext) {
     this.ctx = ctx;
@@ -160,14 +161,14 @@ export class StudioApp {
     this.screen.key(['tab', 'right'], () => this.apply(cyclePane(this.state, 1)));
     this.screen.key(['S-tab', 'left'], () => this.apply(cyclePane(this.state, -1)));
     this.screen.key(['q', 'escape', 'C-c'], () => {
-      if (this.editScreen) return;
+      if (this.editScreen || this.artSession) return;
       this.destroy();
       void this.ctx.close();
     });
     this.screen.key(['e'], () => {
       const sel = selection(this.state);
       const sprite = this.currentSprite();
-      if (!sel.door || !sel.sprite || !sprite || this.editScreen) return;
+      if (!sel.door || !sel.sprite || !sprite || this.editScreen || this.artSession) return;
       // The browser sleeps while the editor owns the screen: its panes
       // hide and its playback pauses, so two timers never fight over
       // render() and apply() ignores keys while the editor is open, so
@@ -184,6 +185,26 @@ export class StudioApp {
         this.refresh();
       });
     });
+    this.screen.key(['m'], () => {
+      const sel = selection(this.state);
+      if (!sel.door || this.editScreen || this.artSession) return;
+      // Same sleep/wake contract as 'e': panes hide and playback pauses
+      // while the art session owns the screen, and apply() ignores keys
+      // while it is open (see below) so the browser cannot drift underneath
+      // it. listArt(door) plus the '[new file]' row is never empty, so
+      // there is no black-screen risk in hiding before the list paints -
+      // the same reasoning the ansi-editor door's showFileBrowser relies on.
+      if (this.playback) { clearInterval(this.playback); this.playback = null; }
+      for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                       this.previewBox, this.statusBar]) w.hide();
+      this.artSession = new ArtSession(this.screen, sel.door, () => {
+        this.artSession = null;
+        for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                         this.previewBox, this.statusBar]) w.show();
+        this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
+        this.refresh();
+      });
+    });
   }
 
   private apply(next: BrowserState): void {
@@ -192,6 +213,8 @@ export class StudioApp {
     // run - and were mutating the selection underneath the editor.
     // Every navigation key funnels through here; one guard covers them.
     if (this.editScreen) return;
+    // Art mode owns the screen the same way while it is open.
+    if (this.artSession) return;
     if (next === this.state) return;
     const before = selection(this.state);
     this.state = next;
@@ -289,6 +312,8 @@ export class StudioApp {
     }
     this.editScreen?.destroy();
     this.editScreen = null;
+    this.artSession?.destroy();
+    this.artSession = null;
     if (this.inputManager) { this.inputManager.disable(); this.inputManager = null; }
     if (this.screen) {
       // removeAllListeners would also strip the stay-alive 'destroy'
@@ -302,5 +327,190 @@ export class StudioApp {
       this.exitResolve();
       this.exitResolve = null;
     }
+  }
+}
+
+/**
+ * Art mode: 'm' on a selected door lists its .ans files (plus a
+ * '[new file]' row) and opens the pick in the full ANSIEditor engine,
+ * full-screen. Same discipline as EditScreen: this object binds its own
+ * screen-level keys and removes them on destroy, so the browser's own
+ * bindings come back untouched when it leaves.
+ *
+ * Two phases, not one screen: a small centred list first (so a file can be
+ * picked or a new name typed), then the editor takes the whole screen.
+ * screen.key() handlers are GLOBAL - they fire regardless of focus - so
+ * the list's keys are unbound before the editor's own internal bindings
+ * take over; leaving both live would race Enter/Escape between the two.
+ */
+class ArtSession {
+  private screen: any;
+  private door: string;
+  private onExit: () => void;
+
+  private listBox: any = null;
+  private editor: any = null;
+  private files: string[] = [];
+  private selected = 0;
+  private naming: string | null = null; // non-null while typing a new file name
+  private keyHandlers: Array<[string[], (...args: any[]) => void]> = [];
+
+  constructor(screen: any, door: string, onExit: () => void) {
+    this.screen = screen;
+    this.door = door;
+    this.onExit = onExit;
+    this.showList();
+  }
+
+  /** Bind one screen-key group, remembered so unbindKeys can remove it. */
+  private key(keys: string[], handler: (...args: any[]) => void): void {
+    this.screen.key(keys, handler);
+    this.keyHandlers.push([keys, handler]);
+  }
+
+  private unbindKeys(): void {
+    for (const [keys, handler] of this.keyHandlers) {
+      if (keys[0] === '__keypress__') this.screen.removeListener('keypress', handler);
+      else this.screen.unkey(keys, handler);
+    }
+    this.keyHandlers = [];
+  }
+
+  /** items(): the door's .ans files, sorted, plus the trailing new-file row. */
+  private items(): string[] {
+    return [...this.files, '[new file]'];
+  }
+
+  private showList(): void {
+    this.files = listArt(this.door);
+    this.listBox = blessed.list({
+      parent: this.screen,
+      top: 'center', left: 'center', width: '50%', height: '50%',
+      label: ` Art: ${this.door} `,
+      border: { type: 'line' },
+      tags: true, keys: false, mouse: false,
+      style: {
+        border: { fg: 'lightyellow' },
+        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
+        item: { fg: 'white' },
+      },
+    });
+    this.selected = 0;
+    this.paint();
+
+    this.key(['up', 'k'], () => {
+      if (this.naming !== null) return;
+      this.selected = Math.max(0, this.selected - 1);
+      this.paint();
+    });
+    this.key(['down', 'j'], () => {
+      if (this.naming !== null) return;
+      this.selected = Math.min(this.items().length - 1, this.selected + 1);
+      this.paint();
+    });
+    this.key(['enter'], () => {
+      if (this.naming !== null) {
+        const name = this.naming;
+        if (!name) return; // the pattern is [a-z0-9-]+; an empty name stays in naming
+        this.naming = null;
+        this.openEditor(`${name}.ans`, '');
+        return;
+      }
+      const isNewFile = this.selected === this.items().length - 1;
+      if (isNewFile) {
+        this.naming = '';
+        this.paint();
+        return;
+      }
+      const file = this.files[this.selected];
+      let content = '';
+      try { content = readArt(this.door, file).toString('latin1'); } catch { content = ''; }
+      this.openEditor(file, content);
+    });
+    this.key(['backspace', 'delete'], () => {
+      if (this.naming === null) return;
+      this.naming = this.naming.slice(0, -1);
+      this.paint();
+    });
+    // 'q' is NOT bound here (unlike the browser's own quit key): a typed
+    // filename must be free to contain the letter q. Escape alone cancels,
+    // the same restriction EditScreen's naming flow already lives with.
+    this.key(['escape'], () => {
+      if (this.naming !== null) { this.naming = null; this.paint(); return; }
+      this.exit();
+    });
+
+    // Typed characters extend the new-file name while naming; the same
+    // [a-z0-9-] pattern EditScreen's '+' animation-naming uses.
+    const onKeypress = (ch: string) => {
+      if (this.naming === null) return;
+      if (!ch || ch.length !== 1) return;
+      if (/[a-z0-9-]/.test(ch)) { this.naming += ch; this.paint(); }
+    };
+    this.screen.on('keypress', onKeypress);
+    this.keyHandlers.push([['__keypress__'], onKeypress]);
+  }
+
+  private paint(): void {
+    const items = this.naming !== null
+      ? [...this.files, `[new file: ${this.naming}_]`]
+      : this.items();
+    this.listBox.setItems(items);
+    this.listBox.select(this.selected);
+    this.screen.render();
+  }
+
+  /** List phase -> editor phase: the list's keys die before the editor's own take over. */
+  private openEditor(file: string, content: string): void {
+    this.unbindKeys();
+    this.listBox?.destroy();
+    this.listBox = null;
+
+    this.editor = new ANSIEditor({
+      parent: this.screen,
+      top: 0, left: 0, width: '100%', height: '100%',
+      title: `Art: ${this.door}/${file}`,
+      initialContent: content,
+      initialMode: 'draw',
+      showLineNumbers: false,
+      showMenuBar: true,
+      showToolbar: true,
+      showSidebar: true,
+      showStatusBar: true,
+      onSave: async (text: string) => {
+        try {
+          // The widget moves cell chars 1:1 through this string with no
+          // CP437/UTF-8 re-encoding of its own (parseANSIToCanvas and
+          // canvasToANSI both copy cell.char verbatim), so the round trip
+          // to Buffer must be byte-preserving too - 'latin1', the encoding
+          // this codebase already uses everywhere raw Amiga bytes cross a
+          // JS string boundary. UTF-8 here would mangle every high-bit byte,
+          // the exact class of bug logged against the Edit/Write tools.
+          writeArt(this.door, file, Buffer.from(text, 'latin1'));
+          return true;
+        } catch (error) {
+          console.error(`[sprite-editor] art save failed for ${this.door}/${file}:`, error);
+          return false;
+        }
+      },
+      onExit: () => {
+        this.exit();
+      },
+    });
+    this.editor.focus();
+    this.screen.render();
+  }
+
+  private exit(): void {
+    this.destroy();
+    this.onExit();
+  }
+
+  destroy(): void {
+    this.unbindKeys();
+    this.listBox?.destroy();
+    this.listBox = null;
+    this.editor?.destroy();
+    this.editor = null;
   }
 }
