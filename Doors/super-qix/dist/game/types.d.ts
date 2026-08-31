@@ -5,7 +5,7 @@
 /** The three skill levels the operator could set (FAQ 4). */
 export type SkillLevel = 'easy' | 'medium' | 'hard';
 export type Direction = 'up' | 'down' | 'left' | 'right';
-export type GameState = 'menu' | 'playing' | 'paused' | 'levelComplete' | 'gameover' | 'highscores' | 'enterName' | 'remapKeys' | 'levelTransition';
+export type GameState = 'menu' | 'playing' | 'paused' | 'levelComplete' | 'gameover' | 'highscores' | 'enterName' | 'remapKeys' | 'attract' | 'levelTransition';
 /**
  * Which key moves the marker which way.
  *

@@ -19,6 +19,7 @@ export type GameState =
   | 'highscores'
   | 'enterName'
   | 'remapKeys'
+  | 'attract'
   | 'levelTransition';
 
 /**
