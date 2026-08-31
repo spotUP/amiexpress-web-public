@@ -1836,3 +1836,273 @@ int flow_build_footer_bar(char *out, unsigned long outcap, int cols,
     out[pos] = '\0';
     return (int) pos;
 }
+
+/* ---------------------------------------------------------------------
+ * Uninstall: what a door owns, and what everything else is
+ *
+ * See flow.h for why these rules exist twice, and tests/delete-rule-cases.txt
+ * for the cases both implementations answer identically.
+ */
+
+void flow_path_comparable(const char *path, char *out, unsigned long cap)
+{
+    unsigned long pos = 0;
+
+    if (out == (char *) 0 || cap == 0) {
+        return;
+    }
+    if (path == (const char *) 0) {
+        out[0] = '\0';
+        return;
+    }
+
+    while (path[pos] != '\0' && pos + 1 < cap) {
+        out[pos] = (char) tolower((unsigned char) path[pos]);
+        pos++;
+    }
+    out[pos] = '\0';
+
+    /* A trailing slash is the same directory written differently. The root
+     * itself is left alone: "/" truncated is nothing at all. */
+    while (pos > 1 && out[pos - 1] == '/') {
+        pos--;
+        out[pos] = '\0';
+    }
+}
+
+/* Writes everything before the last '/' of `path`. Returns 0 when there is
+ * no separator to cut at, which means the caller has nothing to reason
+ * about. */
+static int flow_parent_of(const char *path, char *out, unsigned long cap)
+{
+    unsigned long len;
+    unsigned long cut;
+
+    if (path == (const char *) 0 || out == (char *) 0 || cap == 0) {
+        return 0;
+    }
+
+    len = (unsigned long) strlen(path);
+    while (len > 1 && path[len - 1] == '/') {
+        len--;                       /* ignore a trailing slash while cutting */
+    }
+
+    cut = len;
+    while (cut > 0 && path[cut - 1] != '/') {
+        cut--;
+    }
+    if (cut == 0) {
+        return 0;                    /* no separator: not a path we can climb */
+    }
+    cut--;                           /* drop the separator itself */
+    if (cut == 0) {
+        cut = 1;                     /* the root stays "/" */
+    }
+    if (cut + 1 > cap) {
+        return 0;
+    }
+
+    memcpy(out, path, (size_t) cut);
+    out[cut] = '\0';
+    return 1;
+}
+
+int flow_own_directory(const char *location, int location_is_dir,
+                        const char *bbs_root, const char *doors_root,
+                        char *out, unsigned long cap)
+{
+    char candidate[512];
+    char candidate_cmp[512];
+    char root_cmp[512];
+    char commands[512];
+
+    if (location == (const char *) 0 || location[0] == '\0'
+        || out == (char *) 0 || cap == 0) {
+        return 0;
+    }
+
+    if (location_is_dir) {
+        /* A LOCATION that IS a directory owns THAT directory. Climbing to
+         * its parent is what pointed a delete at Doors: itself. */
+        if ((unsigned long) strlen(location) + 1 > sizeof(candidate)) {
+            return 0;
+        }
+        strcpy(candidate, location);
+    } else if (!flow_parent_of(location, candidate, (unsigned long) sizeof(candidate))) {
+        return 0;
+    }
+
+    flow_path_comparable(candidate, candidate_cmp, (unsigned long) sizeof(candidate_cmp));
+
+    /* None of the roots is a door's directory: a door sitting directly under
+     * Doors: owns no directory, and only its own files may be removed. */
+    if (bbs_root != (const char *) 0) {
+        flow_path_comparable(bbs_root, root_cmp, (unsigned long) sizeof(root_cmp));
+        if (strcmp(candidate_cmp, root_cmp) == 0) {
+            return 0;
+        }
+
+        if ((unsigned long) strlen(bbs_root) + 10 < sizeof(commands)) {
+            strcpy(commands, bbs_root);
+            if (commands[0] != '\0' && commands[strlen(commands) - 1] != '/') {
+                strcat(commands, "/");
+            }
+            strcat(commands, "Commands");
+            flow_path_comparable(commands, root_cmp, (unsigned long) sizeof(root_cmp));
+            if (strcmp(candidate_cmp, root_cmp) == 0) {
+                return 0;
+            }
+        }
+    }
+    if (doors_root != (const char *) 0) {
+        flow_path_comparable(doors_root, root_cmp, (unsigned long) sizeof(root_cmp));
+        if (strcmp(candidate_cmp, root_cmp) == 0) {
+            return 0;
+        }
+    }
+
+    if ((unsigned long) strlen(candidate) + 1 > cap) {
+        return 0;
+    }
+    strcpy(out, candidate);
+    return 1;
+}
+
+int flow_registration_class(const char *other_location,
+                             const char *door_location,
+                             const char *door_dir)
+{
+    char other_cmp[512];
+    char door_cmp[512];
+    char dir_cmp[512];
+    unsigned long dir_len;
+
+    if (other_location == (const char *) 0 || other_location[0] == '\0') {
+        return FLOW_REG_UNRELATED;
+    }
+
+    flow_path_comparable(other_location, other_cmp, (unsigned long) sizeof(other_cmp));
+
+    /* The same binary under a second name - 5D-LogOff is registered as G.
+     * That registration IS this door and goes with it. */
+    if (door_location != (const char *) 0) {
+        flow_path_comparable(door_location, door_cmp, (unsigned long) sizeof(door_cmp));
+        if (strcmp(other_cmp, door_cmp) == 0) {
+            return FLOW_REG_ALIAS;
+        }
+    }
+
+    if (door_dir == (const char *) 0 || door_dir[0] == '\0') {
+        return FLOW_REG_UNRELATED;   /* no directory: nothing can share it */
+    }
+
+    flow_path_comparable(door_dir, dir_cmp, (unsigned long) sizeof(dir_cmp));
+    dir_len = (unsigned long) strlen(dir_cmp);
+    if (dir_len == 0) {
+        return FLOW_REG_UNRELATED;
+    }
+
+    /* Inside the door's directory, or the directory itself: a DIFFERENT door
+     * living alongside this one. It stays, and so does the directory.
+     * The separator check is what keeps Doors/CALCULATOR from looking like
+     * part of Doors/CALC. */
+    if (strcmp(other_cmp, dir_cmp) == 0) {
+        return FLOW_REG_COTENANT;
+    }
+    if (strncmp(other_cmp, dir_cmp, (size_t) dir_len) == 0
+        && other_cmp[dir_len] == '/') {
+        return FLOW_REG_COTENANT;
+    }
+
+    return FLOW_REG_UNRELATED;
+}
+
+/* Case-insensitive prefix test - the tooltype's spelling is the sysop's,
+ * not this door's. */
+static int flow_prefix_ci(const char *s, const char *prefix)
+{
+    unsigned long i = 0;
+
+    while (prefix[i] != '\0') {
+        if (s[i] == '\0') {
+            return 0;
+        }
+        if (tolower((unsigned char) s[i]) != tolower((unsigned char) prefix[i])) {
+            return 0;
+        }
+        i++;
+    }
+    return 1;
+}
+
+int flow_resolve_location(const char *location, const char *doors_dir,
+                           char *out, unsigned long cap)
+{
+    const char *rest;
+    unsigned long need;
+
+    if (location == (const char *) 0 || location[0] == '\0'
+        || out == (char *) 0 || cap == 0) {
+        return 0;
+    }
+
+    if (location[0] == '/') {
+        /* Already physical. A board pointing a command outside Doors: is
+         * describing something this door does not own; say so faithfully
+         * rather than rewriting it into the tree. */
+        need = (unsigned long) strlen(location) + 1;
+        if (need > cap) {
+            return 0;
+        }
+        strcpy(out, location);
+        return 1;
+    }
+
+    rest = location;
+    if (flow_prefix_ci(rest, "bbs:")) {
+        rest += 4;
+    }
+    if (flow_prefix_ci(rest, "doors:")) {
+        rest += 6;
+    } else if (flow_prefix_ci(rest, "doors/")) {
+        rest += 6;
+    }
+    while (*rest == '/') {
+        rest++;
+    }
+
+    if (doors_dir == (const char *) 0 || doors_dir[0] == '\0') {
+        return 0;
+    }
+
+    need = (unsigned long) strlen(doors_dir) + 1 + (unsigned long) strlen(rest) + 1;
+    if (need > cap) {
+        return 0;
+    }
+
+    strcpy(out, doors_dir);
+    if (out[0] != '\0' && out[strlen(out) - 1] != '/') {
+        strcat(out, "/");
+    }
+    strcat(out, rest);
+
+    /* An Amiga LOCATION separates with ':' after an assign only; anything
+     * left is a plain path. Colons deeper in would be a second assign,
+     * which this door does not resolve - leave them alone rather than
+     * inventing a path. */
+    return 1;
+}
+
+int flow_path_has_info_suffix(const char *name)
+{
+    unsigned long len;
+
+    if (name == (const char *) 0) {
+        return 0;
+    }
+    len = (unsigned long) strlen(name);
+    if (len < 5) {
+        return 0;
+    }
+    return flow_prefix_ci(name + len - 5, ".info");
+}

@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include "../flow.h"
 
@@ -2581,6 +2582,195 @@ TEST(doors_row_tolerates_crlf)
     ASSERT_STR_EQ(name, "AE Help", "name clean of CR");
 }
 
+
+/* ---------------------------------------------------------------------
+ * Uninstall rules, driven by tests/delete-rule-cases.txt
+ *
+ * The same table is read by web/backend/tests/doors/delete-rule-parity.test.ts.
+ * DOORREPO deletes doors on a real Amiga board, where there is no server to
+ * ask, and amiexpress-web deletes them in TypeScript for DOORMAN and the
+ * admin UI: two implementations that cannot be collapsed into one, so they
+ * are held to one set of answers here. A rule corrected on one side and
+ * forgotten on the other fails this test rather than eating a door.
+ */
+
+static int class_from_name(const char *name)
+{
+    if (strcmp(name, "alias") == 0) {
+        return FLOW_REG_ALIAS;
+    }
+    if (strcmp(name, "cotenant") == 0) {
+        return FLOW_REG_COTENANT;
+    }
+    return FLOW_REG_UNRELATED;
+}
+
+/* Splits `line` on '|' into at most `cap` fields, in place. Returns the
+ * count. */
+static int split_fields(char *line, char **fields, int cap)
+{
+    int count = 0;
+    char *p = line;
+
+    fields[count++] = p;
+    while (*p != '\0' && count < cap) {
+        if (*p == '|') {
+            *p = '\0';
+            fields[count++] = p + 1;
+        }
+        p++;
+    }
+    return count;
+}
+
+TEST(delete_rules_match_the_shared_case_table)
+{
+    FILE *f;
+    char line[512];
+    int cases = 0;
+    int failures = 0;
+
+    f = fopen("tests/delete-rule-cases.txt", "r");
+    if (f == (FILE *) 0) {
+        tests_failed++;
+        tests_run++;
+        printf("[FAIL] tests/delete-rule-cases.txt not found\n");
+        return;
+    }
+
+    while (fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        char *fields[6];
+        int count;
+        unsigned long len;
+
+        len = (unsigned long) strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (line[0] == '#' || line[0] == '\0') {
+            continue;
+        }
+
+        count = split_fields(line, fields, 6);
+
+        if (strcmp(fields[0], "owndir") == 0 && count == 4) {
+            char got[512];
+            int owns;
+
+            cases++;
+            owns = flow_own_directory(fields[1], atoi(fields[2]),
+                                      "/bbs", "/bbs/Doors",
+                                      got, (unsigned long) sizeof(got));
+            if (strcmp(fields[3], "-") == 0) {
+                if (owns != 0) {
+                    failures++;
+                    printf("\n  owndir %s: expected none, got %s", fields[1], got);
+                }
+            } else if (owns == 0) {
+                failures++;
+                printf("\n  owndir %s: expected %s, got none", fields[1], fields[3]);
+            } else if (strcmp(got, fields[3]) != 0) {
+                failures++;
+                printf("\n  owndir %s: expected %s, got %s", fields[1], fields[3], got);
+            }
+        } else if (strcmp(fields[0], "class") == 0 && count == 5) {
+            int got;
+            int want;
+
+            cases++;
+            got = flow_registration_class(fields[3], fields[1], fields[2]);
+            want = class_from_name(fields[4]);
+            if (got != want) {
+                failures++;
+                printf("\n  class %s vs %s: expected %s, got %d",
+                       fields[3], fields[1], fields[4], got);
+            }
+        }
+    }
+    fclose(f);
+
+    if (cases == 0) {
+        failures++;
+        printf("\n  the case table produced no cases");
+    }
+
+    ASSERT_EQ(failures, 0, "shared delete-rule cases");
+}
+
+TEST(delete_rules_keep_a_shared_directory_whole)
+{
+    /* The incident, stated directly: Doors/emp_tools holds Joincnf (J) and
+     * Bulls (B). Deleting J must not make B's registration part of it. */
+    char dir[512];
+    int owns;
+
+    owns = flow_own_directory("/bbs/Doors/emp_tools/Joincnf", 0,
+                              "/bbs", "/bbs/Doors", dir, (unsigned long) sizeof(dir));
+    ASSERT_EQ(owns, 1, "Joincnf owns its directory");
+    ASSERT_STR_EQ(dir, "/bbs/Doors/emp_tools", "the directory it sits in");
+    ASSERT_EQ(flow_registration_class("/bbs/Doors/emp_tools/Bulls",
+                                      "/bbs/Doors/emp_tools/Joincnf", dir),
+              FLOW_REG_COTENANT, "Bulls is another door, not an alias");
+}
+
+TEST(delete_rules_never_hand_back_a_root)
+{
+    /* BestConf is LOCATION=Doors:BestConf. Its parent is the Doors: assign,
+     * and treating that as the door's directory aimed a delete at every
+     * door on the board. */
+    char dir[512];
+
+    ASSERT_EQ(flow_own_directory("/bbs/Doors/scan.x", 0, "/bbs", "/bbs/Doors",
+                                 dir, (unsigned long) sizeof(dir)),
+              0, "a binary directly under Doors: owns no directory");
+    ASSERT_EQ(flow_own_directory("/bbs/Doors", 1, "/bbs", "/bbs/Doors",
+                                 dir, (unsigned long) sizeof(dir)),
+              0, "the Doors: assign is never a door directory");
+    ASSERT_EQ(flow_own_directory("/bbs/Doors/BestConf", 1, "/bbs", "/bbs/Doors",
+                                 dir, (unsigned long) sizeof(dir)),
+              1, "a LOCATION that is a directory owns itself");
+    ASSERT_STR_EQ(dir, "/bbs/Doors/BestConf", "itself, not its parent");
+}
+
+
+
+TEST(resolve_location_handles_every_spelling_a_board_uses)
+{
+    char out[320];
+
+    ASSERT_EQ(flow_resolve_location("Doors:AquaScan/AquaScan.020", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "assign form");
+    ASSERT_STR_EQ(out, "/bbs/Doors/AquaScan/AquaScan.020", "assign resolved");
+
+    ASSERT_EQ(flow_resolve_location("DOORS:EmP_Tools/Bulls", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "upper-case assign");
+    ASSERT_STR_EQ(out, "/bbs/Doors/EmP_Tools/Bulls", "casing preserved in the tail");
+
+    ASSERT_EQ(flow_resolve_location("BBS:Doors/X/y", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "BBS: prefix");
+    ASSERT_STR_EQ(out, "/bbs/Doors/X/y", "BBS: stripped with the Doors/ that follows");
+
+    ASSERT_EQ(flow_resolve_location("Doors/X/y", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "plain relative");
+    ASSERT_STR_EQ(out, "/bbs/Doors/X/y", "relative resolved once, not twice");
+
+    ASSERT_EQ(flow_resolve_location("/somewhere/else/door", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "absolute");
+    ASSERT_STR_EQ(out, "/somewhere/else/door", "absolute left alone");
+}
+
+TEST(resolve_location_refuses_what_it_cannot_hold)
+{
+    char small[8];
+
+    ASSERT_EQ(flow_resolve_location("Doors:AquaScan/AquaScan.020", "/bbs/Doors",
+                                    small, (unsigned long) sizeof(small)), 0,
+              "a buffer too small is a refusal, not a truncation");
+    ASSERT_EQ(flow_resolve_location("", "/bbs/Doors", small, (unsigned long) sizeof(small)), 0,
+              "an empty LOCATION resolves to nothing");
+}
+
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -2835,6 +3025,13 @@ int main(void)
         RUN_TEST(build_info_content_negative_access_omits_the_tooltype);
     RUN_TEST(build_info_content_negative_access_still_appends_draccess);
     RUN_TEST(build_info_content_255_still_denies_all_but_sysop);
+
+
+        RUN_TEST(delete_rules_match_the_shared_case_table);
+    RUN_TEST(delete_rules_keep_a_shared_directory_whole);
+    RUN_TEST(delete_rules_never_hand_back_a_root);
+    RUN_TEST(resolve_location_handles_every_spelling_a_board_uses);
+    RUN_TEST(resolve_location_refuses_what_it_cannot_hold);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

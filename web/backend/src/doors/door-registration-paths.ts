@@ -74,6 +74,48 @@ export function ownDirectoryOf(
   return path.resolve(candidate);
 }
 
+/** What another registration is, relative to the door being deleted. */
+export type RegistrationClass = 'alias' | 'cotenant' | 'unrelated';
+
+/**
+ * Classify another registration against the door being deleted.
+ *
+ * - `alias`: the SAME binary under a second name. 5D-LogOff is registered as
+ *   G; that registration IS this door and goes with it.
+ * - `cotenant`: a DIFFERENT door in the same directory. Doors/emp_tools holds
+ *   Joincnf (J) and Bulls (B). It stays, and so does the directory.
+ * - `unrelated`: another door elsewhere - not this delete's business.
+ *
+ * The C door answers the same question in flow_registration_class()
+ * (examples/doorrepo-c/flow.c), because on a real AmiExpress board there is
+ * no server to ask. Both are held to
+ * examples/doorrepo-c/tests/delete-rule-cases.txt.
+ *
+ * @param doorDir null when the door owns no directory - then nothing can
+ *                share it and only an exact match is an alias
+ */
+export function classifyRegistration(
+  otherLocation: string,
+  doorLocation: string,
+  doorDir: string | null,
+): RegistrationClass {
+  if (!otherLocation) return 'unrelated';
+
+  const other = comparablePath(otherLocation);
+  if (doorLocation && other === comparablePath(doorLocation)) return 'alias';
+  if (!doorDir) return 'unrelated';
+
+  const dir = comparablePath(doorDir);
+  if (other === dir) return 'cotenant';
+
+  // The separator is what keeps Doors/CALCULATOR from looking like part of
+  // Doors/CALC.
+  const rel = path.relative(dir, other);
+  if (rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)) return 'cotenant';
+
+  return 'unrelated';
+}
+
 /**
  * Where a command is registered, in the order express.e resolves it.
  *

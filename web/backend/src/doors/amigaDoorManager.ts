@@ -24,6 +24,7 @@ import {
   ownDirectoryOf,
   findRegistrationsPointingInto,
   findCommandRegistrations,
+  classifyRegistration,
 } from './door-registration-paths';
 import { db } from '../database';
 
@@ -1582,29 +1583,26 @@ console.error('Cleanup error:', error);
       if (metadata?.resolvedPath) {
         fallbacks.push(metadata.resolvedPath);
 
-        const target = comparablePath(metadata.resolvedPath);
-        const doorDir = this.ownDirectoryOf(metadata.resolvedPath);
+        const doorLocation = metadata.resolvedPath;
+        const doorDir = this.ownDirectoryOf(doorLocation);
 
         // Every other registration that resolves into this door's directory,
         // split by WHAT it points at. The two cases were treated as one, and
-        // that is what deleted six doors on 2026-08-31.
+        // that is what deleted six doors on 2026-08-31. classifyRegistration
+        // is the rule, answered identically by the C door's
+        // flow_registration_class.
         const aliases: string[] = [];
         const coTenants: string[] = [];
-        const searchDir = doorDir ?? target;
+        const searchDir = doorDir ?? comparablePath(doorLocation);
         for (const other of this.findRegistrationsPointingInto(searchDir)) {
           if (path.resolve(other) === path.resolve(infoPath)) continue;
           let otherTarget: string | undefined;
           try { otherTarget = this.parseInfoFile(other)?.resolvedPath; } catch { otherTarget = undefined; }
-          if (otherTarget && comparablePath(otherTarget) === target) {
-            // The same file under a second name. 5D-LogOff is registered as
-            // G; leaving that behind is what made a deleted door go on
-            // answering and shadowed the internal goodbye command.
-            aliases.push(other);
-          } else {
-            // A DIFFERENT door that happens to live in the same directory.
-            // Doors/emp_tools holds Joincnf (J) and Bulls (B).
-            coTenants.push(other);
-          }
+          if (!otherTarget) continue;
+
+          const relation = classifyRegistration(otherTarget, doorLocation, doorDir);
+          if (relation === 'alias') aliases.push(other);
+          else if (relation === 'cotenant') coTenants.push(other);
         }
 
         for (const alias of aliases) {

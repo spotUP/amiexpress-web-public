@@ -954,4 +954,76 @@ int flow_build_footer_bar(char *out, unsigned long outcap, int cols,
                            const char *const *optional_parts, int optional_count,
                            const char *mandatory_suffix);
 
+/* ---------------------------------------------------------------------
+ * Uninstall: what a door owns, and what everything else is
+ *
+ * These rules exist TWICE - here, because DOORREPO deletes doors on a real
+ * AmiExpress board where there is no server to ask, and in TypeScript
+ * (web/backend/src/doors/door-registration-paths.ts) for DOORMAN and the
+ * admin UI. Neither can be removed: one runs on an Amiga, the other in
+ * Node. What keeps them from drifting is tests/delete-rule-cases.txt, which
+ * both test suites read.
+ *
+ * What they encode, from the live board on 2026-08-31: deleting one door
+ * removed six others. The delete took dirname(LOCATION) as "the door's
+ * directory", so deleting Joincnf out of Doors/emp_tools took Bulls - a
+ * different door in the same directory - and every registration pointing
+ * into it. Where a LOCATION named a DIRECTORY (BestConf is
+ * LOCATION=Doors:BestConf) dirname() reached Doors: itself, and the whole
+ * board looked like part of that one door.
+ */
+
+/* Writes the comparable form of an Amiga path: lower-cased, with any
+ * trailing slash removed, so `Doors:emp_tools/Joincnf` and
+ * `DOORS:EmP_Tools/Joincnf` compare equal. An Amiga volume is
+ * case-insensitive; comparing these as written is what hid a co-tenant from
+ * the scan. Truncates at `cap` (always NUL-terminated). */
+void flow_path_comparable(const char *path, char *out, unsigned long cap);
+
+/* The directory a door owns, given its RESOLVED physical LOCATION.
+ *
+ * `location_is_dir` is 1 when that path is itself a directory (the caller
+ * stats it; on a path that no longer exists, pass 0). `bbs_root` and
+ * `doors_root` are the physical roots - a candidate equal to either, or to
+ * <bbs_root>/Commands, is not a door's directory.
+ *
+ * Returns 1 and writes the directory to `out`, or 0 when the door owns no
+ * directory of its own and only its own files may be removed. */
+int flow_own_directory(const char *location, int location_is_dir,
+                        const char *bbs_root, const char *doors_root,
+                        char *out, unsigned long cap);
+
+/* What another registration is, relative to the door being uninstalled. */
+#define FLOW_REG_UNRELATED 0   /* another door elsewhere - not this delete's business */
+#define FLOW_REG_ALIAS     1   /* the SAME binary under another name - remove it too */
+#define FLOW_REG_COTENANT  2   /* a DIFFERENT door in the same directory - keep it,
+                                * and keep the directory */
+
+/* Classifies `other_location` against the door being deleted.
+ *
+ * `door_dir` may be NULL or "" when the door owns no directory, in which
+ * case nothing can be a co-tenant and only an exact match is an alias. */
+int flow_registration_class(const char *other_location,
+                             const char *door_location,
+                             const char *door_dir);
+
+/* 1 when `name` ends in ".info", in any casing - the Commands tree holds
+ * `vsys.info` beside `WHO.info`, and a walk that only matched one spelling
+ * would miss half the registrations. */
+int flow_path_has_info_suffix(const char *name);
+
+/* Resolves a LOCATION tooltype to a physical path under `doors_dir`.
+ *
+ * The tooltype is written in whatever form the sysop's board uses:
+ * `Doors:AquaScan/AquaScan.020`, `BBS:Doors/X/y`, `Doors/X/y`, or an
+ * absolute path. The uninstall needs them in one form to tell an alias of
+ * the door being removed from another door that merely lives beside it.
+ *
+ * Returns 1 on success, 0 when the result would not fit `cap` or the inputs
+ * are missing. An absolute LOCATION is returned unchanged - a board that
+ * points a command outside Doors: is describing something this door does not
+ * own, and the caller's own checks decide what to do about that. */
+int flow_resolve_location(const char *location, const char *doors_dir,
+                           char *out, unsigned long cap);
+
 #endif /* DOORREPO_FLOW_H */

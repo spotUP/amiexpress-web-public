@@ -3696,12 +3696,121 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
  * something already known. Anything else in that directory - a config the
  * sysop wrote, a log the door kept - is deliberately left, and the final
  * message says so when the directory could not be removed. */
+/* One pass over a Commands directory, deciding what each OTHER registration
+ * is to the door being removed. See flow.h's uninstall section: an alias is
+ * the same binary under a second name and goes with the door, a co-tenant is
+ * a different door in the same directory and stays.
+ *
+ * A door is not reliably registered under its own name - 5D-LogOff is
+ * registered as G - and a registration left pointing at files that are gone
+ * answers with an error where the BBS's own command should have run. On the
+ * live board that is what made logging off impossible. */
+typedef struct {
+    const dr_config *cfg;
+    const char *dir;             /* the Commands directory being walked */
+    const char *door_location;   /* resolved LOCATION of the door being removed */
+    const char *door_dir;        /* its own directory, or "" when it owns none */
+    const char *own_info;        /* this door's own .info - already handled */
+    int aliases_removed;
+    int aliases_failed;
+    int cotenants;
+} uninstall_sweep;
+
+static int uninstall_sweep_entry(void *ctx, const char *name, unsigned long size,
+                                 int is_dir)
+{
+    uninstall_sweep *s = (uninstall_sweep *) ctx;
+    char full[320];
+    char resolved[320];
+    dr_info_fields fields;
+    unsigned long len;
+    int relation;
+
+    /* `size` is unused here. Written as a test rather than the usual
+     * `(void) size;` because vbcc reads that cast as a statement with no
+     * effect and warns (153), and the cross-compile is otherwise clean. */
+    if (size == 0 && is_dir) {
+        return 0;
+    }
+    if (is_dir) {
+        return 0;
+    }
+
+    len = (unsigned long) strlen(name);
+    if (len < 6) {
+        return 0;
+    }
+    if (flow_path_has_info_suffix(name) == 0) {
+        return 0;
+    }
+    if (flow_build_local_path(full, sizeof(full), s->dir, name) < 0) {
+        return 0;
+    }
+    if (s->own_info != (const char *) 0 && strcmp(full, s->own_info) == 0) {
+        return 0;
+    }
+
+    if (flow_read_door_info(full, &fields) == 0 || fields.location_found == 0) {
+        return 0;
+    }
+    if (flow_resolve_location(fields.location, s->cfg->doors_dir,
+                              resolved, (unsigned long) sizeof(resolved)) == 0) {
+        return 0;
+    }
+
+    relation = flow_registration_class(resolved, s->door_location, s->door_dir);
+    if (relation == FLOW_REG_ALIAS) {
+        char msg[400];
+
+        if (remove(full) == 0) {
+            s->aliases_removed++;
+            sprintf(msg, "Also removed %s - the same door under another name.", name);
+        } else {
+            s->aliases_failed++;
+            sprintf(msg, "Could not remove %s, which names the same door.", name);
+        }
+        ae_put(msg, 1);
+    } else if (relation == FLOW_REG_COTENANT) {
+        s->cotenants++;
+    }
+
+    return 0;
+}
+
 static void uninstall_door_apply(const dr_config *cfg, const char *archive,
                                  const char *cmdname, const char *install_dir,
                                  const char *info_path)
 {
     char msg[320];
     int removed = 0;
+    char door_location[320];
+    char door_dir[320];
+    int have_location = 0;
+    int owns_dir = 0;
+    uninstall_sweep sweep;
+    dr_info_fields fields;
+
+    /* Read the LOCATION before the .info is gone: everything below needs to
+     * know which binary this command named. */
+    if (flow_read_door_info(info_path, &fields) != 0 && fields.location_found != 0) {
+        have_location = flow_resolve_location(fields.location, cfg->doors_dir,
+                                              door_location,
+                                              (unsigned long) sizeof(door_location));
+    }
+    if (have_location) {
+        /* Is the LOCATION itself a directory? dirlist_scan answers by
+         * enumerating it - a door has no stat(). A LOCATION that IS a
+         * directory owns that directory; taking its parent instead is what
+         * pointed a delete at Doors: itself on 2026-08-31. */
+        int location_is_dir = (dirlist_scan(door_location, (dirlist_cb) 0, (void *) 0) >= 0);
+
+        owns_dir = flow_own_directory(door_location, location_is_dir,
+                                      (const char *) 0, cfg->doors_dir,
+                                      door_dir, (unsigned long) sizeof(door_dir));
+    }
+    if (owns_dir == 0) {
+        door_dir[0] = '\0';
+    }
 
     if (remove(info_path) != 0) {
         sprintf(msg, "Could not remove %s. The command is still installed.", info_path);
@@ -3710,6 +3819,22 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
         return;
     }
     ae_put("BBS command removed.", 1);
+
+    /* Every OTHER registration naming this same binary goes too - a door is
+     * not reliably registered under its own name, and one left behind
+     * answers with an error where the BBS's own command should run. A
+     * DIFFERENT door in the same directory is counted, not touched. */
+    sweep.cfg = cfg;
+    sweep.dir = cfg->bbscmd_dir;
+    sweep.door_location = have_location ? door_location : "";
+    sweep.door_dir = door_dir;
+    sweep.own_info = info_path;
+    sweep.aliases_removed = 0;
+    sweep.aliases_failed = 0;
+    sweep.cotenants = 0;
+    if (have_location) {
+        (void) dirlist_scan(cfg->bbscmd_dir, uninstall_sweep_entry, &sweep);
+    }
 
     files_load(cfg, archive);
     if (g_files_ok) {
@@ -3737,7 +3862,15 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
     sprintf(msg, "Removed %d file(s) from %s.", removed, install_dir);
     ae_put(msg, 1);
 
-    if (remove(install_dir) != 0) {
+    if (sweep.cotenants > 0) {
+        /* Another door lives here. Doors/emp_tools holds Joincnf and Bulls;
+         * removing the directory would take a door the sysop did not ask
+         * about. Said out loud, because the directory staying is a
+         * decision, not a failure. */
+        sprintf(msg, "%s kept - %d other command(s) still point into it.",
+                install_dir, sweep.cotenants);
+        ae_put(msg, 1);
+    } else if (remove(install_dir) != 0) {
         sprintf(msg, "%s still exists - it is not empty. Anything left there was not", install_dir);
         ae_put(msg, 1);
         ae_put("part of the archive and has been left alone.", 1);
@@ -3747,7 +3880,8 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
 
     {
         char logmsg[256];
-        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d", cmdname, removed);
+        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d aliases=%d shared=%d",
+                cmdname, removed, sweep.aliases_removed, sweep.cotenants);
         log_line(cfg, logmsg);
     }
 }
