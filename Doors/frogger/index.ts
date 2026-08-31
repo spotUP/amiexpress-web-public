@@ -625,7 +625,10 @@ function handleInput(key: string): void {
       showMenu();
       break;
     case "levelComplete":
-      // Wait for transition
+      // Enter cuts the hand-over short rather than waiting it out.
+      if (inputKey === "enter" || inputKey === "space") {
+        levelCompleteFrames = LEVEL_COMPLETE_FRAMES;
+      }
       break;
     default:
       showMenu();
