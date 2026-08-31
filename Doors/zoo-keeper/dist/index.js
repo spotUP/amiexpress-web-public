@@ -106,6 +106,10 @@ function initScreen() {
         width: "100%",
         height: 1,
         tags: true,
+        // blessed.box() is a Panel here, and a Panel injects a line border
+        // whenever `border` is absent from the options. On a ONE-ROW box that
+        // border IS the whole box, so the HUD never appeared at all.
+        border: undefined,
         content: formatHUD(),
     });
     // Main game area
@@ -117,6 +121,15 @@ function initScreen() {
         height: SCREEN_HEIGHT - 4,
         fixed: true,
         tags: true,
+        // The stages lay the board out themselves: one line per row, exactly
+        // GAME_AREA.width characters wide. Word wrapping a line that already
+        // fills the box pushes a blank row in after every real row, so the board
+        // renders on every OTHER line - reported as "the lines are too long,
+        // every second one is black".
+        wrap: false,
+        // ...and the same Panel default steals two columns and two rows, which
+        // is what makes an 80-column row overflow a box that only has 78.
+        border: undefined,
         style: {
             bg: "black",
         },

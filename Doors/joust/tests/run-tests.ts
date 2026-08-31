@@ -8,6 +8,7 @@
 /* eslint-disable no-console */
 
 const TEST_MODULES = [
+  './layout.test',
   './sprites.test',
 ];
 
