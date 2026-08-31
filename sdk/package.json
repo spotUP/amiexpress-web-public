@@ -57,6 +57,12 @@
       "types": "./dist/engines/graphics/motion-trail.d.ts",
       "default": "./dist/engines/graphics/motion-trail.js"
     },
+    "./engines/graphics/cell-art": {
+      "types": "./dist/engines/graphics/cell-art/index.d.ts",
+      "import": "./dist-esm/engines/graphics/cell-art/index.js",
+      "require": "./dist/engines/graphics/cell-art/index.js",
+      "default": "./dist/engines/graphics/cell-art/index.js"
+    },
     "./engines/ui/blessed": {
       "types": "./dist/engines/ui/blessed/index.d.ts",
       "import": "./dist-esm/engines/ui/blessed/index.js",
