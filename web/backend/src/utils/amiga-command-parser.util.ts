@@ -210,6 +210,105 @@ function readNullString(buffer: Buffer, offset: number): [string, number] {
 }
 
 /**
+ * Add one raw tooltype string to the map.
+ *
+ * Shared by every reader below so that a tooltype means the same thing however
+ * it was found: parenthesised entries are Workbench's way of commenting one
+ * out, a bare word is a flag worth YES, and everything else splits on the
+ * first '='.
+ */
+function absorbTooltype(tooltypes: Map<string, string>, raw: string): void {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return;
+
+  // Workbench comments a tooltype out by wrapping it in parentheses.
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) return;
+
+  const eqIdx = trimmed.indexOf('=');
+  if (eqIdx !== -1) {
+    const key = trimmed.substring(0, eqIdx).toUpperCase().trim();
+    if (key.length > 0) {
+      tooltypes.set(key, trimmed.substring(eqIdx + 1));
+    }
+    return;
+  }
+
+  const key = trimmed.toUpperCase();
+  if (key.length > 0 && /^[A-Z][A-Z0-9_.]*$/.test(key)) {
+    tooltypes.set(key, 'YES');
+  }
+}
+
+/**
+ * Read the ToolTypes array exactly as icon.library wrote it.
+ *
+ * On disk `do_ToolTypes` is a LENGTH-PREFIXED array, not a run of
+ * null-terminated strings: a ULONG holding (entries + 1) * 4, then for every
+ * entry a ULONG byte count followed by that many bytes, the last of which is
+ * the NUL. Reading it as bare strings loses whichever entries the string
+ * scanner cannot tell from the binary around them - and the prefix itself is
+ * the trap, because a 32-character tooltype carries the length byte 0x21,
+ * which prints as '!' and glues itself to the front of the entry.
+ *
+ * Every field is checked against the next: a byte count that does not land on
+ * its own NUL means this is not the array, and the caller is told so rather
+ * than handed a half-read map. That check is what makes it safe to go looking
+ * for the array when the computed offset misses it.
+ *
+ * @returns the entries and the offset just past the array, or null if the
+ *          bytes at `offset` are not a well-formed ToolTypes array
+ */
+function readToolTypeArray(buffer: Buffer, offset: number): { entries: string[]; end: number } | null {
+  if (offset < 0 || offset + 4 > buffer.length) return null;
+
+  const arraySize = readLong(buffer, offset);
+  if (arraySize < 4 || arraySize % 4 !== 0) return null;
+
+  const entryCount = arraySize / 4 - 1;
+  if (entryCount < 1 || entryCount > 500) return null;
+
+  const entries: string[] = [];
+  let cursor = offset + 4;
+
+  for (let i = 0; i < entryCount; i++) {
+    if (cursor + 4 > buffer.length) return null;
+    const length = readLong(buffer, cursor);
+    cursor += 4;
+
+    if (length < 1 || cursor + length > buffer.length) return null;
+    // The declared length includes the terminator, so the last byte must be it
+    // and no byte before it may be one.
+    if (buffer[cursor + length - 1] !== 0) return null;
+    if (buffer.indexOf(0, cursor) !== cursor + length - 1) return null;
+
+    entries.push(buffer.subarray(cursor, cursor + length - 1).toString('latin1'));
+    cursor += length;
+  }
+
+  return { entries, end: cursor };
+}
+
+/**
+ * Find the ToolTypes array when the computed offset does not land on it.
+ *
+ * The offset is computed by walking optional images whose sizes come from the
+ * icon's own header, and a NewIcons or otherwise unusual icon can put the
+ * walk off by a few bytes. Rather than give up on the real array and fall back
+ * to scanning for printable runs, look for it: `readToolTypeArray` rejects
+ * anything whose lengths do not agree with its own NULs, so a hit is a hit.
+ * At least one entry must look like a KEY=VALUE, which image data will not.
+ */
+function findToolTypeArray(buffer: Buffer, from: number): { entries: string[]; end: number } | null {
+  for (let offset = from; offset + 8 <= buffer.length; offset += 2) {
+    const array = readToolTypeArray(buffer, offset);
+    if (array && array.entries.some(entry => isValidTooltypeString(entry) && entry.includes('='))) {
+      return array;
+    }
+  }
+  return null;
+}
+
+/**
  * Extract tooltypes from Amiga .info file using proper binary structure parsing.
  *
  * NOTE: This function returns Map<string, string> of tooltypes only.
@@ -287,55 +386,28 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
 
     // Now we're at the ToolTypes section
     if (hasToolTypes && offset < buffer.length) {
-      // ToolTypes are stored as sequential null-terminated strings
-      // The section ends when we hit an empty string or run out of valid data
-      let tooltypeCount = 0;
-      const maxTooltypes = 500; // Safety limit
+      const array = readToolTypeArray(buffer, offset) ?? findToolTypeArray(buffer, DISK_OBJECT_SIZE);
 
-      while (offset < buffer.length && tooltypeCount < maxTooltypes) {
-        // Check for null byte at start - end of tooltypes section
-        if (buffer[offset] === 0) {
-          break;
+      if (array) {
+        for (const entry of array.entries) {
+          // Image data that survived the length checks is still not a tooltype.
+          if (!isValidTooltypeString(entry)) continue;
+          absorbTooltype(tooltypes, entry);
         }
 
-        const [tooltypeStr, consumed] = readNullString(buffer, offset);
-        offset += consumed;
-
-        if (tooltypeStr.length === 0) {
-          break;
-        }
-
-        // Skip strings that look like image/garbage data
-        // Valid tooltypes have recognizable ASCII patterns with letters
-        if (!isValidTooltypeString(tooltypeStr)) {
-          continue;
-        }
-
-        // Parse the tooltype string
-        const trimmed = tooltypeStr.trim();
-
-        // Skip commented-out tooltypes (parenthesized)
-        if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
-          tooltypeCount++;
-          continue;
-        }
-
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx !== -1) {
-          const key = trimmed.substring(0, eqIdx).toUpperCase().trim();
-          const value = trimmed.substring(eqIdx + 1);
-          if (key.length > 0) {
+        // Anything written past the end of the array was appended by a tool
+        // that did not grow the array's own count - this BBS has done it. A
+        // real Amiga would never see those, but this one has been reading them
+        // for as long as they have been there, and a tooltype added later is
+        // the more recent edit, so it wins.
+        if (array.end < buffer.length) {
+          const trailing = parseInfoFileFallback(
+            buffer.subarray(array.end), filePath, session, socket
+          );
+          for (const [key, value] of trailing) {
             tooltypes.set(key, value);
           }
-        } else {
-          // Flag-style tooltype (no value)
-          const key = trimmed.toUpperCase();
-          if (key.length > 0 && /^[A-Z][A-Z0-9_.]*$/.test(key)) {
-            tooltypes.set(key, 'YES');
-          }
         }
-
-        tooltypeCount++;
       }
     }
 
@@ -382,8 +454,13 @@ function parseInfoFileFallback(buffer: Buffer, filePath: string, session?: any, 
   for (const line of extractedStrings) {
     const trimmed = line.trim();
 
-    // Skip commented tooltypes
-    if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
+    // Skip commented tooltypes. Parentheses are Workbench's comment marker and
+    // the only one: a leading '!' is not a convention, it is the low byte of
+    // the entry's own 32-bit length (0x21 = a 32-character tooltype) printing
+    // as a character and gluing itself to the front of the run. Dropping those
+    // cost this board every command whose LOCATION happened to be that long -
+    // BADD, BS, M, MOSEARCH, mobnup and _s all vanished from the registry.
+    if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
       continue;
     }
 
