@@ -14,15 +14,9 @@ import { createInitialGameData } from "./game/initial-data";
 import { rpcHandlers } from "./server";
 import { PengoData, InputKey, Direction } from "./game/types";
 import {
-  GRID_WIDTH,
-  GRID_HEIGHT,
-  CELL_W,
-  CELL_H,
   BOARD_COLS,
   BOARD_ROWS,
   GAME_TICK_MS,
-  STARTING_LIVES,
-  INITIAL_TIME,
   MENU_OPTIONS,
   DEFAULT_HIGHSCORES,
 } from "./game/constants";
@@ -124,9 +118,9 @@ function renderMenu(): void {
   gameArea.setContent("");
   if (menuBox) menuBox.destroy();
 
-  // Parented to the SCREEN, not gameArea. gameArea is only GRID_WIDTH * 2
-  // columns - the width of the board - so a 40-column menu centred inside it
-  // resolved to left: -5 and hung five columns off the left edge, which is
+  // Parented to the SCREEN, not gameArea. A menu centred inside the narrower
+  // gameArea box would resolve to a negative left offset whenever the menu
+  // is wider than the board, hanging columns off the left edge - which is
   // exactly how it was reported: the title showing as "ngo" and the items
   // clipped.
   // Arkanoid's menu, from the shared arcade shell rather than a tenth
