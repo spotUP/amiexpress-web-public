@@ -5089,8 +5089,12 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                             name_width, name_width, g_board[r].name,
                             g_board[r].has_archive ? '+' : ' ');
 
+                    /* White-on-blue, the same as every other list in this
+                     * door - blessed's { selected: { bg:'blue', fg:'white' } },
+                     * see ui_draw_list_rows(). This screen had it inverted
+                     * to black-on-white, which read as a different program. */
                     if (is_sel) {
-                        ansi_color(&buf, ANSI_BLACK, ANSI_WHITE, 0);
+                        ansi_color(&buf, ANSI_WHITE, ANSI_BLUE, 1);
                     } else {
                         ansi_color(&buf, ANSI_WHITE, ANSI_BLACK, 0);
                     }
