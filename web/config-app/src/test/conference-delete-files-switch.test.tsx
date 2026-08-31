@@ -5,8 +5,12 @@
  * the reasoning that nothing should destroy every message and upload in a
  * conference as a side effect of a button. That reasoning holds, but it left
  * the sysop cleaning up by hand on the server, which is not a thing an admin
- * should require. So it is a switch: off by default, stated in the
- * confirmation, and the confirmation says which of the two is about to happen.
+ * should require. So it is a switch, off by default.
+ *
+ * It lives IN the confirmation dialog. It first sat above the table, as page
+ * state to be set before pressing delete - "i dont se any switch", and fair
+ * enough: the choice belongs at the moment it is made, next to the button
+ * that acts on it, not somewhere the dialog never mentions.
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -39,15 +43,24 @@ vi.mock('../api/client', () => ({
   },
 }));
 
-/** Captures what the confirmation actually told the sysop. */
-const confirmed = { message: '' };
+/** Captures what the confirmation offered, and answers it. */
+const dialog = {
+  message: '',
+  checkbox: undefined as { label: string; description?: string } | undefined,
+  /** What the sysop does with the box when the dialog is up. */
+  tick: false,
+};
 vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({
     showSuccess: vi.fn(),
     showError: vi.fn(),
-    confirm: async (options: { message: string }) => {
-      confirmed.message = options.message;
-      return true;
+    confirm: async (options: {
+      message: string;
+      checkbox?: { label: string; description?: string };
+    }) => {
+      dialog.message = options.message;
+      dialog.checkbox = options.checkbox;
+      return options.checkbox ? { confirmed: true, checked: dialog.tick } : true;
     },
   }),
   NotificationProvider: ({ children }: { children: ReactNode }) => children,
@@ -67,26 +80,35 @@ function renderPage() {
 describe('deleting a conference', () => {
   beforeEach(() => {
     deleteConferenceConfig.mockClear();
-    confirmed.message = '';
+    dialog.message = '';
+    dialog.checkbox = undefined;
+    dialog.tick = false;
   });
 
-  it('keeps the files by default, and says so', async () => {
+  it('offers the choice in the dialog, not as page state to set first', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /delete general/i }));
+
+    await waitFor(() => expect(deleteConferenceConfig).toHaveBeenCalledTimes(1));
+    expect(dialog.checkbox?.label).toMatch(/files too/i);
+    expect(dialog.checkbox?.description).toMatch(/every message posted there/i);
+  });
+
+  it('keeps the files when the box is left alone', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: /delete general/i }));
 
     await waitFor(() => expect(deleteConferenceConfig).toHaveBeenCalledTimes(1));
     expect(deleteConferenceConfig.mock.calls[0]).toEqual([1, false]);
-    expect(confirmed.message).toMatch(/directory is left alone/i);
   });
 
-  it('takes the files when the switch is on, and warns before it does', async () => {
+  it('takes the files when the box is ticked', async () => {
+    dialog.tick = true;
     renderPage();
-    await userEvent.click(await screen.findByLabelText(/delete the conference's files too/i));
     await userEvent.click(await screen.findByRole('button', { name: /delete general/i }));
 
     await waitFor(() => expect(deleteConferenceConfig).toHaveBeenCalledTimes(1));
     expect(deleteConferenceConfig.mock.calls[0]).toEqual([1, true]);
-    expect(confirmed.message).toMatch(/DIRECTORY WILL BE DELETED/);
   });
 
   it('warns that a middle conference renumbers the ones above it', async () => {
@@ -94,15 +116,15 @@ describe('deleting a conference', () => {
     await userEvent.click(await screen.findByRole('button', { name: /delete general/i }));
 
     // Conference 1 of 2: conference 2 moves down to 1, and access moves with it.
-    expect(confirmed.message).toMatch(/move down one/i);
-    expect(confirmed.message).toMatch(/conference access moves with/i);
+    expect(dialog.message).toMatch(/move down one/i);
+    expect(dialog.message).toMatch(/conference access moves with/i);
   });
 
   it('tells the truth about the last conference: nothing else moves', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: /delete elite/i }));
 
-    expect(confirmed.message).toMatch(/comes off the end of the list/i);
-    expect(confirmed.message).not.toMatch(/move down one/i);
+    expect(dialog.message).toMatch(/comes off the end of the list/i);
+    expect(dialog.message).not.toMatch(/move down one/i);
   });
 });

@@ -29,12 +29,6 @@ export function ConferencesPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConference, setEditingConference] = useState<ConferenceConfig | null>(null);
-  /**
-   * Off by default, and read at the moment of the confirm so the dialog can
-   * say which of the two things is about to happen. A conference's directory
-   * holds every message posted there and every file uploaded to it.
-   */
-  const [removeFilesOnDelete, setRemoveFilesOnDelete] = useState(false);
   const [formData, setFormData] = useState<ConferenceFormData>({
     conference_id: 1,
     name: '',
@@ -152,7 +146,7 @@ export function ConferencesPage() {
 
   const handleDelete = async (conf: ConferenceConfig) => {
     const isLast = conf.conference_id === conferences.length;
-    const confirmed = await confirm({
+    const { confirmed, checked: removeFiles } = await confirm({
       title: 'Delete Conference',
       message:
         `Remove conference ${conf.conference_id}${conf.name ? ` (${conf.name})` : ''}?\n\n` +
@@ -163,22 +157,20 @@ export function ConferencesPage() {
             `them - a user who could reach ${conf.conference_id + 1} will reach it ` +
             `at ${conf.conference_id} afterwards. Read pointers and the Amiga-side ` +
             `conference list move too.\n\n`) +
-        (removeFilesOnDelete
-          ? `Its DIRECTORY WILL BE DELETED: every message posted there and every ` +
-            `file uploaded to it goes with it. This cannot be undone from here.\n\n`
-          : `Its directory is left alone - every message and upload stays on disk, ` +
-            `and the path is reported so you can remove it yourself.\n\n`) +
         `Everything that changes is copied first, under _conf-backups on the board.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
       type: 'danger',
       requireTypedConfirmation: String(conf.conference_id),
+      checkbox: {
+        label: "Delete the conference's files too",
+        description:
+          'Every message posted there and every file uploaded to it. Left alone otherwise, ' +
+          'and the path is reported so you can remove them yourself.',
+      },
     });
     if (confirmed) {
-      deleteMutation.mutate({
-        confNumber: conf.conference_id,
-        removeFiles: removeFilesOnDelete,
-      });
+      deleteMutation.mutate({ confNumber: conf.conference_id, removeFiles });
     }
   };
 
@@ -265,20 +257,6 @@ export function ConferencesPage() {
         </button>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-content-secondary">
-        <input
-          type="checkbox"
-          checked={removeFilesOnDelete}
-          onChange={(e) => setRemoveFilesOnDelete(e.target.checked)}
-          className="form-checkbox h-4 w-4 text-accent"
-        />
-        <span>
-          Delete the conference's files too
-          <span className="ml-2 text-content-muted">
-            every message posted there and every upload in it, not just the entry
-          </span>
-        </span>
-      </label>
 
       <DataTable
         columns={columns}

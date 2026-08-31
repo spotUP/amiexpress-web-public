@@ -32,6 +32,30 @@ interface ConfirmOptions {
    * before the confirm button becomes usable.
    */
   requireTypedConfirmation?: string;
+  /**
+   * An extra decision the dialog carries, answered with the confirmation.
+   *
+   * `confirm` still resolves false on cancel; on confirm it resolves the
+   * checkbox's state, so a caller that asked for one reads it straight out of
+   * the answer instead of keeping page state the dialog knows nothing about.
+   */
+  checkbox?: {
+    label: string;
+    description?: string;
+    defaultChecked?: boolean;
+  };
+}
+
+/**
+ * What a confirm with a checkbox answers.
+ *
+ * Not a bare boolean: "confirmed, box unticked" and "cancelled" are different
+ * answers, and collapsing them into false would have deleted nothing while
+ * looking like it worked - or worse, the other way round.
+ */
+export interface ConfirmWithCheckboxResult {
+  confirmed: boolean;
+  checked: boolean;
 }
 
 interface NotificationContextType {
@@ -40,7 +64,10 @@ interface NotificationContextType {
   showError: (message: string) => void;
   showInfo: (message: string) => void;
   showWarning: (message: string) => void;
-  confirm: (options: ConfirmOptions) => Promise<boolean>;
+  confirm: {
+    (options: ConfirmOptions & { checkbox: NonNullable<ConfirmOptions['checkbox']> }): Promise<ConfirmWithCheckboxResult>;
+    (options: ConfirmOptions): Promise<boolean>;
+  };
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -51,7 +78,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{
     options: ConfirmOptions;
-    resolve: (value: boolean) => void;
+    resolve: (value: boolean | ConfirmWithCheckboxResult) => void;
   } | null>(null);
 
   const showToast = useCallback((message: string, type: ToastType = 'info') => {
@@ -68,16 +95,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const showWarning = useCallback((message: string) => showToast(message, 'warning'), [showToast]);
 
   const confirm = useCallback(
-    (options: ConfirmOptions) =>
-      new Promise<boolean>((resolve) => {
+    ((options: ConfirmOptions) =>
+      new Promise<boolean | ConfirmWithCheckboxResult>((resolve) => {
         setConfirmDialog({ options, resolve });
-      }),
+      })) as NotificationContextType['confirm'],
     []
   );
 
   const closeConfirm = useCallback(
-    (answer: boolean) => {
-      confirmDialog?.resolve(answer);
+    (confirmed: boolean, checked = false) => {
+      const options = confirmDialog?.options;
+      confirmDialog?.resolve(options?.checkbox ? { confirmed, checked } : confirmed);
       setConfirmDialog(null);
     },
     [confirmDialog]
@@ -122,7 +150,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             cancelText={confirmDialog.options.cancelText}
             type={confirmDialog.options.type}
             requireTypedConfirmation={confirmDialog.options.requireTypedConfirmation}
-            onConfirm={() => closeConfirm(true)}
+            checkbox={confirmDialog.options.checkbox}
+            onConfirm={(checked) => closeConfirm(true, checked)}
             onCancel={() => closeConfirm(false)}
           />
         )}

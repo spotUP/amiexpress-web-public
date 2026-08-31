@@ -43,7 +43,21 @@ interface ConfirmDialogProps {
   type?: ConfirmType;
   /** When set, the confirm button stays disabled until this is typed back. */
   requireTypedConfirmation?: string;
-  onConfirm: () => void;
+  /**
+   * An extra decision that belongs to this action rather than to the page.
+   *
+   * Deleting a conference can take its files with it, and that switch first
+   * lived above the table: page state the sysop had to set BEFORE pressing
+   * delete, out of sight of the dialog that asks whether to go ahead. The
+   * choice belongs at the moment it is made, so the dialog carries it and
+   * reports it back with the answer.
+   */
+  checkbox?: {
+    label: string;
+    description?: string;
+    defaultChecked?: boolean;
+  };
+  onConfirm: (checked: boolean) => void;
   onCancel: () => void;
 }
 
@@ -55,16 +69,21 @@ export function ConfirmDialog({
   cancelText = 'Cancel',
   type = 'warning',
   requireTypedConfirmation,
+  checkbox,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const [typed, setTyped] = useState('');
+  const [checked, setChecked] = useState(checkbox?.defaultChecked ?? false);
   const Icon = CONFIRM_ICON[type];
 
   // A dialog reopened for a different object must not inherit the last answer.
   useEffect(() => {
-    if (open) setTyped('');
-  }, [open, requireTypedConfirmation]);
+    if (open) {
+      setTyped('');
+      setChecked(checkbox?.defaultChecked ?? false);
+    }
+  }, [open, requireTypedConfirmation, checkbox?.defaultChecked]);
 
   const confirmBlocked = requireTypedConfirmation !== undefined && typed.trim() !== requireTypedConfirmation;
 
@@ -100,6 +119,23 @@ export function ConfirmDialog({
             </label>
           )}
 
+          {checkbox && (
+            <label className="mt-4 flex items-start gap-2 rounded border border-border bg-surface-2 p-3">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => setChecked(event.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-current text-accent"
+              />
+              <span className="min-w-0 text-sm">
+                <span className="block text-content-primary">{checkbox.label}</span>
+                {checkbox.description && (
+                  <span className="block text-xs text-content-muted">{checkbox.description}</span>
+                )}
+              </span>
+            </label>
+          )}
+
           <div className="mt-5 flex justify-end gap-2">
             <AlertDialogPrimitive.Cancel asChild>
               <button
@@ -114,7 +150,7 @@ export function ConfirmDialog({
               <button
                 type="button"
                 disabled={confirmBlocked}
-                onClick={onConfirm}
+                onClick={() => onConfirm(checked)}
                 className={`h-control rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${CONFIRM_BUTTON_CLASS[type]}`}
               >
                 {confirmText}
