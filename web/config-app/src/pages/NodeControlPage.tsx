@@ -231,7 +231,7 @@ export function NodeControlPage() {
                     {node.reservedFor && (
                       <span
                         className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-status-warn text-content-inverse"
-                        title={`Reserved for ${node.reservedFor} (express.e:7649-7656)`}
+                        title={`Reserved for ${node.reservedFor}`}
                       >
                         <Lock className="w-3 h-3" />
                         Reserved: {node.reservedFor}

@@ -42,28 +42,28 @@ export interface PermissionGroup {
  */
 export const ACS_NOT_FROM_THIS_FILE: Record<string, string> = {
   // Resolved from the node icon (ACP.e reads these into cmds.acLvl).
-  'ACS.SENTBY_FILES': "Set by the node's SENTBY_FILES tooltype, not here (ACP.e:2649)",
-  'ACS.DEFAULT_CHAT_ON': "Set by the node's CHAT_ON tooltype, not here (ACP.e:2650)",
-  'ACS.KEEP_UPLOAD_CREDIT': "Set by the node's KEEP_UPLOAD_CREDIT tooltype, not here (ACP.e:2654)",
-  'ACS.DO_CALLERSLOG': "Set by the node's CALLERS_LOG tooltype, not here (ACP.e:2656)",
-  'ACS.DO_UD_LOG': "Set by the node's UD_LOG tooltype, not here (ACP.e:2657)",
-  'ACS.SCREEN_TO_FRONT': "Set by the node's WINDOW.TO_FRONT tooltype, not here (ACP.e:2606)",
-  'ACS.WILDCARDS': "Set by the node's wildcard toggle, not here (express.e:8482)",
+  'ACS.SENTBY_FILES': "Set by the node's SENTBY_FILES tooltype, not here",
+  'ACS.DEFAULT_CHAT_ON': "Set by the node's CHAT_ON tooltype, not here",
+  'ACS.KEEP_UPLOAD_CREDIT': "Set by the node's KEEP_UPLOAD_CREDIT tooltype, not here",
+  'ACS.DO_CALLERSLOG': "Set by the node's CALLERS_LOG tooltype, not here",
+  'ACS.DO_UD_LOG': "Set by the node's UD_LOG tooltype, not here",
+  'ACS.SCREEN_TO_FRONT': "Set by the node's WINDOW.TO_FRONT tooltype, not here",
+  'ACS.WILDCARDS': "Set by the node's wildcard toggle, not here",
 
   // Resolved from the caller's own record.
-  'ACS.CLEAR_SCREEN_MSG': "Comes from the caller's own screen-clear flag, not from this file (express.e:8473)",
+  'ACS.CLEAR_SCREEN_MSG': "Comes from the caller's own screen-clear flag, not from this file",
 
   // Always granted, whatever the file says.
-  'ACS.MSG_LEVEL': 'Always granted - express.e:8483 returns TRUE before reading this file',
-  'ACS.MSG_EXPERATION': 'Always granted - express.e:8483 returns TRUE before reading this file',
-  'ACS.CUSTOMCOMMANDS': 'Always granted - express.e:8483 returns TRUE before reading this file',
-  'ACS.JOIN_SUB_CONFERENCE': 'Always granted - express.e:8483 returns TRUE before reading this file',
+  'ACS.MSG_LEVEL': 'Always granted, whatever this file says',
+  'ACS.MSG_EXPERATION': 'Always granted, whatever this file says',
+  'ACS.CUSTOMCOMMANDS': 'Always granted, whatever this file says',
+  'ACS.JOIN_SUB_CONFERENCE': 'Always granted, whatever this file says',
 
   // Declared in the enum and never checked anywhere in express.e.
   'ACS.ACCOUNT_VIEW': 'Declared by AmiExpress and never checked - nothing reads it',
   'ACS.CREATE_CONFERENCE': 'Declared by AmiExpress and never checked - nothing reads it',
   'ACS.DUPE_FILECHECK': 'Declared by AmiExpress and never checked - nothing reads it',
-  'ACS.FREE_RESUMING': 'Not implemented in /X3 or /X4 (express.e:14) - nothing reads it',
+  'ACS.FREE_RESUMING': 'Not implemented in AmiExpress - nothing reads it',
   'ACS.MAX_PAGES': 'Declared by AmiExpress and never checked - nothing reads it',
   'ACS.ONE_TIME_BULLETINS': 'Declared by AmiExpress and never checked - nothing reads it',
   'ACS.UNKNOWN': 'A spare slot in the enum, with no meaning of its own',

@@ -183,9 +183,8 @@ export function SecurityPage() {
       {inUse.length > 0 && (
         <div className="p-3 rounded border border-bbs-muted/30 text-sm">
           <p className="mb-2 text-content-secondary">
-            What your users actually have. AmiExpress rounds a level down to a
-            multiple of five and walks down until it finds a file
-            (express.e:3025).
+            The levels your users hold, and the file that serves each. A level
+            with no file of its own is served by the nearest lower one.
           </p>
           <div className="flex flex-wrap gap-2">
             {inUse.map(row => {
@@ -261,10 +260,10 @@ export function SecurityPage() {
                 file mean opposite things on the two systems.
               </p>
               <p className="text-content-muted">
-                AmiExpress reads a tooltype's PRESENCE and never its value
-                (tooltypes.e:204-218), so ACS.DOWNLOAD=NO grants download on a real
-                board. This BBS denies it. Saving the level rewrites them into the
-                parenthesised form, which denies on both:{' '}
+                A real AmiExpress board grants a permission because the tooltype
+                is there at all, whatever it is set to, so ACS.DOWNLOAD=NO grants
+                download there and denies it here. Saving this level rewrites
+                them in the disabled form, which denies on both:{' '}
                 {flagsQuery.data!.data!.ambiguous!.join(', ')}
               </p>
             </div>

@@ -520,11 +520,10 @@ export function DoorsPage() {
                   <p className="text-sm text-bbs-muted mt-2">
                     AmiExpress has no on/off switch for a command, so turning a
                     door off parks its access level out of reach and remembers
-                    the level above, restoring it when you switch the door back
-                    on. The parking level is 32767, not 255: express.e:4704
-                    tests access &gt; acsLevel, so a level-255 sysop could still
-                    run a door parked at 255.
-                    This is what DOORREPO does, and it reads the same door.
+                    the old level, restoring it when you switch the door back
+                    on. The parking level is 32767 rather than 255, because a
+                    level-255 sysop can still run a door parked at 255.
+                    DOORREPO does the same thing to the same door.
                   </p>
                 </div>
               </div>
