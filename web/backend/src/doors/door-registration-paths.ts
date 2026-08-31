@@ -75,6 +75,47 @@ export function ownDirectoryOf(
 }
 
 /**
+ * Where a command is registered, in the order express.e resolves it.
+ *
+ * express.e:4630-4647 tries CONFCMD, then NODECMD, then BBSCMD, and runs the
+ * first that exists. The delete built one path - Commands/BBSCmd/<CMD>.info -
+ * and answered "not found" for anything else, so a door registered only in
+ * Conf12Cmd or Node0Cmd could be listed and run but never removed.
+ *
+ * Returns absolute .info paths, conference and node registrations first.
+ * Matching is case-insensitive, as it is on an Amiga volume: this board has
+ * `vsys.info` for the command VSYS.
+ */
+export function findCommandRegistrations(bbsRoot: string, command: string): string[] {
+  const commandsRoot = path.join(bbsRoot, 'Commands');
+  const wanted = `${command}.info`.toLowerCase();
+  const conferenceOrNode: string[] = [];
+  const global: string[] = [];
+
+  let leaves: string[] = [];
+  try { leaves = amigafs.readdirSync(commandsRoot); } catch { return []; }
+
+  for (const leaf of leaves) {
+    const dir = path.join(commandsRoot, leaf);
+    try { if (!amigafs.statSync(dir).isDirectory()) continue; } catch { continue; }
+
+    let entries: string[] = [];
+    try { entries = amigafs.readdirSync(dir); } catch { continue; }
+    for (const name of entries) {
+      if (name.toLowerCase() !== wanted) continue;
+      const abs = path.join(dir, name);
+      // BBSCmd and SysCmd are the board-wide ones; everything else under
+      // Commands/ is a Conf<N>Cmd or Node<N>Cmd directory, which outranks
+      // them.
+      if (/^(bbscmd|syscmd)$/i.test(leaf)) global.push(abs);
+      else conferenceOrNode.push(abs);
+    }
+  }
+
+  return [...conferenceOrNode, ...global];
+}
+
+/**
  * Every command registration under `Commands/` whose LOCATION resolves to
  * `target` or inside it.
  *

@@ -23,6 +23,7 @@ import {
   comparablePath,
   ownDirectoryOf,
   findRegistrationsPointingInto,
+  findCommandRegistrations,
 } from './door-registration-paths';
 import { db } from '../database';
 
@@ -1562,10 +1563,14 @@ console.error('Cleanup error:', error);
    */
   async deleteAmigaDoor(command: string, onStep?: DoorDeleteProgress): Promise<DoorDeleteResult> {
     try {
-      const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
-      const infoPath = path.join(commandsPath, `${command}.info`);
+      // Wherever the command is actually registered, in the order express.e
+      // resolves it (CONFCMD, NODECMD, then BBSCMD - express.e:4630-4647).
+      // Looking only in BBSCmd made a door registered in Conf12Cmd or
+      // Node0Cmd impossible to remove.
+      const registrations = findCommandRegistrations(this.bbsRoot, command);
+      const infoPath = registrations[0];
 
-      if (!amigafs.existsSync(infoPath)) {
+      if (!infoPath) {
         return { success: false, message: `Door command '${command}' not found` };
       }
 
