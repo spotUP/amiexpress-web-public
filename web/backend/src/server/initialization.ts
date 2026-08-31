@@ -5,6 +5,7 @@ import { config } from '../config';
 import { initializeContainer } from '../container';
 import { loadConfConfig } from '../services/conf-config.service';
 import { onConferencesChanged } from '../services/conference-change-bus';
+import { expandConferenceAccessTo } from '../services/conference-access-expansion';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
 import { setACSConfig, ToggleFlags } from '../utils/acs.util';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
@@ -276,6 +277,31 @@ console.error('[Webhook Init] Error initializing default webhook:', error);
  * is idempotent.
  */
 /**
+ * Grant every account access to the conferences the board has right now.
+ *
+ * Boot did this and the refresh did not, so a conference created in the
+ * admin was everywhere except in anyone's access string until the next
+ * restart. Best-effort: the list is already correct, and a failure here is
+ * logged rather than allowed to fail a create.
+ */
+function expandAccessForCurrentConferences(caller: string): void {
+  if (!db || conferences.length === 0) return;
+  try {
+    const sqlite = (db as any).db;
+    if (!sqlite) return;
+    const result = expandConferenceAccessTo(sqlite, conferences.length);
+    if (result.usersExpanded > 0 || result.newUserDefaultExpanded) {
+      process.stdout.write(
+        `[${caller}] Expanded conference access to ${conferences.length} conferences for ${result.usersExpanded} user(s)` +
+        `${result.newUserDefaultExpanded ? ' and the new-user default' : ''}\n`
+      );
+    }
+  } catch (e) {
+    process.stderr.write(`[${caller}] confaccess migration warn: ${e}\n`);
+  }
+}
+
+/**
  * Swap an array's CONTENTS, keeping the array itself.
  *
  * The conference list is handed to eight consumers at boot - the screen
@@ -396,6 +422,8 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
   // DIR files from disk via FileListingHandler / readDirFile — there is no
   // per-area in-memory file entry cache.
   setFileAreas(fileAreas);
+
+  expandAccessForCurrentConferences('refreshConferencesFromDisk');
 
   return conferences;
 }
@@ -752,38 +780,10 @@ export async function initializeData(io?: SocketIOServer) {
 
     process.stdout.write(`[initializeData] Loaded ${conferences.length} conferences, ${messageBases.length} bases, ${fileAreas.length} areas, ${getDoors().length} doors\n`);
 
-    // Auto-correct confaccess strings when conference count has grown.
-    // Runs on every startup — cheap, idempotent, prevents the "only N confs visible" bug
-    // that hits when conferences are added after initial deployment.
-    if (db && conferences.length > 0) {
-      try {
-        const sqlite = (db as any).db;
-        if (sqlite) {
-          const fullAccess = 'X'.repeat(conferences.length);
-          // Expand new_user_conf_access if shorter than conf count
-          const cfgRow = sqlite.prepare('SELECT new_user_conf_access FROM system_config LIMIT 1').get() as any;
-          if (cfgRow && (cfgRow.new_user_conf_access || '').length < conferences.length) {
-            sqlite.prepare('UPDATE system_config SET new_user_conf_access = ?').run(fullAccess);
-            process.stdout.write(`[initializeData] Expanded new_user_conf_access to ${conferences.length} conferences\n`);
-          }
-          // Expand each user's confaccess string, padding with X for new conferences
-          const users = sqlite.prepare('SELECT id, confaccess FROM users WHERE LENGTH(confaccess) < ?').all(conferences.length) as any[];
-          if (users.length > 0) {
-            const update = sqlite.prepare('UPDATE users SET confaccess = ? WHERE id = ?');
-            const tx = sqlite.transaction(() => {
-              for (const u of users) {
-                const current = (u.confaccess || '').padEnd(conferences.length, 'X');
-                update.run(current, u.id);
-              }
-            });
-            tx();
-            process.stdout.write(`[initializeData] Expanded confaccess for ${users.length} users to ${conferences.length} conferences\n`);
-          }
-        }
-      } catch (e) {
-        process.stderr.write(`[initializeData] confaccess migration warn: ${e}\n`);
-      }
-    }
+    // Access to whatever conferences exist now, for every account. Shared
+    // with refreshConferencesFromDisk so a conference created in the admin is
+    // visible without a restart - see conference-access-expansion.ts.
+    expandAccessForCurrentConferences('initializeData');
   } catch (error) {
     // Surfacing this error: it used to be silently swallowed, which left
     // handlers with uninjected dependencies (e.g. messaging.handler _db)

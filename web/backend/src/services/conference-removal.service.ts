@@ -72,7 +72,7 @@ export interface ConferenceRemovalDeps {
   };
   /** SQLite, for the mirror tables that are keyed by conference id. */
   sqlite?: {
-    prepare(sql: string): { run(...params: unknown[]): unknown };
+    prepare(sql: string): { run(...params: unknown[]): unknown; all?(...params: unknown[]): unknown[] };
     exec?(sql: string): unknown;
   };
   /** Conf.DB, the Amiga-side conference list. */
@@ -231,21 +231,26 @@ export class ConferenceRemovalService {
     }
 
     const sqlite = this.deps.sqlite;
-    if (sqlite) {
+    if (sqlite && sqlite.prepare) {
       try {
-        // SQLite has no "delete the nth character", so the shift is spelled
-        // out: everything before the position, everything after it, padded
-        // back to ten with '_'.
-        sqlite
-          .prepare(
-            `UPDATE users
-                SET confaccess = substr(
-                      substr(confaccess || '__________', 1, ?) ||
-                      substr(confaccess || '__________', ?),
-                      1, 10)
-              WHERE confaccess IS NOT NULL`
-          )
-          .run(conferenceId - 1, conferenceId + 1);
+        // Row by row, each at its OWN width. user.data is CHAR[10], but the
+        // mirror holds NCONFS-wide strings (initializeData pads them), and
+        // the first version of this capped the result at ten - on a
+        // thirteen-conference board that silently took conferences 11-13
+        // from every account.
+        const select = sqlite.prepare('SELECT id, confaccess FROM users WHERE confaccess IS NOT NULL');
+        if (!select.all) {
+console.warn('[ConferenceRemoval] users mirror not migrated: statement has no all()');
+          return migrated;
+        }
+        const rows = select.all() as Array<{ id: unknown; confaccess: string }>;
+        const update = sqlite.prepare('UPDATE users SET confaccess = ? WHERE id = ?');
+        for (const row of rows) {
+          const current = row.confaccess ?? '';
+          if (current.length < conferenceId) continue;
+          const next = removeAccessPosition(current, conferenceId, current.length);
+          if (next !== current) update.run(next, row.id);
+        }
       } catch (error) {
 console.error('[ConferenceRemoval] users mirror not migrated (disk is correct):', error);
       }

@@ -288,35 +288,12 @@ console.error('Config API error:', error);
       // Create database config record
       const config = await configService.createConferenceConfig(req.body, context);
 
-      // Auto-create all directories and files (MODERN enhancement!)
-      try {
-        await conferenceSetup.setupConference({
-          conferenceId: config.conference_id,
-          conferenceName: `Conference ${config.conference_id}`,
-          location: `Conf${config.conference_id}`,
-          ndirs: config.ndirs || 1,
-          minAccessLevel: config.min_access_level,
-          maxAccessLevel: config.max_access_level,
-          forceNewscan: config.force_newscan,
-          excludeFTP: config.exclude_ftp,
-          privateConf: config.private_conf,
-          readOnly: config.read_only
-        });
-
-        // Update ConfConfig.info with new conference
-        await conferenceSetup.updateConfConfig(
-          config.conference_id,
-          `Conference ${config.conference_id}`,
-          `Conf${config.conference_id}/`
-        );
-
-console.log(`[ConfigAPI] Auto-created directories and files for Conf${config.conference_id}`);
-      } catch (setupError) {
-console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError);
-        // Don't fail the entire request - database record was created successfully
-      }
-
-      sendResponse(res, config, 'Conference configuration created and auto-configured');
+      // The service creates the files, registers the conference and mirrors
+      // it - all of it. A second copy of that lived here, with its own
+      // ConferenceSetupService on a different root: it failed on every create
+      // with "ConfConfig.info not found" after the real one had succeeded,
+      // and had it worked it would have renamed the conference "Conference N".
+      sendResponse(res, config, `Conference ${config.conference_id} created`);
     } catch (error) {
       handleError(res, error);
     }

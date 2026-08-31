@@ -54,7 +54,7 @@ function makeUsers(access: string[]) {
 }
 
 /** Records the SQL the migration runs, so the shift can be asserted. */
-function makeSqlite() {
+function makeSqlite(userRows: Array<{ id: number; confaccess: string }> = []) {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   const statements: string[] = [];
   return {
@@ -69,6 +69,7 @@ function makeSqlite() {
         calls.push({ sql: sql.replace(/\s+/g, ' ').trim(), params });
         return { changes: 0 };
       },
+      all: () => (sql.includes('FROM users') ? userRows.map((r) => ({ ...r })) : []),
     }),
   };
 }
@@ -159,6 +160,27 @@ describe('removing a conference from the middle', () => {
     expect(
       sqlite.calls.find((c) => c.sql === 'UPDATE conferences SET id = id - 1 WHERE id > ?')?.params
     ).toEqual([3]);
+  });
+
+  it('shifts the mirror\'s access strings at their own width, not capped at ten', async () => {
+    // user.data is CHAR[10], but the mirror holds NCONFS-wide strings: this
+    // board has fourteen conferences and every account carries fourteen
+    // characters. The first version capped the shifted string at ten and
+    // silently took conferences 11-14 from everyone.
+    const sqlite = makeSqlite([
+      { id: 1, confaccess: 'XXXXXXXXXXXXXX' },  // 14 wide, everything
+      { id: 2, confaccess: 'XX_X__________' },  // 1, 2 and 4
+      { id: 3, confaccess: 'XX' },              // shorter than the position: untouched
+    ]);
+    const service = new ConferenceRemovalService(root, { sqlite });
+
+    await service.remove(3);
+
+    const updates = sqlite.calls.filter((c) => c.sql === 'UPDATE users SET confaccess = ? WHERE id = ?');
+    expect(updates.map((u) => u.params)).toEqual([
+      ['XXXXXXXXXXXXX_', 1],
+      ['XXX___________', 2],
+    ]);
   });
 
   it('moves them together, with the foreign keys deferred until commit', async () => {

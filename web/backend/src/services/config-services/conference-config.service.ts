@@ -159,9 +159,10 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
     // missed, and fell back to "Conference N" - so the name on the form was
     // discarded every time.
     const conferenceName = validated.name?.trim() || confEntry?.name || `Conference ${conferenceId}`;
-    // Conf7, not Conf07: that is what every other conference on a board is
-    // called, and what the entrypoint creates.
-    const location = confEntry?.location || `Conf${conferenceId}`;
+    // BBS:Conf7/, the way every other LOCATION.n on this board is written -
+    // an Amiga path with its assign, not a bare relative name - and Conf7,
+    // not Conf07, which is the directory the entrypoint creates.
+    const location = confEntry?.location || `BBS:Conf${conferenceId}/`;
 
     // DISK FIRST, then the mirror, then the config row - in that order,
     // because the order is what the database enforces.
