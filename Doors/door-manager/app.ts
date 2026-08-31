@@ -5,6 +5,8 @@
  */
 
 import * as path from 'path';
+import { runSelectedDoor } from './run-door';
+import { installedFooter } from './installed-footer';
 import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
 import { ActionLog, installLogPanel } from './action-log';
 import { ArchiveBrowseView } from './archive-browse-view';
@@ -416,12 +418,7 @@ class InstalledView extends BaseView {
 
   private updateFooter(): void {
     const d = this.door();
-    const en = (!d || d.enabled) ? 'Dis' : 'En';
-    this.layout.setFooter(
-      `{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles ` +
-      `{yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} ` +
-      `{yellow-fg}S{/yellow-fg}trip {yellow-fg}Tab{/yellow-fg}=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`
-    );
+    this.layout.setFooter(installedFooter(!d || d.enabled !== false));
   }
 
   enter(): void {
@@ -434,14 +431,15 @@ class InstalledView extends BaseView {
       this.updateInfo(); this.updateFooter(); this.layout.render();
     });
 
+    // ENTER runs the door. Bound to blessed's own 'select' event rather than
+    // keys.key(['enter']): List emits 'select' for Enter itself, and a
+    // separate key binding would fire alongside it.
+    (this.layout.doorList as any).on('select', this._onRun = () => this.doRun());
+
     this.keys.key(['tab'], () => {
       this.vm.push(new RepoView(this.layout, this.bbs));
     });
-    this.keys.key(['q', 'Q'], () => {
-      clearTimeout(this.statusTimer);
-      this.vm.destroy();
-      (this.layout.screen as any).destroy();
-    });
+    this.keys.key(['q', 'Q'], () => this.shutdown());
     this.keys.key(['u', 'U'], () => this.doUpload());
     this.keys.key(['i', 'I'], () => this.doInfoEditor());
     this.keys.key(['f', 'F'], () => this.doFileExplorer());
@@ -452,9 +450,11 @@ class InstalledView extends BaseView {
   }
 
   private _onSelectItem: any;
+  private _onRun: any;
 
   exit(): void {
     (this.layout.doorList as any).off('select item', this._onSelectItem);
+    (this.layout.doorList as any).off('select', this._onRun);
     this.keys.release();
   }
 
@@ -490,6 +490,23 @@ class InstalledView extends BaseView {
       else if (assign === 'BBS' || assign === 'WORK') doorPath = sub;
     }
     this.vm.push(new FileExplorerOverlayView(this.layout, doorPath));
+  }
+
+  /** Close the view. Q and a queued ENTER both end here. */
+  private shutdown(): void {
+    clearTimeout(this.statusTimer);
+    this.vm.destroy();
+    (this.layout.screen as any).destroy();
+  }
+
+  /** ENTER on the list. Everything but the wiring is in run-door.ts. */
+  private doRun(): void {
+    runSelectedDoor({
+      door: this.door(),
+      executeCommand: (c) => (this.bbs as any).executeCommand(c),
+      setStatus: (m, col) => this.setStatus(m, col),
+      teardown: () => this.shutdown(),
+    });
   }
 
   private doDelete(): void {

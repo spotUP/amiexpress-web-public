@@ -42,6 +42,8 @@ exports.formatSuggestedTooltypes = exports.renderFileLines = exports.entryHasDoc
 exports.resolveArchivePath = resolveArchivePath;
 exports.createApp = createApp;
 const path = __importStar(require("path"));
+const run_door_1 = require("./run-door");
+const installed_footer_1 = require("./installed-footer");
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
 const archive_browse_view_1 = require("./archive-browse-view");
@@ -393,10 +395,7 @@ class InstalledView extends ViewManager_1.BaseView {
     }
     updateFooter() {
         const d = this.door();
-        const en = (!d || d.enabled) ? 'Dis' : 'En';
-        this.layout.setFooter(`{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles ` +
-            `{yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} ` +
-            `{yellow-fg}S{/yellow-fg}trip {yellow-fg}Tab{/yellow-fg}=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
+        this.layout.setFooter((0, installed_footer_1.installedFooter)(!d || d.enabled !== false));
     }
     enter() {
         this.layout.showInstalledLayout();
@@ -408,14 +407,14 @@ class InstalledView extends ViewManager_1.BaseView {
             this.updateFooter();
             this.layout.render();
         });
+        // ENTER runs the door. Bound to blessed's own 'select' event rather than
+        // keys.key(['enter']): List emits 'select' for Enter itself, and a
+        // separate key binding would fire alongside it.
+        this.layout.doorList.on('select', this._onRun = () => this.doRun());
         this.keys.key(['tab'], () => {
             this.vm.push(new RepoView(this.layout, this.bbs));
         });
-        this.keys.key(['q', 'Q'], () => {
-            clearTimeout(this.statusTimer);
-            this.vm.destroy();
-            this.layout.screen.destroy();
-        });
+        this.keys.key(['q', 'Q'], () => this.shutdown());
         this.keys.key(['u', 'U'], () => this.doUpload());
         this.keys.key(['i', 'I'], () => this.doInfoEditor());
         this.keys.key(['f', 'F'], () => this.doFileExplorer());
@@ -426,6 +425,7 @@ class InstalledView extends ViewManager_1.BaseView {
     }
     exit() {
         this.layout.doorList.off('select item', this._onSelectItem);
+        this.layout.doorList.off('select', this._onRun);
         this.keys.release();
     }
     onEsc() { }
@@ -464,6 +464,21 @@ class InstalledView extends ViewManager_1.BaseView {
                 doorPath = sub;
         }
         this.vm.push(new FileExplorerOverlayView(this.layout, doorPath));
+    }
+    /** Close the view. Q and a queued ENTER both end here. */
+    shutdown() {
+        clearTimeout(this.statusTimer);
+        this.vm.destroy();
+        this.layout.screen.destroy();
+    }
+    /** ENTER on the list. Everything but the wiring is in run-door.ts. */
+    doRun() {
+        (0, run_door_1.runSelectedDoor)({
+            door: this.door(),
+            executeCommand: (c) => this.bbs.executeCommand(c),
+            setStatus: (m, col) => this.setStatus(m, col),
+            teardown: () => this.shutdown(),
+        });
     }
     doDelete() {
         const d = this.door();
