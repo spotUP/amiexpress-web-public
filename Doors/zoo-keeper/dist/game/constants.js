@@ -6,10 +6,15 @@
 export const SCREEN_WIDTH = 80;
 export const SCREEN_HEIGHT = 24;
 // Game area (inside borders)
+// The board is measured in LOGICAL cells, each drawn CELL_WIDTH characters
+// wide (see game/sprites.ts). Forty cells at two characters each is exactly
+// the 80-column screen, and a cell is then about as wide as it is tall -
+// so a step sideways covers the same visual distance as a step up, which it
+// did not when a cell was one character.
 export const GAME_AREA = {
     top: 1, // Below HUD
     left: 0,
-    width: 80,
+    width: 40,
     height: 19, // Leave room for footer
     bottom: 20
 };
@@ -17,11 +22,11 @@ export const GAME_AREA = {
 export const ZOO_PERIMETER = {
     outerTop: 2,
     outerLeft: 1,
-    outerRight: 78,
+    outerRight: 38,
     outerBottom: 18,
     innerTop: 4,
-    innerLeft: 5,
-    innerRight: 74,
+    innerLeft: 3,
+    innerRight: 36,
     innerBottom: 16
 };
 // Timing (in milliseconds)

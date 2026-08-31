@@ -43,7 +43,7 @@ export class PlatformStageGame {
     const cfg = PLATFORM_STAGE;
 
     // Reset Zeke position (ground level)
-    d.zeke.x = 40;
+    d.zeke.x = Math.floor(GAME_AREA.width / 2);
     d.zeke.y = GAME_AREA.bottom - 2;
     d.zeke.isJumping = false;
     d.zeke.jumpFrame = 0;
@@ -256,7 +256,7 @@ export class PlatformStageGame {
       d.state = 'gameover';
     } else {
       // Reset to ground
-      d.zeke.x = 40;
+      d.zeke.x = Math.floor(GAME_AREA.width / 2);
       d.zeke.y = GAME_AREA.bottom - 2;
       d.platformStage.zekelPlatformIndex = -1;
       d.platformStage.coconuts = [];
@@ -272,9 +272,9 @@ export class PlatformStageGame {
 
     // On platform stage, left/right move Zeke
     if (dir === 'left') {
-      d.zeke.x = Math.max(1, d.zeke.x - 2);
+      d.zeke.x = Math.max(1, d.zeke.x - 1);
     } else if (dir === 'right') {
-      d.zeke.x = Math.min(GAME_AREA.width - 2, d.zeke.x + 2);
+      d.zeke.x = Math.min(GAME_AREA.width - 2, d.zeke.x + 1);
     }
   }
 
@@ -369,7 +369,7 @@ export class PlatformStageGame {
     }
 
     // Draw tree trunk (in center)
-    const trunkX = 38;
+    const trunkX = 19;
     for (let y = 0; y < GAME_AREA.height - 1; y++) {
       buffer[y][trunkX] = wallCell('|');
       buffer[y][trunkX + 1] = wallCell('|');

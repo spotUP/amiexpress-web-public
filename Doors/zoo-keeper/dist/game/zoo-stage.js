@@ -668,8 +668,8 @@ export class ZooKeeperGame {
         }
         // Draw fuse at bottom
         const fuseY = buffer.length - 1;
-        const fuseStart = 10;
-        const fuseEnd = 70;
+        const fuseStart = 5;
+        const fuseEnd = 35;
         const fuseLength = fuseEnd - fuseStart;
         const burnPos = fuseStart + Math.floor(d.zooStage.fusePosition * fuseLength);
         for (let x = fuseStart; x < fuseEnd; x++) {

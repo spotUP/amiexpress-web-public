@@ -21,6 +21,18 @@ import {
   COLORS
 } from './constants';
 
+/**
+ * The escalator's rails, in logical cells.
+ *
+ * Movement and rendering both need these. They were separate literals - the
+ * renderer drew rails at 15 and 65 while the movement clamp used its own 15
+ * and 65 - so halving the board for square cells moved the rails and left
+ * the clamp behind, which would have trapped Zeke off the right-hand edge.
+ */
+const ESCALATOR_LEFT = 8;
+const ESCALATOR_RIGHT = 32;
+
+
 type RenderCallback = (content: string) => void;
 
 /**
@@ -46,7 +58,7 @@ export class StampedeStageGame {
     const cfg = STAMPEDE_STAGE;
 
     // Reset Zeke at bottom of escalator
-    d.zeke.x = 40;
+    d.zeke.x = Math.floor(GAME_AREA.width / 2);
     d.zeke.y = GAME_AREA.bottom - 2;
     d.zeke.isJumping = false;
     d.zeke.jumpFrame = 0;
@@ -229,9 +241,9 @@ export class StampedeStageGame {
 
     // Can only move left/right on escalator
     if (dir === 'left') {
-      d.zeke.x = Math.max(15, d.zeke.x - 3);
+      d.zeke.x = Math.max(ESCALATOR_LEFT + 1, d.zeke.x - 2);
     } else if (dir === 'right') {
-      d.zeke.x = Math.min(65, d.zeke.x + 3);
+      d.zeke.x = Math.min(ESCALATOR_RIGHT - 1, d.zeke.x + 2);
     }
   }
 
@@ -313,8 +325,8 @@ export class StampedeStageGame {
     }
 
     // Draw escalator (diagonal lines)
-    const escLeft = 15;
-    const escRight = 65;
+    const escLeft = ESCALATOR_LEFT;
+    const escRight = ESCALATOR_RIGHT;
     for (let y = 0; y < GAME_AREA.height; y++) {
       // Left rail
       buffer[y][escLeft] = wallCell('|');
@@ -335,7 +347,7 @@ export class StampedeStageGame {
     // Draw "EXTRA LIFE" banner at top
     const bannerY = 1;
     const banner = 'EXTRA LIFE!';
-    const bannerStart = 40 - Math.floor(banner.length / 2);
+    const bannerStart = Math.floor(GAME_AREA.width / 2) - Math.floor(banner.length / 2);
     for (let i = 0; i < banner.length; i++) {
       buffer[bannerY][bannerStart + i] = bonusCell(banner[i]);
     }
@@ -364,7 +376,7 @@ export class StampedeStageGame {
     if (ss.jumpedAnimals > 0) {
       const comboText = `x${ss.jumpedAnimals}`;
       for (let i = 0; i < comboText.length; i++) {
-        buffer[2][70 + i] = bonusCell(comboText[i]);
+        buffer[2][GAME_AREA.width - 6 + i] = bonusCell(comboText[i]);
       }
     }
 

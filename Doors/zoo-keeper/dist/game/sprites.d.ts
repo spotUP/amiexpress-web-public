@@ -21,11 +21,21 @@
  * glyphs depend on the client's font.
  */
 import { AnimalType } from './types';
-/** A drawn cell: one character and the colours it is drawn in. */
+/**
+ * How many characters wide one logical cell is drawn.
+ *
+ * A terminal character is about twice as tall as it is wide, so a board
+ * measured in single characters is not square: one step up covers roughly
+ * twice the visual distance of one step sideways. Super Qix solves this by
+ * drawing every logical cell CELL_WIDTH characters wide, and this door now
+ * does the same - 40 logical columns rendered as 80 characters.
+ */
+export declare const CELL_WIDTH = 2;
+/** A drawn cell: a glyph, and the colours the whole cell is painted in. */
 export interface Cell {
     ch: string;
     fg: string;
-    bg?: string;
+    bg: string;
 }
 export declare const EMPTY: Cell;
 /**
