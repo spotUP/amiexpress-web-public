@@ -185,9 +185,12 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
       // The database is a mirror; a mirror that has fallen behind must not
       // truncate what it mirrors.
       const onDisk = await this.getAllComputerTypes();
-      const fromDb = this.configRepo.getAllComputerTypes();
-      // The caller's entry goes last so it wins over a stale mirror row.
-      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
+      // ONLY the caller's entry. Handing mergeForWrite the whole mirror let it
+      // overwrite and append as well as protect: a stale row rewrote an entry
+      // the sysop never touched, and a row disk had never heard of was added
+      // to the file. mergeForWrite exists to stop the mirror TRUNCATING disk,
+      // not to make it a second source.
+      const changed = change.entry ? [change.entry] : [];
       const computers = mergeForWrite(
         onDisk,
         changed,

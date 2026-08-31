@@ -4,6 +4,7 @@
  */
 
 import type { Database } from '../../database';
+import { getSystemTime } from '../../utils/date-time.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { ScreenType } from '../../database/types';
 import { ScreenTypeSchema, type RequestContext } from '../config.schemas';
@@ -83,10 +84,21 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
       enabled: validated.enabled ?? true
     });
 
-    const newType = await this.getScreenType(id);
-    if (!newType) throw new Error('Failed to create screen type');
+    // Built from what was just validated, not read back through
+    // getScreenType - that reads the MIRROR, where this id belongs to some
+    // other screen type.
+    const now = getSystemTime();
+    const newType: ScreenType = {
+      id,
+      screen_number: validated.screen_number,
+      screen_type: validated.screen_type,
+      screen_title: validated.screen_title,
+      enabled: validated.enabled ?? true,
+      created_at: now,
+      updated_at: now
+    };
 
-    await this.writeScreenTypesInfoFile();
+    await this.writeScreenTypesInfoFile({ entry: newType });
     this.configRepo.logConfigChange('screen_types', id, 'CREATE',
       context.userId, context.username, undefined, newType,
       context.ipAddress, context.userAgent);
@@ -103,13 +115,25 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     const oldType = await this.getScreenType(id);
     if (!oldType) throw new Error(`Screen type ${id} not found`);
 
-    const success = this.configRepo.updateScreenType(id, validated);
-    if (!success) throw new Error(`Failed to update screen type ${id}`);
+    // The mirror is updated best-effort. It holds no row for a screen type
+    // that only exists on disk, and that must not stop the edit from reaching
+    // ScreenTypes.info, which is what the BBS reads.
+    this.configRepo.updateScreenType(id, validated);
 
-    const newType = await this.getScreenType(id);
-    if (!newType) throw new Error('Failed to retrieve updated screen type');
+    const newType: ScreenType = {
+      ...oldType,
+      ...validated,
+      updated_at: getSystemTime()
+    };
 
-    await this.writeScreenTypesInfoFile();
+    // A renamed screen type is still on disk under its old name, so name the
+    // rename or the merge keeps the old entry and appends the new one.
+    await this.writeScreenTypesInfoFile({
+      entry: newType,
+      ...(newType.screen_type !== oldType.screen_type
+        ? { rename: { from: oldType.screen_type, to: newType.screen_type } }
+        : {})
+    });
     this.configRepo.logConfigChange('screen_types', id, 'UPDATE',
       context.userId, context.username, oldType, newType,
       context.ipAddress, context.userAgent);
@@ -122,7 +146,7 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     if (!oldType) return false;
 
     const deleted = this.configRepo.deleteScreenType(id);
-    await this.writeScreenTypesInfoFile(oldType.screen_type);
+    await this.writeScreenTypesInfoFile({ remove: oldType.screen_type });
 
     if (deleted) {
       this.configRepo.logConfigChange('screen_types', id, 'DELETE',
@@ -139,7 +163,9 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
    * `removeType` names an entry being deleted, because the merge starts from
    * DISK and disk still has it.
    */
-  private async writeScreenTypesInfoFile(removeType?: string): Promise<void> {
+  private async writeScreenTypesInfoFile(
+    change: { entry?: ScreenType; remove?: string; rename?: { from: string; to: string } } = {}
+  ): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
     const screenTypesPath = path.join(bbsRoot, 'ScreenTypes.info');
 
@@ -149,13 +175,18 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
       // holds ZERO rows against two entries on disk, so saving one screen type
       // erased both. The database is a mirror; a mirror that has fallen behind
       // must not truncate what it mirrors.
+      // ONLY the caller's entry. Passing the whole mirror let it overwrite and
+      // append as well as protect - and this table holds four rows against two
+      // entries on disk, so every save edited the wrong record.
       const onDisk = await this.getAllScreenTypes();
-      const fromDb = this.configRepo.getAllScreenTypes();
       const screenTypes = mergeForWrite(
         onDisk,
-        fromDb,
-        (t: any) => String(t.screen_type ?? ''),
-        { remove: removeType ? [removeType] : [] }
+        change.entry ? [change.entry] : [],
+        (t: ScreenType) => String(t.screen_type ?? ''),
+        {
+          remove: change.remove ? [change.remove] : [],
+          ...(change.rename ? { rename: change.rename } : {})
+        }
       );
 
       const toolTypes = new Map<string, string>();
