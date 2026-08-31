@@ -119,6 +119,7 @@ export function flagsToTooltypes(
   changes: Record<string, boolean>
 ): Tooltype[] {
   const out = existing.map(t => ({ ...t }));
+  const invented: string[] = [];
 
   for (const [rawFlag, granted] of Object.entries(changes)) {
     const flag = rawFlag.toUpperCase();
@@ -132,6 +133,21 @@ export function flagsToTooltypes(
       if (found.value.toUpperCase() === 'NO') found.value = '';
       found.originalLine = granted ? found.key : `(${found.key})`;
     } else {
+      // A key the file does not have is only worth writing if it is one
+      // AmiExpress reads, and those are ACS.<NAME> - express.e spells them
+      // ACS.CENSORED, ACS.DOWNLOAD, ACS.BREAK_CHAT, and everything that reads
+      // this file filters on that prefix (see tooltypesToFlags below).
+      //
+      // The admin has two security endpoints and they name flags differently:
+      // the file-backed one this writes for says ACS.CENSORED, while the
+      // database mirror says CENSORED. Sending the mirror's spelling used to
+      // add a tooltype nobody reads - the save reported success, the board
+      // was unchanged, and the file grew a line that means nothing.
+      if (!flag.startsWith('ACS.')) {
+        invented.push(rawFlag);
+        continue;
+      }
+
       out.push({
         key: flag,
         value: '',
@@ -141,6 +157,14 @@ export function flagsToTooltypes(
         originalLine: granted ? flag : `(${flag})`,
       });
     }
+  }
+
+  if (invented.length > 0) {
+    throw new Error(
+      `Not an ACS flag this file can hold: ${invented.join(', ')}. ` +
+      `AmiExpress reads ACS.<NAME> (express.e), so a new flag has to be named that way - ` +
+      `'CENSORED' is the database mirror's spelling of 'ACS.CENSORED'.`
+    );
   }
 
   return out;
