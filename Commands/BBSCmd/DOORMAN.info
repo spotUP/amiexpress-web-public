@@ -2,7 +2,6 @@ BBSCMD=DOORMAN
 TYPE=TS
 LOCATION=Doors/door-manager
 DESCRIPTION=Door Manager - browse and launch available doors
-ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Utilities

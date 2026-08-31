@@ -16,6 +16,7 @@ import {
   GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH, BG_COLORS, SPRITE_FG,
   HOME_CENTRE_OFFSET, FROG_GLYPH, TURTLE_GLYPH, MOUTH_GLYPH,
   LOG_END_LEFT, LOG_END_RIGHT, SNAKE_GLYPH, FLY_GLYPH, BANK_TEXTURE,
+  complementOf,
 } from '../game/constants';
 
 interface Painted { ch: string; fg: string; bg: string }
@@ -198,8 +199,12 @@ export async function theFrogIsDrawnOverItsFooting(): Promise<void> {
   const cell = row[9 * CELL_WIDTH];
 
   assert.strictEqual(cell.ch, FROG_GLYPH, 'the frog wins its cell');
-  assert.strictEqual(cell.fg, SPRITE_FG.frog);
-  assert.strictEqual(cell.bg, BG_COLORS.log, 'standing on the log');
+
+  // It takes the opposite of the log it stands on, and its own colour is
+  // the opposite of that again.
+  assert.strictEqual(cell.bg, complementOf(BG_COLORS.log));
+  assert.strictEqual(cell.fg, complementOf(cell.bg));
+  assert.notStrictEqual(cell.bg, BG_COLORS.log, 'never the same as its footing');
 }
 
 /** A crocodile shows its jaws at the end it swims towards. */
@@ -270,7 +275,13 @@ export async function theBanksAreTextured(): Promise<void> {
     textured > row.length / 2,
     `most of the bank should be textured, found ${textured} of ${row.length}`
   );
-  assert.ok(row.every(c => c.bg === BG_COLORS.bank));
+
+  // Every cell but the frog's, which takes the opposite of the ground.
+  const frogAt = row.findIndex(c => c.ch === FROG_GLYPH);
+  assert.ok(
+    row.every((c, i) => i === frogAt || c.bg === BG_COLORS.bank),
+    'the bank should be all one colour behind the texture'
+  );
 }
 
 /** A snake riding a log is drawn over it. */
@@ -376,4 +387,119 @@ export async function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void> {
 
   const words = painted.map(c => c.ch).join('');
   assert.ok(words.includes('GAME OVER'), 'with the message in it');
+}
+
+/**
+ * A frog riding a log stays put on it, frame after frame.
+ *
+ * Reported live 2026-08-31: "when i am on a log the frog and log anims are
+ * offset the frog should move with the log". The frog advanced by its own
+ * copy of the log's sum, so it held a FRACTIONAL offset from its footing -
+ * and a fraction is enough for the two to round to different cells, so they
+ * drew a cell apart and drifted in and out of step.
+ */
+export async function theFrogStaysPutOnTheLogItRides(): Promise<void> {
+  const { game, data } = startedLevel(1);
+
+  const lane = laneOf(data, 'water', 2);
+  const log = lane.objects[0] as RiverObject;
+
+  // A log at a fractional position is the ordinary case: they are moving.
+  log.x = 6.37;
+  lane.objects = [log];
+
+  data.frog.y = lane.y;
+  data.frog.x = 7;
+  game.checkCollisions();
+  assert.ok(data.frog.onObject, 'the frog should be riding the log');
+
+  const gaps = new Set<number>();
+  for (let i = 0; i < 40; i++) {
+    game.update();
+    if (!data.frog.onObject) break;
+
+    const row = paintedRow(frameOf(game)[lane.y]);
+    const frogAt = row.findIndex(c => c.ch === FROG_GLYPH);
+
+    // Anchored on the log's BACKGROUND, not on its '(' end: the frog is
+    // drawn over the log and can cover that end, and skipping those frames
+    // would skip exactly the ones where the two have come apart.
+    const logAt = row.findIndex(c => c.bg === BG_COLORS.log);
+
+    assert.ok(frogAt >= 0 && logAt >= 0, 'both should be on screen');
+    gaps.add(frogAt - logAt);
+  }
+
+  assert.ok(gaps.size > 0, 'the frog and the log should both have been drawn');
+  assert.strictEqual(
+    gaps.size, 1,
+    `the frog should hold one place on the log; it drew at offsets ${[...gaps].join(', ')}`
+  );
+}
+
+/** Hopping off a log ends the ride. */
+export async function hoppingOffALogEndsTheRide(): Promise<void> {
+  const { game, data } = startedLevel(1);
+
+  const lane = laneOf(data, 'water', 2);
+  const log = lane.objects[0] as RiverObject;
+  log.x = 6.37;
+
+  data.frog.y = lane.y;
+  data.frog.x = 7;
+  game.checkCollisions();
+  assert.ok(data.frog.onObject);
+
+  game.handleDirection('down');
+
+  assert.ok(!data.frog.onObject, 'the frog is off the log');
+  assert.strictEqual(data.frog.rideOffset, undefined, 'and no longer carried by it');
+}
+
+/**
+ * The frog is never the colour of what it is standing on.
+ *
+ * Reported live 2026-08-31: "add a bg color as well that always is the
+ * complement color of the ground tile color the frog currently is on and
+ * make the frog color the complement color of it's current bg color this
+ * way it will always be super clear where the frog is."
+ */
+export async function theFrogContrastsWithEveryGroundItCanStandOn(): Promise<void> {
+  const grounds = [
+    BG_COLORS.road, BG_COLORS.water, BG_COLORS.bank,
+    BG_COLORS.hedge, BG_COLORS.log, BG_COLORS.turtle, BG_COLORS.homeEmpty,
+  ];
+
+  for (const ground of grounds) {
+    const bg = complementOf(ground);
+    const fg = complementOf(bg);
+
+    assert.notStrictEqual(bg, ground, `the frog would vanish on ${ground}`);
+    assert.notStrictEqual(fg, bg, `the frog would vanish into its own square on ${ground}`);
+  }
+}
+
+/** Every colour the board uses has an opposite. */
+export async function everyBoardColourHasAnOpposite(): Promise<void> {
+  for (const colour of Object.values(BG_COLORS)) {
+    assert.notStrictEqual(
+      complementOf(colour), colour,
+      `${colour} is its own opposite, which helps nobody`
+    );
+  }
+}
+
+/** The frog on the bank comes out a different colour from the bank. */
+export async function theFrogOnTheBankIsNotTheBank(): Promise<void> {
+  const { game, data } = startedLevel(1);
+
+  const bank = data.lanes.find(l => l.type === 'safe')!;
+  data.frog.y = bank.y;
+  data.frog.x = 20;
+
+  const cell = paintedRow(frameOf(game)[bank.y])[20 * CELL_WIDTH];
+
+  assert.strictEqual(cell.ch, FROG_GLYPH);
+  assert.notStrictEqual(cell.bg, BG_COLORS.bank, 'the frog has to stand out');
+  assert.notStrictEqual(cell.fg, cell.bg);
 }

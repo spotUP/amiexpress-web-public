@@ -8,13 +8,13 @@
  * and snakes. Everything the door used to guess at is read from here.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HOME_CROCODILE_INTERVAL_MS = exports.FLY_DURATION_MS = exports.FLY_SPAWN_INTERVAL_MS = exports.RIVER_HURRY_MULTIPLIER = exports.RIVER_HURRY_AFTER_SECONDS = exports.LANE4_SPEEDUP_AFTER_MS = exports.LANE4_FAST_MULTIPLIER = exports.BLOCK_LENGTH = exports.BLOCK_START = exports.LANE5_CROCODILE_COUNT = exports.LEVEL_TABLE = exports.COLORS = exports.FLY_GLYPH = exports.HOME_RIGHT = exports.HOME_LEFT = exports.HEDGE_TEXTURE = exports.BANK_TEXTURE = exports.SNAKE_GLYPH = exports.OTTER_BODY = exports.CROCODILE_BODY = exports.MOUTH_GLYPH = exports.TURTLE_GLYPH = exports.LOG_END_RIGHT = exports.LOG_END_LEFT = exports.LOG_GRAIN = exports.FROG_GLYPH = exports.SPRITE_FG = exports.BG_COLORS = exports.CELL_WIDTH = exports.SCORES = exports.OBJECT_WIDTHS = exports.TURTLE_SINKING_GLYPH = exports.GAME_OVER_BLINK_FRAMES = exports.TURTLE_DIVE_DURATION = exports.TURTLE_WARNING_MS = exports.TURTLE_SURFACE_DURATION = exports.HOME_CENTRE_OFFSET = exports.HOME_WIDTH = exports.HOME_POSITIONS = exports.LANE_CONFIG = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.EXTRA_LIFE_SCORE = exports.STARTING_LIVES = exports.LIVES_OPTIONS = exports.INITIAL_TIME = exports.GAME_TICK_MS = exports.GAME_AREA_HEIGHT = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
-exports.SPRITES = exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.MAX_NAME_LENGTH = exports.OTTER_INTERVAL_MS = exports.LADY_FROG_INTERVAL_MS = exports.HOME_CROCODILE_DURATION_MS = void 0;
+exports.FLY_DURATION_MS = exports.FLY_SPAWN_INTERVAL_MS = exports.RIVER_HURRY_MULTIPLIER = exports.RIVER_HURRY_AFTER_SECONDS = exports.LANE4_SPEEDUP_AFTER_MS = exports.LANE4_FAST_MULTIPLIER = exports.BLOCK_LENGTH = exports.BLOCK_START = exports.LANE5_CROCODILE_COUNT = exports.LEVEL_TABLE = exports.COLORS = exports.FLY_GLYPH = exports.HOME_RIGHT = exports.HOME_LEFT = exports.HEDGE_TEXTURE = exports.BANK_TEXTURE = exports.SNAKE_GLYPH = exports.OTTER_BODY = exports.CROCODILE_BODY = exports.MOUTH_GLYPH = exports.TURTLE_GLYPH = exports.LOG_END_RIGHT = exports.LOG_END_LEFT = exports.LOG_GRAIN = exports.FROG_GLYPH = exports.COLOR_COMPLEMENT = exports.SPRITE_FG = exports.BG_COLORS = exports.CELL_WIDTH = exports.SCORES = exports.OBJECT_WIDTHS = exports.TURTLE_SINKING_GLYPH = exports.GAME_OVER_BLINK_FRAMES = exports.TURTLE_DIVE_DURATION = exports.TURTLE_WARNING_MS = exports.TURTLE_SURFACE_DURATION = exports.HOME_CENTRE_OFFSET = exports.HOME_WIDTH = exports.HOME_POSITIONS = exports.LANE_CONFIG = exports.GAME_AREA_HEIGHT = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.EXTRA_LIFE_SCORE = exports.STARTING_LIVES = exports.LIVES_OPTIONS = exports.INITIAL_TIME = exports.GAME_TICK_MS = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.SPRITES = exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.MAX_NAME_LENGTH = exports.OTTER_INTERVAL_MS = exports.LADY_FROG_INTERVAL_MS = exports.HOME_CROCODILE_DURATION_MS = exports.HOME_CROCODILE_INTERVAL_MS = void 0;
+exports.complementOf = complementOf;
 exports.getLevelConfig = getLevelConfig;
 // Screen dimensions
 exports.SCREEN_WIDTH = 80;
 exports.SCREEN_HEIGHT = 24;
-exports.GAME_AREA_HEIGHT = 18;
 // Game timing
 exports.GAME_TICK_MS = 50; // 20 FPS
 /**
@@ -37,6 +37,13 @@ exports.EXTRA_LIFE_SCORE = 20000;
 // Grid settings (logical grid, not screen)
 exports.GRID_WIDTH = 40; // 2 chars per cell
 exports.GRID_HEIGHT = 13; // Total lanes including safe zones
+/**
+ * The board is exactly as tall as it is: no spare rows underneath it.
+ *
+ * The clock used to have a row of its own below the board, with blank rows
+ * after that; it is a number in the status line now.
+ */
+exports.GAME_AREA_HEIGHT = exports.GRID_HEIGHT;
 /**
  * The lanes, bottom to top.
  *
@@ -202,6 +209,42 @@ exports.SPRITE_FG = {
     homeCrocodile: 'lightred',
     bank: 'red',
 };
+/**
+ * The opposite of each of the sixteen colours, for the frog.
+ *
+ * The frog is drawn on whatever it is standing on - road, water, a log, a
+ * turtle, the bank, a home - and a fixed colour is bound to collide with
+ * one of them; it was invisible on the green banks until those went
+ * magenta. Rather than pick a colour and hope, the frog takes the opposite
+ * of the ground under it for its background, and the opposite of THAT for
+ * itself, so it stands out wherever it is.
+ *
+ * Opposite here means the far side of the sixteen-colour wheel: red against
+ * cyan, green against magenta, blue against yellow, black against white,
+ * and the bright half mirrored onto the dark.
+ */
+exports.COLOR_COMPLEMENT = {
+    black: 'lightwhite',
+    red: 'lightcyan',
+    green: 'lightmagenta',
+    yellow: 'lightblue',
+    blue: 'lightyellow',
+    magenta: 'lightgreen',
+    cyan: 'lightred',
+    white: 'black',
+    gray: 'lightwhite',
+    lightred: 'cyan',
+    lightgreen: 'magenta',
+    lightyellow: 'blue',
+    lightblue: 'yellow',
+    lightmagenta: 'green',
+    lightcyan: 'red',
+    lightwhite: 'black',
+};
+/** The opposite of `colour`, falling back to white on anything unknown. */
+function complementOf(colour) {
+    return exports.COLOR_COMPLEMENT[colour] ?? 'lightwhite';
+}
 /** The frog, and the frog you carry home. */
 // ASCII only, everywhere in this door. The board is drawn through blessed
 // with fullUnicode off, so anything outside 7-bit ASCII arrives mangled or

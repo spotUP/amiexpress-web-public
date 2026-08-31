@@ -9,7 +9,6 @@
 import { LevelConfig, HighScore } from './types';
 export declare const SCREEN_WIDTH = 80;
 export declare const SCREEN_HEIGHT = 24;
-export declare const GAME_AREA_HEIGHT = 18;
 export declare const GAME_TICK_MS = 50;
 /**
  * Seconds on the clock for one frog (FAQ 7: "You will have 60 seconds to
@@ -30,6 +29,13 @@ export declare const STARTING_LIVES = 3;
 export declare const EXTRA_LIFE_SCORE = 20000;
 export declare const GRID_WIDTH = 40;
 export declare const GRID_HEIGHT = 13;
+/**
+ * The board is exactly as tall as it is: no spare rows underneath it.
+ *
+ * The clock used to have a row of its own below the board, with blank rows
+ * after that; it is a number in the status line now.
+ */
+export declare const GAME_AREA_HEIGHT = 13;
 /**
  * The lanes, bottom to top.
  *
@@ -247,6 +253,23 @@ export declare const SPRITE_FG: {
     homeCrocodile: string;
     bank: string;
 };
+/**
+ * The opposite of each of the sixteen colours, for the frog.
+ *
+ * The frog is drawn on whatever it is standing on - road, water, a log, a
+ * turtle, the bank, a home - and a fixed colour is bound to collide with
+ * one of them; it was invisible on the green banks until those went
+ * magenta. Rather than pick a colour and hope, the frog takes the opposite
+ * of the ground under it for its background, and the opposite of THAT for
+ * itself, so it stands out wherever it is.
+ *
+ * Opposite here means the far side of the sixteen-colour wheel: red against
+ * cyan, green against magenta, blue against yellow, black against white,
+ * and the bright half mirrored onto the dark.
+ */
+export declare const COLOR_COMPLEMENT: Record<string, string>;
+/** The opposite of `colour`, falling back to white on anything unknown. */
+export declare function complementOf(colour: string): string;
 /** The frog, and the frog you carry home. */
 export declare const FROG_GLYPH = "@";
 /** The grain along a log, and the ends that round it off. */

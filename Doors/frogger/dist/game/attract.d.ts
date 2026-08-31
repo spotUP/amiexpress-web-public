@@ -22,6 +22,8 @@ export declare const ATTRACT_BLINK_FRAMES = 10;
  * Anything drawing the title has to make room for exactly this much, or the
  * lines wrap and the letters come apart across doubled rows.
  */
+/** How many rows the block title needs. */
+export declare const LOGO_HEIGHT = 5;
 export declare function titleWidth(): number;
 /**
  * The title as a grid of cells: '#' for the face of the letter, '+' for the

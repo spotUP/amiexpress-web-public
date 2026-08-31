@@ -2471,7 +2471,7 @@ debugLog(
    * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
    *
    * FileInfoBlock structure (260 bytes):
-   * fib_DiskKey (4), fib_DirEntryType (4), fib_FileName (108 BCPL),
+   * fib_DiskKey (4), fib_DirEntryType (4), fib_FileName (108 C string),
    * fib_Protection (4), fib_EntryType (4), fib_Size (4), fib_NumBlocks (4),
    * fib_Date (12 DateStamp), fib_Comment (80 BCPL), fib_OwnerUID (2), fib_OwnerGID (2)
    */
@@ -2546,8 +2546,8 @@ debugLog(
       this.emulator.writeMemory(fibPtr + 6, (dirEntryType >> 8) & 0xff);
       this.emulator.writeMemory(fibPtr + 7, dirEntryType & 0xff);
 
-      // fib_FileName (108 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 8, fileName, 107);
+      // fib_FileName (108 bytes, NUL-terminated C string per dos/dos.h)
+      this.writeFixedCString(fibPtr + 8, fileName, 108);
 
       // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
       // Standard file: 0x0F = DEWR all protected (read-only)
@@ -2576,7 +2576,7 @@ debugLog(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) ->
       this.emulator.writeMemory32(fibPtr + 140, eTicks);
 
       // fib_Comment (80 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 144, "", 79);
+      this.writeFixedCString(fibPtr + 144, "", 80);
 
 debugLog(
         `[dos.library] Examine: ${fileName} (${
@@ -2724,8 +2724,8 @@ debugLog(`[dos.library] ExNext: No more entries`);
       const dirEntryType = stats.isDirectory() || isDirListing ? 2 : -3;
       this.emulator.writeMemory32(fibPtr + 4, dirEntryType);
 
-      // fib_FileName (108 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 8, fileName, 107);
+      // fib_FileName (108 bytes, NUL-terminated C string per dos/dos.h)
+      this.writeFixedCString(fibPtr + 8, fileName, 108);
 
       // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
       // Standard file: 0x0F = DEWR all protected (read-only)
@@ -2751,7 +2751,7 @@ debugLog(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) ->
       this.emulator.writeMemory32(fibPtr + 140, xnTicks);
 
       // fib_Comment (80 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 144, "", 79);
+      this.writeFixedCString(fibPtr + 144, "", 80);
 
 debugLog(
         `[dos.library] ExNext: ${fileName} (${
@@ -4600,6 +4600,26 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
    * Helper: Write BCPL string to memory
    * BCPL strings have a length byte followed by characters (no null terminator)
    */
+  /**
+   * Write a fixed-size NUL-terminated C string field, zero-padded.
+   *
+   * FileInfoBlock's fib_FileName and fib_Comment are plain C strings: the
+   * NDK's dos/dos.h declares `TEXT fib_FileName[108]` and documents it as
+   * null terminated. They were being written as BCPL strings (a leading
+   * length byte), which made every filename a real Amiga door reads back
+   * begin with a control character - correct door code broke here while
+   * working on real hardware.
+   */
+  private writeFixedCString(address: number, str: string, fieldSize: number): void {
+    const bytes = Math.min(str.length, fieldSize - 1);
+    for (let i = 0; i < bytes; i++) {
+      this.emulator.writeMemory(address + i, str.charCodeAt(i) & 0xff);
+    }
+    for (let i = bytes; i < fieldSize; i++) {
+      this.emulator.writeMemory(address + i, 0);
+    }
+  }
+
   private writeBCPLString(address: number, str: string, maxLen: number): void {
     const len = Math.min(str.length, maxLen);
 
@@ -5309,8 +5329,8 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
       this.emulator.writeMemory(fibPtr + 6, (dirEntryType >> 8) & 0xff);
       this.emulator.writeMemory(fibPtr + 7, dirEntryType & 0xff);
 
-      // fib_FileName (108 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 8, fileName, 107);
+      // fib_FileName (108 bytes, NUL-terminated C string per dos/dos.h)
+      this.writeFixedCString(fibPtr + 8, fileName, 108);
 
       // fib_Protection (4 bytes)
       const protection = stats.isDirectory() ? 0 : 0x0f;

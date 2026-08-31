@@ -2,7 +2,6 @@ BBSCMD=GALAGA
 TYPE=TS
 LOCATION=Doors/galaga
 DESCRIPTION=Classic Galaga arcade game - shoot the alien invaders
-ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade

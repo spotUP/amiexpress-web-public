@@ -2,7 +2,6 @@ BBSCMD=LIVECHAT
 TYPE=TS
 LOCATION=Doors/livechat
 DESCRIPTION=Real-time multi-user chat with neo-blessed UI
-ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Communication
