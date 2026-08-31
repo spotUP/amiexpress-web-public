@@ -19,7 +19,7 @@ import { EnemySystem } from '../game/enemies';
 import { DrawingSystem } from '../game/drawing';
 import { SuperQixData, Direction } from '../game/types';
 import {
-  FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES, GAME_TICK_MS,
+  FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES, GAME_TICK_MS, CELL_WIDTH,
   SKULLS_AT_LEVEL_START, SKULLS_PER_RELEASE, SKULL_REVERSE_COOLDOWN_MS,
   SPARX_BASE_SPEED, MARKER_MOVE_DELAY, getLevelConfig,
 } from '../game/constants';
@@ -253,8 +253,15 @@ export async function theBorderShowsTheTimeMeterFillingInPairs(): Promise<void> 
   engine.initLevel(1);
   data.state = 'playing';
 
-  const countRed = (painted: string) =>
-    (painted.match(/\{red-bg\}/g) || []).length;
+  // Counted in CELLS, not in colour tags: adjacent squares of the same
+  // colour are emitted as one run, so counting tags counts runs.
+  const countRed = (painted: string) => {
+    let red = 0;
+    const re = /\{red-bg\}(?:\{[a-z]+-fg\})?(.*?)\{\//g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(painted)) !== null) red += m[1].length;
+    return red / CELL_WIDTH;
+  };
 
   // Empty meter: no red squares on the frame. (Skulls are drawn on a red
   // background too, so they are removed for this measurement.)

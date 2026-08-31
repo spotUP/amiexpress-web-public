@@ -253,3 +253,73 @@ export async function nothingIsDrawnOverThePictureDuringTheHandOver(): Promise<v
     );
   }
 }
+
+/**
+ * Enter cuts the hand-over short.
+ *
+ * Reported live 2026-08-31: "i need to be able to dismiss all dialogs with
+ * enter as well adhd people dont have time to wait". The reveal, the tally
+ * and the announcement run for several seconds together.
+ */
+export async function enterSkipsTheHandOver(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+  data.sparxList = [];
+  data.claimedPercent = data.targetPercent + 1;
+  engine.update();
+
+  assert.ok(engine.isRevealing(), 'the hand-over should be running');
+
+  assert.ok(engine.skipOutro(), 'it should report that it skipped');
+  assert.ok(!engine.isRevealing(), 'and the sequence is over');
+  assert.ok(!engine.advanceLevelOutro(), 'with nothing left to advance');
+}
+
+/** Skipping when there is nothing to skip does nothing. */
+export async function skippingWithNoHandOverRunningIsHarmless(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+  engine.initLevel(1);
+
+  assert.ok(!engine.skipOutro());
+}
+
+/**
+ * The tally is drawn over the picture, not on a black band across it.
+ *
+ * Reported live: "remove the black background from the texts drawn when i
+ * finish a level etc".
+ */
+export async function thePanelDoesNotBlackOutThePicture(): Promise<void> {
+  const data = createData();
+  let frame = '';
+  const engine = new QixEngine(data, c => { frame = c; });
+
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+  data.sparxList = [];
+  data.claimedPercent = data.targetPercent + 1;
+  engine.update();
+
+  // Run the reveal out and into the tally.
+  for (let i = 0; i < FIELD_WIDTH + 5; i++) engine.advanceLevelOutro();
+
+  const rows = frame.split('\n');
+  const bonusRow = rows.find(row => row.includes('BONUS'));
+  assert.ok(bonusRow, 'the tally should be showing');
+
+  assert.ok(
+    !/\{black-bg\}\s{10,}/.test(bonusRow!),
+    'the tally should not be painted on a black band'
+  );
+
+  // The row still carries the ground it is drawn over.
+  const claimed = rows.filter(r => r.includes(`{${BG_COLORS.claimed}-bg}`)).length;
+  const bare = rows.filter(r => r.includes(`{${BG_COLORS.unclaimed}-bg}`)).length;
+  assert.ok(claimed + bare > 0, 'the field should still be drawn behind it');
+}
