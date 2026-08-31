@@ -4,6 +4,13 @@
  */
 
 import {
+  terrainSprite,
+  pengoSprite,
+  enemySprite,
+  eggSprite,
+  paint,
+} from './sprites';
+import {
   PengoData,
   Direction,
   CellType,
@@ -456,45 +463,36 @@ export class PengoGame {
     for (let y = 0; y < GRID_HEIGHT; y++) {
       let line = '';
       for (let x = 0; x < GRID_WIDTH; x++) {
-        // Check for Pengo
+        const ground = terrainSprite(this.data.grid[y][x]);
+
+        // Pengo
         if (this.data.pengo.x === x && this.data.pengo.y === y && !this.data.pengo.isDead) {
-          line += '{cyan-fg}P{/}';
+          line += paint(pengoSprite(ground.bg));
           continue;
         }
 
-        // Check for enemy
+        // Sno-Bee
         const enemy = this.data.enemies.find(e => e.x === x && e.y === y && e.state !== 'dead');
         if (enemy) {
-          const color = enemy.state === 'stunned' ? 'yellow' : 'red';
-          line += `{${color}-fg}S{/}`;
+          line += paint(enemySprite(enemy.state === 'stunned', ground.bg));
           continue;
         }
 
-        // Check for egg
+        // Egg
         const egg = this.data.eggs.find(e => e.x === x && e.y === y);
         if (egg) {
-          line += '{magenta-fg}o{/}';
+          line += paint(eggSprite(ground.bg));
           continue;
         }
 
-        // Render cell
-        const cell = this.data.grid[y][x];
-        switch (cell) {
-          case 'wall':
-            line += '{blue-fg}+{/}';
-            break;
-          case 'ice':
-            line += '{white-fg}#{/}';
-            break;
-          case 'diamond':
-            line += '{yellow-fg}*{/}';
-            break;
-          default:
-            line += ' ';
-        }
+        line += paint(ground);
       }
-      // Add spacing for wider display
-      lines.push(line.split('').join(' '));
+
+      // No space-padding: every cell is already CELL_WIDTH characters, so
+      // the row is the width it claims to be. The old render pushed a space
+      // between every character to fake a wider board, which also pushed one
+      // into the middle of anything two characters long.
+      lines.push(line);
     }
 
     lines.push('');

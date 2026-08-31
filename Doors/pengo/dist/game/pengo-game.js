@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PengoGame = void 0;
+const sprites_1 = require("./sprites");
 const constants_1 = require("./constants");
 class PengoGame {
     constructor(data, onRender) {
@@ -395,42 +396,31 @@ class PengoGame {
         for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
             let line = '';
             for (let x = 0; x < constants_1.GRID_WIDTH; x++) {
-                // Check for Pengo
+                const ground = (0, sprites_1.terrainSprite)(this.data.grid[y][x]);
+                // Pengo
                 if (this.data.pengo.x === x && this.data.pengo.y === y && !this.data.pengo.isDead) {
-                    line += '{cyan-fg}P{/}';
+                    line += (0, sprites_1.paint)((0, sprites_1.pengoSprite)(ground.bg));
                     continue;
                 }
-                // Check for enemy
+                // Sno-Bee
                 const enemy = this.data.enemies.find(e => e.x === x && e.y === y && e.state !== 'dead');
                 if (enemy) {
-                    const color = enemy.state === 'stunned' ? 'yellow' : 'red';
-                    line += `{${color}-fg}S{/}`;
+                    line += (0, sprites_1.paint)((0, sprites_1.enemySprite)(enemy.state === 'stunned', ground.bg));
                     continue;
                 }
-                // Check for egg
+                // Egg
                 const egg = this.data.eggs.find(e => e.x === x && e.y === y);
                 if (egg) {
-                    line += '{magenta-fg}o{/}';
+                    line += (0, sprites_1.paint)((0, sprites_1.eggSprite)(ground.bg));
                     continue;
                 }
-                // Render cell
-                const cell = this.data.grid[y][x];
-                switch (cell) {
-                    case 'wall':
-                        line += '{blue-fg}+{/}';
-                        break;
-                    case 'ice':
-                        line += '{white-fg}#{/}';
-                        break;
-                    case 'diamond':
-                        line += '{yellow-fg}*{/}';
-                        break;
-                    default:
-                        line += ' ';
-                }
+                line += (0, sprites_1.paint)(ground);
             }
-            // Add spacing for wider display
-            lines.push(line.split('').join(' '));
+            // No space-padding: every cell is already CELL_WIDTH characters, so
+            // the row is the width it claims to be. The old render pushed a space
+            // between every character to fake a wider board, which also pushed one
+            // into the middle of anything two characters long.
+            lines.push(line);
         }
         lines.push('');
         const timeColor = this.data.timeRemaining <= 30 ? 'red' : 'yellow';
