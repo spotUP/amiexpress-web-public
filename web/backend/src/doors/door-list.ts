@@ -63,34 +63,55 @@ export function applyInstallMetadata<T extends Record<string, unknown>>(
  *
  * @param bbsRoot absolute path to the BBS data directory
  */
+/**
+ * Find a door's directory on disk, and its size.
+ *
+ * `door.path` may name a directory or a file - AquaScan's .info has
+ * `LOCATION=AquaScan/AquaScan.020` - so a file resolves to its containing
+ * directory, which is what a file browser needs. Tried in order: the recorded
+ * location, `Doors/<command>`, and its lower-cased form; `amigafs` makes each
+ * lookup case-insensitive, as an Amiga volume would be.
+ *
+ * Exported because the door-admin routes must resolve a door to exactly the
+ * same directory this list reports, and a second copy of the candidate order
+ * would be a second answer to the same question.
+ */
+export function resolveDoorDirectory(
+  bbsRoot: string,
+  door: { id?: string; command?: string; path?: string; location?: string; size?: number },
+): { size: number; resolvedPath?: string } {
+  let doorSize = door.size || 0;
+  let resolvedPath: string | undefined;
+
+  const doorPath = door.path || door.location || '';
+  if (doorPath) {
+    try {
+      const candidates = [
+        path.join(bbsRoot, doorPath),
+        path.join(bbsRoot, 'Doors', door.id || door.command || ''),
+        path.join(bbsRoot, 'Doors', (door.command || door.id || '').toLowerCase()),
+      ];
+      for (const testPath of candidates) {
+        if (amigafs.existsSync(testPath)) {
+          const stats = amigafs.statSync(testPath);
+          if (doorSize === 0) doorSize = stats.size;
+          resolvedPath = stats.isDirectory() ? testPath : path.dirname(testPath);
+          break;
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  return { size: doorSize, resolvedPath };
+}
+
 export async function buildDoorList(bbsRoot: string): Promise<DoorListEntry[]> {
   const { getDoors } = require('../handlers/door.handler');
   const allDoors = getDoors();
 
   const mapped = allDoors.map((door: any) => {
-    let doorSize = door.size || 0;
-    let resolvedPath: string | undefined;
-
+    const { size: doorSize, resolvedPath } = resolveDoorDirectory(bbsRoot, door);
     const doorPath = door.path || door.location || '';
-    if (doorPath) {
-      try {
-        // Compute absolute path to the door's directory for the file explorer.
-        // door.path may point to a file (e.g. AquaScan.020) or a directory.
-        const candidates = [
-          path.join(bbsRoot, doorPath),
-          path.join(bbsRoot, 'Doors', door.id || door.command),
-          path.join(bbsRoot, 'Doors', (door.command || door.id || '').toLowerCase()),
-        ];
-        for (const testPath of candidates) {
-          if (amigafs.existsSync(testPath)) {
-            const stats = amigafs.statSync(testPath);
-            if (doorSize === 0) doorSize = stats.size;
-            resolvedPath = stats.isDirectory() ? testPath : path.dirname(testPath);
-            break;
-          }
-        }
-      } catch (_) { /* ignore */ }
-    }
 
     return {
       id: door.id || door.command,

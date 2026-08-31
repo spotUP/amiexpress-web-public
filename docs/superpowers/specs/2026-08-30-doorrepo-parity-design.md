@@ -122,13 +122,20 @@ manages THIS board's installed doors.
 | method | path | purpose |
 |---|---|---|
 | GET | `/api/door-admin/installed` | installed doors: command, type, size, enabled, archive link, resolved metadata |
-| GET | `/api/door-admin/:cmd/files` | the door's directory listing |
-| GET | `/api/door-admin/:cmd/file?p=` | one file's contents |
-| GET | `/api/door-admin/:cmd/info` | the command's tooltypes |
-| PUT | `/api/door-admin/:cmd/info` | write tooltypes |
-| POST | `/api/door-admin/:cmd/enabled` | enable / disable |
-| DELETE | `/api/door-admin/:cmd` | delete, streaming the step log |
+| GET | `/api/door-admin/installed/:cmd/files` | the door's directory listing |
+| GET | `/api/door-admin/installed/:cmd/file?p=` | one file's contents |
+| GET | `/api/door-admin/installed/:cmd/info` | the command's tooltypes |
+| PUT | `/api/door-admin/installed/:cmd/info` | write tooltypes |
+| POST | `/api/door-admin/installed/:cmd/enabled` | enable / disable |
+| DELETE | `/api/door-admin/installed/:cmd` | delete, streaming the step log |
 | POST | `/api/door-admin/installed` | record an install (DOORREPO) |
+
+The per-door routes are nested under `/installed/` rather than sitting beside
+it (`/api/door-admin/:cmd/files`, as this table said until phase B was built).
+`:cmd` is `[A-Za-z0-9]{1,12}`, which matches the literal string `installed`, so
+a board with a command named `INSTALLED` would make `GET /api/door-admin/installed`
+ambiguous between the list and that door. One extra path segment removes the
+ambiguity entirely.
 
 **Responses use the pipe-delimited text family the C door already parses**
 (`FILES|<count>|<junk>` then `<size>|<isJunk>|<path>`), not JSON. C89 JSON
