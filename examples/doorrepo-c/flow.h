@@ -504,6 +504,25 @@ int flow_is_plain_alnum(const char *value);
  * second ad-hoc check. */
 int flow_validate_access_level(const char *input, long *value_out);
 
+/* Validates a sysop-typed STACK size. Digits only, 1-7 characters, and
+ * within 1024-1048576: below a kilobyte no 68K door starts, and a value
+ * past a megabyte is a typo rather than an intention on a machine whose
+ * whole address space this door already fills 500 KB of. On success returns
+ * 0 and writes the parsed value; on failure returns non-zero and leaves
+ * *value_out untouched. */
+int flow_validate_stack_size(const char *input, long *value_out);
+
+/* Validates a sysop-typed tooltype VALUE - the right-hand side of a
+ * KEY=value line, for the fields the .info editor lets a sysop change that
+ * are not numbers (TYPE, MENUNAME).
+ *
+ * Rejects: an empty value, anything longer than `max_len`, a '=' (which
+ * would make the BBS's parser read a second key), and any control
+ * character including CR and LF (which would split one tooltype into two,
+ * or truncate the file's remaining lines into a value). Returns 0 when the
+ * value is usable, non-zero otherwise. */
+int flow_validate_tooltype_value(const char *input, unsigned long max_len);
+
 /* ---- Install support ---------------------------------------------------
  *
  * Installing means three things a download does not: the archive is
@@ -702,6 +721,35 @@ long flow_compute_prior_access(long current_access, long new_access,
  * lines or the result would not fit `outsize`. */
 int flow_rewrite_access_lines(const char *content, char *out, unsigned long outsize,
                               long new_access, long prior_access);
+
+/* Sets ONE tooltype in an existing .info's raw text, in place.
+ *
+ * The general form of flow_rewrite_access_lines() above, and it keeps that
+ * function's central promise: every other line is copied through
+ * byte-for-byte, including its original line ending, because a production
+ * .info carries tooltypes this door has never heard of and an editor is not
+ * a licence to rewrite the file's shape.
+ *
+ *   - the first line whose key matches `key` (case-insensitively - a board
+ *     writes `Stack=` as readily as `STACK=`) is replaced with
+ *     "<key>=<value>\n" at its original position, in the door's own
+ *     canonical spelling of the key;
+ *   - any FURTHER line with that key is dropped, so the result never
+ *     carries two;
+ *   - if no such line exists, one is appended at the end;
+ *   - a `value` of NULL removes the tooltype instead of setting it, which
+ *     is how a field is cleared without leaving `KEY=` behind for the BBS's
+ *     parser to read as an empty string.
+ *
+ * ACCESS keeps its own function: disabling a door has to write ACCESS and
+ * DRACCESS as one decision (see flow_compute_prior_access), which a
+ * single-key setter cannot express.
+ *
+ * Bounded to FLOW_INFO_MAX_LINES like its sibling. Returns the length
+ * written to `out`, or -1 if the input has too many lines, the key is empty,
+ * or the result would not fit `outsize`. */
+int flow_rewrite_tooltype(const char *content, char *out, unsigned long outsize,
+                           const char *key, const char *value);
 
 /* ---- /files listing helpers ----
  *
@@ -1025,5 +1073,18 @@ int flow_path_has_info_suffix(const char *name);
  * own, and the caller's own checks decide what to do about that. */
 int flow_resolve_location(const char *location, const char *doors_dir,
                            char *out, unsigned long cap);
+
+/* ---- The door's own action log ------------------------------------------
+ *
+ * log_line() appends one line per action to LogFile: INSTALL, UNINSTALL,
+ * STRIP, ACCESS, TOOLTYPE, each followed by what it did. The history screen
+ * shows those back, so a sysop can see what a delete actually removed after
+ * the screen it scrolled past is gone.
+ */
+
+/* 1 when this log line records an action on a door, rather than one of the
+ * door's own diagnostics. Matched on the leading verb, case-insensitively,
+ * so a line's own wording can change without the screen losing it. */
+int flow_log_line_is_action(const char *line);
 
 #endif /* DOORREPO_FLOW_H */

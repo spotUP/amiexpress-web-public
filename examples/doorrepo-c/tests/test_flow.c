@@ -2771,6 +2771,177 @@ TEST(resolve_location_refuses_what_it_cannot_hold)
 }
 
 
+
+/* ---------------------------------------------------------------------
+ * flow_rewrite_tooltype - setting one field without reshaping the file
+ *
+ * The M-key editor's promise, and the reason it does not rebuild from a
+ * template: a production .info carries tooltypes this door has never heard
+ * of, and every one of them must survive an edit byte-for-byte.
+ */
+
+TEST(rewrite_tooltype_replaces_a_value_in_place)
+{
+    const char *raw = "TYPE=XIM\nLOCATION=Doors:X/y\nSTACK=20000\nNAME=Old\n";
+    char out[512];
+    int n;
+
+    n = flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "65536");
+    ASSERT_TRUE(n > 0, "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:X/y\nSTACK=65536\nNAME=Old\n",
+                  "only STACK changed, and in its own position");
+}
+
+TEST(rewrite_tooltype_appends_a_field_that_was_missing)
+{
+    const char *raw = "TYPE=XIM\nLOCATION=Doors:X/y\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "MENUNAME", "File Scan") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:X/y\nMENUNAME=File Scan\n",
+                  "appended at the end");
+}
+
+TEST(rewrite_tooltype_keeps_tooltypes_the_door_never_heard_of)
+{
+    /* The corruption this replaced the template rebuild to avoid. */
+    const char *raw = "BBSCMD=FS\nTYPE=XIM\nCATEGORY=Utilities\nMULTINODE=YES\n"
+                      "PRIORITY=SAME\nSTACK=20000\nDESCRIPTION=Scans files\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "40000") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "BBSCMD=FS\nTYPE=XIM\nCATEGORY=Utilities\nMULTINODE=YES\n"
+                       "PRIORITY=SAME\nSTACK=40000\nDESCRIPTION=Scans files\n",
+                  "every other tooltype survives byte-for-byte");
+}
+
+TEST(rewrite_tooltype_matches_the_key_whatever_its_casing)
+{
+    const char *raw = "Type=XIM\nStack=20000\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "8192") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "Type=XIM\nSTACK=8192\n",
+                  "matched Stack=, wrote the door's own spelling");
+}
+
+TEST(rewrite_tooltype_never_leaves_two_lines_with_one_key)
+{
+    /* A hand-edited or corrupted .info can carry a duplicate. */
+    const char *raw = "STACK=20000\nTYPE=XIM\nSTACK=99999\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "40000") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "STACK=40000\nTYPE=XIM\n", "the duplicate is dropped");
+}
+
+TEST(rewrite_tooltype_removes_a_field_when_the_value_is_null)
+{
+    /* Clearing a field must not leave KEY= behind, which the BBS's parser
+     * reads as an empty string rather than as absent. */
+    const char *raw = "TYPE=XIM\nBANNER=Screens:Old\nSTACK=20000\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "BANNER", (const char *) 0) > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\nSTACK=20000\n", "the line is gone entirely");
+}
+
+TEST(rewrite_tooltype_tolerates_crlf_and_a_missing_final_newline)
+{
+    const char *raw = "TYPE=XIM\r\nSTACK=20000";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "1024") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\r\nSTACK=1024\n",
+                  "the untouched line keeps its CRLF; the rewritten one is canonical");
+}
+
+TEST(rewrite_tooltype_refuses_rather_than_truncating)
+{
+    const char *raw = "TYPE=XIM\nSTACK=20000\n";
+    char out[8];
+
+    ASSERT_EQ(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "65536"), -1,
+              "a buffer that cannot hold the result is a refusal");
+    ASSERT_EQ(flow_rewrite_tooltype(raw, out, sizeof(out), "", "x"), -1,
+              "an empty key is refused");
+}
+
+
+
+TEST(stack_size_accepts_what_a_door_can_start_with)
+{
+    long v = 0;
+
+    ASSERT_EQ(flow_validate_stack_size("65536", &v), 0, "an ordinary door stack");
+    ASSERT_EQ(v, 65536L, "parsed");
+    ASSERT_EQ(flow_validate_stack_size("1024", &v), 0, "the floor");
+    ASSERT_EQ(flow_validate_stack_size("1048576", &v), 0, "the ceiling");
+}
+
+TEST(stack_size_rejects_what_would_not_start_or_is_a_typo)
+{
+    long v = 4242;
+
+    ASSERT_EQ(flow_validate_stack_size("512", &v), 1, "below a kilobyte no door starts");
+    ASSERT_EQ(flow_validate_stack_size("99999999", &v), 1, "past a megabyte is a typo");
+    ASSERT_EQ(flow_validate_stack_size("64k", &v), 1, "digits only");
+    ASSERT_EQ(flow_validate_stack_size("-4096", &v), 1, "no sign");
+    ASSERT_EQ(flow_validate_stack_size("", &v), 1, "no empty value");
+    ASSERT_EQ(v, 4242L, "the caller's value is untouched on every refusal");
+}
+
+TEST(tooltype_value_rejects_what_would_break_the_line)
+{
+    ASSERT_EQ(flow_validate_tooltype_value("File Scan", 40), 0, "an ordinary menu name");
+    ASSERT_EQ(flow_validate_tooltype_value("XIM", 8), 0, "a door type");
+    ASSERT_EQ(flow_validate_tooltype_value("", 40), 1, "empty is not a value");
+    ASSERT_EQ(flow_validate_tooltype_value("NAME=OTHER", 40), 1,
+              "an '=' would be read as a second key");
+    ASSERT_EQ(flow_validate_tooltype_value("two\nlines", 40), 1,
+              "a newline would split one tooltype into two");
+    ASSERT_EQ(flow_validate_tooltype_value("carriage\rreturn", 40), 1, "CR too");
+    ASSERT_EQ(flow_validate_tooltype_value("way too long for this field", 8), 1,
+              "over the field's length");
+}
+
+
+
+TEST(log_filter_keeps_the_actions_a_sysop_asks_about)
+{
+    ASSERT_EQ(flow_log_line_is_action("UNINSTALL OK cmd=HDRDROP files=3 aliases=1 shared=0"), 1,
+              "an uninstall record");
+    ASSERT_EQ(flow_log_line_is_action("INSTALL OK archive=CALC.LHA cmd=CALC binary=CALC/calc"), 1,
+              "an install record");
+    ASSERT_EQ(flow_log_line_is_action("TOOLTYPE OK cmd=FS STACK=65536"), 1, "a tooltype edit");
+    ASSERT_EQ(flow_log_line_is_action("ACCESS OK cmd=FS 0 -> 255"), 1, "an access edit");
+    ASSERT_EQ(flow_log_line_is_action("STRIP OK archive=X.LHA removed=4"), 1, "an ad strip");
+    ASSERT_EQ(flow_log_line_is_action("UNINSTALL FAILED: could not remove the .info"), 1,
+              "a failure is an action too - it is the one worth reading");
+}
+
+TEST(log_filter_drops_the_door_own_chatter)
+{
+    ASSERT_EQ(flow_log_line_is_action("fetching catalog page 2"), 0, "ordinary chatter");
+    ASSERT_EQ(flow_log_line_is_action(""), 0, "an empty line");
+    ASSERT_EQ(flow_log_line_is_action("INSTALLER FAILED to start"), 0,
+              "the verb must be the whole first word, not a prefix of one");
+    ASSERT_EQ(flow_log_line_is_action((const char *) 0), 0, "a NULL line");
+}
+
+TEST(log_filter_reads_the_verb_whatever_its_case_or_indent)
+{
+    ASSERT_EQ(flow_log_line_is_action("  uninstall ok cmd=X"), 1, "indented and lower-case");
+    ASSERT_EQ(flow_log_line_is_action("Install: CALC"), 1, "a colon ends the verb too");
+}
+
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -3032,6 +3203,20 @@ int main(void)
     RUN_TEST(delete_rules_never_hand_back_a_root);
     RUN_TEST(resolve_location_handles_every_spelling_a_board_uses);
     RUN_TEST(resolve_location_refuses_what_it_cannot_hold);
+    RUN_TEST(rewrite_tooltype_replaces_a_value_in_place);
+    RUN_TEST(rewrite_tooltype_appends_a_field_that_was_missing);
+    RUN_TEST(rewrite_tooltype_keeps_tooltypes_the_door_never_heard_of);
+    RUN_TEST(rewrite_tooltype_matches_the_key_whatever_its_casing);
+    RUN_TEST(rewrite_tooltype_never_leaves_two_lines_with_one_key);
+    RUN_TEST(rewrite_tooltype_removes_a_field_when_the_value_is_null);
+    RUN_TEST(rewrite_tooltype_tolerates_crlf_and_a_missing_final_newline);
+    RUN_TEST(rewrite_tooltype_refuses_rather_than_truncating);
+    RUN_TEST(stack_size_accepts_what_a_door_can_start_with);
+    RUN_TEST(stack_size_rejects_what_would_not_start_or_is_a_typo);
+    RUN_TEST(tooltype_value_rejects_what_would_break_the_line);
+    RUN_TEST(log_filter_keeps_the_actions_a_sysop_asks_about);
+    RUN_TEST(log_filter_drops_the_door_own_chatter);
+    RUN_TEST(log_filter_reads_the_verb_whatever_its_case_or_indent);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

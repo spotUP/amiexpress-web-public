@@ -2106,3 +2106,210 @@ int flow_path_has_info_suffix(const char *name)
     }
     return flow_prefix_ci(name + len - 5, ".info");
 }
+
+/* Case-insensitive key match. A board writes `Stack=` as readily as
+ * `STACK=`, and flow_parse_tooltype_line hands back the key as written. */
+static int flow_key_equals_ci(const char *a, const char *b)
+{
+    unsigned long i = 0;
+
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (tolower((unsigned char) a[i]) != tolower((unsigned char) b[i])) {
+            return 0;
+        }
+        i++;
+    }
+    return a[i] == '\0' && b[i] == '\0';
+}
+
+int flow_rewrite_tooltype(const char *content, char *out, unsigned long outsize,
+                           const char *key, const char *value)
+{
+    char new_line[FLOW_REWRITE_LINE_MAX];
+    const char *p;
+    unsigned long pos;
+    int line_count;
+    int emitted;
+
+    if (content == (const char *) 0 || out == (char *) 0 || outsize == 0
+        || key == (const char *) 0 || key[0] == '\0') {
+        return -1;
+    }
+
+    if (value != (const char *) 0) {
+        if ((unsigned long) strlen(key) + (unsigned long) strlen(value) + 3
+            > sizeof(new_line)) {
+            return -1;
+        }
+        strcpy(new_line, key);
+        strcat(new_line, "=");
+        strcat(new_line, value);
+        strcat(new_line, "\n");
+    } else {
+        new_line[0] = '\0';          /* NULL value means remove the tooltype */
+    }
+
+    pos = 0;
+    line_count = 0;
+    emitted = 0;
+    p = content;
+
+    while (*p != '\0') {
+        const char *q = p;
+        unsigned long span_len;
+        int is_target = 0;
+
+        while (*q != '\0' && *q != '\n') {
+            q++;
+        }
+        if (*q == '\n') {
+            q++;
+        }
+        span_len = (unsigned long) (q - p);
+
+        line_count++;
+        if (line_count > FLOW_INFO_MAX_LINES) {
+            return -1;
+        }
+
+        {
+            char linebuf[FLOW_REWRITE_LINE_MAX];
+
+            if (span_len + 1 <= sizeof(linebuf)) {
+                char parsed_key[32];
+                char parsed_value[256];
+
+                memcpy(linebuf, p, (size_t) span_len);
+                linebuf[span_len] = '\0';
+                if (flow_parse_tooltype_line(linebuf, parsed_key, sizeof(parsed_key),
+                                             parsed_value, sizeof(parsed_value)) == 0) {
+                    if (flow_key_equals_ci(parsed_key, key)) {
+                        is_target = 1;
+                    }
+                }
+
+                if (is_target) {
+                    if (!emitted && new_line[0] != '\0') {
+                        if (rewrite_append(out, outsize, &pos, new_line) != 0) {
+                            return -1;
+                        }
+                    }
+                    emitted = 1;
+                    /* A further line with this key is dropped: the result
+                     * must never carry two, the same rule ACCESS follows. */
+                } else if (rewrite_append(out, outsize, &pos, linebuf) != 0) {
+                    return -1;
+                }
+            } else {
+                /* Longer than the parse buffer: passed through unidentified
+                 * rather than risking a truncated key being misread as the
+                 * one being set. */
+                if (pos + span_len >= outsize) {
+                    return -1;
+                }
+                memcpy(out + pos, p, (size_t) span_len);
+                pos += span_len;
+            }
+        }
+
+        p = q;
+    }
+
+    if (!emitted && new_line[0] != '\0') {
+        if (rewrite_append(out, outsize, &pos, new_line) != 0) {
+            return -1;
+        }
+    }
+
+    if (pos >= outsize) {
+        return -1;
+    }
+    out[pos] = '\0';
+    return (int) pos;
+}
+
+int flow_validate_stack_size(const char *input, long *value_out)
+{
+    unsigned long len;
+    unsigned long i;
+    long value;
+
+    if (input == (const char *) 0 || value_out == (long *) 0) {
+        return 1;
+    }
+
+    len = (unsigned long) strlen(input);
+    if (len < 1 || len > 7) {
+        return 1;
+    }
+    for (i = 0; i < len; i++) {
+        if (!isdigit((unsigned char) input[i])) {
+            return 1;
+        }
+    }
+
+    value = atol(input);
+    if (value < 1024 || value > 1048576) {
+        return 1;
+    }
+
+    *value_out = value;
+    return 0;
+}
+
+int flow_validate_tooltype_value(const char *input, unsigned long max_len)
+{
+    unsigned long len;
+    unsigned long i;
+
+    if (input == (const char *) 0) {
+        return 1;
+    }
+
+    len = (unsigned long) strlen(input);
+    if (len == 0 || len > max_len) {
+        return 1;
+    }
+
+    for (i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) input[i];
+
+        /* '=' would make the BBS's parser read a second key out of one
+         * line; a control character would split the tooltype in two or
+         * swallow the lines after it. */
+        if (c == '=' || c < 32 || c == 127) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int flow_log_line_is_action(const char *line)
+{
+    static const char *verbs[] = {
+        "INSTALL", "UNINSTALL", "STRIP", "ACCESS", "TOOLTYPE", "DELETE"
+    };
+    unsigned long i;
+
+    if (line == (const char *) 0) {
+        return 0;
+    }
+    while (*line == ' ' || *line == '\t') {
+        line++;
+    }
+
+    for (i = 0; i < sizeof(verbs) / sizeof(verbs[0]); i++) {
+        unsigned long len = (unsigned long) strlen(verbs[i]);
+
+        if (flow_prefix_ci(line, verbs[i])) {
+            /* The verb must be the whole first word: "INSTALLER FAILED" is
+             * not an INSTALL record. */
+            char next = line[len];
+            if (next == '\0' || next == ' ' || next == ':') {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}

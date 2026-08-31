@@ -1788,7 +1788,11 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
                           int installed, int has_junk)
 {
     char bar[160];
-    const char *optional[10];
+    /* Sized above the number of parts that can be pushed below, not equal to
+     * it: this array was exactly full at ten, so the next key added to the
+     * screen wrote one past the end. flow_build_footer_bar drops what does
+     * not fit the width, so a spare slot costs nothing. */
+    const char *optional[16];
     int n = 0;
     int len;
 
@@ -1811,6 +1815,10 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * ever makes sense for an installed entry. */
     if (installed) {
         optional[n++] = "M=Access";
+        /* T edits the rest of the command config - TYPE, STACK, MENUNAME -
+         * and is gated the same way M is: an uninstalled archive has no
+         * .info to edit. */
+        optional[n++] = "T=Config";
     }
     optional[n++] = "A=Archive";
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
@@ -1827,6 +1835,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
     optional[n++] = "F=Find";
     optional[n++] = "C=System";
     optional[n++] = "L=Installed";
+    optional[n++] = "H=History";
     optional[n++] = "K=Patterns";
     if (owner_is_enabled() && !owner_is_logged_in()) {
         optional[n++] = "O=Owner";
@@ -4135,6 +4144,168 @@ static int read_info_raw(const char *info_path, char *out, unsigned long outsize
  * like strip_installed_door() does, and defends against "not installed"
  * even though the footer already hides M for that case (index_lookup()
  * NULL check, same pattern). */
+/* The .info editors' scratch, shared by both of them.
+ *
+ * Static rather than automatic: 4KB is far too much for a 68K door's stack.
+ * One pair rather than a pair each: do_edit_access and do_edit_tooltype are
+ * both called from the main event loop, one keypress at a time, and neither
+ * runs while the other does - two pairs cost 4KB of BSS out of the ~45KB the
+ * emulator's segment budget leaves this door.
+ */
+static char g_info_raw[2048];
+static char g_info_content[2048];
+
+/* The .info editor's other half: the fields that are not ACCESS.
+ *
+ * ACCESS keeps its own screen (do_edit_access below) because disabling a
+ * door writes ACCESS and DRACCESS as one decision - see
+ * flow_compute_prior_access, and the ruling recorded there. Everything else
+ * is one key, one value, and the file's shape must survive it: the edit goes
+ * through flow_rewrite_tooltype, which replaces that one line and copies
+ * every other byte - BBSCMD, CATEGORY, MULTINODE, a tooltype this door has
+ * never heard of - through untouched.
+ *
+ * Works the same on a real AmiExpress board as it does here: nothing below
+ * asks the BBS anything. The door reads the .info, rewrites one line, and
+ * writes it back through the same atomic path the install uses.
+ */
+static void do_edit_tooltype(const dr_config *cfg, const dr_entry *entry,
+                             ansi_buf *b, char *frame, long framecap,
+                             const ui_geometry *g)
+{
+    const char *cmdname = index_lookup(cfg, entry->archive);
+    char info_path[256];
+    char choice[4];
+    char value[128];
+    char msg[420];
+    const char *key;
+    unsigned long max_len;
+    long parsed;
+
+    if (cmdname == (const char *) 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("This archive is not installed - there is no command config to edit.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (flow_build_info_path(info_path, sizeof(info_path), cfg->bbscmd_dir, cmdname) < 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("The path to this command's config is too long to build.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    choice[0] = '\0';
+    if (!ui_text_prompt(b, frame, framecap, g,
+                        "Edit which field - T=Type  S=Stack  N=Menu name:",
+                        choice, 1)) {
+        return;                      /* empty answer = changed their mind */
+    }
+
+    switch (choice[0]) {
+    case 't': case 'T':
+        key = "TYPE";
+        max_len = 8;
+        break;
+    case 's': case 'S':
+        key = "STACK";
+        max_len = 7;
+        break;
+    case 'n': case 'N':
+        key = "MENUNAME";
+        max_len = 40;
+        break;
+    default:
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("Not a field this editor knows. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    value[0] = '\0';
+    sprintf(msg, "New %s:", key);
+    if (!ui_text_prompt(b, frame, framecap, g, msg, value, (int) max_len)) {
+        return;
+    }
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    if (strcmp(key, "STACK") == 0) {
+        if (flow_validate_stack_size(value, &parsed) != 0) {
+            ae_put("That is not a usable stack size: digits only, 1024-1048576.", 1);
+            ae_put("Nothing was changed.", 1);
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+    } else if (flow_validate_tooltype_value(value, max_len) != 0) {
+        sprintf(msg, "That is not a usable %s: no '=', no control characters,", key);
+        ae_put(msg, 1);
+        sprintf(msg, "and at most %lu characters. Nothing was changed.", max_len);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (!read_info_raw(info_path, g_info_raw, sizeof(g_info_raw))) {
+        sprintf(msg, "Could not read %s. Nothing was changed.", info_path);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (flow_rewrite_tooltype(g_info_raw, g_info_content, sizeof(g_info_content),
+                              key, value) < 0) {
+        ae_put("That edit would not fit this command's config, so nothing was", 1);
+        ae_put("changed. The .info may be unusually long or hand-edited.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (!write_info_file_atomic(cfg, info_path, g_info_content, "TOOLTYPE")) {
+        return;                      /* it reports its own failure */
+    }
+
+    sprintf(msg, "%s is now %s for %s.", key, value, cmdname);
+    ae_put(msg, 1);
+    sprintf(msg, "TOOLTYPE OK cmd=%s %s=%s", cmdname, key, value);
+    log_line(cfg, msg);
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
+}
+
 static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
                            ansi_buf *b, char *frame, long framecap,
                            const ui_geometry *g)
@@ -4146,13 +4317,6 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     long current_access;
     long new_access;
     long prior_access;
-    /* Static rather than automatic: 4KB combined is far too much for a
-     * 68K door's stack (same reasoning as UI_FRAME_BYTES/view_index above).
-     * do_edit_access() is single-threaded and non-reentrant, called once
-     * per M keypress from the main event loop, so a static scratch buffer
-     * is safe here. */
-    static char info_raw[2048];
-    static char info_content[2048];
     char msg[420];
     char logmsg[300];
 
@@ -4319,7 +4483,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
      * untouched. See read_info_raw()'s and flow_rewrite_access_lines()'s
      * own doc comments for why this replaced the old
      * flow_build_info_content() rebuild. */
-    if (!read_info_raw(info_path, info_raw, sizeof(info_raw))) {
+    if (!read_info_raw(info_path, g_info_raw, sizeof(g_info_raw))) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
         ansi_reset(b);
@@ -4333,7 +4497,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    if (flow_rewrite_access_lines(info_raw, info_content, sizeof(info_content),
+    if (flow_rewrite_access_lines(g_info_raw, g_info_content, sizeof(g_info_content),
                                   new_access, prior_access) < 0) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
@@ -4353,7 +4517,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     ansi_clear(b);
     ansi_flush(b);
 
-    if (!write_info_file_atomic(cfg, info_path, info_content, "ACCESS")) {
+    if (!write_info_file_atomic(cfg, info_path, g_info_content, "ACCESS")) {
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
         (void) ae_key();
@@ -4381,6 +4545,8 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
  * here so this loop's 'l'/'L' case (Task 4) can call it before its own
  * definition appears in the file. */
 static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat);
+static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                              const ui_geometry *g);
 /* The board's own doors, read from the BBS - see the block above
  * board_load() for why L needs both this and the screen above. */
 static int board_load(const dr_config *cfg);
@@ -4756,6 +4922,29 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 ansi_flush(&buf);
                 need_full_redraw = 1;
             }
+            break;
+        case 't': case 'T':
+            /* The rest of the command config - TYPE, STACK, MENUNAME. M
+             * keeps ACCESS, which is a different decision (it also writes
+             * DRACCESS). */
+            if (view.count > 0) {
+                do_edit_tooltype(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                                 (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'h': case 'H':
+            /* What this door has actually done. A delete prints its steps
+             * as it goes and they scroll away with the screen; this is
+             * where they can be read afterwards. */
+            history_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 0);
+            ansi_flush(&buf);
+            need_full_redraw = 1;
             break;
         case 'l': case 'L':
             /* The BOARD's doors when the BBS can be asked, DoorRepo's own
@@ -5401,6 +5590,192 @@ static void fb_size_text(char *out, unsigned long outsize, const fb_page *pg, in
         sprintf(out, "%luk", pg->sizes[row] / 1024UL);
     } else {
         sprintf(out, "%lu", pg->sizes[row]);
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+ * History screen - what this door has actually done
+ *
+ * The delete log the parity plan asks for, and the reason it is a screen
+ * rather than a line of status: a delete prints its steps as it goes, and
+ * they scroll away with the screen that showed them. Afterwards the only
+ * record is LogFile, which a sysop on a real Amiga board has no comfortable
+ * way to read from inside the door.
+ *
+ * Reads the log at open time, keeps the LAST HISTORY_MAX action lines
+ * (flow_log_line_is_action decides what counts), and pages through them
+ * newest-last. Nothing here asks the BBS anything, so it works the same on a
+ * real AmiExpress board as it does under the emulator.
+ */
+
+#define HISTORY_MAX      40
+#define HISTORY_LINE_MAX 96
+
+static char g_history[HISTORY_MAX][HISTORY_LINE_MAX];
+static int g_history_count;
+/* Index of the OLDEST kept line once the ring has wrapped; 0 until then. */
+static int g_history_start;
+
+/* The i'th kept line, oldest first. */
+static const char *history_line(int i)
+{
+    return g_history[(g_history_start + i) % HISTORY_MAX];
+}
+
+/* Fills g_history with the last HISTORY_MAX action lines from the log.
+ * Returns how many were kept, or -1 when the log could not be read at all -
+ * "no log yet" and "nothing worth showing in it" are different answers. */
+static int history_load(const dr_config *cfg)
+{
+    FILE *f;
+    char line[512];
+    int next = 0;
+    int total = 0;
+
+    g_history_count = 0;
+    g_history_start = 0;
+
+    f = fopen(cfg->log_file, "r");
+    if (f == (FILE *) 0) {
+        return -1;
+    }
+
+    while (fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        unsigned long len = (unsigned long) strlen(line);
+
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (!flow_log_line_is_action(line)) {
+            continue;
+        }
+
+        /* A ring, so a long log costs one pass and no memory beyond the
+         * window: the last HISTORY_MAX matching lines end up in the array,
+         * oldest at `next` once it has wrapped. */
+        strncpy(g_history[next], line, HISTORY_LINE_MAX - 1);
+        g_history[next][HISTORY_LINE_MAX - 1] = '\0';
+        next = (next + 1) % HISTORY_MAX;
+        total++;
+    }
+    fclose(f);
+
+    if (total == 0) {
+        return 0;
+    }
+
+    if (total < HISTORY_MAX) {
+        g_history_start = 0;
+        g_history_count = total;
+        return total;
+    }
+
+    /* Wrapped. The oldest kept line is wherever the ring was about to
+     * overwrite next; the screen reads through history_line() rather than
+     * the array being rotated straight - a rotate needs a second copy of the
+     * whole window, and 3.8KB of automatic storage does not belong on a 68K
+     * door's stack. */
+    g_history_start = next;
+    g_history_count = HISTORY_MAX;
+    return HISTORY_MAX;
+}
+
+static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                              const ui_geometry *g)
+{
+    ansi_buf buf;
+    int loaded;
+    int rows = g->rows - 6;
+    int top = 0;
+    int need_redraw = 1;
+
+    if (rows < 1) {
+        rows = 1;
+    }
+    loaded = history_load(cfg);
+
+    /* Opened on the newest entries: what a sysop wants after a delete is
+     * what just happened, not what happened first. */
+    if (g_history_count > rows) {
+        top = g_history_count - rows;
+    }
+
+    for (;;) {
+        int key;
+
+        if (need_redraw) {
+            int i;
+
+            ansi_begin(&buf, frame, framecap);
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, "History");
+
+            if (loaded < 0) {
+                ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                ansi_text(&buf, 3, 3, "No log file yet - nothing has been installed or removed.",
+                          g->cols - 6);
+            } else if (g_history_count == 0) {
+                ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                ansi_text(&buf, 3, 3, "The log has no installs or removals in it.", g->cols - 6);
+            } else {
+                for (i = 0; i < rows && top + i < g_history_count; i++) {
+                    const char *line = history_line(top + i);
+                    int failed = (strstr(line, "FAILED") != (char *) 0);
+
+                    ansi_color(&buf, failed ? ANSI_RED : ANSI_WHITE, ANSI_BLACK, 0);
+                    ansi_text(&buf, 3 + i, 3, line, g->cols - 6);
+                }
+            }
+
+            {
+                char footer[96];
+                sprintf(footer, "%d entr%s   Up/Down  PgUp/PgDn  Q=Back",
+                        g_history_count, g_history_count == 1 ? "y" : "ies");
+                ansi_color(&buf, ANSI_CYAN, ANSI_BLACK, 1);
+                ansi_text(&buf, g->rows - 1, 3, footer, g->cols - 6);
+            }
+
+            ansi_flush(&buf);
+            need_redraw = 0;
+        }
+
+        key = ae_key();
+        switch (key) {
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, framecap);
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
+        default:
+            break;
+        }
+
+        {
+            int action = ui_nav_action(key);
+            int before = top;
+
+            if (action == FLOW_NAV_UP && top > 0) {
+                top--;
+            } else if (action == FLOW_NAV_DOWN && top + rows < g_history_count) {
+                top++;
+            } else if (action == FLOW_NAV_PGUP) {
+                top = (top > rows) ? top - rows : 0;
+            } else if (action == FLOW_NAV_PGDN) {
+                top = (top + rows < g_history_count - rows) ? top + rows
+                    : ((g_history_count > rows) ? g_history_count - rows : 0);
+            } else if (action == FLOW_NAV_HOME) {
+                top = 0;
+            } else if (action == FLOW_NAV_END) {
+                top = (g_history_count > rows) ? g_history_count - rows : 0;
+            }
+            if (top != before) {
+                need_redraw = 1;
+            }
+        }
     }
 }
 
