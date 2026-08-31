@@ -23,6 +23,9 @@ exports.theDemoWillNotHopIntoACar = theDemoWillNotHopIntoACar;
 exports.theDemoHopsWhenTheRoadIsClear = theDemoHopsWhenTheRoadIsClear;
 exports.theDemoWillNotHopIntoWater = theDemoWillNotHopIntoWater;
 exports.theDemoStartsOnTheBank = theDemoStartsOnTheBank;
+exports.everyTitleRowIsTheSameLength = everyTitleRowIsTheSameLength;
+exports.everyTitleRowStartsAtTheSameColumn = everyTitleRowStartsAtTheSameColumn;
+exports.theLettersLineUpAcrossRows = theLettersLineUpAcrossRows;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const attract_1 = require("../game/attract");
@@ -229,5 +232,58 @@ async function theDemoWillNotHopIntoWater() {
 async function theDemoStartsOnTheBank() {
     const { data } = (0, fixture_1.startedLevel)(1);
     assert_1.default.strictEqual(data.frog.y, constants_1.GRID_HEIGHT - 1);
+}
+/**
+ * Every row of the title starts at the same column.
+ *
+ * Reported live 2026-08-31 with a screenshot: "the frogger logo looks like
+ * some rows etc are offset". titleGrid trimmed the trailing spaces off each
+ * row, so the rows came out different lengths - 60, 61, 60, 60, 61 - and
+ * titleLines centres by row length, so each row was padded by a different
+ * amount and the letters sheared apart.
+ */
+async function everyTitleRowIsTheSameLength() {
+    const grid = (0, attract_1.titleGrid)();
+    const lengths = new Set(grid.map(row => row.length));
+    assert_1.default.strictEqual(lengths.size, 1, `the title rows are ${grid.map(r => r.length).join(', ')} long`);
+}
+/**
+ * ...and the ink starts at the same column on every row.
+ *
+ * Measured by where the first COLOURED run begins, not by counting leading
+ * spaces: the title is painted as background colour, so once the tags are
+ * stripped the whole line is spaces and counting them measures nothing.
+ */
+async function everyTitleRowStartsAtTheSameColumn() {
+    const inkColumn = (line) => {
+        let column = 0;
+        const parts = line.split(/(\{[a-z]+-bg\}|\{\/[a-z]+-bg\})/);
+        let painted = false;
+        for (const part of parts) {
+            if (part.startsWith('{/')) {
+                painted = false;
+                continue;
+            }
+            if (part.startsWith('{')) {
+                painted = true;
+                continue;
+            }
+            if (painted)
+                return column;
+            column += part.length;
+        }
+        return column;
+    };
+    const columns = new Set((0, attract_1.titleLines)(80).map(inkColumn));
+    assert_1.default.strictEqual(columns.size, 1, `the rows start at columns ${[...columns].join(', ')}`);
+}
+/** The letters line up: each column is the same letter on every row. */
+async function theLettersLineUpAcrossRows() {
+    const grid = (0, attract_1.titleGrid)();
+    // The first column that has ink in it should be the same on the rows that
+    // make up the upright of the F - the letter is a straight stem.
+    const inkAt = (row) => row.indexOf('#');
+    assert_1.default.strictEqual(inkAt(grid[0]), inkAt(grid[2]), "the F's stem should be in one column on every row");
+    assert_1.default.strictEqual(inkAt(grid[2]), inkAt(grid[4]));
 }
 //# sourceMappingURL=attract.test.js.map

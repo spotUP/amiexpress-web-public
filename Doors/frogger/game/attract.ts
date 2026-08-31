@@ -85,7 +85,10 @@ export function titleGrid(): string[] {
     }
   });
 
-  return grid.map(row => row.join('').replace(/\s+$/, ''));
+  // Every row the same length. Trimming the trailing spaces left the rows
+  // with different lengths, and titleLines centres by row length - so each
+  // row was padded by a different amount and the letters sheared apart.
+  return grid.map(row => row.join(''));
 }
 
 /**
@@ -119,7 +122,9 @@ export function titleLines(width: number): string[] {
     }
     flush();
 
-    const pad = Math.max(0, Math.floor((width - row.length) / 2));
+    // Centred on the WHOLE title, not on this row: every row has to start
+    // at the same column or the letters shear.
+    const pad = Math.max(0, Math.floor((width - titleWidth()) / 2));
     return ' '.repeat(pad) + out;
   });
 }
