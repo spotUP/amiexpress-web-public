@@ -441,8 +441,19 @@ export class ConfigRepository extends BaseRepository<any> {
     const fields: string[] = [];
     const values: any[] = [];
 
+    // Only keys that are actually COLUMNS. The API's ConferenceConfig type
+    // carries `name`, which lives in ConfConfig.info and not in this table -
+    // and one unknown key made better-sqlite3 throw at prepare, so every UI
+    // save (the form always sends name) updated the mirror for NONE of its
+    // fields, silently, forever.
+    const columns = new Set(
+      (this.prepare('PRAGMA table_info(conference_config)').all() as Array<{ name: string }>).map(
+        c => c.name
+      )
+    );
     Object.entries(updates).forEach(([key, value]) => {
       if (key === 'id' || key === 'conference_id' || key === 'created_at' || key === 'updated_at') return;
+      if (!columns.has(key)) return;
 
       fields.push(`${key} = ?`);
       values.push(typeof value === 'boolean' ? (value ? 1 : 0) : value);

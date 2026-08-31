@@ -350,7 +350,21 @@ console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
    * Update ConfConfig.info to add new conference
    * express.e:31791 - reads NCONFS, NAME.n, LOCATION.n
    */
-  async updateConfConfig(conferenceId: number, conferenceName: string, location: string): Promise<void> {
+  async updateConfConfig(
+    conferenceId: number,
+    conferenceName: string,
+    location: string,
+    options: {
+      /**
+       * Only the CREATE path may raise NCONFS. A rename that reached a
+       * conference id above the count (stale mirror row, racing delete)
+       * used to grow the board and write an EMPTY LOCATION.n - minting a
+       * ghost conference whose directory the next refresh guessed by
+       * number, which is the cross-conference aliasing class again.
+       */
+      allowGrow?: boolean;
+    } = {}
+  ): Promise<void> {
     const confConfigPath = path.join(this.bbsRoot, 'ConfConfig.info');
 
     if (!fs.existsSync(confConfigPath)) {
@@ -365,8 +379,13 @@ console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
     const currentNconfs = nconfsStr ? parseInt(nconfsStr, 10) || 0 : 0;
 
     // Check if conference ID is valid
-    if (conferenceId > currentNconfs + 1) {
+    if (conferenceId > currentNconfs + 1 || (!options.allowGrow && conferenceId > currentNconfs)) {
       throw new Error(`Conference ID ${conferenceId} is too high - current NCONFS is ${currentNconfs}`);
+    }
+    if (!location || !location.trim()) {
+      // express.e:31861 - an empty LOCATION.n erases the conference's
+      // directory binding. Never write one.
+      throw new Error(`Refusing to write an empty LOCATION.${conferenceId}`);
     }
 
     // Only the three keys this call owns are written. ConfConfig.info holds

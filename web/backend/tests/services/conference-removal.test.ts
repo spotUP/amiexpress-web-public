@@ -41,14 +41,21 @@ function makeBoard(conferences: number): string {
   return root;
 }
 
-/** A user file that records what was written back to it. */
-function makeUsers(access: string[]) {
-  const users = access.map((confAccess, index) => ({ slotNumber: index, confAccess }));
+/** A user file that records what was written back, and to which slot. */
+function makeUsers(access: string[], withSlots = true) {
+  const users = access.map((confAccess, index) => ({
+    ...(withSlots ? { slotNumber: index + 1 } : {}),
+    confAccess,
+  }));
+  const writes: Array<{ slot: number; access: string }> = [];
   return {
     users,
+    writes,
     readAllUsers: () => users.map((u) => ({ ...u })),
-    updateUserDataFile: jest.fn((user: { confAccess?: string }, slot: number) => {
-      users[slot].confAccess = user.confAccess ?? '';
+    writeConferenceAccessAt: jest.fn((slot: number, access: string) => {
+      if (slot < 1) throw new Error(`invalid slot ${slot}`);
+      writes.push({ slot, access });
+      users[slot - 1].confAccess = access;
     }),
   };
 }
@@ -127,6 +134,23 @@ describe('removing a conference from the middle', () => {
     expect(users.users[1].confAccess).toBe('XXX_______');
     // Nothing to move.
     expect(users.users[2].confAccess).toBe('__________');
+    // And every write named its 1-based slot - the slot is where the record
+    // sits, not a field a stale import may have zeroed.
+    expect(users.writes.map((w) => w.slot)).toEqual([1, 2]);
+  });
+
+  it('derives the slot from the record position when the carrier has none', async () => {
+    // readAllUsers built users whose slotNumber was never set; the old
+    // migration then wrote every one of them "into" slot 0 - which
+    // fs.writeSync turned into slot 1's bytes. That destroyed the -TCB!-
+    // account on the live board on 2026-08-31.
+    const users = makeUsers(['XXXXXXXXXX', 'XX_X______'], false);
+    const service = new ConferenceRemovalService(root, { users });
+
+    await service.remove(3);
+
+    expect(users.writes.map((w) => w.slot)).toEqual([1, 2]);
+    expect(users.writes.every((w) => w.slot >= 1)).toBe(true);
   });
 
   it('moves every mirror table keyed by conference, not just one', async () => {
@@ -256,6 +280,33 @@ describe('the conference\'s files', () => {
     const after = readTooltypeMap(path.join(root, 'ConfConfig.info'));
     expect(after.get('LOCATION.3')).toBe('BBS:Conf4');
     expect(fs.existsSync(path.join(root, 'Conf4', 'MsgBase', '1'))).toBe(true);
+  });
+
+  it('refuses even when the other LOCATION spells the directory in a different case', async () => {
+    // Amiga volumes are case-insensitive and so is the macOS dev host;
+    // BBS:CONF3/ and BBS:Conf3 are one directory however the strings differ.
+    fs.writeFileSync(
+      path.join(root, 'ConfConfig.info'),
+      'NCONFS=3\nNAME.1=One\nLOCATION.1=BBS:Conf1\nNAME.2=Beavis\nLOCATION.2=BBS:CONF3/\nNAME.3=test\nLOCATION.3=BBS:Conf3\n'
+    );
+    const service = new ConferenceRemovalService(root);
+
+    const result = await service.remove(3, { removeFiles: true });
+
+    expect(result.filesRemoved).toBeNull();
+    expect(fs.existsSync(path.join(root, 'Conf3', 'MsgBase', '1'))).toBe(true);
+  });
+
+  it('copies user.keys and user.misc too, because the migration can touch them', async () => {
+    fs.writeFileSync(path.join(root, 'user.data'), Buffer.alloc(232));
+    fs.writeFileSync(path.join(root, 'user.keys'), Buffer.alloc(56));
+    fs.writeFileSync(path.join(root, 'user.misc'), Buffer.alloc(248));
+    const service = new ConferenceRemovalService(root);
+
+    const { backupDir } = await service.remove(3);
+
+    expect(fs.existsSync(path.join(backupDir, 'user.keys'))).toBe(true);
+    expect(fs.existsSync(path.join(backupDir, 'user.misc'))).toBe(true);
   });
 
   it('refuses to delete a directory that is another conference\'s home', async () => {

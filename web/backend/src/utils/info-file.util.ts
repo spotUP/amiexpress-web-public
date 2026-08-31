@@ -533,6 +533,20 @@ export class InfoFileWriteError extends Error {
  * silently wrote the original bytes back, so set/delete looked like
  * they succeeded while the on-disk file was unchanged.
  */
+/**
+ * Write-then-rename, because some of these files ARE the board.
+ *
+ * ConfConfig.info defines which conferences exist; a crash or a concurrent
+ * reader mid-writeFileSync sees a truncated registry. rename(2) on the same
+ * filesystem is atomic, so a reader gets the whole old file or the whole new
+ * one, never the middle.
+ */
+function atomicWrite(filePath: string, data: Buffer | string): void {
+  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, filePath);
+}
+
 export function writeInfoFile(info: InfoFile): void {
   if (info.isBinary) {
     if ((info as InfoFileInternal)._fallback) {
@@ -548,7 +562,7 @@ export function writeInfoFile(info: InfoFile): void {
 
     if (info.tooltypes.length === 0 && info.iconData.length === 0) {
       // Opaque binary without a recognized tooltype section.
-      fs.writeFileSync(info.filePath, info.rawBuffer);
+      atomicWrite(info.filePath, info.rawBuffer);
       return;
     }
 
@@ -591,7 +605,7 @@ export function writeInfoFile(info: InfoFile): void {
   // reason.
   const ends = info.trailingNewline ?? true;
   const textBuf = Buffer.from(lines + (lines && ends ? eol : ''), 'latin1');
-  fs.writeFileSync(info.filePath, Buffer.concat([textBuf, info.iconData]));
+  atomicWrite(info.filePath, Buffer.concat([textBuf, info.iconData]));
 }
 
 /**

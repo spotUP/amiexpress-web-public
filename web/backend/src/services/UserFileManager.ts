@@ -1047,6 +1047,10 @@ console.warn(
         // Generate user ID from slot number (1-indexed in AmiExpress)
         const userId = `user-${i + 1}`;
         const user = this.fileStructsToUser(userStruct, keysStruct, miscStruct, userId, userDataStats.mtime);
+        // The slot IS the position in the file. The struct carries its own
+        // slotNumber field but stale imports leave it wrong; the offset the
+        // record was read from is the only truth a write-back can use.
+        user.slotNumber = i + 1;
         users.push(user);
       }
 
@@ -1062,8 +1066,68 @@ console.error('[UserFileManager] Error reading user files:', error);
    * Update a specific user's record in user.data, user.keys, and user.misc
    * Writes to the correct slot position (slots are 1-indexed in AmiExpress)
    */
+
+  /**
+   * Byte offset of conferenceAccess[10] inside a user.data record.
+   *
+   * Locked by a unit test against serializeUserStruct with a marker string,
+   * so a struct change that moves the field fails the test instead of
+   * silently patching the wrong bytes.
+   */
+  public conferenceAccessOffset(): number {
+    const marker = '@@ACCESS@@';
+    const probe = this.serializeUserStruct(
+      this.userToFileStruct(
+        {
+          username: 'probe',
+          confAccess: marker,
+          created: new Date(0),
+          lastLogin: new Date(0),
+        } as unknown as User,
+        1
+      )
+    );
+    const at = probe.indexOf(Buffer.from(marker, 'latin1'));
+    if (at < 0) throw new Error('conferenceAccessOffset: marker not found');
+    return at;
+  }
+
+  /**
+   * Patch ONLY the conferenceAccess bytes of one user.data record.
+   *
+   * The conference removal used updateUserDataFile for this, which
+   * round-trips the whole account through User and back - hardcoding
+   * creditDays, lineLength, baud and friends on the way, and rewriting
+   * user.keys and user.misc that the caller never meant to touch. Ten bytes
+   * change; ten bytes are written.
+   */
+  public writeConferenceAccessAt(slotNumber: number, access: string): void {
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+      throw new Error(`writeConferenceAccessAt: invalid slot ${slotNumber}`);
+    }
+    this.ensureUserFilesReady();
+    const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE + this.conferenceAccessOffset();
+    const bytes = Buffer.alloc(10, 0);
+    bytes.write(access.slice(0, 10), 0, 'latin1');
+    const fd = fs.openSync(this.userDataPath, 'r+');
+    try {
+      fs.writeSync(fd, bytes, 0, 10, offset);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
   public updateUserDataFile(user: User, slotNumber: number): void {
     try {
+      // Slot 1 is the first record. A slot of 0 computed offset -232, and
+      // fs.writeSync with a negative position writes at the CURRENT position
+      // - byte 0 - so every caller that forgot the slot serialized its user
+      // over slot 1's record. That is how the -TCB!- account was destroyed
+      // on 2026-08-31: a conference removal migrated 30+ users, each "into"
+      // slot 0, each landing on slot 1. Loud refusal, never a guess.
+      if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+        throw new Error(`updateUserDataFile: invalid slot ${slotNumber} for ${user.username}`);
+      }
       this.ensureUserFilesReady();
       // Convert to file structs
       const userStruct = this.userToFileStruct(user, slotNumber);

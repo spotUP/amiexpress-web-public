@@ -20,6 +20,50 @@ import * as path from 'path';
 export class ConferenceConfigService {
   private configRepo: ConfigRepository;
   private conferenceSetup: ConferenceSetupService;
+  /**
+   * One conference write at a time. Create, update and delete all
+   * read-then-write the same files with awaits in between; two admins (or
+   * an admin racing the change-bus refresh) could interleave and each be
+   * told "success" about a board neither described. A promise chain is
+   * enough - this is one process.
+   */
+  private writeLock: Promise<unknown> = Promise.resolve();
+
+  private serialize<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.writeLock.then(work, work);
+    this.writeLock = run.catch(() => undefined);
+    return run;
+  }
+
+  private async createConferenceConfigImpl(
+    config: Omit<ConferenceConfig, 'id' | 'created_at' | 'updated_at'>,
+    context: RequestContext
+  ): Promise<ConferenceConfig> {
+    return this.serialize(() => this.createConferenceConfigImpl(config, context));
+  }
+
+  private async updateConferenceConfigImpl(
+    conferenceId: number,
+    updates: Partial<ConferenceConfig>,
+    context: RequestContext
+  ): Promise<ConferenceConfig> {
+    return this.serialize(() => this.updateConferenceConfigImpl(conferenceId, updates, context));
+  }
+
+  deleteConferenceConfig(
+    conferenceId: number,
+    context: RequestContext,
+    options: ConferenceRemovalOptions = {}
+  ): Promise<{
+    deleted: boolean;
+    keptOnDisk: string | null;
+    filesRemoved: string | null;
+    renumbered: boolean;
+    usersMigrated: number;
+    nconfs: number;
+  }> {
+    return this.serialize(() => this.deleteConferenceConfigImpl(conferenceId, context, options));
+  }
 
   constructor(private database: Database) {
     this.configRepo = database.getConfigRepository();
@@ -152,25 +196,41 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
 
     const bbsRoot = appConfig.get('dataDir');
     const confConfig = loadConfConfig(bbsRoot);
-    const confEntry = confConfig?.entries[conferenceId - 1];
 
-    // The name the sysop typed, not a lookup of an entry that does not exist
-    // yet. This read `entries[id - 1]` for a conference being CREATED, always
-    // missed, and fell back to "Conference N" - so the name on the form was
-    // discarded every time.
-    const conferenceName = validated.name?.trim() || confEntry?.name || `Conference ${conferenceId}`;
-    // BBS:Conf7/, the way every other LOCATION.n on this board is written -
-    // an Amiga path with its assign, not a bare relative name - and Conf7,
-    // not Conf07, which is the directory the entrypoint creates.
-    //
-    // And NOT simply Conf<id>. Directories do not move when conferences
-    // renumber, so after a middle delete the number and the directory drift
-    // apart - on this board, conference 12 lives in BBS:Conf13/. Handing a
-    // new conference the directory its NUMBER suggests handed it Beavis
-    // Collection's directory, and the delete-files switch then destroyed it.
-    // The directory must be one that no conference references and that does
-    // not exist.
-    const location = confEntry?.location || this.freeConferenceDirectory(confConfig, bbsRoot);
+    // The id is NOT the client's to choose. NCONFS is a count, so the only
+    // id a create can mean is count+1; anything lower is an EXISTING
+    // conference - the old code found its entry, reused its directory, and
+    // updateConfConfig then overwrote its NAME with the new one. Two admins
+    // with stale dialogs did exactly that. Anything higher left a stray
+    // Conf<N>.info landmine after the too-high check fired post-mutation.
+    const nconfs = confConfig?.entries.length ?? 0;
+    if (conferenceId !== nconfs + 1) {
+      throw new Error(
+        `Conference ${conferenceId} cannot be created: this board has ${nconfs}, so the ` +
+        `next conference is ${nconfs + 1}. Reload the page and try again.`
+      );
+    }
+
+    // The runtime derives message and bulletin paths from the conference
+    // NUMBER (MessageFileManager, bbs-paths.util), so the directory must be
+    // Conf<id> - anything else posts one conference's messages into
+    // another's base. When Conf<id> is already some conference's home (the
+    // board renumbered and directories stayed put), creating is refused
+    // until the drift is healed rather than armed.
+    const wantedDir = `Conf${conferenceId}`;
+    const dirOwner = (confConfig?.entries ?? []).findIndex(e =>
+      (e.location || '').replace(/^.*:/, '').replace(/\/+$/, '').toLowerCase() === wantedDir.toLowerCase()
+    );
+    if (dirOwner >= 0) {
+      throw new Error(
+        `Cannot create conference ${conferenceId}: its directory ${wantedDir} is conference ` +
+        `${dirOwner + 1} (${confConfig?.entries[dirOwner]?.name ?? 'unnamed'})'s home. ` +
+        `The board's numbers and directories have drifted apart after a removal.`
+      );
+    }
+
+    const conferenceName = validated.name?.trim() || `Conference ${conferenceId}`;
+    const location = `BBS:${wantedDir}/`;
 
     // DISK FIRST, then the mirror, then the config row - in that order,
     // because the order is what the database enforces.
@@ -204,7 +264,9 @@ console.log(`[ConferenceConfigService] Created Conf${conferenceId}.info`);
     // And no try/catch around either: a conference that is not on disk does
     // not exist, so swallowing the failure and writing a config row for it
     // would report success for nothing.
-    await this.conferenceSetup.updateConfConfig(conferenceId, conferenceName, location);
+    await this.conferenceSetup.updateConfConfig(conferenceId, conferenceName, location, {
+      allowGrow: true,
+    });
 console.log(`[ConferenceConfigService] Registered conference ${conferenceId} in ConfConfig.info`);
 
     // Rebuilds the board's list and mirrors the new conference into the
@@ -224,21 +286,6 @@ console.log(`[ConferenceConfigService] Registered conference ${conferenceId} in 
       context.ipAddress, context.userAgent);
 
     return newConfig;
-  }
-
-  /**
-   * A directory for a NEW conference: unreferenced and nonexistent.
-   *
-   * Learned the destructive way. Conference numbers renumber on delete and
-   * directories stay put, so `Conf<id>` can already be another conference's
-   * home. The first free slot is taken - free meaning no LOCATION.n on the
-   * board resolves to it AND nothing by that name is on disk.
-   */
-  private freeConferenceDirectory(
-    confConfig: ReturnType<typeof loadConfConfig>,
-    bbsRoot: string
-  ): string {
-    return freeConferenceDirectory(confConfig?.entries ?? [], bbsRoot);
   }
 
   /**
@@ -317,8 +364,27 @@ console.error('[ConferenceConfigService] Conference list refresh failed (disk is
     const renamed = (validated as { name?: string }).name;
     if (renamed !== undefined && renamed !== oldConfig.name) {
       const bbsRoot = appConfig.get('dataDir');
-      const location = loadConfConfig(bbsRoot)?.entries[conferenceId - 1]?.location ?? '';
-      await this.conferenceSetup.updateConfConfig(conferenceId, renamed, location);
+      const entries = loadConfConfig(bbsRoot)?.entries ?? [];
+      const entry = entries[conferenceId - 1];
+      if (!entry) {
+        // A rename can only rename something ConfConfig.info has. Reaching
+        // here with a mirror-only row used to GROW the board and write an
+        // empty LOCATION - a ghost conference whose directory the next
+        // refresh guessed by number.
+        throw new Error(
+          `Conference ${conferenceId} is not in ConfConfig.info - it cannot be renamed. ` +
+          `The mirror row is stale; a restart will prune it.`
+        );
+      }
+      const taken = entries.findIndex(
+        (e, i) => i !== conferenceId - 1 && (e.name || '').trim().toLowerCase() === renamed.trim().toLowerCase()
+      );
+      if (taken >= 0) {
+        // Disk would accept the duplicate; the mirror's UNIQUE(name) then
+        // fails silently and the two disagree forever. Refuse with the facts.
+        throw new Error(`Conference ${taken + 1} is already named "${renamed}".`);
+      }
+      await this.conferenceSetup.updateConfConfig(conferenceId, renamed, entry.location || `BBS:Conf${conferenceId}/`);
     }
 
     // The mirror is best-effort and comes AFTER the disk write: a conference
@@ -359,7 +425,7 @@ console.error(`[ConferenceConfigService] Mirror update failed for conference ${c
    * every message posted there and every file uploaded to it. It is kept
    * unless the caller asks for it, and reported either way.
    */
-  async deleteConferenceConfig(
+  private async deleteConferenceConfigImpl(
     conferenceId: number,
     context: RequestContext,
     options: ConferenceRemovalOptions = {}
@@ -429,29 +495,3 @@ console.error(`[ConferenceConfigService] Mirror delete failed for conference ${c
   }
 }
 
-/**
- * A directory for a NEW conference: unreferenced and nonexistent.
- *
- * Learned the destructive way. Conference numbers renumber on delete and
- * directories stay put, so `Conf<id>` can already be another conference's
- * home - on this board, conference 12 lived in BBS:Conf13/. Handing a new
- * conference the directory its NUMBER suggests handed it Beavis Collection's
- * directory, and the delete-files switch then destroyed it.
- */
-export function freeConferenceDirectory(
-  entries: Array<{ location?: string }>,
-  bbsRoot: string
-): string {
-  const referenced = new Set(
-    entries
-      .map(e => (e.location || '').replace(/^.*:/, '').replace(/\/+$/, '').toLowerCase())
-      .filter(Boolean)
-  );
-  for (let k = 1; k < 1000; k += 1) {
-    const dir = `Conf${k}`;
-    if (referenced.has(dir.toLowerCase())) continue;
-    if (fs.existsSync(path.join(bbsRoot, dir))) continue;
-    return `BBS:${dir}/`;
-  }
-  throw new Error('No free Conf<N> directory below 1000 - clean up the BBS root');
-}

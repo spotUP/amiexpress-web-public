@@ -68,7 +68,7 @@ export interface ConferenceRemovalDeps {
   /** Reads and rewrites user.data. Injected so the migration is testable. */
   users?: {
     readAllUsers(): AccessCarrier[];
-    updateUserDataFile(user: AccessCarrier, slotNumber: number): void;
+    writeConferenceAccessAt(slotNumber: number, access: string): void;
   };
   /** SQLite, for the mirror tables that are keyed by conference id. */
   sqlite?: {
@@ -130,6 +130,15 @@ export class ConferenceRemovalService {
     const location = toolTypes.get(`LOCATION.${conferenceId}`) ?? '';
     const confDir = location ? path.join(this.bbsRoot, location.replace(/^.*:/, '')) : '';
 
+    // Every refusal this operation can make is decided HERE, before a byte
+    // changes. The first version validated the directory delete after the
+    // board had already shifted, so a refusal (or a throw) left the board
+    // renumbered while the API reported failure - and a retry with the same
+    // number then named the NEXT conference.
+    const removalPlan = options.removeFiles && confDir
+      ? this.planDirectoryRemoval(confDir, conferenceId, nconfs, toolTypes)
+      : { remove: false as const, reason: null };
+
     const backupDir = this.backupEverythingThisTouches(conferenceId, nconfs);
 
     this.shiftConfConfig(conferenceId, nconfs, toolTypes, confConfigPath);
@@ -139,30 +148,11 @@ export class ConferenceRemovalService {
     this.removeConfDbSlot(conferenceId);
 
     let filesRemoved: string | null = null;
-    if (options.removeFiles && confDir) {
-      // Refuse when the directory is still some other conference's home.
-      // Numbers renumber and directories stay put, so two LOCATION.n lines
-      // can name one directory - this board's conference 12 lived in
-      // BBS:Conf13/, a new conference 13 was handed the same directory by
-      // its number, and deleting it with the switch on destroyed conference
-      // 12's messages and files. The registrations were already updated
-      // above, so what is checked is the board as it now is.
-      const after = readTooltypeMap(confConfigPath);
-      const target = path.resolve(confDir);
-      let sharedWith: string | null = null;
-      for (let i = 1; i <= nconfs - 1; i += 1) {
-        const loc = (after.get(`LOCATION.${i}`) ?? '').replace(/^.*:/, '');
-        if (loc && path.resolve(this.bbsRoot, loc) === target) {
-          sharedWith = `${i} (${after.get(`NAME.${i}`) ?? 'unnamed'})`;
-          break;
-        }
-      }
-      if (sharedWith) {
-console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: it is conference ${sharedWith}'s directory`);
-      } else {
-        this.removeConferenceDirectory(confDir);
-        filesRemoved = confDir;
-      }
+    if (removalPlan.remove) {
+      this.removeConferenceDirectory(removalPlan.target);
+      filesRemoved = confDir;
+    } else if (options.removeFiles && removalPlan.reason) {
+console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: ${removalPlan.reason}`);
     }
 
     return {
@@ -194,6 +184,10 @@ console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: it is conference ${sh
 
     copy('ConfConfig.info');
     copy('user.data');
+    // user.keys and user.misc were rewritten by the old migration and were
+    // not in the copy - "everything this touches" has to mean everything.
+    copy('user.keys');
+    copy('user.misc');
     copy('Conf.DB');
     for (let i = 1; i <= nconfs; i += 1) copy(`Conf${i}.info`);
 
@@ -241,13 +235,22 @@ console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: it is conference ${sh
 
     const users = this.deps.users;
     if (users) {
-      for (const user of users.readAllUsers()) {
+      const all = users.readAllUsers();
+      for (let index = 0; index < all.length; index += 1) {
+        const user = all[index];
         const current = user.confAccess ?? user.conferenceAccess ?? '';
         const next = removeAccessPosition(current, conferenceId);
         if (next === current) continue;
-        const slot = user.slotNumber ?? 0;
-        users.updateUserDataFile({ ...user, confAccess: next, conferenceAccess: next }, slot);
-        migrated += 1;
+        // The slot is the record's position; the carrier's own field is
+        // trusted only when it is a sane 1-based value. A slot of 0 wrote
+        // every migrated user over slot 1 - see writeConferenceAccessAt.
+        const slot = user.slotNumber && user.slotNumber >= 1 ? user.slotNumber : index + 1;
+        try {
+          users.writeConferenceAccessAt(slot, next);
+          migrated += 1;
+        } catch (error) {
+console.error(`[ConferenceRemoval] disk access not migrated for slot ${slot}:`, error);
+        }
       }
     }
 
@@ -305,6 +308,14 @@ console.error('[ConferenceRemoval] users mirror not migrated (disk is correct):'
       ['bulletins', 'conferenceid'],
       ['mail_stats', 'conference_id'],
       ['conf_base', 'conference_id'],
+      // The first list stopped at six, and these three reference
+      // conferences(id) too. vote rows above the removed conference pointed
+      // one conference off forever, and a row keyed to the old LAST
+      // conference failed the deferred FK check at COMMIT - rolling back the
+      // whole migration while the API reported success.
+      ['vote_topics', 'conference_id'],
+      ['vote_status', 'conference_id'],
+      ['conference_config', 'conference_id'],
     ];
 
     const exec = (sql: string) => {
@@ -316,15 +327,22 @@ console.error('[ConferenceRemoval] users mirror not migrated (disk is correct):'
       exec('BEGIN IMMEDIATE');
       exec('PRAGMA defer_foreign_keys = ON');
 
+      // Order matters even with deferral: mail_stats, conf_base and the vote
+      // tables are ON DELETE CASCADE, and cascade ACTIONS are not deferred -
+      // deleting the parent row while shifted children already sat at its id
+      // wiped the conference above the removed one. So: children of the
+      // removed conference go, then its parent row, then parents shift, then
+      // children shift into the ids their parents now hold.
       for (const [table, column] of keyedByConference) {
         sqlite.prepare(`DELETE FROM ${table} WHERE ${column} = ?`).run(conferenceId);
+      }
+      sqlite.prepare('DELETE FROM conferences WHERE id = ?').run(conferenceId);
+      sqlite.prepare('UPDATE conferences SET id = id - 1 WHERE id > ?').run(conferenceId);
+      for (const [table, column] of keyedByConference) {
         sqlite
           .prepare(`UPDATE ${table} SET ${column} = ${column} - 1 WHERE ${column} > ?`)
           .run(conferenceId);
       }
-
-      sqlite.prepare('DELETE FROM conferences WHERE id = ?').run(conferenceId);
-      sqlite.prepare('UPDATE conferences SET id = id - 1 WHERE id > ?').run(conferenceId);
 
       exec('COMMIT');
     } catch (error) {
@@ -347,26 +365,60 @@ console.error('[ConferenceRemoval] Conf.DB slot not removed (disk is correct):',
   }
 
   /**
-   * Delete the conference's directory, and refuse anything that is not one.
+   * Decide - before anything mutates - whether the directory may go.
    *
-   * The path comes from a LOCATION tooltype, which is sysop-editable text, so
-   * it is resolved and checked against the BBS root before a recursive delete
-   * runs - a trusted string is not a guard.
+   * Case-insensitively and through realpath: Amiga volumes do not care about
+   * case and neither does the macOS dev host, so LOCATION.a=BBS:CONF13/ and
+   * LOCATION.b=BBS:Conf13/ are one directory however the strings differ, and
+   * a symlink is its target. The comparison walks the board AS IT WILL BE
+   * after the shift - every position except the one being removed - which is
+   * computable from the pre-shift map.
+   */
+  private planDirectoryRemoval(
+    confDir: string,
+    conferenceId: number,
+    nconfs: number,
+    toolTypes: Map<string, string>
+  ): { remove: true; target: string; reason: null } | { remove: false; reason: string | null } {
+    const canon = (p: string): string => {
+      try {
+        return fs.realpathSync(p).toLowerCase();
+      } catch {
+        return path.resolve(p).toLowerCase();
+      }
+    };
+
+    const root = canon(this.bbsRoot);
+    const target = canon(confDir);
+    if (target === root || !target.startsWith(root + path.sep)) {
+      throw new Error(`Refusing to delete ${confDir}: it is not inside the BBS root (${this.bbsRoot}).`);
+    }
+    if (!fs.existsSync(confDir)) {
+      return { remove: false, reason: 'the directory does not exist' };
+    }
+    if (!fs.statSync(confDir).isDirectory()) {
+      throw new Error(`Refusing to delete ${confDir}: it is not a directory.`);
+    }
+
+    for (let i = 1; i <= nconfs; i += 1) {
+      if (i === conferenceId) continue;
+      const loc = (toolTypes.get(`LOCATION.${i}`) ?? '').replace(/^.*:/, '');
+      if (!loc) continue;
+      if (canon(path.join(this.bbsRoot, loc)) === target) {
+        return {
+          remove: false,
+          reason: `it is conference ${i} (${toolTypes.get(`NAME.${i}`) ?? 'unnamed'})'s directory`,
+        };
+      }
+    }
+    return { remove: true, target: confDir, reason: null };
+  }
+
+  /**
+   * The recursive delete itself. Everything that can refuse already has, in
+   * planDirectoryRemoval, before the board changed.
    */
   private removeConferenceDirectory(confDir: string): void {
-    const resolved = path.resolve(confDir);
-    const root = path.resolve(this.bbsRoot);
-
-    if (resolved === root || !resolved.startsWith(root + path.sep)) {
-      throw new Error(
-        `Refusing to delete ${resolved}: it is not inside the BBS root (${root}).`
-      );
-    }
-    if (!fs.existsSync(resolved)) return;
-    if (!fs.statSync(resolved).isDirectory()) {
-      throw new Error(`Refusing to delete ${resolved}: it is not a directory.`);
-    }
-
-    fs.rmSync(resolved, { recursive: true, force: true });
+    fs.rmSync(confDir, { recursive: true, force: true });
   }
 }

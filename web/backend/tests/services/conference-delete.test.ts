@@ -60,7 +60,7 @@ describe('creating a conference', () => {
       location: 'Conf4',
       ndirs: 1,
     });
-    await setup.updateConfConfig(4, 'Elite', 'Conf4');
+    await setup.updateConfConfig(4, 'Elite', 'Conf4', { allowGrow: true });
 
     const after = readTooltypeMap(path.join(root, 'ConfConfig.info'));
     expect(after.get('NCONFS')).toBe('4');
@@ -86,7 +86,7 @@ describe('creating a conference', () => {
     // NCONFS is a COUNT. Registering 6 on a 3-conference board would make the
     // BBS walk 1..6 and find nothing behind 4 and 5.
     const setup = new ConferenceSetupService(root);
-    await expect(setup.updateConfConfig(6, 'Too far', 'Conf6')).rejects.toThrow(/too high/i);
+    await expect(setup.updateConfConfig(6, 'Too far', 'Conf6', { allowGrow: true })).rejects.toThrow(/too high/i);
   });
 
   it('round-trips: create it, then remove it, and the board is as it was', async () => {
@@ -94,7 +94,7 @@ describe('creating a conference', () => {
     const before = readTooltypeMap(path.join(root, 'ConfConfig.info'));
 
     await setup.setupConference({ conferenceId: 4, conferenceName: 'Elite', location: 'Conf4', ndirs: 1 });
-    await setup.updateConfConfig(4, 'Elite', 'Conf4');
+    await setup.updateConfConfig(4, 'Elite', 'Conf4', { allowGrow: true });
     await new ConferenceRemovalService(root).remove(4);
 
     const after = readTooltypeMap(path.join(root, 'ConfConfig.info'));

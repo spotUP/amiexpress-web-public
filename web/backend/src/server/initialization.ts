@@ -473,13 +473,16 @@ export async function initializeData(io?: SocketIOServer) {
     // Conferences, message bases and file areas, from disk - the same
     // path an admin write re-runs, so a rename reaches the board without
     // a restart. See refreshConferencesFromDisk.
-    await refreshConferencesFromDisk(bbsRoot);
-    await ensureRootScreens(bbsRoot);
-
-    // From here on, an admin write rebuilds the same way boot just did.
+    // The listener FIRST. It used to be registered after ensureRootScreens,
+    // so any throw in between left the server up with no listener - every
+    // admin write then "succeeded" while nothing reached the board until a
+    // restart, silently, which is the original rename bug wearing a new hat.
     onConferencesChanged(async () => {
       await refreshConferencesFromDisk(bbsRoot);
     });
+
+    await refreshConferencesFromDisk(bbsRoot);
+    await ensureRootScreens(bbsRoot);
 
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });
