@@ -75,13 +75,14 @@ describe('door enabled state', () => {
       expect(isDoorEnabled({ ACCESS: '255', DRACCESS: '10' })).toBe(false);
     });
 
-    it('remembers zero for a door that had no access tooltype', () => {
-      // A door with no ACCESS is reachable by everyone, which is level 0 -
-      // omitting DRACCESS here would make the door impossible to re-enable.
+    it('records the ABSENCE of a level for a door that had none', () => {
+      // This asserted DRACCESS=0, which is what the bug looked like from the
+      // inside: express.e:4703 denies ACCESS=0 to everyone, so restoring a
+      // door "to level 0" locked it. Absence is recorded as its own thing.
       const out = applyEnabledToTooltypes(tools([['TYPE', 'XIM']]), false);
 
       expect(valueOf(out, 'ACCESS')).toBe(String(DISABLED_ACCESS_LEVEL));
-      expect(valueOf(out, PRIOR_ACCESS_TOOLTYPE)).toBe('0');
+      expect(valueOf(out, PRIOR_ACCESS_TOOLTYPE)).not.toBe('0');
     });
 
     it('does not overwrite the remembered level when disabled twice', () => {
@@ -146,6 +147,53 @@ describe('door enabled state', () => {
     });
   });
 
+  describe('what express.e means by ACCESS=0', () => {
+    // express.e:4702-4707
+    //   access:=readToolTypeInt(tooltype,cmd,'ACCESS');
+    //   IF access=0 THEN RETURN TRUE          <- RESULT_NOT_ALLOWED (axenums.e:23)
+    //   IF (access>acsLevel) ... RETURN RESULT_NOT_ALLOWED
+    //
+    // readToolTypeInt returns -1 for an ABSENT tooltype (tooltypes.e:176-180),
+    // and -1 > acsLevel is never true. So absence means "everyone may run it"
+    // and 0 means "nobody may". They are opposites, and this code had them the
+    // wrong way round: a door with no ACCESS was recorded as level 0, and
+    // re-enabling it wrote ACCESS=0 and locked it permanently.
+
+    it('does not write ACCESS=0 when re-enabling a door that had none', () => {
+      const openToAll = tools([['TYPE', 'XIM'], ['LOCATION', 'DOORS:Wall/wall']]);
+
+      const disabled = applyEnabledToTooltypes(openToAll, false);
+      const restored = applyEnabledToTooltypes(disabled, true);
+
+      // Back to having no ACCESS at all, which is what "everyone" looks like.
+      expect(has(restored, 'ACCESS')).toBe(false);
+      expect(has(restored, PRIOR_ACCESS_TOOLTYPE)).toBe(false);
+    });
+
+    it('remembers that the door had no level, rather than calling it zero', () => {
+      const disabled = applyEnabledToTooltypes(tools([['TYPE', 'XIM']]), false);
+
+      // Whatever the sentinel is, it must not be a level express.e would
+      // enforce as "denied to everyone".
+      expect(valueOf(disabled, PRIOR_ACCESS_TOOLTYPE)).not.toBe('0');
+    });
+
+    it('parks a disabled door above any account that can exist', () => {
+      // express.e:4704 is `access > acsLevel`, so parking at 255 leaves a
+      // level-255 sysop able to run the door - and this board has ACS.255.
+      const disabled = applyEnabledToTooltypes(tools([['ACCESS', '10']]), false);
+
+      expect(Number(valueOf(disabled, 'ACCESS'))).toBeGreaterThan(255);
+    });
+
+    it('still restores a real level exactly', () => {
+      const disabled = applyEnabledToTooltypes(tools([['ACCESS', '30']]), false);
+      const restored = applyEnabledToTooltypes(disabled, true);
+
+      expect(valueOf(restored, 'ACCESS')).toBe('30');
+    });
+  });
+
   describe('the access level the admin is shown', () => {
     it('shows the normal level for a disabled door, not the parked one', () => {
       // Showing 255 here would be saved straight back as the level to
@@ -168,7 +216,11 @@ describe('door enabled state', () => {
     it('edits the remembered level, not the parked one', () => {
       // Otherwise enabling the door would restore the old level and throw the
       // sysop's edit away - the value they typed IS the door's normal level.
-      const disabled = tools([['TYPE', 'XIM'], ['ACCESS', '255'], ['DRACCESS', '10']]);
+      const disabled = tools([
+        ['TYPE', 'XIM'],
+        ['ACCESS', String(DISABLED_ACCESS_LEVEL)],
+        ['DRACCESS', '10'],
+      ]);
 
       const out = applyDoorFieldsToTooltypes(disabled, { min_security_level: 50 });
 
