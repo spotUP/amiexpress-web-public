@@ -16,7 +16,11 @@
     // imports from it (installArcadeSfx). The package's "import" condition
     // points at dist-esm, so without this an esbuild client bundle resolves
     // ./dist-esm/engines/ui/arcade/index.js and finds nothing there.
-    "engines/ui/arcade/**/*"
+    "engines/ui/arcade/**/*",
+    // cell-art is pure and a client bundle may draw sprites; without this
+    // the "import" condition points at a dist-esm path that never exists
+    // (the exact fault the arcade module shipped with).
+    "engines/graphics/cell-art/**/*"
   ],
   "exclude": [
     "node_modules",
