@@ -16,7 +16,8 @@
     "build": "tsc && esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
     "build:server": "tsc",
     "build:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "test": "tsx tests/run-tests.ts"
   },
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk"
