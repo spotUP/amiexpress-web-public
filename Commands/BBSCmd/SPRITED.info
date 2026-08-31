@@ -1,0 +1,8 @@
+BBSCMD=SPRITED
+TYPE=TS
+LOCATION=Doors/sprite-editor
+DESCRIPTION=Sprite Studio - browse and preview door sprite sheets
+MULTINODE=YES
+PRIORITY=SAME
+ACCESS=255
+CATEGORY=Utilities
