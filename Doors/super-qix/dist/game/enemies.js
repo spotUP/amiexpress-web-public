@@ -2,7 +2,7 @@
  * Super Qix - Enemy System
  * Handles Qix, Sparx, and Fuse behavior
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, QIX_BASE_SPEED, QIX_BASE_PULL, QIX_LEVEL_PULL, QIX_DRAWING_PULL, QIX_MAX_PULL, QIX_SPLIT_FROM_LEVEL, QIX_SPLIT_CHANCE_PER_TICK, QIX_MAX_COPIES, QIX_SEGMENT_COUNT, SPARX_BASE_SPEED, SKULLS_AT_LEVEL_START, SKULL_REVERSE_COOLDOWN_MS, FUSE_BASE_SPEED } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, QIX_BASE_SPEED, QIX_BASE_PULL, QIX_LEVEL_PULL, QIX_DRAWING_PULL, QIX_MAX_PULL, QIX_STEP_SCALE, QIX_NUDGE_CHANCE, QIX_SPLIT_FROM_LEVEL, QIX_SPLIT_CHANCE_PER_TICK, QIX_MAX_COPIES, QIX_SEGMENT_COUNT, SPARX_BASE_SPEED, SKULLS_AT_LEVEL_START, SKULL_REVERSE_COOLDOWN_MS, FUSE_BASE_SPEED } from './constants';
 /**
  * Enemy system managing Qix, Sparx, and Fuse
  */
@@ -345,7 +345,7 @@ export class EnemySystem {
      * wall reverses the component that hit it and the Qix keeps its speed.
      */
     updateQix(qix, speedScale = 1) {
-        const step = 0.1 * speedScale;
+        const step = QIX_STEP_SCALE * speedScale;
         let nextX = qix.x + qix.vx * step;
         let nextY = qix.y + qix.vy * step;
         // Reflect each axis independently, so sliding along a wall works and a
@@ -379,7 +379,7 @@ export class EnemySystem {
         // you every time you detach from a wall". So the nudge is pulled towards
         // the marker rather than being uniformly random, and pulled harder while
         // the player is drawing on a later level.
-        if (Math.random() < 0.05) {
+        if (Math.random() < QIX_NUDGE_CHANCE) {
             const speed = Math.hypot(qix.vx, qix.vy) || qix.speed;
             const current = Math.atan2(qix.vy, qix.vx);
             const wander = (Math.random() - 0.5) * 0.8;

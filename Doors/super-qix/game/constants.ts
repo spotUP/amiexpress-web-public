@@ -135,6 +135,35 @@ export const QIX_LEVEL_PULL = 0.09;     // added by level 16
 export const QIX_DRAWING_PULL = 0.08;   // added while the player is exposed
 export const QIX_MAX_PULL = 0.25;        // never a perfect homing missile
 
+/**
+ * How far a Gremlin travels per tick, per unit of its speed.
+ *
+ * This was an unnamed 0.1 buried in updateQix, and it silently divided the
+ * whole speed system: the level table ramps qixSpeed 1.0 -> 2.5, but at 0.1
+ * that came out as 3.3 -> 8.3 cells per second against a marker that moves
+ * 20 (one cell per MARKER_MOVE_DELAY). The Gremlin could not catch a moving
+ * player at ANY level, so the ramp was cosmetic and circling it cleared
+ * level after level. Reported 2026-08-31: "the main enemy moves too slow,
+ * too little and is very predictive, i completed 5 levels by just circling
+ * him".
+ *
+ * Sized so the fastest Gremlin (level 16, speed 2.75) reaches ~16 cells per
+ * second - four fifths of the marker's 20. It closes on a careless player
+ * and punishes a long draw, and it still cannot outrun one who is paying
+ * attention. theGremlinNeverOutrunsTheMarker pins that ceiling.
+ */
+export const QIX_STEP_SCALE = 0.19;
+
+/**
+ * Chance per tick that a Gremlin re-aims.
+ *
+ * At the old 0.05 it held one heading for twenty ticks - two thirds of a
+ * second of dead straight line - which is what made it read as "very
+ * predictive". Re-aiming about four times a second keeps the wander the FAQ
+ * describes without turning it into a jitter that cancels its own progress.
+ */
+export const QIX_NUDGE_CHANCE = 0.12;
+
 // The Gremlin divides on later levels, rarely, and never without limit
 // (FAQ 2.2 / 2.5.3: usually one, sometimes two or more).
 export const QIX_SPLIT_FROM_LEVEL = 7;

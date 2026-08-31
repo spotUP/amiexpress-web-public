@@ -656,6 +656,17 @@ async function startGame(): Promise<void> {
 function handleInput(key: string): void {
   const inputKey = normalizeKey(key);
 
+  // TEMPORARY (2026-08-31): diagnosing "Enter does not dismiss the dialog
+  // between levels". Records what actually arrives and in which state, so
+  // the gap between the engine (whose skip is tested and works) and the
+  // door's input path can be seen rather than guessed at. Remove once the
+  // cause is known.
+  console.log(
+    `[SuperQix INPUT] raw=${JSON.stringify(key)} normalized=${JSON.stringify(inputKey)} ` +
+    `state=${gameData?.state} outroRunning=${engine?.isRevealing() ?? 'n/a'} ` +
+    `transitionTimer=${gameData?.transitionTimer}`
+  );
+
   switch (gameData.state) {
     case "menu":
       handleMenuInput(inputKey);
