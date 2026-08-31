@@ -17,7 +17,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { InfoFileParser } from '../../src/services/info-file-parser';
+import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { FileCheckerConfigService } from '../../src/services/config-services/file-checker-config.service';
 import { LanguageConfigService } from '../../src/services/config-services/language-config.service';
 import { NodeConfigService } from '../../src/services/config-services/node-config.service';
@@ -25,14 +25,14 @@ import { config as appConfig } from '../../src/config';
 
 function writeInfo(filePath: string, entries: Record<string, string>): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, new InfoFileParser().write(new Map(Object.entries(entries))));
+  const text = Object.entries(entries).map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
+  fs.writeFileSync(filePath, text);
 }
 
 function readInfo(filePath: string): Map<string, string> {
-  const parsed = new InfoFileParser().parse(fs.readFileSync(filePath));
   const out = new Map<string, string>();
-  for (const [key, value] of parsed.toolTypes.entries()) {
-    out.set(key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase(), value);
+  for (const [key, value] of readTooltypeMap(filePath)) {
+    out.set(key.startsWith('&') ? key.substring(1) : key, value);
   }
   return out;
 }

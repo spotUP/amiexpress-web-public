@@ -14,21 +14,17 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { InfoFileParser } from '../../src/services/info-file-parser';
+import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { DriveConfigService } from '../../src/services/config-services/drive-config.service';
 import { config as appConfig } from '../../src/config';
 
 function writeDrivesInfo(root: string, entries: Record<string, string>): void {
-  const parser = new InfoFileParser();
-  const map = new Map(Object.entries(entries));
-  fs.writeFileSync(path.join(root, 'Drives.info'), parser.write(map));
+  const text = Object.entries(entries).map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
+  fs.writeFileSync(path.join(root, 'Drives.info'), text);
 }
 
 function readDrivesInfo(root: string): Map<string, string> {
-  const parsed = new InfoFileParser().parse(fs.readFileSync(path.join(root, 'Drives.info')));
-  const out = new Map<string, string>();
-  for (const [key, value] of parsed.toolTypes.entries()) out.set(key.toUpperCase(), value);
-  return out;
+  return readTooltypeMap(path.join(root, 'Drives.info'));
 }
 
 /** A config repository that knows nothing, which is the live case. */

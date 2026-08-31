@@ -4,13 +4,13 @@
  */
 
 import type { Database } from '../../database';
+import { readTooltypeMap } from '../../utils/info-file.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import { readConferenceFields } from './conference-info-file.service';
 import type { ConferenceConfig } from '../../database/types';
 import { ConferenceConfigSchema, type RequestContext } from '../config.schemas';
 import { ConferenceSetupService } from '../conference-setup.service';
 import { loadConfConfig } from '../conf-config.service';
-import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -39,7 +39,6 @@ console.warn('[ConferenceConfigService] ConfConfig.info not found or empty');
     }
 
     const configs: ConferenceConfig[] = [];
-    const parser = new InfoFileParser();
 
     for (let i = 1; i <= confConfig.confCount; i++) {
       const confInfoPath = path.join(bbsRoot, `Conf${i}.info`);
@@ -50,14 +49,8 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
       }
 
       try {
-        const buffer = fs.readFileSync(confInfoPath);
         const stats = fs.statSync(confInfoPath);
-        const parsed = parser.parse(buffer);
-
-        const toolTypes = new Map<string, string>();
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
+        const toolTypes = readTooltypeMap(confInfoPath);
 
         // Reader and writer share one map of field -> tooltype, so the two
         // cannot drift apart again. They had: six settings were written under

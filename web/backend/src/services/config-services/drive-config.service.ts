@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { DriveConfig } from '../../database/types';
 import { DriveConfigSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { mergeForWrite } from './config-merge.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
@@ -31,16 +31,9 @@ console.warn('[DriveConfigService] Drives.info not found, falling back to databa
     }
 
     try {
-      const buffer = fs.readFileSync(drivesInfoPath);
       const stats = fs.statSync(drivesInfoPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
       // Convert tooltypes to uppercase map
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(drivesInfoPath);
 
       // Parse DRIVE.N tooltypes
       const drives: DriveConfig[] = [];
@@ -243,28 +236,19 @@ console.error('[DriveConfigService] Error reading Drives.info:', error);
         { remove: change.removeNumber !== undefined ? [String(change.removeNumber)] : [] }
       );
 
-      // Start from what is already in the file so keys this service does not
-      // own survive.
+      // Only the DRIVE.n series is this writer's; applyTooltypes keeps the
+      // icon and every other tooltype in the file, so there is nothing to
+      // read back and re-assert.
       const toolTypes = new Map<string, string>();
-      if (fs.existsSync(drivesInfoPath)) {
-        const parsed = new InfoFileParser().parse(fs.readFileSync(drivesInfoPath));
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
-      }
-      for (const key of [...toolTypes.keys()]) {
-        if (/^DRIVE\.\d+$/.test(key)) toolTypes.delete(key);
-      }
-
       for (const drive of merged) {
         if (drive.enabled !== false) {
           toolTypes.set(`DRIVE.${drive.drive_number}`, drive.drive_path);
         }
       }
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(drivesInfoPath, infoData);
+      applyTooltypes(drivesInfoPath, toolTypes, {
+        removeKeys: key => /^DRIVE\.\d+$/.test(key),
+      });
 
 console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${merged.length} drives`);
     } catch (error) {

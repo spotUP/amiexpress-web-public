@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { ScreenType } from '../../database/types';
 import { ScreenTypeSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
@@ -30,15 +30,8 @@ console.warn('[ScreenConfigService] ScreenTypes.info not found');
     }
 
     try {
-      const buffer = fs.readFileSync(screenTypesPath);
       const stats = fs.statSync(screenTypesPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(screenTypesPath);
 
       const screenTypes: ScreenType[] = [];
       let typeNum = 1;
@@ -176,9 +169,9 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
         }
       }
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(screenTypesPath, infoData);
+      applyTooltypes(screenTypesPath, toolTypes, {
+        removeKeys: key => /^(TYPE|TITLE)\.\d+$/.test(key),
+      });
 
 console.log(`[ScreenConfigService] Wrote ${screenTypesPath} with ${typeNum} types`);
     } catch (error) {

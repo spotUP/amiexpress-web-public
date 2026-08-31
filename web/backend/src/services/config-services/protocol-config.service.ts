@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { Protocol } from '../../database/types';
 import { ProtocolSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
@@ -31,15 +31,8 @@ console.warn('[ProtocolConfigService] Protocols/XprTypes.info not found');
     }
 
     try {
-      const buffer = fs.readFileSync(xprTypesPath);
       const stats = fs.statSync(xprTypesPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(xprTypesPath);
 
       const protocols: Protocol[] = [];
       let protocolNum = 1;
@@ -227,9 +220,9 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
         }
       }
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(xprTypesPath, infoData);
+      applyTooltypes(xprTypesPath, toolTypes, {
+        removeKeys: key => /^(LIBRARY|TITLE)\.\d+$/.test(key),
+      });
 
 console.log(`[ProtocolConfigService] Wrote ${xprTypesPath} with ${protocolNum - 1} protocols`);
     } catch (error) {

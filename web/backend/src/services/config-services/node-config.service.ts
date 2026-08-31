@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { NodeConfig } from '../../database/types';
 import { NodeConfigSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -33,15 +33,8 @@ export class NodeConfigService {
           continue;
         }
 
-        const buffer = fs.readFileSync(nodeInfoPath);
         const stats = fs.statSync(nodeInfoPath);
-        const parser = new InfoFileParser();
-        const parsed = parser.parse(buffer);
-
-        const toolTypes = new Map<string, string>();
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
+        const toolTypes = readTooltypeMap(nodeInfoPath);
 
         nodeConfigs.push({
           id: nodeNum + 1,
@@ -97,15 +90,8 @@ console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
     }
 
     try {
-      const buffer = fs.readFileSync(nodeInfoPath);
       const stats = fs.statSync(nodeInfoPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(nodeInfoPath);
 
       return {
         id: nodeNumber,
@@ -284,25 +270,15 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
     const nodeInfoPath = path.join(bbsRoot, `Node${nodeNum}.info`);
 
     try {
-      // Start from what NodeN.info already holds. Building the map from
-      // nothing dropped every tooltype this form does not own on each save,
-      // and a node's icon carries more than the dozen fields edited here.
-      const toolTypes = new Map<string, string>();
-      if (fs.existsSync(nodeInfoPath)) {
-        const existing = new InfoFileParser().parse(fs.readFileSync(nodeInfoPath));
-        for (const [key, value] of existing.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
-      }
-
-      // Flags are written by presence, so an unset one has to be removed
-      // rather than left behind from the previous save.
-      for (const flag of [
+      // Flags are written by presence, so an unset one has to be dropped from
+      // the file rather than left behind from the previous save. Everything
+      // else a node's icon carries is left untouched.
+      const OWNED_FLAGS = [
         'CAPITOL_FILES', 'DEF_SCREENS', 'SENTBY_FILES', 'CALLERS_LOG', 'START_LOG',
         'UD_LOG', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
-      ]) {
-        toolTypes.delete(flag);
-      }
+      ];
+
+      const toolTypes = new Map<string, string>();
 
       if (config.node_start) toolTypes.set('NODESTART', config.node_start);
       if (config.priority !== undefined) toolTypes.set('PRIORITY', config.priority.toString());
@@ -320,9 +296,9 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       if (config.disable_quick_logons) toolTypes.set('DISABLE_QUICK_LOGONS', '1');
       if (config.view_password) toolTypes.set('VIEW_PASSWORD', '1');
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(nodeInfoPath, infoData);
+      applyTooltypes(nodeInfoPath, toolTypes, {
+        removeKeys: key => OWNED_FLAGS.includes(key),
+      });
 
 console.log(`[NodeConfigService] Wrote ${nodeInfoPath} with ${toolTypes.size} tooltypes`);
     } catch (error) {

@@ -214,11 +214,48 @@ function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
 }
 
 /**
+ * Does this buffer carry the placeholder "icon" the old
+ * `InfoFileParser.write()` produced?
+ *
+ * That writer emitted 256 zero bytes with 0xE3100001 at the front, followed
+ * by raw `KEY=VALUE\0` strings - no DiskObject, no gadget, no length-prefixed
+ * tooltype array. `GetDiskObject` returns NIL on it (or a NULL do_ToolTypes),
+ * so `FindToolType` finds nothing (tooltypes.e:215-218) and the settings the
+ * admin saved simply went silent.
+ *
+ * A real DiskObject opens with the same four bytes - magic 0xE310 then
+ * do_Version 1 - so the magic alone cannot tell them apart. What separates
+ * them is the Gadget: a real icon carries a non-zero Width and Height at
+ * offsets 12 and 14, while the placeholder is zero all the way to 256.
+ *
+ * Recognising it lets a file the admin already damaged be healed on the next
+ * save instead of throwing InfoFileWriteError forever.
+ */
+function isPlaceholderIconHeader(buf: Buffer): boolean {
+  if (buf.length < 256) return false;
+  if (buf.readUInt32BE(0) !== 0xe3100001) return false;
+  for (let i = 4; i < 256; i++) {
+    if (buf[i] !== 0) return false;
+  }
+  return true;
+}
+
+/**
  * Parse an .info file into an InfoFile record. Supports both binary
  * Amiga DiskObject icons and plain-text variants.
  */
 export function parseInfoFile(filePath: string): InfoFile {
-  const buffer = fs.readFileSync(filePath);
+  return parseInfoBuffer(fs.readFileSync(filePath), filePath);
+}
+
+/**
+ * The same parse, over bytes that are already in hand.
+ *
+ * Callers that read through a cache (the file-checker list reads fifteen
+ * icons on every page load) must not be forced to choose between the cache
+ * and the real parser.
+ */
+export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
   const isBinary = buffer.length > 2 && buffer[0] === 0xe3 && buffer[1] === 0x10;
 
   if (!isBinary) {
@@ -231,6 +268,21 @@ export function parseInfoFile(filePath: string): InfoFile {
       diskObject: Buffer.alloc(0),
       iconData,
       tooltypes,
+      rawBuffer: buffer,
+    };
+  }
+
+  if (isPlaceholderIconHeader(buffer)) {
+    // Not an icon at all - see isPlaceholderIconHeader. Read it as the text
+    // it effectively is, and drop the dead header so the next write produces
+    // something the BBS can read. The icon it replaced is already gone; that
+    // is not recoverable here, only stoppable, which Phase 1.1 does.
+    return {
+      filePath,
+      isBinary: false,
+      diskObject: Buffer.alloc(0),
+      iconData: Buffer.alloc(0),
+      tooltypes: extractTooltypesFallback(buffer.slice(256)),
       rawBuffer: buffer,
     };
   }
@@ -352,6 +404,98 @@ export function writeInfoFile(info: InfoFile): void {
   const lines = info.tooltypes.map(renderTooltype).join('\n');
   const textBuf = Buffer.from(lines + (lines ? '\n' : ''), 'utf8');
   fs.writeFileSync(info.filePath, Buffer.concat([textBuf, info.iconData]));
+}
+
+/**
+ * Parse an .info file, or hand back an empty text-mode record when it does
+ * not exist yet.
+ *
+ * A caller that has to create the file cannot use `parseInfoFile` - it reads
+ * from disk - and every one of them used to reach for a private writer
+ * instead. Text is what the new-door path already writes
+ * (`door-config.service.ts`), and `parseInfoFile` reads it back, so a created
+ * file round-trips through the same code an existing one does.
+ */
+export function parseOrCreateInfoFile(filePath: string): InfoFile {
+  if (fs.existsSync(filePath)) return parseInfoFile(filePath);
+  return {
+    filePath,
+    isBinary: false,
+    diskObject: Buffer.alloc(0),
+    iconData: Buffer.alloc(0),
+    tooltypes: [],
+    rawBuffer: Buffer.alloc(0),
+  };
+}
+
+/**
+ * Read a .info file as the map its callers want: uppercase key to value.
+ *
+ * Mirrors `FindToolType` (tooltypes.e:215-218): a commented-out tooltype is
+ * not set, and where a key appears twice the FIRST one wins. Reading through
+ * this means one parser owns the format - `InfoFileParser.parse` is a second,
+ * weaker one that splits the file on NUL bytes and therefore cannot read a
+ * plain-text .info at all, which is how a file written by one half of this
+ * codebase became unreadable to the other.
+ */
+export function tooltypeMap(info: InfoFile): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const tt of info.tooltypes) {
+    if (tt.commented) continue;
+    if (out.has(tt.key)) continue;
+    out.set(tt.key, tt.value);
+  }
+  return out;
+}
+
+/** `tooltypeMap` over a file on disk. */
+export function readTooltypeMap(filePath: string): Map<string, string> {
+  return tooltypeMap(parseInfoFile(filePath));
+}
+
+/**
+ * Write a set of tooltypes into a .info file, in place.
+ *
+ * This is the one writer for the admin's lookup-table files
+ * (ComputerList.info, XprTypes.info, Drives.info, ScreenTypes.info,
+ * Node<N>.info, a language's or file checker's icon, a conference's).
+ * Each of those used to build a complete `Map` and hand it to
+ * `InfoFileParser.write()`, which destroyed the icon and produced a file
+ * AmiExpress could not read.
+ *
+ * The icon image, the DiskObject and every tooltype the caller does not name
+ * survive. `removeKeys` names the keys the caller OWNS - the ones it is
+ * allowed to drop before writing its own set, which is how a flag written by
+ * presence gets switched off, and how an entry removed from a numbered series
+ * (`DRIVE.3`, `LIBRARY.7`) actually disappears.
+ *
+ * @param filePath    - the .info to write
+ * @param assignments - key/value pairs to set, in order
+ * @param opts.removeKeys - predicate over EXISTING uppercase keys: true drops
+ */
+export function applyTooltypes(
+  filePath: string,
+  assignments: Iterable<readonly [string, string]>,
+  opts: { removeKeys?: (key: string) => boolean } = {}
+): void {
+  const info = parseOrCreateInfoFile(filePath);
+
+  if (opts.removeKeys) {
+    const drop = opts.removeKeys;
+    info.tooltypes = info.tooltypes.filter(tt => !drop(tt.key));
+  }
+
+  for (const [key, value] of assignments) {
+    // An entry that already says this keeps its exact on-disk bytes. Nothing
+    // is gained by re-rendering it, and re-rendering costs its prefix and its
+    // spacing. A COMMENTED entry is still asserted: the caller is saying the
+    // setting must be live, and a parenthesised tooltype is not.
+    const existing = info.tooltypes.find(tt => tt.key === key.toUpperCase());
+    if (existing && !existing.commented && existing.value === value) continue;
+    updateTooltype(info, key, value, false);
+  }
+
+  writeInfoFile(info);
 }
 
 /**

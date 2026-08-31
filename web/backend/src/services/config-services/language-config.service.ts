@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { SystemLanguages, Language } from '../../database/types';
 import { SystemLanguagesSchema, LanguageSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -60,15 +60,8 @@ console.warn('[LanguageConfigService] Languages/ directory not found');
       let languageNum = 1;
       for (const infoFile of infoFiles) {
         const infoPath = path.join(languagesDir, infoFile);
-        const buffer = fs.readFileSync(infoPath);
         const stats = fs.statSync(infoPath);
-        const parser = new InfoFileParser();
-        const parsed = parser.parse(buffer);
-
-        const toolTypes = new Map<string, string>();
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
+        const toolTypes = readTooltypeMap(infoPath);
 
         const languageName = infoFile.replace(/\.info$/i, '');
 
@@ -200,23 +193,14 @@ console.error('[LanguageConfigService] Error reading Languages/ directory:', err
         fs.mkdirSync(languagesDir, { recursive: true });
       }
 
-      // Start from what the file already holds, so a tooltype this form does
-      // not own survives an edit to one that it does.
+      // Only the three fields this form owns are written; applyTooltypes
+      // leaves the icon and every other tooltype in the file alone.
       const toolTypes = new Map<string, string>();
-      if (fs.existsSync(infoPath)) {
-        const existing = new InfoFileParser().parse(fs.readFileSync(infoPath));
-        for (const [key, value] of existing.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
-      }
-
       if (language.language_code) toolTypes.set('CODE', language.language_code);
       if (language.file_path) toolTypes.set('PATH', language.file_path);
       if (language.enabled !== undefined) toolTypes.set('ENABLED', language.enabled ? '1' : '0');
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(infoPath, infoData);
+      applyTooltypes(infoPath, toolTypes);
 
 console.log(`[LanguageConfigService] Wrote ${infoPath}`);
     } catch (error) {

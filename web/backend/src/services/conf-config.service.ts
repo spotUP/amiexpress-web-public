@@ -1,6 +1,6 @@
 import * as fs from 'fs';
+import { readTooltypeMap } from '../utils/info-file.util';
 import * as path from 'path';
-import { InfoFileParser } from './info-file-parser';
 
 export interface ConfConfigEntry {
   name: string;
@@ -23,15 +23,7 @@ export function loadConfConfig(bbsRoot: string): ConfConfigData | null {
       return null;
     }
 
-    const buffer = fs.readFileSync(confConfigPath);
-    const parser = new InfoFileParser();
-    const parsed = parser.parse(buffer);
-
-    // Normalize keys to uppercase for lookups
-    const toolTypes = new Map<string, string>();
-    for (const [key, value] of parsed.toolTypes.entries()) {
-      toolTypes.set(key.toUpperCase(), value);
-    }
+    const toolTypes = readTooltypeMap(confConfigPath);
 
     const countStr = toolTypes.get('NCONFS');
     const confCount = countStr ? parseInt(countStr, 10) || 0 : 0;

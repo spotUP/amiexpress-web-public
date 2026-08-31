@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ComputerConfigService } from '../../src/services/config-services/computer-config.service';
-import { InfoFileParser } from '../../src/services/info-file-parser';
+import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { config as appConfig } from '../../src/config';
 import type { Database } from '../../src/database';
 import type { ComputerType } from '../../src/database/types';
@@ -70,22 +70,23 @@ class FakeComputerTable {
   }
 }
 
+/** A plain-text .info, which parseInfoFile reads and writeInfoFile round-trips. */
+function textInfo(toolTypes: Map<string, string>): string {
+  return [...toolTypes].map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
+}
+
 function writeComputerList(bbsRoot: string, names: string[]): void {
   const toolTypes = new Map<string, string>();
   names.forEach((name, i) => toolTypes.set(`COMPUTER.${i + 1}`, name));
   toolTypes.set('COMPUTER.NUM', String(names.length));
   fs.writeFileSync(
     path.join(bbsRoot, 'ComputerList.info'),
-    new InfoFileParser().write(toolTypes),
+    textInfo(toolTypes),
   );
 }
 
 function readComputerList(bbsRoot: string): string[] {
-  const parsed = new InfoFileParser().parse(
-    fs.readFileSync(path.join(bbsRoot, 'ComputerList.info')),
-  );
-  const toolTypes = new Map<string, string>();
-  for (const [k, v] of parsed.toolTypes.entries()) toolTypes.set(k.toUpperCase(), v);
+  const toolTypes = readTooltypeMap(path.join(bbsRoot, 'ComputerList.info'));
 
   const count = parseInt(toolTypes.get('COMPUTER.NUM') ?? '0', 10);
   const names: string[] = [];
