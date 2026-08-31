@@ -97,6 +97,11 @@ void ansi_fill(ansi_buf *b, int row, int col, int width, int fg, int bg);
  * written into the top edge as " label ", where blessed puts a panel label. */
 void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, const char *label);
 
+/* ansi_box that paints its interior first, so a dialog drawn over the
+ * browser hides what is behind it instead of letting it read through. */
+void ansi_panel(ansi_buf *b, int top, int left, int height, int width,
+                int fg, int bg, const char *label);
+
 /* Writes `text` centred within `width` columns starting at (row, col). */
 void ansi_center(ansi_buf *b, int row, int col, int width, const char *text);
 

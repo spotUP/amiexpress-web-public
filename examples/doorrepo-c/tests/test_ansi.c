@@ -60,10 +60,69 @@ static void test_clear_still_homes_the_cursor(void)
     check("clear homes the cursor", strstr(frame, "\033[H") != (const char *) 0);
 }
 
+
+/* A dialog drawn OVER the catalog has to hide it.
+ *
+ * Reported 2026-08-31 with a screenshot: the "Not installed" notice opened
+ * on top of the browser and the archive list and the ANSI art behind it
+ * showed straight through the box, so the two sentences in it were barely
+ * readable. ansi_box() draws a FRAME - four edges and a label - and never
+ * touched the middle, which is correct everywhere it is used on a screen
+ * that was just cleared and wrong for every dialog.
+ */
+static void test_a_panel_paints_over_what_is_behind_it(void)
+{
+    ansi_buf b;
+    char frame[4096];
+    int rows;
+    const char *p;
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_panel(&b, 5, 10, 4, 20, ANSI_CYAN, ANSI_BLACK, "Not installed");
+    frame[b.len] = '\0';
+
+    /* One run of blanks per row of the panel, the full width each time. */
+    rows = 0;
+    for (p = frame; (p = strstr(p, "                    ")) != (const char *) 0; p++) {
+        rows++;
+    }
+    check("every row of the panel is painted", rows >= 4);
+    check("the panel still has its frame", strstr(frame, "+-") != (const char *) 0);
+    check("and still carries its title", strstr(frame, "Not installed") != (const char *) 0);
+}
+
+static void test_a_panel_sets_the_background_it_paints_with(void)
+{
+    ansi_buf b;
+    char frame[4096];
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_panel(&b, 2, 2, 3, 10, ANSI_CYAN, ANSI_BLUE, (const char *) 0);
+    frame[b.len] = '\0';
+
+    /* Blue background - 44. Without a colour the blanks would be painted in
+     * whatever the screen underneath had set, which is how a "cleared" box
+     * can still come out the colour of the thing it covered. */
+    check("the fill names its background", strstr(frame, ";44m") != (const char *) 0);
+}
+
+static void test_a_panel_too_small_to_have_an_inside_draws_nothing(void)
+{
+    ansi_buf b;
+    char frame[512];
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_panel(&b, 1, 1, 1, 1, ANSI_CYAN, ANSI_BLACK, (const char *) 0);
+    check("nothing is emitted for a degenerate panel", b.len == 0);
+}
+
 int main(void)
 {
     test_clear_cannot_inherit_a_colour();
     test_clear_still_homes_the_cursor();
+    test_a_panel_paints_over_what_is_behind_it();
+    test_a_panel_sets_the_background_it_paints_with();
+    test_a_panel_too_small_to_have_an_inside_draws_nothing();
 
     if (failures == 0) {
         printf("ALL TESTS PASSED\n");

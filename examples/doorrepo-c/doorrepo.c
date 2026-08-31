@@ -1764,7 +1764,10 @@ static void ui_notice(ansi_buf *b, char *frame, long framecap,
 
     ansi_begin(b, frame, framecap);
     ansi_cursor(b, 0);
-    ansi_box(b, top, left, height, width, ANSI_CYAN, title);
+    /* A PANEL, not a box: this opens on top of the browser, so it has to
+     * paint over the archive list and the ANSI art behind it. A frame alone
+     * left both reading straight through the middle of the dialog. */
+    ansi_panel(b, top, left, height, width, ANSI_CYAN, ANSI_BLACK, title);
 
     ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
     ansi_text(b, top + 2, left + 2, line1, inner);
@@ -2560,7 +2563,9 @@ static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
         int key;
 
         ansi_begin(b, frame, framecap);
-        ansi_box(b, g->pane_top, g->list_left, 3, boxw, ANSI_YELLOW, "FILTER");
+        /* Also an overlay - it opens over the list it is filtering. */
+        ansi_panel(b, g->pane_top, g->list_left, 3, boxw, ANSI_YELLOW,
+                   ANSI_BLACK, "FILTER");
         ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 1);
         ansi_text(b, g->pane_top + 1, g->list_left + 1, v->text, inner);
         /* Park the cursor after the text so a terminal showing it looks right. */

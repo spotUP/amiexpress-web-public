@@ -169,6 +169,32 @@ void ansi_fill(ansi_buf *b, int row, int col, int width, int fg, int bg)
     }
 }
 
+/* A box that HIDES what is behind it.
+ *
+ * ansi_box() draws a frame and nothing else, which is right on a screen
+ * that was just cleared and wrong for a dialog: the "Not installed" notice
+ * opened over the browser and the archive list and the ANSI art behind it
+ * read straight through the middle of it (screenshot, 2026-08-31).
+ *
+ * Painting the rectangle first is the whole difference. Every overlay wants
+ * it, so it lives here rather than as a fill loop copied into each caller -
+ * and a caller that draws on a cleared screen keeps using ansi_box, which
+ * writes fewer bytes down a modem line.
+ */
+void ansi_panel(ansi_buf *b, int top, int left, int height, int width,
+                int fg, int bg, const char *label)
+{
+    int row;
+
+    if (width < 2 || height < 2) {
+        return;
+    }
+    for (row = 0; row < height; row++) {
+        ansi_fill(b, top + row, left, width, fg, bg);
+    }
+    ansi_box(b, top, left, height, width, fg, label);
+}
+
 void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, const char *label)
 {
     int i;
