@@ -173,8 +173,17 @@ sync_tracked() {
     ih=$(file_hash "$src")
 
     if [ ! -f "$dst" ]; then
+        # A failed copy must not be recorded as written. This file has no
+        # `set -e`, so an unchecked cp fails silently - and the manifest would
+        # then claim a baseline for a file that is not there, which is worse
+        # than not copying it: the next deploy would read the absence as an
+        # edit and never try again.
         mkdir -p "$(dirname "$dst")"
-        cp "$src" "$dst"
+        if ! cp "$src" "$dst"; then
+            echo "[Entrypoint]   ERROR: could not create $rel" >&2
+            TRACKED_FAILED=$((TRACKED_FAILED + 1))
+            return 0
+        fi
         echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
         TRACKED_CREATED=$((TRACKED_CREATED + 1))
         return 0
@@ -198,7 +207,14 @@ sync_tracked() {
 
     if [ "$vh" = "$mh" ]; then
         if [ "$vh" != "$ih" ]; then
-            cp "$src" "$dst"
+            if ! cp "$src" "$dst"; then
+                echo "[Entrypoint]   ERROR: could not update $rel" >&2
+                TRACKED_FAILED=$((TRACKED_FAILED + 1))
+                # Keep the OLD baseline: the volume still holds the old file,
+                # and claiming otherwise would strand it.
+                echo "$mh $rel" >> "$DEPLOY_MANIFEST_NEXT"
+                return 0
+            fi
             TRACKED_UPDATED=$((TRACKED_UPDATED + 1))
         fi
         echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
@@ -260,7 +276,7 @@ for f in $VOLUME_OWNED_INFO; do sync_volume_owned "$f"; done
 
 # Tracked files and the whole Commands tree: the image leads until the sysop
 # takes over a file. Counters are reported after the directory pass below.
-TRACKED_CREATED=0; TRACKED_UPDATED=0; TRACKED_KEPT=0; TRACKED_ADOPTED=0
+TRACKED_CREATED=0; TRACKED_UPDATED=0; TRACKED_KEPT=0; TRACKED_ADOPTED=0; TRACKED_FAILED=0
 rm -f "$DEPLOY_MANIFEST_NEXT"
 for f in $TRACKED_INFO; do sync_tracked "$f"; done
 
@@ -460,7 +476,14 @@ else
     if [ -f "$DEPLOY_MANIFEST_NEXT" ]; then
         mv "$DEPLOY_MANIFEST_NEXT" "$DEPLOY_MANIFEST"
     fi
-    echo "[Entrypoint]   Tracked: $TRACKED_CREATED created, $TRACKED_UPDATED updated, $TRACKED_KEPT kept (edited on this board), $TRACKED_ADOPTED adopted"
+    echo "[Entrypoint]   Tracked: $TRACKED_CREATED created, $TRACKED_UPDATED updated, $TRACKED_KEPT kept (edited on this board), $TRACKED_ADOPTED adopted, $TRACKED_FAILED failed"
+    if [ "$TRACKED_FAILED" -gt 0 ]; then
+        # The blanket sync this replaced exited non-zero on failure, and a
+        # startup that cannot place the board's own command definitions should
+        # not pretend otherwise.
+        echo "[Entrypoint] ERROR: $TRACKED_FAILED tracked file(s) could not be written" >&2
+        exit 1
+    fi
 
     # Say, on the volume itself, that the sync finished.
     #
