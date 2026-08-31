@@ -53,3 +53,18 @@ export async function selectionNamesWhatTheUiShouldLoad(): Promise<void> {
   assert.ok(sel.sprite && sel.sprite.endsWith('.sprite.json'));
   assert.ok(sel.animation && sel.animation.length > 0);
 }
+
+export async function aClampedMoveReturnsTheIdenticalState(): Promise<void> {
+  // The UI skips repaints when moveSelection hands back the same object,
+  // so a no-op move must be IDENTITY, not an equal copy - in every pane.
+  let s = initialState();
+  assert.strictEqual(moveSelection(s, -1), s, 'doors pane, clamped at top');
+  s = cyclePane(s, 1); // sprites
+  assert.strictEqual(moveSelection(s, -1), s, 'sprites pane, clamped at top');
+  s = cyclePane(s, 1); // animations
+  assert.strictEqual(moveSelection(s, -1), s, 'animations pane, clamped at top');
+  assert.strictEqual(
+    moveSelection(s, s.animations.length + 99), moveSelection(moveSelection(s, s.animations.length + 99), 1),
+    'and clamped at the bottom too'
+  );
+}
