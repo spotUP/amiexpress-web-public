@@ -4,6 +4,7 @@ import { db } from '../database';
 import { config } from '../config';
 import { initializeContainer } from '../container';
 import { loadConfConfig } from '../services/conf-config.service';
+import { onConferencesChanged } from '../services/conference-change-bus';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
 import { setACSConfig, ToggleFlags } from '../utils/acs.util';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
@@ -256,6 +257,122 @@ console.error('[Webhook Init] Error initializing default webhook:', error);
 }
 
 /**
+ * Build the conference list from disk and hand it to everyone who holds one.
+ *
+ * express.e reads ConfConfig.info at startup and this used to do the same and
+ * only that - so the list every handler holds was whatever the file said when
+ * the container last started. Renaming a conference in the admin wrote NAME.n
+ * to the file correctly and the board went on showing the old name until a
+ * deploy happened to restart it. The sysop renamed "Lamer Zone" to
+ * "Lamer Zonen", saw it on disk, and saw the old name on J.
+ *
+ * So this is the one implementation, called at startup AND after any admin
+ * write that changes what conferences exist or what they are called. Disk
+ * stays the source of truth; the SQLite table and the handlers' arrays are
+ * caches of it, and a cache with no way to be invalidated is the bug.
+ *
+ * It rebuilds the message bases and the file areas too, because a created
+ * conference has neither until something loads them, and ensureConferenceStructure
+ * is idempotent.
+ */
+export async function refreshConferencesFromDisk(bbsRootOverride?: string): Promise<any[]> {
+  const bbsRoot = bbsRootOverride || process.env.BBS_ROOT || config.get('dataDir');
+
+  const confConfig = loadConfConfig(bbsRoot);
+
+  if (confConfig && confConfig.confCount > 0) {
+    console.log(`[INIT] Found ${confConfig.confCount} conferences in ConfConfig.info`);
+    // Create conferences array from ConfConfig.info (express.e:8499-8512 uses cmds.numConf from this file)
+    conferences = [];
+    for (let i = 0; i < confConfig.confCount; i++) {
+      const entry = confConfig.entries[i];
+      conferences.push({
+        id: i + 1,
+        name: entry.name || `Conference ${i + 1}`,
+        location: entry.location || `BBS:Conf${i + 1}/`
+      });
+    }
+  } else {
+    // Fallback: check for Conf.DB headers (original AmiExpress format)
+    const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
+    if (confDbHeaders.length > 0) {
+      conferences = confDbHeaders.map((header: any, i: number) => ({
+        id: i + 1,
+        name: header.name || `Conference ${i + 1}`,
+        location: `BBS:Conf${i + 1}/`
+      }));
+    } else {
+      // Last resort: scan for Conf*.info files on disk
+      const confFiles = fs.readdirSync(bbsRoot).filter((f: string) => /^Conf\d+\.info$/.test(f));
+      const confNumbers = confFiles.map((f: string) => parseInt(f.match(/\d+/)?.[0] || '0')).filter((n: number) => n > 0).sort((a: number, b: number) => a - b);
+      if (confNumbers.length > 0) {
+        const maxConf = Math.max(...confNumbers);
+        conferences = [];
+        for (let i = 1; i <= maxConf; i++) {
+          conferences.push({
+            id: i,
+            name: `Conference ${i}`,
+            location: `BBS:Conf${i}/`
+          });
+        }
+      } else {
+        // Absolute fallback: use database
+        conferences = await db.getConferences();
+        if (conferences.length === 0) {
+          await db.initializeDefaultData();
+          conferences = await db.getConferences();
+        }
+      }
+    }
+  }
+
+  // Mirror disk conferences into the SQLite `conferences` table so
+  // web paths that resolve by conf-id (db.getFileAreas,
+  // db.getConferenceById, the admin UI) match what's actually
+  // declared in ConfConfig.info. Before this, SQLite carried only
+  // the 3 default-seeded rows even on sites declaring 14+ confs on
+  // disk, which silently broke per-conf lookups (the "still only 4
+  // confs visible" cascade). Disk is the source of truth — this is
+  // a one-way mirror, not a reverse sync.
+  try {
+    const syncResult = await db.syncConferencesFromDisk(
+      conferences.map((c: any) => ({ id: c.id, name: c.name, location: c.location }))
+    );
+    if (syncResult && (syncResult.inserted > 0 || syncResult.renamed > 0)) {
+      console.log(
+        `[INIT] Synced conferences table from disk: ${syncResult.inserted} inserted, ${syncResult.renamed} renamed`
+      );
+    }
+  } catch (e: any) {
+    console.warn('[INIT] Conferences disk sync failed:', e?.message || e);
+  }
+
+  // Inject conferences into screen handler
+  setConferences(conferences);
+
+  // Load message bases from disk (CRITICAL: Disk-based, not database - CLAUDE.md rule #10)
+  // express.e:2048-2112 - Reads from {ConfLocation}/MsgBases.info or defaults to 1 base per conference
+  const { MessageBaseLoaderService } = await import('../services/message-base-loader.service.js');
+  const messageBaseLoader = new MessageBaseLoaderService(bbsRoot);
+  messageBases = messageBaseLoader.loadAllMessageBases(conferences);
+
+  // Inject dependencies into conference handler
+  setConferencesForConferenceHandler(conferences);
+  setMessageBases(messageBases);
+
+  // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
+  fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
+  await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
+
+  // Inject dependencies into file handler. The live F-command path reads
+  // DIR files from disk via FileListingHandler / readDirFile — there is no
+  // per-area in-memory file entry cache.
+  setFileAreas(fileAreas);
+
+  return conferences;
+}
+
+/**
  * Initialize database and inject dependencies into all handlers
  * @param io - Optional Socket.IO server instance for handlers that need socket access
  */
@@ -297,100 +414,20 @@ export async function initializeData(io?: SocketIOServer) {
     setACSConfig({ toggles: acsToggles });
     console.log(`[INIT] ACS toggles loaded — CREDITBYKB=${acsToggles[ToggleFlags.CREDITBYKB]}`);
 
-    const confConfig = loadConfConfig(bbsRoot);
+    // Conferences, message bases and file areas, from disk - the same
+    // path an admin write re-runs, so a rename reaches the board without
+    // a restart. See refreshConferencesFromDisk.
+    await ensureRootScreens(bbsRoot);
+    await refreshConferencesFromDisk(bbsRoot);
 
-    if (confConfig && confConfig.confCount > 0) {
-      console.log(`[INIT] Found ${confConfig.confCount} conferences in ConfConfig.info`);
-      // Create conferences array from ConfConfig.info (express.e:8499-8512 uses cmds.numConf from this file)
-      conferences = [];
-      for (let i = 0; i < confConfig.confCount; i++) {
-        const entry = confConfig.entries[i];
-        conferences.push({
-          id: i + 1,
-          name: entry.name || `Conference ${i + 1}`,
-          location: entry.location || `BBS:Conf${i + 1}/`
-        });
-      }
-    } else {
-      // Fallback: check for Conf.DB headers (original AmiExpress format)
-      const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
-      if (confDbHeaders.length > 0) {
-        conferences = confDbHeaders.map((header: any, i: number) => ({
-          id: i + 1,
-          name: header.name || `Conference ${i + 1}`,
-          location: `BBS:Conf${i + 1}/`
-        }));
-      } else {
-        // Last resort: scan for Conf*.info files on disk
-        const confFiles = fs.readdirSync(bbsRoot).filter((f: string) => /^Conf\d+\.info$/.test(f));
-        const confNumbers = confFiles.map((f: string) => parseInt(f.match(/\d+/)?.[0] || '0')).filter((n: number) => n > 0).sort((a: number, b: number) => a - b);
-        if (confNumbers.length > 0) {
-          const maxConf = Math.max(...confNumbers);
-          conferences = [];
-          for (let i = 1; i <= maxConf; i++) {
-            conferences.push({
-              id: i,
-              name: `Conference ${i}`,
-              location: `BBS:Conf${i}/`
-            });
-          }
-        } else {
-          // Absolute fallback: use database
-          conferences = await db.getConferences();
-          if (conferences.length === 0) {
-            await db.initializeDefaultData();
-            conferences = await db.getConferences();
-          }
-        }
-      }
-    }
+    // From here on, an admin write rebuilds the same way boot just did.
+    onConferencesChanged(async () => {
+      await refreshConferencesFromDisk(bbsRoot);
+    });
 
-    // Mirror disk conferences into the SQLite `conferences` table so
-    // web paths that resolve by conf-id (db.getFileAreas,
-    // db.getConferenceById, the admin UI) match what's actually
-    // declared in ConfConfig.info. Before this, SQLite carried only
-    // the 3 default-seeded rows even on sites declaring 14+ confs on
-    // disk, which silently broke per-conf lookups (the "still only 4
-    // confs visible" cascade). Disk is the source of truth — this is
-    // a one-way mirror, not a reverse sync.
-    try {
-      const syncResult = await db.syncConferencesFromDisk(
-        conferences.map((c: any) => ({ id: c.id, name: c.name, location: c.location }))
-      );
-      if (syncResult && (syncResult.inserted > 0 || syncResult.renamed > 0)) {
-        console.log(
-          `[INIT] Synced conferences table from disk: ${syncResult.inserted} inserted, ${syncResult.renamed} renamed`
-        );
-      }
-    } catch (e: any) {
-      console.warn('[INIT] Conferences disk sync failed:', e?.message || e);
-    }
-
-    // Inject conferences into screen handler
-    setConferences(conferences);
-
-    // Load message bases from disk (CRITICAL: Disk-based, not database - CLAUDE.md rule #10)
-    // express.e:2048-2112 - Reads from {ConfLocation}/MsgBases.info or defaults to 1 base per conference
-    const { MessageBaseLoaderService } = await import('../services/message-base-loader.service.js');
-    const messageBaseLoader = new MessageBaseLoaderService(bbsRoot);
-    messageBases = messageBaseLoader.loadAllMessageBases(conferences);
-
-    // Inject dependencies into conference handler
-    setConferencesForConferenceHandler(conferences);
-    setMessageBases(messageBases);
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });
     setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, LoggedOnSubState });
-
-    // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
-    fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
-    await ensureRootScreens(bbsRoot);
-    await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
-
-    // Inject dependencies into file handler. The live F-command path reads
-    // DIR files from disk via FileListingHandler / readDirFile — there is no
-    // per-area in-memory file entry cache.
-    setFileAreas(fileAreas);
     setDatabaseForFileHandler(db);
     setCallersLog(callersLog);
     setGetUserStats(getUserStats);

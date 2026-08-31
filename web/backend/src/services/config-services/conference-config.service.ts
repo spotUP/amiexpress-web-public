@@ -11,6 +11,7 @@ import type { ConferenceConfig } from '../../database/types';
 import { ConferenceConfigSchema, type RequestContext } from '../config.schemas';
 import { ConferenceSetupService } from '../conference-setup.service';
 import { loadConfConfig } from '../conf-config.service';
+import { notifyConferencesChanged } from '../conference-change-bus';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -204,7 +205,31 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
       context.userId, context.username, undefined, newConfig,
       context.ipAddress, context.userAgent);
 
+    await this.refreshRunningBoard();
+
     return newConfig;
+  }
+
+  /**
+   * Tell the running board what changed on disk.
+   *
+   * The conference list every handler holds is built from ConfConfig.info at
+   * startup and was never rebuilt, so a rename here reached the file and not
+   * the board: "Lamer Zone" stayed "Lamer Zone" on J until the next deploy
+   * restarted the container. Disk is the source of truth and those arrays are
+   * caches of it; a cache nothing can invalidate is the bug.
+   *
+   * Through the bus rather than by importing the server's own refresh: that
+   * import boots a second copy of the BBS - see conference-change-bus.
+   * Best-effort, because a stale name must never fail a write that already
+   * succeeded on disk.
+   */
+  private async refreshRunningBoard(): Promise<void> {
+    try {
+      await notifyConferencesChanged();
+    } catch (error) {
+console.error('[ConferenceConfigService] Conference list refresh failed (disk is correct):', error);
+    }
   }
 
   async updateConferenceConfig(
@@ -281,6 +306,8 @@ console.error(`[ConferenceConfigService] Mirror update failed for conference ${c
       context.userId, context.username, oldConfig, newConfig,
       context.ipAddress, context.userAgent);
 
+    await this.refreshRunningBoard();
+
     return newConfig;
   }
 
@@ -337,6 +364,8 @@ console.error(`[ConferenceConfigService] Mirror delete failed for conference ${c
     this.configRepo.logConfigChange('conference_config', oldConfig.id, 'DELETE',
       context.userId, context.username, oldConfig, undefined,
       context.ipAddress, context.userAgent);
+
+    await this.refreshRunningBoard();
 
     const confDir = location ? path.join(bbsRoot, location.replace(/^.*:/, '')) : '';
     return {
