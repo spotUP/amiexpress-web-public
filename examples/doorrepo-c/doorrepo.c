@@ -35,6 +35,7 @@
 #include "ansi.h"
 #include "infocache.h"
 #include "shell.h"
+#include "dirlist.h"
 #include "json_lite.h"
 #include "owner_auth.h"
 
@@ -4240,6 +4241,11 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
  * here so this loop's 'l'/'L' case (Task 4) can call it before its own
  * definition appears in the file. */
 static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat);
+/* The board's own doors, read from the BBS - see the block above
+ * board_load() for why L needs both this and the screen above. */
+static int board_load(const dr_config *cfg);
+static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                            const ui_geometry *g);
 
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
@@ -4612,7 +4618,19 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             }
             break;
         case 'l': case 'L':
-            installed_loop_ansi(cfg, cat);
+            /* The BOARD's doors when the BBS can be asked, DoorRepo's own
+             * install receipts when it cannot. On a real AmiExpress board
+             * there is no /api/door-admin and no token, so board_load()
+             * returns 0 and the original screen opens - which is the only
+             * one that could ever have worked there. On this board the
+             * receipts file is empty (nothing here was installed BY
+             * DoorRepo), so without this the screen was correctly, and
+             * uselessly, blank. */
+            if (board_load(cfg) > 0) {
+                board_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+            } else {
+                installed_loop_ansi(cfg, cat);
+            }
             need_full_redraw = 1;
             break;
         case 'b': case 'B':
@@ -4838,6 +4856,536 @@ static void ui_draw_installed_empty_message(ansi_buf *b, const ui_geometry *g)
     ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 0);
     ansi_center(b, row, g->list_left + 1, g->list_width - 2, "No doors are installed.");
     ansi_reset(b);
+}
+
+/* ---------------------------------------------------------------------
+ * The BOARD's installed doors (as opposed to DoorRepo's own)
+ *
+ * DoorRepo.idx records what THIS door installed. On a board where the
+ * doors were put there by anything else - which is every existing board -
+ * that file is empty, and the installed screen built from it correctly
+ * shows nothing. Measured on the live board: no DoorRepo.idx at all, and
+ * 368 registered commands.
+ *
+ * The board's own registry is not readable from inside a door: it is an
+ * in-memory list on the BBS plus a sqlite table. So this is one of the two
+ * things the door-admin API exists for (the other is asking the BBS to
+ * reload after a .info edit). GET /api/door-admin/installed answers with
+ * the DOORS| family, and flow_doors_parse_row reads a row of it.
+ *
+ * On a real AmiExpress board there is no such API and no token file, so
+ * board_load() finds nothing, returns 0, and the caller falls back to the
+ * DoorRepo.idx view. That fallback is the whole reason this is additive
+ * rather than a replacement.
+ *
+ * The response is consumed through http_request's SINK, one line at a
+ * time, so a 368-row body never exists in memory. Only the four fields the
+ * list renders are kept.
+ * ------------------------------------------------------------------- */
+
+/* Defined below, next to the browser itself. */
+static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
+                            char *frame, long framecap, const ui_geometry *g);
+
+#define BOARD_MAX_DOORS 400
+#define BOARD_CMD_MAX    16
+#define BOARD_NAME_MAX   40
+
+typedef struct {
+    char cmd[BOARD_CMD_MAX];
+    char name[BOARD_NAME_MAX];
+    unsigned long size;
+    int has_archive;
+} board_door;
+
+static board_door g_board[BOARD_MAX_DOORS];
+static int g_board_count = 0;
+
+typedef struct {
+    char line[320];
+    int len;
+    int overflowed;   /* a line longer than the buffer: skip to its end */
+} board_sink_ctx;
+
+static void board_add_line(const char *line)
+{
+    char cmd[BOARD_CMD_MAX];
+    char name[BOARD_NAME_MAX];
+    char archive[80];
+    unsigned long size = 0;
+
+    if (g_board_count >= BOARD_MAX_DOORS) {
+        return;
+    }
+    if (flow_doors_parse_row(line, cmd, sizeof(cmd), name, sizeof(name),
+                             archive, sizeof(archive), &size) != 0) {
+        return;   /* header, or a row this door cannot read */
+    }
+
+    strcpy(g_board[g_board_count].cmd, cmd);
+    strcpy(g_board[g_board_count].name, name);
+    g_board[g_board_count].size = size;
+    g_board[g_board_count].has_archive = (archive[0] != '\0');
+    g_board_count++;
+}
+
+static int board_sink(void *ctx, const unsigned char *buf, unsigned long len)
+{
+    board_sink_ctx *st = (board_sink_ctx *) ctx;
+    unsigned long i;
+
+    for (i = 0; i < len; i++) {
+        char c = (char) buf[i];
+
+        if (c == '\n') {
+            if (!st->overflowed) {
+                st->line[st->len] = '\0';
+                board_add_line(st->line);
+            }
+            st->len = 0;
+            st->overflowed = 0;
+        } else if (c == '\r') {
+            continue;
+        } else if (st->len + 1 < (int) sizeof(st->line)) {
+            st->line[st->len++] = c;
+        } else {
+            /* Longer than any row the server should send. Drop the whole
+             * line rather than parse its first 320 bytes as if complete. */
+            st->overflowed = 1;
+        }
+    }
+    return 0;
+}
+
+/* Fills g_board from the BBS. Returns the number of doors read, or 0 when
+ * there is no API to ask - which is the normal case on a real board and
+ * must never be reported as an error. */
+static int board_load(const dr_config *cfg)
+{
+    char token[128];
+    char tokenhdr[160];
+    const char *headers[1];
+    http_response resp;
+    board_sink_ctx sink;
+    dr_config local_cfg;
+
+    g_board_count = 0;
+
+    if (!config_read_token(cfg, token, sizeof(token))) {
+        return 0;
+    }
+
+    /* http_request targets cfg->host, which is the REMOTE catalog server.
+     * This board's own API is bbs_host/bbs_port - posting to cfg->host
+     * would send this board's launch token to bbs.uprough.net in
+     * cleartext, the same trap report_install_to_bbs() documents. */
+    local_cfg = *cfg;
+    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
+    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
+    local_cfg.port = cfg->bbs_port;
+
+    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
+    headers[0] = tokenhdr;
+
+    memset(&resp, 0, sizeof(resp));
+    sink.len = 0;
+    sink.overflowed = 0;
+
+    if (http_request(&local_cfg, "GET", "/api/door-admin/installed",
+                     (const char *) 0, 0UL, headers, 1, &resp,
+                     board_sink, &sink) != HTTP_OK
+        || resp.status != 200) {
+        g_board_count = 0;
+        return 0;
+    }
+
+    /* A body with no trailing newline still has a last row in it. */
+    if (sink.len > 0 && !sink.overflowed) {
+        sink.line[sink.len] = '\0';
+        board_add_line(sink.line);
+    }
+
+    return g_board_count;
+}
+
+/* The board's doors, listed. Deliberately plainer than
+ * installed_loop_ansi(): those rows are catalog entries with a DIZ and a
+ * document to show, these are whatever the board has registered, most of
+ * which this repo has never heard of. F opens the file browser, which is
+ * the thing that works for all of them. */
+static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                            const ui_geometry *g)
+{
+    ansi_buf buf;
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    int rows = g->visible_rows;
+    int need_redraw = 1;
+
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    for (;;) {
+        int key;
+        int i;
+
+        if (need_redraw) {
+            char title[96];
+
+            ansi_begin(&buf, frame, framecap);
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+
+            strcpy(title, "Doors on this board   ");
+            ui_append_ulong(title, (unsigned long) g_board_count);
+            strcat(title, " installed");
+            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+
+            if (g_board_count == 0) {
+                ansi_text(&buf, 3, 3, "The BBS reported no installed doors.",
+                          g->cols - 6);
+            } else {
+                for (i = 0; i < rows; i++) {
+                    unsigned long r = top_index + (unsigned long) i;
+                    char line[BOARD_CMD_MAX + BOARD_NAME_MAX + 24];
+                    int is_sel;
+
+                    if (r >= (unsigned long) g_board_count) {
+                        break;
+                    }
+                    is_sel = (r == selected);
+                    sprintf(line, "%-12.12s %-40.40s %s",
+                            g_board[r].cmd, g_board[r].name,
+                            g_board[r].has_archive ? "+" : " ");
+                    ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
+                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+                }
+                ansi_reset(&buf);
+            }
+
+            ansi_color(&buf, 3, 0, 0);
+            ansi_text(&buf, g->rows - 1, 3, "F=Files  Q=Quit", g->cols - 6);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            need_redraw = 0;
+        }
+
+        key = ui_read_key();
+        need_redraw = 1;
+
+        switch (key) {
+        case UI_KEY_UP:
+            if (selected > 0) {
+                selected--;
+                if (selected < top_index) top_index = selected;
+            }
+            break;
+        case UI_KEY_DOWN:
+            if (selected + 1 < (unsigned long) g_board_count) {
+                selected++;
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_PGUP: case 'p': case 'P':
+            selected = (selected > (unsigned long) rows)
+                ? selected - (unsigned long) rows : 0;
+            top_index = (selected < (unsigned long) rows) ? 0 : selected;
+            break;
+        case UI_KEY_PGDN: case 'n': case 'N':
+            if (g_board_count > 0) {
+                selected += (unsigned long) rows;
+                if (selected >= (unsigned long) g_board_count) {
+                    selected = (unsigned long) g_board_count - 1;
+                }
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_HOME:
+            selected = 0; top_index = 0;
+            break;
+        case UI_KEY_END:
+            if (g_board_count > 0) {
+                selected = (unsigned long) g_board_count - 1;
+                top_index = ((unsigned long) g_board_count > (unsigned long) rows)
+                    ? (unsigned long) g_board_count - (unsigned long) rows : 0;
+            }
+            break;
+        case 'f': case 'F':
+            if (g_board_count > 0 && selected < (unsigned long) g_board_count) {
+                files_loop_ansi(cfg, g_board[selected].cmd, frame, framecap, g);
+            }
+            break;
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, framecap);
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
+        default:
+            break;
+        }
+    }
+}
+
+/* ---------------------------------------------------------------------
+ * File browser for an installed door (key F on the installed screen)
+ *
+ * Reads the door's own directory off the disk through dirlist.h - no
+ * catalog, no BBS, no network. That matters for the doors this repo cannot
+ * describe: an install with no catalog row has no listing to fetch, and
+ * until now there was no way to see what it put on disk at all.
+ *
+ * ONE SCREENFUL is held, not the whole listing. The walk is re-run on every
+ * redraw and the callback keeps only the rows inside the current window,
+ * counting the rest. A door directory is local and small, so a second walk
+ * costs nothing worth measuring, while a buffer big enough for the largest
+ * plausible directory would be permanent BSS - and this door has about
+ * 80 KB of headroom before the emulator refuses to load it (see
+ * web/backend/src/amiga-emulation/memory-map.ts).
+ * ------------------------------------------------------------------- */
+
+#define FB_PAGE_MAX   40
+#define FB_NAME_MAX   64
+#define FB_PATH_MAX   256
+
+typedef struct {
+    unsigned long skip;    /* how many entries to pass over first */
+    int want;              /* window size */
+    int got;               /* rows actually captured */
+    unsigned long total;   /* every entry seen, window or not */
+    char names[FB_PAGE_MAX][FB_NAME_MAX];
+    unsigned long sizes[FB_PAGE_MAX];
+    int dirs[FB_PAGE_MAX];
+} fb_page;
+
+static int fb_collect(void *ctx, const char *name, unsigned long size, int is_dir)
+{
+    fb_page *pg = (fb_page *) ctx;
+
+    if (pg->total >= pg->skip && pg->got < pg->want) {
+        strncpy(pg->names[pg->got], name, FB_NAME_MAX - 1);
+        pg->names[pg->got][FB_NAME_MAX - 1] = '\0';
+        pg->sizes[pg->got] = size;
+        pg->dirs[pg->got] = is_dir;
+        pg->got++;
+    }
+    pg->total++;
+    /* Never stops early: the total is what the footer and the clamping
+     * need, and it is only known once every entry has been seen. */
+    return 0;
+}
+
+/* "<base>/<rel>", or just "<base>" when rel is empty. Returns 0 on
+ * success, -1 if it would not fit - a path too long to build is reported
+ * rather than silently truncated into some other directory. */
+static int fb_join(char *out, unsigned long outsize, const char *base, const char *rel)
+{
+    unsigned long need = strlen(base) + 1;
+
+    if (rel[0] != '\0') {
+        need += strlen(rel) + 1;
+    }
+    if (need > outsize) {
+        return -1;
+    }
+    strcpy(out, base);
+    if (rel[0] != '\0') {
+        unsigned long n = strlen(out);
+        if (n > 0 && out[n - 1] != '/' && out[n - 1] != ':') {
+            strcat(out, "/");
+        }
+        strcat(out, rel);
+    }
+    return 0;
+}
+
+/* Drops the last "/name" from `rel`, leaving "" at the top. */
+static void fb_parent(char *rel)
+{
+    char *slash = strrchr(rel, '/');
+
+    if (slash != (char *) 0) {
+        *slash = '\0';
+    } else {
+        rel[0] = '\0';
+    }
+}
+
+static void fb_size_text(char *out, unsigned long outsize, const fb_page *pg, int row)
+{
+    if (pg->dirs[row]) {
+        strncpy(out, "<DIR>", outsize - 1);
+        out[outsize - 1] = '\0';
+        return;
+    }
+    if (pg->sizes[row] >= 1024UL) {
+        sprintf(out, "%luk", pg->sizes[row] / 1024UL);
+    } else {
+        sprintf(out, "%lu", pg->sizes[row]);
+    }
+}
+
+static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
+                            char *frame, long framecap, const ui_geometry *g)
+{
+    static fb_page page;
+    char install_dir[FB_PATH_MAX];
+    char rel[FB_PATH_MAX];
+    char full[FB_PATH_MAX];
+    char title[128];
+    ansi_buf buf;
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    int rows = g->visible_rows;
+    int need_redraw = 1;
+
+    if (rows > FB_PAGE_MAX) {
+        rows = FB_PAGE_MAX;
+    }
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    if (flow_build_install_dir(install_dir, sizeof(install_dir),
+                               cfg->doors_dir, cmdname) < 0) {
+        return;
+    }
+    rel[0] = '\0';
+
+    for (;;) {
+        int key;
+        int i;
+        long n;
+
+        if (fb_join(full, sizeof(full), install_dir, rel) < 0) {
+            return;
+        }
+
+        page.skip = top_index;
+        page.want = rows;
+        page.got = 0;
+        page.total = 0;
+        n = dirlist_scan(full, fb_collect, &page);
+
+        if (need_redraw) {
+            ansi_begin(&buf, frame, framecap);
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+
+            sprintf(title, "%.20s%s%.40s", cmdname, rel[0] ? "/" : "", rel);
+            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+
+            if (n < 0) {
+                ansi_text(&buf, 3, 3, "This door has no directory on disk.",
+                          g->cols - 6);
+            } else if (page.total == 0) {
+                ansi_text(&buf, 3, 3, "(empty)", g->cols - 6);
+            } else {
+                for (i = 0; i < page.got; i++) {
+                    char line[FB_NAME_MAX + 32];
+                    char sizetext[24];
+                    int is_sel = ((unsigned long) i + top_index) == selected;
+
+                    fb_size_text(sizetext, sizeof(sizetext), &page, i);
+                    sprintf(line, "%-40.40s %8.8s", page.names[i], sizetext);
+                    ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
+                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+                }
+                ansi_reset(&buf);
+            }
+
+            ansi_color(&buf, 3, 0, 0);
+            ansi_text(&buf, g->rows - 1, 3,
+                      rel[0] ? "ENTER=Open  B=Up  Q=Quit" : "ENTER=Open  Q=Quit",
+                      g->cols - 6);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            need_redraw = 0;
+        }
+
+        key = ui_read_key();
+        need_redraw = 1;
+
+        switch (key) {
+        case UI_KEY_UP:
+            if (selected > 0) {
+                selected--;
+                if (selected < top_index) top_index = selected;
+            }
+            break;
+        case UI_KEY_DOWN:
+            if (page.total > 0 && selected + 1 < page.total) {
+                selected++;
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_PGUP: case 'p': case 'P':
+            if (selected > (unsigned long) rows) selected -= (unsigned long) rows;
+            else selected = 0;
+            top_index = (selected < (unsigned long) rows) ? 0 : selected;
+            break;
+        case UI_KEY_PGDN: case 'n': case 'N':
+            if (page.total > 0) {
+                selected += (unsigned long) rows;
+                if (selected >= page.total) selected = page.total - 1;
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_HOME:
+            selected = 0;
+            top_index = 0;
+            break;
+        case UI_KEY_END:
+            if (page.total > 0) {
+                selected = page.total - 1;
+                top_index = (page.total > (unsigned long) rows)
+                    ? page.total - (unsigned long) rows : 0;
+            }
+            break;
+        case UI_KEY_ENTER:
+            /* Only a directory opens. Viewing a file's contents is not
+             * wired here yet - the local text viewer is its own piece of
+             * work, and a browser that navigates is useful without it. */
+            if (page.total > 0 && selected >= top_index) {
+                int row = (int) (selected - top_index);
+                if (row >= 0 && row < page.got && page.dirs[row]) {
+                    char next[FB_PATH_MAX];
+                    if (fb_join(next, sizeof(next), rel, page.names[row]) == 0) {
+                        strcpy(rel, next);
+                        selected = 0;
+                        top_index = 0;
+                    }
+                }
+            }
+            break;
+        case 'b': case 'B':
+            if (rel[0] != '\0') {
+                fb_parent(rel);
+                selected = 0;
+                top_index = 0;
+            }
+            break;
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, framecap);
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
+        default:
+            break;
+        }
+    }
 }
 
 static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
@@ -5080,6 +5628,23 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                 need_full_redraw = 1;
             }
             break;
+        case 'f': case 'F': {
+            /* The door's own files, read off the disk. Unlike A (the
+             * archive's contents) this needs no catalog row and no
+             * network, so it works for the installed doors this repo has
+             * never heard of. */
+            const char *cmdname = (view.count > 0)
+                ? index_lookup(cfg, cat->rows[view.index[selected]].archive)
+                : (const char *) 0;
+            if (cmdname != (const char *) 0 && cmdname[0] != '\0') {
+                files_loop_ansi(cfg, cmdname, frame, (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        }
         case 'v': case 'V':
             if (sel_entry != (const dr_entry *) 0 && sel_entry->has_doc == 0) {
                 break;

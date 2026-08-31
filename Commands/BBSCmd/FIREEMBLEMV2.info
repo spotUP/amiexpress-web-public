@@ -1,7 +1,0 @@
-BBSCMD=FIREEMBLEMV2
-TYPE=TS
-LOCATION=Doors/fire-emblem-v2
-DESCRIPTION=Fire Emblem: Emblem of Valor - tactical RPG game
-MULTINODE=YES
-PRIORITY=SAME
-CATEGORY=Games/RPG

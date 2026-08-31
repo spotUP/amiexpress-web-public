@@ -152,8 +152,16 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
       const bbsRoot = appConfig.get('dataDir');
       const confConfig = loadConfConfig(bbsRoot);
       const confEntry = confConfig?.entries[newConfig.conference_id - 1];
-      const conferenceName = confEntry?.name || `Conference ${newConfig.conference_id}`;
-      const location = confEntry?.location || `Conf${String(newConfig.conference_id).padStart(2, '0')}`;
+
+      // The name the sysop typed, not a lookup of an entry that does not
+      // exist yet. This read `entries[id - 1]` for a conference being
+      // CREATED, always missed, and fell back to "Conference N" - so the
+      // name on the form was discarded every time.
+      const conferenceName =
+        validated.name?.trim() || confEntry?.name || `Conference ${newConfig.conference_id}`;
+      // Conf7, not Conf07: that is what every other conference on a board is
+      // called, and what the entrypoint creates.
+      const location = confEntry?.location || `Conf${newConfig.conference_id}`;
 
       await this.conferenceSetup.setupConference({
         conferenceId: newConfig.conference_id,
@@ -168,6 +176,26 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
         readOnly: validated.read_only || false
       });
 console.log(`[ConferenceConfigService] Created Conf${newConfig.conference_id}.info`);
+
+      // Register it LAST, and only once the files exist.
+      //
+      // setupConference builds the icon, the directory tree, the DIR files
+      // and the counters - and never touched ConfConfig.info, which is the
+      // file that decides whether a conference exists at all.
+      // express.e:31849 walks `FOR i:=1 TO cmds.numConf` reading NAME.i and
+      // LOCATION.i from it, so a conference missing from it is invisible to
+      // the BBS however complete its directory is. That is the mirror of the
+      // delete that left NAME.n behind with no icon.
+      //
+      // Last, because the opposite order leaves a named conference with
+      // nothing behind it if the setup fails - the ghost state again. An
+      // unregistered directory is harmless by comparison.
+      await this.conferenceSetup.updateConfConfig(
+        newConfig.conference_id,
+        conferenceName,
+        location
+      );
+console.log(`[ConferenceConfigService] Registered conference ${newConfig.conference_id} in ConfConfig.info`);
     } catch (error) {
 console.error(`[ConferenceConfigService] Failed to create disk structure:`, error);
     }
@@ -256,11 +284,34 @@ console.error(`[ConferenceConfigService] Mirror update failed for conference ${c
     return newConfig;
   }
 
-  async deleteConferenceConfig(conferenceId: number, context: RequestContext): Promise<boolean> {
+  /**
+   * Remove a conference.
+   *
+   * What this used to do: delete the conference_config row and unlink
+   * Conf<N>.info. That is not a delete, it is half of one. ConfConfig.info
+   * still advertised the conference - NCONFS unchanged, NAME.<N> and
+   * LOCATION.<N> still there - so express.e:31849 went on building it into
+   * the conference list, users who had access could still join it, and what
+   * they joined had no icon behind it: no NDIRS, no message base, no file
+   * paths.
+   *
+   * What it deliberately does NOT do is delete the conference's DIRECTORY.
+   * That holds every message ever posted there and every file ever uploaded,
+   * and no confirmation dialog is worth that. The path is returned so the
+   * sysop can remove it themselves once they are sure.
+   */
+  async deleteConferenceConfig(
+    conferenceId: number,
+    context: RequestContext
+  ): Promise<{ deleted: boolean; keptOnDisk: string | null; nconfs: number }> {
     const oldConfig = await this.getConferenceConfig(conferenceId);
-    if (!oldConfig) return false;
+    if (!oldConfig) return { deleted: false, keptOnDisk: null, nconfs: 0 };
 
-    const deleted = this.configRepo.deleteConferenceConfig(conferenceId);
+    // ConfConfig.info FIRST. It is the file that decides whether the
+    // conference exists at all, and it is the one that refuses when removing
+    // this conference would renumber the others - see removeLastConference.
+    // Doing it first means a refusal changes nothing.
+    const { nconfs, location } = await this.conferenceSetup.removeLastConference(conferenceId);
 
     const bbsRoot = appConfig.get('dataDir');
     const confInfoPath = path.join(bbsRoot, `Conf${conferenceId}.info`);
@@ -273,12 +324,25 @@ console.error(`[ConferenceConfigService] Failed to delete ${confInfoPath}:`, err
       }
     }
 
-    if (deleted) {
-      this.configRepo.logConfigChange('conference_config', oldConfig.id, 'DELETE',
-        context.userId, context.username, oldConfig, undefined,
-        context.ipAddress, context.userAgent);
+    // The mirror is best-effort and comes last: a conference that only ever
+    // existed on disk has no row, and that must not turn a completed removal
+    // into an error.
+    let deleted = false;
+    try {
+      deleted = this.configRepo.deleteConferenceConfig(conferenceId);
+    } catch (mirrorError) {
+console.error(`[ConferenceConfigService] Mirror delete failed for conference ${conferenceId} (disk already updated):`, mirrorError);
     }
 
-    return deleted;
+    this.configRepo.logConfigChange('conference_config', oldConfig.id, 'DELETE',
+      context.userId, context.username, oldConfig, undefined,
+      context.ipAddress, context.userAgent);
+
+    const confDir = location ? path.join(bbsRoot, location.replace(/^.*:/, '')) : '';
+    return {
+      deleted: true,
+      keptOnDisk: confDir && fs.existsSync(confDir) ? confDir : null,
+      nconfs,
+    };
   }
 }

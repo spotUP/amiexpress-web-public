@@ -1175,6 +1175,63 @@ int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
     return 0;
 }
 
+/* One "DOORS|" row from the BBS's own /api/door-admin/installed:
+ *
+ *   <command>|<type>|<size>|<enabled>|<accessLevel>|<archive>|<name>|<category>|<description>
+ *
+ * Reuses files_field() rather than a second splitter, so the two response
+ * families can never disagree about what a field boundary is. Every field
+ * the server sends has already had '|', CR and LF replaced with a space on
+ * its side, which is what makes a fixed column count safe to rely on here.
+ *
+ * Only the four fields this door renders are handed back; the rest are
+ * parsed for their boundaries and discarded, so a later column added to
+ * the response (the API promises append-only growth) cannot shift them.
+ *
+ * Returns 0 and fills whichever out-parameters are non-NULL; non-zero for
+ * the header line, a malformed row, or an empty command - the same
+ * tolerance flow_files_parse_row() applies, since a hand-edited or
+ * truncated body must skip a line rather than abandon the screen. */
+int flow_doors_parse_row(const char *line,
+                         char *cmd_out, unsigned long cmd_outsize,
+                         char *name_out, unsigned long name_outsize,
+                         char *archive_out, unsigned long archive_outsize,
+                         unsigned long *size_out)
+{
+    char sizebuf[32];
+    char scratch[8];
+
+    if (line == (const char *) 0 || cmd_out == (char *) 0) {
+        return 1;
+    }
+    if (files_field(line, 0, cmd_out, cmd_outsize) != 0) {
+        return 1;
+    }
+    if (cmd_out[0] == '\0') {
+        return 1;
+    }
+    /* The header is "DOORS|<count>" - two fields, so field 2 is absent and
+     * the row test below rejects it without a special case. */
+    if (files_field(line, 2, sizebuf, sizeof(sizebuf)) != 0) {
+        return 1;
+    }
+    if (files_field(line, 3, scratch, sizeof(scratch)) != 0) {
+        return 1;
+    }
+    if (archive_out != (char *) 0
+        && files_field(line, 5, archive_out, archive_outsize) != 0) {
+        return 1;
+    }
+    if (name_out != (char *) 0
+        && files_field(line, 6, name_out, name_outsize) != 0) {
+        return 1;
+    }
+    if (size_out != (unsigned long *) 0) {
+        *size_out = strtoul(sizebuf, (char **) 0, 10);
+    }
+    return 0;
+}
+
 /* Basename of an archive-internal path, i.e. everything after the last
  * '/' (the /files listing always uses '/' regardless of the archive's own
  * separator). */

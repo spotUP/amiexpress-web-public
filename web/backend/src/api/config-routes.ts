@@ -345,13 +345,22 @@ console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError)
     try {
       const conferenceId = parseInt(req.params.conferenceId, 10);
       const context = getRequestContext(req);
-      const deleted = await configService.deleteConferenceConfig(conferenceId, context);
+      const result = await configService.deleteConferenceConfig(conferenceId, context);
 
-      if (!deleted) {
+      if (!result.deleted) {
         return handleError(res, new Error(`Conference ${conferenceId} configuration not found`));
       }
 
-      sendResponse(res, { deleted: true }, 'Conference configuration deleted');
+      // Say what was left behind. The conference's directory holds every
+      // message posted there and every file uploaded to it, and removing that
+      // is the sysop's decision, not a side effect of a button.
+      sendResponse(
+        res,
+        result,
+        result.keptOnDisk
+          ? `Conference removed. Its files are still on disk at ${result.keptOnDisk} - delete them yourself when you are sure.`
+          : 'Conference removed'
+      );
     } catch (error) {
       handleError(res, error);
     }
