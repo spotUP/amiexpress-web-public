@@ -202,19 +202,18 @@ export declare const BG_COLORS: {
     homeCrocodile: string;
 };
 /**
- * The sprites the board is drawn with.
+ * The characters the board is drawn with.
  *
- * Adapted from the style of Philippe Majerus's Frogger ANSI: coloured lane
- * backgrounds with character sprites laid over them, rather than the solid
- * blocks this door drew before. A log with rounded ends and a grain reads as
- * a log; a brown rectangle reads as a brown rectangle.
+ * Adapted from the style of Philippe Majerus's Frogger ANSI: coloured lanes
+ * with character sprites laid over them, rather than the solid blocks this
+ * door drew before. A log with rounded ends and a grain along it reads as a
+ * log; a brown rectangle reads as a brown rectangle.
  *
- * Every sprite is built to exactly `width * CELL_WIDTH` characters so it
- * fills its cells and no more.
+ * Every sprite is built to exactly `width * CELL_WIDTH` characters, so it
+ * covers its cells and no more.
  */
 export declare const SPRITE_FG: {
     log: string;
-    logEnd: string;
     turtle: string;
     crocodile: string;
     crocodileMouth: string;
@@ -228,18 +227,33 @@ export declare const SPRITE_FG: {
     frog: string;
     frogDying: string;
     hedge: string;
-    homeFrame: string;
+    home: string;
     homeFrog: string;
     homeFly: string;
     homeCrocodile: string;
     bank: string;
 };
-/** The frog, and the frog riding home on your back. */
+/** The frog, and the frog you carry home. */
 export declare const FROG_GLYPH = "\u03A9";
-/** The texture along the banks and the median. */
+/** The grain along a log, and the ends that round it off. */
+export declare const LOG_GRAIN = "-.";
+export declare const LOG_END_LEFT = "(";
+export declare const LOG_END_RIGHT = ")";
+/** One turtle of a set. */
+export declare const TURTLE_GLYPH = ":O:";
+/** The jaws of a crocodile or an otter, and the bodies behind them. */
+export declare const MOUTH_GLYPH = "><";
+export declare const CROCODILE_BODY = "\u2261";
+export declare const OTTER_BODY = "~";
+/** The snake, riding a log or patrolling the median. */
+export declare const SNAKE_GLYPH = "\u00A7";
+/** The texture of the banks and the median, and of the hedge up top. */
 export declare const BANK_TEXTURE = "\u00B7:";
-/** The texture of the hedge between the homes. */
 export declare const HEDGE_TEXTURE = "\u2591";
+/** The sides of a home, and what can be sitting in one. */
+export declare const HOME_LEFT = "\u2590";
+export declare const HOME_RIGHT = "\u258C";
+export declare const FLY_GLYPH = "*";
 export declare const COLORS: {
     frog: string;
     ladyFrog: string;
@@ -308,6 +322,14 @@ export declare const HOME_CROCODILE_DURATION_MS = 4000;
 export declare const LADY_FROG_INTERVAL_MS = 12000;
 /** The otter turns up on a water lane at random (FAQ 6.4 note). */
 export declare const OTTER_INTERVAL_MS = 15000;
+/**
+ * How long a name in the score table may be.
+ *
+ * The arcade took three initials because that is what a coin-op with a
+ * joystick can ask for. A BBS knows its caller's handle, so the table holds
+ * a handle - and when one has to be typed, it can be a whole one.
+ */
+export declare const MAX_NAME_LENGTH = 16;
 export declare const MENU_OPTIONS: string[];
 export declare const DEFAULT_HIGHSCORES: HighScore[];
 export declare const SPRITES: {

@@ -1,18 +1,24 @@
 /**
  * How the board is drawn.
  *
- * Blocks of background colour rather than ASCII sprites, the way Grandmaster
- * and Super Qix draw theirs, with each logical cell CELL_WIDTH characters
- * wide so a cell comes out roughly square.
+ * Coloured lanes with character sprites over them, in the style of Philippe
+ * Majerus's Frogger ANSI: a log has rounded ends and a grain, a turtle is
+ * `:O:`, a car has a nose pointing the way it is going. Each logical cell is
+ * CELL_WIDTH characters wide, so a cell is roughly square and forty of them
+ * fill the eighty-column screen.
  */
 
 import assert from 'assert';
 import { startedLevel, laneOf } from './fixture';
 import { FroggerGame } from '../game/frogger-game';
-import { FroggerData, RiverObject } from '../game/types';
+import { RiverObject } from '../game/types';
 import {
-  GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH, BG_COLORS, HOME_CENTRE_OFFSET,
+  GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH, BG_COLORS, SPRITE_FG,
+  HOME_CENTRE_OFFSET, FROG_GLYPH, TURTLE_GLYPH, MOUTH_GLYPH,
+  LOG_END_LEFT, LOG_END_RIGHT, SNAKE_GLYPH, FLY_GLYPH, BANK_TEXTURE,
 } from '../game/constants';
+
+interface Painted { ch: string; fg: string; bg: string }
 
 /** Render once and hand back the frame. */
 function frameOf(game: FroggerGame): string[] {
@@ -23,101 +29,158 @@ function frameOf(game: FroggerGame): string[] {
   return frame.split('\n');
 }
 
-/** The background colour of every cell of one row. */
-function rowColours(line: string): string[] {
-  const cells: string[] = [];
-  const re = /\{([a-z]+)-bg\}( +)\{\/[a-z]+-bg\}/g;
+/** Pull one row apart into its characters and their colours. */
+function paintedRow(line: string): Painted[] {
+  const cells: Painted[] = [];
+  const re = /\{([a-z]+)-bg\}\{([a-z]+)-fg\}(.*?)\{\/[a-z]+-fg\}\{\/[a-z]+-bg\}/g;
 
   let m: RegExpExecArray | null;
   while ((m = re.exec(line)) !== null) {
-    const count = m[2].length / CELL_WIDTH;
-    for (let i = 0; i < count; i++) cells.push(m[1]);
+    for (const ch of m[3]) cells.push({ ch, fg: m[2], bg: m[1] });
   }
   return cells;
 }
 
-/** Every board row is the full width, in cells and in characters. */
-export async function everyRowIsAFullWidthOfCells(): Promise<void> {
+/** The characters of a row, as a plain string. */
+function textOf(line: string): string {
+  return paintedRow(line).map(c => c.ch).join('');
+}
+
+/** Every board row is the full width, character for character. */
+export async function everyRowIsAFullScreenWide(): Promise<void> {
   const { game } = startedLevel(1);
   const rows = frameOf(game).slice(0, GRID_HEIGHT);
 
   assert.strictEqual(rows.length, GRID_HEIGHT, 'one line per lane');
 
   for (let y = 0; y < rows.length; y++) {
-    const visible = rows[y].replace(/\{[^}]*\}/g, '');
     assert.strictEqual(
-      visible.length, GRID_WIDTH * CELL_WIDTH,
+      paintedRow(rows[y]).length, GRID_WIDTH * CELL_WIDTH,
       `row ${y} should be ${GRID_WIDTH * CELL_WIDTH} characters wide`
     );
-    assert.strictEqual(rowColours(rows[y]).length, GRID_WIDTH, `row ${y} cell count`);
   }
 }
 
-/** A cell is drawn wider than one character, so it is not a tall sliver. */
+/** A cell is wider than one character, so it is not a tall sliver. */
 export async function aCellIsWiderThanOneCharacter(): Promise<void> {
   assert.ok(CELL_WIDTH >= 2, 'a cell needs to be at least two characters wide');
 }
 
-/** The board is colour, not text: no ASCII sprites are left in it. */
-export async function theBoardCarriesNoAsciiSprites(): Promise<void> {
+/**
+ * The board is drawn with characters, not just colour. This is the whole
+ * point of the ANSI style, and the reason it was reported: a board of solid
+ * blocks reads as coloured bars rather than as a game.
+ */
+export async function theBoardIsDrawnWithCharacters(): Promise<void> {
   const { game } = startedLevel(3);
   const rows = frameOf(game).slice(0, GRID_HEIGHT);
 
-  const visible = rows.join('').replace(/\{[^}]*\}/g, '');
-  assert.strictEqual(
-    visible.trim(), '',
-    'every board cell should be a coloured space, not a character'
+  const drawn = rows.map(textOf).join('').replace(/ /g, '');
+  assert.ok(
+    drawn.length > 100,
+    `the board should be full of sprites, found ${drawn.length} characters`
   );
-
-  assert.ok(rows.every(r => r.includes('-bg}')), 'every row is painted with backgrounds');
 }
 
-/** Open water is water-coloured; the road is road-coloured. */
-export async function theGroundIsPaintedByLaneType(): Promise<void> {
+/** A log has rounded ends and a grain along it. */
+export async function aLogIsDrawnAsALog(): Promise<void> {
   const { game, data } = startedLevel(1);
 
-  const water = laneOf(data, 'water', 3);
-  water.objects = [];
-  const road = laneOf(data, 'road', 2);
-  road.objects = [];
+  const lane = laneOf(data, 'water', 2);
+  const log = lane.objects[0] as RiverObject;
+  log.x = 4;
 
-  const rows = frameOf(game);
+  const row = paintedRow(frameOf(game)[lane.y]);
+  const span = log.width * CELL_WIDTH;
+  const sprite = row.slice(4 * CELL_WIDTH, 4 * CELL_WIDTH + span);
+  const text = sprite.map(c => c.ch).join('');
+
+  assert.strictEqual(text[0], LOG_END_LEFT, 'a rounded left end');
+  assert.strictEqual(text[text.length - 1], LOG_END_RIGHT, 'and a rounded right end');
+  assert.ok(text.includes('-'), 'with a grain along it');
+  assert.ok(sprite.every(c => c.bg === BG_COLORS.log), 'on wood, not on water');
+}
+
+/** A turtle set is drawn as turtles. */
+export async function turtlesAreDrawnAsTurtles(): Promise<void> {
+  const { game, data } = startedLevel(1);
+
+  const lane = laneOf(data, 'water', 1);
+  const turtle = lane.objects[0] as RiverObject;
+  turtle.x = 6;
+  turtle.isDiving = false;
+
+  const row = paintedRow(frameOf(game)[lane.y]);
+  const text = row.slice(6 * CELL_WIDTH, 6 * CELL_WIDTH + turtle.width * CELL_WIDTH)
+    .map(c => c.ch).join('');
 
   assert.ok(
-    rowColours(rows[water.y]).every(c => c === BG_COLORS.water),
-    'empty water should be all water'
-  );
-  assert.ok(
-    rowColours(rows[road.y]).every(c => c === BG_COLORS.road),
-    'empty road should be all road'
+    text.includes(TURTLE_GLYPH),
+    `expected a turtle in "${text}"`
   );
 }
 
-/** A car is drawn in the car colour, across its whole width. */
-export async function aCarIsPaintedInTheCarColour(): Promise<void> {
+/** A turtle that has dived shows nothing: there is nothing to stand on. */
+export async function aDivedTurtleShowsOnlyWater(): Promise<void> {
+  const { game, data } = startedLevel(2);
+
+  const lane = laneOf(data, 'water', 1);
+  const turtle = (lane.objects as RiverObject[]).find(t => t.canDive)!;
+  turtle.x = 6;
+  turtle.isDiving = true;
+
+  const row = paintedRow(frameOf(game)[lane.y]);
+  const cells = row.slice(6 * CELL_WIDTH, 6 * CELL_WIDTH + turtle.width * CELL_WIDTH);
+
+  assert.strictEqual(
+    cells.map(c => c.ch).join('').trim(), '',
+    'a turtle under the surface should not be drawn'
+  );
+  assert.ok(cells.every(c => c.bg === BG_COLORS.water), 'only water is left');
+}
+
+/** A vehicle points the way it is travelling. */
+export async function aVehiclePointsWhereItIsGoing(): Promise<void> {
   const { game, data } = startedLevel(1);
 
   const road = laneOf(data, 'road', 1);
   road.objects = [{
     id: 1, type: 'car', x: 10, y: road.y, lane: road.lane, width: 2,
-    speed: road.speed,
+    speed: Math.abs(road.speed),      // travelling right
   }];
 
-  const colours = rowColours(frameOf(game)[road.y]);
+  const row = paintedRow(frameOf(game)[road.y]);
+  const text = row.slice(10 * CELL_WIDTH, 10 * CELL_WIDTH + 2 * CELL_WIDTH)
+    .map(c => c.ch).join('');
 
-  assert.strictEqual(colours[10], BG_COLORS.car);
-  assert.strictEqual(colours[11], BG_COLORS.car);
-  assert.strictEqual(colours[12], BG_COLORS.road, 'and no wider than it is');
+  assert.strictEqual(text[text.length - 1], '>', `a nose on the right, got "${text}"`);
+  assert.ok(
+    row[10 * CELL_WIDTH].fg === SPRITE_FG.car,
+    'painted in the car colour'
+  );
 }
 
-/** Each kind of traffic has its own colour. */
-export async function eachKindOfTrafficIsToldApartByColour(): Promise<void> {
-  const distinct = new Set([BG_COLORS.car, BG_COLORS.truck, BG_COLORS.racecar]);
-  assert.strictEqual(distinct.size, 3, 'cars, trucks and racecars differ');
+/** ...and the other way when it is going the other way. */
+export async function aVehicleGoingLeftPointsLeft(): Promise<void> {
+  const { game, data } = startedLevel(1);
 
-  assert.notStrictEqual(BG_COLORS.log, BG_COLORS.water, 'a log stands out from the water');
-  assert.notStrictEqual(BG_COLORS.turtle, BG_COLORS.water, 'so does a turtle');
-  assert.notStrictEqual(BG_COLORS.frog, BG_COLORS.log, 'and the frog from its footing');
+  const road = laneOf(data, 'road', 1);
+  road.objects = [{
+    id: 1, type: 'car', x: 10, y: road.y, lane: road.lane, width: 2,
+    speed: -Math.abs(road.speed),
+  }];
+
+  const text = paintedRow(frameOf(game)[road.y])
+    .slice(10 * CELL_WIDTH, 10 * CELL_WIDTH + 2 * CELL_WIDTH)
+    .map(c => c.ch).join('');
+
+  assert.strictEqual(text[0], '<', `a nose on the left, got "${text}"`);
+}
+
+/** Each kind of traffic is told apart by colour. */
+export async function eachKindOfTrafficHasItsOwnColour(): Promise<void> {
+  const distinct = new Set([SPRITE_FG.car, SPRITE_FG.truck, SPRITE_FG.racecar]);
+  assert.strictEqual(distinct.size, 3, 'cars, trucks and racecars differ');
 }
 
 /** The frog is drawn on top of whatever it is standing on. */
@@ -131,58 +194,39 @@ export async function theFrogIsDrawnOverItsFooting(): Promise<void> {
   data.frog.y = water.y;
   data.frog.x = 9;
 
-  const colours = rowColours(frameOf(game)[water.y]);
+  const row = paintedRow(frameOf(game)[water.y]);
+  const cell = row[9 * CELL_WIDTH];
 
-  assert.strictEqual(colours[9], BG_COLORS.frog, 'the frog wins the cell');
-  assert.strictEqual(colours[8], BG_COLORS.log, 'the log either side of it');
+  assert.strictEqual(cell.ch, FROG_GLYPH, 'the frog wins its cell');
+  assert.strictEqual(cell.fg, SPRITE_FG.frog);
+  assert.strictEqual(cell.bg, BG_COLORS.log, 'standing on the log');
 }
 
-/**
- * A crocodile's mouth is a different colour from its back, because one is
- * footing and the other is fatal.
- */
-export async function aCrocodileShowsWhichEndIsItsMouth(): Promise<void> {
+/** A crocodile shows its jaws at the end it swims towards. */
+export async function aCrocodileShowsItsJaws(): Promise<void> {
   const { game, data } = startedLevel(5);
 
   const lane = laneOf(data, 'water', 5);
   const croc = lane.objects[0] as RiverObject;
   croc.x = 12;
 
-  const colours = rowColours(frameOf(game)[lane.y]);
-  const cells = colours.slice(12, 12 + croc.width);
+  const row = paintedRow(frameOf(game)[lane.y]);
+  const span = croc.width * CELL_WIDTH;
+  const sprite = row.slice(12 * CELL_WIDTH, 12 * CELL_WIDTH + span);
+  const text = sprite.map(c => c.ch).join('');
 
-  assert.ok(
-    cells.includes(BG_COLORS.crocodileMouth),
-    `the mouth should be marked, got ${cells.join(',')}`
-  );
-  assert.ok(
-    cells.includes(BG_COLORS.crocodile),
-    'and the back should not be'
-  );
+  assert.ok(text.includes(MOUTH_GLYPH), `jaws somewhere in "${text}"`);
 
-  // Lane 5 runs right to left, so the mouth is the leading, leftmost cell.
-  assert.strictEqual(cells[0], BG_COLORS.crocodileMouth);
-}
-
-/** A turtle that has dived is drawn as water: there is nothing to stand on. */
-export async function aDivedTurtleLooksLikeWater(): Promise<void> {
-  const { game, data } = startedLevel(2);
-
-  const lane = laneOf(data, 'water', 1);
-  const turtle = (lane.objects as RiverObject[]).find(t => t.canDive)!;
-  turtle.x = 6;
-  turtle.isDiving = true;
-
-  const colours = rowColours(frameOf(game)[lane.y]);
-
+  // Lane 5 runs right to left, so the jaws lead on the left.
+  assert.strictEqual(text.slice(0, MOUTH_GLYPH.length), MOUTH_GLYPH);
+  assert.strictEqual(sprite[0].fg, SPRITE_FG.crocodileMouth, 'and they are marked');
   assert.strictEqual(
-    colours[6], BG_COLORS.turtleDiving,
-    'a turtle under the surface should not look like footing'
+    sprite[span - 1].fg, SPRITE_FG.crocodile,
+    'while the back is not'
   );
-  assert.strictEqual(BG_COLORS.turtleDiving, BG_COLORS.water);
 }
 
-/** A home shows what is in it. */
+/** A home shows what is sitting in it. */
 export async function aHomeShowsWhatIsInIt(): Promise<void> {
   const { game, data } = startedLevel(2);
 
@@ -190,21 +234,43 @@ export async function aHomeShowsWhatIsInIt(): Promise<void> {
   data.homes[1].hasFly = true;
   data.homes[2].hasAlligator = true;
 
-  const colours = rowColours(frameOf(game)[0]);
+  const row = paintedRow(frameOf(game)[0]);
+  // The cell the frog has to land in is where the occupant is drawn.
+  const middleOf = (i: number) =>
+    row[(data.homes[i].x + HOME_CENTRE_OFFSET) * CELL_WIDTH];
 
-  assert.strictEqual(colours[data.homes[0].x + HOME_CENTRE_OFFSET], BG_COLORS.homeOccupied);
-  assert.strictEqual(colours[data.homes[1].x + HOME_CENTRE_OFFSET], BG_COLORS.homeFly);
-  assert.strictEqual(colours[data.homes[2].x + HOME_CENTRE_OFFSET], BG_COLORS.homeCrocodile);
-  assert.strictEqual(colours[data.homes[3].x + HOME_CENTRE_OFFSET], BG_COLORS.homeEmpty);
+  assert.strictEqual(middleOf(0).ch, FROG_GLYPH, 'a frog safely home');
+  assert.strictEqual(middleOf(1).ch, FLY_GLYPH, 'a fly to be had');
+  assert.strictEqual(middleOf(2).ch, MOUTH_GLYPH[0], 'a crocodile lying in wait');
+  assert.strictEqual(middleOf(3).ch, ' ', 'and an empty home');
 }
 
-/** The hedge between the homes is not an opening. */
-export async function theHedgeBetweenHomesIsSolid(): Promise<void> {
+/** The hedge between the homes is textured, not a flat block. */
+export async function theHedgeIsTextured(): Promise<void> {
   const { game, data } = startedLevel(1);
-  const colours = rowColours(frameOf(game)[0]);
+  const row = paintedRow(frameOf(game)[0]);
 
-  const between = data.homes[0].x + 5;   // between home 1 and home 2
-  assert.strictEqual(colours[between], BG_COLORS.hedge);
+  const between = row[(data.homes[0].x + 5) * CELL_WIDTH];
+  assert.notStrictEqual(between.ch, ' ', 'the hedge should have a texture');
+  assert.strictEqual(between.bg, BG_COLORS.hedge);
+}
+
+/** The banks and the median are textured too. */
+export async function theBanksAreTextured(): Promise<void> {
+  const { game, data } = startedLevel(1);
+  const bank = data.lanes.find(l => l.type === 'safe')!;
+
+  const row = paintedRow(frameOf(game)[bank.y]);
+
+  // Counted, not merely "something is drawn": the frog stands on the bottom
+  // bank, so one glyph proves nothing about the texture.
+  const textured = row.filter(c => BANK_TEXTURE.includes(c.ch)).length;
+
+  assert.ok(
+    textured > row.length / 2,
+    `most of the bank should be textured, found ${textured} of ${row.length}`
+  );
+  assert.ok(row.every(c => c.bg === BG_COLORS.bank));
 }
 
 /** A snake riding a log is drawn over it. */
@@ -216,13 +282,13 @@ export async function aSnakeOnALogIsVisible(): Promise<void> {
   log.x = 5;
   log.snakeAt = 2;
 
-  const colours = rowColours(frameOf(game)[lane.y]);
+  const row = paintedRow(frameOf(game)[lane.y]);
 
-  assert.strictEqual(colours[7], BG_COLORS.snake, 'the snake shows on the log');
-  assert.strictEqual(colours[5], BG_COLORS.log, 'the rest of the log does not');
+  assert.strictEqual(row[7 * CELL_WIDTH].ch, SNAKE_GLYPH, 'the snake shows on the log');
+  assert.strictEqual(row[7 * CELL_WIDTH].fg, SPRITE_FG.snake);
 }
 
-/** A dying frog blinks rather than sitting there. */
+/** A dying frog blinks. */
 export async function aDyingFrogBlinks(): Promise<void> {
   const { game, data } = startedLevel(1);
 
@@ -231,11 +297,12 @@ export async function aDyingFrogBlinks(): Promise<void> {
   data.frog.y = 10;
 
   data.frog.deathFrame = 0;
-  const on = rowColours(frameOf(game)[10])[20];
+  const on = paintedRow(frameOf(game)[10])[20 * CELL_WIDTH];
 
   data.frog.deathFrame = 3;
-  const off = rowColours(frameOf(game)[10])[20];
+  const off = paintedRow(frameOf(game)[10])[20 * CELL_WIDTH];
 
-  assert.strictEqual(on, BG_COLORS.frogDying, 'showing on one frame');
-  assert.notStrictEqual(off, BG_COLORS.frogDying, 'and gone on the next');
+  assert.strictEqual(on.ch, FROG_GLYPH, 'showing on one frame');
+  assert.strictEqual(on.fg, SPRITE_FG.frogDying, 'in the dying colour');
+  assert.notStrictEqual(off.ch, FROG_GLYPH, 'and gone on the next');
 }

@@ -165,18 +165,17 @@ export declare class FroggerGame {
     /** Line the demo up with a free home, then hop in. */
     private demoAimForHome;
     /**
-     * Render the game.
+     * Render the board.
      *
-     * Drawn as blocks of background colour rather than ASCII sprites, the way
-     * Grandmaster and Super Qix draw their boards: a solid red block reads as
-     * a car where a '#' reads as punctuation. Each logical cell is CELL_WIDTH
-     * characters wide so that a cell comes out roughly square on a terminal,
-     * and forty of them fill the screen exactly.
+     * Coloured lanes with character sprites laid over them, in the style of
+     * Philippe Majerus's Frogger ANSI. Each logical cell is CELL_WIDTH
+     * characters wide, so a cell comes out roughly square and forty of them
+     * fill the eighty-column screen exactly.
      */
     render(): void;
-    /** The ground: road, water, the banks and the median. */
+    /** The ground: road, water, the banks and the median, and the hedge. */
     private paintLanes;
-    /** The five homes cut into the hedge along the top. */
+    /** The five homes cut into the hedge. */
     private paintHomes;
     /** Everything travelling in a lane. */
     private paintObjects;
@@ -185,12 +184,17 @@ export declare class FroggerGame {
     /** The player. */
     private paintFrog;
     /**
-     * The colour of one cell of a moving object.
+     * The sprite for one moving thing, built to exactly fill its cells.
      *
-     * A crocodile and an otter are drawn with their mouth in a different
-     * colour, because landing on the mouth is fatal and landing on the back is
-     * not - the player has to be able to see which end is which.
+     * `mouthAt` is where the jaws of a crocodile or otter go: the leading end,
+     * whichever way it is swimming. The player has to be able to see which end
+     * eats them.
      */
-    private colourFor;
+    private spriteFor;
+    /**
+     * A vehicle: a body with a nose on the end it is travelling towards, so
+     * you can see which way the traffic is coming from.
+     */
+    private vehicleSprite;
 }
 //# sourceMappingURL=frogger-game.d.ts.map

@@ -8,7 +8,8 @@
  * and snakes. Everything the door used to guess at is read from here.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SPRITES = exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.OTTER_INTERVAL_MS = exports.LADY_FROG_INTERVAL_MS = exports.HOME_CROCODILE_DURATION_MS = exports.HOME_CROCODILE_INTERVAL_MS = exports.FLY_DURATION_MS = exports.FLY_SPAWN_INTERVAL_MS = exports.RIVER_HURRY_MULTIPLIER = exports.RIVER_HURRY_AFTER_SECONDS = exports.LANE4_SPEEDUP_AFTER_MS = exports.LANE4_FAST_MULTIPLIER = exports.BLOCK_LENGTH = exports.BLOCK_START = exports.LANE5_CROCODILE_COUNT = exports.LEVEL_TABLE = exports.COLORS = exports.HEDGE_TEXTURE = exports.BANK_TEXTURE = exports.FROG_GLYPH = exports.SPRITE_FG = exports.BG_COLORS = exports.CELL_WIDTH = exports.SCORES = exports.OBJECT_WIDTHS = exports.TURTLE_SURFACE_DURATION = exports.TURTLE_DIVE_DURATION = exports.HOME_CENTRE_OFFSET = exports.HOME_WIDTH = exports.HOME_POSITIONS = exports.LANE_CONFIG = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.EXTRA_LIFE_SCORE = exports.STARTING_LIVES = exports.LIVES_OPTIONS = exports.INITIAL_TIME = exports.GAME_TICK_MS = exports.GAME_AREA_HEIGHT = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.OTTER_INTERVAL_MS = exports.LADY_FROG_INTERVAL_MS = exports.HOME_CROCODILE_DURATION_MS = exports.HOME_CROCODILE_INTERVAL_MS = exports.FLY_DURATION_MS = exports.FLY_SPAWN_INTERVAL_MS = exports.RIVER_HURRY_MULTIPLIER = exports.RIVER_HURRY_AFTER_SECONDS = exports.LANE4_SPEEDUP_AFTER_MS = exports.LANE4_FAST_MULTIPLIER = exports.BLOCK_LENGTH = exports.BLOCK_START = exports.LANE5_CROCODILE_COUNT = exports.LEVEL_TABLE = exports.COLORS = exports.FLY_GLYPH = exports.HOME_RIGHT = exports.HOME_LEFT = exports.HEDGE_TEXTURE = exports.BANK_TEXTURE = exports.SNAKE_GLYPH = exports.OTTER_BODY = exports.CROCODILE_BODY = exports.MOUTH_GLYPH = exports.TURTLE_GLYPH = exports.LOG_END_RIGHT = exports.LOG_END_LEFT = exports.LOG_GRAIN = exports.FROG_GLYPH = exports.SPRITE_FG = exports.BG_COLORS = exports.CELL_WIDTH = exports.SCORES = exports.OBJECT_WIDTHS = exports.TURTLE_SURFACE_DURATION = exports.TURTLE_DIVE_DURATION = exports.HOME_CENTRE_OFFSET = exports.HOME_WIDTH = exports.HOME_POSITIONS = exports.LANE_CONFIG = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.EXTRA_LIFE_SCORE = exports.STARTING_LIVES = exports.LIVES_OPTIONS = exports.INITIAL_TIME = exports.GAME_TICK_MS = exports.GAME_AREA_HEIGHT = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.SPRITES = exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.MAX_NAME_LENGTH = void 0;
 exports.getLevelConfig = getLevelConfig;
 // Screen dimensions
 exports.SCREEN_WIDTH = 80;
@@ -154,19 +155,18 @@ exports.BG_COLORS = {
     homeCrocodile: 'lightred',
 };
 /**
- * The sprites the board is drawn with.
+ * The characters the board is drawn with.
  *
- * Adapted from the style of Philippe Majerus's Frogger ANSI: coloured lane
- * backgrounds with character sprites laid over them, rather than the solid
- * blocks this door drew before. A log with rounded ends and a grain reads as
- * a log; a brown rectangle reads as a brown rectangle.
+ * Adapted from the style of Philippe Majerus's Frogger ANSI: coloured lanes
+ * with character sprites laid over them, rather than the solid blocks this
+ * door drew before. A log with rounded ends and a grain along it reads as a
+ * log; a brown rectangle reads as a brown rectangle.
  *
- * Every sprite is built to exactly `width * CELL_WIDTH` characters so it
- * fills its cells and no more.
+ * Every sprite is built to exactly `width * CELL_WIDTH` characters, so it
+ * covers its cells and no more.
  */
 exports.SPRITE_FG = {
     log: 'gray',
-    logEnd: 'black',
     turtle: 'lightgreen',
     crocodile: 'lightgreen',
     crocodileMouth: 'lightred',
@@ -180,18 +180,33 @@ exports.SPRITE_FG = {
     frog: 'lightgreen',
     frogDying: 'lightred',
     hedge: 'green',
-    homeFrame: 'blue',
+    home: 'blue',
     homeFrog: 'lightgreen',
     homeFly: 'lightyellow',
     homeCrocodile: 'lightred',
     bank: 'red',
 };
-/** The frog, and the frog riding home on your back. */
+/** The frog, and the frog you carry home. */
 exports.FROG_GLYPH = '\u03a9';
-/** The texture along the banks and the median. */
+/** The grain along a log, and the ends that round it off. */
+exports.LOG_GRAIN = '-.';
+exports.LOG_END_LEFT = '(';
+exports.LOG_END_RIGHT = ')';
+/** One turtle of a set. */
+exports.TURTLE_GLYPH = ':O:';
+/** The jaws of a crocodile or an otter, and the bodies behind them. */
+exports.MOUTH_GLYPH = '><';
+exports.CROCODILE_BODY = '\u2261';
+exports.OTTER_BODY = '~';
+/** The snake, riding a log or patrolling the median. */
+exports.SNAKE_GLYPH = '\u00a7';
+/** The texture of the banks and the median, and of the hedge up top. */
 exports.BANK_TEXTURE = '\u00b7:';
-/** The texture of the hedge between the homes. */
 exports.HEDGE_TEXTURE = '\u2591';
+/** The sides of a home, and what can be sitting in one. */
+exports.HOME_LEFT = '\u2590';
+exports.HOME_RIGHT = '\u258c';
+exports.FLY_GLYPH = '*';
 // Colors for rendering
 exports.COLORS = {
     frog: 'green',
@@ -278,6 +293,14 @@ exports.HOME_CROCODILE_DURATION_MS = 4000;
 exports.LADY_FROG_INTERVAL_MS = 12000;
 /** The otter turns up on a water lane at random (FAQ 6.4 note). */
 exports.OTTER_INTERVAL_MS = 15000;
+/**
+ * How long a name in the score table may be.
+ *
+ * The arcade took three initials because that is what a coin-op with a
+ * joystick can ask for. A BBS knows its caller's handle, so the table holds
+ * a handle - and when one has to be typed, it can be a whole one.
+ */
+exports.MAX_NAME_LENGTH = 16;
 // Menu options
 exports.MENU_OPTIONS = ['Start Game', 'Lives', 'High Scores', 'Help', 'Quit'];
 // Default high scores

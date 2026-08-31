@@ -27,6 +27,7 @@ import {
   INITIAL_TIME,
   MENU_OPTIONS,
   LIVES_OPTIONS,
+  MAX_NAME_LENGTH,
   DEFAULT_HIGHSCORES,
   HOME_POSITIONS,
 } from "./game/constants";
@@ -738,16 +739,42 @@ function handleGameOverInput(key: InputKey): void {
   if (key === "enter" || key === "space") {
     const lowestScore =
       gameData.highscores[gameData.highscores.length - 1]?.score || 0;
-    if (gameData.score > lowestScore || gameData.highscores.length < 10) {
-      gameData.state = "enterName";
-      gameData.playerName = "";
-      showNameEntry();
-    } else {
+    const madeTheTable =
+      gameData.score > lowestScore || gameData.highscores.length < 10;
+
+    if (!madeTheTable) {
       showMenu();
+      return;
     }
+
+    // The BBS knows the caller. Only ask for a name when it somehow does
+    // not - typing initials is a coin-op ritual, not something a BBS user
+    // should have to do.
+    if (gameData.playerName) {
+      void saveScoreAndReturn(gameData.playerName);
+      return;
+    }
+
+    gameData.state = "enterName";
+    showNameEntry();
   } else if (key === "q" || key === "escape") {
     showMenu();
   }
+}
+
+/** Record the score under `name`, then go back to the menu either way. */
+async function saveScoreAndReturn(name: string): Promise<void> {
+  try {
+    await rpcHandlers.saveHighscore({
+      name,
+      score: gameData.score,
+      level: gameData.level,
+    });
+    gameData.highscores = await rpcHandlers.getHighscores();
+  } catch {
+    // A high score that cannot be written is not worth losing the door over.
+  }
+  showMenu();
 }
 
 /**
@@ -761,7 +788,7 @@ function showNameEntry(): void {
     "",
     "{cyan-fg}Enter your initials:{/}",
     "",
-    `{white-fg}[ ${gameData.playerName.padEnd(3, "_")} ]{/}`,
+    `{white-fg}[ ${gameData.playerName.padEnd(MAX_NAME_LENGTH, "_")} ]{/}`,
     "",
     "{gray-fg}Press ENTER when done{/}",
   ];
@@ -790,16 +817,7 @@ function showNameEntry(): void {
 async function handleNameEntryInput(key: InputKey): Promise<void> {
   if (key === "enter") {
     if (gameData.playerName.length > 0) {
-      try {
-        await rpcHandlers.saveHighscore({
-          name: gameData.playerName,
-          score: gameData.score,
-          level: gameData.level,
-        });
-      } catch {
-        // Continue anyway
-      }
-      showMenu();
+      await saveScoreAndReturn(gameData.playerName);
     }
   } else if (key === "backspace") {
     if (gameData.playerName.length > 0) {
@@ -811,10 +829,13 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
   } else if (
     typeof key === "string" &&
     key.length === 1 &&
-    /[A-Za-z0-9]/.test(key)
+    key >= " " && key <= "~"
   ) {
-    if (gameData.playerName.length < 3) {
-      gameData.playerName += key.toUpperCase();
+    // Any printable character, and a handle's worth of them. It used to
+    // take three letters or digits and nothing else, so a BBS handle with a
+    // symbol in it could not be typed at all.
+    if (gameData.playerName.length < MAX_NAME_LENGTH) {
+      gameData.playerName += key;
       showNameEntry();
     }
   }
@@ -859,6 +880,10 @@ function cleanup(): void {
 door.onStart(async (ctx: any) => {
   doorContext = ctx;
   gameData = createInitialGameData();
+
+  // The BBS already knows who is playing, so a high score does not need to
+  // be typed in three letters at a time - the same thing Grandmaster does.
+  gameData.playerName = ctx?.session?.user?.username || "";
 
   // Prevent event loop from emptying
   keepAlive = setInterval(() => {}, 60000);
