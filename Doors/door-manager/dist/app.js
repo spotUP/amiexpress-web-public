@@ -45,6 +45,7 @@ const path = __importStar(require("path"));
 const run_door_1 = require("./run-door");
 const installed_footer_1 = require("./installed-footer");
 const type_badge_1 = require("./type-badge");
+const delete_door_action_1 = require("./delete-door-action");
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
 const archive_browse_view_1 = require("./archive-browse-view");
@@ -482,73 +483,18 @@ class InstalledView extends ViewManager_1.BaseView {
         if (!d)
             return;
         const idx = this.layout.listSelected;
-        this.vm.push(new ConfirmView(this.layout, `Delete {yellow-fg}${d.name}{/yellow-fg}?\n\n{red-fg}This cannot be undone.{/red-fg}`, 'Delete', 'Cancel', async () => {
-            const isTS = ['TS', 'typescript', 'SDK'].includes(d.type);
-            const id = isTS ? (d.location?.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0] || d.command) : d.command;
-            // The delete used to run behind a single status line, and the
-            // backend did its filesystem work synchronously - so the board froze
-            // and the sysop watched a still screen with no idea how far along it
-            // was. The work is asynchronous now; this shows each stage as it
-            // happens, in the same panel an install reports into.
-            const log = new action_log_1.ActionLog(`Deleting ${d.name}`);
-            const paint = (extra = '') => {
-                this.layout.setInfo(log.render() + extra);
-                this.layout.render();
-            };
-            this.setStatus(`Deleting ${d.name}...`, 'yellow', 30000);
-            log.ok(`${d.command}: ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
-            paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
-            try {
-                // Each step is painted AS it happens. DOORMAN runs in the backend's
-                // own process, so this callback is a direct call from the delete -
-                // and because the filesystem work between steps is asynchronous,
-                // the repaint actually reaches the terminal instead of arriving as
-                // one finished log after the pause.
-                const onStep = (step) => {
-                    log.add(step.kind, step.text);
-                    paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
-                };
-                const r = await this.bbs.deleteDoor(id, isTS, onStep);
-                if (r.success) {
-                    // Belt and braces: deleteDoor refreshes backend caches itself,
-                    // but a stale registry here left deleted doors visible with no
-                    // feedback (2026-08-15). Refresh again from our side, re-fetch,
-                    // and confirm persistently in the info panel.
-                    log.ok('reloading the door registry');
-                    paint('\n\n{yellow-fg}Reloading...{/yellow-fg}\n');
-                    await (0, ViewManager_1.refreshDoorRegistry)();
-                    this.doors = await fetchDoors(this.bbs);
-                    this.refresh(Math.max(0, idx - 1));
-                    // The door is only deleted when it has left the list the sysop is
-                    // looking at. Saying "deleted" while it is still on screen is the
-                    // exact report this fix came from.
-                    const stillListed = this.doors.some(other => other.command === d.command);
-                    if (stillListed) {
-                        log.fail(`${d.command} is still registered - the BBS still lists it`);
-                        this.setStatus(`${d.name} still listed`, 'red', 8000);
-                        paint(`\n\n{red-fg}Still registered{/red-fg}\n\n` +
-                            `The files were removed but ${(0, ViewManager_1.sanitizeForTags)(d.command)} is still in the door list.\n`);
-                        console.log(`[DOORMAN] delete incomplete: ${d.command} still in the registry after delete`);
-                        return;
-                    }
-                    log.ok(`${d.command} is gone from the door list`);
-                    this.setStatus(`${d.name} deleted`, 'green', 8000);
-                    paint(`\n\n{green-fg}Deleted{/green-fg}\n`);
-                }
-                else {
-                    log.fail(String(r.message ?? 'unknown error'));
-                    this.setStatus(`Failed: ${r.message}`, 'red', 8000);
-                    paint(`\n\n{red-fg}Delete failed{/red-fg}\n`);
-                    console.log(`[DOORMAN] delete failed: ${d.name}: ${r.message}`);
-                }
-            }
-            catch (e) {
-                log.fail(e?.message ?? String(e));
-                this.setStatus(`Error: ${e.message}`, 'red', 8000);
-                paint(`\n\n{red-fg}Delete failed{/red-fg}\n`);
-                console.log(`[DOORMAN] delete error: ${d.name}: ${e?.message ?? e}`);
-            }
-        }));
+        this.vm.push(new ConfirmView(this.layout, `Delete {yellow-fg}${d.name}{/yellow-fg}?\n\n{red-fg}This cannot be undone.{/red-fg}`, 'Delete', 'Cancel', () => (0, delete_door_action_1.performDoorDelete)({
+            door: d,
+            selectedIndex: idx,
+            bbs: this.bbs,
+            setInfo: (text) => this.layout.setInfo(text),
+            render: () => this.layout.render(),
+            setStatus: (m, colour, ms) => this.setStatus(m, colour, ms),
+            refreshRegistry: () => (0, ViewManager_1.refreshDoorRegistry)(),
+            fetchDoors: () => fetchDoors(this.bbs),
+            onDoorsChanged: (doors, selectIdx) => { this.doors = doors; this.refresh(selectIdx); },
+            showSelectedDoor: () => { this.updateInfo(); this.updateFooter(); this.layout.render(); },
+        })));
     }
     doViewDoc() {
         const d = this.door();
