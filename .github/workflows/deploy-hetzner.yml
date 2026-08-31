@@ -122,6 +122,31 @@
                 echo "== no previous image to tag (first deploy) =="
               fi
 
+              # Make room BEFORE building, not after failing to.
+              #
+              # 2026-09-01: the board went down mid-session with the disk at
+              # 100% and the container in a restart loop - the entrypoint
+              # could not write a byte. Nothing in this pipeline had ever
+              # freed anything, so every deploy left its build cache and its
+              # displaced image behind: 27.4GB of buildkit cache across 1348
+              # entries, and 19 images totalling 49GB, on a 75GB disk. The
+              # deploy still reported success, because the workflow is green
+              # when the build is green - the board was serving an image from
+              # hours earlier.
+              #
+              # --keep-storage leaves the recent layers, so an ordinary
+              # deploy still builds from cache; only the long tail goes. The
+              # daemon's own builder.gc enforces the same ceiling between
+              # deploys (see /etc/docker/daemon.json) - this is the belt to
+              # that braces, and the one that runs when it matters.
+              echo "== free space before build =="
+              df -h / | tail -1
+              docker builder prune -f --keep-storage=10GB 2>&1 | tail -2 || true
+              # Untagged leftovers only: :latest and :rollback are tags, so
+              # neither is a dangling image and neither can be caught here.
+              docker image prune -f 2>&1 | tail -2 || true
+              df -h / | tail -1
+
               echo "== docker compose build (with GIT_SHA) =="
               GIT_SHA="$ACTUAL_SHA" docker compose build
 
