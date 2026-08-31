@@ -10,7 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel } from '../services/config-services/door-info-file.service';
-import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags } from '../services/config-services/acs-level-file.service';
+import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
@@ -876,8 +876,33 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   router.get('/security/levels', async (_req: Request, res: Response) => {
     try {
       const bbsRoot = config.get('dataDir');
+      const levels = listAcsLevels(bbsRoot);
+
+      // The levels USERS actually hold, and which file serves each.
+      //
+      // The page listed the files and nothing else, so a board whose new
+      // users are level 30 saw 10/20/50/255 - none of them 30, and no way to
+      // tell that a level-30 caller is served out of ACS.20 (express.e:3025
+      // rounds down to a multiple of five and walks down). That reads as a
+      // made-up list.
+      let inUse: Array<{ level: number; users: number; servedBy: number | null }> = [];
+      try {
+        const counts = new Map<number, number>();
+        for (const user of userFileManager.readAllUsers() ?? []) {
+          const level = Number((user as { secLevel?: number }).secLevel ?? 0);
+          if (!Number.isFinite(level)) continue;
+          counts.set(level, (counts.get(level) ?? 0) + 1);
+        }
+        inUse = [...counts.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([level, users]) => ({ level, users, servedBy: acsLevelServing(level, levels) }));
+      } catch (readError) {
+        console.error('[Config API] could not read user levels:', readError);
+      }
+
       sendResponse(res, {
-        levels: listAcsLevels(bbsRoot),
+        levels,
+        inUse,
         permissions: ACS_PERMISSION_NAMES,
       });
     } catch (error) {
@@ -1622,6 +1647,38 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
 
         // Merge updates into current user
         const updatedUser = { ...currentUser };
+
+        // A rename, if one was asked for.
+        //
+        // The form disabled this and said "Username cannot be changed". The
+        // write path has always supported it - userToStruct puts
+        // `user.username` in the record's name field - so what was missing
+        // was the validation, not the ability.
+        //
+        // What a rename does NOT do is rewrite history: messages, the callers
+        // log and file uploaders all record the name as text at the time.
+        // The UI says so; silently leaving those pointing at a name that no
+        // longer exists would be the worse of the two.
+        if (updates.username !== undefined && updates.username !== currentUser.username) {
+          const wanted = String(updates.username).trim();
+          if (!wanted) {
+            return handleError(res, new Error('Username cannot be empty'));
+          }
+          if (wanted.length > 31) {
+            // axobjects.e sizes the field; a longer name would be truncated
+            // into the record and stop matching at login.
+            return handleError(res, new Error('Username cannot be longer than 31 characters'));
+          }
+          const clash = (userFileManager.readAllUsers() ?? []).find(
+            (u: { username?: string; slotNumber?: number }) =>
+              u.username?.toUpperCase() === wanted.toUpperCase() &&
+              u.slotNumber !== slotNumber
+          );
+          if (clash) {
+            return handleError(res, new Error(`A user called "${wanted}" already exists`));
+          }
+          updatedUser.username = wanted;
+        }
 
         // Map frontend field names to User object fields
         if (updates.realname !== undefined) updatedUser.realname = updates.realname;
