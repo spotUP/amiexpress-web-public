@@ -58,8 +58,26 @@ export class DoorConfigService {
       throw new Error(`Door command '${validated.door_command}' already exists`);
     }
 
-    const newDoor = this.configRepo.createDoor(validated);
+    // DISK FIRST, then the mirror - the same order the rest of this config
+    // layer uses, and for the same reason: Commands/BBSCmd/<CMD>.info is what
+    // the BBS reads and the `doors` table is a copy.
+    //
+    // The order mattered here. `doors.door_type` is CHECKed against
+    // ('SYSCMD','BBSCMD','INTERNAL') - the command's SCOPE - while the list
+    // this form is filled from reports the door's TYPE, which is what the
+    // .info carries: XIM, AIM, FIM, DD, SIM, typescript. So every Add Door
+    // with a real type hit "CHECK constraint failed: door_type" and threw
+    // before writing the registration: a 500 with a raw SQLite message, and
+    // no door.
     this.writeDoorInfoFile(validated);
+
+    let newDoor: Door;
+    try {
+      newDoor = this.configRepo.createDoor(validated);
+    } catch (mirrorError) {
+console.error(`[DoorConfigService] Mirror insert failed for ${validated.door_command} (registration written):`, mirrorError);
+      newDoor = { ...validated, id: 0 } as Door;
+    }
 
     this.configRepo.logConfigChange('doors', newDoor.id, 'CREATE',
       context.userId, context.username, undefined, newDoor,

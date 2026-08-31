@@ -475,6 +475,17 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
     try {
       const context = getRequestContext(req);
       const door = await configService.createDoor(req.body, context);
+
+      // getDoors() answers from a list built at startup, so a door created
+      // here did not appear in the list it was created from until a restart -
+      // the same reason the .info edit route reloads, and the same reload.
+      try {
+        const { initializeDoors } = require('../handlers/door.handler');
+        await initializeDoors();
+      } catch (reloadError) {
+        console.error('[config] door registry reload failed (registration written):', reloadError);
+      }
+
       sendResponse(res, door, 'Door created');
     } catch (error) {
       handleError(res, error);
