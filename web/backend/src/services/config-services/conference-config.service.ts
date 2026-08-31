@@ -152,8 +152,16 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
       const bbsRoot = appConfig.get('dataDir');
       const confConfig = loadConfConfig(bbsRoot);
       const confEntry = confConfig?.entries[newConfig.conference_id - 1];
-      const conferenceName = confEntry?.name || `Conference ${newConfig.conference_id}`;
-      const location = confEntry?.location || `Conf${String(newConfig.conference_id).padStart(2, '0')}`;
+
+      // The name the sysop typed, not a lookup of an entry that does not
+      // exist yet. This read `entries[id - 1]` for a conference being
+      // CREATED, always missed, and fell back to "Conference N" - so the
+      // name on the form was discarded every time.
+      const conferenceName =
+        validated.name?.trim() || confEntry?.name || `Conference ${newConfig.conference_id}`;
+      // Conf7, not Conf07: that is what every other conference on a board is
+      // called, and what the entrypoint creates.
+      const location = confEntry?.location || `Conf${newConfig.conference_id}`;
 
       await this.conferenceSetup.setupConference({
         conferenceId: newConfig.conference_id,
@@ -168,6 +176,26 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
         readOnly: validated.read_only || false
       });
 console.log(`[ConferenceConfigService] Created Conf${newConfig.conference_id}.info`);
+
+      // Register it LAST, and only once the files exist.
+      //
+      // setupConference builds the icon, the directory tree, the DIR files
+      // and the counters - and never touched ConfConfig.info, which is the
+      // file that decides whether a conference exists at all.
+      // express.e:31849 walks `FOR i:=1 TO cmds.numConf` reading NAME.i and
+      // LOCATION.i from it, so a conference missing from it is invisible to
+      // the BBS however complete its directory is. That is the mirror of the
+      // delete that left NAME.n behind with no icon.
+      //
+      // Last, because the opposite order leaves a named conference with
+      // nothing behind it if the setup fails - the ghost state again. An
+      // unregistered directory is harmless by comparison.
+      await this.conferenceSetup.updateConfConfig(
+        newConfig.conference_id,
+        conferenceName,
+        location
+      );
+console.log(`[ConferenceConfigService] Registered conference ${newConfig.conference_id} in ConfConfig.info`);
     } catch (error) {
 console.error(`[ConferenceConfigService] Failed to create disk structure:`, error);
     }

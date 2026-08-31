@@ -120,3 +120,71 @@ describe('removing a conference', () => {
     expect(after.get('NAME.11')).toBe('Conference 11');
   });
 });
+
+describe('creating a conference', () => {
+  // The mirror of the delete bug. setupConference built the icon, the
+  // directory tree, the DIR files and the counters - and never touched
+  // ConfConfig.info, the file that decides whether a conference EXISTS.
+  // express.e:31849 walks `FOR i:=1 TO cmds.numConf` reading NAME.i and
+  // LOCATION.i out of it, so a conference absent from it is invisible to the
+  // BBS however complete its directory is.
+  let root: string;
+
+  beforeEach(() => { root = makeBoard(3); });
+  afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
+
+  it('appears in ConfConfig.info, where the BBS looks for it', async () => {
+    const setup = new ConferenceSetupService(root);
+
+    await setup.setupConference({
+      conferenceId: 4,
+      conferenceName: 'Elite',
+      location: 'Conf4',
+      ndirs: 1,
+    });
+    await setup.updateConfConfig(4, 'Elite', 'Conf4');
+
+    const after = readTooltypeMap(path.join(root, 'ConfConfig.info'));
+    expect(after.get('NCONFS')).toBe('4');
+    expect(after.get('NAME.4')).toBe('Elite');
+    expect(after.get('LOCATION.4')).toBe('Conf4');
+  });
+
+  it('builds what express.e needs on disk', async () => {
+    const setup = new ConferenceSetupService(root);
+    await setup.setupConference({
+      conferenceId: 4, conferenceName: 'Elite', location: 'Conf4', ndirs: 2,
+    });
+
+    expect(fs.existsSync(path.join(root, 'Conf4.info'))).toBe(true);
+    // express.e:2068 reads <ConfLocation>MsgBase/, :24648 Bulletins/
+    expect(fs.existsSync(path.join(root, 'Conf4', 'MsgBase'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'Conf4', 'Bulletins'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'Conf4', 'DIR1'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'Conf4', 'DIR2'))).toBe(true);
+  });
+
+  it('will not skip a number and leave a gap', async () => {
+    // NCONFS is a COUNT. Registering 6 on a 3-conference board would make the
+    // BBS walk 1..6 and find nothing behind 4 and 5.
+    const setup = new ConferenceSetupService(root);
+    await expect(setup.updateConfConfig(6, 'Too far', 'Conf6')).rejects.toThrow(/too high/i);
+  });
+
+  it('round-trips: create it, then remove it, and the board is as it was', async () => {
+    const setup = new ConferenceSetupService(root);
+    const before = readTooltypeMap(path.join(root, 'ConfConfig.info'));
+
+    await setup.setupConference({ conferenceId: 4, conferenceName: 'Elite', location: 'Conf4', ndirs: 1 });
+    await setup.updateConfConfig(4, 'Elite', 'Conf4');
+    await setup.removeLastConference(4);
+
+    const after = readTooltypeMap(path.join(root, 'ConfConfig.info'));
+    expect(after.get('NCONFS')).toBe(before.get('NCONFS'));
+    expect(after.has('NAME.4')).toBe(false);
+    for (let i = 1; i <= 3; i += 1) {
+      expect(after.get(`NAME.${i}`)).toBe(before.get(`NAME.${i}`));
+      expect(after.get(`LOCATION.${i}`)).toBe(before.get(`LOCATION.${i}`));
+    }
+  });
+});
