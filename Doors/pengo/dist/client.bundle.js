@@ -9305,6 +9305,174 @@ var require_bundle = __commonJS({
   }
 });
 
+// ../../sdk/node_modules/chiptune3/chiptune3.js
+var chiptune3_exports = {};
+__export(chiptune3_exports, {
+  ChiptuneJsPlayer: () => ChiptuneJsPlayer
+});
+var defaultCfg, ChiptuneJsPlayer;
+var init_chiptune3 = __esm({
+  "../../sdk/node_modules/chiptune3/chiptune3.js"() {
+    defaultCfg = {
+      repeatCount: -1,
+      // -1 = play endless, 0 = play once, do not repeat
+      stereoSeparation: 100,
+      // percents
+      interpolationFilter: 0,
+      // https://lib.openmpt.org/doc/group__openmpt__module__render__param.html
+      context: false
+    };
+    ChiptuneJsPlayer = class {
+      constructor(cfg) {
+        this.config = { ...defaultCfg, ...cfg };
+        if (this.config.context) {
+          if (!this.config.context.destination) {
+            throw "ChiptuneJsPlayer: This is not an audio context";
+          }
+          this.context = this.config.context;
+          this.destination = false;
+        } else {
+          this.context = new AudioContext();
+          this.destination = this.context.destination;
+        }
+        delete this.config.context;
+        this.gain = this.context.createGain();
+        this.gain.gain.value = 1;
+        this.handlers = [];
+        this.context.audioWorklet.addModule(new URL("./chiptune3.worklet.js", import.meta.url)).then(() => {
+          this.processNode = new AudioWorkletNode(this.context, "libopenmpt-processor", {
+            numberOfInputs: 0,
+            numberOfOutputs: 1,
+            outputChannelCount: [2]
+          });
+          this.processNode.port.onmessage = this.handleMessage_.bind(this);
+          this.processNode.port.postMessage({ cmd: "config", val: this.config });
+          this.fireEvent("onInitialized");
+          this.processNode.connect(this.gain);
+          if (this.destination)
+            this.gain.connect(this.destination);
+        }).catch((e) => console.error(e));
+      }
+      // msg from worklet
+      handleMessage_(msg) {
+        switch (msg.data.cmd) {
+          case "meta":
+            this.meta = msg.data.meta;
+            this.duration = msg.data.meta.dur;
+            this.fireEvent("onMetadata", this.meta);
+            break;
+          case "pos":
+            this.currentTime = msg.data.pos;
+            this.order = msg.data.order;
+            this.pattern = msg.data.pattern;
+            this.row = msg.data.row;
+            this.fireEvent("onProgress", msg.data);
+            break;
+          case "end":
+            this.fireEvent("onEnded");
+            break;
+          case "err":
+            this.fireEvent("onError", { type: msg.data.val });
+            break;
+          case "fullAudioData":
+            this.fireEvent("onFullAudioData", msg.data);
+            break;
+          default:
+            console.log("Received unknown message", msg.data);
+        }
+      }
+      // handlers
+      fireEvent(eventName, response) {
+        const handlers = this.handlers;
+        if (handlers.length) {
+          handlers.forEach(function(handler2) {
+            if (handler2.eventName === eventName) {
+              handler2.handler(response);
+            }
+          });
+        }
+      }
+      addHandler(eventName, handler2) {
+        this.handlers.push({ eventName, handler: handler2 });
+      }
+      onInitialized(handler2) {
+        this.addHandler("onInitialized", handler2);
+      }
+      onEnded(handler2) {
+        this.addHandler("onEnded", handler2);
+      }
+      onError(handler2) {
+        this.addHandler("onError", handler2);
+      }
+      onMetadata(handler2) {
+        this.addHandler("onMetadata", handler2);
+      }
+      onProgress(handler2) {
+        this.addHandler("onProgress", handler2);
+      }
+      onFullAudioData(handler2) {
+        this.addHandler("onFullAudioData", handler2);
+      }
+      // methods
+      postMsg(cmd, val) {
+        if (this.processNode)
+          this.processNode.port.postMessage({ cmd, val });
+      }
+      load(url) {
+        fetch(url).then((response) => response.arrayBuffer()).then((arrayBuffer) => this.play(arrayBuffer)).catch((e) => {
+          this.fireEvent("onError", { type: "Load" });
+        });
+      }
+      play(val) {
+        this.postMsg("play", val);
+      }
+      stop() {
+        this.postMsg("stop");
+      }
+      pause() {
+        this.postMsg("pause");
+      }
+      unpause() {
+        this.postMsg("unpause");
+      }
+      togglePause() {
+        this.postMsg("togglePause");
+      }
+      setRepeatCount(val) {
+        this.postMsg("repeatCount", val);
+      }
+      setPitch(val) {
+        this.postMsg("setPitch", val);
+      }
+      setTempo(val) {
+        this.postMsg("setTempo", val);
+      }
+      setPos(val) {
+        this.postMsg("setPos", val);
+      }
+      setOrderRow(o, r) {
+        this.postMsg("setOrderRow", { o, r });
+      }
+      setVol(val) {
+        this.gain.gain.value = val;
+      }
+      selectSubsong(val) {
+        this.postMsg("selectSubsong", val);
+      }
+      // compatibility
+      seek(val) {
+        this.setPos(val);
+      }
+      getCurrentTime() {
+        return this.currentTime;
+      }
+      decodeAll(ab) {
+        this.postMsg("decodeAll", ab);
+      }
+    };
+  }
+});
+
 // ../../sdk/node_modules/events/events.js
 var require_events = __commonJS({
   "../../sdk/node_modules/events/events.js"(exports, module) {
@@ -36090,6 +36258,521 @@ var PlaybackState;
   PlaybackState2["Paused"] = "paused";
   PlaybackState2["Loading"] = "loading";
 })(PlaybackState || (PlaybackState = {}));
+var TrackerEngine = class _TrackerEngine {
+  /**
+   * Create a new TrackerEngine instance.
+   *
+   * @param config - Engine configuration
+   *
+   * @example
+   * ```typescript
+   * // Default configuration
+   * const tracker = new TrackerEngine();
+   *
+   * // Custom configuration
+   * const tracker = new TrackerEngine({
+   *   repeatCount: 0,           // Play once
+   *   stereoSeparation: 100,    // Normal stereo
+   *   interpolationFilter: InterpolationFilter.Sinc8,
+   *   volume: 0.8
+   * });
+   * ```
+   */
+  constructor(config = {}) {
+    this.player = null;
+    this.eventHandlers = /* @__PURE__ */ new Map();
+    this._state = PlaybackState.Stopped;
+    this._metadata = null;
+    this._position = { position: 0, order: 0, pattern: 0, row: 0 };
+    this._initialized = false;
+    this.pendingBuffer = null;
+    this.config = {
+      repeatCount: config.repeatCount ?? -1,
+      stereoSeparation: config.stereoSeparation ?? 100,
+      interpolationFilter: config.interpolationFilter ?? InterpolationFilter.Linear,
+      audioContext: config.audioContext,
+      outputNode: config.outputNode ?? null,
+      volume: config.volume ?? 1,
+      autoPlay: config.autoPlay ?? false
+    };
+    this.isBrowser = typeof globalThis !== "undefined" && globalThis.window !== void 0 && typeof globalThis.window.AudioContext !== "undefined";
+    if (!this.isBrowser) {
+      console.warn("TrackerEngine: Running in Node.js environment. Audio playback disabled.");
+      return;
+    }
+    this.initPlayer();
+  }
+  /**
+   * Initialize the chiptune3 player.
+   * @private
+   */
+  async initPlayer() {
+    try {
+      const { ChiptuneJsPlayer: ChiptuneJsPlayer2 } = await Promise.resolve().then(() => (init_chiptune3(), chiptune3_exports));
+      this.player = new ChiptuneJsPlayer2({
+        repeatCount: this.config.repeatCount,
+        stereoSeparation: this.config.stereoSeparation,
+        interpolationFilter: this.config.interpolationFilter,
+        context: this.config.audioContext
+      });
+      if (this.config.audioContext && this.player.gain) {
+        const bus = this.config.outputNode;
+        if (bus) {
+          this.player.gain.connect(bus.input ?? bus);
+        } else {
+          this.player.gain.connect(this.config.audioContext.destination);
+        }
+      }
+      this.player.setVol(this.config.volume);
+      this.player.onInitialized(() => {
+        this._initialized = true;
+        this.emit("initialized");
+        if (this.pendingBuffer) {
+          const buffer = this.pendingBuffer;
+          this.pendingBuffer = null;
+          this.player.play(buffer);
+        }
+      });
+      this.player.onMetadata((meta) => {
+        this._metadata = this.parseMetadata(meta);
+        this.emit("metadata", this._metadata);
+      });
+      this.player.onProgress((data) => {
+        this._position = {
+          position: data.pos || 0,
+          order: data.order || 0,
+          pattern: data.pattern || 0,
+          row: data.row || 0
+        };
+        this.emit("progress", this._position);
+      });
+      this.player.onEnded(() => {
+        this.setState(PlaybackState.Stopped);
+        this.emit("ended");
+      });
+      this.player.onError((err) => {
+        this.emit("error", {
+          type: err?.type || "Unknown",
+          message: err?.message
+        });
+      });
+    } catch (error) {
+      console.error("TrackerEngine: Failed to initialize chiptune3:", error);
+      this.emit("error", { type: "Unknown", message: String(error) });
+    }
+  }
+  /**
+   * Parse raw metadata from libopenmpt into structured format.
+   * @private
+   */
+  parseMetadata(meta) {
+    return {
+      title: meta?.title || meta?.song || "Unknown",
+      type: meta?.type || "Unknown",
+      tracker: meta?.tracker || "Unknown",
+      channels: meta?.channels || 0,
+      patterns: meta?.patterns || 0,
+      orders: meta?.orders || 0,
+      instruments: meta?.instruments || 0,
+      samples: meta?.samples || 0,
+      duration: meta?.dur || 0,
+      subsongs: meta?.subsongs || 1,
+      message: meta?.message || "",
+      instrumentNames: meta?.instrumentNames || [],
+      sampleNames: meta?.sampleNames || []
+    };
+  }
+  /**
+   * Set playback state and emit event.
+   * @private
+   */
+  setState(state) {
+    if (this._state !== state) {
+      this._state = state;
+      this.emit("statechange", state);
+    }
+  }
+  /**
+   * Emit an event to all registered handlers.
+   * @private
+   */
+  emit(event, data) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach((handler2) => {
+        try {
+          handler2(data);
+        } catch (error) {
+          console.error(`TrackerEngine: Error in ${event} handler:`, error);
+        }
+      });
+    }
+  }
+  // ==========================================================================
+  // Public API
+  // ==========================================================================
+  /**
+   * Check if engine is initialized and ready.
+   */
+  get initialized() {
+    return this._initialized;
+  }
+  /**
+   * Get current playback state.
+   */
+  get state() {
+    return this._state;
+  }
+  /**
+   * Get module metadata (available after loading).
+   */
+  get metadata() {
+    return this._metadata;
+  }
+  /**
+   * Get current playback position.
+   */
+  get position() {
+    return { ...this._position };
+  }
+  /**
+   * Get current time in seconds.
+   */
+  get currentTime() {
+    return this.player?.getCurrentTime?.() || this._position.position;
+  }
+  /**
+   * Get module duration in seconds.
+   */
+  get duration() {
+    return this._metadata?.duration || 0;
+  }
+  /**
+   * Register an event handler.
+   *
+   * @param event - Event type
+   * @param handler - Event handler function
+   * @returns this (for chaining)
+   *
+   * @example
+   * ```typescript
+   * tracker.on('progress', (pos) => {
+   *   console.log(`Row: ${pos.row}/${pos.pattern}`);
+   * });
+   *
+   * tracker.on('ended', () => {
+   *   console.log('Song finished');
+   * });
+   * ```
+   */
+  on(event, handler2) {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, /* @__PURE__ */ new Set());
+    }
+    this.eventHandlers.get(event).add(handler2);
+    return this;
+  }
+  /**
+   * Remove an event handler.
+   *
+   * @param event - Event type
+   * @param handler - Handler to remove
+   * @returns this (for chaining)
+   */
+  off(event, handler2) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.delete(handler2);
+    }
+    return this;
+  }
+  /**
+   * Load a module from a URL.
+   *
+   * @param url - URL to the module file
+   * @returns Promise that resolves when loading starts
+   *
+   * @example
+   * ```typescript
+   * await tracker.load('/music/cool_song.mod');
+   * await tracker.load('https://example.com/music.xm');
+   * ```
+   */
+  async load(url) {
+    if (!this.isBrowser || !this.player) {
+      throw new Error("TrackerEngine: Cannot load - not in browser environment");
+    }
+    this.setState(PlaybackState.Loading);
+    this._metadata = null;
+    return new Promise((resolve, reject) => {
+      const errorHandler = (err) => {
+        this.off("error", errorHandler);
+        this.off("metadata", metaHandler);
+        this.setState(PlaybackState.Stopped);
+        reject(new Error(`Failed to load: ${err.type}`));
+      };
+      const metaHandler = () => {
+        this.off("error", errorHandler);
+        this.off("metadata", metaHandler);
+        this.setState(PlaybackState.Playing);
+        resolve();
+      };
+      this.on("error", errorHandler);
+      this.on("metadata", metaHandler);
+      this.player.load(url);
+    });
+  }
+  /**
+   * Play a module from an ArrayBuffer.
+   *
+   * @param buffer - Module data as ArrayBuffer
+   *
+   * @example
+   * ```typescript
+   * // From fetch
+   * const response = await fetch('/music/song.xm');
+   * const buffer = await response.arrayBuffer();
+   * tracker.play(buffer);
+   *
+   * // From File input
+   * const file = input.files[0];
+   * const buffer = await file.arrayBuffer();
+   * tracker.play(buffer);
+   * ```
+   */
+  play(buffer) {
+    if (!this.isBrowser) {
+      console.warn("TrackerEngine: Cannot play - not in browser environment");
+      return;
+    }
+    this.setState(PlaybackState.Loading);
+    this._metadata = null;
+    if (!this.player || !this._initialized) {
+      this.pendingBuffer = buffer;
+      return;
+    }
+    this.player.play(buffer);
+  }
+  /**
+   * Stop playback and reset position.
+   */
+  stop() {
+    this.pendingBuffer = null;
+    if (!this.player)
+      return;
+    this.player.stop();
+    this._position = { position: 0, order: 0, pattern: 0, row: 0 };
+    this.setState(PlaybackState.Stopped);
+  }
+  /**
+   * Pause playback.
+   */
+  pause() {
+    if (!this.player || this._state !== PlaybackState.Playing)
+      return;
+    this.player.pause();
+    this.setState(PlaybackState.Paused);
+  }
+  /**
+   * Resume playback after pause.
+   */
+  resume() {
+    if (!this.player || this._state !== PlaybackState.Paused)
+      return;
+    this.player.unpause();
+    this.setState(PlaybackState.Playing);
+  }
+  /**
+   * Toggle between playing and paused states.
+   */
+  togglePause() {
+    if (!this.player)
+      return;
+    this.player.togglePause();
+    if (this._state === PlaybackState.Playing) {
+      this.setState(PlaybackState.Paused);
+    } else if (this._state === PlaybackState.Paused) {
+      this.setState(PlaybackState.Playing);
+    }
+  }
+  /**
+   * Seek to a position in seconds.
+   *
+   * @param seconds - Position in seconds
+   *
+   * @example
+   * ```typescript
+   * tracker.seek(30);  // Seek to 30 seconds
+   * tracker.seek(tracker.duration / 2);  // Seek to middle
+   * ```
+   */
+  seek(seconds) {
+    if (!this.player)
+      return;
+    this.player.setPos(Math.max(0, seconds));
+  }
+  /**
+   * Seek to a specific order and row position.
+   *
+   * @param order - Order/position in song
+   * @param row - Row within pattern (optional, default 0)
+   *
+   * @example
+   * ```typescript
+   * tracker.seekToPosition(5, 0);   // Jump to order 5, row 0
+   * tracker.seekToPosition(10, 32); // Jump to order 10, row 32
+   * ```
+   */
+  seekToPosition(order, row = 0) {
+    if (!this.player)
+      return;
+    this.player.setOrderRow(order, row);
+  }
+  /**
+   * Set playback volume.
+   *
+   * @param volume - Volume level (0.0 - 1.0)
+   *
+   * @example
+   * ```typescript
+   * tracker.setVolume(0.5);  // 50% volume
+   * tracker.setVolume(1.0);  // Full volume
+   * ```
+   */
+  setVolume(volume) {
+    if (!this.player)
+      return;
+    const clamped = Math.max(0, Math.min(1, volume));
+    this.config.volume = clamped;
+    this.player.setVol(clamped);
+  }
+  /**
+   * Get current volume.
+   */
+  getVolume() {
+    return this.config.volume;
+  }
+  /**
+   * Set tempo adjustment factor.
+   *
+   * @param factor - Tempo multiplier (1.0 = normal, 2.0 = double speed)
+   *
+   * @example
+   * ```typescript
+   * tracker.setTempo(1.5);  // 50% faster
+   * tracker.setTempo(0.75); // 25% slower
+   * ```
+   */
+  setTempo(factor) {
+    if (!this.player)
+      return;
+    this.player.setTempo(Math.max(0.1, factor));
+  }
+  /**
+   * Set pitch adjustment.
+   *
+   * @param semitones - Pitch shift in semitones
+   *
+   * @example
+   * ```typescript
+   * tracker.setPitch(2);   // Up 2 semitones
+   * tracker.setPitch(-3);  // Down 3 semitones
+   * ```
+   */
+  setPitch(semitones) {
+    if (!this.player)
+      return;
+    this.player.setPitch(semitones);
+  }
+  /**
+   * Set repeat/loop mode.
+   *
+   * @param count - -1 = infinite loop, 0 = play once, n = repeat n times
+   *
+   * @example
+   * ```typescript
+   * tracker.setRepeat(-1);  // Loop forever
+   * tracker.setRepeat(0);   // Play once
+   * tracker.setRepeat(3);   // Play 4 times total
+   * ```
+   */
+  setRepeat(count) {
+    if (!this.player)
+      return;
+    this.config.repeatCount = count;
+    this.player.setRepeatCount(count);
+  }
+  /**
+   * Select a subsong (for modules with multiple songs).
+   *
+   * @param index - Subsong index (0-based)
+   */
+  selectSubsong(index) {
+    if (!this.player)
+      return;
+    this.player.selectSubsong(index);
+  }
+  /**
+   * Get list of supported file extensions.
+   */
+  static getSupportedFormats() {
+    return [
+      "mod",
+      "xm",
+      "s3m",
+      "it",
+      "mptm",
+      "stm",
+      "nst",
+      "m15",
+      "stk",
+      "wow",
+      "ult",
+      "669",
+      "mtm",
+      "med",
+      "far",
+      "mdl",
+      "ams",
+      "dsm",
+      "amf",
+      "okt",
+      "dmf",
+      "ptm",
+      "psm",
+      "mt2",
+      "dbm",
+      "digi",
+      "imf",
+      "j2b",
+      "gdm",
+      "umx",
+      "plm",
+      "mo3",
+      "xpk",
+      "ppm",
+      "mmcmp"
+    ];
+  }
+  /**
+   * Check if a file extension is supported.
+   *
+   * @param extension - File extension (with or without dot)
+   */
+  static isFormatSupported(extension) {
+    const ext = extension.toLowerCase().replace(/^\./, "");
+    return _TrackerEngine.getSupportedFormats().includes(ext);
+  }
+  /**
+   * Clean up resources.
+   */
+  dispose() {
+    this.stop();
+    this.eventHandlers.clear();
+    this.player = null;
+    this._initialized = false;
+  }
+};
 
 // ../../sdk/dist-esm/media/VoiceCapture.js
 var import_events6 = __toESM(require_events());
@@ -36864,6 +37547,90 @@ var audio = new AudioEngine({
   }
 });
 var stopSfx = null;
+var MUSIC_POLL_MS = 1e3;
+var tracker = null;
+var trackerContext = null;
+var currentTrack = null;
+var trackSeq = 0;
+var musicPoll = null;
+var trackCache = /* @__PURE__ */ new Map();
+function ensureTracker() {
+  if (!tracker) {
+    try {
+      trackerContext = new AudioContext();
+      tracker = new TrackerEngine({
+        audioContext: trackerContext,
+        repeatCount: -1,
+        // loop until the screen changes it
+        volume: 0.9
+      });
+    } catch (e) {
+      console.warn("[Pengo] tracker unavailable:", e);
+      return null;
+    }
+  }
+  return tracker;
+}
+async function playTrack(name) {
+  if (currentTrack === name)
+    return;
+  currentTrack = name;
+  const seq = ++trackSeq;
+  try {
+    const engine = ensureTracker();
+    if (!engine)
+      return;
+    if (trackerContext && trackerContext.state === "suspended") {
+      void trackerContext.resume().catch(() => {
+      });
+    }
+    let buffer = trackCache.get(name);
+    if (!buffer) {
+      const base = globalThis.__BBS__?.backendUrl || "";
+      const res = await fetch(
+        `${base}/api/doors/PENGO/assets/${encodeURIComponent(name)}`
+      );
+      if (!res.ok)
+        throw new Error(`asset ${name}: HTTP ${res.status}`);
+      buffer = await res.arrayBuffer();
+      trackCache.set(name, buffer);
+    }
+    if (seq !== trackSeq)
+      return;
+    engine.play(buffer);
+  } catch (e) {
+    console.warn("[Pengo] music unavailable:", e);
+  }
+}
+function startMusicPoll() {
+  if (musicPoll)
+    return;
+  musicPoll = setInterval(async () => {
+    try {
+      const result = await door.rpc("getMusicTrack", {});
+      if (result && result.track)
+        void playTrack(result.track);
+    } catch {
+    }
+  }, MUSIC_POLL_MS);
+}
+function stopMusic() {
+  if (musicPoll) {
+    clearInterval(musicPoll);
+    musicPoll = null;
+  }
+  try {
+    tracker?.stop();
+  } catch {
+  }
+  try {
+    void trackerContext?.close();
+  } catch {
+  }
+  tracker = null;
+  trackerContext = null;
+  currentTrack = null;
+}
 console.log("[Pengo] Client door initializing...");
 door.on("init", () => {
   console.log("[Pengo] Client door init event");
@@ -36872,12 +37639,14 @@ door.on("connect", (user) => {
   console.log(`[Pengo] Connected as ${user.name}`);
   if (!stopSfx)
     stopSfx = installArcadeSfx(audio);
+  startMusicPoll();
 });
 function teardown() {
   if (stopSfx) {
     stopSfx();
     stopSfx = null;
   }
+  stopMusic();
 }
 door.on("disconnect", teardown);
 door.on("shutdown", teardown);
