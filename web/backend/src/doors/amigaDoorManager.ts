@@ -1747,72 +1747,51 @@ console.error('Cleanup error:', error);
       // Fallback to name as command
       let resolvedCommand: string = commandName ?? name.toUpperCase();
 
-      // Verify the derived commandName has a matching .info in Commands/BBSCmd/.
-      // If not, scan all BBSCmd .info files for one whose LOCATION= points to Doors/<name>.
-      // This handles doors where CMDNAME / bbsCommand don't match the registered command
-      // (e.g. grandmaster has CMDNAME=grandmaster but is registered as GMASTER.info).
-      if (amigafs.existsSync(commandsPath)) {
-        const candidateInfo = path.join(commandsPath, `${resolvedCommand.toLowerCase()}.info`);
-        if (!amigafs.existsSync(candidateInfo)) {
-          try {
-            const { parseInfoFile } = require('../utils/info-file.util');
-            const files = amigafs.readdirSync(commandsPath);
-            for (const file of files) {
-              if (!(file.toLowerCase().endsWith('.info'))) continue;
-              try {
-                const parsed = parseInfoFile(path.join(commandsPath, file));
-                const locTT = parsed.tooltypes.find((t: any) => t.key === 'LOCATION');
-                if (!locTT) continue;
-                const locDir = locTT.value.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0].toLowerCase();
-                if (locDir === name.toLowerCase()) {
-                  const cmdTT = parsed.tooltypes.find((t: any) => t.key === 'BBSCMD');
-                  if (cmdTT) {
-                    resolvedCommand = cmdTT.value.toUpperCase();
-                    break;
-                  }
-                }
-              } catch { /* skip malformed .info */ }
-            }
-          } catch (e) {
-console.warn(`[deleteTypeScriptDoor] BBSCmd scan failed: ${(e as Error).message}`);
-          }
+      // Every registration that POINTS AT this door, wherever it lives in the
+      // Commands tree and whatever it is called.
+      //
+      // This used to rebuild the command name from the door's directory name
+      // and then look for a BBSCMD tooltype to correct it. Most .info files
+      // on this board carry no BBSCMD tooltype at all - the FILENAME is the
+      // command (loadCommandFromInfo says so) - so when the two names
+      // differed the correction never happened and the registration stayed.
+      // That is the GWWALL report: LOCATION=Doors/bbslinkwall, no BBSCMD, the
+      // files removed and the door still in every list.
+      //
+      // Asking which registrations resolve into this directory needs no
+      // guessing, and it finds the aliases too: bbslink is registered under
+      // two dozen names.
+      const registrations = this.findRegistrationsPointingInto(doorPath);
+      for (const infoPath of registrations) {
+        try {
+          amigafs.unlinkSync(infoPath);
+          onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, infoPath)}` });
+          deletedFiles.push(infoPath);
+        } catch (e) {
+          onStep?.({
+            kind: 'fail',
+            text: `${path.relative(this.bbsRoot, infoPath)}: ${(e as Error).message}`,
+          });
         }
       }
 
-      // Delete .info file from Commands/BBSCmd/ (case-insensitive search)
-      if (amigafs.existsSync(commandsPath)) {
+      // A registration named after the door but pointing somewhere else (or
+      // nowhere) is still this door's registration as far as the sysop is
+      // concerned - findRegistrationsPointingInto cannot see those, so the
+      // name is still worth one look, in both command trees.
+      for (const dir of [commandsPath, path.join(this.bbsRoot, 'Commands', 'SysCmd')]) {
+        if (!amigafs.existsSync(dir)) continue;
         try {
-          const files = amigafs.readdirSync(commandsPath);
-          for (const file of files) {
-            const lowerFile = file.toLowerCase();
-            if (lowerFile === `${resolvedCommand.toLowerCase()}.info`) {
-              const infoPath = path.join(commandsPath, file);
-              amigafs.unlinkSync(infoPath);
-              onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, infoPath)}` });
-              deletedFiles.push(infoPath);
-            }
+          for (const file of amigafs.readdirSync(dir)) {
+            if (file.toLowerCase() !== `${resolvedCommand.toLowerCase()}.info`) continue;
+            const infoPath = path.join(dir, file);
+            if (deletedFiles.includes(infoPath)) continue;
+            amigafs.unlinkSync(infoPath);
+            onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, infoPath)}` });
+            deletedFiles.push(infoPath);
           }
         } catch (e) {
-console.warn(`Could not clean up Commands/BBSCmd: ${(e as Error).message}`);
-        }
-      }
-
-      // Also check SysCmd
-      const sysCmdPath = path.join(this.bbsRoot, 'Commands', 'SysCmd');
-      if (amigafs.existsSync(sysCmdPath)) {
-        try {
-          const files = amigafs.readdirSync(sysCmdPath);
-          for (const file of files) {
-            const lowerFile = file.toLowerCase();
-            if (lowerFile === `${resolvedCommand.toLowerCase()}.info`) {
-              const infoPath = path.join(sysCmdPath, file);
-              amigafs.unlinkSync(infoPath);
-              onStep?.({ kind: 'ok', text: `removed ${path.relative(this.bbsRoot, infoPath)}` });
-              deletedFiles.push(infoPath);
-            }
-          }
-        } catch (e) {
-console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
+console.warn(`Could not clean up ${dir}: ${(e as Error).message}`);
         }
       }
 
@@ -1839,8 +1818,14 @@ console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
       const removed = deletedFiles.map(f => path.relative(this.bbsRoot, f));
 
       // Same verification as the Amiga path: what is still on disk decides
-      // whether this worked, not the fact that no call threw.
-      const leftover = [doorPath, ...deletedFiles].filter(f => amigafs.existsSync(f));
+      // whether this worked, not the fact that no call threw. A surviving
+      // REGISTRATION counts - it is what puts a door in every list the BBS
+      // draws, and a delete that leaves one has not deleted the door. That
+      // is what "the files were removed but GWWALL is still in the door
+      // list" looked like from the sysop's side.
+      const survivingRegistrations = this.findRegistrationsPointingInto(doorPath);
+      const leftover = [doorPath, ...deletedFiles, ...survivingRegistrations]
+        .filter(f => amigafs.existsSync(f));
       if (leftover.length > 0) {
         return {
           success: false,
@@ -1876,19 +1861,27 @@ console.error('TypeScript door deletion error:', error);
     isTypeScriptDoor?: boolean,
     onStep?: DoorDeleteProgress
   ): Promise<DoorDeleteResult> {
-    // If explicitly marked as TypeScript door, delete as such
+    // A REGISTRATION decides the path, before the caller's opinion of what
+    // kind of door this is.
+    //
+    // DOORMAN passes isTypeScriptDoor=true for anything of TYPE=TS, which
+    // sent GWWALL - registered as GWWALL.info, LOCATION=Doors/bbslinkwall -
+    // into the TypeScript path looking for Doors/GWWALL, a directory that
+    // does not exist. The registration path already handles a TypeScript
+    // door correctly: LOCATION names its directory, and the .info, its
+    // aliases and the directory all go together.
+    const registered = findCommandRegistrations(this.bbsRoot, identifier);
+    if (registered.length > 0) {
+      onStep?.({
+        kind: 'ok',
+        text: `${identifier} is registered at ${path.relative(this.bbsRoot, registered[0])}`,
+      });
+      return this.deleteAmigaDoor(identifier, onStep);
+    }
+
     if (isTypeScriptDoor === true) {
       onStep?.({ kind: 'ok', text: `${identifier} is a TypeScript door` });
       return this.deleteTypeScriptDoor(identifier, onStep);
-    }
-
-    // Try Amiga door first
-    const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
-    const infoPath = path.join(commandsPath, `${identifier}.info`);
-
-    if (amigafs.existsSync(infoPath)) {
-      onStep?.({ kind: 'ok', text: `${identifier} is registered in Commands/BBSCmd` });
-      return this.deleteAmigaDoor(identifier, onStep);
     }
 
     // Try TypeScript door
