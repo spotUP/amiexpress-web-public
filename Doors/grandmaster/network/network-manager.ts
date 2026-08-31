@@ -466,6 +466,20 @@ export class GrandmasterNetworkManager extends EventEmitter {
   }
 
   /**
+   * Report that the match is over, so the lobby can host another.
+   *
+   * The broker sets a lobby to 'playing' when the game begins and nothing
+   * ever set it back - so a second game in the same room was impossible and
+   * matchmaking would not offer the room to anybody else. Any player may
+   * send this, not just the host: in a 1v1 the host is as likely to be the
+   * one who lost.
+   */
+  endMatch(): void {
+    console.log('[GrandmasterNetworkManager] endMatch called');
+    this.network.lobby.endGame();
+  }
+
+  /**
    * Start match (host only)
    *
    * Starts the game outright rather than running the lobby's own countdown.

@@ -1051,7 +1051,21 @@ export class GrandmasterApp {
         } else {
           await this.startVersusGame(result.mode, result.settings);
         }
-        return;
+
+        // Back to the LOBBY, not out to the main menu.
+        //
+        // "when a vs game ends i get thrown out to the main menu, i should
+        // stay in the lobby for more games" - and the people you just played
+        // are still sitting in it. Returning here meant every rematch cost
+        // both players a walk back through the menu and a fresh search for
+        // each other.
+        //
+        // The lobby is told the match is over first: the broker put it into
+        // 'playing' to start the game and nothing ever put it back, so
+        // without this the room could never host a second game and would not
+        // be offered to anyone searching.
+        this.network?.endMatch();
+        continue;
 
       } else if (changingMode) {
         // C was pressed during lobby — loop back to mode selection overlay

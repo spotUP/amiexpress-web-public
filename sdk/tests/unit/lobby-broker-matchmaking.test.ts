@@ -200,3 +200,50 @@ describe('two players asking for the same mode', () => {
     expect(found.lobby.id).not.toBe(opened.lobby.id);
   });
 });
+
+describe('after the match', () => {
+  it('gives the lobby back so the same players can go again', async () => {
+    // "when a vs game ends i get thrown out to the main menu, i should stay
+    // in the lobby for more games". Nothing ever moved a lobby out of
+    // 'playing': the room could not host a second game, would not be
+    // offered to anyone searching, and simply leaked for the life of the
+    // process.
+    const broker = freshBroker();
+    const host = new FakeClient(51, 'sysop', 1);
+    const guest = new FakeClient(52, 'spot', 2);
+
+    const lobby = await matchmake(broker, host, 'versus_1v1');
+    await matchmake(broker, guest, 'versus_1v1');
+
+    broker.handleEvent(host.clientId, 'lobby:start_game', {});
+    await new Promise((r) => setTimeout(r, 150));
+    expect((broker as any).lobbies.get(lobby.lobby.id).state).toBe('playing');
+
+    // The loser reports it, not the host - a game that ends only when the
+    // winner says so is a game that hangs.
+    broker.handleEvent(guest.clientId, 'lobby:game_over', {});
+    await new Promise((r) => setTimeout(r, 20));
+
+    const after = (broker as any).lobbies.get(lobby.lobby.id);
+    expect(after.state).toBe('waiting');
+    expect(after.players.every((p: any) => !p.ready)).toBe(true);
+    expect(after.players.length).toBe(2);
+  });
+
+  it('makes the room findable again for a third player', async () => {
+    const broker = freshBroker();
+    const host = new FakeClient(61, 'sysop', 1);
+    const guest = new FakeClient(62, 'spot', 2);
+
+    const lobby = await matchmake(broker, host, 'versus_1v1');
+    await matchmake(broker, guest, 'versus_1v1');
+    broker.handleEvent(host.clientId, 'lobby:start_game', {});
+    await new Promise((r) => setTimeout(r, 150));
+    broker.handleEvent(host.clientId, 'lobby:game_over', {});
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Full at 2, so a third still opens their own - but the room is a
+    // lobby again rather than a permanent 'playing' ghost.
+    expect((broker as any).lobbies.get(lobby.lobby.id).state).toBe('waiting');
+  });
+});

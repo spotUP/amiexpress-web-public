@@ -552,6 +552,24 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
   /**
    * Start game immediately (host only)
    */
+  /**
+   * Report that the match is over, so the lobby becomes a lobby again.
+   *
+   * Any player may send it, not only the host - in a 1v1 the host is as
+   * likely to be the one who lost, and a game whose end depends on the
+   * loser staying connected never ends. The server clears the ready flags
+   * with the state, so the next game does not start the moment the screen
+   * reappears.
+   */
+  endGame(): void {
+    if (!this._current) return;
+
+    const socket = this.connection.getSocket();
+    if (socket?.connected) {
+      socket.emit('lobby:game_over');
+    }
+  }
+
   startGame(): void {
     if (!this._current || !this.isHost()) return;
 

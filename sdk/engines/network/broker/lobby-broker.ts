@@ -129,6 +129,9 @@ export class LobbyBroker {
           case 'lobby:start_game':
             this.handleStartGame(clientId);
             break;
+          case 'lobby:game_over':
+            this.handleGameOver(clientId);
+            break;
           case 'lobby:force_start':
             this.handleForceStart(clientId);
             break;
@@ -632,6 +635,40 @@ export class LobbyBroker {
     setTimeout(() => {
       this.broadcastToLobby(lobby.id, 'lobby:game_started');
     }, 100);
+  }
+
+  /**
+   * The match is over: the lobby goes back to being a lobby.
+   *
+   * Nothing ever did this. A lobby went to 'playing' and stayed there for
+   * the life of the process - so the players could not start a second game
+   * in it, matchmaking would not offer it to anybody else, and the room
+   * simply leaked. The door's answer was to drop everyone back to the main
+   * menu when a game ended, which is what the sysop reported: "when a vs
+   * game ends i get thrown out to the main menu, i should stay in the lobby
+   * for more games".
+   *
+   * Any player in the lobby may report it, not just the host: in a 1v1 the
+   * host is as likely to be the one who lost, and a game whose end depends
+   * on the loser staying connected is a game that never ends.
+   *
+   * Ready flags are cleared with it. They described who was ready for the
+   * game that has just finished, and leaving them set would start the next
+   * one the instant the screen appeared.
+   */
+  private handleGameOver(clientId: string): void {
+    const { lobby } = this.getPlayerInLobby(clientId);
+    if (!lobby) return;
+    if (lobby.state === 'waiting') return;      // already back, or never left
+
+    this.clearCountdown(lobby.id);
+    lobby.state = 'waiting';
+    lobby.countdown = 0;
+    for (const player of lobby.players) {
+      player.ready = false;
+    }
+
+    this.broadcastToLobby(lobby.id, 'lobby:updated', lobby);
   }
 
   private handleForceStart(clientId: string): void {
