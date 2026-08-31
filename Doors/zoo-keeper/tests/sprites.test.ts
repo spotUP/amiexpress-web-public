@@ -144,3 +144,24 @@ export async function theSameCharacterTernaryIsGone(): Promise<void> {
     "a ternary returning '@' either way cannot show anything"
   );
 }
+
+/**
+ * ...and every stage actually passes the net state through.
+ *
+ * carryingTheNetIsVisible proves zekeCell can tell the two apart; it does
+ * NOT prove the stages ask it to. Measured: breaking the zoo stage's call to
+ * pass a constant left that test green, because it never touches the call
+ * site. This is the guard that fails.
+ */
+export async function everyStageDrawsZekeWithHisRealNetState(): Promise<void> {
+  for (const stage of ['stampede-stage.ts', 'platform-stage.ts', 'zoo-stage.ts']) {
+    const src = readFileSync(join(__dirname, '..', 'game', stage), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+
+    assert.ok(
+      /zekeCell\(Boolean\(d\.zeke\.hasNet\)\)/.test(src),
+      `${stage} must draw Zeke from his LIVE net state, not a constant`
+    );
+  }
+}
