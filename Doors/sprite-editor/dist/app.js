@@ -59,6 +59,11 @@ class StudioApp {
             enableGrabKeys: false,
             enableMouse: true,
         });
+        // enable() installs the BBS-to-blessed key bridge
+        // (bbsSession.doorInputHandler); without it the backend drops every
+        // keystroke and the door is input-dead - constructed is not enabled.
+        // Every sibling blessed door calls this (ansi-editor, door-manager).
+        this.inputManager.enable();
         this.state = (0, browser_model_1.initialState)();
         this.buildLayout();
         this.bindKeys();
@@ -149,8 +154,13 @@ class StudioApp {
     apply(next) {
         if (next === this.state)
             return;
+        const before = (0, browser_model_1.selection)(this.state);
         this.state = next;
-        this.tick = 0; // a new selection starts its animation from the top
+        const after = (0, browser_model_1.selection)(next);
+        if (before.door !== after.door || before.sprite !== after.sprite ||
+            before.animation !== after.animation) {
+            this.tick = 0; // a new SELECTION starts from the top; a focus move does not
+        }
         this.refresh();
     }
     /** The current sheet, loaded once per (door, sprite) selection. */
@@ -183,10 +193,13 @@ class StudioApp {
         focus(this.spritesList, this.state.pane === 'sprites');
         focus(this.animationsList, this.state.pane === 'animations');
         const sel = (0, browser_model_1.selection)(this.state);
-        this.statusBar.setContent(`{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
+        const left = `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
             `{white-fg}${sel.sprite ?? '-'}{/} / ` +
-            `{lightcyan-fg}${sel.animation ?? '-'}{/}` +
-            '{|}{gray-fg}TAB panes  ARROWS move  Q quit{/}');
+            `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
+        const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
+        const visible = (tagged) => tagged.replace(/\{[^}]*\}/g, '').length;
+        const gap = Math.max(1, this.screen.width - visible(left) - visible(right));
+        this.statusBar.setContent(left + ' '.repeat(gap) + right);
         this.paintPreview();
     }
     paintPreview() {
