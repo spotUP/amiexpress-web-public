@@ -53,7 +53,13 @@ sed "s/git HEAD, vbcc/git $SHA, vbcc/" "$README" > "$PKG/ReadMe.txt"
 cp "$HERE/DoorRepo.cfg.example"  "$PKG/DoorRepo.cfg.example"
 cp "$HERE/Makefile"              "$PKG/src/Makefile"
 for f in "$HERE"/*.c "$HERE"/*.h; do cp "$f" "$PKG/src/"; done
-for f in "$HERE"/tests/*.c "$HERE"/tests/*.h; do cp "$f" "$PKG/src/tests/"; done
+# .txt as well as source: tests/delete-rule-cases.txt is the table the
+# uninstall rules are tested against on BOTH sides of this project, and the
+# C tests read it at runtime. Packing the tests without it made the packed
+# source fail its own verification - which is what that verification is for.
+for f in "$HERE"/tests/*.c "$HERE"/tests/*.h "$HERE"/tests/*.txt; do
+  [ -e "$f" ] && cp "$f" "$PKG/src/tests/"
+done
 for f in "$HERE"/tools/*.c; do cp "$f" "$PKG/src/tools/"; done
 
 # The two documents go in as plain text under names an Amiga reader expects.
