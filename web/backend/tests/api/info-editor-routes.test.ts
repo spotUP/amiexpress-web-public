@@ -31,7 +31,10 @@ describe('Info Editor Routes', () => {
         expect(res.body.success).toBe(true);
         expect(Array.isArray(res.body.data.files)).toBe(true);
       }
-    }, 30000); // Extended timeout: endpoint scans the BBS directory tree
+    }, 60000); // Extended timeout: the endpoint walks the whole BBS tree - a few
+    // thousand files - and under full-suite parallel load 30s was not enough.
+    // It passes in about 3s on its own; this is headroom, not slowness that
+    // has been accepted.
   });
 
   describe('GET /api/info/file', () => {
