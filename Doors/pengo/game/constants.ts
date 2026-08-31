@@ -5,17 +5,25 @@
 import { LevelConfig, HighScore } from './types';
 
 export const SCREEN_WIDTH = 80;
-export const SCREEN_HEIGHT = 24;
-export const GRID_WIDTH = 15;
-export const GRID_HEIGHT = 10;
+/**
+ * A door owns the whole 80x25 terminal. The BBS proper keeps to 80x23
+ * because it needs rows for its prompt, but that constraint is the BBS's,
+ * not a game's - designing the board to 24 rows wasted a row that was
+ * always there.
+ */
+export const SCREEN_HEIGHT = 25;
+export const GRID_WIDTH = 16;
+export const GRID_HEIGHT = 11;
 
 /**
  * Cell geometry for the sprite renderer: every maze cell is a 5x2 block of
- * characters, so the 15x10 maze is a 75x20 board - the full terminal, with
- * the HUD above and the hint below.
+ * characters, so the 16x11 maze is an 80x22 board - the full terminal
+ * width, edge to edge, with the HUD above and the hint on the bottom row.
  *
- * GRID_HEIGHT dropped from 13 to 10 to buy the second sprite row: 13 cells
- * x 2 rows was 26 rows on a 24-row screen. Approved in the design doc.
+ * The row budget: HUD 1 + board 22 + hint 1 = 24 of the 25 rows a door
+ * gets; a twelfth maze row would need 26. The maze dropped from 13 rows to
+ * buy the second sprite row (13 x 2 = 26). It holds 11, not the 10 the
+ * first pass shipped - that pass budgeted 24 rows and wasted one.
  */
 export const CELL_W = 5;
 export const CELL_H = 2;
@@ -43,11 +51,11 @@ export const HATCH_TIME = 100;
 export const ENEMY_MOVE_DELAY = 8;
 
 export const LEVEL_CONFIGS: LevelConfig[] = [
-  { enemies: 3, eggs: 0, iceBlocks: 44, enemySpeed: 10, timeLimit: 180 },
-  { enemies: 4, eggs: 1, iceBlocks: 40, enemySpeed: 9, timeLimit: 160 },
-  { enemies: 4, eggs: 2, iceBlocks: 37, enemySpeed: 8, timeLimit: 150 },
-  { enemies: 5, eggs: 2, iceBlocks: 33, enemySpeed: 7, timeLimit: 140 },
-  { enemies: 5, eggs: 3, iceBlocks: 29, enemySpeed: 6, timeLimit: 120 },
+  { enemies: 3, eggs: 0, iceBlocks: 53, enemySpeed: 10, timeLimit: 180 },
+  { enemies: 4, eggs: 1, iceBlocks: 48, enemySpeed: 9, timeLimit: 160 },
+  { enemies: 4, eggs: 2, iceBlocks: 44, enemySpeed: 8, timeLimit: 150 },
+  { enemies: 5, eggs: 2, iceBlocks: 40, enemySpeed: 7, timeLimit: 140 },
+  { enemies: 5, eggs: 3, iceBlocks: 35, enemySpeed: 6, timeLimit: 120 },
 ];
 
 export function getLevelConfig(level: number): LevelConfig {
