@@ -38,6 +38,77 @@ export const TRAIL_LIFETIME_MS = SDK_TRAIL_LIFETIME_MS;
 /** The landing shadow. */
 export const GHOST_CHAR = '{gray-fg}░░{/gray-fg}';
 
+/**
+ * How often the playfield is actually painted (game-screen RENDER_FPS).
+ *
+ * Effects have to be authored against this, not against wall-clock taste: a
+ * flash shorter than one interval is not a fast flash, it is a flash the
+ * player sees or misses depending on where the frame boundary falls.
+ */
+export const RENDER_INTERVAL_MS = 1000 / 20;
+
+/** The lock flash is solid for one painted frame, then thins for two more. */
+const LOCK_FLASH_SOLID_MS = RENDER_INTERVAL_MS;
+export const LOCK_FLASH_MS = RENDER_INTERVAL_MS * 3;
+
+/**
+ * The white flash over a piece that has just locked, or null once it is over.
+ *
+ * Driven straight off elapsed time in whole render frames rather than off a
+ * fading curve. The curve version was visible for 56 ms of a 100 ms life, so
+ * at 20 fps it was sampled once, never, or - when it landed inside the first
+ * 20 ms - as a solid white block. Same landing, three different pictures.
+ */
+export function lockFlashChar(elapsedMs: number): string | null {
+  if (elapsedMs < 0 || elapsedMs >= LOCK_FLASH_MS) return null;
+  if (elapsedMs < LOCK_FLASH_SOLID_MS) return '{white-fg}{bold}██{/bold}{/white-fg}';
+  return '{white-fg}░░{/white-fg}';
+}
+
+/**
+ * A cheap identity for an overlay frame.
+ *
+ * Only used to answer "did the effects change since the last paint", so it
+ * compares content, not object identity - and an EMPTY overlay must be
+ * distinguishable from a full one, which is the case that was missed.
+ */
+export function overlaySignature(overlay: (string | null)[][]): string {
+  let signature = '';
+  for (let row = 0; row < overlay.length; row++) {
+    const cells = overlay[row];
+    if (!cells) continue;
+    for (let col = 0; col < cells.length; col++) {
+      const cell = cells[col];
+      if (cell !== null && cell !== undefined) signature += `${row},${col},${cell};`;
+    }
+  }
+  return signature;
+}
+
+/**
+ * Whether the playfield has to be painted again this frame.
+ *
+ * `overlayChanged` is the one that was missing. The old gate asked whether
+ * an effect was RUNNING, which is true on every frame of a flash and false
+ * on the frame after it ends - so the last frame of the flash was never
+ * cleared and stayed on the board until something unrelated moved. Asking
+ * whether the overlay DIFFERS from what is on screen covers the appearance,
+ * the animation and the disappearance with one question.
+ */
+export function boardNeedsRepaint(state: {
+  boardChanged: boolean;
+  overlayChanged: boolean;
+  hasTrails: boolean;
+  hadTrails: boolean;
+  isShaking: boolean;
+}): boolean {
+  return state.boardChanged
+    || state.overlayChanged
+    || state.hasTrails
+    || state.hadTrails
+    || state.isShaking;
+}
+
 const BRIGHT: Record<string, string> = {
   red: 'lightred',
   green: 'lightgreen',

@@ -4,6 +4,8 @@
  * Grade-up, COOL/REGRET, line clear flash, lock glow, etc.
  */
 
+import { LOCK_FLASH_MS } from '../ui/board-effects';
+
 /**
  * Animation types
  */
@@ -169,7 +171,10 @@ export class AnimationManager {
     this.animations.push({
       type: 'lockGlow',
       elapsed: 0,
-      duration: 100,
+      // Three painted frames at the board's 20fps. It was 100ms, visible
+      // for 56 of them - less than two frames, so whether the player saw
+      // the landing flash at all depended on where the frame boundary fell.
+      duration: LOCK_FLASH_MS,
       data: { cells, color } as LockGlowData,
     });
   }

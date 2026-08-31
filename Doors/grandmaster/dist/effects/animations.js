@@ -6,6 +6,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnimationRenderer = exports.AnimationManager = void 0;
+const board_effects_1 = require("../ui/board-effects");
 /**
  * Animation manager
  */
@@ -68,7 +69,10 @@ class AnimationManager {
         this.animations.push({
             type: 'lockGlow',
             elapsed: 0,
-            duration: 100,
+            // Three painted frames at the board's 20fps. It was 100ms, visible
+            // for 56 of them - less than two frames, so whether the player saw
+            // the landing flash at all depended on where the frame boundary fell.
+            duration: board_effects_1.LOCK_FLASH_MS,
             data: { cells, color },
         });
     }

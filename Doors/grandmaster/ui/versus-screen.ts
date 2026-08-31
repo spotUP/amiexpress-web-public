@@ -7,6 +7,7 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { lockFlashChar } from './board-effects';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
@@ -1141,18 +1142,16 @@ export class VersusScreen {
     };
 
     // Layer 4 (lowest): Lock glow
+    // Same flash as the single-player board, from the same function - the
+    // curve this used to sample was shorter than one painted frame, so the
+    // landing flashed or did not depending on the phase.
     const lockGlowAnims = this.animations.getAnimationsByType('lockGlow');
     for (const anim of lockGlowAnims) {
-      const intensity = AnimationRenderer.getLockGlowIntensity(anim);
-      if (intensity > 0.3) {
-        const data = anim.data as any;
-        for (const cell of data.cells) {
-          if (intensity > 0.7) {
-            setCell(cell.x, cell.y, '{white-fg}{bold}██{/bold}{/white-fg}');
-          } else {
-            setCell(cell.x, cell.y, '{white-fg}░░{/white-fg}');
-          }
-        }
+      const char = lockFlashChar(anim.elapsed);
+      if (!char) continue;
+      const data = anim.data as any;
+      for (const cell of data.cells) {
+        setCell(cell.x, cell.y, char);
       }
     }
 

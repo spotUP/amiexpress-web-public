@@ -31,6 +31,8 @@ class GameScreen {
         // Board overlay compositor: effects rendered inline in board content
         // Each cell is a blessed-tagged 2-char string or null (no overlay)
         this.boardOverlay = [];
+        /** What the overlay looked like the last time the board was painted. */
+        this.lastOverlaySignature = '';
         this.lastRender = 0;
         this.RENDER_FPS = 20; // Reduced for BBS efficiency
         this.RENDER_INTERVAL = 1000 / this.RENDER_FPS;
@@ -634,7 +636,22 @@ class GameScreen {
         const hadTrails = this.hardDropTrails.length > 0;
         this.hardDropTrails = (0, board_effects_1.expireTrails)(this.hardDropTrails, Date.now());
         const hasTrails = this.hardDropTrails.length > 0;
-        if (boardHash !== this.lastBoardHash || hasTrails || hadTrails || this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || isShaking) {
+        // Effects BEFORE the board.
+        //
+        // renderBoard() composites this overlay into the board content, and this
+        // used to be built after it - so every flash, particle and popup was
+        // painted one frame late, and the frame in which an effect ENDED never
+        // repainted at all. A landed piece flashed white and stayed white until
+        // the next piece spawned; reported as "the landing animation looks
+        // buggy" (2026-08-31).
+        const overlayChanged = this.updateBoardOverlay();
+        if ((0, board_effects_1.boardNeedsRepaint)({
+            boardChanged: boardHash !== this.lastBoardHash,
+            overlayChanged,
+            hasTrails,
+            hadTrails,
+            isShaking,
+        })) {
             // Apply shake offset
             if (isShaking) {
                 const offset = this.shaker.getOffset();
@@ -686,14 +703,10 @@ class GameScreen {
             this.lastSectionInfoRender = Date.now();
             needsRender = true;
         }
-        // Build board overlay for inline effects rendering (replaces effectsBox)
-        if (this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || this.animations.getFloatingTexts().length > 0) {
-            this.buildBoardOverlay();
+        // The overlay was built at the top of this frame; a change in it is
+        // already a reason to have repainted the board.
+        if (overlayChanged) {
             needsRender = true;
-        }
-        else {
-            // Clear overlay when no effects active
-            this.boardOverlay = [];
         }
         // Only render to screen if content changed
         if (needsRender) {
@@ -826,6 +839,28 @@ class GameScreen {
      * Board coordinates: x=0..9, y=4..23 (visible area)
      * Each overlay cell is a 2-char blessed-tagged string or null
      */
+    /**
+     * Build this frame's overlay and say whether it differs from the last one.
+     *
+     * The "differs" half is the point: an effect appearing, moving AND
+     * vanishing all have to mark the board dirty, and the vanishing case is
+     * the one that used to be missed.
+     */
+    updateBoardOverlay() {
+        const hasEffects = this.particles.getRenderableParticles().length > 0
+            || this.animations.getAnimations().length > 0
+            || this.animations.getFloatingTexts().length > 0;
+        if (hasEffects) {
+            this.buildBoardOverlay();
+        }
+        else {
+            this.boardOverlay = [];
+        }
+        const signature = (0, board_effects_1.overlaySignature)(this.boardOverlay);
+        const changed = signature !== this.lastOverlaySignature;
+        this.lastOverlaySignature = signature;
+        return changed;
+    }
     buildBoardOverlay() {
         // Reset overlay grid: 20 visible rows (y=4..23) x 10 cols
         this.boardOverlay = [];
@@ -842,17 +877,12 @@ class GameScreen {
         // --- Layer 4 (lowest): Lock glow ---
         const lockGlowAnims = this.animations.getAnimationsByType('lockGlow');
         for (const anim of lockGlowAnims) {
-            const intensity = animations_1.AnimationRenderer.getLockGlowIntensity(anim);
-            if (intensity > 0.3) {
-                const data = anim.data;
-                for (const cell of data.cells) {
-                    if (intensity > 0.7) {
-                        setCell(cell.x, cell.y, '{white-fg}{bold}██{/bold}{/white-fg}');
-                    }
-                    else {
-                        setCell(cell.x, cell.y, '{white-fg}░░{/white-fg}');
-                    }
-                }
+            const char = (0, board_effects_1.lockFlashChar)(anim.elapsed);
+            if (!char)
+                continue;
+            const data = anim.data;
+            for (const cell of data.cells) {
+                setCell(cell.x, cell.y, char);
             }
         }
         // --- Layer 3: Particles (now spawned in board coordinates) ---

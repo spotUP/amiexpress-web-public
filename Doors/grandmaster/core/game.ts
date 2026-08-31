@@ -56,6 +56,14 @@ export class GameEngine {
   private frameAccumulator: number = 0;
   private readonly TARGET_FPS = 60;
   private readonly FRAME_TIME = 1000 / this.TARGET_FPS;
+  /**
+   * Most game frames one update() may run.
+   *
+   * Eight frames is 133ms - a wide allowance for a slow repaint, and far
+   * short of the lock delay a stall used to be able to burn through in one
+   * uninterruptible burst.
+   */
+  private readonly MAX_CATCHUP_FRAMES = 8;
 
   // Gravity accumulator for fractional gravity values
   private gravityAccumulator: number = 0;
@@ -307,7 +315,19 @@ export class GameEngine {
   update(deltaTime: number): void {
     if (this.state.status !== 'playing') return;
 
-    this.frameAccumulator += deltaTime;
+    // Catch up, but only so far.
+    //
+    // The loop that calls this also repaints the board and polls the
+    // keyboard (game-screen run()), so a slow repaint delays all three. With
+    // no cap, a 500ms hitch ran thirty game frames back to back with no
+    // input sampled between any of them - at 20G, where the piece is already
+    // on the floor and only lock delay stands between it and the stack,
+    // that is the piece locking somewhere the player never chose. Running
+    // the game a few frames behind wall clock is the cheaper mistake.
+    this.frameAccumulator = Math.min(
+      this.frameAccumulator + deltaTime,
+      this.FRAME_TIME * this.MAX_CATCHUP_FRAMES
+    );
 
     while (this.frameAccumulator >= this.FRAME_TIME) {
       this.frameAccumulator -= this.FRAME_TIME;

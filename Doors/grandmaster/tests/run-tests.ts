@@ -23,6 +23,8 @@ const TEST_MODULES = [
   './tetrinet-line-clear.test',
   './tetrinet-cell-width.test',
   './das-arr-timing.test',
+  './input-repeat.test',
+  './lock-flash.test',
   './gamepad-every-mode.test',
   './saved-settings-merge.test',
   './input-hints.test',

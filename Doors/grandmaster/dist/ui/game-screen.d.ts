@@ -37,6 +37,8 @@ export declare class GameScreen {
     private zoneBox;
     private footerBox;
     private boardOverlay;
+    /** What the overlay looked like the last time the board was painted. */
+    private lastOverlaySignature;
     private lastRender;
     private readonly RENDER_FPS;
     private readonly RENDER_INTERVAL;
@@ -144,6 +146,14 @@ export declare class GameScreen {
      * Board coordinates: x=0..9, y=4..23 (visible area)
      * Each overlay cell is a 2-char blessed-tagged string or null
      */
+    /**
+     * Build this frame's overlay and say whether it differs from the last one.
+     *
+     * The "differs" half is the point: an effect appearing, moving AND
+     * vanishing all have to mark the board dirty, and the vanishing case is
+     * the one that used to be missed.
+     */
+    private updateBoardOverlay;
     private buildBoardOverlay;
     /**
      * Overlay text centered on the board at a given visible row offset

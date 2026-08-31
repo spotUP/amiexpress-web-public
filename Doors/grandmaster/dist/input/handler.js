@@ -22,6 +22,26 @@ class InputHandler {
         this.downPressed = false;
         this.dasTimer = 0;
         this.arrTimer = 0;
+        /**
+         * Soft drop has its own clock.
+         *
+         * It used to share `arrTimer` with the sideways auto-repeat. Held
+         * together - which is how the game is played from about level 300, where
+         * soft drop is down more or less permanently - each reset the other's
+         * timer and the piece managed ONE sideways cell per second against the
+         * twelve the settings asked for. Measured, not guessed:
+         * tests/input-repeat.test.ts.
+         */
+        this.softDropTimer = 0;
+        /**
+         * Most repeats one update() may deliver.
+         *
+         * A repeat is a rate in milliseconds, so a slow frame owes the player
+         * several - but a frame that ran a whole second late must not empty the
+         * backlog into one tick and throw the piece across the board. Four cells
+         * is a wide slow frame; beyond that the debt is dropped rather than paid.
+         */
+        this.MAX_REPEATS_PER_UPDATE = 4;
         // Key release simulation (blessed doesn't emit keyrelease)
         this.lastLeftPress = 0;
         this.lastRightPress = 0;
@@ -111,6 +131,7 @@ class InputHandler {
             }
             else if (this.config.softDrop.includes(name)) {
                 this.downPressed = false;
+                this.softDropTimer = 0;
             }
         });
     }
@@ -150,6 +171,7 @@ class InputHandler {
         else if (this.config.softDrop.includes(keyName)) {
             this.downPressed = true;
             this.lastDownPress = now;
+            this.softDropTimer = 0;
             this.triggerAction('soft_drop');
         }
         else {
@@ -262,36 +284,57 @@ class InputHandler {
         }
         if (!this.keyStateMode && this.downPressed && now - this.lastDownPress > this.KEY_RELEASE_TIMEOUT) {
             this.downPressed = false;
+            this.softDropTimer = 0;
         }
         // Update DAS/ARR for held directional keys
         if (this.leftPressed || this.rightPressed) {
             this.dasTimer += dt;
             if (this.dasTimer >= this.dasDelay) {
-                // DAS has expired, start ARR
+                // DAS has expired, start ARR.
+                //
+                // As many cells as the elapsed time paid for, not one per update:
+                // this runs from the game loop, which polls input and repaints the
+                // board on the same interval (game-screen run()), and a blessed
+                // repaint pushed over a socket does not fit in 16 ms. One repeat
+                // per iteration silently turned the player's ARR into "whatever the
+                // loop managed this frame" and dropped the rest.
                 this.arrTimer += dt;
-                if (this.arrTimer >= this.arrRate) {
-                    this.arrTimer = 0;
-                    // Trigger repeat
-                    if (this.leftPressed) {
-                        this.triggerAction('left');
-                    }
-                    else if (this.rightPressed) {
-                        this.triggerAction('right');
-                    }
-                }
+                this.repeatWhileHeld(() => this.arrTimer, (value) => { this.arrTimer = value; }, this.arrRate, () => this.triggerAction(this.leftPressed ? 'left' : 'right'));
             }
         }
-        // Soft drop repeat
+        else {
+            this.arrTimer = 0;
+        }
+        // Soft drop repeat, on its own clock.
         if (this.downPressed) {
-            this.arrTimer += dt;
-            if (this.arrTimer >= config_1.TIMING.SOFT_DROP_RATE) {
-                this.arrTimer = 0;
-                this.triggerAction('soft_drop');
-            }
+            this.softDropTimer += dt;
+            this.repeatWhileHeld(() => this.softDropTimer, (value) => { this.softDropTimer = value; }, config_1.TIMING.SOFT_DROP_RATE, () => this.triggerAction('soft_drop'));
+        }
+        else {
+            this.softDropTimer = 0;
         }
         // Note: Keys remain held for DAS/ARR to work properly
         // They are only cleared when a different directional key is pressed
         // This compensates for blessed not providing keyrelease events
+    }
+    /**
+     * Pay out one repeat per elapsed period, capped.
+     *
+     * Shared by the sideways repeat and the soft drop so the two cannot drift
+     * apart again - they were one piece of code precisely because they behave
+     * the same way; what they must NOT share is the accumulator.
+     */
+    repeatWhileHeld(read, write, period, fire) {
+        let fired = 0;
+        while (read() >= period && fired < this.MAX_REPEATS_PER_UPDATE) {
+            write(read() - period);
+            fired++;
+            fire();
+        }
+        // Cap reached: the frame was so late that paying the rest would read as
+        // the piece teleporting. Forget the debt instead of carrying it.
+        if (fired >= this.MAX_REPEATS_PER_UPDATE)
+            write(0);
     }
     /**
      * Clear held keys (simulate key release)
@@ -346,6 +389,7 @@ class InputHandler {
         this.state.lastAction = null;
         this.dasTimer = 0;
         this.arrTimer = 0;
+        this.softDropTimer = 0;
         this.leftPressed = false;
         this.rightPressed = false;
         this.downPressed = false;
