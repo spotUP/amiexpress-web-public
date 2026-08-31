@@ -29,9 +29,11 @@ exports.theEffectsAreSentWetToBothReverbAndEcho = theEffectsAreSentWetToBothReve
 const assert_1 = __importDefault(require("assert"));
 const fs_1 = require("fs");
 const path_1 = require("path");
+const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const initial_data_1 = require("../game/initial-data");
 const pengo_game_1 = require("../game/pengo-game");
 const constants_1 = require("../game/constants");
+const sheet = (0, cell_art_1.loadSpriteSheet)((0, path_1.join)(__dirname, '..', 'sprites'));
 /**
  * A board the test controls completely.
  *
@@ -41,7 +43,7 @@ const constants_1 = require("../game/constants");
  */
 function emptyBoard() {
     const data = (0, initial_data_1.createInitialGameData)();
-    const game = new pengo_game_1.PengoGame(data, () => { });
+    const game = new pengo_game_1.PengoGame(data, () => { }, sheet);
     game.initLevel();
     for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
         for (let x = 0; x < constants_1.GRID_WIDTH; x++) {

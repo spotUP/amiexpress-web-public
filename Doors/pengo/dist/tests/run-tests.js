@@ -8,11 +8,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 /* eslint-disable no-console */
 const TEST_MODULES = [
-    './sprites.test',
     './menu.test',
     './sfx.test',
     './sprites-assets.test',
     './layout.test',
+    './render.test',
 ];
 (async () => {
     let passed = 0;

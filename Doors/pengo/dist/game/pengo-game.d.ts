@@ -4,9 +4,11 @@
  */
 import { PengoData, Direction } from './types';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
+import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 export declare class PengoGame {
     private data;
     private renderCallback;
+    private sheet;
     /**
      * What just happened, for whoever is listening.
      *
@@ -15,7 +17,7 @@ export declare class PengoGame {
      * a test with no audio anywhere near it.
      */
     readonly cues: SfxCues;
-    constructor(data: PengoData, onRender: (content: string) => void);
+    constructor(data: PengoData, onRender: (content: string) => void, sheet: Record<string, Sprite>);
     initLevel(): void;
     private spawnEnemy;
     handleDirection(direction: Direction): void;

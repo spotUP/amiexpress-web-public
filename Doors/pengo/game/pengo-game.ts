@@ -4,13 +4,6 @@
  */
 
 import {
-  terrainSprite,
-  pengoSprite,
-  enemySprite,
-  eggSprite,
-  paint,
-} from './sprites';
-import {
   PengoData,
   Direction,
   CellType,
@@ -27,10 +20,13 @@ import {
   getLevelConfig,
 } from './constants';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
+import { Sprite, bufferToTags } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { buildBoard } from './render';
 
 export class PengoGame {
   private data: PengoData;
   private renderCallback: (content: string) => void;
+  private sheet: Record<string, Sprite>;
 
   /**
    * What just happened, for whoever is listening.
@@ -41,9 +37,14 @@ export class PengoGame {
    */
   readonly cues = new SfxCues();
 
-  constructor(data: PengoData, onRender: (content: string) => void) {
+  constructor(
+    data: PengoData,
+    onRender: (content: string) => void,
+    sheet: Record<string, Sprite>
+  ) {
     this.data = data;
     this.renderCallback = onRender;
+    this.sheet = sheet;
   }
 
   initLevel(): void {
@@ -491,47 +492,7 @@ export class PengoGame {
   }
 
   render(): void {
-    const lines: string[] = [];
-
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-      let line = '';
-      for (let x = 0; x < GRID_WIDTH; x++) {
-        const ground = terrainSprite(this.data.grid[y][x]);
-
-        // Pengo
-        if (this.data.pengo.x === x && this.data.pengo.y === y && !this.data.pengo.isDead) {
-          line += paint(pengoSprite(ground.bg));
-          continue;
-        }
-
-        // Sno-Bee
-        const enemy = this.data.enemies.find(e => e.x === x && e.y === y && e.state !== 'dead');
-        if (enemy) {
-          line += paint(enemySprite(enemy.state === 'stunned', ground.bg));
-          continue;
-        }
-
-        // Egg
-        const egg = this.data.eggs.find(e => e.x === x && e.y === y);
-        if (egg) {
-          line += paint(eggSprite(ground.bg));
-          continue;
-        }
-
-        line += paint(ground);
-      }
-
-      // No space-padding: every cell is already CELL_WIDTH characters, so
-      // the row is the width it claims to be. The old render pushed a space
-      // between every character to fake a wider board, which also pushed one
-      // into the middle of anything two characters long.
-      lines.push(line);
-    }
-
-    lines.push('');
-    const timeColor = this.data.timeRemaining <= 30 ? 'red' : 'yellow';
-    lines.push(`{${timeColor}-fg}TIME: ${this.data.timeRemaining}{/}  {white-fg}ENEMIES: ${this.data.enemies.filter(e => e.state !== 'dead').length}{/}`);
-
-    this.renderCallback(lines.join('\n'));
+    const board = buildBoard(this.data, this.sheet, this.data.frameCount);
+    this.renderCallback(bufferToTags(board).join('\n'));
   }
 }

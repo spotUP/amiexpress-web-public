@@ -1,0 +1,63 @@
+{
+  "name": "pengo",
+  "cellW": 5,
+  "cellH": 2,
+  "animations": {
+    "walk-right": {
+      "ticksPerFrame": 3, "loop": true,
+      "frames": [
+        [[null, ["▄",11,0], ["█",11,0], ["►",3,0], null],
+         [null, ["▐",9,0], ["▀",11,0], ["▌",9,0], null]],
+        [[null, ["▄",11,0], ["█",11,0], ["►",3,0], null],
+         [null, ["▌",9,0], ["▀",11,0], ["▐",9,0], null]]
+      ]
+    },
+    "walk-left": {
+      "ticksPerFrame": 3, "loop": true,
+      "frames": [
+        [[null, ["◄",3,0], ["█",11,0], ["▄",11,0], null],
+         [null, ["▐",9,0], ["▀",11,0], ["▌",9,0], null]],
+        [[null, ["◄",3,0], ["█",11,0], ["▄",11,0], null],
+         [null, ["▌",9,0], ["▀",11,0], ["▐",9,0], null]]
+      ]
+    },
+    "walk-up": {
+      "ticksPerFrame": 3, "loop": true,
+      "frames": [
+        [[null, ["▄",11,0], ["▲",3,0], ["▄",11,0], null],
+         [null, ["▐",9,0], ["▀",11,0], ["▌",9,0], null]],
+        [[null, ["▄",11,0], ["▲",3,0], ["▄",11,0], null],
+         [null, ["▌",9,0], ["▀",11,0], ["▐",9,0], null]]
+      ]
+    },
+    "walk-down": {
+      "ticksPerFrame": 3, "loop": true,
+      "frames": [
+        [[null, ["▄",11,0], ["█",11,0], ["▄",11,0], null],
+         [null, ["▐",9,0], ["▼",3,0], ["▌",9,0], null]],
+        [[null, ["▄",11,0], ["█",11,0], ["▄",11,0], null],
+         [null, ["▌",9,0], ["▼",3,0], ["▐",9,0], null]]
+      ]
+    },
+    "push": {
+      "ticksPerFrame": 2, "loop": true,
+      "frames": [
+        [[["▄",11,0], ["█",11,0], ["█",11,0], ["►",3,0], null],
+         [["▐",9,0], ["▀",11,0], ["▀",11,0], ["▌",9,0], null]],
+        [[null, ["█",11,0], ["█",11,0], ["►",3,0], ["─",7,0]],
+         [null, ["▐",9,0], ["▀",11,0], ["▌",9,0], null]]
+      ]
+    },
+    "death": {
+      "ticksPerFrame": 6, "loop": false,
+      "frames": [
+        [[null, null, null, null, null],
+         [null, ["▄",11,0], ["█",11,0], ["▄",11,0], null]],
+        [[null, null, null, null, null],
+         [null, ["░",11,0], ["▒",11,0], ["░",11,0], null]],
+        [[null, null, null, null, null],
+         [null, null, ["░",8,0], null, null]]
+      ]
+    }
+  }
+}

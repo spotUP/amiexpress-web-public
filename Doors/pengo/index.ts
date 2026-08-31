@@ -7,6 +7,8 @@ import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import { Screen, Box, List, ScrollableBox, Message, Prompt } from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
+import { loadSpriteSheet } from "@amiexpress/bbs-door-sdk/engines/graphics/cell-art";
+import { join } from "path";
 import { PengoGame } from "./game/pengo-game";
 import { createInitialGameData } from "./game/initial-data";
 import { rpcHandlers } from "./server";
@@ -27,6 +29,7 @@ import {
 
 export { rpcHandlers };
 
+const spriteSheet = loadSpriteSheet(join(__dirname, "sprites"));
 
 const door = new Door({
   name: "Pengo",
@@ -252,7 +255,7 @@ function startGame(): void {
     // Every event that changes the board repaints it, so this is the
     // one place that sees them all.
     if (sfx && game) sfx.flush(game.cues);
-  });
+  }, spriteSheet);
   game.initLevel();
 
   if (gameLoop) clearInterval(gameLoop);
