@@ -417,8 +417,8 @@ export async function initializeData(io?: SocketIOServer) {
     // Conferences, message bases and file areas, from disk - the same
     // path an admin write re-runs, so a rename reaches the board without
     // a restart. See refreshConferencesFromDisk.
-    await ensureRootScreens(bbsRoot);
     await refreshConferencesFromDisk(bbsRoot);
+    await ensureRootScreens(bbsRoot);
 
     // From here on, an admin write rebuilds the same way boot just did.
     onConferencesChanged(async () => {

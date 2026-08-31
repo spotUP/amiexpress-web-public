@@ -79,9 +79,13 @@ export function ConferencesPage() {
   const deleteMutation = useMutation({
     mutationFn: ({ confNumber, removeFiles }: { confNumber: number; removeFiles: boolean }) =>
       apiClient.deleteConferenceConfig(confNumber, removeFiles),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['conferences'] });
-      showSuccess('Conference deleted successfully');
+      // The server's own sentence, not "deleted successfully": removing a
+      // conference from the middle moves every account's access, and may or
+      // may not have taken its files. The sysop is entitled to hear which,
+      // from the thing that did it.
+      showSuccess(response?.message || 'Conference removed');
     },
     onError: (error: Error) => {
       showError(`Failed to delete conference: ${error.message}`);

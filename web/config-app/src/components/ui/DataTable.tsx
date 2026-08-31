@@ -237,7 +237,21 @@ export function DataTable<T extends RowData>({
                 })}
 
                 {rowActions && (
-                  <td className="h-row whitespace-nowrap px-3 text-right">
+                  <td
+                    className="h-row whitespace-nowrap px-3 text-right"
+                    // A row action is not a click on the row.
+                    //
+                    // With onRowClick set, pressing Delete opened the editor
+                    // as well: the button's click bubbled to the <tr>. The
+                    // sysop got the edit modal ON TOP of the confirmation,
+                    // which marks the rest of the page aria-hidden - so the
+                    // dialog looked stuck and the toast that followed was
+                    // buried under a modal nobody asked for.
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+                    }}
+                  >
                     {/* Opacity, never display:none - the buttons stay in the
                         keyboard order whether or not the pointer is here. */}
                     <span className="inline-flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
