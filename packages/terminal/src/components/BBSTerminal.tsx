@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
+import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { getZmodem } from '../utils/zmodem';
@@ -1315,12 +1316,38 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       normalPressedKeys.clear();
     };
 
+    /**
+     * Reconnect the moment the world changes, instead of waiting out a
+     * backoff that was measured for a server that had not come back yet.
+     *
+     * This is the half the sysop actually feels: bringing Chrome to the
+     * front is the signal that somebody wants to type RIGHT NOW.
+     */
+    const wakeSocket = () => {
+      const live = socketRef.current;
+      if (!live) return;
+      const visible = typeof document === 'undefined' || document.visibilityState === 'visible';
+      const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+      if (!shouldReconnectNow(live.connected, visible, online)) return;
+      console.log('[Terminal] Tab is back and the socket is not - reconnecting now');
+      live.connect();
+    };
+
     // Prevent stuck keys: clear state when window loses focus or tab becomes hidden
     const handleWindowBlur = () => clearAllKeyState();
     const handleVisibilityChange = () => {
-      if (document.hidden) clearAllKeyState();
+      if (document.hidden) {
+        clearAllKeyState();
+        return;
+      }
+      wakeSocket();
     };
     window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', wakeSocket);
+    window.addEventListener('online', wakeSocket);
+    // Restored from the back/forward cache: the page never ran a line of
+    // code while it was frozen, so nothing noticed the socket dying.
+    window.addEventListener('pageshow', wakeSocket);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Connect to BBS backend
@@ -1334,13 +1361,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       timeout: 20000,
       upgrade: true,
       rememberUpgrade: true,
-      reconnection: true,
-      // Aggressive reconnection to maintain session within 2-minute window
-      reconnectionAttempts: isDevelopment ? 5 : 30,
-      reconnectionDelay: 1000, // Start with 1 second
-      reconnectionDelayMax: isDevelopment ? 3000 : 10000, // Max 10 seconds in prod
-      // Random factor to prevent thundering herd on server restart
-      randomizationFactor: 0.5,
+      // Retry until it works or the tab closes - see reconnect-policy.ts.
+      // This used to stop after 5 attempts on localhost, about eleven
+      // seconds, which is shorter than a dev backend takes to restart.
+      ...reconnectPolicy(isDevelopment),
     });
     socketRef.current = socket;
 
@@ -1507,6 +1531,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       startGuruAnimation();
 
       onConnectionError?.(error);
+    });
+
+    // Belt and braces. The policy retries forever, so this should never
+    // fire - but if it ever does, a terminal that has quietly stopped
+    // reconnecting looks exactly like a BBS that has hung, and the only way
+    // out is a reload. Start over instead.
+    socket.io.on('reconnect_failed', () => {
+      console.warn('[Terminal] Reconnection gave up - starting over rather than sitting dead');
+      socket.connect();
     });
 
     socket.on('transfer-raw:init', (payload: any) => {
@@ -2724,6 +2757,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       window.removeEventListener('mousemove', gameWindowMouseMove);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', wakeSocket);
+      window.removeEventListener('online', wakeSocket);
+      window.removeEventListener('pageshow', wakeSocket);
       // Clean up wheel handler
       if (terminalRef.current) {
         const handler = (terminalRef.current as any)._wheelHandler;
