@@ -11,7 +11,12 @@
   "include": [
     "client/**/*",
     "common/**/*",
-    "core/**/*"
+    "core/**/*",
+    // The arcade shell is pure and I/O-free, and a door's browser client
+    // imports from it (installArcadeSfx). The package's "import" condition
+    // points at dist-esm, so without this an esbuild client bundle resolves
+    // ./dist-esm/engines/ui/arcade/index.js and finds nothing there.
+    "engines/ui/arcade/**/*"
   ],
   "exclude": [
     "node_modules",

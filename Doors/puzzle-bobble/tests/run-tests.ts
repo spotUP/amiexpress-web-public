@@ -9,6 +9,7 @@
 
 const TEST_MODULES = [
   './layout.test',
+  './sfx.test',
 ];
 
 (async () => {

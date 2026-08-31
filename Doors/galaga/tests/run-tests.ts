@@ -10,6 +10,7 @@
 const TEST_MODULES = [
   './layout.test',
   './sprites.test',
+  './sfx.test',
 ];
 
 (async () => {

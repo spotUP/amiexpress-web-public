@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const TEST_MODULES = [
     './sprites.test',
     './menu.test',
+    './sfx.test',
 ];
 (async () => {
     let passed = 0;

@@ -26,12 +26,22 @@ import {
   getColorsForLevel,
   generateLevelPattern,
 } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 
 export class PuzzleBobbleGame {
   private data: PuzzleBobbleData;
   private renderCallback: (content: string) => void;
   private onGameOver: () => void;
   private onLevelComplete: () => void;
+
+  /**
+   * What just happened, for whoever is listening.
+   *
+   * The game names the moment; the door decides whether anybody hears it.
+   * Nothing in here touches a socket, so the sound design is assertable in
+   * a test with no audio anywhere near it.
+   */
+  readonly cues = new SfxCues();
 
   constructor(
     data: PuzzleBobbleData,
@@ -139,6 +149,7 @@ export class PuzzleBobbleGame {
       if (this.data.bubblesCleared > 0) {
         this.data.score += SCORES.perfectClear;
       }
+      this.cues.push('level-up');
       this.data.state = 'levelComplete';
       this.onLevelComplete();
       return;
@@ -146,6 +157,7 @@ export class PuzzleBobbleGame {
 
     // Check for game over (bubbles reached shooter)
     if (this.checkGameOver()) {
+      this.cues.push('gameover');
       this.data.state = 'gameover';
       this.onGameOver();
       return;
@@ -162,6 +174,7 @@ export class PuzzleBobbleGame {
 
     // Wall bounce
     if (bubble.x <= 0 || bubble.x >= GRID_WIDTH - 1) {
+      this.cues.push('blip');
       bubble.vx = -bubble.vx;
       bubble.x = Math.max(0, Math.min(GRID_WIDTH - 1, bubble.x));
     }
@@ -269,7 +282,14 @@ export class PuzzleBobbleGame {
     // Check for matches
     const matches = this.findMatches(row, col, bubble.color);
 
+    // Sticking and popping are the two outcomes of a shot, and the player
+    // aims the next one differently depending on which it was.
+    if (matches.length < MIN_MATCH) {
+      this.cues.push('land');
+    }
+
     if (matches.length >= MIN_MATCH) {
+      this.cues.push('pickup');
       // Pop matching bubbles
       for (const [mRow, mCol] of matches) {
         const cell = this.data.grid[mRow][mCol];
@@ -282,6 +302,7 @@ export class PuzzleBobbleGame {
       // Check combo
       if (this.data.frameCount - this.data.lastMatchTime < COMBO_WINDOW) {
         this.data.combo++;
+        this.cues.push('powerup');
       } else {
         this.data.combo = 1;
       }
@@ -375,6 +396,7 @@ export class PuzzleBobbleGame {
     }
 
     if (droppedCount > 0) {
+      this.cues.push('drop');
       this.data.score += droppedCount * SCORES.bubbleDrop;
       this.data.bubblesCleared += droppedCount;
     }
@@ -406,10 +428,12 @@ export class PuzzleBobbleGame {
   }
 
   private dropCeiling(): void {
+    this.cues.push('alarm');
     this.data.gridOffset += 0.5;
 
     // Check if any bubble is now too low
     if (this.checkGameOver()) {
+      this.cues.push('gameover');
       this.data.state = 'gameover';
       this.onGameOver();
     }
@@ -463,6 +487,7 @@ export class PuzzleBobbleGame {
     const vx = Math.cos(angleRad) * BUBBLE_SPEED;
     const vy = -Math.sin(angleRad) * BUBBLE_SPEED;
 
+    this.cues.push('laser');
     this.data.shootingBubble = {
       x: this.data.shooter.x,
       y: this.data.shooter.y - 1,

@@ -7,8 +7,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PengoGame = void 0;
 const sprites_1 = require("./sprites");
 const constants_1 = require("./constants");
+const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 class PengoGame {
     constructor(data, onRender) {
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The game names the moment; the door decides whether anybody hears it.
+         * Nothing in here touches a socket, so the sound design is assertable in
+         * a test with no audio anywhere near it.
+         */
+        this.cues = new arcade_1.SfxCues();
         this.data = data;
         this.renderCallback = onRender;
     }
@@ -143,6 +152,8 @@ class PengoGame {
         }
     }
     pushBlock(x, y, dx, dy) {
+        // The block leaves Pengo's flippers whatever it goes on to hit.
+        this.cues.push('dash');
         this.data.pengo.isPushing = true;
         this.data.pengo.pushFrame = 0;
         this.data.score += constants_1.SCORES.pushBlock;
@@ -162,6 +173,7 @@ class PengoGame {
                 enemyHit.state = 'dead';
                 this.data.score += constants_1.SCORES.crushEnemy;
                 crushedEnemy = true;
+                this.cues.push('explosion');
                 // Block stops at enemy position
                 this.data.grid[y][x] = 'empty';
                 this.data.grid[slideY][slideX] = 'empty';
@@ -185,6 +197,9 @@ class PengoGame {
         this.checkDiamondAlignment();
     }
     shakeWall(direction) {
+        // A shake that catches nobody is a dull thud; one that stuns is a hit.
+        // The player has to be able to tell those apart to learn the timing.
+        let stunned = false;
         // Stun all enemies touching that wall
         for (const enemy of this.data.enemies) {
             if (enemy.state === 'dead')
@@ -202,8 +217,10 @@ class PengoGame {
                 enemy.state = 'stunned';
                 enemy.stunTimer = constants_1.STUN_DURATION;
                 this.data.score += constants_1.SCORES.stunEnemy;
+                stunned = true;
             }
         }
+        this.cues.push(stunned ? 'hit' : 'boop');
     }
     checkDiamondAlignment() {
         // Check horizontal alignment
@@ -215,6 +232,10 @@ class PengoGame {
             }
             if (count >= 2) {
                 this.data.score += count === 2 ? constants_1.SCORES.diamondAlign2 : constants_1.SCORES.diamondAlign3;
+                // Only the moment they LINE UP is worth a sound; the check runs on
+                // every push and would otherwise fanfare each one thereafter.
+                if (!this.data.diamondsAligned)
+                    this.cues.push('powerup');
                 this.data.diamondsAligned = true;
             }
         }
@@ -227,6 +248,8 @@ class PengoGame {
             }
             if (count >= 2) {
                 this.data.score += count === 2 ? constants_1.SCORES.diamondAlign2 : constants_1.SCORES.diamondAlign3;
+                if (!this.data.diamondsAligned)
+                    this.cues.push('powerup');
                 this.data.diamondsAligned = true;
             }
         }
@@ -268,6 +291,7 @@ class PengoGame {
         if (this.data.enemies.filter(e => e.state !== 'dead').length === 0 &&
             this.data.eggs.length === 0) {
             this.data.state = 'levelComplete';
+            this.cues.push('level-up');
             this.data.score += constants_1.SCORES.clearLevel;
             this.data.score += this.data.timeRemaining * constants_1.SCORES.timeBonus;
             setTimeout(() => {
@@ -340,6 +364,7 @@ class PengoGame {
             egg.hatchTimer--;
             if (egg.hatchTimer <= 0) {
                 // Hatch into enemy
+                this.cues.push('blip');
                 this.data.enemies.push({
                     id: this.data.enemyIdCounter++,
                     x: egg.x,
@@ -366,6 +391,9 @@ class PengoGame {
         }
     }
     killPengo() {
+        if (this.data.pengo.isDead)
+            return;
+        this.cues.push('death');
         this.data.pengo.isDead = true;
         this.data.pengo.deathFrame = 0;
         this.data.lives--;
@@ -373,6 +401,7 @@ class PengoGame {
     respawnPengo() {
         if (this.data.lives <= 0) {
             this.data.state = 'gameover';
+            this.cues.push('gameover');
             return;
         }
         this.data.pengo.isDead = false;

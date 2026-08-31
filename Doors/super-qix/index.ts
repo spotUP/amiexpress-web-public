@@ -9,7 +9,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
-import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
@@ -437,6 +437,7 @@ function renderMenu(): void {
  * Show high scores
  */
 async function showHighscores(): Promise<void> {
+  sfx?.play("select");
   gameData.state = "highscores";
 
   try {
@@ -490,6 +491,7 @@ async function showHighscores(): Promise<void> {
  * Show help screen
  */
 function showHelp(): void {
+  sfx?.play("select");
   const content = [
     "{yellow-fg}HOW TO PLAY{/}",
     "",
@@ -684,6 +686,7 @@ function cycleSkill(): void {
  * Start the game
  */
 async function startGame(): Promise<void> {
+  sfx?.play("start");
   gameData.state = "playing";
   gameData.score = 0;
   // FAQ 4: how many lives you get is the skill setting, not a constant.
@@ -702,6 +705,9 @@ async function startGame(): Promise<void> {
     gameArea.setContent(content);
     hudBox.setContent(formatHUD());
     screen.render();
+    // Every event that changes the board repaints it, so this is the one
+    // place that sees them all.
+    if (sfx && engine) sfx.flush(engine.cues);
   });
 
   await applyLevelBackground(1);
@@ -728,6 +734,9 @@ async function startGame(): Promise<void> {
       }
       engine?.update();
       syncMusicState();
+      // A lost last life or a finished level returns before the repaint,
+      // so drain here too and the sound lands on the tick it happened on.
+      if (sfx && engine) sfx.flush(engine.cues);
     } else if (gameData.state === "gameover") {
       // Keep painting so the GAME OVER prompt blinks. Nothing drew this
       // state at all before, so losing the last life froze the board.
@@ -841,11 +850,13 @@ function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
       gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
+      sfx?.play("blip");
       renderMenu();
       break;
 
     case "down":
       gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
+      sfx?.play("blip");
       renderMenu();
       break;
 
@@ -1088,9 +1099,25 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
 let keepAlive: ReturnType<typeof setInterval> | null = null;
 // doorContext already declared above
 
+/**
+ * Sound effects, over the session socket to the browser.
+ *
+ * Separate from the music, which the CLIENT drives by polling
+ * getMusicTrack: a track is a state, and the door can answer "what should
+ * be playing" whenever it is asked. An effect is an event, and an event
+ * asked about a second late has already gone.
+ */
+let sfx: ArcadeSfx | null = null;
+
 function cleanup(): void {
+
   stopAttract();
   stopMenuIdle();
+
+  if (sfx) {
+    sfx.destroy();
+    sfx = null;
+  }
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
@@ -1114,6 +1141,14 @@ function cleanup(): void {
 
 // Door lifecycle hooks
 door.onStart(async (ctx: any) => {
+  // A browser session has a socket; a telnet one does not, and ArcadeSfx
+  // treats a missing socket as "nobody is listening" rather than an error.
+  sfx = new ArcadeSfx(ctx?.socket, {
+    // The fuse relights on every tick it burns. One warning a second is a
+    // warning; thirty is a siren.
+    soundGapMs: { alarm: 1000 },
+  });
+
   doorContext = ctx;
   gameData = createInitialGameData();
 

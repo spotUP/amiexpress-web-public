@@ -24,6 +24,7 @@ const TEST_MODULES = [
   './controls.test',
   './attract.test',
   './music.test',
+  './sfx.test',
 ];
 
 (async () => {

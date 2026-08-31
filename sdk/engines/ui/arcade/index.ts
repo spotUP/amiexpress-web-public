@@ -15,3 +15,15 @@ export {
   MENU_COLORS,
 } from './menu';
 export type { ArcadeMenuSpec, MenuOption } from './menu';
+
+export { ArcadeSfx, SfxCues, installArcadeSfx, ARCADE_SFX_EVENT } from './sfx';
+export type {
+  ArcadeSound,
+  ArcadeSoundParams,
+  ArcadeSfxPayload,
+  ArcadeSfxOptions,
+  ArcadeSfxTransport,
+  ArcadeSfxSink,
+  ArcadeSfxSocket,
+  InstallArcadeSfxOptions,
+} from './sfx';

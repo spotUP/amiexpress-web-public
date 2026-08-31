@@ -8,67 +8,17 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
-import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/door-input-manager";
 import { ZooKeeperGame } from "./game/zoo-stage";
+import { createInitialGameData } from "./game/initial-data";
 import { rpcHandlers } from "./server";
-import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, DEFAULT_HIGHSCORES, } from "./game/constants";
+import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, } from "./game/constants";
 // Export RPC handlers for hybrid mode
 export { rpcHandlers };
 /**
  * Create initial game data
  */
-function createInitialGameData() {
-    return {
-        state: "menu",
-        score: 0,
-        lives: STARTING_LIVES,
-        level: 1,
-        round: 1,
-        zeke: {
-            x: 40,
-            y: 10,
-            direction: "right",
-            hasNet: false,
-            netTimer: 0,
-            isJumping: false,
-            jumpFrame: 0,
-            isDead: false,
-            deathFrame: 0,
-        },
-        zooStage: {
-            wall: [],
-            animals: [],
-            bonusItems: [],
-            timer: 60,
-            fusePosition: 0,
-            animalIdCounter: 0,
-        },
-        platformStage: {
-            platforms: [],
-            coconuts: [],
-            zelda: { x: 40, y: 2 },
-            monkey: { x: 60, y: 3 },
-            monkeyThrowTimer: 0,
-            zekelY: 18,
-            zekelPlatformIndex: -1,
-        },
-        stampedeStage: {
-            escalatorSpeed: 1,
-            chargingAnimals: [],
-            zekelY: 18,
-            jumpedAnimals: 0,
-        },
-        highscores: [...DEFAULT_HIGHSCORES],
-        menuSelection: 0,
-        playerName: "",
-        playerNameCursor: 0,
-        lastUpdateTime: Date.now(),
-        frameCount: 0,
-        transitionTimer: 0,
-        transitionMessage: "",
-    };
-}
 /**
  * Main door entry point
  */
@@ -233,6 +183,7 @@ function renderMenu() {
  * Show high scores
  */
 async function showHighscores() {
+    sfx?.play("select");
     gameData.state = "highscores";
     // Try to load from server
     try {
@@ -277,6 +228,7 @@ async function showHighscores() {
  * Show help screen
  */
 function showHelp() {
+    sfx?.play("select");
     const content = [
         "{yellow-fg}HOW TO PLAY{/}",
         "",
@@ -324,6 +276,7 @@ function showHelp() {
  * Start the game
  */
 function startGame() {
+    sfx?.play("start");
     gameData.state = "playing";
     gameData.score = 0;
     gameData.lives = STARTING_LIVES;
@@ -338,6 +291,10 @@ function startGame() {
         gameArea.setContent(content);
         hudBox.setContent(formatHUD());
         screen.render();
+        // Every event that changes the board repaints it, so this is the
+        // one place that sees them all.
+        if (sfx && game)
+            sfx.flush(game.cues);
     });
     game.initZooStage();
     // Start game loop
@@ -351,6 +308,11 @@ function startGame() {
             pollHeldDirections();
             game?.update();
         }
+        // The state can change inside update() - a wave finished, a last life
+        // lost - and those paths return before the game repaints. Draining here
+        // as well means the sound still lands on the tick it happened on.
+        if (sfx && game)
+            sfx.flush(game.cues);
     }, GAME_TICK_MS);
 }
 /**
@@ -435,10 +397,12 @@ function handleMenuInput(key) {
     switch (key) {
         case "up":
             gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
+            sfx?.play("blip");
             renderMenu();
             break;
         case "down":
             gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
+            sfx?.play("blip");
             renderMenu();
             break;
         case "enter":
@@ -629,7 +593,18 @@ async function handleNameEntryInput(key) {
  */
 let keepAlive = null;
 // doorContext already declared above
+/**
+ * Sound effects, over the session socket to the browser.
+ *
+ * Null over telnet and until the door starts; every call site treats that
+ * as "nobody is listening", which is the truth rather than an error.
+ */
+let sfx = null;
 function cleanup() {
+    if (sfx) {
+        sfx.destroy();
+        sfx = null;
+    }
     if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;
@@ -650,6 +625,9 @@ function cleanup() {
 }
 // Door lifecycle hooks
 door.onStart(async (ctx) => {
+    // A browser session has a socket; a telnet one does not, and ArcadeSfx
+    // treats a missing socket as "nobody is listening" rather than an error.
+    sfx = new ArcadeSfx(ctx?.socket);
     doorContext = ctx;
     gameData = createInitialGameData();
     // Prevent event loop from emptying

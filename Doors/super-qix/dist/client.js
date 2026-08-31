@@ -1,4 +1,5 @@
 import { ClientDoor, AudioEngine, TrackerEngine } from "@amiexpress/bbs-door-sdk/client";
+import { installArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 const door = new ClientDoor({
     name: "Super Qix",
     version: "1.0.0",
@@ -6,7 +7,33 @@ const door = new ClientDoor({
     runtime: "hybrid",
     hybrid: true,
 });
-const audio = new AudioEngine();
+const audio = new AudioEngine({
+    masterVolume: 0.7,
+    // The tracker music plays on its own context (see ensureTracker), so what
+    // balances the mix against it is sfxVolume, not musicVolume.
+    sfxVolume: 0.55,
+    // Two knobs, not one. `wet` is the SEND LEVEL - how much tail is audible
+    // - and it stays high, because the first pass was reported as too dry.
+    // `decay` and `feedback` are how LONG it rings, and they are short,
+    // because the second was reported as "way too long tails". Claims come in
+    // bursts here, so a tail that outlasts one covers the next.
+    //
+    // The send is parallel and the music is on a different AudioContext
+    // entirely, so none of this passes through the tracker.
+    sfxReverb: {
+        wet: 0.78,
+        decay: 2.0,
+        preDelay: 0.02,
+    },
+    // The bounce: a couple of audible repeats, not a decaying cloud.
+    sfxEcho: {
+        delayTime: 0.14,
+        feedback: 0.22,
+        wet: 0.78,
+    },
+});
+/** Detach from the sound-effect channel. Set while the door is connected. */
+let stopSfx = null;
 console.log("[Super Qix] Client door initializing...");
 // ===========================================================================
 // Music - real tracker modules (Zabutom XM pack) via the SDK TrackerEngine.
@@ -123,26 +150,36 @@ door.on("init", () => {
 door.on("connect", (user) => {
     console.log(`[Super Qix] Connected as ${user.name}`);
     startMusicPoll();
+    if (!stopSfx)
+        stopSfx = installArcadeSfx(audio);
 });
 door.on("disconnect", () => {
     stopMusic();
+    stopArcadeSfx();
 });
 door.on("close", () => {
     stopMusic();
+    stopArcadeSfx();
 });
-door.on("audio", async (data) => {
-    try {
-        if (data && data.action === "play" && data.name) {
-            await audio.init();
-            audio.playSound(data.name, data.options || { frequency: 440, duration: 0.1 });
-        }
-        else if (data && data.action === "stop") {
-            audio.stopMusic();
-        }
+/**
+ * Stop listening for sound effects.
+ *
+ * A door is unloaded by removing its script, which detaches nothing it
+ * subscribed to. Without this, re-entering Super Qix leaves the previous
+ * listener in place and every claim plays twice.
+ */
+function stopArcadeSfx() {
+    if (stopSfx) {
+        stopSfx();
+        stopSfx = null;
     }
-    catch (err) {
-        console.error("Audio error:", err);
-    }
+}
+// This file used to carry a `door.on("audio")` handler, copied from the
+// same template as every other arcade door. Nothing has ever emitted that
+// event, so it has never run.
+door.on("shutdown", () => {
+    stopMusic();
+    stopArcadeSfx();
 });
 console.log("[Super Qix] Starting client door...");
 door.start();

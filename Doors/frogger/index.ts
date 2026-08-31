@@ -5,7 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
-import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
@@ -110,6 +110,16 @@ let hudBox: ReturnType<typeof blessed.box>;
 let logoBox: ReturnType<typeof blessed.box>;
 let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Sound effects, over the session socket to the browser.
+ *
+ * Null over telnet, and null until the door starts; every call site treats
+ * that as "nobody is listening", which is the truth and not an error.
+ * Attract mode is deliberately left out - the demo game's cues are never
+ * drained, so a board sitting on its menu stays quiet.
+ */
+let sfx: ArcadeSfx | null = null;
 
 /** How long the finished board stays up between levels, in ticks. */
 const LEVEL_COMPLETE_FRAMES = 40;
@@ -550,6 +560,10 @@ function startGame(): void {
     gameArea.setContent(content);
     hudBox.setContent(formatHUD());
     screen.render();
+    // Every event that changes the board repaints it, so this is the one
+    // place that sees them all - no hunting for the five call sites that
+    // would each need their own flush.
+    if (sfx && game) sfx.flush(game.cues);
   });
 
   game.initLevel();
@@ -641,6 +655,7 @@ function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+      sfx?.play("blip");
       renderMenu();
       break;
     case "down":
@@ -648,22 +663,27 @@ function handleMenuInput(key: InputKey): void {
         MENU_OPTIONS.length - 1,
         gameData.menuSelection + 1
       );
+      sfx?.play("blip");
       renderMenu();
       break;
     case "enter":
     case "space":
       switch (MENU_OPTIONS[gameData.menuSelection]) {
         case "Start Game":
+          sfx?.play("start");
           startGame();
           break;
         case "Lives":
           cycleLives();
+          sfx?.play("select");
           renderMenu();
           break;
         case "High Scores":
+          sfx?.play("select");
           showHighscores();
           break;
         case "Help":
+          sfx?.play("select");
           showHelp();
           break;
         case "Quit":
@@ -732,6 +752,7 @@ function handleGameInput(key: InputKey): void {
  */
 function showPauseScreen(): void {
   gameData.state = "paused";
+  sfx?.play("pause");
 
   if (menuBox) menuBox.destroy();
 
@@ -761,6 +782,7 @@ function handlePausedInput(key: InputKey): void {
       menuBox = null;
     }
     gameData.state = "playing";
+    sfx?.play("unpause");
     game?.render();
   } else if (key === "q" || key === "escape") {
     gameData.state = "menu";
@@ -889,6 +911,10 @@ let keepAlive: ReturnType<typeof setInterval> | null = null;
 
 function cleanup(): void {
   stopAttract();
+  if (sfx) {
+    sfx.destroy();
+    sfx = null;
+  }
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
@@ -924,6 +950,16 @@ door.onStart(async (ctx: any) => {
   // The BBS already knows who is playing, so a high score does not need to
   // be typed in three letters at a time - the same thing Grandmaster does.
   gameData.playerName = ctx?.session?.user?.username || "";
+
+  // A browser session has a socket; a telnet one does not, and ArcadeSfx
+  // treats a missing socket as "nobody is listening" rather than an error.
+  sfx = new ArcadeSfx(ctx?.socket, {
+    // Hopping is the sound the player hears most, and Frogger's hop repeat
+    // is capped at 140 ms by pollHeldDirections, so the default gap would
+    // never drop one. Given room to be shorter, a fast player hears every
+    // hop they made.
+    soundGapMs: { jump: 40 },
+  });
 
   // Prevent event loop from emptying
   keepAlive = setInterval(() => {}, 60000);

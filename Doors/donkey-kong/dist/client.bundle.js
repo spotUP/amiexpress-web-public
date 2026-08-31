@@ -235,7 +235,6 @@ function parseTags(text) {
           return attrs.noInverse;
         case "invisible":
           return attrs.noInvisible;
-        // Foreground color closing tags - reset to default fg
         case "black-fg":
         case "red-fg":
         case "green-fg":
@@ -274,7 +273,6 @@ function parseTags(text) {
         case "grey":
         case "fg":
           return defaultFg;
-        // Background color closing tags - reset to default bg
         case "black-bg":
         case "red-bg":
         case "green-bg":
@@ -332,7 +330,6 @@ function parseTags(text) {
       case "gray":
       case "grey":
         return fg(name === "grey" ? "gray" : name);
-      // Standard foreground colors (0-7)
       case "black-fg":
         return fg("black");
       case "red-fg":
@@ -352,7 +349,6 @@ function parseTags(text) {
       case "gray-fg":
       case "grey-fg":
         return fg("gray");
-      // Bright/light foreground colors (8-15)
       case "lightblack-fg":
       case "brightblack-fg":
         return fg("lightblack");
@@ -377,7 +373,6 @@ function parseTags(text) {
       case "lightwhite-fg":
       case "brightwhite-fg":
         return fg("lightwhite");
-      // Standard background colors (0-7)
       case "black-bg":
         return bg("black");
       case "red-bg":
@@ -397,7 +392,6 @@ function parseTags(text) {
       case "gray-bg":
       case "grey-bg":
         return bg("gray");
-      // Bright/light background colors (8-15)
       case "lightblack-bg":
       case "brightblack-bg":
         return bg("lightblack");
@@ -426,7 +420,6 @@ function parseTags(text) {
         return value ? fg(value) : "";
       case "bg":
         return value ? bg(value) : "";
-      // Escape sequences for literal braces
       case "open":
         return "{";
       case "close":
@@ -532,7 +525,7 @@ var init_colors = __esm({
         push(i, l, l, l);
       }
     })();
-    ccolors = (function() {
+    ccolors = function() {
       const _cols = vcolors.slice();
       const cols = colors.slice();
       vcolors.length = 8;
@@ -545,7 +538,7 @@ var init_colors = __esm({
         colors[i] = cols[i];
       }
       return out;
-    })();
+    }();
     colorNames = {
       // special
       default: -1,
@@ -7482,16 +7475,12 @@ var init_dockable_panel = __esm({
         switch (this.dockPosition) {
           case "left":
             return direction === "right";
-          // Swipe right to undock left panel
           case "right":
             return direction === "left";
-          // Swipe left to undock right panel
           case "top":
             return direction === "down";
-          // Swipe down to undock top panel
           case "bottom":
             return direction === "up";
-          // Swipe up to undock bottom panel
           default:
             return false;
         }
@@ -8494,7 +8483,7 @@ var init_lcd = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js"() {
     "use strict";
     init_contrib_canvas();
-    CharacterMasks = (function() {
+    CharacterMasks = function() {
       const a1 = 1 << 0, a2 = 1 << 1, b = 1 << 2, c = 1 << 3, d1 = 1 << 4, d2 = 1 << 5, e = 1 << 6, f = 1 << 7, g1 = 1 << 8, g2 = 1 << 9, h = 1 << 10, i = 1 << 11, j = 1 << 12, k = 1 << 13, l = 1 << 14, m = 1 << 15;
       return {
         " ": 0,
@@ -8540,7 +8529,7 @@ var init_lcd = __esm({
         "+": g1 | g2 | i | l,
         "*": g1 | g2 | h | i | j | k | l | m
       };
-    })();
+    }();
   }
 });
 
@@ -8859,7 +8848,8 @@ var init_blessed = __esm({
 var require_arrayWithHoles = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
     function _arrayWithHoles(r) {
-      if (Array.isArray(r)) return r;
+      if (Array.isArray(r))
+        return r;
     }
     module.exports = _arrayWithHoles, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
@@ -8874,16 +8864,21 @@ var require_iterableToArrayLimit = __commonJS({
         var e, n, i, u, a = [], f = true, o = false;
         try {
           if (i = (t = t.call(r)).next, 0 === l) {
-            if (Object(t) !== t) return;
+            if (Object(t) !== t)
+              return;
             f = false;
-          } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true) ;
+          } else
+            for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true)
+              ;
         } catch (r2) {
           o = true, n = r2;
         } finally {
           try {
-            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
+            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u))
+              return;
           } finally {
-            if (o) throw n;
+            if (o)
+              throw n;
           }
         }
         return a;
@@ -8898,7 +8893,8 @@ var require_arrayLikeToArray = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
     function _arrayLikeToArray(r, a) {
       (null == a || a > r.length) && (a = r.length);
-      for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
+      for (var e = 0, n = Array(a); e < a; e++)
+        n[e] = r[e];
       return n;
     }
     module.exports = _arrayLikeToArray, module.exports.__esModule = true, module.exports["default"] = module.exports;
@@ -8911,7 +8907,8 @@ var require_unsupportedIterableToArray = __commonJS({
     var arrayLikeToArray = require_arrayLikeToArray();
     function _unsupportedIterableToArray(r, a) {
       if (r) {
-        if ("string" == typeof r) return arrayLikeToArray(r, a);
+        if ("string" == typeof r)
+          return arrayLikeToArray(r, a);
         var t = {}.toString.call(r).slice(8, -1);
         return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? arrayLikeToArray(r, a) : void 0;
       }
@@ -8948,7 +8945,8 @@ var require_slicedToArray = __commonJS({
 var require_classCallCheck = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
     function _classCallCheck(a, n) {
-      if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
+      if (!(a instanceof n))
+        throw new TypeError("Cannot call a class as a function");
     }
     module.exports = _classCallCheck, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
@@ -8974,11 +8972,13 @@ var require_toPrimitive = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     function toPrimitive(t, r) {
-      if ("object" != _typeof(t) || !t) return t;
+      if ("object" != _typeof(t) || !t)
+        return t;
       var e = t[Symbol.toPrimitive];
       if (void 0 !== e) {
         var i = e.call(t, r || "default");
-        if ("object" != _typeof(i)) return i;
+        if ("object" != _typeof(i))
+          return i;
         throw new TypeError("@@toPrimitive must return a primitive value.");
       }
       return ("string" === r ? String : Number)(t);
@@ -9024,7 +9024,7 @@ var require_bundle = __commonJS({
   "../../sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
     (function(global, factory) {
       typeof exports === "object" && typeof module !== "undefined" ? factory(exports, require_slicedToArray(), require_classCallCheck(), require_createClass()) : typeof define === "function" && define.amd ? define(["exports", "@babel/runtime/helpers/slicedToArray", "@babel/runtime/helpers/classCallCheck", "@babel/runtime/helpers/createClass"], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global.automationEvents = {}, global._slicedToArray, global._classCallCheck, global._createClass));
-    })(exports, (function(exports2, _slicedToArray, _classCallCheck, _createClass) {
+    })(exports, function(exports2, _slicedToArray, _classCallCheck, _createClass) {
       "use strict";
       var createExtendedExponentialRampToValueAutomationEvent = function createExtendedExponentialRampToValueAutomationEvent2(value, endTime, insertTime) {
         return {
@@ -9128,7 +9128,7 @@ var require_bundle = __commonJS({
       var isSetTargetAutomationEvent = function isSetTargetAutomationEvent2(automationEvent) {
         return automationEvent.type === "setTarget";
       };
-      var AutomationEventList2 = /* @__PURE__ */ (function() {
+      var AutomationEventList2 = /* @__PURE__ */ function() {
         function AutomationEventList3(defaultValue) {
           _classCallCheck(this, AutomationEventList3);
           this._automationEvents = [];
@@ -9258,7 +9258,7 @@ var require_bundle = __commonJS({
             return this._defaultValue;
           }
         }]);
-      })();
+      }();
       var createCancelAndHoldAutomationEvent2 = function createCancelAndHoldAutomationEvent3(cancelTime) {
         return {
           cancelTime,
@@ -9301,7 +9301,7 @@ var require_bundle = __commonJS({
       exports2.createSetTargetAutomationEvent = createSetTargetAutomationEvent2;
       exports2.createSetValueAutomationEvent = createSetValueAutomationEvent2;
       exports2.createSetValueCurveAutomationEvent = createSetValueCurveAutomationEvent2;
-    }));
+    });
   }
 });
 
@@ -9326,7 +9326,8 @@ var require_events = __commonJS({
       };
     }
     function ProcessEmitWarning(warning) {
-      if (console && console.warn) console.warn(warning);
+      if (console && console.warn)
+        console.warn(warning);
     }
     var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value) {
       return value !== value;
@@ -9382,7 +9383,8 @@ var require_events = __commonJS({
     };
     EventEmitter24.prototype.emit = function emit(type) {
       var args = [];
-      for (var i = 1; i < arguments.length; i++) args.push(arguments[i]);
+      for (var i = 1; i < arguments.length; i++)
+        args.push(arguments[i]);
       var doError = type === "error";
       var events = this._events;
       if (events !== void 0)
@@ -9553,7 +9555,8 @@ var require_events = __commonJS({
         var key;
         for (i = 0; i < keys.length; ++i) {
           key = keys[i];
-          if (key === "removeListener") continue;
+          if (key === "removeListener")
+            continue;
           this.removeAllListeners(key);
         }
         this.removeAllListeners("removeListener");
@@ -18232,8 +18235,12 @@ var Timeline = class _Timeline extends Tone {
 // ../../sdk/node_modules/tslib/tslib.es6.mjs
 function __decorate(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function")
+    r = Reflect.decorate(decorators, target, key, desc);
+  else
+    for (var i = decorators.length - 1; i >= 0; i--)
+      if (d = decorators[i])
+        r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
   return c > 3 && r && Object.defineProperty(target, key, r), r;
 }
 function __awaiter(thisArg, _arguments, P, generator) {
@@ -36093,6 +36100,9 @@ var import_events19 = __toESM(require_events());
 // ../../sdk/dist-esm/engines/network/broker/broker-client.js
 var import_events7 = __toESM(require_events());
 
+// ../../sdk/dist-esm/engines/network/broker/lobby-broker.js
+var BROKER_KEY = Symbol.for("aex-lobby-broker");
+
 // ../../sdk/dist-esm/engines/network/modules/connection.js
 var import_events8 = __toESM(require_events());
 
@@ -36781,6 +36791,42 @@ ClientDoor.SERVER_FORWARD_EVENTS = /* @__PURE__ */ new Set([
   "audio:devices"
 ]);
 
+// ../../sdk/dist-esm/engines/ui/arcade/sfx.js
+var ARCADE_SFX_EVENT = "arcade:sfx";
+function defaultSocket() {
+  const bbs = globalThis?.__BBS__;
+  const socket = bbs?.socket;
+  return socket && typeof socket.on === "function" ? socket : null;
+}
+function installArcadeSfx(audio2, options = {}) {
+  const socket = options.socket === void 0 ? defaultSocket() : options.socket;
+  if (!socket)
+    return () => {
+    };
+  const onError = options.onError ?? ((error) => console.warn("[arcade-sfx] sound unavailable:", error));
+  let ready = null;
+  const ensureReady = () => {
+    if (!ready)
+      ready = audio2.init();
+    return ready;
+  };
+  const handler2 = (payload) => {
+    if (!payload || typeof payload.sound !== "string")
+      return;
+    ensureReady().then(() => audio2.playSound(payload.sound, payload.params)).catch((error) => {
+      ready = null;
+      onError(error);
+    });
+  };
+  socket.on(ARCADE_SFX_EVENT, handler2);
+  return () => {
+    try {
+      socket.off?.(ARCADE_SFX_EVENT, handler2);
+    } catch {
+    }
+  };
+}
+
 // client.ts
 var door = new ClientDoor({
   name: "Donkey Kong",
@@ -36789,29 +36835,50 @@ var door = new ClientDoor({
   runtime: "hybrid",
   hybrid: true
 });
-var audio = new AudioEngine();
+var audio = new AudioEngine({
+  masterVolume: 0.7,
+  sfxVolume: 0.6,
+  // Girders: a hard, short ring rather than a hall.
+  //
+  // Two knobs, not one, and the difference is what the tuning got wrong in
+  // both directions. `wet` is the SEND LEVEL - how much tail is audible -
+  // and it stays high, because the first pass was reported as too dry.
+  // `decay` and `feedback` are how LONG it rings, and they are short,
+  // because the second pass was reported as "way too long tails". A send
+  // is parallel: raising wet adds tail beside the dry hit rather than
+  // taking anything away from it.
+  sfxReverb: {
+    wet: 0.78,
+    decay: 1.8,
+    preDelay: 0.02
+  },
+  // The bounce. A couple of audible repeats, not a decaying cloud: the SDK
+  // builds ONE send at max(reverb.wet, echo.wet), so this wet matches the
+  // reverb's and the feedback alone decides how many repeats survive.
+  sfxEcho: {
+    delayTime: 0.13,
+    feedback: 0.25,
+    wet: 0.78
+  }
+});
+var stopSfx = null;
 console.log("[Donkey Kong] Client door initializing...");
 door.on("init", () => {
   console.log("[Donkey Kong] Client door init event");
 });
 door.on("connect", (user) => {
   console.log(`[Donkey Kong] Connected as ${user.name}`);
+  if (!stopSfx)
+    stopSfx = installArcadeSfx(audio);
 });
-door.on("audio", async (data) => {
-  try {
-    if (data && data.action === "play" && data.name) {
-      await audio.init();
-      audio.playSound(
-        data.name,
-        data.options || { frequency: 440, duration: 0.1 }
-      );
-    } else if (data && data.action === "stop") {
-      audio.stopMusic();
-    }
-  } catch (err) {
-    console.error("Audio error:", err);
+function teardown() {
+  if (stopSfx) {
+    stopSfx();
+    stopSfx = null;
   }
-});
+}
+door.on("disconnect", teardown);
+door.on("shutdown", teardown);
 console.log("[Donkey Kong] Starting client door...");
 door.start();
 var client_default = door;

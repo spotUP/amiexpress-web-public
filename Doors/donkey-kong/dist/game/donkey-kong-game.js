@@ -4,8 +4,17 @@
  */
 import { EMPTY, COLORS as SPRITE_COLORS, block, paint } from './sprites';
 import { GAME_WIDTH, GAME_HEIGHT, GRAVITY, JUMP_POWER, PLAYER_SPEED, CLIMB_SPEED, MAX_FALL_SPEED, BARREL_SPEED, FIREBALL_SPEED, HAMMER_DURATION, BARREL_SPAWN_RATE, FIREBALL_SPAWN_RATE, BONUS_DECREMENT, BONUS_INTERVAL, RESPAWN_TIME, INVINCIBLE_TIME, SCORES, SPRITES, getStageData, } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 export class DonkeyKongGame {
     constructor(data, renderCallback, onGameOver, onStageComplete) {
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The game names the moment; the door decides whether anybody hears it.
+         * Nothing in here touches a socket, so the sound design is assertable in
+         * a test with no audio anywhere near it.
+         */
+        this.cues = new SfxCues();
         this.data = data;
         this.renderCallback = renderCallback;
         this.onGameOver = onGameOver;
@@ -80,6 +89,7 @@ export class DonkeyKongGame {
         this.checkCollisions();
         // Check stage complete (rivets stage or reached Pauline)
         if (this.checkStageComplete()) {
+            this.cues.push('level-up');
             this.data.score += this.data.bonusTimer;
             this.data.state = 'stageComplete';
             this.onStageComplete();
@@ -222,6 +232,7 @@ export class DonkeyKongGame {
                 const dist = Math.abs(player.x - hammer.x) + Math.abs(player.y - hammer.y);
                 if (dist < 2) {
                     hammer.isCollected = true;
+                    this.cues.push('powerup');
                     player.hasHammer = true;
                     player.hammerTimer = HAMMER_DURATION;
                 }
@@ -233,6 +244,7 @@ export class DonkeyKongGame {
                 const dist = Math.abs(player.x - rivet.x) + Math.abs(player.y - rivet.y);
                 if (dist < 2) {
                     rivet.isRemoved = true;
+                    this.cues.push('switch');
                     this.data.score += SCORES.rivet;
                 }
             }
@@ -429,6 +441,11 @@ export class DonkeyKongGame {
             }
         }
     }
+    /**
+     * Public because the door's own tests drive it, the way Frogger's do: a
+     * collision is a step a test needs to take on its own without letting a
+     * whole update() move everything it just placed.
+     */
     checkCollisions() {
         const player = this.data.player;
         if (!player.isAlive || player.invincibleTimer > 0)
@@ -439,6 +456,7 @@ export class DonkeyKongGame {
             if (dist < 1.5) {
                 if (player.hasHammer) {
                     // Smash barrel
+                    this.cues.push('explosion');
                     this.data.score += SCORES.barrel;
                     this.data.barrels = this.data.barrels.filter(b => b.id !== barrel.id);
                 }
@@ -451,6 +469,7 @@ export class DonkeyKongGame {
             if (!barrel.onLadder && player.isJumping && player.y < barrel.y - 1 &&
                 Math.abs(player.x - barrel.x) < 2) {
                 if (this.data.jumpScore === 0) {
+                    this.cues.push('coin');
                     this.data.jumpScore = SCORES.jump;
                     this.data.score += SCORES.jump;
                 }
@@ -465,6 +484,7 @@ export class DonkeyKongGame {
             const dist = Math.sqrt(Math.pow(player.x - fireball.x, 2) + Math.pow(player.y - fireball.y, 2));
             if (dist < 1.5) {
                 if (player.hasHammer) {
+                    this.cues.push('explosion');
                     this.data.score += SCORES.fireball;
                     this.data.fireBalls = this.data.fireBalls.filter(f => f.id !== fireball.id);
                 }
@@ -486,10 +506,14 @@ export class DonkeyKongGame {
         return dist < 3;
     }
     killPlayer() {
+        if (!this.data.player.isAlive)
+            return;
+        this.cues.push('death');
         this.data.player.isAlive = false;
         this.data.player.hasHammer = false;
         this.data.lives--;
         if (this.data.lives <= 0) {
+            this.cues.push('gameover');
             this.data.state = 'gameover';
             this.onGameOver();
         }
@@ -539,6 +563,7 @@ export class DonkeyKongGame {
         if (!player.isAlive)
             return;
         if (player.isOnGround && !player.isJumping && !player.isClimbing) {
+            this.cues.push('jump');
             player.vy = JUMP_POWER;
             player.isJumping = true;
             player.isOnGround = false;

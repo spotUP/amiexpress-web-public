@@ -31,6 +31,7 @@ import {
   EXTRA_LIFE_SCORE,
   STARTING_LIVES
 } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 
 type RenderCallback = (content: string) => void;
 
@@ -43,6 +44,15 @@ export class ZooKeeperGame {
   private moveTimer: number = 0;
   private animalMoveTimer: number = 0;
   private lastExtraLifeScore: number = 0;
+
+  /**
+   * What just happened, for whoever is listening.
+   *
+   * The game names the moment; the door decides whether anybody hears it.
+   * Nothing in here touches a socket, so the sound design is assertable in
+   * a test with no audio anywhere near it.
+   */
+  readonly cues = new SfxCues();
 
   constructor(data: ZooKeeperData, renderCallback: RenderCallback) {
     this.data = data;
@@ -333,7 +343,11 @@ export class ZooKeeperGame {
     const wallY = y - ZOO_PERIMETER.outerTop;
 
     if (wall[wallY] && wall[wallY][wallX]) {
+      const before = wall[wallY][wallX].thickness;
       wall[wallY][wallX].thickness = 3;  // Max thickness
+      // Only a wall that was actually damaged makes a sound. Zeke walks the
+      // perimeter constantly, and a repair noise on every step is noise.
+      if (before < 3) this.cues.push('switch');
     }
   }
 
@@ -344,6 +358,7 @@ export class ZooKeeperGame {
     const d = this.data;
     if (d.zeke.isJumping || d.zeke.isDead) return;
 
+    this.cues.push('jump');
     d.zeke.isJumping = true;
     d.zeke.jumpFrame = 0;
   }
@@ -444,6 +459,7 @@ export class ZooKeeperGame {
     // Damage wall
     if (wall[targetY] && wall[targetY][targetX]) {
       wall[targetY][targetX].thickness -= stats.strength;
+      this.cues.push('hit');
       if (wall[targetY][targetX].thickness <= 0) {
         wall[targetY][targetX].thickness = 0;
         // Check if animal can escape through this gap
@@ -459,6 +475,7 @@ export class ZooKeeperGame {
     // If gap is near animal, it escapes
     const dist = Math.abs(animal.x - gapX) + Math.abs(animal.y - gapY);
     if (dist < 5) {
+      this.cues.push('alarm');
       animal.escaped = true;
       animal.x = gapX;
       animal.y = gapY;
@@ -493,7 +510,12 @@ export class ZooKeeperGame {
   /**
    * Check collisions between Zeke and animals
    */
-  private checkCollisions(): void {
+  /**
+   * Public because the door's own tests drive them, the way Frogger's do:
+   * a test needs to take one step without letting a whole update() move
+   * everything it just placed.
+   */
+  checkCollisions(): void {
     const d = this.data;
 
     for (const animal of d.zooStage.animals) {
@@ -507,6 +529,7 @@ export class ZooKeeperGame {
           a.escaped &&
           Math.abs(a.x - d.zeke.x) + Math.abs(a.y - d.zeke.y) <= 2
         ).length;
+        this.cues.push('coin');
         d.score += JUMP_SCORES[Math.min(jumpedCount, 11)] || 0;
       } else if (dist <= 1) {
         if (d.zeke.hasNet) {
@@ -528,6 +551,7 @@ export class ZooKeeperGame {
     const d = this.data;
     const stats = ANIMAL_STATS[animal.type];
 
+    this.cues.push('pickup');
     d.score += stats.capturePoints;
 
     // Remove animal from list
@@ -540,7 +564,12 @@ export class ZooKeeperGame {
   /**
    * Check bonus item collection
    */
-  private checkBonusItems(): void {
+  /**
+   * Public because the door's own tests drive them, the way Frogger's do:
+   * a test needs to take one step without letting a whole update() move
+   * everything it just placed.
+   */
+  checkBonusItems(): void {
     const d = this.data;
     const fusePos = d.zooStage.fusePosition;
 
@@ -559,6 +588,9 @@ export class ZooKeeperGame {
         if (dist <= 2) {
           item.collected = true;
           const bonus = BONUS_ITEMS[item.type];
+          // The net is the one bonus that changes what Zeke can do, so it
+          // gets the powerup rather than the same chime as the fruit.
+          this.cues.push(bonus.isNet ? 'powerup' : 'coin');
           d.score += bonus.points;
 
           if (bonus.isNet) {
@@ -573,12 +605,18 @@ export class ZooKeeperGame {
   /**
    * Check for extra life
    */
-  private checkExtraLife(): void {
+  /**
+   * Public because the door's own tests drive them, the way Frogger's do:
+   * a test needs to take one step without letting a whole update() move
+   * everything it just placed.
+   */
+  checkExtraLife(): void {
     const d = this.data;
     const threshold = Math.floor(d.score / EXTRA_LIFE_SCORE);
     const lastThreshold = Math.floor(this.lastExtraLifeScore / EXTRA_LIFE_SCORE);
 
     if (threshold > lastThreshold) {
+      this.cues.push('1up');
       d.lives++;
       this.lastExtraLifeScore = d.score;
     }
@@ -589,6 +627,8 @@ export class ZooKeeperGame {
    */
   private levelComplete(): void {
     const d = this.data;
+
+    this.cues.push('level-up');
 
     // Bonus for remaining time
     const timeBonus = Math.floor((1 - d.zooStage.fusePosition) * 1000);
@@ -625,9 +665,11 @@ export class ZooKeeperGame {
    */
   private loseLife(): void {
     const d = this.data;
+    this.cues.push('death');
     d.lives--;
 
     if (d.lives <= 0) {
+      this.cues.push('gameover');
       d.state = 'gameover';
       this.showGameOver();
     } else {

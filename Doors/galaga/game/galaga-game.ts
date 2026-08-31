@@ -37,12 +37,22 @@ import {
   getStageConfig,
   GAME_TICK_MS,
 } from './constants';
+import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 
 export class GalagaGame {
   private data: GalagaData;
   private renderCallback: (content: string) => void;
   private lastDiveTime: number = 0;
   private heldKeys: Set<string> = new Set();
+
+  /**
+   * What just happened, for whoever is listening.
+   *
+   * The game names the moment; the door decides whether anybody hears it.
+   * Nothing in here touches a socket, so the sound design is assertable in
+   * a test with no audio anywhere near it.
+   */
+  readonly cues = new SfxCues();
 
   constructor(data: GalagaData, onRender: (content: string) => void) {
     this.data = data;
@@ -174,6 +184,7 @@ export class GalagaGame {
     if (playerBullets.length >= MAX_PLAYER_BULLETS) return;
 
     this.data.shotsFired++;
+    this.cues.push('laser');
 
     // Create bullet(s)
     if (this.data.player.hasDualFighter) {
@@ -421,7 +432,12 @@ export class GalagaGame {
   /**
    * Check all collisions
    */
-  private checkCollisions(): void {
+  /**
+   * Public because the door's own tests drive it, the way Frogger's do: a
+   * collision is a step a test needs to take on its own without letting a
+   * whole update() move everything it just placed.
+   */
+  checkCollisions(): void {
     // Player bullets vs aliens
     for (const bullet of this.data.bullets.filter(b => !b.isEnemy)) {
       for (const alien of this.data.aliens) {
@@ -437,6 +453,8 @@ export class GalagaGame {
           if (alien.health <= 0) {
             this.killAlien(alien);
             this.data.shotsHit++;
+          } else {
+            this.cues.push('hit');
           }
 
           // Remove bullet
@@ -476,6 +494,7 @@ export class GalagaGame {
    * Kill an alien
    */
   private killAlien(alien: Alien): void {
+    this.cues.push('explosion');
     const wasFormationed = alien.state === 'formation';
     alien.state = 'dead';
 
@@ -493,6 +512,7 @@ export class GalagaGame {
         if (alien.capturedFighter && !this.data.player.hasDualFighter) {
           // Rescue captured fighter!
           this.data.player.hasDualFighter = true;
+          this.cues.push('powerup');
           this.data.score += SCORES.dualFighter;
         }
         break;
@@ -529,6 +549,8 @@ export class GalagaGame {
     this.data.player.isDead = true;
     this.data.player.deathFrame = 0;
 
+    this.cues.push('death');
+
     if (this.data.player.hasDualFighter) {
       // Lose dual fighter first
       this.data.player.hasDualFighter = false;
@@ -552,6 +574,7 @@ export class GalagaGame {
   private respawnPlayer(): void {
     if (this.data.lives <= 0) {
       this.data.state = 'gameover';
+      this.cues.push('gameover');
       return;
     }
 
@@ -578,6 +601,7 @@ export class GalagaGame {
       }
 
       this.data.state = 'stageComplete';
+      this.cues.push('level-up');
       setTimeout(() => {
         this.data.stage++;
         this.initStage();

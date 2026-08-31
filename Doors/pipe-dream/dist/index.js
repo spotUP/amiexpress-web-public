@@ -4,41 +4,13 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
-import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { PipeDreamGame } from "./game/pipe-dream-game";
+import { createInitialGameData } from "./game/initial-data";
 import { rpcHandlers } from "./server";
-import { GAME_TICK_MS, QUEUE_SIZE, MENU_OPTIONS, DEFAULT_HIGHSCORES, } from "./game/constants";
+import { GAME_TICK_MS, MENU_OPTIONS, } from "./game/constants";
 export { rpcHandlers };
-function createInitialGameData() {
-    return {
-        state: "menu",
-        score: 0,
-        level: 1,
-        pipesUsed: 0,
-        grid: [],
-        cursor: { x: 3, y: 2 },
-        pipeQueue: [],
-        queueSize: QUEUE_SIZE,
-        flowState: null,
-        flowStarted: false,
-        flowTimer: 0,
-        flowDelay: 50,
-        startX: 0,
-        startY: 2,
-        startDirection: "right",
-        endX: 6,
-        endY: 2,
-        hasEnd: false,
-        reachedEnd: false,
-        requiredPipes: 8,
-        highscores: [...DEFAULT_HIGHSCORES],
-        menuSelection: 0,
-        playerName: "",
-        lastUpdateTime: Date.now(),
-        frameCount: 0,
-    };
-}
 const door = new Door({
     name: "Pipe Dream",
     version: "1.0.0",
@@ -168,6 +140,7 @@ function renderMenu() {
     screen.render();
 }
 async function showHighscores() {
+    sfx?.play("select");
     gameData.state = "highscores";
     try {
         gameData.highscores = await rpcHandlers.getHighscores();
@@ -206,6 +179,7 @@ async function showHighscores() {
     screen.render();
 }
 function showHelp() {
+    sfx?.play("select");
     const content = [
         "{yellow-fg}HOW TO PLAY{/}",
         "",
@@ -244,6 +218,7 @@ function showHelp() {
     screen.render();
 }
 function startGame() {
+    sfx?.play("start");
     gameData = { ...createInitialGameData(), state: "playing" };
     if (menuBox) {
         menuBox.destroy();
@@ -253,6 +228,10 @@ function startGame() {
         gameArea.setContent(content);
         hudBox.setContent(formatHUD());
         screen.render();
+        // Every event that changes the board repaints it, so this is the
+        // one place that sees them all.
+        if (sfx && game)
+            sfx.flush(game.cues);
     }, () => showGameOver(), () => showLevelComplete());
     game.initLevel();
     if (gameLoop)
@@ -262,6 +241,11 @@ function startGame() {
             pollHeldDirections();
             game?.update();
         }
+        // The state can change inside update() - a wave finished, a last life
+        // lost - and those paths return before the game repaints. Draining here
+        // as well means the sound still lands on the tick it happened on.
+        if (sfx && game)
+            sfx.flush(game.cues);
     }, GAME_TICK_MS);
 }
 function showLevelComplete() {
@@ -375,10 +359,12 @@ function normalizeKey(key) {
 function handleMenuInput(key) {
     if (key === "up") {
         gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
+        sfx?.play("blip");
         renderMenu();
     }
     else if (key === "down") {
         gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
+        sfx?.play("blip");
         renderMenu();
     }
     else if (key === "enter" || key === "place") {
@@ -565,7 +551,18 @@ async function handleNameEntryInput(key) {
 }
 let keepAlive = null;
 // doorContext already declared above
+/**
+ * Sound effects, over the session socket to the browser.
+ *
+ * Null over telnet and until the door starts; every call site treats that
+ * as "nobody is listening", which is the truth rather than an error.
+ */
+let sfx = null;
 function cleanup() {
+    if (sfx) {
+        sfx.destroy();
+        sfx = null;
+    }
     if (inputManager) {
         inputManager.disable();
         inputManager = null;
@@ -584,6 +581,9 @@ function cleanup() {
     }
 }
 door.onStart(async (ctx) => {
+    // A browser session has a socket; a telnet one does not, and ArcadeSfx
+    // treats a missing socket as "nobody is listening" rather than an error.
+    sfx = new ArcadeSfx(ctx?.socket);
     doorContext = ctx;
     gameData = createInitialGameData();
     // Prevent event loop from emptying

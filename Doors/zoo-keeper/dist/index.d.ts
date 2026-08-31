@@ -10,6 +10,9 @@ import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import { rpcHandlers } from "./server";
 export { rpcHandlers };
 /**
+ * Create initial game data
+ */
+/**
  * Main door entry point
  */
 declare const door: Door;

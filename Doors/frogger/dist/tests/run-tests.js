@@ -16,6 +16,7 @@ const TEST_MODULES = [
     './render.test',
     './layout.test',
     './highscore-name.test',
+    './sfx.test',
 ];
 (async () => {
     let passed = 0;

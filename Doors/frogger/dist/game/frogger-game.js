@@ -9,8 +9,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FroggerGame = void 0;
 const constants_1 = require("./constants");
+const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 class FroggerGame {
     constructor(data, onRender) {
+        /**
+         * What just happened, for whoever is listening.
+         *
+         * The game never touches a socket: it names the moment and the door
+         * decides whether anybody hears it. That keeps the sound design
+         * assertable - a test can step the game and check that drowning sounds
+         * different from being run over - and it keeps attract mode silent, since
+         * the demo's cues are simply never drained.
+         */
+        this.cues = new arcade_1.SfxCues();
         this.data = data;
         this.renderCallback = onRender;
     }
@@ -326,6 +337,9 @@ class FroggerGame {
         }
         if (newX === frog.x && newY === frog.y)
             return;
+        // A hop that went nowhere - into a wall - makes no sound, which is why
+        // this sits after the no-move return rather than at the top.
+        this.cues.push('jump');
         frog.direction = direction;
         frog.isJumping = true;
         frog.jumpProgress = 0;
@@ -399,6 +413,7 @@ class FroggerGame {
             return;
         d.lives++;
         d.extraLifeAwarded = true;
+        this.cues.push('1up');
     }
     /**
      * Update all moving objects
@@ -619,6 +634,7 @@ class FroggerGame {
             if (obj.ladyFrogAt !== null && obj.ladyFrogAt !== undefined) {
                 d.carryingLadyFrog = true;
                 obj.ladyFrogAt = null;
+                this.cues.push('pickup');
             }
             frog.onObject = obj;
             // Where on it the frog landed, in whole cells, so the two stay in
@@ -691,19 +707,23 @@ class FroggerGame {
         home.occupied = true;
         d.homesCompleted++;
         d.score += constants_1.SCORES.home;
+        this.cues.push('success');
         if (home.hasFly) {
             d.score += constants_1.SCORES.fly;
             home.hasFly = false;
+            this.cues.push('coin');
         }
         // FAQ 6.3: "Bringing a Frog to Your Home: 200 points".
         if (d.carryingLadyFrog) {
             d.score += constants_1.SCORES.ladyFrog;
             d.carryingLadyFrog = false;
+            this.cues.push('powerup');
         }
         d.score += Math.max(0, Math.floor(d.timeRemaining)) * constants_1.SCORES.timeBonus;
         if (d.homesCompleted >= 5) {
             d.score += constants_1.SCORES.levelComplete;
             d.state = 'levelComplete';
+            this.cues.push('level-up');
         }
         else {
             this.startNextTrip();
@@ -728,6 +748,20 @@ class FroggerGame {
         const d = this.data;
         if (d.frog.isDead)
             return;
+        // Frogger's deaths do not sound alike, and the difference is
+        // information: the plunk tells you that you missed the log, the thud
+        // that the truck got you, and the clock that you ran out of time.
+        switch (deathType) {
+            case 'water':
+                this.cues.push('drop');
+                break;
+            case 'timeout':
+                this.cues.push('alarm');
+                break;
+            default:
+                this.cues.push('death');
+                break;
+        }
         d.frog.isDead = true;
         d.frog.deathType = deathType;
         d.frog.deathFrame = 0;
@@ -742,6 +776,7 @@ class FroggerGame {
     respawnFrog() {
         if (this.data.lives <= 0) {
             this.data.state = 'gameover';
+            this.cues.push('gameover');
             return;
         }
         this.startNextTrip();
