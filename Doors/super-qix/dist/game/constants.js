@@ -188,7 +188,10 @@ export const BG_COLORS = {
     // and dark yellows - level 3's skull is almost entirely colour 3 - and a
     // dark yellow line laid over one is invisible.
     stix: 'lightyellow',
-    stixSafe: 'blue',
+    // A line that has been closed off stays drawn. FAQ 2.1: the line you are
+    // drawing is yellow, and "turns blue and becomes 'Safe' if you can connect
+    // the other end". LIGHT blue, because plain blue is the unclaimed field.
+    stixSafe: 'lightblue',
     qix: 'magenta',
     sparx: 'red',
     superSparx: 'red',
