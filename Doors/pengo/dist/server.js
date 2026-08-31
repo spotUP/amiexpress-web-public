@@ -37,6 +37,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.rpcHandlers = void 0;
+exports.setMusicState = setMusicState;
+const music_select_1 = require("./music-select");
 const constants_1 = require("./game/constants");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
@@ -56,7 +58,29 @@ function saveHighscores(scores) {
     }
     catch { /* ignore */ }
 }
+/**
+ * What the door is showing right now, for getMusicTrack to answer with.
+ *
+ * A module-level value rather than session state: a TypeScript door is
+ * loaded per launch, so this belongs to the one game being played through
+ * it - the same thing the polling client is asking about. Same shape as
+ * Super Qix's.
+ */
+let currentState = 'menu';
+/** Told by the door whenever the screen changes. */
+function setMusicState(state) {
+    currentState = state;
+}
 exports.rpcHandlers = {
+    /**
+     * Which module the client should be playing.
+     *
+     * Answered from the pure trackForState the tests cover, so the music
+     * cannot drift from the screen.
+     */
+    getMusicTrack: async () => {
+        return { track: (0, music_select_1.trackForState)(currentState) };
+    },
     getHighscores: async () => loadHighscores(),
     saveHighscore: async (params) => {
         const scores = loadHighscores();

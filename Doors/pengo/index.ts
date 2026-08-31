@@ -11,7 +11,7 @@ import { loadSpriteSheet } from "@amiexpress/bbs-door-sdk/engines/graphics/cell-
 import { join } from "path";
 import { PengoGame } from "./game/pengo-game";
 import { createInitialGameData } from "./game/initial-data";
-import { rpcHandlers } from "./server";
+import { rpcHandlers, setMusicState } from "./server";
 import { PengoData, InputKey, Direction } from "./game/types";
 import {
   BOARD_COLS,
@@ -262,7 +262,19 @@ function startGame(): void {
     // lost - and those paths return before the game repaints. Draining here
     // as well means the sound still lands on the tick it happened on.
     if (sfx && game) sfx.flush(game.cues);
+    syncMusicState();
   }, GAME_TICK_MS);
+}
+
+/**
+ * Tell the server what screen this is, for the client's music poll.
+ *
+ * Called from the input handler and the game loop rather than from each
+ * individual transition - there are a dozen of those, and one of them
+ * would eventually be missed (the Super Qix rule).
+ */
+function syncMusicState(): void {
+  setMusicState(gameData.state);
 }
 
 function handleInput(key: string): void {
@@ -296,6 +308,8 @@ function handleInput(key: string): void {
     default:
       showMenu();
   }
+
+  syncMusicState();
 }
 
 function normalizeKey(key: string): InputKey {

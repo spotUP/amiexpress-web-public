@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const TEST_MODULES = [
     './menu.test',
     './sfx.test',
+    './music.test',
     './sprites-assets.test',
     './layout.test',
     './render.test',
