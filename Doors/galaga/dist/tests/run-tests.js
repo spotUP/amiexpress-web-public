@@ -8,6 +8,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 /* eslint-disable no-console */
 const TEST_MODULES = [
+    './layout.test',
     './sprites.test',
 ];
 (async () => {

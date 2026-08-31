@@ -90,6 +90,10 @@ function initScreen() {
         height: 1,
         tags: true,
         content: formatHUD(),
+        // blessed.box() is a Panel here, and a Panel injects a line border
+        // whenever `border` is absent. On a ONE-ROW box that border IS the whole
+        // box, so the HUD never appears at all.
+        border: undefined,
     });
     gameArea = blessed_1.default.box({
         fixed: true,
@@ -100,6 +104,14 @@ function initScreen() {
         height: constants_1.GAME_AREA_HEIGHT,
         tags: true,
         style: { bg: "black" },
+        // The game lays its board out itself: one line per row, exactly the
+        // field's width. Word wrapping a line that already fills the box pushes a
+        // blank row in after every real row, so the board renders on every OTHER
+        // line - reported as "the lines are too long, every second one is black".
+        wrap: false,
+        // ...and the same Panel default steals two columns and two rows, which is
+        // what makes a full-width row overflow the box in the first place.
+        border: undefined,
     });
     footerBox = blessed_1.default.box({
         parent: screen,
