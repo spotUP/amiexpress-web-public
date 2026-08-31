@@ -140,8 +140,29 @@ export class ConferenceRemovalService {
 
     let filesRemoved: string | null = null;
     if (options.removeFiles && confDir) {
-      this.removeConferenceDirectory(confDir);
-      filesRemoved = confDir;
+      // Refuse when the directory is still some other conference's home.
+      // Numbers renumber and directories stay put, so two LOCATION.n lines
+      // can name one directory - this board's conference 12 lived in
+      // BBS:Conf13/, a new conference 13 was handed the same directory by
+      // its number, and deleting it with the switch on destroyed conference
+      // 12's messages and files. The registrations were already updated
+      // above, so what is checked is the board as it now is.
+      const after = readTooltypeMap(confConfigPath);
+      const target = path.resolve(confDir);
+      let sharedWith: string | null = null;
+      for (let i = 1; i <= nconfs - 1; i += 1) {
+        const loc = (after.get(`LOCATION.${i}`) ?? '').replace(/^.*:/, '');
+        if (loc && path.resolve(this.bbsRoot, loc) === target) {
+          sharedWith = `${i} (${after.get(`NAME.${i}`) ?? 'unnamed'})`;
+          break;
+        }
+      }
+      if (sharedWith) {
+console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: it is conference ${sharedWith}'s directory`);
+      } else {
+        this.removeConferenceDirectory(confDir);
+        filesRemoved = confDir;
+      }
     }
 
     return {

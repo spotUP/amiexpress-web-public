@@ -258,6 +258,24 @@ describe('the conference\'s files', () => {
     expect(fs.existsSync(path.join(root, 'Conf4', 'MsgBase', '1'))).toBe(true);
   });
 
+  it('refuses to delete a directory that is another conference\'s home', async () => {
+    // Numbers renumber and directories stay put, so two LOCATION.n lines can
+    // name one directory. This board's conference 12 lived in BBS:Conf13/; a
+    // new conference 13 was handed the same directory by its number, and the
+    // switch destroyed conference 12's messages and files.
+    fs.writeFileSync(
+      path.join(root, 'ConfConfig.info'),
+      'NCONFS=3\nNAME.1=One\nLOCATION.1=BBS:Conf1\nNAME.2=Beavis\nLOCATION.2=BBS:Conf3\nNAME.3=test\nLOCATION.3=BBS:Conf3\n'
+    );
+    const service = new ConferenceRemovalService(root);
+
+    const result = await service.remove(3, { removeFiles: true });
+
+    expect(result.filesRemoved).toBeNull();
+    expect(result.keptOnDisk).toBe(path.join(root, 'Conf3'));
+    expect(fs.existsSync(path.join(root, 'Conf3', 'MsgBase', '1'))).toBe(true);
+  });
+
   it('refuses a LOCATION that points outside the board', async () => {
     fs.writeFileSync(
       path.join(root, 'ConfConfig.info'),

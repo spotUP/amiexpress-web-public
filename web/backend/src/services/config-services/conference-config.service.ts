@@ -162,7 +162,15 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
     // BBS:Conf7/, the way every other LOCATION.n on this board is written -
     // an Amiga path with its assign, not a bare relative name - and Conf7,
     // not Conf07, which is the directory the entrypoint creates.
-    const location = confEntry?.location || `BBS:Conf${conferenceId}/`;
+    //
+    // And NOT simply Conf<id>. Directories do not move when conferences
+    // renumber, so after a middle delete the number and the directory drift
+    // apart - on this board, conference 12 lives in BBS:Conf13/. Handing a
+    // new conference the directory its NUMBER suggests handed it Beavis
+    // Collection's directory, and the delete-files switch then destroyed it.
+    // The directory must be one that no conference references and that does
+    // not exist.
+    const location = confEntry?.location || this.freeConferenceDirectory(confConfig, bbsRoot);
 
     // DISK FIRST, then the mirror, then the config row - in that order,
     // because the order is what the database enforces.
@@ -216,6 +224,21 @@ console.log(`[ConferenceConfigService] Registered conference ${conferenceId} in 
       context.ipAddress, context.userAgent);
 
     return newConfig;
+  }
+
+  /**
+   * A directory for a NEW conference: unreferenced and nonexistent.
+   *
+   * Learned the destructive way. Conference numbers renumber on delete and
+   * directories stay put, so `Conf<id>` can already be another conference's
+   * home. The first free slot is taken - free meaning no LOCATION.n on the
+   * board resolves to it AND nothing by that name is on disk.
+   */
+  private freeConferenceDirectory(
+    confConfig: ReturnType<typeof loadConfConfig>,
+    bbsRoot: string
+  ): string {
+    return freeConferenceDirectory(confConfig?.entries ?? [], bbsRoot);
   }
 
   /**
@@ -404,4 +427,31 @@ console.error(`[ConferenceConfigService] Mirror delete failed for conference ${c
       nconfs: result.nconfs,
     };
   }
+}
+
+/**
+ * A directory for a NEW conference: unreferenced and nonexistent.
+ *
+ * Learned the destructive way. Conference numbers renumber on delete and
+ * directories stay put, so `Conf<id>` can already be another conference's
+ * home - on this board, conference 12 lived in BBS:Conf13/. Handing a new
+ * conference the directory its NUMBER suggests handed it Beavis Collection's
+ * directory, and the delete-files switch then destroyed it.
+ */
+export function freeConferenceDirectory(
+  entries: Array<{ location?: string }>,
+  bbsRoot: string
+): string {
+  const referenced = new Set(
+    entries
+      .map(e => (e.location || '').replace(/^.*:/, '').replace(/\/+$/, '').toLowerCase())
+      .filter(Boolean)
+  );
+  for (let k = 1; k < 1000; k += 1) {
+    const dir = `Conf${k}`;
+    if (referenced.has(dir.toLowerCase())) continue;
+    if (fs.existsSync(path.join(bbsRoot, dir))) continue;
+    return `BBS:${dir}/`;
+  }
+  throw new Error('No free Conf<N> directory below 1000 - clean up the BBS root');
 }
