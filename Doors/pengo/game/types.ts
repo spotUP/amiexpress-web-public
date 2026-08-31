@@ -86,6 +86,15 @@ export interface PengoData {
   diamondsAligned: boolean;
   enemyIdCounter: number;
 
+  /**
+   * The block push that just happened, for the renderer: the destination
+   * cell plays its 'sliding' animation briefly. Rendering state, not
+   * gameplay - nothing reads it back.
+   */
+  lastSlide?: { x: number; y: number; tick: number };
+  /** Likewise for a wall shake: the frame the walls started rattling. */
+  wallShake?: { tick: number };
+
   highscores: HighScore[];
   menuSelection: number;
   playerName: string;

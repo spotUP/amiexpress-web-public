@@ -240,6 +240,9 @@ export class PengoGame {
       this.data.grid[slideY][slideX] = cellType;
     }
 
+    // Where the block came to rest, for the renderer's slide flash.
+    this.data.lastSlide = { x: slideX, y: slideY, tick: this.data.frameCount };
+
     // Check for diamond alignment
     this.checkDiamondAlignment();
   }
@@ -268,6 +271,7 @@ export class PengoGame {
     }
 
     this.cues.push(stunned ? 'hit' : 'boop');
+    this.data.wallShake = { tick: this.data.frameCount };
   }
 
   private checkDiamondAlignment(): void {

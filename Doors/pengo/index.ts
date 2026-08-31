@@ -14,6 +14,10 @@ import { PengoData, InputKey, Direction } from "./game/types";
 import {
   GRID_WIDTH,
   GRID_HEIGHT,
+  CELL_W,
+  CELL_H,
+  BOARD_COLS,
+  BOARD_ROWS,
   GAME_TICK_MS,
   STARTING_LIVES,
   INITIAL_TIME,
@@ -65,8 +69,8 @@ function initScreen(): void {
     parent: screen,
     top: 1,
     left: 0,
-    width: GRID_WIDTH * 2,
-    height: GRID_HEIGHT + 2,
+    width: BOARD_COLS,
+    height: BOARD_ROWS,
     fixed: true,
     tags: true,
     style: { bg: "black" },
@@ -77,10 +81,8 @@ function initScreen(): void {
     bottom: 0,
     left: 0,
     width: "100%",
-    height: 3,
+    height: 1,
     tags: true,
-    border: { type: "line" },
-    style: { border: { fg: "gray" } },
     content:
       "{gray-fg}Arrow Keys: Move | Space: Push Block | P: Pause | Q: Quit{/}",
   });
@@ -89,7 +91,13 @@ function initScreen(): void {
 function formatHUD(): string {
   const scoreStr = gameData.score.toString().padStart(8, "0");
   const livesStr = "*".repeat(Math.max(0, gameData.lives));
-  return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  {red-fg}LIVES: ${livesStr}{/}`;
+  const timeColor = gameData.timeRemaining <= 30 ? "red" : "yellow";
+  const enemies = gameData.enemies.filter(e => e.state !== "dead").length;
+  return (
+    `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  ` +
+    `{red-fg}LIVES: ${livesStr}{/}  {${timeColor}-fg}TIME: ${gameData.timeRemaining}{/}  ` +
+    `{white-fg}ENEMIES: ${enemies}{/}`
+  );
 }
 
 /**
