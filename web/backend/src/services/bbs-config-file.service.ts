@@ -709,6 +709,10 @@ function getDefaultConfig(): BBSConfigData {
     email: '',
     website: '',
     min_password_length: 8,
+    // Without a default, loadBBSConfig has no `typeof` to infer the field's
+    // type from and returns the tooltype as a STRING, while
+    // login-post.service.ts:351 tests for a number - so expiry never applied.
+    password_expiry_days: 0,
     min_password_strength: 0,
     max_password_fails: -1,
     password_security: 'bcrypt',

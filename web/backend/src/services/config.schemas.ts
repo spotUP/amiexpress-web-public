@@ -26,6 +26,16 @@ export const SystemConfigSchema = z.object({
     z.enum(['bcrypt', 'sha256', 'md5', 'legacy'])
   ).optional(),
   strict_password_policy: z.boolean().optional(),
+  // express.e:29785 - 0 disables expiry. Mapped in TOOLTYPE_MAP and served by
+  // the API, but absent here, so `.partial().parse()` STRIPPED it: zod drops
+  // an unknown key and reports success, so the save looked fine and the value
+  // never reached the writer.
+  password_expiry_days: z.number().int().min(0).max(3650).optional(),
+  // ACP.e:2630 - cmds.sysPass, the password the sysop types at the local
+  // console. It also goes in DISK_ONLY_FIELDS: "password" in the name would
+  // otherwise route it to the encrypted database while the login gate reads
+  // the disk.
+  system_password: z.string().max(200).optional(),
   auto_validate: z.boolean().optional(),
   confirm_deletions: z.boolean().optional(),
 
@@ -65,6 +75,14 @@ export const SystemConfigSchema = z.object({
   max_nodes: z.number().int().min(1).max(255).optional(),
 
   // File Management
+  // express.e:346 - the level required to reach the HOLD directory. The form
+  // has a field for it AND a <TooltypeKey> badge naming the key it claims to
+  // write; zod stripped it on the way through.
+  hold_access_level: z.number().int().min(0).max(255).optional(),
+  // express.e:19253 - uploaded filenames are upper-cased.
+  capitalize_filenames: z.boolean().optional(),
+  // Ratios counted in kilobytes rather than in files.
+  credit_by_kb: z.boolean().optional(),
   file_check_enabled: z.boolean().optional(),
   upload_check_virus: z.boolean().optional(),
   upload_check_dupe: z.boolean().optional(),
@@ -104,6 +122,11 @@ export const SystemConfigSchema = z.object({
 
   // Logging
   debug_mode: z.boolean().optional(),
+  // Which AREXX interpreter runs a .rexx door. engine-selector.ts:41 accepts
+  // these three and falls back to 'auto' for anything else.
+  arexx_engine: z.string().transform(v => v?.toLowerCase()).pipe(
+    z.enum(['auto', 'native', 'ts'])
+  ).optional(),
   log_level: z.enum(['debug', 'info', 'warning', 'error']).optional(),
   log_retention_days: z.number().int().min(1).max(365).optional(),
   sysop_debug_enabled: z.boolean().optional(),
