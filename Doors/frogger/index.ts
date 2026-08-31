@@ -156,10 +156,11 @@ function initScreen(): void {
     content: titleLines(SCREEN_WIDTH).join("\n"),
   });
 
-  // HUD under it
+  // HUD under it, with a blank row between so the score line is not jammed
+  // against the bottom of the logo.
   hudBox = blessed.box({
     parent: screen,
-    top: LOGO_HEIGHT,
+    top: LOGO_HEIGHT + 1,
     left: 0,
     width: "100%",
     height: 1,
@@ -174,7 +175,7 @@ function initScreen(): void {
   gameArea = blessed.box({
     fixed: true,
     parent: screen,
-    top: LOGO_HEIGHT + 1,
+    top: LOGO_HEIGHT + 2,
     left: 0,
     width: "100%",
     height: GAME_AREA_HEIGHT,
@@ -219,14 +220,28 @@ function formatHUD(): string {
   const seconds = Math.max(0, Math.ceil(gameData.timeRemaining));
   const timeColour = seconds <= 10 ? "lightred" : "lightgreen";
 
-  return (
+  return centreTagged(
     `{yellow-fg}1-UP ${scoreStr}{/}  ` +
     `{white-fg}HI-SCORE ${hiStr}{/}  ` +
     `{cyan-fg}LEVEL ${gameData.level}{/}  ` +
     `{green-fg}HOMES ${homesStr}/5{/}  ` +
     `{red-fg}FROGS ${livesStr}{/}  ` +
-    `{${timeColour}-fg}TIME ${seconds.toString().padStart(2, "0")}{/}`
+    `{${timeColour}-fg}TIME ${seconds.toString().padStart(2, "0")}{/}`,
+    SCREEN_WIDTH
   );
+}
+
+/**
+ * Centre a string that carries blessed colour tags.
+ *
+ * The tags are markup, not glyphs, so padding has to be measured on what the
+ * terminal actually paints - counting the tags would push the line left by
+ * dozens of columns.
+ */
+function centreTagged(text: string, width: number): string {
+  const visible = text.replace(/\{[^}]*\}/g, "").length;
+  const pad = Math.max(0, Math.floor((width - visible) / 2));
+  return " ".repeat(pad) + text;
 }
 
 /**
@@ -367,10 +382,6 @@ function renderMenu(): void {
   menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
   menuContent.push("");
 
-  // A strip of the board itself: the traffic, the river and its footing,
-  // in the colours the game draws them in.
-  menuContent.push(laneStrip(width));
-  menuContent.push("");
 
   MENU_OPTIONS.forEach((option, index) => {
     const selected = index === gameData.menuSelection;
@@ -417,31 +428,6 @@ function renderMenu(): void {
 function centred(text: string, width: number, colour: string): string {
   const pad = Math.max(0, Math.floor((width - text.length) / 2));
   return `${" ".repeat(pad)}{${colour}-fg}${text}{/${colour}-fg}`;
-}
-
-/**
- * A strip of the board, drawn in the game's own colours: the road, a car,
- * the river, a log, a turtle set and the bank.
- */
-function laneStrip(width: number): string {
-  const run = [
-    { bg: BG_COLORS.road, cells: 3 },
-    { bg: BG_COLORS.car, cells: 2 },
-    { bg: BG_COLORS.road, cells: 3 },
-    { bg: BG_COLORS.water, cells: 2 },
-    { bg: BG_COLORS.log, cells: 4 },
-    { bg: BG_COLORS.water, cells: 2 },
-    { bg: BG_COLORS.turtle, cells: 3 },
-    { bg: BG_COLORS.water, cells: 2 },
-    { bg: BG_COLORS.bank, cells: 3 },
-  ];
-
-  const drawn = run.reduce((n, part) => n + part.cells, 0);
-  const pad = Math.max(0, Math.floor((width - drawn) / 2));
-
-  return " ".repeat(pad) + run
-    .map(part => `{${part.bg}-bg}${" ".repeat(part.cells)}{/${part.bg}-bg}`)
-    .join("");
 }
 
 /**

@@ -118,10 +118,11 @@ function initScreen() {
         border: undefined,
         content: (0, attract_1.titleLines)(constants_1.SCREEN_WIDTH).join("\n"),
     });
-    // HUD under it
+    // HUD under it, with a blank row between so the score line is not jammed
+    // against the bottom of the logo.
     hudBox = blessed_1.default.box({
         parent: screen,
-        top: attract_1.LOGO_HEIGHT,
+        top: attract_1.LOGO_HEIGHT + 1,
         left: 0,
         width: "100%",
         height: 1,
@@ -135,7 +136,7 @@ function initScreen() {
     gameArea = blessed_1.default.box({
         fixed: true,
         parent: screen,
-        top: attract_1.LOGO_HEIGHT + 1,
+        top: attract_1.LOGO_HEIGHT + 2,
         left: 0,
         width: "100%",
         height: constants_1.GAME_AREA_HEIGHT,
@@ -172,12 +173,24 @@ function formatHUD() {
     // was really telling anybody.
     const seconds = Math.max(0, Math.ceil(gameData.timeRemaining));
     const timeColour = seconds <= 10 ? "lightred" : "lightgreen";
-    return (`{yellow-fg}1-UP ${scoreStr}{/}  ` +
+    return centreTagged(`{yellow-fg}1-UP ${scoreStr}{/}  ` +
         `{white-fg}HI-SCORE ${hiStr}{/}  ` +
         `{cyan-fg}LEVEL ${gameData.level}{/}  ` +
         `{green-fg}HOMES ${homesStr}/5{/}  ` +
         `{red-fg}FROGS ${livesStr}{/}  ` +
-        `{${timeColour}-fg}TIME ${seconds.toString().padStart(2, "0")}{/}`);
+        `{${timeColour}-fg}TIME ${seconds.toString().padStart(2, "0")}{/}`, constants_1.SCREEN_WIDTH);
+}
+/**
+ * Centre a string that carries blessed colour tags.
+ *
+ * The tags are markup, not glyphs, so padding has to be measured on what the
+ * terminal actually paints - counting the tags would push the line left by
+ * dozens of columns.
+ */
+function centreTagged(text, width) {
+    const visible = text.replace(/\{[^}]*\}/g, "").length;
+    const pad = Math.max(0, Math.floor((width - visible) / 2));
+    return " ".repeat(pad) + text;
 }
 /**
  * Show main menu
@@ -300,10 +313,6 @@ function renderMenu() {
     const menuContent = [];
     menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
     menuContent.push("");
-    // A strip of the board itself: the traffic, the river and its footing,
-    // in the colours the game draws them in.
-    menuContent.push(laneStrip(width));
-    menuContent.push("");
     constants_1.MENU_OPTIONS.forEach((option, index) => {
         const selected = index === gameData.menuSelection;
         // The lives row shows its setting and Enter steps through them. On the
@@ -340,28 +349,6 @@ function renderMenu() {
 function centred(text, width, colour) {
     const pad = Math.max(0, Math.floor((width - text.length) / 2));
     return `${" ".repeat(pad)}{${colour}-fg}${text}{/${colour}-fg}`;
-}
-/**
- * A strip of the board, drawn in the game's own colours: the road, a car,
- * the river, a log, a turtle set and the bank.
- */
-function laneStrip(width) {
-    const run = [
-        { bg: constants_1.BG_COLORS.road, cells: 3 },
-        { bg: constants_1.BG_COLORS.car, cells: 2 },
-        { bg: constants_1.BG_COLORS.road, cells: 3 },
-        { bg: constants_1.BG_COLORS.water, cells: 2 },
-        { bg: constants_1.BG_COLORS.log, cells: 4 },
-        { bg: constants_1.BG_COLORS.water, cells: 2 },
-        { bg: constants_1.BG_COLORS.turtle, cells: 3 },
-        { bg: constants_1.BG_COLORS.water, cells: 2 },
-        { bg: constants_1.BG_COLORS.bank, cells: 3 },
-    ];
-    const drawn = run.reduce((n, part) => n + part.cells, 0);
-    const pad = Math.max(0, Math.floor((width - drawn) / 2));
-    return " ".repeat(pad) + run
-        .map(part => `{${part.bg}-bg}${" ".repeat(part.cells)}{/${part.bg}-bg}`)
-        .join("");
 }
 /**
  * Show high scores

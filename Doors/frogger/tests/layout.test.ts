@@ -198,3 +198,51 @@ export async function theLogoFitsTheScreen(): Promise<void> {
     );
   }
 }
+
+
+/**
+ * The score line is centred under the logo, with a blank row between.
+ *
+ * Reported 2026-08-31 with a screenshot: the score line sat directly against
+ * the bottom of the block logo and ran hard against the left edge, while
+ * everything else on the screen is centred.
+ */
+export async function theScoreLineIsCentredUnderTheLogo(): Promise<void> {
+  const { readFileSync } = await import('fs');
+  const { join } = await import('path');
+  const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+
+  assert.ok(
+    /hudBox = blessed\.box\(\{[\s\S]*?top: LOGO_HEIGHT \+ 1,/.test(index),
+    'the score line should sit one row below the logo, leaving a blank row'
+  );
+  assert.ok(
+    /top: LOGO_HEIGHT \+ 2,[\s\S]*?height: GAME_AREA_HEIGHT,/.test(index),
+    'and the board should move down with it rather than being overlapped'
+  );
+  assert.ok(
+    /return centreTagged\(/.test(index),
+    'the score line should be centred'
+  );
+
+  // The centring must measure PAINTED width, not the markup.
+  const fn = index.slice(index.indexOf('function centreTagged'));
+  assert.ok(
+    /replace\(\/\\\{\[\^\}\]\*\\\}\/g, ""\)/.test(fn) || /\{\[\^\}\]\*\\?\}/.test(fn),
+    'centreTagged must strip colour tags before measuring'
+  );
+}
+
+/**
+ * The menu carries no strip of coloured blocks.
+ *
+ * Reported 2026-08-31: "remove these color things from the frogger menu, they
+ * are a leftover from arkanoid."
+ */
+export async function theMenuHasNoColourBlockStrip(): Promise<void> {
+  const { readFileSync } = await import('fs');
+  const { join } = await import('path');
+  const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+
+  assert.ok(!/laneStrip/.test(index), 'the block strip and its helper should be gone');
+}
