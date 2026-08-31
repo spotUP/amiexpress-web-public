@@ -1,3 +1,12 @@
+/**
+ * DEPRECATED, superseded and never adopted: use the cell-art sprite engine
+ * at sdk/engines/graphics/cell-art (JSON sprite format, per-cell colours,
+ * tick-driven animation, validating loader). This class draws every cell
+ * of a sprite in ONE colour and has no consumers. Kept only so nothing
+ * that might reference it breaks; do not build on it. See
+ * thoughts/shared/plans/2026-08-31-sprite-engine-asset-studio-theming-design.md
+ */
+
 import { ANSIColor } from './types';
 import { ANSIGraphics } from './graphics';
 

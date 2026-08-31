@@ -31,22 +31,6 @@ export declare const SCORES: {
     timeBonus: number;
     eggDestroy: number;
 };
-export declare const COLORS: {
-    pengo: string;
-    enemy: string;
-    ice: string;
-    diamond: string;
-    wall: string;
-    floor: string;
-};
-export declare const SPRITES: {
-    pengo: string[];
-    enemy: string[];
-    ice: string[];
-    diamond: string[];
-    wall: string[];
-    egg: string[];
-};
 export declare const STUN_DURATION = 50;
 export declare const HATCH_TIME = 100;
 export declare const ENEMY_MOVE_DELAY = 8;

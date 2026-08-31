@@ -3,7 +3,7 @@
  * Pengo - Game Constants
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SPRITES = exports.COLORS = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
 exports.getLevelConfig = getLevelConfig;
 exports.SCREEN_WIDTH = 80;
 exports.SCREEN_HEIGHT = 24;
@@ -33,22 +33,6 @@ exports.SCORES = {
     clearLevel: 500,
     timeBonus: 10,
     eggDestroy: 500,
-};
-exports.COLORS = {
-    pengo: 'cyan',
-    enemy: 'red',
-    ice: 'white',
-    diamond: 'yellow',
-    wall: 'blue',
-    floor: 'black',
-};
-exports.SPRITES = {
-    pengo: ['P'],
-    enemy: ['S'],
-    ice: ['#'],
-    diamond: ['*'],
-    wall: ['+'],
-    egg: ['o'],
 };
 exports.STUN_DURATION = 50;
 exports.HATCH_TIME = 100;

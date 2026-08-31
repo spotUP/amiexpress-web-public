@@ -38,24 +38,6 @@ export const SCORES = {
   eggDestroy: 500,
 };
 
-export const COLORS = {
-  pengo: 'cyan',
-  enemy: 'red',
-  ice: 'white',
-  diamond: 'yellow',
-  wall: 'blue',
-  floor: 'black',
-};
-
-export const SPRITES = {
-  pengo: ['P'],
-  enemy: ['S'],
-  ice: ['#'],
-  diamond: ['*'],
-  wall: ['+'],
-  egg: ['o'],
-};
-
 export const STUN_DURATION = 50;
 export const HATCH_TIME = 100;
 export const ENEMY_MOVE_DELAY = 8;

@@ -99,9 +99,9 @@ function renderMenu() {
     gameArea.setContent("");
     if (menuBox)
         menuBox.destroy();
-    // Parented to the SCREEN, not gameArea. gameArea is only GRID_WIDTH * 2
-    // columns - the width of the board - so a 40-column menu centred inside it
-    // resolved to left: -5 and hung five columns off the left edge, which is
+    // Parented to the SCREEN, not gameArea. A menu centred inside the narrower
+    // gameArea box would resolve to a negative left offset whenever the menu
+    // is wider than the board, hanging columns off the left edge - which is
     // exactly how it was reported: the title showing as "ngo" and the items
     // clipped.
     // Arkanoid's menu, from the shared arcade shell rather than a tenth

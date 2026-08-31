@@ -1,4 +1,13 @@
 /**
+ * DEPRECATED, superseded and never adopted: this engine predates the
+ * cell-art sprite engine at sdk/engines/graphics/cell-art (JSON sprite
+ * format, per-cell colours, tick-driven animation, validating loader).
+ * It has no package export in sdk/package.json and no consumers anywhere
+ * in the repo. Kept only so nothing that might reference it breaks; new
+ * sprite work goes to cell-art, not here.
+ */
+
+/**
  * Block Sprite Engine
  *
  * A complete sprite engine for creating animated graphics using

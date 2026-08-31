@@ -68,6 +68,15 @@ describe('blitCells', () => {
     expect(() => blitCells(dest, [[red('A'), red('B')]], 1, 1)).not.toThrow();
     expect((dest[1][1] as Cell).char).toBe('A');
   });
+
+  it('paints in call order: the last blit to a cell wins, null never erases', () => {
+    const dest = createBuffer(1, 1);
+    blitCells(dest, [[red('A')]], 0, 0);
+    blitCells(dest, [[{ char: 'B', fg: 2, bg: 0 }]], 0, 0);
+    expect((dest[0][0] as Cell).char).toBe('B');
+    blitCells(dest, [[null]], 0, 0);
+    expect((dest[0][0] as Cell).char).toBe('B');
+  });
 });
 
 describe('rowToTags', () => {
