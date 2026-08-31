@@ -15,6 +15,7 @@ const TEST_MODULES = [
     './attract.test',
     './render.test',
     './layout.test',
+    './highscore-name.test',
 ];
 (async () => {
     let passed = 0;
