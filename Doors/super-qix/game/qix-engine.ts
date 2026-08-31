@@ -519,21 +519,37 @@ export class QixEngine {
    * each cell is already a run of colour tags. Every replacement row is
    * padded to the full width so the frame still measures SCREEN_WIDTH.
    */
-  private overlayPanel(lines: string[], panel: Array<{ text: string; colour: string }>): void {
+  /**
+   * Lay a panel's text over the board, one character at a time.
+   *
+   * Only the characters of the message are touched: whatever is behind
+   * them - usually the picture the level just revealed - keeps its own
+   * colours. This used to replace whole rows with a black band, which put
+   * a black stripe across the picture the sequence exists to show.
+   */
+  private overlayPanel(
+    grid: Array<Array<{ ch: string; fg?: string; bg?: string }>>,
+    panel: Array<{ text: string; colour: string }>
+  ): void {
     const width = FIELD_WIDTH * CELL_WIDTH;
-    const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+    const top = Math.max(0, Math.floor((grid.length - panel.length) / 2));
 
     panel.forEach((entry, i) => {
-      const row = top + i;
-      if (row < 0 || row >= lines.length) return;
+      const row = grid[top + i];
+      if (!row || !entry.text) return;
 
       const left = Math.max(0, Math.floor((width - entry.text.length) / 2));
-      const padded =
-        ' '.repeat(left) + entry.text + ' '.repeat(Math.max(0, width - left - entry.text.length));
 
-      lines[row] = `{black-bg}{${entry.colour}-fg}${padded}{/${entry.colour}-fg}{/black-bg}`;
+      for (let c = 0; c < entry.text.length; c++) {
+        const cell = row[left + c];
+        if (!cell) continue;
+
+        cell.ch = entry.text[c];
+        cell.fg = entry.colour;
+      }
     });
   }
+
 
   /**
    * The panel the end-of-level sequence is showing: the BONUS tally over the
@@ -691,6 +707,21 @@ export class QixEngine {
     return true;
   }
 
+  /**
+   * Cut the end-of-level sequence short.
+   *
+   * The reveal, the tally and the announcement together run for several
+   * seconds, which is a long time to sit through once you have seen it.
+   * Enter skips straight to the next level.
+   */
+  skipOutro(): boolean {
+    if (!this.outro) return false;
+
+    this.outro = null;
+    this.data.transitionTimer = 0;
+    return true;
+  }
+
   /** Is the end-of-level sequence still running? */
   isRevealing(): boolean {
     return this.outro !== null;
@@ -799,6 +830,12 @@ export class QixEngine {
         this.applyRejoinMultiplier({ x: nextX, y: nextY });
 
         // Complete stix - claim area
+        // The line's own cells, kept before the claim clears them. A small
+        // claim encloses NOTHING - the ground it takes is the line itself -
+        // so result.filled comes back empty and a bonus released from "the
+        // area just filled" had nowhere to come from.
+        const linePoints = (d.currentStix?.points ?? []).map(p => ({ ...p }));
+
         const result = this.drawingSystem.completeStix({ x: nextX, y: nextY });
         if (result.success) {
           d.marker.x = nextX;
@@ -828,7 +865,7 @@ export class QixEngine {
 
           // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
           // bonus, even one too small to have scored a single point.
-          this.powerUpSystem.trySpawnPowerUp();
+          this.powerUpSystem.trySpawnPowerUp([...(result.filled ?? []), ...linePoints]);
 
           // Update border path for Sparx, then re-anchor existing Sparx to
           // it - the rebuilt array reorders points, so a stale pathIndex
@@ -1199,6 +1236,14 @@ export class QixEngine {
       }
     }
 
+    // While the level is handing over, the picture has the board to itself.
+    //
+    // The player's lines, the marker, the Gremlin, the Skulls, the fuse and
+    // any uncollected bonus are all held back until the sequence is done:
+    // the whole point of the reveal is to show the finished picture, and
+    // the lines were being drawn straight back over it.
+    const handingOver = this.outro !== null;
+
     // The lines the player has already closed off stay drawn over the
     // picture they revealed.
     //
@@ -1207,7 +1252,7 @@ export class QixEngine {
     // border or to part of a previously-finished line". Nothing drew them,
     // so the moment a claim filled in, the shape the player had just drawn
     // vanished into the artwork and the board lost its geometry.
-    for (const line of d.internalLines) {
+    if (!handingOver) for (const line of d.internalLines) {
       for (const point of line) {
         if (point.y < 0 || point.y >= FIELD_HEIGHT) continue;
         if (point.x < 0 || point.x >= FIELD_WIDTH) continue;
@@ -1220,7 +1265,7 @@ export class QixEngine {
     }
 
     // Draw current stix
-    if (d.currentStix) {
+    if (d.currentStix && !handingOver) {
       const bg = BG_COLORS.stix;
       for (const point of d.currentStix.points) {
         if (point.y >= 0 && point.y < FIELD_HEIGHT && point.x >= 0 && point.x < FIELD_WIDTH) {
@@ -1230,7 +1275,7 @@ export class QixEngine {
     }
 
     // Draw Qix
-    for (const qix of d.qixList) {
+    if (!handingOver) for (const qix of d.qixList) {
       const char = d.frameCount % 2 === 0 ? CHARS.qix : CHARS.qixAlt;
       const qx = Math.floor(qix.x);
       const qy = Math.floor(qix.y);
@@ -1248,7 +1293,7 @@ export class QixEngine {
     }
 
     // Draw Sparx
-    for (const sparx of d.sparxList) {
+    if (!handingOver) for (const sparx of d.sparxList) {
       const sx = Math.floor(sparx.x);
       const sy = Math.floor(sparx.y);
       if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
@@ -1264,7 +1309,7 @@ export class QixEngine {
     }
 
     // Draw Fuse
-    if (d.fuse && d.fuse.active) {
+    if (d.fuse && d.fuse.active && !handingOver) {
       const fx = Math.floor(d.fuse.x);
       const fy = Math.floor(d.fuse.y);
       if (fy >= 0 && fy < FIELD_HEIGHT && fx >= 0 && fx < FIELD_WIDTH) {
@@ -1274,7 +1319,7 @@ export class QixEngine {
     }
 
     // Draw power-ups
-    for (const powerUp of d.powerUps) {
+    if (!handingOver) for (const powerUp of d.powerUps) {
       if (!powerUp.collected) {
         const px = Math.floor(powerUp.x);
         const py = Math.floor(powerUp.y);
@@ -1287,7 +1332,7 @@ export class QixEngine {
     // Draw marker
     const mx = d.marker.x;
     const my = d.marker.y;
-    if (my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
+    if (!handingOver && my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
       // The arcade marker is an animated sprite. No glyph: the cycling
       // block IS the sprite, and a character on top only muddies it
       // against the picture behind.
@@ -1297,46 +1342,75 @@ export class QixEngine {
       buffer[my][mx] = { ch: ' ', bg: cycle };
     }
 
-    // Convert buffer to tagged string.
+    // Convert the buffer to characters, one entry per screen column.
     //
-    // Each logical cell is painted CELL_WIDTH characters wide so that a cell
-    // is as wide as it is tall on screen (see CELL_WIDTH in constants.ts).
-    // A glyph occupies the first column of its cell and the remainder is
-    // padded with spaces carrying the same colours, so the block stays solid.
+    // Each logical cell is CELL_WIDTH characters wide so that a cell is as
+    // wide as it is tall on screen. Panels are laid over these characters
+    // rather than over whole rows, so the picture behind a message still
+    // shows - the tally used to be painted on a black band that wiped out
+    // the very picture the reveal exists to show.
+    type Painted = { ch: string; fg?: string; bg?: string };
+    const grid: Painted[][] = [];
+
     for (let y = 0; y < buffer.length; y++) {
-      let line = '';
+      const row: Painted[] = [];
+
       for (let x = 0; x < buffer[y].length; x++) {
         const { ch, fg, bg, art } = buffer[y][x];
 
-        // Revealed picture: each art character keeps its own colours, so the
-        // two columns of a cell can differ - which is what makes it read as
-        // artwork rather than a coloured block.
+        // Revealed picture: each art character keeps its own colours, so
+        // the two columns of a cell can differ - which is what makes it
+        // read as artwork rather than a coloured block.
         if (art) {
           for (const part of art) {
-            const artFg = ART_PALETTE[part.fg] || 'white';
-            const artBg = ART_PALETTE[part.bg] || 'black';
-            line += `{${artBg}-bg}{${artFg}-fg}${part.char}{/${artFg}-fg}{/${artBg}-bg}`;
+            row.push({
+              ch: part.char,
+              fg: ART_PALETTE[part.fg] || 'white',
+              bg: ART_PALETTE[part.bg] || 'black',
+            });
           }
           continue;
         }
 
-        let cellStr = ch + ' '.repeat(CELL_WIDTH - 1);
-        if (fg) cellStr = `{${fg}-fg}${cellStr}{/${fg}-fg}`;
-        if (bg) cellStr = `{${bg}-bg}${cellStr}{/${bg}-bg}`;
-        line += cellStr;
+        row.push({ ch, fg, bg });
+        for (let i = 1; i < CELL_WIDTH; i++) row.push({ ch: ' ', fg, bg });
       }
-      lines.push(line);
+
+      grid.push(row);
     }
 
     // The end-of-level sequence and the game-over screen speak for
     // themselves. Without any of this the field simply froze.
     const panel = this.gameOverPanel() ?? this.outroPanel();
     if (panel) {
-      this.overlayPanel(lines, panel);
+      this.overlayPanel(grid, panel);
     } else if (d.transitionMessage && d.state === 'levelTransition') {
-      this.overlayPanel(lines, [
+      this.overlayPanel(grid, [
         { text: d.transitionMessage, colour: 'lightyellow' },
       ]);
+    }
+
+    for (const row of grid) {
+      let line = '';
+      let run = '';
+      let fg: string | undefined;
+      let bg: string | undefined;
+
+      const flush = () => {
+        if (!run) return;
+        let piece = run;
+        if (fg) piece = `{${fg}-fg}${piece}{/${fg}-fg}`;
+        if (bg) piece = `{${bg}-bg}${piece}{/${bg}-bg}`;
+        line += piece;
+        run = '';
+      };
+
+      for (const cell of row) {
+        if (cell.fg !== fg || cell.bg !== bg) { flush(); fg = cell.fg; bg = cell.bg; }
+        run += cell.ch;
+      }
+      flush();
+      lines.push(line);
     }
 
     this.renderCallback(lines.join('\n'));

@@ -843,3 +843,181 @@ specification.
 - **Endpoint paths and HTTP semantics (status codes, header names, the
   read-only nature of the API) are considered stable** and are not expected
   to change independent of a documented, versioned format change.
+## 11. The board's own door-admin API (a different server)
+
+Everything above describes the door **repository** server at
+`doors.uprough.net`, which is read-only and serves a catalog. This section
+describes something else that a DoorRepo door talks to: `/api/door-admin/*` on
+**the BBS the door is running on**. It manages that board's installed doors.
+The two are deliberately separate - `RepoHost` in `DoorRepo.cfg` names the
+catalog; the admin API is always the local board.
+
+Added by phase B of
+`docs/superpowers/specs/2026-08-30-doorrepo-parity-design.md`. Phase C adds the
+writes.
+
+### Auth
+
+Every request carries `X-Door-Token`, whose value is the contents of
+`Doors/DoorRepo/DoorRepo.token` - written 0600 by the BBS each time it launches
+the door, and rejected once that session ends. The server additionally re-checks
+that the session's user is a sysop (`secLevel >= 250`) on every request; a valid
+token alone is not authority.
+
+Missing or stale token: `401 UNAUTHORIZED`. Not a sysop: `403 FORBIDDEN`.
+
+**On a real AmiExpress board there is no token file and no `/api/door-admin`.**
+`config_read_token` finds nothing, the door never calls these routes, and it
+must keep working exactly as it always did. That silence is by design.
+
+### Responses
+
+Plain text, CRLF, never JSON. A header line naming the shape and a count of the
+rows that follow, then the rows, pipe-delimited - the same family as the
+catalog's `FILES|<count>|<junk>`.
+
+The count in a header is what the server **emitted**, not what exists, so a
+client always knows how many lines to read even when a cap truncated the set.
+
+In every field, `|`, CR, LF and TAB are replaced with a space before sending,
+and the field is truncated to its cap. A door's `NAME` tooltype is sysop-edited
+free text - on this board some of them are ASCII art - so a value that could
+carry a separator would otherwise shift every later column.
+
+Errors are a single word: `UNAUTHORIZED`, `FORBIDDEN`, `BAD REQUEST`,
+`NOT FOUND`, `BINARY`, `ERROR`.
+
+### GET /api/door-admin/installed
+
+Every registered command on the board.
+
+```
+DOORS|<count>
+<command>|<type>|<size>|<enabled>|<accessLevel>|<archive>|<name>|<category>|<description>
+```
+
+`enabled` is `0` or `1`. `archive` is the catalog archive this door was
+installed from, and is **empty for a door with no install record** - which is
+every door installed before this API existed. Caps: command 12, type 8, archive
+64, name 64, category 32, description 160.
+
+### GET /api/door-admin/installed/&lt;CMD&gt;/files
+
+The door's own directory, recursively, parents before their contents.
+
+```
+DIR|<count>
+<size>|<isDir>|<relative path>
+```
+
+Paths are relative to the door's directory with `/` separators. `size` is 0 for
+a directory. At most 2000 rows. A symlink is listed as an entry and is never
+followed, so the listing cannot wander out of the door.
+
+`404 NOT FOUND` when the command is not registered, or is registered but its
+directory is not on disk (the `BROADCAST` shape).
+
+### GET /api/door-admin/installed/&lt;CMD&gt;/file?p=&lt;relative path&gt;
+
+One file from inside that door's directory.
+
+```
+FILE|<byteCount>|<truncated>
+<the bytes>
+```
+
+`byteCount` is what follows the header. Text only, capped at 32768 bytes -
+above the door's own 16 KB and 24 KB buffers, so the door decides how much it
+keeps. `truncated` is `1` when the file was longer.
+
+`p` must be a relative path that stays inside the door. An absolute path, a
+`..` escape, or a symlink whose target is outside is `403 FORBIDDEN`; a
+directory is `400 BAD REQUEST`; a file containing a NUL byte in its first 8 KB
+is `415 BINARY` (door directories hold LHA archives and 68K binaries).
+
+### GET /api/door-admin/installed/&lt;CMD&gt;/info
+
+The tooltypes of `Commands/BBSCmd/<CMD>.info`.
+
+```
+INFO|<count>
+<commented>|<key>|<value>
+```
+
+`commented` is `1` for a tooltype disabled in the file. Caps: key 64, value
+256. `404 NOT FOUND` when there is no `.info` for that command.
+
+Note: which syntax marks a tooltype as disabled depends on the file's form. In
+a binary DiskObject `.info` - what the board actually holds - both `(KEY)` and
+`!KEY` are recognised. In the plain-text variant, only `!KEY` is; a `(KEY)`
+there is returned as a literal key named `(KEY)`.
+### POST /api/door-admin/installed/&lt;CMD&gt;/rescan
+
+Tells the board to reload its door registry after the door changed a `.info` on
+disk. Reply:
+
+```
+RESCAN|<found>
+```
+
+`found` is `1` when the command is registered after the reload - which is how
+the door tells the sysop the board has picked the change up.
+
+**This is not an enable/disable route, deliberately.** Enable and disable are
+the door's own job and always have been: it writes `ACCESS=255` with
+`DRACCESS=<prior>` remembering the normal level, the rule in `flow.h`'s
+`flow_compute_prior_access`. That has to keep working with no server at all,
+because a real AmiExpress board has none. Implementing the same rule again on
+the server would put one ruling in two languages. So the door edits the file as
+it always did, then calls this to make the board notice.
+
+### PUT /api/door-admin/installed/&lt;CMD&gt;/info
+
+Replaces the command's tooltypes. JSON body:
+
+```json
+{"tooltypes": [{"key": "ACCESS", "value": "255"},
+               {"key": "DRACCESS", "value": "0"},
+               {"key": "INTERNAL", "value": "1", "commented": true}]}
+```
+
+```
+INFOWRITE|<count>
+```
+
+The whole array is replaced, not merged - a partial update has no way to say
+"remove this tooltype", and the caller always holds the full list it just read
+from `GET .../info`. At most 64 entries. A key containing `=` or a line break,
+an empty key, or a value containing a line break is `400 BAD REQUEST` and the
+file is left untouched.
+
+The icon survives: the file is read, its tooltype array swapped, and written
+back, so the DiskObject header and imagery of a binary `.info` are preserved.
+
+Does not rescan. Editing a registration and making the board notice are
+separate calls, so several edits cost one reload rather than one each.
+
+### DELETE /api/door-admin/installed/&lt;CMD&gt;
+
+Removes the door, streaming the log as it happens rather than after it:
+
+```
+STEP|ok|removed Doors/AEHELP/aehelp.data
+STEP|skip|Doors/AEHELP/missing was not there
+STEP|fail|Doors/AEHELP/locked: EBUSY
+DONE|1|Deleted AEHELP
+```
+
+`kind` is `ok`, `skip` or `fail`. Read to the `DONE` line: because the first
+`STEP` has already flushed the headers, the HTTP status was fixed before
+anything was removed, so **success is in `DONE`, not in the status**. `DONE|1`
+succeeded, `DONE|0` did not and carries the reason.
+
+`404 NOT FOUND` when the command has neither a `Commands/BBSCmd/<CMD>.info` nor
+a `Doors/<CMD>/` directory - checked before the stream opens, while a status can
+still be sent.
+
+Every path the delete touches, including the rows it reads from the board's own
+database, is confined to `Doors/`, `Commands/` or a recorded library, and never
+to one of those roots itself. That guard exists because an unchecked recursive
+delete removed this board's entire `Doors/` tree on 2026-08-30.

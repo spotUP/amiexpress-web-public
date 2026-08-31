@@ -20,7 +20,7 @@ import { SuperQixData } from '../game/types';
 import {
   FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES,
   LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, SPARE_LETTER_POINTS,
-  POINTS_PER_BONUS_PERCENT, EXTRA_LIFE_PERCENT,
+  POINTS_PER_BONUS_PERCENT, EXTRA_LIFE_PERCENT, BG_COLORS,
 } from '../game/constants';
 
 function createData(): SuperQixData {
@@ -197,4 +197,129 @@ export async function theOutroShowsTheBonusTallyThenTheNextRound(): Promise<void
     `the tally must come before the next round's demand, got ${order.join(' -> ')}`
   );
   assert.strictEqual(engine.isRevealing(), false, 'the sequence should finish');
+}
+
+/**
+ * The picture has the board to itself while the level hands over.
+ *
+ * Reported live 2026-08-31: "the blue lines dont get cleared when i finish a
+ * level and the full image draws in superqix nothing should be in the way
+ * for the image". The player's finished lines were drawn straight back over
+ * the picture the reveal exists to show, and so were the marker, the
+ * Gremlin, the Skulls and any uncollected bonus.
+ */
+export async function nothingIsDrawnOverThePictureDuringTheHandOver(): Promise<void> {
+  const data = createData();
+  let frame = '';
+  const engine = new QixEngine(data, c => { frame = c; });
+
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.sparxList = [];
+  data.qixList = [];
+
+  // A finished line, and a bonus sitting on the board.
+  data.internalLines = [[
+    { x: 10, y: 18 }, { x: 11, y: 18 }, { x: 12, y: 18 },
+  ]];
+  for (const cell of data.internalLines[0]) data.field[cell.y][cell.x] = 'claimed';
+  data.powerUps = [{
+    id: 1, type: 'letter', letter: 'C', x: 15, y: 15,
+    collected: false, spawnTime: Date.now(),
+  }];
+
+  // It is all drawn while the level is running.
+  engine.render();
+  assert.ok(
+    frame.includes(`{${BG_COLORS.stixSafe}-bg}`),
+    'the finished line should be drawn during play'
+  );
+
+  // Clear the level, and look again.
+  data.claimedPercent = data.targetPercent + 1;
+  engine.update();
+  assert.ok(engine.isRevealing(), 'the hand-over should be running');
+
+  engine.render();
+  for (const [what, colour] of [
+    ['the finished lines', BG_COLORS.stixSafe],
+    ['the line being drawn', BG_COLORS.stix],
+    ['the Gremlin', BG_COLORS.qix],
+    ['a bonus', BG_COLORS.powerUp],
+  ] as const) {
+    assert.ok(
+      !frame.includes(`{${colour}-bg}`),
+      `${what} should not be over the picture during the reveal`
+    );
+  }
+}
+
+/**
+ * Enter cuts the hand-over short.
+ *
+ * Reported live 2026-08-31: "i need to be able to dismiss all dialogs with
+ * enter as well adhd people dont have time to wait". The reveal, the tally
+ * and the announcement run for several seconds together.
+ */
+export async function enterSkipsTheHandOver(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+  data.sparxList = [];
+  data.claimedPercent = data.targetPercent + 1;
+  engine.update();
+
+  assert.ok(engine.isRevealing(), 'the hand-over should be running');
+
+  assert.ok(engine.skipOutro(), 'it should report that it skipped');
+  assert.ok(!engine.isRevealing(), 'and the sequence is over');
+  assert.ok(!engine.advanceLevelOutro(), 'with nothing left to advance');
+}
+
+/** Skipping when there is nothing to skip does nothing. */
+export async function skippingWithNoHandOverRunningIsHarmless(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+  engine.initLevel(1);
+
+  assert.ok(!engine.skipOutro());
+}
+
+/**
+ * The tally is drawn over the picture, not on a black band across it.
+ *
+ * Reported live: "remove the black background from the texts drawn when i
+ * finish a level etc".
+ */
+export async function thePanelDoesNotBlackOutThePicture(): Promise<void> {
+  const data = createData();
+  let frame = '';
+  const engine = new QixEngine(data, c => { frame = c; });
+
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+  data.sparxList = [];
+  data.claimedPercent = data.targetPercent + 1;
+  engine.update();
+
+  // Run the reveal out and into the tally.
+  for (let i = 0; i < FIELD_WIDTH + 5; i++) engine.advanceLevelOutro();
+
+  const rows = frame.split('\n');
+  const bonusRow = rows.find(row => row.includes('BONUS'));
+  assert.ok(bonusRow, 'the tally should be showing');
+
+  assert.ok(
+    !/\{black-bg\}\s{10,}/.test(bonusRow!),
+    'the tally should not be painted on a black band'
+  );
+
+  // The row still carries the ground it is drawn over.
+  const claimed = rows.filter(r => r.includes(`{${BG_COLORS.claimed}-bg}`)).length;
+  const bare = rows.filter(r => r.includes(`{${BG_COLORS.unclaimed}-bg}`)).length;
+  assert.ok(claimed + bare > 0, 'the field should still be drawn behind it');
 }

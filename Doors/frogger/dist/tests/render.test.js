@@ -30,6 +30,7 @@ exports.aSnakeOnALogIsVisible = aSnakeOnALogIsVisible;
 exports.aDyingFrogBlinks = aDyingFrogBlinks;
 exports.theBoardIsPureAscii = theBoardIsPureAscii;
 exports.theFrogStandsOutFromEveryLane = theFrogStandsOutFromEveryLane;
+exports.theGameOverPanelDoesNotBlackOutTheBoard = theGameOverPanelDoesNotBlackOutTheBoard;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const constants_1 = require("../game/constants");
@@ -265,5 +266,27 @@ async function theFrogStandsOutFromEveryLane() {
     for (const ground of [constants_1.BG_COLORS.bank, constants_1.BG_COLORS.water, constants_1.BG_COLORS.road, constants_1.BG_COLORS.log]) {
         assert_1.default.notStrictEqual(constants_1.SPRITE_FG.frog, ground, `the frog would be invisible on ${ground}`);
     }
+}
+/**
+ * The GAME OVER panel is text over the board, not a black band across it.
+ *
+ * Reported live 2026-08-31: "remove the black background from the texts
+ * drawn when i finish a level etc".
+ */
+async function theGameOverPanelDoesNotBlackOutTheBoard() {
+    const { game, data } = (0, fixture_1.startedLevel)(3);
+    data.state = 'gameover';
+    data.score = 4321;
+    data.frameCount = 0;
+    const rows = frameOf(game);
+    const titleRow = rows.find(r => r.includes('GAME OVER'));
+    assert_1.default.ok(titleRow, 'the panel should be showing');
+    const painted = paintedRow(titleRow);
+    assert_1.default.strictEqual(painted.length, constants_1.GRID_WIDTH * constants_1.CELL_WIDTH, 'the row should still be a full board row');
+    // The lanes either side of the words keep their own colours.
+    const backgrounds = new Set(painted.map(c => c.bg));
+    assert_1.default.ok(backgrounds.size > 1 || !backgrounds.has('black'), `the panel row went solid ${[...backgrounds].join(',')}`);
+    const words = painted.map(c => c.ch).join('');
+    assert_1.default.ok(words.includes('GAME OVER'), 'with the message in it');
 }
 //# sourceMappingURL=render.test.js.map

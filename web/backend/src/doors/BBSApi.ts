@@ -28,32 +28,19 @@ import {
   enableGameMode as enableGameModeForSession,
   disableGameMode as disableGameModeForSession,
 } from '../services/game-mode.service';
-import { getInstallByCommand, DoorInstall } from './door-installs.repository';
+import { applyInstallMetadata, buildDoorList, DoorListEntry } from './door-list';
+import { deleteDoorAndRefresh } from './door-delete';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
-/** Overlay the metadata captured when a door was installed onto the door
- *  object the doors list renders. Exported so the mapping itself is
- *  testable: it lives inside a large builder method, and the fields it
- *  carries (description, version, release group) are user-visible in the
- *  door menu with no error path if they go missing. */
-import { applyRepoMetadata, getRepoMetadataIndex } from './door-repo-metadata';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 
-export function applyInstallMetadata<T extends Record<string, unknown>>(
-  door: T,
-  match: DoorInstall | null
-): T {
-  if (!match) return door;
-  return {
-    ...door,
-    name: match.name || door.name,
-    description: match.description || door.description,
-    category: match.category || door.category,
-    version: match.version || undefined,
-    releaseGroup: match.release_group || undefined,
-  } as T;
-}
+// applyInstallMetadata and the list build moved to ./door-list on 2026-08-31
+// so the door list and its metadata rule live together and the HTTP route can
+// reach them without a session. Re-exported because this is the import path
+// DOORMAN and the existing tests already use - one definition, two ways in.
+export { applyInstallMetadata, buildDoorList };
+export type { DoorListEntry };
 
 export interface BBSUser {
   id: string;
@@ -1316,104 +1303,15 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
   /**
    * Get list of available doors
    * Used by door menu systems to display available doors
+   *
+   * The build itself lives in ./door-list so the same rules serve the HTTP
+   * route the DoorRepo C door reads (GET /api/door-admin/installed). This
+   * method contributes the one thing a session knows and a route does not:
+   * where the BBS root is.
    */
-  async getDoorList(): Promise<Array<{
-    id: string;
-    command: string;
-    name: string;
-    description: string;
-    type: string;
-    doorType?: string;
-    size: number;
-    accessLevel: number;
-    enabled: boolean;
-    category?: string;
-    location: string;
-    resolvedPath?: string;
-  }>> {
-    const { getDoors } = require('../handlers/door.handler');
-    const allDoors = getDoors();
+  async getDoorList(): Promise<DoorListEntry[]> {
     const bbsRoot = (this.session as any)?.dataDir || process.env.BBS_DATA_DIR || process.cwd();
-
-    const mapped = allDoors.map((door: any) => {
-      const amigafs = require('../utils/amigafs');
-      const pathMod = require('path');
-
-      let doorSize = door.size || 0;
-      let resolvedPath: string | undefined;
-
-      const doorPath = door.path || door.location || '';
-      if (doorPath) {
-        try {
-          // Compute absolute path to the door's directory for the file explorer.
-          // door.path may point to a file (e.g. AquaScan.020) or a directory.
-          const candidates = [
-            pathMod.join(bbsRoot, doorPath),
-            pathMod.join(bbsRoot, 'Doors', door.id || door.command),
-            pathMod.join(bbsRoot, 'Doors', (door.command || door.id || '').toLowerCase()),
-          ];
-          for (const testPath of candidates) {
-            if (amigafs.existsSync(testPath)) {
-              const stats = amigafs.statSync(testPath);
-              if (doorSize === 0) doorSize = stats.size;
-              resolvedPath = stats.isDirectory() ? testPath : pathMod.dirname(testPath);
-              break;
-            }
-          }
-        } catch (_) { /* ignore */ }
-      }
-
-      return {
-        id: door.id || door.command,
-        command: door.command || door.id,
-        name: door.name || door.command || door.id,
-        description: door.description || '',
-        type: door.type || 'AMI',
-        doorType: door.type,
-        size: doorSize,
-        accessLevel: door.accessLevel || 0,
-        enabled: door.enabled !== false,
-        category: door.category || undefined,
-        location: doorPath,
-        resolvedPath,
-      };
-    });
-
-    // getInstallByCommand opens and closes its own better-sqlite3 connection
-    // per call (door-installs.repository.ts) - with 370 registered commands,
-    // calling it twice per door here meant 740 open/close cycles per render.
-    // Fetched once per door below and threaded into both overlays instead.
-    const installByCommand = new Map<string, DoorInstall | null>();
-    const withMetadata = mapped.map((door: any) => {
-      // Overlay the metadata captured when this door was installed. It used
-      // to come from door_catalog; the shared catalog now lives in the door
-      // server, and door_installs holds this node's snapshot of it (keyed by
-      // command, so no installed_as matching is needed any more).
-      let installRow: DoorInstall | null = null;
-      try {
-        installRow = getInstallByCommand(door.command);
-      } catch { /* catalog not yet built */ }
-      installByCommand.set(door.command, installRow);
-      try {
-        return applyInstallMetadata(door, installRow);
-      } catch { /* catalog not yet built — return door as-is */ }
-      return door;
-    });
-
-    // Doors put on disk any other way have no install record - and on this
-    // board door_installs does not exist at all, so every command reaches
-    // the doors menu with an empty description. Ask the repo for the ones it
-    // recognises. Only empty fields are filled: what a door's own .info says
-    // always wins.
-    try {
-      const repoIndex = await getRepoMetadataIndex();
-      return withMetadata.map((door: any) => {
-        const archiveName = installByCommand.get(door.command)?.archive_name ?? null;
-        return applyRepoMetadata(door, repoIndex, { archiveName });
-      });
-    } catch {
-      return withMetadata;
-    }
+    return buildDoorList(bbsRoot);
   }
 
   /**
@@ -1428,48 +1326,19 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     isTypeScriptDoor?: boolean,
     onStep?: (step: { kind: 'ok' | 'skip' | 'fail'; text: string }) => void
   ): Promise<{ success: boolean; message: string; removed?: string[] }> {
-console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
-
     // Check if user has sysop access
     if (this.session.user && this.session.user.secLevel < 250) {
-console.log(`[BBSApi.deleteDoor] Access denied: user secLevel=${this.session.user?.secLevel}`);
       return {
         success: false,
         message: 'Access denied: SysOp access required to delete doors'
       };
     }
 
-    try {
-      const { getAmigaDoorManager, refreshDoorCache } = await import('./amigaDoorManager');
-      const manager = getAmigaDoorManager();
-console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${isTypeScriptDoor})`);
-      const result = await manager.deleteDoor(identifier, isTypeScriptDoor, onStep);
-console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
-
-      if (result.success) {
-        // Refresh amiga door cache
-        onStep?.({ kind: 'ok', text: 'rescanning the door definitions' });
-        await refreshDoorCache();
-        // Also reload the TypeScript door registry so the deleted door
-        // is removed from getDoors() immediately (without server restart)
-        try {
-          const { initializeDoors } = require('../handlers/door.handler');
-          onStep?.({ kind: 'ok', text: 'reloading the door registry' });
-          await initializeDoors();
-        } catch (e) {
-          onStep?.({ kind: 'fail', text: `door registry reload failed: ${(e as Error).message}` });
-          console.warn('[BBSApi.deleteDoor] Could not reload door registry:', e);
-        }
-      }
-
-      return result;
-    } catch (error) {
-console.error('[BBSApi.deleteDoor] Error:', error);
-      return {
-        success: false,
-        message: `Delete failed: ${(error as Error).message}`
-      };
-    }
+    // The removal and the cache reloads live in ./door-delete so the HTTP
+    // route DELETE /api/door-admin/installed/:cmd runs the identical path.
+    // Authorization stays here, because that route authorizes differently -
+    // a launch token's secLevel, not a session's.
+    return deleteDoorAndRefresh(identifier, isTypeScriptDoor, onStep);
   }
 
   /**

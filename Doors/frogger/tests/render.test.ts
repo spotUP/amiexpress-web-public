@@ -343,3 +343,37 @@ export async function theFrogStandsOutFromEveryLane(): Promise<void> {
     );
   }
 }
+
+/**
+ * The GAME OVER panel is text over the board, not a black band across it.
+ *
+ * Reported live 2026-08-31: "remove the black background from the texts
+ * drawn when i finish a level etc".
+ */
+export async function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void> {
+  const { game, data } = startedLevel(3);
+
+  data.state = 'gameover';
+  data.score = 4321;
+  data.frameCount = 0;
+
+  const rows = frameOf(game);
+  const titleRow = rows.find(r => r.includes('GAME OVER'));
+  assert.ok(titleRow, 'the panel should be showing');
+
+  const painted = paintedRow(titleRow!);
+  assert.strictEqual(
+    painted.length, GRID_WIDTH * CELL_WIDTH,
+    'the row should still be a full board row'
+  );
+
+  // The lanes either side of the words keep their own colours.
+  const backgrounds = new Set(painted.map(c => c.bg));
+  assert.ok(
+    backgrounds.size > 1 || !backgrounds.has('black'),
+    `the panel row went solid ${[...backgrounds].join(',')}`
+  );
+
+  const words = painted.map(c => c.ch).join('');
+  assert.ok(words.includes('GAME OVER'), 'with the message in it');
+}

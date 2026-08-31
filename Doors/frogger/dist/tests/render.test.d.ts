@@ -58,4 +58,11 @@ export declare function theBoardIsPureAscii(): Promise<void>;
  * the same green."
  */
 export declare function theFrogStandsOutFromEveryLane(): Promise<void>;
+/**
+ * The GAME OVER panel is text over the board, not a black band across it.
+ *
+ * Reported live 2026-08-31: "remove the black background from the texts
+ * drawn when i finish a level etc".
+ */
+export declare function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void>;
 //# sourceMappingURL=render.test.d.ts.map

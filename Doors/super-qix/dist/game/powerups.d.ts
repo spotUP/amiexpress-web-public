@@ -2,7 +2,7 @@
  * Super Qix - Power-Up System
  * Handles power-up spawning, effects, and letter collection
  */
-import { SuperQixData, PowerUp, Marker } from './types';
+import { SuperQixData, PowerUp, Marker, Point } from './types';
 /**
  * Power-up system for spawning and managing power-ups
  */
@@ -12,7 +12,11 @@ export declare class PowerUpSystem {
     /**
      * Try to spawn a power-up after claiming area
      */
-    trySpawnPowerUp(): void;
+    /**
+     * @param filled the cells the claim just took, if any. FAQ 2.3 releases a
+     *   bonus from the area you have just filled, so that is where it starts.
+     */
+    trySpawnPowerUp(filled?: Point[]): void;
     /**
      * Send a freshly released bonus on its way (FAQ 2.3).
      *
@@ -44,6 +48,19 @@ export declare class PowerUpSystem {
     private walkEdge;
     /**
      * Find a valid position to spawn a power-up
+     */
+    /**
+     * Where a released bonus starts.
+     *
+     * FAQ 2.3: "Every time you fill an area of the picture (no matter how
+     * small), there's a chance a random Letter or heart-shaped Power-up will
+     * be released" - so it is released from the ground just filled.
+     *
+     * This used to scan the whole board for a claimed cell touching open
+     * field, and only between x,y of 2 and FIELD-2. A claim hugging an edge -
+     * which is what almost every claim is, and what FAQ 5.2's strategy is
+     * built on - lands on the row that scan excludes, so it found nothing and
+     * no bonus was ever released. Nobody had seen a letter.
      */
     private findSpawnPosition;
     /**

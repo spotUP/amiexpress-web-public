@@ -180,6 +180,11 @@ export declare class FroggerGame {
      * coin slot, so it asks for a key.
      */
     private overlayGameOver;
+    /**
+     * Write `text` into an already-painted row at column `left`, keeping
+     * whatever background each character lands on.
+     */
+    private overlayText;
     /** The ground: road, water, the banks and the median, and the hedge. */
     private paintLanes;
     /** The five homes cut into the hedge. */

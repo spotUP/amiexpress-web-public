@@ -15,6 +15,7 @@ import * as path from "path";
 import { debugLog } from "../../utils/debug-log";
 import { notifySysop } from "../../utils/sysop-alert.util";
 import { getSystemTime } from '../../utils/date-time.util';
+import * as memoryMap from "../memory-map";
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -101,7 +102,7 @@ export class ExecLibrary {
   private allocVecBlocks?: Map<number, { size: number; headerAddr: number }>; // AllocVec tracking
   // Start allocations at 0x100000 (1MB) to avoid overlap with door code segments
   // Door code starts at 0x1000 and large doors can exceed 100KB
-  private nextFreeMemory: number = 0x100000;
+  private nextFreeMemory: number = memoryMap.ALLOCMEM_HEAP_BASE;
   // Free list for simple reuse
   private freeList: { addr: number; size: number }[] = [];
 
@@ -190,22 +191,24 @@ export class ExecLibrary {
   // 0x080000+: System structures and library stubs
   // 0x100000+: AllocMem heap
   //
-  // Standard library addresses (for stubs) - AFTER door code range
-  private readonly EXEC_BASE_ADDR = 0x080000; // ExecBase at 512KB (after door code)
-  private readonly DOS_LIB_ADDR = 0x0b0000; // DOS.library at 704KB
-  private readonly AEDOOR_LIB_ADDR = 0x0c0000; // AEDoor.library at 768KB
-  private readonly ICON_LIB_ADDR = 0x0d0000; // icon.library at 832KB
-  private readonly INTUITION_LIB_ADDR = 0x0e0000; // intuition.library at 896KB
-  private readonly GRAPHICS_LIB_ADDR = 0x0e8000; // graphics.library at 928KB
-  private readonly UTILITY_LIB_ADDR = 0x0f0000; // utility.library at 960KB
-  private readonly BSDSOCKET_LIB_ADDR = 0x0f2000; // bsdsocket.library at 968KB
-  private readonly AMISSLMASTER_LIB_ADDR = 0x0f4000; // amisslmaster.library at 976KB
-  private readonly AMISSL_LIB_ADDR = 0x0f6000; // amissl.library at 984KB
-  private readonly DREAMDOOR_LIB_ADDR = 0x0f8000; // dreamdoor.library at 992KB
-  private readonly REXXSUPPORT_LIB_ADDR = 0x0fa000; // rexxsupport.library at 1000KB
-  private readonly REXXARPLIB_LIB_ADDR = 0x0fc000; // rexxarplib.library at 1008KB
-  private readonly FAME_LIB_ADDR = 0x0fe000; // fame.library at 1016KB
-  private nextStubLibraryAddr = 0x100000; // fallback base for unknown stub libraries (1MB+)
+  // The addresses themselves live in ../memory-map.ts, which is also what
+  // enforces the door-segment ceiling above — a second copy here is how the
+  // "512KB max" line stayed a comment instead of a rule.
+  private readonly EXEC_BASE_ADDR = memoryMap.EXEC_BASE_ADDR;
+  private readonly DOS_LIB_ADDR = memoryMap.DOS_LIB_ADDR;
+  private readonly AEDOOR_LIB_ADDR = memoryMap.AEDOOR_LIB_ADDR;
+  private readonly ICON_LIB_ADDR = memoryMap.ICON_LIB_ADDR;
+  private readonly INTUITION_LIB_ADDR = memoryMap.INTUITION_LIB_ADDR;
+  private readonly GRAPHICS_LIB_ADDR = memoryMap.GRAPHICS_LIB_ADDR;
+  private readonly UTILITY_LIB_ADDR = memoryMap.UTILITY_LIB_ADDR;
+  private readonly BSDSOCKET_LIB_ADDR = memoryMap.BSDSOCKET_LIB_ADDR;
+  private readonly AMISSLMASTER_LIB_ADDR = memoryMap.AMISSLMASTER_LIB_ADDR;
+  private readonly AMISSL_LIB_ADDR = memoryMap.AMISSL_LIB_ADDR;
+  private readonly DREAMDOOR_LIB_ADDR = memoryMap.DREAMDOOR_LIB_ADDR;
+  private readonly REXXSUPPORT_LIB_ADDR = memoryMap.REXXSUPPORT_LIB_ADDR;
+  private readonly REXXARPLIB_LIB_ADDR = memoryMap.REXXARPLIB_LIB_ADDR;
+  private readonly FAME_LIB_ADDR = memoryMap.FAME_LIB_ADDR;
+  private nextStubLibraryAddr = memoryMap.ALLOCMEM_HEAP_BASE; // fallback base for unknown stub libraries (1MB+)
   private readonly PORT_LIST_OFFSET = 392;
   private currentStackLower = 0;
   private currentStackUpper = 0;

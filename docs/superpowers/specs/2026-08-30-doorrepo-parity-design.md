@@ -122,13 +122,30 @@ manages THIS board's installed doors.
 | method | path | purpose |
 |---|---|---|
 | GET | `/api/door-admin/installed` | installed doors: command, type, size, enabled, archive link, resolved metadata |
-| GET | `/api/door-admin/:cmd/files` | the door's directory listing |
-| GET | `/api/door-admin/:cmd/file?p=` | one file's contents |
-| GET | `/api/door-admin/:cmd/info` | the command's tooltypes |
-| PUT | `/api/door-admin/:cmd/info` | write tooltypes |
-| POST | `/api/door-admin/:cmd/enabled` | enable / disable |
-| DELETE | `/api/door-admin/:cmd` | delete, streaming the step log |
+| GET | `/api/door-admin/installed/:cmd/files` | the door's directory listing |
+| GET | `/api/door-admin/installed/:cmd/file?p=` | one file's contents |
+| GET | `/api/door-admin/installed/:cmd/info` | the command's tooltypes |
+| PUT | `/api/door-admin/installed/:cmd/info` | write tooltypes |
+| POST | `/api/door-admin/installed/:cmd/rescan` | reload the registry after the door edited a .info |
+| DELETE | `/api/door-admin/installed/:cmd` | delete, streaming the step log |
 | POST | `/api/door-admin/installed` | record an install (DOORREPO) |
+
+The per-door routes are nested under `/installed/` rather than sitting beside
+it (`/api/door-admin/:cmd/files`, as this table said until phase B was built).
+`:cmd` is `[A-Za-z0-9]{1,12}`, which matches the literal string `installed`, so
+a board with a command named `INSTALLED` would make `GET /api/door-admin/installed`
+ambiguous between the list and that door. One extra path segment removes the
+ambiguity entirely.
+
+`enabled` became `rescan` when phase C was built. Enable and disable already
+exist, in the C door, as `ACCESS=255` plus `DRACCESS=<prior>` with the ruling in
+`examples/doorrepo-c/flow.h:618` marked "do not redesign" - and they have to
+stay there, because a real AmiExpress board has no API to call. A server-side
+`enabled` would have been the same ruling in a second language, which this
+document forbids two sections down. What the door genuinely cannot do from
+outside the process is make the BBS reload its in-memory registry; that is what
+`rescan` is for. (DOORMAN's own toggle was never a real one - `app.ts:592` says
+"session only" and writes nothing.)
 
 **Responses use the pipe-delimited text family the C door already parses**
 (`FILES|<count>|<junk>` then `<size>|<isJunk>|<path>`), not JSON. C89 JSON

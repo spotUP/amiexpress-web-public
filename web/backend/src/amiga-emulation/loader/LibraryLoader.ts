@@ -1,6 +1,7 @@
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { HunkLoader } from './HunkLoader';
 import { KickstartRom } from '../KickstartRom';
+import { NATIVE_LIBRARY_BASE } from '../memory-map';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
@@ -57,7 +58,7 @@ export class LibraryLoader {
   private librarySearchPaths: string[];
   // Place real libraries safely within 24-bit address space but above door code.
   // Door code lives below ~0x200000; use 0x00200000 and step downward to avoid collisions.
-  private nextLibraryBase: number = 0x00200000;
+  private nextLibraryBase: number = NATIVE_LIBRARY_BASE;
   private loadedLibraries = new Map<string, LoadedLibrary>();
 
   // Libraries that are ROM-resident in Kickstart 3.1

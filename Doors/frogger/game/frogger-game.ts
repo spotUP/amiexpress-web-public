@@ -1077,15 +1077,58 @@ export class FroggerGame {
 
     panel.forEach((row, i) => {
       const y = top + i;
-      if (y >= lines.length) return;
+      if (y >= lines.length || !row.text) return;
 
-      const pad = Math.max(0, Math.floor((width - row.text.length) / 2));
-      lines[y] =
-        `{black-bg}${' '.repeat(pad)}` +
-        `{${row.colour}-fg}${row.text}{/${row.colour}-fg}` +
-        `${' '.repeat(Math.max(0, width - pad - row.text.length))}{/black-bg}`;
+      const left = Math.max(0, Math.floor((width - row.text.length) / 2));
+
+      // Laid over the board a character at a time, so the game behind the
+      // message still shows. It used to be painted on a black band across
+      // the whole row.
+      lines[y] = this.overlayText(lines[y], left, row.text, row.colour);
     });
   }
+
+  /**
+   * Write `text` into an already-painted row at column `left`, keeping
+   * whatever background each character lands on.
+   */
+  private overlayText(line: string, left: number, text: string, colour: string): string {
+    // Pull the row apart into characters and their colours.
+    const cells: Array<{ ch: string; fg: string; bg: string }> = [];
+    const re = /\{([a-z]+)-bg\}\{([a-z]+)-fg\}(.*?)\{\/[a-z]+-fg\}\{\/[a-z]+-bg\}/g;
+
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      for (const ch of m[3]) cells.push({ ch, fg: m[2], bg: m[1] });
+    }
+
+    for (let i = 0; i < text.length; i++) {
+      const cell = cells[left + i];
+      if (!cell) continue;
+      cell.ch = text[i];
+      cell.fg = colour;
+    }
+
+    let out = '';
+    let run = '';
+    let fg = '';
+    let bg = '';
+
+    const flush = () => {
+      if (!run) return;
+      out += `{${bg}-bg}{${fg}-fg}${run}{/${fg}-fg}{/${bg}-bg}`;
+      run = '';
+    };
+
+    for (const cell of cells) {
+      if (cell.fg !== fg || cell.bg !== bg) { flush(); fg = cell.fg; bg = cell.bg; }
+      run += cell.ch;
+    }
+    flush();
+
+    return out;
+  }
+
 
   /** The ground: road, water, the banks and the median, and the hedge. */
   private paintLanes(

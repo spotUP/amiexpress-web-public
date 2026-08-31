@@ -838,14 +838,18 @@ typedef enum {
  * every arrow key opened a fresh TCP connection and took 430-620 ms, and
  * arrowing back onto the entry you had just left fetched it all over again.
  *
- * 32 entries is two screens' worth, so the up-and-down movement that
- * dominates browsing stops touching the network entirely. The slab is
- * static (66 KB) and sits against a door that already reserves 1.6 MB for
- * the catalog itself.
+ * 32 entries was two screens' worth, so the up-and-down movement that
+ * dominates browsing stopped touching the network entirely. Cut to 8 on
+ * 2026-08-31: at 66 KB the slab was the single largest cache in the door,
+ * and this door's BSS had grown to 436 KB - past the 500 KB the
+ * amiexpress-web emulator gives a door's CODE+DATA+BSS, so the build
+ * loaded on top of exec.library's jump table and died before main(). 8
+ * entries is still most of a screen, which covers the arrow-key
+ * back-and-forth that the one-entry cache did not.
  * ------------------------------------------------------------------- */
 
 #define DIZ_MAX_BYTES 2048
-#define DIZ_CACHE_SLOTS 32
+#define DIZ_CACHE_SLOTS 8
 
 static char g_diz[DIZ_MAX_BYTES + 1];
 static unsigned long g_diz_len = 0;
@@ -1125,10 +1129,12 @@ static void ui_view_cycle_type(ui_view *v, const dr_catalog *cat)
  * manifest silently leaves ads on disk. 16 KB holds the full listing for
  * every archive in the current catalog. Static, not stack. */
 #define FILES_MAX_BYTES 16384
-/* Four entries, not the DIZ pane's 32: these are 16 KB each, and the archive
+/* Two entries, not the DIZ pane's 8: these are 16 KB each, and the archive
  * listing is something a sysop opens for one door at a time rather than
- * scrolls a page of. Enough to make going back to the previous few free. */
-#define FILES_CACHE_SLOTS 4
+ * scrolls a page of. Two makes "back to the one before" free, which is the
+ * only revisit that happens in practice. Was four until 2026-08-31, when
+ * the door's BSS had to come back under the emulator's 500 KB ceiling. */
+#define FILES_CACHE_SLOTS 2
 
 static char g_files[FILES_MAX_BYTES + 1];
 static char g_files_archive[64] = "";
@@ -1162,10 +1168,11 @@ static int files_sink(void *ctx, const unsigned char *buf, unsigned long len)
  * not just a tail. 24 KB covers all but 186 of them. It is static, not
  * stack (this door's icon declares STACK=8192). */
 #define DOC_MAX_BYTES 24576
-/* Two: a document is read, not skimmed past, and at 24 KB each these are the
- * most expensive entries in the door. Two makes "back to the one before"
- * free, which is the only revisit that happens in practice. */
-#define DOC_CACHE_SLOTS 2
+/* One: a document is read, not skimmed past, and at 24 KB each these are the
+ * most expensive entries in the door - a second slot cost more BSS than any
+ * other single byte in it. Cut from two on 2026-08-31 to bring the door back
+ * under the emulator's 500 KB CODE+DATA+BSS ceiling. */
+#define DOC_CACHE_SLOTS 1
 
 static char g_doc[DOC_MAX_BYTES + 1];
 static char g_doc_archive[64] = "";
