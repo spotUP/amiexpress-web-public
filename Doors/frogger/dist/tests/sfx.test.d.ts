@@ -49,10 +49,12 @@ export declare function anUndrainedDemoStaysBounded(): Promise<void>;
  * max(reverb.wet, echo.wet), and no echo was declared at all, so the send
  * carried nothing but the reverb wash. Hence the floor on both wets.
  *
- * Second pass was reported as "way too long tails". That is a DIFFERENT
- * knob - decay and feedback, not wet - so the ceiling here is on those, and
- * the wetness floor stays where it is. Anyone tuning this again should move
- * decay and feedback, and leave wet alone.
+ * Then "too long tails" was reported TWICE - at 5-7s, and again at
+ * 1.8-2.4s. That is a DIFFERENT knob from wet: decay and feedback. So the
+ * ceiling here is on those two and the wetness floor stays where it is.
+ * Anyone tuning this again should move decay and feedback and leave wet
+ * alone; a send is parallel, so lowering wet costs audibility without
+ * shortening anything.
  */
 export declare function theEffectsAreSentWetToBothReverbAndEcho(): Promise<void>;
 //# sourceMappingURL=sfx.test.d.ts.map
