@@ -204,6 +204,19 @@ export declare class QixEngine {
      */
     handleDirection(dir: Direction): void;
     /**
+     * If the marker has been buried by a claim, put it back on walkable ground.
+     *
+     * Only the EDGES of claimed ground can be walked (isWalkable), so a claim
+     * that closes over the marker leaves it somewhere it is not allowed to be.
+     * The nearest walkable cell is the least surprising place to put it: it is
+     * where the player was heading anyway, and it keeps the marker visible at
+     * the boundary of what they just won.
+     *
+     * Deliberately does nothing while a line is being drawn - the marker is
+     * out in open field then, and moving it would throw the line away.
+     */
+    private returnMarkerToWalkableGround;
+    /**
      * Light the Fuse on the line being drawn, and advance it a step.
      *
      * QUIX lights the fuse from two places: the player standing still

@@ -130,10 +130,24 @@ export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on s
 // How strongly the Gremlin steers towards the marker (FAQ 2.2: its bounce is
 // "weighted somewhat towards your marker", and on later levels it will "zoom
 // towards you every time you detach from a wall").
-export const QIX_BASE_PULL = 0.03;      // always a slight lean
-export const QIX_LEVEL_PULL = 0.09;     // added by level 16
+/*
+ * How hard the Gremlin steers towards the marker.
+ *
+ * This, not speed, is what makes it a threat. Measured over ten seconds on
+ * level 1: at the old 0.03 lean its path was 62 cells long but its NET drift
+ * only 13, and it never came closer than 6.7 cells to the marker - a local
+ * random walk that read exactly as reported, "he circles himself all the
+ * time the gremlin he is no threat at all". Raising the lean does not change
+ * how far it travels; it changes where it ends up. At 0.18 the closest
+ * approach is 1.4 cells, at 0.25 it is 0.6 - touching distance.
+ *
+ * Speed was raised first and was the wrong lever on its own: it made the
+ * Gremlin cover ground faster while still wandering nowhere near the player.
+ */
+export const QIX_BASE_PULL = 0.15;      // a real lean, even on level 1
+export const QIX_LEVEL_PULL = 0.15;     // added by level 16
 export const QIX_DRAWING_PULL = 0.08;   // added while the player is exposed
-export const QIX_MAX_PULL = 0.25;        // never a perfect homing missile
+export const QIX_MAX_PULL = 0.40;        // never a perfect homing missile
 
 /**
  * How far a Gremlin travels per tick, per unit of its speed.

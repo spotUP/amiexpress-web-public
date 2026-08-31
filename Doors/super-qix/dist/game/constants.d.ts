@@ -65,10 +65,10 @@ export declare const ONE_UP_CHANCE = 0.02;
 export declare const LETTER_POINTS = 1000;
 export declare const WORD_COMPLETE_POINTS = 10000;
 export declare const SPLIT_QIX_MULTIPLIERS: number[];
-export declare const QIX_BASE_PULL = 0.03;
-export declare const QIX_LEVEL_PULL = 0.09;
+export declare const QIX_BASE_PULL = 0.15;
+export declare const QIX_LEVEL_PULL = 0.15;
 export declare const QIX_DRAWING_PULL = 0.08;
-export declare const QIX_MAX_PULL = 0.25;
+export declare const QIX_MAX_PULL = 0.4;
 /**
  * How far a Gremlin travels per tick, per unit of its speed.
  *

@@ -176,8 +176,9 @@ export async function theInteriorOfClaimedGroundIsNotWalkable(): Promise<void> {
  * A marker buried by its own claim must still be able to get out, or the
  * game would softlock.
  */
-export async function aMarkerBuriedByItsOwnClaimCanEscape(): Promise<void> {
+export async function aMarkerBuriedByItsOwnClaimIsPutBackOnTheEdge(): Promise<void> {
   const { engine, data } = startedEngine();
+  data.state = 'playing';
 
   for (let y = FIELD_HEIGHT - 6; y <= FIELD_HEIGHT - 2; y++) {
     for (let x = 10; x <= 14; x++) data.field[y][x] = 'claimed';
@@ -189,12 +190,71 @@ export async function aMarkerBuriedByItsOwnClaimCanEscape(): Promise<void> {
 
   data.marker.x = buried.x;
   data.marker.y = buried.y;
-  move(engine, 'up');
+  engine.update();
 
-  assert.notStrictEqual(
-    data.marker.y, buried.y,
-    'a marker with no legal move must still be able to leave a buried cell'
+  assert.strictEqual(
+    drawing.isWalkable({ x: data.marker.x, y: data.marker.y }), true,
+    `the marker was left on unwalkable ground at ${data.marker.x},${data.marker.y}`
   );
+}
+
+/**
+ * A buried marker must not be able to stroll through the finished picture.
+ *
+ * Reported 2026-08-31 with a screenshot, at ROUND 1 and 73% claimed: "i can
+ * still drive straight into the images i have uncovered ... i am in the
+ * image." The old escape hatch let a marker on a buried cell step onto ANY
+ * safe ground, claiming it was allowed only "until it is back on an edge" -
+ * but it never tested that, and every step from a buried cell lands on
+ * another buried cell, so the permission never expired and the whole claimed
+ * region became walkable.
+ */
+export async function aBuriedMarkerCannotRoamTheClaimedPicture(): Promise<void> {
+  const { engine, data } = startedEngine();
+  data.state = 'playing';
+
+  // A big claimed block with a genuine interior.
+  const x0 = 8, x1 = 20, y0 = 4, y1 = FIELD_HEIGHT - 3;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) data.field[y][x] = 'claimed';
+  }
+
+  const drawing: any = (engine as any).drawingSystem;
+  const deepInside = { x: 14, y: Math.floor((y0 + y1) / 2) };
+  assert.strictEqual(
+    drawing.isWalkable(deepInside), false,
+    'the middle of a claimed block must not be walkable, or this proves nothing'
+  );
+
+  // Drop the marker in the middle, the way a closing claim would.
+  data.marker.x = deepInside.x;
+  data.marker.y = deepInside.y;
+  engine.update();
+
+  // Wherever it ended up, it is legal ground...
+  assert.strictEqual(
+    drawing.isWalkable({ x: data.marker.x, y: data.marker.y }), true,
+    'the marker should have been returned to walkable ground'
+  );
+
+  // ...and now walk it about. Standing in UNCLAIMED field is fine - that is
+  // drawing, and it is the whole game. What must never happen again is
+  // standing on claimed ground that is not an edge: that is being inside the
+  // picture, which is what the screenshot showed.
+  const dirs: Direction[] = ['up', 'down', 'left', 'right'];
+  for (let i = 0; i < 400; i++) {
+    move(engine, dirs[i % dirs.length]);
+    engine.update();
+
+    const here = { x: data.marker.x, y: data.marker.y };
+    if (data.field[here.y][here.x] !== 'claimed') continue;
+
+    assert.strictEqual(
+      drawing.isWalkable(here), true,
+      `after ${i + 1} moves the marker stood INSIDE claimed ground at ` +
+      `${here.x},${here.y} - it is in the picture again`
+    );
+  }
 }
 
 /**

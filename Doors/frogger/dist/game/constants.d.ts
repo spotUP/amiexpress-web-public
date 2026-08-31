@@ -39,11 +39,25 @@ export declare const GAME_AREA_HEIGHT = 13;
 /**
  * The lanes, bottom to top.
  *
- * Directions are FAQ 7: "the cars travel on the roadway from left to right
- * while the logs, turtles, crocodiles, etc. travel on the water lanes in
- * the following direction: Lanes #1, #3, and #5 go from right to left.
- * Lanes #2 and #4 go from left to right." Every water lane here was running
- * the opposite way, and the road lanes alternated.
+ * Water directions are FAQ 7: "the logs, turtles, crocodiles, etc. travel on
+ * the water lanes in the following direction: Lanes #1, #3, and #5 go from
+ * right to left. Lanes #2 and #4 go from left to right." Every water lane
+ * here was once running the opposite way.
+ *
+ * The ROAD is a deliberate departure from that same sentence. The FAQ claims
+ * "the cars travel on the roadway from left to right", and the road was built
+ * that way - but the arcade alternates its road lanes, and the FAQ itself
+ * gives the game away two paragraphs later when it advises "try to find
+ * 'lanes' in between the vehicles" and warns about being trapped. Traffic
+ * running one way makes every gap line up into a single moving column, so
+ * there is nothing to thread. Reported 2026-08-31: "all car lanes drive in
+ * the same direction thats not how it should be, the original frogger has
+ * different directions."
+ *
+ * So the road takes the FAQ's own water rule - odd lanes right to left, even
+ * lanes left to right - which is what the arcade does. Lane 1 is the row
+ * nearest the start bank and runs right to left, matching the arcade's first
+ * row of cars.
  *
  * `lane` is the FAQ's own numbering, counting away from the median in each
  * direction, which is how the level table addresses them.
@@ -55,7 +69,7 @@ export declare const LANE_CONFIG: readonly [{
     readonly type: "road";
     readonly y: 11;
     readonly lane: 1;
-    readonly dir: 1;
+    readonly dir: -1;
     readonly speed: 1.5;
 }, {
     readonly type: "road";
@@ -67,7 +81,7 @@ export declare const LANE_CONFIG: readonly [{
     readonly type: "road";
     readonly y: 9;
     readonly lane: 3;
-    readonly dir: 1;
+    readonly dir: -1;
     readonly speed: 1;
 }, {
     readonly type: "road";
@@ -79,7 +93,7 @@ export declare const LANE_CONFIG: readonly [{
     readonly type: "road";
     readonly y: 7;
     readonly lane: 5;
-    readonly dir: 1;
+    readonly dir: -1;
     readonly speed: 3;
 }, {
     readonly type: "safe";

@@ -235,7 +235,7 @@ export async function theFuseStillKillsWhenItReachesTheMarker(): Promise<void> {
  * This asserts the outcome the player actually experiences rather than any
  * one constant, so retuning any of them keeps the guarantee.
  */
-export async function anOrdinaryDrawAtBbsPaceUsuallySurvives(): Promise<void> {
+export async function theFuseIsNotWhatKillsAnOrdinaryDraw(): Promise<void> {
   // 150 rather than 30. This is a stochastic assertion against a threshold
   // the real rate sits close to: measured over 200 runs it is 57%, and at
   // THIRTY runs the sampling error is about nine points, so a true 57% dips
@@ -282,14 +282,37 @@ export async function anOrdinaryDrawAtBbsPaceUsuallySurvives(): Promise<void> {
   }
 
   const detail = Object.entries(causes).map(([k, v]) => `${k}:${v}`).join(' ') || 'none';
-  assert.ok(
-    survived >= runs / 2,
-    `only ${survived}/${runs} ordinary draws survived at BBS pace (deaths: ${detail}); ` +
-    'drawing should not be a coin toss'
-  );
+
+  // What this test was written for, and still guards: the FUSE must not be
+  // what kills an ordinary draw. It lit after 500ms once - shorter than the
+  // gap between two taps - and killed thirty draws out of thirty.
   assert.ok(
     (causes['fuse'] || 0) <= runs / 10,
-    `the fuse killed ${causes['fuse']}/${runs} ordinary draws; it should only punish a real pause`
+    `the fuse killed ${causes['fuse']}/${runs} ordinary draws (all deaths: ${detail}); ` +
+    'it should only punish a real pause'
+  );
+
+  // The blanket "half of all draws survive at tapping pace" assertion that
+  // used to sit here has been DROPPED, deliberately, and it is worth being
+  // plain about why rather than quietly deleting it.
+  //
+  // It was written when the Gremlin barely leaned towards the marker at all,
+  // and it encoded the opposite of what the game now wants: the Gremlin is
+  // deliberately aggressive (see QIX_BASE_PULL), so a player who stands
+  // still for two thirds of a second between steps SHOULD usually be caught.
+  // Reported twice while testing: "he circles himself all the time the
+  // gremlin he is no threat at all."
+  //
+  // The two cannot both hold. What replaces it is
+  // anOrdinaryDrawWithHeldKeysIsComfortablySafe, which measures the cadence
+  // the door is actually played at - held keys step the marker once a frame,
+  // and the 660ms tapping model predates held-key tracking existing at all.
+  //
+  // The number is kept visible rather than asserted, so a future reader can
+  // see what a tapping player faces without the suite pretending it is fine.
+  console.log(
+    `        [note] at 660ms-per-step tapping pace ${survived}/${runs} draws ` +
+    `survive (deaths: ${detail}) - see anOrdinaryDrawWithHeldKeysIsComfortablySafe`
   );
 }
 

@@ -270,6 +270,12 @@ export class QixEngine {
     // Paint in any claim still sweeping across the field
     this.advanceFill();
 
+    // A claim can close over the cell the marker is standing on - including
+    // part-way through the sweep above - and the interior of claimed ground
+    // is not walkable. Put it back on an edge rather than leaving it adrift
+    // inside the picture.
+    this.returnMarkerToWalkableGround();
+
     // Fill the border Time Meter
     this.advanceTimeMeter();
 
@@ -922,17 +928,57 @@ export class QixEngine {
       if (this.drawingSystem.isWalkable({ x: nextX, y: nextY })) {
         d.marker.x = nextX;
         d.marker.y = nextY;
-      } else if (
-        !this.drawingSystem.isWalkable({ x: d.marker.x, y: d.marker.y }) &&
-        (nextCell === 'border' || nextCell === 'claimed')
-      ) {
-        // Escape hatch: a claim can bury the cell the marker is standing on,
-        // and a marker with nowhere legal to go would be stuck for good. From
-        // a buried cell, any safe ground is allowed until it is back on an edge.
-        d.marker.x = nextX;
-        d.marker.y = nextY;
       }
+      // There used to be an "escape hatch" here: from a cell its own claim
+      // had buried, the marker was allowed onto ANY safe ground "until it is
+      // back on an edge". It never checked that last part - every step from a
+      // buried cell lands on another buried cell, so the condition stayed
+      // true and the marker could stroll through the whole finished picture.
+      // Reported 2026-08-31 with a screenshot: "i can still drive straight
+      // into the images i have uncovered ... i am in the image."
+      //
+      // Being buried is now fixed where it happens rather than excused
+      // afterwards: see returnMarkerToWalkableGround, which puts the marker
+      // back on the nearest edge the moment a claim swallows it.
       // Moving into unclaimed area without drawing: stay put
+    }
+  }
+
+  /**
+   * If the marker has been buried by a claim, put it back on walkable ground.
+   *
+   * Only the EDGES of claimed ground can be walked (isWalkable), so a claim
+   * that closes over the marker leaves it somewhere it is not allowed to be.
+   * The nearest walkable cell is the least surprising place to put it: it is
+   * where the player was heading anyway, and it keeps the marker visible at
+   * the boundary of what they just won.
+   *
+   * Deliberately does nothing while a line is being drawn - the marker is
+   * out in open field then, and moving it would throw the line away.
+   */
+  private returnMarkerToWalkableGround(): void {
+    const d = this.data;
+    if (d.marker.isDrawing) return;
+    if (this.drawingSystem.isWalkable({ x: d.marker.x, y: d.marker.y })) return;
+
+    const from = { x: Math.round(d.marker.x), y: Math.round(d.marker.y) };
+    let best: Point | null = null;
+    let bestDistance = Infinity;
+
+    for (let y = 0; y < FIELD_HEIGHT; y++) {
+      for (let x = 0; x < FIELD_WIDTH; x++) {
+        if (!this.drawingSystem.isWalkable({ x, y })) continue;
+        const distance = Math.abs(x - from.x) + Math.abs(y - from.y);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = { x, y };
+        }
+      }
+    }
+
+    if (best) {
+      d.marker.x = best.x;
+      d.marker.y = best.y;
     }
   }
 
