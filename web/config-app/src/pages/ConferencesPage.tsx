@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 
 interface ConferenceFormData {
   conference_id: number;
+  name: string;
   ndirs: number;
   dlpath_1: string;
   ulpath_1: string;
@@ -30,6 +31,7 @@ export function ConferencesPage() {
   const [editingConference, setEditingConference] = useState<ConferenceConfig | null>(null);
   const [formData, setFormData] = useState<ConferenceFormData>({
     conference_id: 1,
+    name: '',
     ndirs: 1,
     dlpath_1: '',
     ulpath_1: '',
@@ -88,6 +90,7 @@ export function ConferencesPage() {
   const resetForm = () => {
     setFormData({
       conference_id: 1,
+      name: '',
       ndirs: 1,
       dlpath_1: '',
       ulpath_1: '',
@@ -116,6 +119,7 @@ export function ConferencesPage() {
   const handleEdit = (conf: ConferenceConfig) => {
     setFormData({
       conference_id: conf.conference_id,
+      name: conf.name || '',
       ndirs: conf.ndirs,
       dlpath_1: conf.dlpath_1 || '',
       ulpath_1: conf.ulpath_1 || '',
@@ -255,6 +259,9 @@ export function ConferencesPage() {
         error={error as Error | null}
         onRetry={() => refetch()}
         emptyMessage="No conferences configured. Add conferences to organize messages and files."
+        // The row itself opens the editor. The pencil stays: it is what a
+        // keyboard reaches, and it says the row is editable at all.
+        onRowClick={handleEdit}
         rowActions={(conf) => (
           <>
             <button
@@ -300,6 +307,23 @@ export function ConferencesPage() {
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label htmlFor="name" className="label">Conference Name *</label>
+                  <input
+                    id="name"
+                    type="text"
+                    maxLength={54}
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="input-field w-full"
+                    required
+                  />
+                  <p className="text-xs text-bbs-muted mt-1">
+                    Written to ConfConfig.info as NAME.{formData.conference_id} - this is the
+                    name the BBS shows in the conference list
+                  </p>
+                </div>
+
                 <div>
                   <label htmlFor="conference_id" className="label">Conference ID *</label>
                   <input
