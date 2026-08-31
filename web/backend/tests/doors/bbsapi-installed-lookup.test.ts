@@ -38,10 +38,16 @@ describe('BBSApi installed-door lookup', () => {
   });
 
   it('does not import the catalog service any more', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src', 'doors', 'BBSApi.ts'), 'utf-8');
-    expect(src).not.toMatch(/door-catalog\.service/);
-    expect(src).toMatch(/door-installs\.repository/);
+    // The door list moved to door-list.ts on 2026-08-31 (phase B), taking
+    // the door_installs import with it. The rule this pins is unchanged:
+    // the list is built from door_installs, never from the retired
+    // door_catalog service. Both files are checked so neither can quietly
+    // reacquire it.
+    const read = (file: string) => fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'doors', file), 'utf-8');
+    expect(read('BBSApi.ts')).not.toMatch(/door-catalog\.service/);
+    expect(read('door-list.ts')).not.toMatch(/door-catalog\.service/);
+    expect(read('door-list.ts')).toMatch(/door-installs\.repository/);
   });
 
   it('overlays all five catalog fields onto the door object', () => {
