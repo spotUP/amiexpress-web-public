@@ -76,18 +76,23 @@ export const SystemConfigSchema = z.object({
   default_language: z.string().max(50).optional(),
 
   // Limits
+  // Left at 256 deliberately. axobjects.e:38 declares conferenceAccess as
+  // ARRAY OF CHAR [10], which would cap a board at nine - but this board runs
+  // fourteen conferences today, and AmiExpress has a second path for exactly
+  // that case (isConfAccessAreaName / TOOLTYPE_AREA, express.e:8505-8512).
+  // Clamping to nine would break a working board on a reading of one struct.
   max_conferences: z.number().int().min(1).max(256).optional(),
   max_message_bases: z.number().int().min(1).max(1024).optional(),
   max_file_areas: z.number().int().min(1).max(1024).optional(),
-  max_nodes: z.number().int().min(1).max(255).optional(),
+  // axcommon.e:28 - EXPORT CONST MAX_NODES=32. A board cannot have more, so
+  // offering 255 offered a number AmiExpress cannot honour.
+  max_nodes: z.number().int().min(1).max(32).optional(),
 
   // File Management
   // express.e:346 - the level required to reach the HOLD directory. The form
   // has a field for it AND a <TooltypeKey> badge naming the key it claims to
   // write; zod stripped it on the way through.
   hold_access_level: z.number().int().min(0).max(255).optional(),
-  // express.e:19253 - uploaded filenames are upper-cased.
-  capitalize_filenames: z.boolean().optional(),
   // Ratios counted in kilobytes rather than in files.
   credit_by_kb: z.boolean().optional(),
   file_check_enabled: z.boolean().optional(),
@@ -115,7 +120,6 @@ export const SystemConfigSchema = z.object({
 
   // HTTP Server (TOOLTYPE_XFERLIB, express.e:15002-15006)
   http_enabled: z.boolean().optional(),
-  http_host: z.string().max(200).optional(),
   http_port: z.number().int().min(1).max(65535).optional(),
 
   // BBS Server Ports
@@ -174,7 +178,9 @@ export const NodeConfigSchema = z.object({
   // Node0 is a real node - it exists on this board and on the live one, and
   // AmiExpress numbers from zero. Requiring 1 meant the admin refused to save
   // the first node it listed.
-  node_number: z.number().int().min(0).max(255),
+  // Node numbers are 0-based and there are at most MAX_NODES of them
+  // (axcommon.e:28). Node 0 is real - Node0.info is the first node.
+  node_number: z.number().int().min(0).max(31),
   // NODESTART is a multi-line block - the command, then a tooltype per line
   // (QUIETNODE, PRIORITY, CONSOLE_OUTPUT_DEVICE and the rest). A real one is
   // well past 200 characters, so the cap rejected every node that had one.
@@ -319,7 +325,11 @@ export const ProtocolSchema = z.object({
 
 // Security Level Access (TOOLTYPE_ACCESS from express.e)
 export const SecurityLevelAccessSchema = z.object({
-  security_level: z.number().int().min(1).max(255),
+  // express.e:3025-3034 - findAcsLevel computes `secStatus/5*5` and walks
+  // DOWN in fives until a file exists, falling back to 0. So a level that is
+  // not a multiple of five names a file the BBS can never look for, and 0 is
+  // a real level rather than an absence.
+  security_level: z.number().int().min(0).max(255).multipleOf(5),
   acs_flag: z.string().min(1).max(100),
   enabled: z.boolean().optional(),
   description: z.string().max(500).optional()

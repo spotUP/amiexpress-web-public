@@ -957,8 +957,16 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   router.post('/security/levels/:level', async (req: any, res: Response) => {
     try {
       const level = parseInt(req.params.level, 10);
-      if (!Number.isFinite(level) || level < 1 || level > 255) {
-        return handleError(res, new Error('Security level must be between 1 and 255'));
+      if (!Number.isFinite(level) || level < 0 || level > 255) {
+        return handleError(res, new Error('Security level must be between 0 and 255'));
+      }
+      // express.e:3025-3034 - findAcsLevel computes `secStatus/5*5` and walks
+      // DOWN in fives. ACS.31.info is a file the BBS would never look for, so
+      // creating one produces a level that silently does nothing.
+      if (level % 5 !== 0) {
+        return handleError(res, new Error(
+          `Security level must be a multiple of 5: AmiExpress only ever looks for ACS.0, ACS.5, ACS.10 ... (express.e:3025)`
+        ));
       }
 
       const bbsRoot = config.get('dataDir');

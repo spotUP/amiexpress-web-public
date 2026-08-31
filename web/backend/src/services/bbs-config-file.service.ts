@@ -73,7 +73,6 @@ export interface BBSConfigData {
   upload_check_virus?: boolean;
   upload_check_dupe?: boolean;
   hold_access_level?: number; // express.e:346 - Security level required to access HOLD directory (default 201)
-  capitalize_filenames?: boolean; // express.e:19253 - Convert uploaded filenames to uppercase (LVL_CAPITOLS_in_FILE)
 
   // Mail & SMTP
   allow_internet_email?: boolean;
@@ -94,7 +93,6 @@ export interface BBSConfigData {
 
   // HTTP Server
   http_enabled?: boolean;
-  http_host?: string;
   http_port?: number;
 
   // BBS Server Ports
@@ -250,7 +248,10 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'UPLOAD_CHECK_VIRUS': 'upload_check_virus',
   'UPLOAD_CHECK_DUPE': 'upload_check_dupe',
   'HOLD_ACCESS_LEVEL': 'hold_access_level',
-  'LVL_CAPITOLS_in_FILE': 'capitalize_filenames',
+  // LVL_CAPITOLS_in_FILE is an ARRAY INDEX (axcommon.e:53), not a tooltype.
+  // The real one is CAPITOL_FILES and it lives in the NODE icon
+  // (ACP.e:2651), where the Nodes page already edits it - so this setting has
+  // no place in bbsConfig.info at all.
 
   // Mail & SMTP
   'ALLOW_INTERNET_EMAIL': 'allow_internet_email',
@@ -271,8 +272,10 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
 
   // HTTP Server
   'HTTP_ENABLED': 'http_enabled',
-  'HTTP_HOST': 'http_host',
-  'HTTP_PORT': 'http_port',
+  // HTTP_HOST was never a bbsConfig tooltype. express.e:15002 reads HTTPHOST
+  // out of the PROTOCOL icon (TOOLTYPE_XFERLIB), per protocol, which is the
+  // Protocols page's business and cannot be one board-wide field.
+  'HTTPPORT': 'http_port',          // express.e:15707, and the node icon at :15708
 
   // BBS Server Ports
   'TELNET_PORT': 'telnet_port',
@@ -283,7 +286,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'CONVERT_TO_MB': 'convert_to_mb',
   'REGKEY': 'reg_key',
   // express.e sopt.toggles[TOGGLES_CREDITBYKB] — counts UL/DL in KB instead of bytes
-  'CREDITBYKB': 'credit_by_kb',
+  'CREDIT_BY_KBYTES': 'credit_by_kb',  // ACP.e:3030 - CREDITBYKB is an index (axcommon.e:385)
 
   // Logging
   'DEBUG_MODE': 'debug_mode',
@@ -733,7 +736,12 @@ function getDefaultConfig(): BBSConfigData {
     // Without a default, loadBBSConfig has no `typeof` to infer the field's
     // type from and returns the tooltype as a STRING, while
     // login-post.service.ts:351 tests for a number - so expiry never applied.
+    // The same is true of every field below: a boolean with no default comes
+    // back as '' or '1' and no form checkbox can show it.
     password_expiry_days: 0,
+    system_password: '',
+    credit_by_kb: false,
+    arexx_engine: 'auto',
     min_password_strength: 0,
     max_password_fails: -1,
     // What a board with NO PASSWORD_SECURITY tooltype actually does:
@@ -772,7 +780,6 @@ function getDefaultConfig(): BBSConfigData {
     upload_check_virus: false,
     upload_check_dupe: true,
     hold_access_level: 201, // express.e:346 - Default security level for HOLD directory access
-    capitalize_filenames: false, // express.e:19253 - Convert uploaded filenames to uppercase
     allow_internet_email: false,
     smtp_server: '',
     smtp_port: 25,
@@ -787,7 +794,6 @@ function getDefaultConfig(): BBSConfigData {
     ftp_port: 21,
     ftp_data_ports: '',
     http_enabled: false,
-    http_host: '',
     http_port: 80,
     telnet_port: 2323,
     ssh_port: 2222,

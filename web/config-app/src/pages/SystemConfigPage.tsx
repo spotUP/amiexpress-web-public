@@ -1522,19 +1522,10 @@ export function SystemConfigPage() {
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">HTTP Server Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="http_host" className="label">
-                HTTP Host
-              </label>
-              <TooltypeKey field="http_host" />
-              <input
-                id="http_host"
-                type="text"
-                {...register('http_host')}
-                className="input-field w-full"
-              />
-              <p className="text-xs text-bbs-muted mt-1">Bind address for HTTP (blank = all interfaces).</p>
-            </div>
+            {/* HTTP Host was removed. express.e:15002 reads HTTPHOST out of
+                the PROTOCOL icon (TOOLTYPE_XFERLIB), per protocol - there has
+                never been a bbsConfig tooltype for it, so this field wrote a
+                key nothing read. It belongs on the Protocols page. */}
 
             <div>
               <label htmlFor="http_port" className="label">

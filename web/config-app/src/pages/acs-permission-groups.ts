@@ -26,6 +26,49 @@ export interface PermissionGroup {
   permissions: string[];
 }
 
+/**
+ * Permissions the ACS file does not decide.
+ *
+ * express.e:8466-8485 resolves eighteen flags BEFORE it ever looks in
+ * Access/ACS.<level>.info. Eight come from the node icon or the caller's own
+ * record, four always answer TRUE, and six are declared and never checked
+ * anywhere - express.e's own header says FREE_RESUMING is "not implemented in
+ * /X3 or 4" (express.e:14).
+ *
+ * They are still shown, because they are still in the file and a sysop
+ * reading the AmiExpress documentation will look for them. What changes is
+ * that the page says what actually controls them, rather than presenting a
+ * switch that cannot do anything.
+ */
+export const ACS_NOT_FROM_THIS_FILE: Record<string, string> = {
+  // Resolved from the node icon (ACP.e reads these into cmds.acLvl).
+  'ACS.SENTBY_FILES': "Set by the node's SENTBY_FILES tooltype, not here (ACP.e:2649)",
+  'ACS.DEFAULT_CHAT_ON': "Set by the node's CHAT_ON tooltype, not here (ACP.e:2650)",
+  'ACS.KEEP_UPLOAD_CREDIT': "Set by the node's KEEP_UPLOAD_CREDIT tooltype, not here (ACP.e:2654)",
+  'ACS.DO_CALLERSLOG': "Set by the node's CALLERS_LOG tooltype, not here (ACP.e:2656)",
+  'ACS.DO_UD_LOG': "Set by the node's UD_LOG tooltype, not here (ACP.e:2657)",
+  'ACS.SCREEN_TO_FRONT': "Set by the node's WINDOW.TO_FRONT tooltype, not here (ACP.e:2606)",
+  'ACS.WILDCARDS': "Set by the node's wildcard toggle, not here (express.e:8482)",
+
+  // Resolved from the caller's own record.
+  'ACS.CLEAR_SCREEN_MSG': "Comes from the caller's own screen-clear flag, not from this file (express.e:8473)",
+
+  // Always granted, whatever the file says.
+  'ACS.MSG_LEVEL': 'Always granted - express.e:8483 returns TRUE before reading this file',
+  'ACS.MSG_EXPERATION': 'Always granted - express.e:8483 returns TRUE before reading this file',
+  'ACS.CUSTOMCOMMANDS': 'Always granted - express.e:8483 returns TRUE before reading this file',
+  'ACS.JOIN_SUB_CONFERENCE': 'Always granted - express.e:8483 returns TRUE before reading this file',
+
+  // Declared in the enum and never checked anywhere in express.e.
+  'ACS.ACCOUNT_VIEW': 'Declared by AmiExpress and never checked - nothing reads it',
+  'ACS.CREATE_CONFERENCE': 'Declared by AmiExpress and never checked - nothing reads it',
+  'ACS.DUPE_FILECHECK': 'Declared by AmiExpress and never checked - nothing reads it',
+  'ACS.FREE_RESUMING': 'Not implemented in /X3 or /X4 (express.e:14) - nothing reads it',
+  'ACS.MAX_PAGES': 'Declared by AmiExpress and never checked - nothing reads it',
+  'ACS.ONE_TIME_BULLETINS': 'Declared by AmiExpress and never checked - nothing reads it',
+  'ACS.UNKNOWN': 'A spare slot in the enum, with no meaning of its own',
+};
+
 /** Description for a raw ACS name. */
 export const ACS_LABELS: Record<string, string> = {
   // Getting on, and staying on

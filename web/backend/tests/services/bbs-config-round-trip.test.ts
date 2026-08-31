@@ -105,11 +105,11 @@ describe('bbsConfig.info round trip', () => {
   it('round-trips both states of a boolean', () => {
     // A boolean tooltype is present for true and absent for false, so the
     // two directions fail differently and both need covering.
-    saveBBSConfig(root, { capitalize_filenames: true });
-    expect(loadBBSConfig(root).capitalize_filenames).toBe(true);
+    saveBBSConfig(root, { credit_by_kb: true });
+    expect(loadBBSConfig(root).credit_by_kb).toBe(true);
 
-    saveBBSConfig(root, { capitalize_filenames: false });
-    expect(loadBBSConfig(root).capitalize_filenames).toBe(false);
+    saveBBSConfig(root, { credit_by_kb: false });
+    expect(loadBBSConfig(root).credit_by_kb).toBe(false);
   });
 
   it('can switch off a flag whose default is on', () => {
@@ -123,13 +123,14 @@ describe('bbsConfig.info round trip', () => {
     expect(loadBBSConfig(root).confirm_deletions).toBe(false);
   });
 
-  it('reads back the one tooltype AmiExpress does not spell in upper case', () => {
-    // LVL_CAPITOLS_in_FILE (axcommon.e:53). Keys were upper-cased on the way
-    // in, so this one never matched its field: switching it on saved nothing
-    // the form could read back.
-    saveBBSConfig(root, { capitalize_filenames: true });
+  it('writes CREDIT_BY_KBYTES, which is the key ACP.e:3030 reads', () => {
+    // It wrote CREDITBYKB, which is an array index (axcommon.e:385), not a
+    // tooltype - the same mistake LVL_CAPITOLS_in_FILE was.
+    saveBBSConfig(root, { credit_by_kb: true });
 
-    expect(loadBBSConfig(root).capitalize_filenames).toBe(true);
+    const written = fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8');
+    expect(written).toContain('CREDIT_BY_KBYTES');
+    expect(written).not.toContain('CREDITBYKB');
   });
 
   it('uses the defaults only when there is no configuration file at all', () => {

@@ -112,16 +112,19 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
           no_newscan: fromDisk.no_newscan,
           show_new_files: fromDisk.show_new_files,
           no_new_files: fromDisk.no_new_files,
-          // No tooltype exists for these; they live in the database only.
-          free_downloads: false,
+          // All four DO have a tooltype, and all four are read from the
+          // conference's own icon: FREEDOWNLOADS (express.e:5010), USERNAME
+          // (:4081), REALNAME (:4083), INTERNETNAME (:5022). Serving fixed
+          // values here meant the form could not show what the board does.
+          free_downloads: fromDisk.free_downloads,
           exclude_ftp: fromDisk.exclude_ftp,
           private_conf: fromDisk.private_conf,
           read_only: fromDisk.read_only,
           menu_prompt: fromDisk.menu_prompt,
           confdb_shared: fromDisk.confdb_shared,
-          use_username: true,
-          use_realname: false,
-          use_internetname: false,
+          use_username: fromDisk.use_username,
+          use_realname: fromDisk.use_realname,
+          use_internetname: fromDisk.use_internetname,
           min_access_level: fromDisk.min_access_level,
           max_access_level: fromDisk.max_access_level,
           created_at: stats.birthtime,
@@ -193,6 +196,10 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
     if (validated.exclude_ftp !== undefined) confInfoUpdates.excludeFTP = validated.exclude_ftp;
     if (validated.private_conf !== undefined) confInfoUpdates.privateConf = validated.private_conf;
     if (validated.read_only !== undefined) confInfoUpdates.readOnly = validated.read_only;
+    const conf = validated as Record<string, unknown>;
+    for (const field of ['free_downloads', 'use_username', 'use_realname', 'use_internetname']) {
+      if (conf[field] !== undefined) confInfoUpdates[field] = conf[field];
+    }
 
     const dlpaths: { [key: number]: string } = {};
     const ulpaths: { [key: number]: string } = {};

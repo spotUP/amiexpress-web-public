@@ -17,9 +17,13 @@
 /** Scalar settings: the tooltype holds the value. */
 export const CONFERENCE_FIELD_TOOLTYPES: Record<string, string> = {
   ndirs: 'NDIRS',
+  // MIN_ACCESS and MAX_ACCESS are this admin's own bookkeeping - see
+  // CONFERENCE_TOOLTYPES_AMIEXPRESS_IGNORES.
   min_access_level: 'MIN_ACCESS',
   max_access_level: 'MAX_ACCESS',
-  menu_prompt: 'MENUPROMPT',
+  // express.e:5013 and :15269 read MENU_PROMPT. MENUPROMPT, without the
+  // underscore, is a key AmiExpress has never looked for.
+  menu_prompt: 'MENU_PROMPT',
   confdb_shared: 'CONFDB_SHARED',
 };
 
@@ -34,22 +38,46 @@ export const CONFERENCE_FLAG_TOOLTYPES: Record<string, string> = {
   show_new_files: 'SHOW_NEW_FILES',
   no_new_files: 'NO_NEW_FILES',
   exclude_ftp: 'EXCLUDE_FTP',
+  // PRIVATE and READ_ONLY are this admin's own - see
+  // CONFERENCE_TOOLTYPES_AMIEXPRESS_IGNORES.
   private_conf: 'PRIVATE',
   read_only: 'READ_ONLY',
+  // These four were classed "database only, because AmiExpress has no
+  // tooltype for them". All four have one, and all four are read from the
+  // conference's own icon:
+  free_downloads: 'FREEDOWNLOADS',   // express.e:5010
+  use_username: 'USERNAME',          // express.e:4081
+  use_realname: 'REALNAME',          // express.e:4083
+  use_internetname: 'INTERNETNAME',  // express.e:5022
 };
 
 /**
- * Fields the admin keeps in the database only, because AmiExpress has no
- * tooltype for them: free_downloads, use_username, use_realname and
- * use_internetname. Inventing keys for these would put values in a
- * conference's .info that the BBS never reads.
+ * Conference tooltypes AmiExpress does not read.
+ *
+ * A conference is gated by the caller's own conferenceAccess mask -
+ * express.e:8499-8512 tests `user.conferenceAccess[confNum-1]="X"` - not by a
+ * level range, and there is no PRIVATE or READ_ONLY tooltype anywhere in the
+ * sources. They are this port's own bookkeeping and they are kept, because
+ * the admin shows them and a sysop's board already carries them; what they
+ * are not is a setting that changes what AmiExpress does.
  */
-export const CONFERENCE_DATABASE_ONLY_FIELDS = [
-  'free_downloads',
-  'use_username',
-  'use_realname',
-  'use_internetname',
-] as const;
+export const CONFERENCE_TOOLTYPES_AMIEXPRESS_IGNORES: Record<string, string> = {
+  min_access_level: "This port's own. AmiExpress gates a conference by the caller's conferenceAccess mask (express.e:8499-8512), not by a level range",
+  max_access_level: "This port's own. AmiExpress gates a conference by the caller's conferenceAccess mask (express.e:8499-8512), not by a level range",
+  private_conf: "This port's own. No PRIVATE tooltype exists in AmiExpress",
+  read_only: "This port's own. No READ_ONLY tooltype exists in AmiExpress",
+};
+
+/**
+ * Fields the admin keeps in the database only.
+ *
+ * Empty. It used to hold free_downloads, use_username, use_realname and
+ * use_internetname on the grounds that AmiExpress had no tooltype for them.
+ * All four have one - FREEDOWNLOADS, USERNAME, REALNAME and INTERNETNAME -
+ * and all four are read from the conference's own icon, so all four now go
+ * where the BBS looks for them.
+ */
+export const CONFERENCE_DATABASE_ONLY_FIELDS = [] as const;
 
 export const MAX_FILE_AREAS = 16;
 
@@ -76,6 +104,10 @@ export interface ConferenceInfoFields {
   exclude_ftp: boolean;
   private_conf: boolean;
   read_only: boolean;
+  free_downloads: boolean;
+  use_username: boolean;
+  use_realname: boolean;
+  use_internetname: boolean;
   /** DLPATH.1 .. DLPATH.16, keyed 1-based. */
   dlpaths: Record<number, string>;
   /** ULPATH.1 .. ULPATH.16, keyed 1-based. */
@@ -100,7 +132,7 @@ export function readConferenceFields(toolTypes: ToolTypes): ConferenceInfoFields
     ndirs: number('NDIRS', 0),
     min_access_level: number('MIN_ACCESS', 0),
     max_access_level: number('MAX_ACCESS', 255),
-    menu_prompt: toolTypes.get('MENUPROMPT') ?? '',
+    menu_prompt: toolTypes.get('MENU_PROMPT') ?? '',
     confdb_shared: number('CONFDB_SHARED', 0),
     force_newscan: flagIsSet(toolTypes, 'FORCE_NEWSCAN'),
     no_newscan: flagIsSet(toolTypes, 'NO_NEWSCAN'),
@@ -109,6 +141,10 @@ export function readConferenceFields(toolTypes: ToolTypes): ConferenceInfoFields
     exclude_ftp: flagIsSet(toolTypes, 'EXCLUDE_FTP'),
     private_conf: flagIsSet(toolTypes, 'PRIVATE'),
     read_only: flagIsSet(toolTypes, 'READ_ONLY'),
+    free_downloads: flagIsSet(toolTypes, 'FREEDOWNLOADS'),
+    use_username: flagIsSet(toolTypes, 'USERNAME'),
+    use_realname: flagIsSet(toolTypes, 'REALNAME'),
+    use_internetname: flagIsSet(toolTypes, 'INTERNETNAME'),
     dlpaths,
     ulpaths,
   };

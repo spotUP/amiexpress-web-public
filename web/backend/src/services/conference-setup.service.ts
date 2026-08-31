@@ -397,6 +397,12 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
     excludeFTP: boolean;
     privateConf: boolean;
     readOnly: boolean;
+    // express.e:5010, :4081, :4083, :5022 - all four ARE tooltypes on the
+    // conference's own icon, and were classed database-only.
+    free_downloads: boolean;
+    use_username: boolean;
+    use_realname: boolean;
+    use_internetname: boolean;
     dlpaths: { [key: number]: string };
     ulpaths: { [key: number]: string };
   }>): Promise<void> {
@@ -428,6 +434,10 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
       exclude_ftp: updates.excludeFTP,
       private_conf: updates.privateConf,
       read_only: updates.readOnly,
+      free_downloads: updates.free_downloads,
+      use_username: updates.use_username,
+      use_realname: updates.use_realname,
+      use_internetname: updates.use_internetname,
       dlpaths: updates.dlpaths,
       ulpaths: updates.ulpaths,
     });

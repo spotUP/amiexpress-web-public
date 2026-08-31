@@ -156,3 +156,64 @@ describe('an ACS flag written =NO', () => {
     expect(ambiguouslyDeniedFlags([tooltypes[1], tooltypes[2]])).toEqual([]);
   });
 });
+
+describe('tooltype names AmiExpress actually reads', () => {
+  // Each of these was a plausible-looking key that nothing on the Amiga side
+  // ever looked for, so the setting was written and never read.
+  const { CONFERENCE_FIELD_TOOLTYPES, CONFERENCE_FLAG_TOOLTYPES, CONFERENCE_DATABASE_ONLY_FIELDS } =
+    require('../../src/services/config-services/conference-info-file.service');
+
+  it("a conference's menu prompt is MENU_PROMPT", () => {
+    // express.e:5013 and :15269. MENUPROMPT, without the underscore, is a key
+    // AmiExpress has never looked for.
+    expect(CONFERENCE_FIELD_TOOLTYPES.menu_prompt).toBe('MENU_PROMPT');
+  });
+
+  it('the four fields called "database only" all have a tooltype', () => {
+    expect(CONFERENCE_FLAG_TOOLTYPES.free_downloads).toBe('FREEDOWNLOADS');    // express.e:5010
+    expect(CONFERENCE_FLAG_TOOLTYPES.use_username).toBe('USERNAME');           // express.e:4081
+    expect(CONFERENCE_FLAG_TOOLTYPES.use_realname).toBe('REALNAME');           // express.e:4083
+    expect(CONFERENCE_FLAG_TOOLTYPES.use_internetname).toBe('INTERNETNAME');   // express.e:5022
+    expect(CONFERENCE_DATABASE_ONLY_FIELDS).toEqual([]);
+  });
+
+  it('round-trips a conference flag that used to be database only', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conf-flags-'));
+    try {
+      const { applyConferenceFields, readConferenceFields } =
+        require('../../src/services/config-services/conference-info-file.service');
+      const toolTypes = new Map<string, string>();
+      applyConferenceFields(toolTypes, { free_downloads: true, use_realname: true });
+
+      const read = readConferenceFields(toolTypes);
+      expect(read.free_downloads).toBe(true);
+      expect(read.use_realname).toBe(true);
+      expect(read.use_username).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('ranges AmiExpress can honour', () => {
+  const { NodeConfigSchema, SecurityLevelAccessSchema } = require('../../src/services/config.schemas');
+
+  it('caps nodes at MAX_NODES', () => {
+    // axcommon.e:28 - EXPORT CONST MAX_NODES=32, and node numbers are 0-based.
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 0 }).success).toBe(true);
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 31 }).success).toBe(true);
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 32 }).success).toBe(false);
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 97 }).success).toBe(false);
+  });
+
+  it('takes only the ACS levels findAcsLevel can reach', () => {
+    // express.e:3025-3034 computes secStatus/5*5 and walks DOWN in fives,
+    // falling back to 0. ACS.31.info is a file it would never look for.
+    for (const level of [0, 5, 30, 255]) {
+      expect(SecurityLevelAccessSchema.partial().safeParse({ security_level: level }).success).toBe(true);
+    }
+    for (const level of [1, 31, 254]) {
+      expect(SecurityLevelAccessSchema.partial().safeParse({ security_level: level }).success).toBe(false);
+    }
+  });
+});

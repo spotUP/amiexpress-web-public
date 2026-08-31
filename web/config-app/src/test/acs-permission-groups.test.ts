@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACS_GROUPS,
+  ACS_NOT_FROM_THIS_FILE,
   ACS_LABELS,
   GROUPED_PERMISSIONS,
   acsLabel,
@@ -95,5 +96,61 @@ describe('ACS permission groups', () => {
     it('returns nothing when the filter matches nothing', () => {
       expect(groupPermissions(['ACS.DOWNLOAD'], () => false)).toEqual([]);
     });
+  });
+});
+
+describe('permissions the ACS file does not decide', () => {
+  // express.e:8466-8485 resolves these before it ever opens
+  // Access/ACS.<level>.info. A checkbox that cannot do anything must say so,
+  // or the sysop ticks it and nothing happens - which is the fault that runs
+  // through this whole admin.
+  it('annotates every flag express.e resolves before the lookup', () => {
+    const resolvedEarly = [
+      // From the node icon (ACP.e reads these into cmds.acLvl).
+      'ACS.SENTBY_FILES',
+      'ACS.DEFAULT_CHAT_ON',
+      'ACS.KEEP_UPLOAD_CREDIT',
+      'ACS.DO_CALLERSLOG',
+      'ACS.DO_UD_LOG',
+      'ACS.SCREEN_TO_FRONT',
+      'ACS.WILDCARDS',
+      // From the caller's own record.
+      'ACS.CLEAR_SCREEN_MSG',
+      // Always TRUE.
+      'ACS.MSG_LEVEL',
+      'ACS.MSG_EXPERATION',
+      'ACS.CUSTOMCOMMANDS',
+      'ACS.JOIN_SUB_CONFERENCE',
+    ];
+
+    const unannotated = resolvedEarly.filter((name) => !ACS_NOT_FROM_THIS_FILE[name]);
+    expect(unannotated).toEqual([]);
+  });
+
+  it('annotates the six AmiExpress declares and never checks', () => {
+    const neverChecked = [
+      'ACS.ACCOUNT_VIEW',
+      'ACS.CREATE_CONFERENCE',
+      'ACS.DUPE_FILECHECK',
+      'ACS.FREE_RESUMING',
+      'ACS.MAX_PAGES',
+      'ACS.ONE_TIME_BULLETINS',
+    ];
+
+    const unannotated = neverChecked.filter((name) => !ACS_NOT_FROM_THIS_FILE[name]);
+    expect(unannotated).toEqual([]);
+  });
+
+  it('annotates nothing that is not a real permission', () => {
+    const placed = new Set(GROUPED_PERMISSIONS);
+    const orphans = Object.keys(ACS_NOT_FROM_THIS_FILE).filter((name) => !placed.has(name));
+    expect(orphans).toEqual([]);
+  });
+
+  it('leaves the flags the file DOES decide alone', () => {
+    // If everything were annotated the annotation would mean nothing.
+    for (const name of ['ACS.DOWNLOAD', 'ACS.UPLOAD', 'ACS.SYSOP_COMMANDS', 'ACS.READ_MESSAGE']) {
+      expect(ACS_NOT_FROM_THIS_FILE[name]).toBeUndefined();
+    }
   });
 });

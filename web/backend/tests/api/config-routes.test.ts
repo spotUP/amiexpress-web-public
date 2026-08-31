@@ -68,13 +68,25 @@ describe('Config Routes', () => {
 
   describe('POST /api/config/nodes', () => {
     it('creates a node config and returns it', async () => {
+      // Node numbers are 0-based and there are at most MAX_NODES=32 of them
+      // (axcommon.e:28); this used to ask for node 97.
       const res = await request(app)
         .post('/api/config/nodes')
-        .send({ node_number: 97 });
+        .send({ node_number: 17 });
       expect([200, 201]).toContain(res.status);
       if (res.status === 200 || res.status === 201) {
         expect(res.body.success).toBe(true);
       }
+    });
+
+    it('refuses a node number AmiExpress cannot have', async () => {
+      // axcommon.e:28 - EXPORT CONST MAX_NODES=32. A board cannot have node
+      // 97, so offering it offered a number that could never work.
+      const res = await request(app)
+        .post('/api/config/nodes')
+        .send({ node_number: 97 });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBeLessThan(500);
     });
   });
 
