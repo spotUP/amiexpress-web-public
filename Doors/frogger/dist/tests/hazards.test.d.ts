@@ -86,4 +86,25 @@ export declare function theWarningIsLongEnoughToHopOff(): Promise<void>;
 export declare function losingTheLastFrogShowsGameOver(): Promise<void>;
 /** ...and the prompt blinks. */
 export declare function theGameOverPromptBlinks(): Promise<void>;
+/**
+ * Whether a frog gets home is decided by the cell it is DRAWN on.
+ *
+ * Reported live 2026-08-31 with a screenshot: "i placed my frog in the
+ * second home now and got game over". Riding a log leaves the frog on a
+ * fractional x, and a hop used to keep that fraction - so the frog could be
+ * drawn on the home's cell and still be judged against a position half a
+ * cell away. A hop now lands on a whole cell, which is the one it is drawn
+ * on, so what the player sees is what is tested.
+ */
+export declare function gettingHomeIsDecidedByTheCellTheFrogIsDrawnOn(): Promise<void>;
+/** Landing on a cell that is not a home still kills, as the FAQ requires. */
+export declare function missingTheHomeByAWholeCellStillKills(): Promise<void>;
+/**
+ * A hop lands on a whole cell.
+ *
+ * Checked on open water, where nothing picks the frog up again: riding an
+ * object deliberately puts it back on the object's own fractional position,
+ * a whole number of cells along it.
+ */
+export declare function aHopLandsOnAWholeCell(): Promise<void>;
 //# sourceMappingURL=hazards.test.d.ts.map
