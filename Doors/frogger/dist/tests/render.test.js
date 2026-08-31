@@ -31,6 +31,8 @@ exports.aDyingFrogBlinks = aDyingFrogBlinks;
 exports.theBoardIsPureAscii = theBoardIsPureAscii;
 exports.theFrogStandsOutFromEveryLane = theFrogStandsOutFromEveryLane;
 exports.theGameOverPanelDoesNotBlackOutTheBoard = theGameOverPanelDoesNotBlackOutTheBoard;
+exports.theFrogStaysPutOnTheLogItRides = theFrogStaysPutOnTheLogItRides;
+exports.hoppingOffALogEndsTheRide = hoppingOffALogEndsTheRide;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const constants_1 = require("../game/constants");
@@ -288,5 +290,56 @@ async function theGameOverPanelDoesNotBlackOutTheBoard() {
     assert_1.default.ok(backgrounds.size > 1 || !backgrounds.has('black'), `the panel row went solid ${[...backgrounds].join(',')}`);
     const words = painted.map(c => c.ch).join('');
     assert_1.default.ok(words.includes('GAME OVER'), 'with the message in it');
+}
+/**
+ * A frog riding a log stays put on it, frame after frame.
+ *
+ * Reported live 2026-08-31: "when i am on a log the frog and log anims are
+ * offset the frog should move with the log". The frog advanced by its own
+ * copy of the log's sum, so it held a FRACTIONAL offset from its footing -
+ * and a fraction is enough for the two to round to different cells, so they
+ * drew a cell apart and drifted in and out of step.
+ */
+async function theFrogStaysPutOnTheLogItRides() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    const lane = (0, fixture_1.laneOf)(data, 'water', 2);
+    const log = lane.objects[0];
+    // A log at a fractional position is the ordinary case: they are moving.
+    log.x = 6.37;
+    lane.objects = [log];
+    data.frog.y = lane.y;
+    data.frog.x = 7;
+    game.checkCollisions();
+    assert_1.default.ok(data.frog.onObject, 'the frog should be riding the log');
+    const gaps = new Set();
+    for (let i = 0; i < 40; i++) {
+        game.update();
+        if (!data.frog.onObject)
+            break;
+        const row = paintedRow(frameOf(game)[lane.y]);
+        const frogAt = row.findIndex(c => c.ch === constants_1.FROG_GLYPH);
+        // Anchored on the log's BACKGROUND, not on its '(' end: the frog is
+        // drawn over the log and can cover that end, and skipping those frames
+        // would skip exactly the ones where the two have come apart.
+        const logAt = row.findIndex(c => c.bg === constants_1.BG_COLORS.log);
+        assert_1.default.ok(frogAt >= 0 && logAt >= 0, 'both should be on screen');
+        gaps.add(frogAt - logAt);
+    }
+    assert_1.default.ok(gaps.size > 0, 'the frog and the log should both have been drawn');
+    assert_1.default.strictEqual(gaps.size, 1, `the frog should hold one place on the log; it drew at offsets ${[...gaps].join(', ')}`);
+}
+/** Hopping off a log ends the ride. */
+async function hoppingOffALogEndsTheRide() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    const lane = (0, fixture_1.laneOf)(data, 'water', 2);
+    const log = lane.objects[0];
+    log.x = 6.37;
+    data.frog.y = lane.y;
+    data.frog.x = 7;
+    game.checkCollisions();
+    assert_1.default.ok(data.frog.onObject);
+    game.handleDirection('down');
+    assert_1.default.ok(!data.frog.onObject, 'the frog is off the log');
+    assert_1.default.strictEqual(data.frog.rideOffset, undefined, 'and no longer carried by it');
 }
 //# sourceMappingURL=render.test.js.map

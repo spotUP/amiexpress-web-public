@@ -65,4 +65,16 @@ export declare function theFrogStandsOutFromEveryLane(): Promise<void>;
  * drawn when i finish a level etc".
  */
 export declare function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void>;
+/**
+ * A frog riding a log stays put on it, frame after frame.
+ *
+ * Reported live 2026-08-31: "when i am on a log the frog and log anims are
+ * offset the frog should move with the log". The frog advanced by its own
+ * copy of the log's sum, so it held a FRACTIONAL offset from its footing -
+ * and a fraction is enough for the two to round to different cells, so they
+ * drew a cell apart and drifted in and out of step.
+ */
+export declare function theFrogStaysPutOnTheLogItRides(): Promise<void>;
+/** Hopping off a log ends the ride. */
+export declare function hoppingOffALogEndsTheRide(): Promise<void>;
 //# sourceMappingURL=render.test.d.ts.map

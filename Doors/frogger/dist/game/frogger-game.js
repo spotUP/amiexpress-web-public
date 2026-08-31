@@ -333,6 +333,7 @@ class FroggerGame {
         frog.x = newX;
         frog.y = newY;
         frog.onObject = null;
+        frog.rideOffset = undefined;
         if (newY === 0) {
             this.checkHomeArrival();
         }
@@ -535,9 +536,15 @@ class FroggerGame {
         if (!frog.onObject)
             return;
         const obj = frog.onObject;
-        const lane = d.lanes.find(l => l.y === obj.y);
-        const scale = lane?.type === 'water' ? this.riverSpeedScale() : 1;
-        frog.x += obj.speed * (constants_1.GAME_TICK_MS / 1000) * scale;
+        // Carried BY the log, rather than moved alongside it.
+        //
+        // The frog used to advance by its own copy of the same sum, which left
+        // it holding a fractional offset from its footing - and a fraction is
+        // enough for the two to round to different cells, so the frog and the
+        // log it was standing on drew a cell apart and drifted in and out of
+        // step. Riding a whole number of cells from the object's own position
+        // keeps them locked together however either one is rounded.
+        frog.x = obj.x + (frog.rideOffset ?? 0);
         if (obj.type === 'turtle' && obj.isDiving) {
             this.killFrog('water');
             return;
@@ -550,6 +557,7 @@ class FroggerGame {
         }
         if (frog.x < obj.x || frog.x >= obj.x + obj.width) {
             frog.onObject = null;
+            frog.rideOffset = undefined;
         }
     }
     /**
@@ -604,6 +612,10 @@ class FroggerGame {
                 obj.ladyFrogAt = null;
             }
             frog.onObject = obj;
+            // Where on it the frog landed, in whole cells, so the two stay in
+            // step when they are drawn.
+            frog.rideOffset = Math.round(frog.x - obj.x);
+            frog.x = obj.x + frog.rideOffset;
             return;
         }
         if (!frog.isJumping)
@@ -711,6 +723,7 @@ class FroggerGame {
         d.frog.deathType = deathType;
         d.frog.deathFrame = 0;
         d.frog.onObject = null;
+        d.frog.rideOffset = undefined;
         d.carryingLadyFrog = false;
         d.lives--;
     }
@@ -748,6 +761,7 @@ class FroggerGame {
         frog.isJumping = false;
         frog.jumpProgress = 0;
         frog.onObject = null;
+        frog.rideOffset = undefined;
     }
     /**
      * One move of the machine playing itself, for attract mode.

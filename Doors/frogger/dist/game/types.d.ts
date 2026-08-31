@@ -23,6 +23,13 @@ export interface Frog {
     deathType: "car" | "water" | "timeout" | "edge" | "snake" | "crocodile" | null;
     deathFrame: number;
     onObject: RiverObject | null;
+    /**
+     * Where on that object the frog is standing, in whole cells.
+     *
+     * Held as an offset rather than as its own position, so the frog and its
+     * footing round to the same cell and move as one.
+     */
+    rideOffset?: number;
 }
 export interface Vehicle {
     id: number;
