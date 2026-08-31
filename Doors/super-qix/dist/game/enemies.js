@@ -160,14 +160,17 @@ export class EnemySystem {
         }
     }
     /**
-     * Main update loop
+     * Main update loop.
+     *
+     * `speedScale` is what a Hurry multiplies everything by: FAQ 2.3.1 says
+     * it "Speeds up EVERYTHING in the game", not just the marker.
      */
-    update() {
+    update(speedScale = 1) {
         const d = this.data;
         // Update Qix
         for (const qix of d.qixList) {
             if (!qix.frozen) {
-                this.updateQix(qix);
+                this.updateQix(qix, speedScale);
             }
             else {
                 qix.frozenTimer--;
@@ -182,7 +185,7 @@ export class EnemySystem {
         // Super Skulls that chase the player up an unfinished line.
         for (const sparx of d.sparxList) {
             if (!sparx.frozen) {
-                this.updateSparx(sparx);
+                this.updateSparx(sparx, speedScale);
             }
             else {
                 sparx.frozenTimer--;
@@ -341,8 +344,8 @@ export class EnemySystem {
      * Movement is now axis-separated reflection against isBlockedForQix, so a
      * wall reverses the component that hit it and the Qix keeps its speed.
      */
-    updateQix(qix) {
-        const step = 0.1;
+    updateQix(qix, speedScale = 1) {
+        const step = 0.1 * speedScale;
         let nextX = qix.x + qix.vx * step;
         let nextY = qix.y + qix.vy * step;
         // Reflect each axis independently, so sliding along a wall works and a
@@ -416,7 +419,7 @@ export class EnemySystem {
     /**
      * Re-anchor every Sparx's pathIndex after d.borderPath has been rebuilt.
      *
-     * updateBorderPath() rebuilds the array by re-scanning the field, so a
+     * rebuildPatrolPath() rebuilds the array by re-scanning the field, so a
      * claim can change both its length and the order of its points - the old
      * pathIndex no longer names the same physical cell. Left unfixed, the next
      * updateSparx() snaps sparx.x/y to whatever cell the stale index now
@@ -448,12 +451,12 @@ export class EnemySystem {
     /**
      * Update a single Sparx
      */
-    updateSparx(sparx) {
+    updateSparx(sparx, speedScale = 1) {
         const d = this.data;
         if (d.borderPath.length === 0)
             return;
         // Move along border path
-        sparx.pathIndex += sparx.direction * sparx.speed * 0.1;
+        sparx.pathIndex += sparx.direction * sparx.speed * 0.1 * speedScale;
         // Wrap around rather than reversing: FAQ 2.2 says a Skull never
         // instantly turns round on a line, so reaching the end of the path
         // continues the same way about, it does not bounce back.
@@ -551,6 +554,25 @@ export class EnemySystem {
             }
         }
         return false;
+    }
+    /**
+     * The Skull touching the marker, if any.
+     *
+     * The caller needs the Skull itself and not just a yes/no, because a
+     * Shield "will also stun the Skull in question for one second"
+     * (FAQ 2.3.1) - you cannot stun an answer of `true`.
+     */
+    sparxTouching(marker) {
+        const d = this.data;
+        // FAQ 2.1: "When you are Drawing a line, the Skulls can't reach you".
+        if (d.marker.isDrawing)
+            return null;
+        for (const sparx of d.sparxList) {
+            const dist = Math.abs(sparx.x - marker.x) + Math.abs(sparx.y - marker.y);
+            if (dist < 1.2)
+                return sparx;
+        }
+        return null;
     }
     /**
      * Check Sparx collision with marker

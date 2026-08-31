@@ -2,7 +2,7 @@
  * Super Qix - Core Game Engine
  * Main game logic and state management
  */
-import { SuperQixData, Direction } from './types';
+import { SuperQixData, Point, Direction } from './types';
 import { Background } from './background';
 type RenderCallback = (content: string) => void;
 /**
@@ -65,6 +65,49 @@ export declare class QixEngine {
      * Main update loop
      */
     update(): void;
+    /**
+     * How much faster everything is running right now.
+     *
+     * FAQ 2.3.1: a Hurry "Speeds up EVERYTHING in the game (including the
+     * music!) ... These are cumulative, so if you pick up several in quick
+     * succession, the game may get unmanageably fast." One Hurry was only
+     * ever speeding the marker up, which made it a pure benefit rather than
+     * the double-edged thing the arcade hands you.
+     */
+    enemySpeedScale(): number;
+    /**
+     * Pay the skill level's bonus lives as the score passes them (FAQ 4).
+     *
+     * Hard mode lists none, so its table is empty and nothing is ever paid.
+     */
+    private awardBonusLives;
+    /**
+     * Is the Warp doorway fully open?
+     *
+     * FAQ 2.3.1: it "takes a second or two to open, remains open for another
+     * second or so, then closes".
+     */
+    isWarpOpen(now?: number): boolean;
+    /**
+     * Step through an open doorway if the marker is standing in one.
+     *
+     * FAQ 2.3.1: "If you can move your diamond into it while it is fully
+     * open, you advance directly to the next level. (NOTE: if you warp, you
+     * get no end-of-level bonuses, e.g. for partially-spelled words.)" - so
+     * this deliberately does NOT go through startLevelOutro, which is where
+     * the bonuses are worked out and paid.
+     */
+    private enterWarpIfOpen;
+    /**
+     * Set the score multiplier for a claim about to be made (FAQ 2.4.1).
+     *
+     * "Multipliers occur when the point where you finish outlining an area is
+     * as close as possible (within about 2 pixels) to the point where you
+     * began. Achieving a multiplier will give you 20x normal points for the
+     * area filled. If you manage another multiplier within a second or two of
+     * the last one, it increases to 30x".
+     */
+    private applyRejoinMultiplier;
     /**
      * Fill the border Time Meter, and release Skulls when it tops out.
      *
@@ -161,9 +204,23 @@ export declare class QixEngine {
      */
     handleStopDraw(): void;
     /**
-     * Update border path to include claimed area edges
+     * Rebuild the path the Skulls patrol.
+     *
+     * The frame and the edges of claimed ground, plus every line the player
+     * has finished. FAQ 2.2: the Skulls "can follow any line on the screen
+     * (including internal lines which you can't travel on anymore)" - a line
+     * the marker can no longer reach, because a later claim buried it, is
+     * still a road for them, and that is how a Skull cuts you off from a
+     * direction you thought was safe.
+     *
+     * A buried line is spliced into the walk beside the cell it joins, and
+     * walked out and back again, so the patrol stays a single continuous tour
+     * - a Skull that turns down one of these has to come back out of it
+     * rather than jumping across the board.
      */
-    private updateBorderPath;
+    rebuildPatrolPath(): Point[];
+    /** Where in a path the cell closest to `to` sits. */
+    private closestIndex;
     /**
      * Check all collisions
      */

@@ -32,7 +32,7 @@ function createData(): SuperQixData {
     currentStix: null,
     qixList: [], sparxList: [], fuse: null, qixIdCounter: 0, sparxIdCounter: 0,
     powerUps: [], powerUpIdCounter: 0, collectedLetters: [], levelWord: '',
-    activeEffects: [], borderPath: [],
+    activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
     stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
@@ -284,7 +284,7 @@ export async function theSparxPathUsesTheSameEdgeDefinition(): Promise<void> {
     for (let x = 10; x <= 14; x++) data.field[y][x] = 'claimed';
   }
 
-  const path: Array<{ x: number; y: number }> = (engine as any).updateBorderPath();
+  const path: Array<{ x: number; y: number }> = (engine as any).rebuildPatrolPath();
   const drawing: any = (engine as any).drawingSystem;
 
   for (const point of path) {

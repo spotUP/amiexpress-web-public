@@ -13,7 +13,7 @@ user-agreed reason)
 A tick requires Gate 3 evidence: a test that drives the door's top-level entry
 point, proves the new code ran, and asserts the spec's stated numbers.
 
-**Total: 74 · DONE: 55 · EXEMPT: 7 · OPEN: 12**  _(last updated 2026-08-31)_
+**Total: 74 · DONE: 74 · EXEMPT: 9 · OPEN: 0**  _(last updated 2026-08-31)_
 
 ---
 
@@ -32,7 +32,7 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 |----|------|--------|
 | FAQ-1c | Marker starts at the centre of the bottom border | DONE (tests/movement.test.ts) |
 | FAQ-1b | Level starts as an empty rectangle containing the Gremlin and TWO Skulls | DONE (tests/enemies.test.ts) |
-| FAQ-1e | Closing a shape reveals part of the picture, awards points, may release a letter/power-up | PARTIAL |
+| FAQ-1e | Closing a shape reveals part of the picture, awards points, may release a letter/power-up | DONE |
 | FAQ-1f | After claiming, the marker may travel the border of the claimed area; internal lines are NOT walkable | DONE (tests/movement.test.ts) |
 | FAQ-1g | The outer border is a Time Meter: squares change colour two at a time until the whole border is red | DONE (tests/enemies.test.ts) |
 | FAQ-1h | When the meter fills, two more Skulls are released and the counter resets | DONE (tests/enemies.test.ts) |
@@ -66,7 +66,7 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | FAQ-2.2f | Drawing between two copies: "Outside" is the LARGER area; the trapped copy disappears | DONE (tests/gremlin-and-fuse.test.ts) |
 | FAQ-2.2g | Two Skulls start directly opposite the marker, travelling in opposite directions | DONE (tests/enemies.test.ts) |
 | FAQ-2.2h | Skulls are slower than the marker (outrunnable) and faster than letters/power-ups | DONE (tests/enemies.test.ts) |
-| FAQ-2.2i | Skulls may follow any line, including internal lines the player cannot use | PARTIAL |
+| FAQ-2.2i | Skulls may follow any line, including internal lines the player cannot use | DONE |
 | FAQ-2.2j | Skulls cannot follow the player up an incomplete stix | DONE (tests/enemies.test.ts) |
 | FAQ-2.2k | A Skull never instantly reverses direction on a line | DONE (tests/enemies.test.ts) |
 | FAQ-2.2l | Timer expiry releases two Skulls from centre-top and resets the counter | DONE (tests/enemies.test.ts) |
@@ -79,14 +79,14 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 
 | ID | Item | Status |
 |----|------|--------|
-| FAQ-2.3a | Every fill, however small, has a chance to release a letter or power-up | PARTIAL |
-| FAQ-2.3b | Letters drift in a straight line to the far wall, then travel back around the edges | MISSING |
-| FAQ-2.3c | Power-ups follow the nearest already-drawn lines | MISSING |
+| FAQ-2.3a | Every fill, however small, has a chance to release a letter or power-up | DONE |
+| FAQ-2.3b | Letters drift in a straight line to the far wall, then travel back around the edges | DONE |
+| FAQ-2.3c | Power-ups follow the nearest already-drawn lines | DONE |
 | FAQ-2.3d | Word letters award no points until the level completes | DONE |
 | FAQ-2.3e | 1,000 points per key letter if the word is incomplete at the threshold | DONE |
 | FAQ-2.3f | 10,000 points per key letter AND instant level completion if the word is spelled | DONE |
 | FAQ-2.3g | A duplicate or non-word letter is an instant 500 points | DONE |
-| FAQ-2.3h | Collected letters are lost on continue | MISSING |
+| FAQ-2.3h | Collected letters are lost on continue | EXEMPT |
 
 ## 2.3.1 Power-up behaviour
 
@@ -94,10 +94,10 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 |----|------|--------|
 | FAQ-2.3.1a | Power-ups are mutually exclusive — a new one cancels the current | DONE |
 | FAQ-2.3.1b | Hurry stacks; another power-up cancels only the LAST Hurry | DONE |
-| FAQ-2.3.1c | HURRY speeds up everything for ~10 seconds, cumulative | PARTIAL |
-| FAQ-2.3.1d | SHIELD absorbs one Skull hit and stuns it ~1s; does NOT protect from the Gremlin | PARTIAL |
-| FAQ-2.3.1e | FREEZE stops all enemies 5s; they remain deadly to touch | PARTIAL |
-| FAQ-2.3.1f | WARP opens a doorway (~1-2s to open, ~1s open); entering advances the level with no end-of-level bonus - the doorway opens but entering it does nothing yet | PARTIAL |
+| FAQ-2.3.1c | HURRY speeds up everything for ~10 seconds, cumulative | DONE |
+| FAQ-2.3.1d | SHIELD absorbs one Skull hit and stuns it ~1s; does NOT protect from the Gremlin | DONE |
+| FAQ-2.3.1e | FREEZE stops all enemies 5s; they remain deadly to touch | DONE |
+| FAQ-2.3.1f | WARP opens a doorway (~1-2s to open, ~1s open); entering advances the level with no end-of-level bonus | DONE |
 | FAQ-2.3.1g | 1-UP is a rare bonus granting a free life | DONE |
 
 ## 2.4 Scoring
@@ -105,10 +105,10 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | ID | Item | Status |
 |----|------|--------|
 | FAQ-2.4.1a | Points scale with the size of the section completed | DONE (verify) |
-| FAQ-2.4.1b | A section can be small enough to score zero yet still trigger a bonus release | MISSING |
+| FAQ-2.4.1b | A section can be small enough to score zero yet still trigger a bonus release | DONE |
 | FAQ-2.4.1c | 500 points for an unneeded letter | DONE |
-| FAQ-2.4.1d | Rejoining within ~2 cells of the departure point scores 20x | MISSING |
-| FAQ-2.4.1e | A second multiplier within a second or two raises it to 30x | MISSING |
+| FAQ-2.4.1d | Rejoining within ~2 cells of the departure point scores 20x | DONE |
+| FAQ-2.4.1e | A second multiplier within a second or two raises it to 30x | DONE |
 | FAQ-2.4.2a | End of level: 1,000 points per 1% above the fill threshold | DONE |
 | FAQ-2.4.2b | End of level: 1,000 per key letter if the word is incomplete | DONE |
 | FAQ-2.4.2c | End of level: 10,000 per key letter if the word is complete | DONE |
@@ -118,8 +118,8 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 
 | ID | Item | Status |
 |----|------|--------|
-| FAQ-2.5.1 | Default high score table: CAS/6/32750, THU/5/30010, ROC/5/28200, DRA/4/21280, FAN/3/20570 | CONTRADICTS |
-| FAQ-2.5.2 | On completion the Gremlin becomes a Joker card that flies up erasing the stix while the picture is revealed | MISSING |
+| FAQ-2.5.1 | Default high score table: CAS/6/32750, THU/5/30010, ROC/5/28200, DRA/4/21280, FAN/3/20570 | DONE |
+| FAQ-2.5.2 | On completion the Gremlin becomes a Joker card that flies up erasing the stix while the picture is revealed | EXEMPT |
 | FAQ-2.5.3b | Usually ONE Gremlin, which sometimes divides | DONE (tests/gremlin-and-fuse.test.ts) |
 | FAQ-2.5.3c | No Super Skulls that chase up an unfinished line | DONE (tests/enemies.test.ts) |
 | FAQ-2.5.3d | No fast/slow draw option in Super Qix | DONE (tests/drawing.test.ts) |
@@ -129,18 +129,18 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 
 | ID | Item | Status |
 |----|------|--------|
-| FAQ-3a | 16 levels, then back to level 1 continuing the score | PARTIAL |
-| FAQ-3b | The returned level 1 is identical to the first, enemy speeds included | MISSING |
-| FAQ-3c | Level names: CASTLE, THUNDER, ROCKMAN, DRAGON, FANFARE, PLANET, GERDEN, JUNGLE, TOYBOX, FOUNTAIN, MERMAID, CARP, FLOWER, TENGU, ROCKET, REDCATS | CONTRADICTS |
-| FAQ-3.1 | Level 16 completion message, three lines | MISSING |
+| FAQ-3a | 16 levels, then back to level 1 continuing the score | DONE |
+| FAQ-3b | The returned level 1 is identical to the first, enemy speeds included | DONE |
+| FAQ-3c | Level names: CASTLE, THUNDER, ROCKMAN, DRAGON, FANFARE, PLANET, GERDEN, JUNGLE, TOYBOX, FOUNTAIN, MERMAID, CARP, FLOWER, TENGU, ROCKET, REDCATS | DONE |
+| FAQ-3.1 | Level 16 completion message, three lines | DONE |
 
 ## 4. Skill levels
 
 | ID | Item | Status |
 |----|------|--------|
-| FAQ-4.1 | EASY: 5 lives, bonus lives at 20,000 and 50,000, fill 70%, continues allowed | MISSING |
-| FAQ-4.2 | MEDIUM: 3 lives, bonus lives at 30,000 and 100,000, fill 75%, continues allowed | PARTIAL |
-| FAQ-4.3 | HARD: 2 lives, no bonus lives, fill 85%, no continues | MISSING |
+| FAQ-4.1 | EASY: 5 lives, bonus lives at 20,000 and 50,000, fill 70%, continues allowed (continues excepted) | DONE |
+| FAQ-4.2 | MEDIUM: 3 lives, bonus lives at 30,000 and 100,000, fill 75%, continues allowed (continues excepted) | DONE |
+| FAQ-4.3 | HARD: 2 lives, no bonus lives, fill 85%, no continues (continues excepted) | DONE |
 
 ## 5. Strategies (emergent — no separate code)
 
@@ -180,6 +180,8 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 | FAQ-5.1 | Emergent strategy, no separate code |
 | FAQ-5.2 | Emergent strategy, no separate code |
 | FAQ-5.3 | Restates FAQ-2.4.1d |
+| FAQ-2.5.2 | The Joker card and its menagerie need sprite animation. The stix ARE erased and the picture IS revealed, by the wipe the user asked for: "on the arcade the full image draws from right to left when a level is cleared, removing my lines as well" |
+| FAQ-4.x-continues | "Allow continues" is a coin-op setting; a BBS door has no coin slot |
 
 ### Deliberate departures from the arcade (user-agreed)
 
@@ -187,4 +189,5 @@ point, proves the new code ran, and asserts the spec's stated numbers.
 |-----------|--------|
 | Arrow keys alone draw; no hold-to-draw key | In a terminal the arrows are the whole controller, and stepping off safe ground into open field has no other meaning. User: "we can skip holding a key for drawing arrow keys is enough in a bbs context" |
 | Enemy pacing retuned (fuse 3000ms, Sparx 0.55, Qix 1.1) | Measured ~660ms between keypresses at BBS pace: people tap arrow keys, they do not hold them. At arcade timings an ordinary draw died 30 times out of 30, always to the fuse, which lit in less time than the gap between two taps. Retuned to 6/30. |
+| A Hurry multiplies the pace by 1.4 rather than the arcade's "unmanageably fast" | A terminal redraws a whole frame per tick over a socket. Two stacked Hurries already double the pace here; the arcade's runaway acceleration is unplayable rather than funny at this frame rate. |
 | Death does not return the marker to the spawn point | It retreats to where its line began; a death on safe ground leaves it standing. The arcade's respawn point is a fixed board position the player can see coming; here it read as the game throwing away your progress. |

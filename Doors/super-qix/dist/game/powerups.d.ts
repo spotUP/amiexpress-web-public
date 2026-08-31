@@ -2,7 +2,7 @@
  * Super Qix - Power-Up System
  * Handles power-up spawning, effects, and letter collection
  */
-import { SuperQixData, Marker } from './types';
+import { SuperQixData, PowerUp, Marker } from './types';
 /**
  * Power-up system for spawning and managing power-ups
  */
@@ -13,6 +13,35 @@ export declare class PowerUpSystem {
      * Try to spawn a power-up after claiming area
      */
     trySpawnPowerUp(): void;
+    /**
+     * Send a freshly released bonus on its way (FAQ 2.3).
+     *
+     * "When created, Letters will tend to drift across the playing field in a
+     * straight line towards the far wall, then move back around the edges. In
+     * contrast, Power-ups will begin following the nearest lines ('stix')
+     * already laid down". Both used to be dropped where they spawned and sit
+     * there until they expired, which made catching one a matter of walking
+     * to it rather than heading it off.
+     */
+    launch(powerUp: PowerUp): void;
+    /** A unit heading towards whichever wall is farthest away. */
+    private farthestWall;
+    /** A unit heading towards the closest line the bonus could follow. */
+    private nearestLine;
+    /**
+     * Move every uncollected bonus one tick (FAQ 2.3).
+     *
+     * A Letter crosses the field until it meets a line, a Power-up makes
+     * straight for the nearest one, and both then walk the lines - "but like
+     * the Skulls, can sometimes get lost following internal lines which you
+     * can't reach anymore", which falls out of following the same path the
+     * Skulls patrol.
+     */
+    updateMovement(): void;
+    /** Anchor a bonus to the line network at the closest point on it. */
+    private joinEdge;
+    /** One step along the lines. */
+    private walkEdge;
     /**
      * Find a valid position to spawn a power-up
      */

@@ -40,7 +40,18 @@ import {
   ART_PALETTE,
   getLevelConfig,
   DEFAULT_HIGHSCORES,
-  FUSE_START_DELAY
+  FUSE_START_DELAY,
+  SKILL_LEVELS,
+  LEVELS_PER_LAP,
+  FINAL_LAP_MESSAGE,
+  HURRY_SPEED_SCALE,
+  MULTIPLIER_REJOIN_CELLS,
+  MULTIPLIER_FIRST,
+  MULTIPLIER_CHAINED,
+  MULTIPLIER_CHAIN_MS,
+  WARP_OPENING_MS,
+  WARP_OPEN_MS,
+  SKULL_STUN_MS,
 } from './constants';
 import { Background, ArtCell, artForCell } from './background';
 import { DrawingSystem } from './drawing';
@@ -123,9 +134,12 @@ export class QixEngine {
     const d = this.data;
     const config = getLevelConfig(levelNum);
 
+    const skill = SKILL_LEVELS[d.skill] ?? SKILL_LEVELS.medium;
+
     d.level = levelNum;
     d.claimedPercent = 0;
-    d.targetPercent = config.targetPercent;
+    // FAQ 4: the fill area is the operator's skill setting, not the level's.
+    d.targetPercent = skill.targetPercent;
     d.scoreMultiplier = 1;
     d.levelWord = config.word;
     d.collectedLetters = [];
@@ -140,6 +154,7 @@ export class QixEngine {
     d.field = this.createField();
 
     // Initialize border path for Sparx patrol
+    d.internalLines = [];
     d.borderPath = this.createBorderPath();
 
     // Reset marker to bottom center of border
@@ -156,6 +171,12 @@ export class QixEngine {
     d.currentStix = null;
     d.fuse = null;
 
+    // A doorway does not survive the level it was opened on.
+    d.warp = null;
+    d.lastMultiplier = 1;
+    d.lastMultiplierAt = 0;
+    d.scoreMultiplier = 1;
+
     // Abandon any claim still being painted in. The winning claim of the
     // previous level is a large one, and its remaining columns would
     // otherwise carry on painting into THIS level's fresh field - which
@@ -164,7 +185,13 @@ export class QixEngine {
     this.outro = null;
 
     // Spawn enemies
-    this.enemySystem.initLevel(config);
+    // FAQ 4: "Difficulty refers mainly to how quickly/unpredictably and
+    // aggressively the Gremlin and Skulls move".
+    this.enemySystem.initLevel({
+      ...config,
+      qixSpeed: config.qixSpeed * skill.difficulty,
+      sparxSpeed: config.sparxSpeed * skill.difficulty,
+    });
 
     // Clear power-ups
     d.powerUps = [];
@@ -240,8 +267,11 @@ export class QixEngine {
     // Update active effects
     this.powerUpSystem.updateEffects();
 
-    // Update enemies
-    this.enemySystem.update();
+    // Update enemies. A Hurry speeds them up along with the marker.
+    this.enemySystem.update(this.enemySpeedScale());
+
+    // Released letters and power-ups travel the field on their own.
+    this.powerUpSystem.updateMovement();
 
     // Update fuse if drawing and stopped
     if (d.marker.isDrawing && d.currentStix) {
@@ -261,21 +291,142 @@ export class QixEngine {
     // Check power-up collection
     this.powerUpSystem.checkCollection(d.marker);
 
+    // A free life at each of this skill's score thresholds (FAQ 4).
+    this.awardBonusLives();
+
+    // Walking into an open Warp doorway ends the level at once (FAQ 2.3.1).
+    if (this.enterWarpIfOpen()) return;
+
     // Check level complete
     if (d.claimedPercent >= d.targetPercent) {
       this.levelComplete();
       return;
     }
 
-    // Check word complete (auto-complete level)
+    // Spelling the whole word finishes the level on the spot (FAQ 2.3).
+    // The 10,000 per letter is paid by the end-of-level tally, which is
+    // also where the area bonus is worked out - there was a second flat
+    // 10,000 here, and the percentage was forced to 100 so that the area
+    // bonus paid out for ground the player never actually claimed.
     if (this.checkWordComplete()) {
-      d.score += 10000;  // Word bonus
-      d.claimedPercent = 100;
       this.levelComplete();
       return;
     }
 
     this.render();
+  }
+
+  /**
+   * How much faster everything is running right now.
+   *
+   * FAQ 2.3.1: a Hurry "Speeds up EVERYTHING in the game (including the
+   * music!) ... These are cumulative, so if you pick up several in quick
+   * succession, the game may get unmanageably fast." One Hurry was only
+   * ever speeding the marker up, which made it a pure benefit rather than
+   * the double-edged thing the arcade hands you.
+   */
+  enemySpeedScale(): number {
+    const hurries = this.data.activeEffects.filter(e => e.type === 'speed').length;
+    return Math.pow(HURRY_SPEED_SCALE, hurries);
+  }
+
+  /**
+   * Pay the skill level's bonus lives as the score passes them (FAQ 4).
+   *
+   * Hard mode lists none, so its table is empty and nothing is ever paid.
+   */
+  private awardBonusLives(): void {
+    const d = this.data;
+    const thresholds = (SKILL_LEVELS[d.skill] ?? SKILL_LEVELS.medium).bonusLives;
+
+    while (
+      d.bonusLivesAwarded < thresholds.length &&
+      d.score >= thresholds[d.bonusLivesAwarded]
+    ) {
+      d.lives++;
+      d.bonusLivesAwarded++;
+    }
+  }
+
+  /**
+   * Is the Warp doorway fully open?
+   *
+   * FAQ 2.3.1: it "takes a second or two to open, remains open for another
+   * second or so, then closes".
+   */
+  isWarpOpen(now: number = Date.now()): boolean {
+    const warp = this.data.warp;
+    if (!warp) return false;
+
+    const age = now - warp.openedAt;
+    return age >= WARP_OPENING_MS && age < WARP_OPENING_MS + WARP_OPEN_MS;
+  }
+
+  /**
+   * Step through an open doorway if the marker is standing in one.
+   *
+   * FAQ 2.3.1: "If you can move your diamond into it while it is fully
+   * open, you advance directly to the next level. (NOTE: if you warp, you
+   * get no end-of-level bonuses, e.g. for partially-spelled words.)" - so
+   * this deliberately does NOT go through startLevelOutro, which is where
+   * the bonuses are worked out and paid.
+   */
+  private enterWarpIfOpen(): boolean {
+    const d = this.data;
+    const warp = d.warp;
+    if (!warp || !this.isWarpOpen()) {
+      // A doorway that has closed is simply gone.
+      if (warp && Date.now() - warp.openedAt >= WARP_OPENING_MS + WARP_OPEN_MS) {
+        d.warp = null;
+      }
+      return false;
+    }
+
+    if (Math.round(d.marker.x) !== warp.x || Math.round(d.marker.y) !== warp.y) {
+      return false;
+    }
+
+    d.warp = null;
+    d.state = 'levelTransition';
+    d.transitionMessage = 'WARP';
+    d.transitionTimer = 30;
+    this.render();
+    return true;
+  }
+
+  /**
+   * Set the score multiplier for a claim about to be made (FAQ 2.4.1).
+   *
+   * "Multipliers occur when the point where you finish outlining an area is
+   * as close as possible (within about 2 pixels) to the point where you
+   * began. Achieving a multiplier will give you 20x normal points for the
+   * area filled. If you manage another multiplier within a second or two of
+   * the last one, it increases to 30x".
+   */
+  private applyRejoinMultiplier(endPoint: Point): void {
+    const d = this.data;
+    const start = d.currentStix?.points[0];
+    if (!start) return;
+
+    const distance = Math.max(
+      Math.abs(endPoint.x - start.x),
+      Math.abs(endPoint.y - start.y)
+    );
+
+    if (distance > MULTIPLIER_REJOIN_CELLS) {
+      d.scoreMultiplier = 1;
+      d.lastMultiplier = 1;
+      return;
+    }
+
+    const now = Date.now();
+    const chained =
+      d.lastMultiplier >= MULTIPLIER_FIRST &&
+      now - d.lastMultiplierAt <= MULTIPLIER_CHAIN_MS;
+
+    d.lastMultiplier = chained ? MULTIPLIER_CHAINED : MULTIPLIER_FIRST;
+    d.lastMultiplierAt = now;
+    d.scoreMultiplier = d.lastMultiplier;
   }
 
   /**
@@ -395,16 +546,30 @@ export class QixEngine {
     if (outro.phase === 'bonus') {
       const row = (label: string, value: number) =>
         `${label.padEnd(12)}${String(value).padStart(8)}`;
-      return [
+      const panel = [
         { text: 'BONUS', colour: 'lightcyan' },
         { text: '', colour: 'white' },
         { text: row(`AREA  ${outro.areaPercent}%`, outro.areaBonus), colour: 'lightblue' },
         { text: row('WORD', outro.wordBonus), colour: 'lightblue' },
       ];
+
+      // FAQ 3.1: clearing the sixteenth level is the end of a lap, and
+      // everyone in the picture - the girl in the convertible and every one
+      // of the cats - says the same three lines before you start again.
+      if (this.data.level >= LEVELS_PER_LAP) {
+        panel.push({ text: '', colour: 'white' });
+        for (const line of FINAL_LAP_MESSAGE) {
+          panel.push({ text: line, colour: 'lightyellow' });
+        }
+      }
+
+      return panel;
     }
 
     if (outro.phase === 'intro') {
-      const next = getLevelConfig(this.data.level + 1);
+      // The lap wraps, so the level after the sixteenth is the first again.
+      const nextLevel = this.data.level >= LEVELS_PER_LAP ? 1 : this.data.level + 1;
+      const next = getLevelConfig(nextLevel);
       return [
         { text: 'CHALLENGE TO', colour: 'lightred' },
         { text: `TAKE ${next.targetPercent}% AREA`, colour: 'lightred' },
@@ -629,6 +794,10 @@ export class QixEngine {
           d.stopTimer = 0;  // Reset fuse timer
         }
       } else if (nextCell === 'border' || nextCell === 'claimed') {
+        // Rejoining close to where the line left pays a multiplier, so it
+        // has to be settled before the claim is scored.
+        this.applyRejoinMultiplier({ x: nextX, y: nextY });
+
         // Complete stix - claim area
         const result = this.drawingSystem.completeStix({ x: nextX, y: nextY });
         if (result.success) {
@@ -654,13 +823,17 @@ export class QixEngine {
             d.claimedPercent += result.percent;
           }
 
-          // Spawn power-up chance
+          // The multiplier is spent on the claim that earned it.
+          d.scoreMultiplier = 1;
+
+          // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
+          // bonus, even one too small to have scored a single point.
           this.powerUpSystem.trySpawnPowerUp();
 
           // Update border path for Sparx, then re-anchor existing Sparx to
           // it - the rebuilt array reorders points, so a stale pathIndex
           // would otherwise teleport a Sparx onto the marker's landing cell.
-          d.borderPath = this.updateBorderPath();
+          d.borderPath = this.rebuildPatrolPath();
           this.enemySystem.reanchorBorderPositions();
         }
       } else if (nextCell === 'stix') {
@@ -729,32 +902,71 @@ export class QixEngine {
   }
 
   /**
-   * Update border path to include claimed area edges
+   * Rebuild the path the Skulls patrol.
+   *
+   * The frame and the edges of claimed ground, plus every line the player
+   * has finished. FAQ 2.2: the Skulls "can follow any line on the screen
+   * (including internal lines which you can't travel on anymore)" - a line
+   * the marker can no longer reach, because a later claim buried it, is
+   * still a road for them, and that is how a Skull cuts you off from a
+   * direction you thought was safe.
+   *
+   * A buried line is spliced into the walk beside the cell it joins, and
+   * walked out and back again, so the patrol stays a single continuous tour
+   * - a Skull that turns down one of these has to come back out of it
+   * rather than jumping across the board.
    */
-  private updateBorderPath(): Point[] {
+  rebuildPatrolPath(): Point[] {
     const d = this.data;
     const path: Point[] = [];
-    const visited = new Set<string>();
+    const onPath = new Set<string>();
+    const key = (p: Point) => `${p.x},${p.y}`;
 
-    // Find all border and claimed edge cells
     for (let y = 0; y < FIELD_HEIGHT; y++) {
       for (let x = 0; x < FIELD_WIDTH; x++) {
         const cell = d.field[y][x];
-        if (cell === 'border') {
+        const walkable =
+          cell === 'border' ||
+          (cell === 'claimed' && this.drawingSystem.touchesUnclaimed(x, y));
+
+        if (walkable && !onPath.has(`${x},${y}`)) {
+          onPath.add(`${x},${y}`);
           path.push({ x, y });
-        } else if (cell === 'claimed' && this.drawingSystem.touchesUnclaimed(x, y)) {
-          // The edge of claimed ground. Same predicate the marker walks on,
-          // so the Sparx patrol and the player agree on what an edge is.
-          const key = `${x},${y}`;
-          if (!visited.has(key)) {
-            visited.add(key);
-            path.push({ x, y });
-          }
         }
       }
     }
 
+    for (const line of d.internalLines) {
+      // Only the part of it the marker has lost access to.
+      const buried = line.filter(p => !onPath.has(key(p)));
+      if (buried.length === 0) continue;
+
+      for (const p of buried) onPath.add(key(p));
+
+      // Out along the buried line and back, spliced in beside whichever
+      // cell of the walk it starts closest to.
+      const detour = [...buried, ...buried.slice(0, -1).reverse()];
+      const joinAt = this.closestIndex(path, buried[0]);
+      path.splice(joinAt + 1, 0, ...detour);
+    }
+
     return path;
+  }
+
+  /** Where in a path the cell closest to `to` sits. */
+  private closestIndex(path: Point[], to: Point): number {
+    let best = 0;
+    let bestDistance = Infinity;
+
+    path.forEach((point, index) => {
+      const distance = Math.hypot(point.x - to.x, point.y - to.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+
+    return best;
   }
 
   /**
@@ -763,21 +975,25 @@ export class QixEngine {
   private checkCollisions(): boolean {
     const d = this.data;
 
-    // Check Qix collision (only while drawing)
+    // The Gremlin, while drawing. FAQ 2.3.1 is explicit that the Shield
+    // "will NOT protect you from the Gremlin hitting either you or your
+    // line" - it used to, which made the Shield a free pass against the
+    // one enemy the arcade never lets you buy your way past.
     if (d.marker.isDrawing && d.currentStix) {
       if (this.enemySystem.checkQixCollision(d.marker, d.currentStix.points)) {
-        if (d.marker.hasShield) {
-          d.marker.hasShield = false;
-          return false;  // Shield saved us
-        }
         return true;
       }
     }
 
-    // Check Sparx collision (always)
-    if (this.enemySystem.checkSparxCollision(d.marker)) {
+    // Skulls, always. This is what the Shield is for: it "will protect you
+    // from one encounter with a Skull" and "will also stun the Skull in
+    // question for one second".
+    const struck = this.enemySystem.sparxTouching(d.marker);
+    if (struck) {
       if (d.marker.hasShield) {
         d.marker.hasShield = false;
+        struck.frozen = true;
+        struck.frozenTimer = Math.ceil(SKULL_STUN_MS / GAME_TICK_MS);
         return false;
       }
       return true;
@@ -903,7 +1119,16 @@ export class QixEngine {
    */
   advanceLevel(): void {
     const d = this.data;
-    d.level++;
+
+    // FAQ 3: "Once you uncover them all, you go back to level 1 and
+    // continue playing to increase your score."
+    if (d.level >= LEVELS_PER_LAP) {
+      d.level = 1;
+      d.lap = (d.lap || 1) + 1;
+    } else {
+      d.level++;
+    }
+
     this.initLevel(d.level);
     d.state = 'playing';
   }

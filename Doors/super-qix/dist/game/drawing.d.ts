@@ -55,11 +55,6 @@ export declare class DrawingSystem {
      */
     private countCells;
     /**
-     * Check if Qix have been split into separate regions
-     * Returns bonus multiplier if split occurred
-     */
-    private checkQixSplit;
-    /**
      * Calculate total claimed percentage
      */
     calculateClaimedPercent(): number;

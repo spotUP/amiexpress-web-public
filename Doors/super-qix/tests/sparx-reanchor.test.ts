@@ -6,7 +6,7 @@
  * no Sparx anywhere nearby on screen.
  *
  * Root cause: `sparx.pathIndex` is a raw index into `d.borderPath`, but
- * `updateBorderPath()` (game/qix-engine.ts) rebuilds that array from scratch
+ * `rebuildPatrolPath()` (game/qix-engine.ts) rebuilds that array from scratch
  * every time an area is claimed - different length, different point order.
  * The stale index then resolves to an unrelated cell on the very next tick,
  * teleporting the Sparx - often onto the marker's landing cell - which trips
@@ -14,7 +14,7 @@
  *
  * Fix: `EnemySystem.reanchorBorderPositions()` re-maps every Sparx's
  * pathIndex to the nearest point in the rebuilt path, called right after
- * `updateBorderPath()` in `QixEngine`'s stix-completion branch.
+ * `rebuildPatrolPath()` in `QixEngine`'s stix-completion branch.
  */
 
 import assert from 'assert';
@@ -55,7 +55,7 @@ function createData(): SuperQixData {
     levelWord: '',
     activeEffects: [],
 
-    borderPath: [],
+    borderPath: [], internalLines: [],
 
     highscores: [],
     menuSelection: 0,
@@ -75,7 +75,7 @@ function createData(): SuperQixData {
 /**
  * Unit test: reanchorBorderPositions keeps a Sparx physically where it was,
  * even when the border path is rebuilt with a completely different length
- * and point order (the exact situation updateBorderPath() creates on a
+ * and point order (the exact situation rebuildPatrolPath() creates on a
  * claim).
  */
 export async function reanchorKeepsSparxPhysicallyStable(): Promise<void> {
@@ -92,7 +92,7 @@ export async function reanchorKeepsSparxPhysicallyStable(): Promise<void> {
   }];
 
   // New path: same points, completely different order and length - the
-  // shape updateBorderPath() produces after a claim reshapes the border.
+  // shape rebuildPatrolPath() produces after a claim reshapes the border.
   const shuffled = [...data.borderPath].reverse();
   shuffled.push({ x: 0, y: 0 }, { x: 0, y: 1 });
   data.borderPath = shuffled;

@@ -8,6 +8,7 @@
  * who is drawing, and cannot climb an unfinished line), FAQ-2.2g (two Skulls
  * start opposite the marker travelling in opposite directions), FAQ-2.2h
  * (Skulls are outrunnable), FAQ-2.2k (a Skull never instantly reverses),
+ * FAQ-2.2i (Skulls may follow internal lines the marker cannot use),
  * FAQ-2.2m (a death culls all but two Skulls) and FAQ-2.5.3c (there are no
  * Super Skulls).
  */
@@ -15,6 +16,7 @@
 import assert from 'assert';
 import { QixEngine } from '../game/qix-engine';
 import { EnemySystem } from '../game/enemies';
+import { DrawingSystem } from '../game/drawing';
 import { SuperQixData, Direction } from '../game/types';
 import {
   FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES, GAME_TICK_MS,
@@ -34,7 +36,7 @@ function createData(): SuperQixData {
     currentStix: null,
     qixList: [], sparxList: [], fuse: null, qixIdCounter: 0, sparxIdCounter: 0,
     powerUps: [], powerUpIdCounter: 0, collectedLetters: [], levelWord: '',
-    activeEffects: [], borderPath: [],
+    activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
     stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
@@ -403,4 +405,51 @@ export async function enemiesCannotBeDestroyed(): Promise<void> {
 
   assert.ok(data.qixList.length >= qixBefore, 'a Gremlin disappeared');
   assert.ok(data.sparxList.length >= skullsBefore, 'a Skull disappeared');
+}
+
+/**
+ * FAQ-2.2i: the Skulls "can follow any line on the screen (including
+ * internal lines which you can't travel on anymore)".
+ *
+ * A line the player drew and then buried under a later claim is off limits
+ * to the marker - FAQ 1: "internal lines become inaccessible" - but it is
+ * still a road for the Skulls, which is how one gets behind you.
+ */
+export async function skullsPatrolLinesTheMarkerCanNoLongerUse(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+  engine.initLevel(1);
+
+  // A block of claimed ground with one of the player's finished lines
+  // buried in the middle of it.
+  for (let y = 12; y <= 17; y++) {
+    for (let x = 10; x <= 15; x++) data.field[y][x] = 'claimed';
+  }
+  const buried = [{ x: 12, y: 14 }, { x: 12, y: 15 }];
+  data.internalLines = [buried];
+
+  const drawing = new DrawingSystem(data);
+  for (const cell of buried) {
+    assert.ok(
+      !drawing.isWalkable(cell),
+      `the marker should not be able to stand on ${cell.x},${cell.y}`
+    );
+  }
+
+  const path = engine.rebuildPatrolPath();
+  for (const cell of buried) {
+    assert.ok(
+      path.some(p => p.x === cell.x && p.y === cell.y),
+      `the Skulls should still be able to walk ${cell.x},${cell.y}`
+    );
+  }
+
+  // The detour is walked out and back, so the buried line is entered from
+  // the cell beside it and left the same way rather than teleported into.
+  const first = path.findIndex(p => p.x === buried[0].x && p.y === buried[0].y);
+  const before = path[first - 1];
+  assert.ok(
+    Math.hypot(before.x - buried[0].x, before.y - buried[0].y) <= 2,
+    'a Skull should step onto a buried line from beside it, not jump to it'
+  );
 }

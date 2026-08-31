@@ -13,13 +13,14 @@ import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers
 import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
 import { rpcHandlers } from "./server";
-import { SuperQixData, GameState, InputKey, Direction } from "./game/types";
+import { SuperQixData, GameState, InputKey, Direction, SkillLevel } from "./game/types";
 import {
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
   GAME_TICK_MS,
   STARTING_LIVES,
   MENU_OPTIONS,
+  SKILL_LEVELS,
   COLORS,
   DEFAULT_HIGHSCORES,
   FIELD_WIDTH,
@@ -35,6 +36,11 @@ export { rpcHandlers };
 function createInitialGameData(): SuperQixData {
   return {
     state: "menu",
+    lap: 1,
+    skill: "medium",
+    bonusLivesAwarded: 0,
+    lastMultiplierAt: 0,
+    lastMultiplier: 1,
     score: 0,
     lives: STARTING_LIVES,
     level: 1,
@@ -70,6 +76,7 @@ function createInitialGameData(): SuperQixData {
     activeEffects: [],
 
     borderPath: [],
+    internalLines: [],
 
     highscores: [...DEFAULT_HIGHSCORES],
     menuSelection: 0,
@@ -255,8 +262,14 @@ function renderMenu(): void {
   MENU_OPTIONS.forEach((option, index) => {
     const selected = index === gameData.menuSelection;
     const prefix = selected ? "{cyan-fg}> " : "{white-fg}  ";
-    const suffix = selected ? "{/}" : "{/}";
-    menuContent.push(`${prefix}${option}${suffix}`);
+
+    // The skill row shows what it is set to, and Enter cycles it. In the
+    // arcade this was an operator switch inside the cabinet (FAQ 4).
+    const label = option === SKILL_ROW
+      ? `${option}: ${SKILL_LEVELS[gameData.skill].label}`
+      : option;
+
+    menuContent.push(`${prefix}${label}{/}`);
   });
 
   menuBox = blessed.box({
@@ -401,14 +414,27 @@ async function applyLevelBackground(level: number): Promise<void> {
   }
 }
 
+/** The menu row that carries the skill setting (FAQ 4). */
+const SKILL_ROW = "Skill";
+
+/** Step to the next skill level. */
+function cycleSkill(): void {
+  const order: SkillLevel[] = ["easy", "medium", "hard"];
+  const next = (order.indexOf(gameData.skill) + 1) % order.length;
+  gameData.skill = order[next];
+}
+
 /**
  * Start the game
  */
 async function startGame(): Promise<void> {
   gameData.state = "playing";
   gameData.score = 0;
-  gameData.lives = STARTING_LIVES;
+  // FAQ 4: how many lives you get is the skill setting, not a constant.
+  gameData.lives = SKILL_LEVELS[gameData.skill].lives;
+  gameData.bonusLivesAwarded = 0;
   gameData.level = 1;
+  gameData.lap = 1;
 
   if (menuBox) {
     menuBox.destroy();
@@ -550,17 +576,21 @@ function handleMenuInput(key: InputKey): void {
 
     case "enter":
     case "space":
-      switch (gameData.menuSelection) {
-        case 0:
+      switch (MENU_OPTIONS[gameData.menuSelection]) {
+        case "Start Game":
           startGame();
           break;
-        case 1:
+        case SKILL_ROW:
+          cycleSkill();
+          renderMenu();
+          break;
+        case "High Scores":
           showHighscores();
           break;
-        case 2:
+        case "Help":
           showHelp();
           break;
-        case 3:
+        case "Quit":
           cleanup();
           doorContext?.close();
           break;

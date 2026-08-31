@@ -50,9 +50,12 @@ export declare class EnemySystem {
      */
     cullSkullsAfterDeath(): void;
     /**
-     * Main update loop
+     * Main update loop.
+     *
+     * `speedScale` is what a Hurry multiplies everything by: FAQ 2.3.1 says
+     * it "Speeds up EVERYTHING in the game", not just the marker.
      */
-    update(): void;
+    update(speedScale?: number): void;
     /**
      * Get current level config
      */
@@ -123,7 +126,7 @@ export declare class EnemySystem {
     /**
      * Re-anchor every Sparx's pathIndex after d.borderPath has been rebuilt.
      *
-     * updateBorderPath() rebuilds the array by re-scanning the field, so a
+     * rebuildPatrolPath() rebuilds the array by re-scanning the field, so a
      * claim can change both its length and the order of its points - the old
      * pathIndex no longer names the same physical cell. Left unfixed, the next
      * updateSparx() snaps sparx.x/y to whatever cell the stale index now
@@ -153,6 +156,14 @@ export declare class EnemySystem {
      * Check Qix collision with marker or stix
      */
     checkQixCollision(marker: Point, stix: Point[]): boolean;
+    /**
+     * The Skull touching the marker, if any.
+     *
+     * The caller needs the Skull itself and not just a yes/no, because a
+     * Shield "will also stun the Skull in question for one second"
+     * (FAQ 2.3.1) - you cannot stun an answer of `true`.
+     */
+    sparxTouching(marker: Point): Sparx | null;
     /**
      * Check Sparx collision with marker
      */

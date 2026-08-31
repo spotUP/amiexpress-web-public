@@ -2,7 +2,7 @@
  * Super Qix - Drawing System
  * Handles stix drawing, area claiming, and flood fill algorithms
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, DRAW_BASE_POINTS, SPLIT_QIX_MULTIPLIERS } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, DRAW_BASE_POINTS } from './constants';
 /**
  * Drawing system for stix and area claiming
  */
@@ -102,18 +102,22 @@ export class DrawingSystem {
         const claimResult = this.claimAreaWithoutQix();
         // Points scale with the size of the section claimed (FAQ 2.4.1).
         // There is no slow/fast draw in Super Qix (FAQ 2.5.3), so there is
-        // only one base rate.
+        // only one base rate. The multiplier is the rejoin bonus the engine
+        // has already worked out for this claim.
+        //
+        // Cutting the divided Gremlin apart used to pay a bonus of its own and
+        // to raise this multiplier permanently, which is neither what the
+        // arcade does - FAQ 2.2, on trapping half of a divided Gremlin: "I
+        // don't think this gets you any bonus points, unfortunately" - nor
+        // compatible with the multiplier meaning what FAQ 2.4.1 says it means.
         const points = Math.floor(claimResult.percent * DRAW_BASE_POINTS * d.scoreMultiplier);
-        // Check if we split the Qix
-        const splitBonus = this.checkQixSplit();
-        if (splitBonus > 0) {
-            d.scoreMultiplier = Math.min(9, d.scoreMultiplier + splitBonus);
-        }
+        // The line just drawn stays on the board. The player cannot walk it
+        // once it is buried, but the Skulls can (FAQ 2.2).
+        d.internalLines.push(d.currentStix.points.map(p => ({ ...p })));
         return {
             success: true,
             percent: claimResult.percent,
-            points: points + (splitBonus * 1000),
-            splitBonus,
+            points,
             filled: claimResult.filled
         };
     }
@@ -237,41 +241,6 @@ export class DrawingSystem {
             }
         }
         return count;
-    }
-    /**
-     * Check if Qix have been split into separate regions
-     * Returns bonus multiplier if split occurred
-     */
-    checkQixSplit() {
-        const d = this.data;
-        if (d.qixList.length < 2)
-            return 0;
-        // Find all unclaimed regions
-        const regions = this.findUnclaimedRegions();
-        if (regions.length <= 1)
-            return 0;
-        // Check which regions contain Qix
-        const qixRegionMap = new Map();
-        for (let i = 0; i < d.qixList.length; i++) {
-            const qix = d.qixList[i];
-            const qx = Math.floor(qix.x);
-            const qy = Math.floor(qix.y);
-            for (let r = 0; r < regions.length; r++) {
-                if (regions[r].points.some(p => p.x === qx && p.y === qy)) {
-                    if (!qixRegionMap.has(r)) {
-                        qixRegionMap.set(r, []);
-                    }
-                    qixRegionMap.get(r).push(i);
-                    break;
-                }
-            }
-        }
-        // If Qix are in different regions, they've been split
-        if (qixRegionMap.size > 1) {
-            // Bonus based on how many regions have Qix
-            return Math.min(qixRegionMap.size, SPLIT_QIX_MULTIPLIERS.length);
-        }
-        return 0;
     }
     /**
      * Calculate total claimed percentage

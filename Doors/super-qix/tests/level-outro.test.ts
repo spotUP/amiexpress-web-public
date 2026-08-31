@@ -35,7 +35,7 @@ function createData(): SuperQixData {
     currentStix: null,
     qixList: [], sparxList: [], fuse: null, qixIdCounter: 0, sparxIdCounter: 0,
     powerUps: [], powerUpIdCounter: 0, collectedLetters: [], levelWord: '',
-    activeEffects: [], borderPath: [],
+    activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
     stopTimer: 0, timeMeter: 0, lastMultiplierAt: 0, lastMultiplier: 1,
@@ -83,10 +83,10 @@ export async function theAreaBonusPaysPerPercentAboveTheThreshold(): Promise<voi
  * word is unfinished.
  */
 export async function bankedLettersPayAtTheEndOfTheLevel(): Promise<void> {
-  // 'CAT' is level 1's word; two of the three collected.
+  // 'CASTLE' is level 1's word; two of the three collected.
   const { data, gained } = clearedLevel(75, ['C', 'A']);
 
-  assert.strictEqual(data.levelWord, 'CAT', 'this test assumes level 1 spells CAT');
+  assert.strictEqual(data.levelWord, 'CASTLE', 'this test assumes level 1 spells CASTLE');
   assert.strictEqual(
     gained, 2 * LETTER_END_OF_LEVEL_POINTS,
     'two banked letters should pay 1,000 each when the word is unfinished'
@@ -95,10 +95,11 @@ export async function bankedLettersPayAtTheEndOfTheLevel(): Promise<void> {
 
 /** FAQ-2.3/2.4.2: a completed word pays 10,000 per letter instead. */
 export async function completingTheWordPaysTenThousandPerLetter(): Promise<void> {
-  const { gained } = clearedLevel(75, ['C', 'A', 'T']);
+  const spelled = 'CASTLE'.split('');
+  const { gained } = clearedLevel(75, spelled);
 
   assert.strictEqual(
-    gained, 3 * LETTER_WORD_COMPLETE_POINTS,
+    gained, spelled.length * LETTER_WORD_COMPLETE_POINTS,
     'a finished word should pay 10,000 per letter'
   );
 }
@@ -109,7 +110,7 @@ export async function completingTheWordPaysTenThousandPerLetter(): Promise<void>
  */
 export async function collectingANeededLetterPaysNothingImmediately(): Promise<void> {
   const data = createData();
-  data.levelWord = 'CAT';
+  data.levelWord = 'CASTLE';
   const powerUps = new PowerUpSystem(data);
 
   const before = data.score;
@@ -122,7 +123,7 @@ export async function collectingANeededLetterPaysNothingImmediately(): Promise<v
 /** FAQ-2.3/2.4.1: a duplicate or unwanted letter pays 500 at once. */
 export async function aSpareLetterPaysFiveHundredImmediately(): Promise<void> {
   const data = createData();
-  data.levelWord = 'CAT';
+  data.levelWord = 'CASTLE';
   data.collectedLetters = ['C'];
   const powerUps = new PowerUpSystem(data);
 

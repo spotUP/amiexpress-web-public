@@ -2,7 +2,7 @@
  * Super Qix - Power-Up System
  * Handles power-up spawning, effects, and letter collection
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, POWERUP_SPAWN_CHANCE, SPEED_BOOST_DURATION, FREEZE_DURATION, SPARE_LETTER_POINTS, ONE_UP_CHANCE } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, POWERUP_SPAWN_CHANCE, SPEED_BOOST_DURATION, FREEZE_DURATION, SPARE_LETTER_POINTS, ONE_UP_CHANCE, POWERUP_DRIFT_SPEED } from './constants';
 /**
  * Power-up system for spawning and managing power-ups
  */
@@ -42,6 +42,139 @@ export class PowerUpSystem {
             }
         }
         d.powerUps.push(powerUp);
+        this.launch(powerUp);
+    }
+    /**
+     * Send a freshly released bonus on its way (FAQ 2.3).
+     *
+     * "When created, Letters will tend to drift across the playing field in a
+     * straight line towards the far wall, then move back around the edges. In
+     * contrast, Power-ups will begin following the nearest lines ('stix')
+     * already laid down". Both used to be dropped where they spawned and sit
+     * there until they expired, which made catching one a matter of walking
+     * to it rather than heading it off.
+     */
+    launch(powerUp) {
+        if (powerUp.type === 'letter') {
+            const heading = this.farthestWall(powerUp);
+            powerUp.drift = 'cross';
+            powerUp.vx = heading.x;
+            powerUp.vy = heading.y;
+            return;
+        }
+        const line = this.nearestLine(powerUp);
+        powerUp.drift = 'seek';
+        powerUp.vx = line.x;
+        powerUp.vy = line.y;
+    }
+    /** A unit heading towards whichever wall is farthest away. */
+    farthestWall(from) {
+        const left = from.x;
+        const right = (FIELD_WIDTH - 1) - from.x;
+        const up = from.y;
+        const down = (FIELD_HEIGHT - 1) - from.y;
+        const farthest = Math.max(left, right, up, down);
+        if (farthest === right)
+            return { x: 1, y: 0 };
+        if (farthest === left)
+            return { x: -1, y: 0 };
+        if (farthest === down)
+            return { x: 0, y: 1 };
+        return { x: 0, y: -1 };
+    }
+    /** A unit heading towards the closest line the bonus could follow. */
+    nearestLine(from) {
+        const d = this.data;
+        let best = null;
+        let bestDistance = Infinity;
+        for (let y = 0; y < FIELD_HEIGHT; y++) {
+            for (let x = 0; x < FIELD_WIDTH; x++) {
+                const cell = d.field[y]?.[x];
+                if (cell !== 'border' && cell !== 'claimed')
+                    continue;
+                const distance = Math.hypot(x - from.x, y - from.y);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = { x, y };
+                }
+            }
+        }
+        if (!best || bestDistance === 0)
+            return { x: 0, y: 0 };
+        return {
+            x: (best.x - from.x) / bestDistance,
+            y: (best.y - from.y) / bestDistance,
+        };
+    }
+    /**
+     * Move every uncollected bonus one tick (FAQ 2.3).
+     *
+     * A Letter crosses the field until it meets a line, a Power-up makes
+     * straight for the nearest one, and both then walk the lines - "but like
+     * the Skulls, can sometimes get lost following internal lines which you
+     * can't reach anymore", which falls out of following the same path the
+     * Skulls patrol.
+     */
+    updateMovement() {
+        const d = this.data;
+        for (const powerUp of d.powerUps) {
+            if (powerUp.collected)
+                continue;
+            if (!powerUp.drift)
+                this.launch(powerUp);
+            if (powerUp.drift === 'edge') {
+                this.walkEdge(powerUp);
+                continue;
+            }
+            const nextX = powerUp.x + (powerUp.vx ?? 0) * POWERUP_DRIFT_SPEED;
+            const nextY = powerUp.y + (powerUp.vy ?? 0) * POWERUP_DRIFT_SPEED;
+            const cell = d.field[Math.round(nextY)]?.[Math.round(nextX)];
+            if (!cell || cell === 'border' || cell === 'claimed') {
+                // It has arrived at a line: from here it walks them.
+                this.joinEdge(powerUp);
+                continue;
+            }
+            powerUp.x = nextX;
+            powerUp.y = nextY;
+        }
+    }
+    /** Anchor a bonus to the line network at the closest point on it. */
+    joinEdge(powerUp) {
+        const d = this.data;
+        let bestIndex = 0;
+        let bestDistance = Infinity;
+        d.borderPath.forEach((point, index) => {
+            const distance = Math.hypot(point.x - powerUp.x, point.y - powerUp.y);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = index;
+            }
+        });
+        powerUp.drift = 'edge';
+        powerUp.pathIndex = bestIndex;
+        const anchor = d.borderPath[bestIndex];
+        if (anchor) {
+            powerUp.x = anchor.x;
+            powerUp.y = anchor.y;
+        }
+    }
+    /** One step along the lines. */
+    walkEdge(powerUp) {
+        const d = this.data;
+        if (d.borderPath.length === 0)
+            return;
+        const direction = (powerUp.vx ?? 0) < 0 || (powerUp.vy ?? 0) < 0 ? -1 : 1;
+        let index = (powerUp.pathIndex ?? 0) + direction * POWERUP_DRIFT_SPEED;
+        if (index >= d.borderPath.length)
+            index = 0;
+        if (index < 0)
+            index = d.borderPath.length - 1;
+        powerUp.pathIndex = index;
+        const point = d.borderPath[Math.floor(index)];
+        if (point) {
+            powerUp.x = point.x;
+            powerUp.y = point.y;
+        }
     }
     /**
      * Find a valid position to spawn a power-up
