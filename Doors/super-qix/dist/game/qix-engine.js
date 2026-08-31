@@ -2,7 +2,7 @@
  * Super Qix - Core Game Engine
  * Main game logic and state management
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, LEVEL_CLEAR_WIPE_COLUMNS, BONUS_PANEL_FRAMES, INTRO_PANEL_FRAMES, LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, MARKER_CYCLE, MARKER_CYCLE_FRAMES, SKULL_CHEW_FRAMES, GAME_OVER_BLINK_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY, SKILL_LEVELS, LEVELS_PER_LAP, FINAL_LAP_MESSAGE, HURRY_SPEED_SCALE, MULTIPLIER_REJOIN_CELLS, MULTIPLIER_FIRST, MULTIPLIER_CHAINED, MULTIPLIER_CHAIN_MS, WARP_OPENING_MS, WARP_OPEN_MS, SKULL_STUN_MS, } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, LEVEL_CLEAR_WIPE_COLUMNS, BONUS_PANEL_FRAMES, INTRO_PANEL_FRAMES, LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, MARKER_CYCLE, MARKER_CYCLE_FRAMES, SKULL_CHEW_FRAMES, GAME_OVER_BLINK_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY, SKILL_LEVELS, LEVELS_PER_LAP, FINAL_LAP_MESSAGE, HURRY_SPEED_SCALE, MULTIPLIER_REJOIN_CELLS, MULTIPLIER_FIRST, MULTIPLIER_CHAINED, MULTIPLIER_CHAIN_MS, WARP_OPENING_MS, WARP_OPEN_MS, SKULL_STUN_MS, RESPAWN_INVULNERABLE_MS, INVULNERABLE_BLINK_FRAMES, } from './constants';
 import { artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
@@ -93,6 +93,7 @@ export class QixEngine {
         d.fuse = null;
         // A doorway does not survive the level it was opened on.
         d.warp = null;
+        d.invulnerableUntil = 0;
         d.lastMultiplier = 1;
         d.lastMultiplierAt = 0;
         d.scoreMultiplier = 1;
@@ -699,7 +700,10 @@ export class QixEngine {
                     d.scoreMultiplier = 1;
                     // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
                     // bonus, even one too small to have scored a single point.
-                    this.powerUpSystem.trySpawnPowerUp([...(result.filled ?? []), ...linePoints]);
+                    const claimed = [...(result.filled ?? []), ...linePoints];
+                    // A letter caught inside the claim is caught, full stop.
+                    this.powerUpSystem.collectEnclosed(claimed);
+                    this.powerUpSystem.trySpawnPowerUp(claimed);
                     // Update border path for Sparx, then re-anchor existing Sparx to
                     // it - the rebuilt array reorders points, so a stale pathIndex
                     // would otherwise teleport a Sparx onto the marker's landing cell.
@@ -831,6 +835,11 @@ export class QixEngine {
      */
     checkCollisions() {
         const d = this.data;
+        // A moment's grace after a death. The enemy that killed you has not
+        // moved, so without this it kills you again on the next frame, and
+        // again on the one after: every life goes in a tenth of a second.
+        if (Date.now() < (d.invulnerableUntil ?? 0))
+            return false;
         // The Gremlin, while drawing. FAQ 2.3.1 is explicit that the Shield
         // "will NOT protect you from the Gremlin hitting either you or your
         // line" - it used to, which made the Shield a free pass against the
@@ -867,6 +876,7 @@ export class QixEngine {
     handleDeath() {
         const d = this.data;
         d.lives--;
+        d.invulnerableUntil = Date.now() + RESPAWN_INVULNERABLE_MS;
         // Where the marker goes back to.
         //
         // NOT the level's spawn point. Losing a life in a far corner and being
@@ -1123,7 +1133,13 @@ export class QixEngine {
             // block IS the sprite, and a character on top only muddies it
             // against the picture behind.
             const cycle = MARKER_CYCLE[Math.floor(d.frameCount / MARKER_CYCLE_FRAMES) % MARKER_CYCLE.length];
-            buffer[my][mx] = { ch: ' ', bg: cycle };
+            // Blink while it cannot be hurt, so the grace period is something the
+            // player can see rather than guess at.
+            const safe = Date.now() < (d.invulnerableUntil ?? 0);
+            const showing = !safe ||
+                Math.floor(d.frameCount / INVULNERABLE_BLINK_FRAMES) % 2 === 0;
+            if (showing)
+                buffer[my][mx] = { ch: ' ', bg: cycle };
         }
         const grid = [];
         for (let y = 0; y < buffer.length; y++) {

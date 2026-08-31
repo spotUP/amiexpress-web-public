@@ -24,6 +24,7 @@ function createInitialGameData() {
         lap: 1,
         skill: "medium",
         bonusLivesAwarded: 0,
+        invulnerableUntil: 0,
         lastMultiplierAt: 0,
         lastMultiplier: 1,
         score: 0,

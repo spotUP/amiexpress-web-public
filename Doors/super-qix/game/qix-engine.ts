@@ -52,6 +52,8 @@ import {
   WARP_OPENING_MS,
   WARP_OPEN_MS,
   SKULL_STUN_MS,
+  RESPAWN_INVULNERABLE_MS,
+  INVULNERABLE_BLINK_FRAMES,
 } from './constants';
 import { Background, ArtCell, artForCell } from './background';
 import { DrawingSystem } from './drawing';
@@ -173,6 +175,7 @@ export class QixEngine {
 
     // A doorway does not survive the level it was opened on.
     d.warp = null;
+    d.invulnerableUntil = 0;
     d.lastMultiplier = 1;
     d.lastMultiplierAt = 0;
     d.scoreMultiplier = 1;
@@ -865,7 +868,11 @@ export class QixEngine {
 
           // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
           // bonus, even one too small to have scored a single point.
-          this.powerUpSystem.trySpawnPowerUp([...(result.filled ?? []), ...linePoints]);
+          const claimed = [...(result.filled ?? []), ...linePoints];
+
+          // A letter caught inside the claim is caught, full stop.
+          this.powerUpSystem.collectEnclosed(claimed);
+          this.powerUpSystem.trySpawnPowerUp(claimed);
 
           // Update border path for Sparx, then re-anchor existing Sparx to
           // it - the rebuilt array reorders points, so a stale pathIndex
@@ -1012,6 +1019,11 @@ export class QixEngine {
   private checkCollisions(): boolean {
     const d = this.data;
 
+    // A moment's grace after a death. The enemy that killed you has not
+    // moved, so without this it kills you again on the next frame, and
+    // again on the one after: every life goes in a tenth of a second.
+    if (Date.now() < (d.invulnerableUntil ?? 0)) return false;
+
     // The Gremlin, while drawing. FAQ 2.3.1 is explicit that the Shield
     // "will NOT protect you from the Gremlin hitting either you or your
     // line" - it used to, which made the Shield a free pass against the
@@ -1053,6 +1065,7 @@ export class QixEngine {
     const d = this.data;
 
     d.lives--;
+    d.invulnerableUntil = Date.now() + RESPAWN_INVULNERABLE_MS;
 
     // Where the marker goes back to.
     //
@@ -1339,7 +1352,15 @@ export class QixEngine {
       const cycle = MARKER_CYCLE[
         Math.floor(d.frameCount / MARKER_CYCLE_FRAMES) % MARKER_CYCLE.length
       ];
-      buffer[my][mx] = { ch: ' ', bg: cycle };
+
+      // Blink while it cannot be hurt, so the grace period is something the
+      // player can see rather than guess at.
+      const safe = Date.now() < (d.invulnerableUntil ?? 0);
+      const showing =
+        !safe ||
+        Math.floor(d.frameCount / INVULNERABLE_BLINK_FRAMES) % 2 === 0;
+
+      if (showing) buffer[my][mx] = { ch: ' ', bg: cycle };
     }
 
     // Convert the buffer to characters, one entry per screen column.

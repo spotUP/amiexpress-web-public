@@ -88,6 +88,10 @@ export class PowerUpSystem {
    */
   launch(powerUp: PowerUp): void {
     if (powerUp.type === 'letter') {
+      // A letter FLIES. FAQ 2.3 has it drifting across the field, and it is
+      // caught either by running into it or by taking the ground it is
+      // flying over - so it has to stay out in the open where both are
+      // possible, rather than settling onto the lines where only one is.
       const heading = this.farthestWall(powerUp);
       powerUp.drift = 'cross';
       powerUp.vx = heading.x;
@@ -100,6 +104,7 @@ export class PowerUpSystem {
     powerUp.vx = line.x;
     powerUp.vy = line.y;
   }
+
 
   /** A unit heading towards whichever wall is farthest away. */
   private farthestWall(from: Point): Point {
@@ -166,10 +171,20 @@ export class PowerUpSystem {
 
       const nextX = powerUp.x + (powerUp.vx ?? 0) * POWERUP_DRIFT_SPEED;
       const nextY = powerUp.y + (powerUp.vy ?? 0) * POWERUP_DRIFT_SPEED;
-
       const cell = d.field[Math.round(nextY)]?.[Math.round(nextX)];
-      if (!cell || cell === 'border' || cell === 'claimed') {
-        // It has arrived at a line: from here it walks them.
+      const blocked = !cell || cell === 'border' || cell === 'claimed';
+
+      // A letter bounces off the edges of the open field and keeps flying.
+      // It used to stop at the first line it met and walk the border from
+      // there, which put it out of reach of a claim and left it circling
+      // the frame instead of crossing the board.
+      if (blocked && powerUp.type === 'letter') {
+        this.bounce(powerUp);
+        continue;
+      }
+
+      if (blocked) {
+        // A power-up follows the lines, which is what FAQ 2.3 says it does.
         this.joinEdge(powerUp);
         continue;
       }
@@ -178,6 +193,59 @@ export class PowerUpSystem {
       powerUp.y = nextY;
     }
   }
+
+  /**
+   * Turn a flying letter away from whatever it just met.
+   *
+   * Each axis is tried on its own, so a letter meeting a wall head-on
+   * reverses and one meeting a corner reverses both - the same reflection
+   * the Gremlin uses.
+   */
+  private bounce(powerUp: PowerUp): void {
+    const d = this.data;
+    const open = (x: number, y: number) => {
+      const cell = d.field[Math.round(y)]?.[Math.round(x)];
+      return cell === 'unclaimed' || cell === 'stix';
+    };
+
+    const vx = powerUp.vx ?? 0;
+    const vy = powerUp.vy ?? 0;
+    const step = POWERUP_DRIFT_SPEED;
+
+    if (!open(powerUp.x + vx * step, powerUp.y)) powerUp.vx = -vx;
+    if (!open(powerUp.x, powerUp.y + vy * step)) powerUp.vy = -vy;
+
+    // Still boxed in - the claim closed around it - so turn right round.
+    if (!open(powerUp.x + (powerUp.vx ?? 0) * step, powerUp.y + (powerUp.vy ?? 0) * step)) {
+      powerUp.vx = -(powerUp.vx ?? 0);
+      powerUp.vy = -(powerUp.vy ?? 0);
+      return;
+    }
+
+    powerUp.x += (powerUp.vx ?? 0) * step;
+    powerUp.y += (powerUp.vy ?? 0) * step;
+  }
+
+  /**
+   * Take every bonus standing on ground the player has just claimed.
+   *
+   * FAQ 5.2's whole strategy is boxing letters in rather than chasing them
+   * down: "you can sometimes zip out into the field and quickly catch them
+   * before they get too far" is the alternative, not the only way.
+   */
+  collectEnclosed(cells: Point[]): void {
+    if (cells.length === 0) return;
+
+    const taken = new Set(cells.map(c => `${Math.round(c.x)},${Math.round(c.y)}`));
+
+    for (const powerUp of this.data.powerUps) {
+      if (powerUp.collected) continue;
+      if (taken.has(`${Math.round(powerUp.x)},${Math.round(powerUp.y)}`)) {
+        this.collectPowerUp(powerUp);
+      }
+    }
+  }
+
 
   /** Anchor a bonus to the line network at the closest point on it. */
   private joinEdge(powerUp: PowerUp): void {

@@ -191,6 +191,17 @@ export declare const HURRY_SPEED_SCALE = 1.4;
  * than do Power-ups and Letters, but slightly slower than your marker".
  */
 export declare const POWERUP_DRIFT_SPEED = 0.25;
+/**
+ * How long the marker cannot be killed again after losing a life.
+ *
+ * Without this, the enemy that killed you is still touching you on the
+ * very next frame, and every life you have goes in as many frames - three
+ * lives in a tenth of a second. The arcade gives you a moment to get clear;
+ * so does this.
+ */
+export declare const RESPAWN_INVULNERABLE_MS = 1500;
+/** How fast the marker blinks while it cannot be hurt. */
+export declare const INVULNERABLE_BLINK_FRAMES = 2;
 /** How long a Shield stuns the Skull it stopped (FAQ 2.3.1). */
 export declare const SKULL_STUN_MS = 1000;
 export declare const POWERUP_EFFECTS: Record<PowerUpType, {
