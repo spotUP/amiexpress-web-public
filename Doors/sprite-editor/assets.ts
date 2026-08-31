@@ -40,11 +40,15 @@ export function resolveAssetPath(
 ): string {
   const base = resolve(DOORS_ROOT, door, kind);
   const target = resolve(base, file);
-  // the directory itself, for listing
-  if (target === base) return base;
-  // Resolve FIRST, compare AFTER - and the base itself must still be
-  // inside Doors/, or a door name of "../web" moves the fence.
-  if (!base.startsWith(DOORS_ROOT + sep) || !target.startsWith(base + sep)) {
+  // Containment FIRST - the base itself can escape when the DOOR argument
+  // carries traversal, and the '.'-listing shortcut must not run before
+  // this is settled. Review-caught 2026-08-31: the shortcut-first ordering
+  // let resolveAssetPath('..', 'sprites', '.') list outside Doors/.
+  if (!base.startsWith(DOORS_ROOT + sep)) {
+    throw new Error(`asset path outside ${door}/${kind}: ${file}`);
+  }
+  if (target === base) return base; // the directory itself, for listing
+  if (!target.startsWith(base + sep)) {
     throw new Error(`asset path outside ${door}/${kind}: ${file}`);
   }
   return target;
