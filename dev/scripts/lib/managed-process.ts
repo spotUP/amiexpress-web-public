@@ -24,7 +24,7 @@
  * Nothing here is watcher-specific; it is the process half of watch-doors.ts,
  * split out because it is the half worth testing against real processes.
  */
-import { spawn, ChildProcess, SpawnOptions } from 'child_process';
+import { spawn, execSync, ChildProcess, SpawnOptions } from 'child_process';
 
 /** Whether a pid still exists. Signal 0 performs the permission and
  *  existence checks without delivering anything. */
@@ -143,3 +143,66 @@ export async function stopManaged(
   // is about to start a replacement that will collide with it.
   return { stopped: !isAlive(pid), forced: true };
 }
+
+/** Everything LISTENING on a TCP port. Empty when the port is free. */
+export function pidsOnPort(port: number): number[] {
+  try {
+    const out = execSync(`lsof -ti tcp:${port} -sTCP:LISTEN`, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString().trim();
+    return out
+      ? out.split('\n').map(Number).filter(n => Number.isFinite(n) && n > 0)
+      : [];
+  } catch {
+    return []; // lsof exits non-zero when nothing listens - that IS free
+  }
+}
+
+export interface EnsurePortFreeOptions {
+  graceMs?: number;
+  killMs?: number;
+  pollMs?: number;
+  /** Called per escalation, for the caller's log. */
+  onKill?: (pids: number[], signal: NodeJS.Signals) => void;
+}
+
+/**
+ * Make a port free, whatever holds it. Returns whether it is free.
+ *
+ * Written after two dev-server outages in one evening (2026-08-31): the
+ * watcher's STOP path is careful, but when any kill path fails - a backend
+ * whose SIGTERM handler logs and never exits, an orphan from an older
+ * watcher, a second watcher racing - startBackend spawned anyway, died of
+ * EADDRINUSE, and the half-dead survivor kept the port serving 404s.
+ *
+ * Three kill layers already existed (start-servers traps, kill-servers
+ * pattern-pkills, stopManaged) and each can miss. Trusting them all was
+ * the bug. This is the choke point instead: before a backend starts, the
+ * port IS free, or the start is refused - the port-level version of the
+ * resolved-path rule. In dev, whatever listens on our port is ours to
+ * kill by definition.
+ */
+export async function ensurePortFree(
+  port: number,
+  opts: EnsurePortFreeOptions = {}
+): Promise<boolean> {
+  const escalation: Array<[NodeJS.Signals, number]> = [
+    ['SIGTERM', opts.graceMs ?? 3000],
+    ['SIGKILL', opts.killMs ?? 2000],
+  ];
+  const pollMs = opts.pollMs ?? 100;
+
+  for (const [signal, waitMs] of escalation) {
+    const pids = pidsOnPort(port);
+    if (pids.length === 0) return true;
+    opts.onKill?.(pids, signal);
+    for (const pid of pids) killTree(pid, signal);
+    const deadline = Date.now() + waitMs;
+    while (Date.now() < deadline) {
+      if (pidsOnPort(port).length === 0) return true;
+      await sleep(pollMs);
+    }
+  }
+  return pidsOnPort(port).length === 0;
+}
+

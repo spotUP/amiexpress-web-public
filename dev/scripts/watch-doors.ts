@@ -18,7 +18,7 @@ import { watch, FSWatcher } from 'chokidar';
 import { ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { startManaged, stopManaged, isAlive } from './lib/managed-process';
+import { startManaged, stopManaged, isAlive, ensurePortFree } from './lib/managed-process';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const PID_FILE = path.join(PROJECT_ROOT, '.watch-doors.pid');
@@ -58,6 +58,16 @@ function checkAndKillExisting(): void {
               // Process is gone
               break;
             }
+          }
+          // Grace expired and the old watcher may still be alive - it can
+          // be stuck awaiting its own backend's shutdown. Leaving it gave
+          // us two watchers managing two backends over one port; escalate.
+          try {
+            process.kill(oldPid, 0);
+            console.log(`[WARN] Old watch-doors ${oldPid} survived SIGTERM - SIGKILL`);
+            process.kill(oldPid, 'SIGKILL');
+          } catch {
+            // Gone after all.
           }
         } catch {
           // Process doesn't exist, ignore
@@ -118,13 +128,31 @@ function backendCommand(): { command: string; args: string[] } {
   return { command: 'npx', args: ['tsx', 'src/index.ts'] };
 }
 
-function startBackend() {
+const BACKEND_PORT = 3001;
+
+async function startBackend(): Promise<void> {
   if (isShuttingDown) return;
 
   // Never overwrite a live handle: that loses the only reference able to
   // stop it, which is how an orphan is made.
   if (backendProcess?.pid && isAlive(backendProcess.pid)) {
     log('[WARN] Backend already running - not starting a second one', colors.yellow);
+    return;
+  }
+
+  // The port guard - the actual fix for the evening the dev server "went
+  // down" twice. The stop path is careful, but when ANY kill path fails
+  // (a backend whose SIGTERM handler never exits, an orphan from an older
+  // watcher, a second watcher racing), spawning anyway meant the new
+  // backend died of EADDRINUSE and the half-dead survivor kept 3001,
+  // serving 404s. The invariant lives here, at the one place a backend is
+  // born: the port IS free, or nothing is started.
+  const free = await ensurePortFree(BACKEND_PORT, {
+    onKill: (pids, signal) =>
+      log(`[WARN] Port ${BACKEND_PORT} held by pid(s) ${pids.join(', ')} - sending ${signal}`, colors.yellow),
+  });
+  if (!free) {
+    log(`[ERROR] Port ${BACKEND_PORT} still held after SIGKILL - refusing to start a colliding backend`, colors.red);
     return;
   }
 
@@ -243,7 +271,7 @@ async function restartBackend(changedFile: string) {
   // Small delay to ensure cleanup
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  startBackend();
+  await startBackend();
   log('----------------------------------------------------\n', colors.gray);
   isRestarting = false;
 
@@ -273,7 +301,7 @@ checkAndKillExisting();
 writePidFile();
 
 // Start initial backend
-startBackend();
+void startBackend();
 
 // Watch door directories AND backend source.
 //
