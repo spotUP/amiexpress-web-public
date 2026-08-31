@@ -1,8 +1,9 @@
 {
   "scripts": {
-    "test": "npm run test:sdk && npm run test:backend",
+    "test": "npm run test:sdk && npm run test:backend && npm run test:doors",
     "test:sdk": "cd sdk && npm test",
     "test:backend": "cd web/backend && npm test",
+    "test:doors": "npx tsx dev/tests/run-tests.ts",
     "dev:doors": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/watch-doors.ts",
     "door:doctor": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/door-doctor.ts",
     "door:create": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/create-door-skeleton.ts",

@@ -3,15 +3,37 @@
  * All game parameters based on original 1987 Taito arcade specifications
  */
 
-import { LevelConfig, PowerUpType } from './types';
+import { LevelConfig, PowerUpType, SkillLevel } from './types';
 
 // Display dimensions (neo-blessed terminal)
 export const SCREEN_WIDTH = 80;
 export const SCREEN_HEIGHT = 24;
 
 // Playfield dimensions (inside borders)
-export const FIELD_WIDTH = 76;
-export const FIELD_HEIGHT = 18;
+//
+// A terminal character cell is about twice as tall as it is wide, so a
+// playfield measured in single characters is not square: one step up or
+// down covers roughly twice the visual distance of one step left or right,
+// which made horizontal movement feel half-speed.
+//
+// The fix is geometric, not a speed tweak: every logical cell is drawn
+// CELL_WIDTH characters wide, so one cell is ~2 units wide by ~2 units
+// tall on screen - square. The grid is therefore 38 logical columns
+// rendered as 76 characters, which still fits SCREEN_WIDTH (80).
+// All game logic works in logical cells and needs no aspect correction.
+// The grid is also sized to the background art: a piece is 80 columns wide,
+// and at CELL_WIDTH characters per cell that is exactly FIELD_WIDTH cells,
+// so the art is revealed at its native resolution with nothing squashed.
+// FIELD_HEIGHT matches the game area (SCREEN_HEIGHT less the HUD and the
+// footer), and the art's remaining rows are cropped.
+export const CELL_WIDTH = 2;
+export const FIELD_WIDTH = 40;
+export const FIELD_HEIGHT = 20;
+
+// Background art dimensions. Every piece in backgrounds/ is 80x25 (SAUCE
+// says so for all of them); the field shows the top FIELD_HEIGHT rows.
+export const ART_WIDTH = FIELD_WIDTH * CELL_WIDTH;  // 80
+export const ART_HEIGHT = FIELD_HEIGHT;             // 20 of the art's 25 rows
 export const FIELD_OFFSET_X = 2;
 export const FIELD_OFFSET_Y = 2;
 
@@ -32,20 +54,80 @@ export const BONUS_PERCENT_START = 76;  // Points start here
 export const POINTS_PER_BONUS_PERCENT = 1000;
 
 // Scoring
-export const FAST_DRAW_BASE_POINTS = 10;  // Per % claimed
-export const SLOW_DRAW_BASE_POINTS = 20;  // 2x for slow draw
+// Super Qix has no slow/fast draw (FAQ 2.5.3), so a claim has one rate.
+export const DRAW_BASE_POINTS = 10;  // Per % claimed
+
+// A completed claim is painted in over several frames, sweeping right
+// to left, rather than appearing all at once.
+export const FILL_ANIMATION_FRAMES = 12;
+
+// Clearing a level wipes the picture in from the right, taking the
+// player's lines with it. Columns uncovered per frame.
+export const LEVEL_CLEAR_WIPE_COLUMNS = 1;
+
+// How long each panel of the level-clear sequence stays up, in frames.
+export const BONUS_PANEL_FRAMES = 75;   // ~2.5s
+export const INTRO_PANEL_FRAMES = 60;   // ~2s
+
+// The arcade marker is an animated sprite rather than a flat dot. It cycles
+// through these so it stands out against both the blue field and whatever
+// picture has been uncovered.
+export const MARKER_CYCLE = [
+  'lightred', 'lightyellow', 'lightgreen', 'lightcyan', 'lightblue', 'lightmagenta',
+];
+export const MARKER_CYCLE_FRAMES = 3;
+
+// Frames per Skull chew frame - they alternate an open and closed mouth.
+export const SKULL_CHEW_FRAMES = 6;
+
+// How fast the GAME OVER prompt blinks, in frames.
+export const GAME_OVER_BLINK_FRAMES = 15;
+
+// Letters (FAQ 2.3 / 2.4.2). A letter you NEED scores nothing when picked
+// up - it pays at the end of the level. A letter you do not need pays at once.
+export const LETTER_END_OF_LEVEL_POINTS = 1000;    // per letter, word unfinished
+export const LETTER_WORD_COMPLETE_POINTS = 10000;  // per letter, word finished
+export const SPARE_LETTER_POINTS = 500;            // duplicate or not in the word
+
+// FAQ 2.3.1: the 1-UP is "an extremely rare bonus".
+export const ONE_UP_CHANCE = 0.02;
+
 export const LETTER_POINTS = 1000;
 export const WORD_COMPLETE_POINTS = 10000;
 export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on separation
 
 // Enemy parameters
-export const QIX_BASE_SPEED = 2;
+// How strongly the Gremlin steers towards the marker (FAQ 2.2: its bounce is
+// "weighted somewhat towards your marker", and on later levels it will "zoom
+// towards you every time you detach from a wall").
+export const QIX_BASE_PULL = 0.03;      // always a slight lean
+export const QIX_LEVEL_PULL = 0.09;     // added by level 16
+export const QIX_DRAWING_PULL = 0.08;   // added while the player is exposed
+export const QIX_MAX_PULL = 0.25;        // never a perfect homing missile
+
+// The Gremlin divides on later levels, rarely, and never without limit
+// (FAQ 2.2 / 2.5.3: usually one, sometimes two or more).
+export const QIX_SPLIT_FROM_LEVEL = 7;
+export const QIX_SPLIT_CHANCE_PER_TICK = 0.0015;
+export const QIX_MAX_COPIES = 3;
+
+export const QIX_BASE_SPEED = 1.1;
 export const QIX_SEGMENT_COUNT = 5;
-export const SPARX_BASE_SPEED = 1.5;
-export const SUPER_SPARX_SPEED_MULT = 1.5;
-export const SUPER_SPARX_DEFAULT_TIME = 30000;  // 30 seconds
-export const FUSE_BASE_SPEED = 2;
-export const FUSE_START_DELAY = 500;  // ms before fuse starts
+export const SPARX_BASE_SPEED = 0.55;
+// FAQ 2.5.3: "There are no Super Skulls capable of chasing your marker
+// up an unfinished line." Skulls never promote.
+//
+// FAQ 1: the outer border is a Time Meter. When it fills, two more
+// Skulls are released and the counter resets. Later levels count down
+// more quickly.
+export const SKULLS_PER_RELEASE = 2;
+export const SKULLS_AT_LEVEL_START = 2;
+
+// FAQ 2.2: a Skull never instantly reverses on a line, so a turn is
+// refused while the last one is still fresh.
+export const SKULL_REVERSE_COOLDOWN_MS = 1000;
+export const FUSE_BASE_SPEED = 1.2;
+export const FUSE_START_DELAY = 3000;  // ms before fuse starts
 
 // Power-up parameters
 export const POWERUP_SPAWN_CHANCE = 0.25;  // 25% chance on area claim
@@ -59,7 +141,10 @@ export const CHARS = {
   markerDrawing: '@',
   qix: '*',
   qixAlt: '%',
-  sparx: '+',
+  // The Skulls chew: alternating these two reads as a mouth opening and
+  // closing, the way the arcade sprite animates.
+  sparx: '8',
+  sparxChew: 'O',
   superSparx: 'X',
   fuse: '~',
   fuseHead: '*',
@@ -96,6 +181,46 @@ export const COLORS = {
   percent: 'green'
 };
 
+/**
+ * The 16 ANSI colours, indexed the way ANSI art indexes them, named the way
+ * blessed tags name them. Art cells carry fg/bg as 0-15, so this is the
+ * translation used when a claimed cell reveals the picture behind it.
+ *
+ * Same names and order as the palette in the LiveChat door, so the two agree
+ * on what "colour 9" is called.
+ */
+export const ART_PALETTE = [
+  'black', 'red', 'green', 'yellow',
+  'blue', 'magenta', 'cyan', 'white',
+  'gray', 'lightred', 'lightgreen', 'lightyellow',
+  'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
+];
+
+// Background-block colors for the playfield. A space glyph colored with
+// -fg is invisible (fg has no effect on a blank char) - the field must be
+// painted with -bg so claimed/border/stix area actually shows as filled
+// color blocks, the way the arcade original renders them.
+export const BG_COLORS = {
+  border: 'white',
+  // The border doubles as the Time Meter: squares turn red as it fills
+  // (FAQ 1), and when the whole border is red two more Skulls arrive.
+  borderMeter: 'red',
+  unclaimed: 'blue',
+  claimed: 'blue',
+  // FAQ 2.1: the line you are drawing is YELLOW, and turns BLUE once it
+  // reconnects and becomes safe. There is no slow/fast draw in Super
+  // Qix, so there is one drawing colour, not two.
+  stix: 'yellow',
+  stixSafe: 'blue',
+  qix: 'magenta',
+  sparx: 'red',
+  superSparx: 'red',
+  fuse: 'yellow',
+  powerUp: 'green',
+  marker: 'cyan',
+  markerDrawing: 'yellow'
+};
+
 // Level configurations (16 levels)
 export const LEVEL_CONFIGS: LevelConfig[] = [
   // Level 1-4: Easy
@@ -103,48 +228,48 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 1,
     qixCount: 1,
     qixSpeed: 1.0,
-    sparxCount: 2,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.0,
-    superSparxTime: 45000,
+    timeMeterMs: 45000,
     fuseSpeed: 1.5,
     targetPercent: 75,
-    word: 'CAT',
+    word: 'CASTLE',
     backgroundPattern: 'stripes'
   },
   {
     number: 2,
     qixCount: 1,
     qixSpeed: 1.1,
-    sparxCount: 2,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.1,
-    superSparxTime: 40000,
+    timeMeterMs: 40000,
     fuseSpeed: 1.6,
     targetPercent: 75,
-    word: 'DOG',
+    word: 'THUNDER',
     backgroundPattern: 'dots'
   },
   {
     number: 3,
     qixCount: 1,
     qixSpeed: 1.2,
-    sparxCount: 3,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.2,
-    superSparxTime: 35000,
+    timeMeterMs: 35000,
     fuseSpeed: 1.7,
     targetPercent: 75,
-    word: 'FISH',
+    word: 'ROCKMAN',
     backgroundPattern: 'checker'
   },
   {
     number: 4,
     qixCount: 1,
     qixSpeed: 1.3,
-    sparxCount: 3,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.3,
-    superSparxTime: 30000,
+    timeMeterMs: 30000,
     fuseSpeed: 1.8,
     targetPercent: 75,
-    word: 'BIRD',
+    word: 'DRAGON',
     backgroundPattern: 'waves'
   },
   // Level 5-8: Medium
@@ -152,48 +277,48 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 5,
     qixCount: 1,
     qixSpeed: 1.5,
-    sparxCount: 4,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.4,
-    superSparxTime: 25000,
+    timeMeterMs: 25000,
     fuseSpeed: 2.0,
     targetPercent: 75,
-    word: 'LION',
+    word: 'FANFARE',
     backgroundPattern: 'cross'
   },
   {
     number: 6,
     qixCount: 1,
     qixSpeed: 1.6,
-    sparxCount: 4,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.5,
-    superSparxTime: 22000,
+    timeMeterMs: 22000,
     fuseSpeed: 2.1,
     targetPercent: 75,
-    word: 'TIGER',
+    word: 'PLANET',
     backgroundPattern: 'spiral'
   },
   {
     number: 7,
     qixCount: 2,
     qixSpeed: 1.4,
-    sparxCount: 4,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.5,
-    superSparxTime: 20000,
+    timeMeterMs: 20000,
     fuseSpeed: 2.2,
     targetPercent: 75,
-    word: 'BEAR',
+    word: 'GERDEN',
     backgroundPattern: 'diamond'
   },
   {
     number: 8,
     qixCount: 2,
     qixSpeed: 1.5,
-    sparxCount: 5,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.6,
-    superSparxTime: 18000,
+    timeMeterMs: 18000,
     fuseSpeed: 2.3,
     targetPercent: 75,
-    word: 'WOLF',
+    word: 'JUNGLE',
     backgroundPattern: 'zigzag'
   },
   // Level 9-12: Hard
@@ -201,48 +326,48 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 9,
     qixCount: 2,
     qixSpeed: 1.7,
-    sparxCount: 5,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.7,
-    superSparxTime: 15000,
+    timeMeterMs: 15000,
     fuseSpeed: 2.5,
     targetPercent: 75,
-    word: 'EAGLE',
+    word: 'TOYBOX',
     backgroundPattern: 'grid'
   },
   {
     number: 10,
     qixCount: 2,
     qixSpeed: 1.8,
-    sparxCount: 6,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.8,
-    superSparxTime: 12000,
+    timeMeterMs: 12000,
     fuseSpeed: 2.6,
     targetPercent: 75,
-    word: 'SHARK',
+    word: 'FOUNTAIN',
     backgroundPattern: 'brick'
   },
   {
     number: 11,
     qixCount: 2,
     qixSpeed: 1.9,
-    sparxCount: 6,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 1.9,
-    superSparxTime: 10000,
+    timeMeterMs: 10000,
     fuseSpeed: 2.7,
     targetPercent: 75,
-    word: 'WHALE',
+    word: 'MERMAID',
     backgroundPattern: 'star'
   },
   {
     number: 12,
     qixCount: 3,
     qixSpeed: 1.8,
-    sparxCount: 6,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.0,
-    superSparxTime: 8000,
+    timeMeterMs: 8000,
     fuseSpeed: 2.8,
     targetPercent: 75,
-    word: 'SNAKE',
+    word: 'CARP',
     backgroundPattern: 'flower'
   },
   // Level 13-16: Expert
@@ -250,72 +375,143 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
     number: 13,
     qixCount: 3,
     qixSpeed: 2.0,
-    sparxCount: 7,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.1,
-    superSparxTime: 6000,
+    timeMeterMs: 6000,
     fuseSpeed: 3.0,
     targetPercent: 75,
-    word: 'FROG',
+    word: 'FLOWER',
     backgroundPattern: 'maze'
   },
   {
     number: 14,
     qixCount: 3,
     qixSpeed: 2.2,
-    sparxCount: 7,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.2,
-    superSparxTime: 5000,
+    timeMeterMs: 5000,
     fuseSpeed: 3.2,
     targetPercent: 75,
-    word: 'DEER',
+    word: 'TENGU',
     backgroundPattern: 'celtic'
   },
   {
     number: 15,
     qixCount: 3,
     qixSpeed: 2.4,
-    sparxCount: 8,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.3,
-    superSparxTime: 4000,
+    timeMeterMs: 4000,
     fuseSpeed: 3.4,
     targetPercent: 75,
-    word: 'SEAL',
+    word: 'ROCKET',
     backgroundPattern: 'tribal'
   },
   {
     number: 16,
     qixCount: 4,
     qixSpeed: 2.5,
-    sparxCount: 8,
+    sparxCount: SKULLS_AT_LEVEL_START,
     sparxSpeed: 2.5,
-    superSparxTime: 3000,
+    timeMeterMs: 3000,
     fuseSpeed: 3.5,
     targetPercent: 75,
-    word: 'PANDA',
+    word: 'REDCATS',
     backgroundPattern: 'final'
   }
 ];
 
+/** How many levels make up one lap of the game (FAQ 3). */
+export const LEVELS_PER_LAP = 16;
+
 /**
- * Get level config (loops after 16 with increased difficulty)
+ * The configuration for a level.
+ *
+ * FAQ 3: "There are no changes that I can detect between the initial L.1 and
+ * the L.1 you come back to after finishing L.16. Even the enemy speeds are
+ * the same, which, after you've gotten used to the craziness of the upper
+ * levels, almost makes for a relaxing vacation!" - so a lap is a lap, and
+ * nothing here scales with how many of them you have played. The skill level
+ * is what moves the enemy speeds (FAQ 4).
  */
 export function getLevelConfig(level: number): LevelConfig {
-  const baseLevel = ((level - 1) % 16);
-  const loopCount = Math.floor((level - 1) / 16);
-
-  const config = { ...LEVEL_CONFIGS[baseLevel] };
+  const config = { ...LEVEL_CONFIGS[(level - 1) % LEVELS_PER_LAP] };
   config.number = level;
-
-  // Increase difficulty on each loop
-  if (loopCount > 0) {
-    config.qixSpeed *= 1 + (loopCount * 0.2);
-    config.sparxSpeed *= 1 + (loopCount * 0.2);
-    config.fuseSpeed *= 1 + (loopCount * 0.15);
-    config.superSparxTime = Math.max(2000, config.superSparxTime - (loopCount * 1000));
-  }
-
   return config;
 }
+
+/**
+ * The three skill levels the arcade operator could set (FAQ 4).
+ *
+ * "Difficulty" in the FAQ's table "refers mainly to how quickly/
+ * unpredictably and aggressively the Gremlin and Skulls move, and how often
+ * new Skulls appear", so it is carried here as a straight speed scale over
+ * the level's own figures. Continues are not modelled: a BBS door has no
+ * coin slot, so there is nothing to continue with.
+ */
+export const SKILL_LEVELS: Record<SkillLevel, {
+  label: string;
+  lives: number;
+  bonusLives: number[];
+  targetPercent: number;
+  difficulty: number;
+}> = {
+  easy:   { label: 'Easy',   lives: 5, bonusLives: [20000, 50000],  targetPercent: 70, difficulty: 0.8 },
+  medium: { label: 'Medium', lives: 3, bonusLives: [30000, 100000], targetPercent: 75, difficulty: 1.0 },
+  hard:   { label: 'Hard',   lives: 2, bonusLives: [],              targetPercent: 85, difficulty: 1.3 },
+};
+
+/**
+ * What the game says when you finish a lap (FAQ 3.1), spoken by the girl in
+ * the convertible and every one of the cats.
+ */
+export const FINAL_LAP_MESSAGE = [
+  'WE CAN NOT FIGHT ANY MORE',
+  'BUT WE ARE NOT LOSE YET',
+  'WE NEVER LOSE NEXT',
+];
+
+/**
+ * The rejoin multiplier (FAQ 2.4.1).
+ *
+ * "Multipliers occur when the point where you finish outlining an area is as
+ * close as possible (within about 2 pixels) to the point where you began.
+ * Achieving a multiplier will give you 20x normal points ... If you manage
+ * another multiplier within a second or two of the last one, it increases to
+ * 30x". The arcade's "2 pixels" is 2 cells here - a cell is the smallest
+ * thing that can be drawn in a terminal.
+ */
+export const MULTIPLIER_REJOIN_CELLS = 2;
+export const MULTIPLIER_FIRST = 20;
+export const MULTIPLIER_CHAINED = 30;
+export const MULTIPLIER_CHAIN_MS = 2000;
+
+/**
+ * The Warp doorway (FAQ 2.3.1): it "takes a second or two to open, remains
+ * open for another second or so, then closes".
+ */
+export const WARP_OPENING_MS = 1500;
+export const WARP_OPEN_MS = 1000;
+
+/**
+ * What one Hurry multiplies the pace of the game by (FAQ 2.3.1).
+ *
+ * They stack, so two Hurries square it. Kept modest because a BBS terminal
+ * redraws a whole frame per tick - the arcade's "unmanageably fast" is
+ * unplayable rather than funny at this frame rate.
+ */
+export const HURRY_SPEED_SCALE = 1.4;
+
+/**
+ * How fast a released Letter or Power-up travels, in cells per tick.
+ *
+ * FAQ 2.2 sets the pecking order: the Skulls "move slightly more quickly
+ * than do Power-ups and Letters, but slightly slower than your marker".
+ */
+export const POWERUP_DRIFT_SPEED = 0.25;
+
+/** How long a Shield stuns the Skull it stopped (FAQ 2.3.1). */
+export const SKULL_STUN_MS = 1000;
 
 // Power-up types and their effects
 export const POWERUP_EFFECTS: Record<PowerUpType, {
@@ -348,6 +544,12 @@ export const POWERUP_EFFECTS: Record<PowerUpType, {
     char: 'W',
     color: 'magenta'
   },
+  oneUp: {
+    duration: 0,
+    description: 'Extra life',
+    char: '1',
+    color: 'lightred'
+  },
   letter: {
     duration: 0,
     description: 'Collect letter',
@@ -359,18 +561,22 @@ export const POWERUP_EFFECTS: Record<PowerUpType, {
 // Menu options
 export const MENU_OPTIONS = [
   'Start Game',
+  'Skill',
   'High Scores',
   'Help',
   'Quit'
 ];
 
-// Default high scores
+/**
+ * The machine's factory high score table (FAQ 2.5.1), the same for all three
+ * pre-set difficulty levels.
+ */
 export const DEFAULT_HIGHSCORES = [
-  { name: 'QIX', score: 100000, level: 10, maxPercent: 95, date: '1987-01-01' },
-  { name: 'TAI', score: 80000, level: 8, maxPercent: 90, date: '1987-01-01' },
-  { name: 'TOE', score: 60000, level: 6, maxPercent: 85, date: '1987-01-01' },
-  { name: 'AAA', score: 40000, level: 4, maxPercent: 80, date: '1987-01-01' },
-  { name: 'BBB', score: 20000, level: 2, maxPercent: 78, date: '1987-01-01' }
+  { name: 'CAS', score: 32750, level: 6, maxPercent: 95, date: '1987-01-01' },
+  { name: 'THU', score: 30010, level: 5, maxPercent: 90, date: '1987-01-01' },
+  { name: 'ROC', score: 28200, level: 5, maxPercent: 85, date: '1987-01-01' },
+  { name: 'DRA', score: 21280, level: 4, maxPercent: 80, date: '1987-01-01' },
+  { name: 'FAN', score: 20570, level: 3, maxPercent: 78, date: '1987-01-01' },
 ];
 
 // Max high scores

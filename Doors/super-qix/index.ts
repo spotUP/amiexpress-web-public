@@ -11,14 +11,16 @@ import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
+import { loadBackgroundForLevel } from "./game/background";
 import { rpcHandlers } from "./server";
-import { SuperQixData, GameState, InputKey, Direction } from "./game/types";
+import { SuperQixData, GameState, InputKey, Direction, SkillLevel } from "./game/types";
 import {
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
   GAME_TICK_MS,
   STARTING_LIVES,
   MENU_OPTIONS,
+  SKILL_LEVELS,
   COLORS,
   DEFAULT_HIGHSCORES,
   FIELD_WIDTH,
@@ -34,6 +36,11 @@ export { rpcHandlers };
 function createInitialGameData(): SuperQixData {
   return {
     state: "menu",
+    lap: 1,
+    skill: "medium",
+    bonusLivesAwarded: 0,
+    lastMultiplierAt: 0,
+    lastMultiplier: 1,
     score: 0,
     lives: STARTING_LIVES,
     level: 1,
@@ -49,7 +56,6 @@ function createInitialGameData(): SuperQixData {
       x: Math.floor(FIELD_WIDTH / 2),
       y: FIELD_HEIGHT - 1,
       isDrawing: false,
-      drawSpeed: null,
       hasShield: false,
       speedBoost: false,
       speedBoostTimer: 0,
@@ -70,6 +76,7 @@ function createInitialGameData(): SuperQixData {
     activeEffects: [],
 
     borderPath: [],
+    internalLines: [],
 
     highscores: [...DEFAULT_HIGHSCORES],
     menuSelection: 0,
@@ -80,6 +87,8 @@ function createInitialGameData(): SuperQixData {
     frameCount: 0,
     levelStartTime: Date.now(),
     stopTimer: 0,
+    timeMeter: 0,
+    warp: null,
 
     transitionTimer: 0,
     transitionMessage: "",
@@ -104,7 +113,6 @@ let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let engine: QixEngine | null = null;
 let isDrawKeyHeld: boolean = false;
-let currentDrawSpeed: "fast" | "slow" | null = null;
 let doorContext: any; // Will be set on start
 let inputManager: DoorInputManager | null = null;
 
@@ -129,6 +137,10 @@ function initScreen(): void {
     width: "100%",
     height: 1,
     tags: true,
+    // blessed.box() is a Panel here, and a Panel draws a blue line border
+    // unless one is asked for explicitly. On a one-row box that border IS
+    // the box, so the HUD never appeared at all.
+    border: undefined,
     content: formatHUD(),
   });
 
@@ -141,6 +153,16 @@ function initScreen(): void {
     width: "100%",
     height: SCREEN_HEIGHT - 4,
     tags: true,
+    // The engine lays the playfield out itself: one line per field row,
+    // exactly SCREEN_WIDTH characters wide. Word wrapping a line that
+    // already fills the box pushes a blank row in after every real row, so
+    // the field rendered on every OTHER line and its bottom half - the
+    // right and bottom borders included - fell off the visible area.
+    wrap: false,
+    // ...and the same Panel default stole two columns and two rows from
+    // the playfield, which is what wrapped every row and hid the right
+    // and bottom borders.
+    border: undefined,
     style: {
       bg: "black",
     },
@@ -159,7 +181,7 @@ function initScreen(): void {
       border: { fg: "gray" },
     },
     content:
-      "{gray-fg}Arrows: Move | Z: Slow Draw | X: Fast Draw | P: Pause | Q: Quit{/}",
+      "{gray-fg}Arrows: Move and Draw | P: Pause | Q: Quit{/}",
   });
 }
 
@@ -167,21 +189,50 @@ function initScreen(): void {
  * Format HUD display
  */
 function formatHUD(): string {
-  const scoreStr = gameData.score.toString().padStart(8, "0");
-  const livesStr = "*".repeat(gameData.lives);
-  const percentStr = Math.floor(gameData.claimedPercent)
-    .toString()
-    .padStart(2, " ");
-  return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LVL: ${gameData.level}{/}  {green-fg}CLAIMED: ${percentStr}%{/}  {red-fg}LIVES: ${livesStr}{/}`;
+  // Laid out like the arcade: score, the round, the level's word with the
+  // letters already collected picked out, and the ratio claimed so far
+  // against what the level needs.
+  const scoreStr = gameData.score.toString().padStart(6, "0");
+  const livesStr = "*".repeat(Math.max(0, gameData.lives));
+  const ratio = Math.floor(gameData.claimedPercent);
+
+  const word = (gameData.levelWord || "")
+    .split("")
+    .map(letter =>
+      gameData.collectedLetters.includes(letter)
+        ? `{lightyellow-fg}${letter}{/lightyellow-fg}`
+        : `{gray-fg}${letter}{/gray-fg}`
+    )
+    .join("");
+
+  return (
+    `{lightred-fg}SCORE{/lightred-fg} {lightgreen-fg}${scoreStr}{/lightgreen-fg}  ` +
+    `{lightred-fg}ROUND{/lightred-fg} {lightgreen-fg}${gameData.level}{/lightgreen-fg}  ` +
+    `{lightcyan-fg}[{/lightcyan-fg}${word}{lightcyan-fg}]{/lightcyan-fg}  ` +
+    `{lightred-fg}RATIO{/lightred-fg} {lightyellow-fg}${ratio}%{/lightyellow-fg}` +
+    `{lightred-fg}/${gameData.targetPercent}%{/lightred-fg}  ` +
+    `{red-fg}${livesStr}{/red-fg}`
+  );
 }
 
 /**
- * Show main menu
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
  */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
 
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
   if (gameArea) {
     gameArea.setContent("");
   }
@@ -211,8 +262,14 @@ function showMenu(): void {
   MENU_OPTIONS.forEach((option, index) => {
     const selected = index === gameData.menuSelection;
     const prefix = selected ? "{cyan-fg}> " : "{white-fg}  ";
-    const suffix = selected ? "{/}" : "{/}";
-    menuContent.push(`${prefix}${option}${suffix}`);
+
+    // The skill row shows what it is set to, and Enter cycles it. In the
+    // arcade this was an operator switch inside the cabinet (FAQ 4).
+    const label = option === SKILL_ROW
+      ? `${option}: ${SKILL_LEVELS[gameData.skill].label}`
+      : option;
+
+    menuContent.push(`${prefix}${label}{/}`);
   });
 
   menuBox = blessed.box({
@@ -342,13 +399,42 @@ function showHelp(): void {
 }
 
 /**
+ * Load the picture for a level and hand it to the engine.
+ *
+ * Reading the art is I/O, so it happens here rather than inside initLevel.
+ * A board with no backgrounds/ directory simply gets null and the playfield
+ * draws in flat colour, exactly as it did before.
+ */
+async function applyLevelBackground(level: number): Promise<void> {
+  try {
+    engine?.setBackground(await loadBackgroundForLevel(level));
+  } catch (error) {
+    console.error("[Super Qix] Background load failed:", error);
+    engine?.setBackground(null);
+  }
+}
+
+/** The menu row that carries the skill setting (FAQ 4). */
+const SKILL_ROW = "Skill";
+
+/** Step to the next skill level. */
+function cycleSkill(): void {
+  const order: SkillLevel[] = ["easy", "medium", "hard"];
+  const next = (order.indexOf(gameData.skill) + 1) % order.length;
+  gameData.skill = order[next];
+}
+
+/**
  * Start the game
  */
-function startGame(): void {
+async function startGame(): Promise<void> {
   gameData.state = "playing";
   gameData.score = 0;
-  gameData.lives = STARTING_LIVES;
+  // FAQ 4: how many lives you get is the skill setting, not a constant.
+  gameData.lives = SKILL_LEVELS[gameData.skill].lives;
+  gameData.bonusLivesAwarded = 0;
   gameData.level = 1;
+  gameData.lap = 1;
 
   if (menuBox) {
     menuBox.destroy();
@@ -362,6 +448,7 @@ function startGame(): void {
     screen.render();
   });
 
+  await applyLevelBackground(1);
   engine.initLevel(1);
 
   // Start game loop
@@ -371,11 +458,36 @@ function startGame(): void {
 
   gameLoop = setInterval(() => {
     if (gameData.state === "playing") {
+      // Drive movement from the keys actually held down, the way Arkanoid
+      // does: one step per frame while a direction is held, with no wait
+      // for the client's auto-repeat. handleDirection keeps its own move
+      // throttle, so this sets responsiveness, not speed.
+      if (inputManager?.isKeyStateActive()) {
+        for (const dir of ["up", "down", "left", "right"] as Direction[]) {
+          if (inputManager.isHeld(dir)) engine?.handleDirection(dir);
+        }
+      }
       engine?.update();
+    } else if (gameData.state === "gameover") {
+      // Keep painting so the GAME OVER prompt blinks. Nothing drew this
+      // state at all before, so losing the last life froze the board.
+      gameData.frameCount++;
+      engine?.render();
     } else if (gameData.state === "levelTransition") {
+      // The arcade hand-over: the picture wipes in from the right taking
+      // the player's lines with it, the BONUS tally sits over the
+      // finished image, the picture wipes away, and the next round
+      // announces itself. Only then does the level advance.
+      const stillPlaying = engine?.advanceLevelOutro() ?? false;
+      if (stillPlaying) return;
+
       gameData.transitionTimer--;
       if (gameData.transitionTimer <= 0) {
-        engine?.advanceLevel();
+        // Reveal a different picture on the next level. The load is async;
+        // advance once it is in place so the new level never paints a frame
+        // with the previous level's art.
+        const nextLevel = gameData.level + 1;
+        void applyLevelBackground(nextLevel).then(() => engine?.advanceLevel());
       }
     }
   }, GAME_TICK_MS);
@@ -415,8 +527,16 @@ function handleInput(key: string): void {
       handleNameEntryInput(inputKey);
       break;
 
+    case "levelTransition":
+      // The level is being handed over. Swallow input rather than
+      // falling through to the default below, which sent the player back
+      // to the MENU on any keypress - clearing a level looked like the
+      // game quitting on you.
+      break;
+
     default:
-      showMenu();
+      // An unknown state should not throw the player out of their game.
+      break;
   }
 }
 
@@ -443,7 +563,7 @@ function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
       break;
 
     case "down":
@@ -451,22 +571,26 @@ function handleMenuInput(key: InputKey): void {
         MENU_OPTIONS.length - 1,
         gameData.menuSelection + 1
       );
-      showMenu();
+      renderMenu();
       break;
 
     case "enter":
     case "space":
-      switch (gameData.menuSelection) {
-        case 0:
+      switch (MENU_OPTIONS[gameData.menuSelection]) {
+        case "Start Game":
           startGame();
           break;
-        case 1:
+        case SKILL_ROW:
+          cycleSkill();
+          renderMenu();
+          break;
+        case "High Scores":
           showHighscores();
           break;
-        case 2:
+        case "Help":
           showHelp();
           break;
-        case 3:
+        case "Quit":
           cleanup();
           doorContext?.close();
           break;
@@ -490,15 +614,19 @@ function handleGameInput(key: InputKey): void {
     case "down":
     case "left":
     case "right":
+      // When real key-down/key-up edges are available the game loop drives
+      // movement from the held keys instead (see the gameLoop below), which
+      // is what removes the client's ~400ms auto-repeat gap. Acting on the
+      // character here as well would move the marker twice per press.
+      if (inputManager?.isKeyStateActive()) break;
       engine?.handleDirection(key as Direction);
       break;
 
+    // Super Qix has ONE draw button - no slow/fast choice (FAQ 2.5.3).
+    case "space":
     case "z":
-      engine?.handleSlowDraw();
-      break;
-
     case "x":
-      engine?.handleFastDraw();
+      engine?.handleDraw();
       break;
 
     case "p":
@@ -702,6 +830,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'SuperQix'
   });

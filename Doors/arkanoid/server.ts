@@ -19,11 +19,39 @@ interface HighScore {
 const MAX_HIGHSCORES = 10;
 
 /**
- * Get the highscores file path
+ * Resolve this door's own directory.
+ *
+ * __dirname is Doors/arkanoid when the door runs from TypeScript source
+ * (dev - door.handler.ts prefers the .ts entry outside production) and
+ * Doors/arkanoid/dist when it runs compiled. Walking up to the directory
+ * holding package.json gives the door root in both cases, so dev and the
+ * live board use ONE file instead of drifting apart.
+ *
+ * This must NOT be derived from process.cwd(): the backend runs with cwd
+ * web/backend (Dockerfile WORKDIR /app/web/backend), so a cwd-relative
+ * path wrote to web/backend/Doors/arkanoid/, which is outside the Doors
+ * volume and lives only in the container's ephemeral layer - every deploy
+ * wiped the board.
  */
-function getHighscorePath(): string {
-  // Use the arkanoid door directory under Doors/ for hybrid server-side state
-  return path.join(process.cwd(), 'Doors', 'arkanoid', 'highscores.json');
+function getDoorRoot(): string {
+  let dir = __dirname;
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return __dirname;
+}
+
+/**
+ * Get the highscores file path
+ *
+ * Exported so a regression test can assert it resolves inside the door's
+ * own directory rather than under the backend's cwd.
+ */
+export function getHighscorePath(): string {
+  return path.join(getDoorRoot(), 'highscores.json');
 }
 
 /**

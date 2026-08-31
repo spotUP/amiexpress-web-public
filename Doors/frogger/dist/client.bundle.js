@@ -235,6 +235,7 @@ function parseTags(text) {
           return attrs.noInverse;
         case "invisible":
           return attrs.noInvisible;
+        // Foreground color closing tags - reset to default fg
         case "black-fg":
         case "red-fg":
         case "green-fg":
@@ -273,6 +274,7 @@ function parseTags(text) {
         case "grey":
         case "fg":
           return defaultFg;
+        // Background color closing tags - reset to default bg
         case "black-bg":
         case "red-bg":
         case "green-bg":
@@ -330,6 +332,7 @@ function parseTags(text) {
       case "gray":
       case "grey":
         return fg(name === "grey" ? "gray" : name);
+      // Standard foreground colors (0-7)
       case "black-fg":
         return fg("black");
       case "red-fg":
@@ -349,6 +352,7 @@ function parseTags(text) {
       case "gray-fg":
       case "grey-fg":
         return fg("gray");
+      // Bright/light foreground colors (8-15)
       case "lightblack-fg":
       case "brightblack-fg":
         return fg("lightblack");
@@ -373,6 +377,7 @@ function parseTags(text) {
       case "lightwhite-fg":
       case "brightwhite-fg":
         return fg("lightwhite");
+      // Standard background colors (0-7)
       case "black-bg":
         return bg("black");
       case "red-bg":
@@ -392,6 +397,7 @@ function parseTags(text) {
       case "gray-bg":
       case "grey-bg":
         return bg("gray");
+      // Bright/light background colors (8-15)
       case "lightblack-bg":
       case "brightblack-bg":
         return bg("lightblack");
@@ -420,6 +426,7 @@ function parseTags(text) {
         return value ? fg(value) : "";
       case "bg":
         return value ? bg(value) : "";
+      // Escape sequences for literal braces
       case "open":
         return "{";
       case "close":
@@ -525,7 +532,7 @@ var init_colors = __esm({
         push(i, l, l, l);
       }
     })();
-    ccolors = function() {
+    ccolors = (function() {
       const _cols = vcolors.slice();
       const cols = colors.slice();
       vcolors.length = 8;
@@ -538,7 +545,7 @@ var init_colors = __esm({
         colors[i] = cols[i];
       }
       return out;
-    }();
+    })();
     colorNames = {
       // special
       default: -1,
@@ -1295,6 +1302,10 @@ var init_box = __esm({
     init_element();
     init_responsive_constants();
     Box = class extends Element {
+      /** blessed-style widget kind; see Element.type. */
+      get type() {
+        return "box";
+      }
       constructor(options = {}) {
         super(options);
         if (options.responsivePadding) {
@@ -1403,6 +1414,47 @@ var init_element = __esm({
     ESC2 = String.fromCharCode(27);
     Element = class extends EventEmitter2 {
       /**
+       * Widget kind, blessed-style ('list', 'textbox', 'button', ...).
+       *
+       * Subclasses set this in their constructor. Callers use it to ask "is a
+       * text-entry widget focused right now" without importing every widget
+       * class - MultiplayerLobby.widgetHasFocus() has always read
+       * `focused.type`, but nothing ever DEFINED it, so it was permanently
+       * undefined and that guard always returned false. Every single-letter
+       * lobby shortcut therefore fired while the user was typing in the chat
+       * box: 'o' jumped to the Game tab, 's' started the match, and 'q'/ESC
+       * left the lobby outright (reported live 2026-08-25).
+       */
+      get type() {
+        return "element";
+      }
+      /**
+       * Whether this element is hidden.
+       *
+       * Routed through show()/hide() rather than being a plain field because
+       * `visible` is a SEPARATE flag that renderElement() also tests
+       * (`if (!this.visible || this.hidden) return`). hide() clears both, so
+       * any code that later did the obvious `el.hidden = false` un-hid the
+       * element while leaving `visible === false` - the element then reported
+       * `hidden: false`, had correct coords, and still never painted. That
+       * silently ate the Grandmaster lobby's Bots button, which is built with
+       * `hidden: true` and revealed by `setAsHost()` (2026-08-25). Assigning
+       * this property now performs the real show/hide so the two flags cannot
+       * drift apart.
+       */
+      get hidden() {
+        return this._hidden;
+      }
+      set hidden(value) {
+        if (value === this._hidden)
+          return;
+        if (value) {
+          this.hide();
+        } else {
+          this.show();
+        }
+      }
+      /**
        * Check if this element or any of its descendants has focus
        */
       hasFocusedChild() {
@@ -1442,7 +1494,7 @@ var init_element = __esm({
         this._contentDirty = false;
         this._lastParsedWidth = 0;
         this.visible = true;
-        this.hidden = false;
+        this._hidden = false;
         this.focused = false;
         this.destroyed = false;
         this.disabled = false;
@@ -1639,9 +1691,26 @@ var init_element = __esm({
         }
         return { left: 0, right: 0, top: 0, bottom: 0 };
       }
+      /**
+       * Whether this element actually draws a border.
+       *
+       * Public because Screen's own render path needs the SAME predicate -
+       * `border` accepts both a string (`'line'` / `'none'`) and an object
+       * (`{type:'line'}`), and screen.ts used to test only the object form
+       * (`options.border?.type !== 'none'`). For the string `'none'`, `.type`
+       * is undefined, so that test read as "has a border" while this method
+       * said otherwise, and Screen then inset content by 1 row. On a 1-row
+       * element that made startY exceed maxY and the element painted NOTHING
+       * (Grandmaster lobby's whole button row vanished, 2026-08-25); on a
+       * 3-row one it pushed the text a row down into its neighbour.
+       */
       hasBorder() {
         const border = this.options.border;
-        if (!border || border === "none")
+        if (!border)
+          return false;
+        if (border === "none")
+          return false;
+        if (typeof border === "object" && border.type === "none")
           return false;
         return true;
       }
@@ -2396,7 +2465,18 @@ var init_element = __esm({
             "light-cyan": 14,
             "light-white": 15,
             gray: 8,
-            grey: 8
+            grey: 8,
+            // Non-hyphenated aliases - Screen._colorToCode() spells these
+            // 'lightwhite' etc. Both maps must accept both spellings or a name
+            // valid in one renderer silently resolves differently in the other.
+            lightblack: 8,
+            lightred: 9,
+            lightgreen: 10,
+            lightyellow: 11,
+            lightblue: 12,
+            lightmagenta: 13,
+            lightcyan: 14,
+            lightwhite: 15
           };
           const lower = color.toLowerCase();
           if (lower in colorMap) {
@@ -2616,8 +2696,8 @@ var init_element = __esm({
       show() {
         if (this.destroyed)
           return;
-        if (this.hidden) {
-          this.hidden = false;
+        if (this._hidden) {
+          this._hidden = false;
           this.visible = true;
           this._invalidateCoords();
           if (this.screen && this.screen.markDirtyElement) {
@@ -2633,7 +2713,7 @@ var init_element = __esm({
       hide() {
         if (this.destroyed)
           return;
-        if (!this.hidden) {
+        if (!this._hidden) {
           if (this.screen && this.screen.markDirtyElement) {
             this.screen.markDirtyElement(this);
           }
@@ -2641,7 +2721,7 @@ var init_element = __esm({
           if (this.screen && pos) {
             this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
           }
-          this.hidden = true;
+          this._hidden = true;
           this.visible = false;
           this.blur();
           this.emit("hide");
@@ -3087,6 +3167,9 @@ var init_element = __esm({
       onMouse(event) {
         if (this.hidden || !this.visible)
           return false;
+        if (!this.options.mouse && !this.options.clickable && !this.options.scrollable) {
+          return false;
+        }
         const coords = this._getCoords();
         if (!coords)
           return false;
@@ -3121,8 +3204,15 @@ var init_element = __esm({
             this._startScrollbarDrag(event);
             return true;
           }
-          this.emit("click", event);
-          if (this.clickable) {
+          const btn = event.button;
+          if (btn === "right") {
+            this.emit("rightclick", event);
+          } else if (btn === "middle") {
+            this.emit("middleclick", event);
+          } else {
+            this.emit("click", event);
+          }
+          if (btn !== "right" && btn !== "middle" && this.clickable) {
             this.focus();
             return true;
           }
@@ -3179,36 +3269,36 @@ var init_element = __esm({
         const type = typeof this.options.border === "string" ? this.options.border : this.options.border.type || "line";
         const borders = {
           line: {
-            topLeft: "\u250C",
-            topRight: "\u2510",
-            bottomLeft: "\u2514",
-            bottomRight: "\u2518",
-            horizontal: "\u2500",
-            vertical: "\u2502"
+            topLeft: ".",
+            topRight: ".",
+            bottomLeft: "`",
+            bottomRight: "'",
+            horizontal: "-",
+            vertical: "|"
           },
           heavy: {
-            topLeft: "\u250F",
-            topRight: "\u2513",
-            bottomLeft: "\u2517",
-            bottomRight: "\u251B",
-            horizontal: "\u2501",
-            vertical: "\u2503"
+            topLeft: "+",
+            topRight: "+",
+            bottomLeft: "+",
+            bottomRight: "+",
+            horizontal: "=",
+            vertical: "|"
           },
           double: {
-            topLeft: "\u2554",
-            topRight: "\u2557",
-            bottomLeft: "\u255A",
-            bottomRight: "\u255D",
-            horizontal: "\u2550",
-            vertical: "\u2551"
+            topLeft: "+",
+            topRight: "+",
+            bottomLeft: "+",
+            bottomRight: "+",
+            horizontal: "=",
+            vertical: "|"
           },
           round: {
-            topLeft: "\u256D",
-            topRight: "\u256E",
-            bottomLeft: "\u2570",
-            bottomRight: "\u256F",
-            horizontal: "\u2500",
-            vertical: "\u2502"
+            topLeft: ".",
+            topRight: ".",
+            bottomLeft: "`",
+            bottomRight: "'",
+            horizontal: "-",
+            vertical: "|"
           },
           bg: {
             topLeft: " ",
@@ -3588,17 +3678,7 @@ var init_element = __esm({
         const pos = this._getCoords();
         if (!pos)
           return;
-        let style = this.options.style;
-        const focusStyle = this.options.style?.focus;
-        const hoverStyle = this.options.style?.hover;
-        const disabledStyle = this.options.style?.disabled;
-        if (this.disabled && disabledStyle) {
-          style = { ...style, ...disabledStyle };
-        } else if (this.focused && focusStyle) {
-          style = { ...style, ...focusStyle };
-        } else if (this._hovered && hoverStyle) {
-          style = { ...style, ...hoverStyle };
-        }
+        const style = this.getEffectiveContentStyle();
         const attr = this.sattr(style);
         const border = this.hasBorder() ? 1 : 0;
         const padding = this.getPadding();
@@ -3629,6 +3709,34 @@ var init_element = __esm({
       /**
        * Render content text (called by subclasses)
        */
+      /**
+       * Resolve the content style for the element's current state (disabled >
+       * focused > hovered > idle). Focus forces `bold` by default so a focus
+       * change reads as a text-weight change, not just a color swap - a
+       * color-only swap is easy to miss when the element's own idle bg is
+       * already bright/saturated (e.g. a yellow button), or when the same
+       * focus color is reused elsewhere on screen for something unrelated (a
+       * selected list row, a highlighted setting). Bold is a hue-independent
+       * cue that survives both cases, and mirrors the border-focus default a
+       * few hundred lines up. Exposed (not inlined in renderContent) so this
+       * resolution is directly testable.
+       */
+      getEffectiveContentStyle() {
+        const style = this.options.style || {};
+        if (this.disabled && style.disabled) {
+          return { ...style, ...style.disabled };
+        }
+        if (this.disabled) {
+          return { ...style, fg: "gray" };
+        }
+        if (this.focused && style.focus) {
+          return { ...style, bold: true, ...style.focus };
+        }
+        if (this._hovered && style.hover) {
+          return { ...style, ...style.hover };
+        }
+        return style;
+      }
       renderContent() {
         if (!this.screen)
           return;
@@ -3636,16 +3744,7 @@ var init_element = __esm({
         if (!pos)
           return;
         const lines = this.getVisibleLines();
-        let style = this.options.style;
-        if (this.disabled && this.options.style?.disabled) {
-          style = { ...style, ...this.options.style.disabled };
-        } else if (this.disabled) {
-          style = { ...style, fg: "gray" };
-        } else if (this.focused && this.options.style?.focus) {
-          style = { ...style, ...this.options.style.focus };
-        } else if (this._hovered && this.options.style?.hover) {
-          style = { ...style, ...this.options.style.hover };
-        }
+        const style = this.getEffectiveContentStyle();
         const attr = this.sattr(style);
         let y = this.itop;
         for (const line3 of lines) {
@@ -4290,24 +4389,35 @@ var init_button = __esm({
     init_element();
     init_responsive_constants();
     Button = class extends Element {
+      /** blessed-style widget kind; see Element.type. */
+      get type() {
+        return "button";
+      }
       constructor(options = {}) {
         const baseStyle = options.style ?? {};
         const focusStyle = {
-          fg: "black",
-          bg: "yellow",
+          fg: "white",
+          bg: "lightblue",
+          bold: true,
           ...baseStyle.focus ?? {}
         };
         const hoverStyle = {
-          fg: "black",
-          bg: "cyan",
+          fg: "white",
+          bg: "lightblue",
           ...baseStyle.hover ?? {}
         };
         const isInline = options.inline === true;
+        const isGhosted = options.ghostWhenIdle === true;
         super({
           focusable: true,
           clickable: true,
           keys: true,
-          border: isInline ? void 0 : "line",
+          // NO frame by default. A box drawn around every button made dialogs
+          // look like a stack of nested windows - "the LiveChat quit dialog
+          // looks really strange" - and the button is already legible from its
+          // label and its focus colours. A caller that genuinely wants a frame
+          // can still pass `border` through the options spread below.
+          border: void 0,
           align: "center",
           valign: "middle",
           padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
@@ -4316,8 +4426,16 @@ var init_button = __esm({
           ...options,
           style: {
             fg: baseStyle.fg ?? "white",
-            bg: baseStyle.bg ?? "black",
+            bg: baseStyle.bg ?? "blue",
             ...baseStyle,
+            // Override AFTER the baseStyle spread so ghosting wins over
+            // whatever fg/bg the caller asked for as this button's idle look.
+            // Plain white, not 'gray' (#808080 read as invisible against black
+            // in practice - a lobby's whole button row disappeared until
+            // focused, reported live 2026-08-24). White still reads as
+            // quieter than the focused state, which is bold *and* the
+            // button's real saturated color.
+            ...isGhosted ? { fg: "white", bg: "black" } : {},
             focus: focusStyle,
             hover: hoverStyle
           }
@@ -5469,6 +5587,8 @@ var init_dockable_panel = __esm({
           });
           if (options.draggable !== false) {
             this.titleBar.on("mousedown", (data) => {
+              if (data?.button && data.button !== "left")
+                return;
               if (!this.panelState.minimized && !this.isMaximized) {
                 this.startDrag(data.x, data.y);
               }
@@ -5552,6 +5672,8 @@ var init_dockable_panel = __esm({
         if (this.fixed || this.isStatic)
           return;
         this.on("mousedown", (data) => {
+          if (data?.button && data.button !== "left")
+            return;
           if (this.resizable) {
             const edge = this.detectResizeEdge(data.x, data.y);
             if (edge) {
@@ -5577,6 +5699,8 @@ var init_dockable_panel = __esm({
         if (this.fixed || !this.resizable)
           return;
         this.on("mousedown", (data) => {
+          if (data?.button && data.button !== "left")
+            return;
           const edge = this.detectResizeEdge(data.x, data.y);
           if (edge) {
             this.startResizeFromEdge(edge, data.x, data.y);
@@ -6664,6 +6788,38 @@ var init_dockable_panel = __esm({
           btn.on("press", () => {
             this.switchTab(index);
           });
+          let dragStart = null;
+          let detached = false;
+          btn.on("mousedown", (data) => {
+            if (data?.button && data.button !== "left")
+              return;
+            dragStart = { x: data?.x ?? 0, y: data?.y ?? 0 };
+            detached = false;
+          });
+          if (this.screen) {
+            const onMove = (data) => {
+              if (!dragStart || detached)
+                return;
+              if (data.action !== "mousemove" && data.action !== "mousedown")
+                return;
+              const dx = (data.x ?? 0) - dragStart.x;
+              const dy = (data.y ?? 0) - dragStart.y;
+              if (Math.abs(dx) + Math.abs(dy) < 3)
+                return;
+              detached = true;
+              const panelToDetach = this.tabs[index];
+              if (panelToDetach && panelToDetach !== this) {
+                this.detachTab(index);
+                panelToDetach.startDrag?.(data.x, data.y);
+              }
+            };
+            const onUp = () => {
+              dragStart = null;
+              detached = false;
+            };
+            this.screen.on("mousemove", onMove);
+            this.screen.on("mouseup", onUp);
+          }
           this.tabButtons.push(btn);
           currentX += String(label).length + 3;
         });
@@ -6688,6 +6844,61 @@ var init_dockable_panel = __esm({
         this.activeTab = index;
         this.updateTabs();
         this.emit("tab-switch", index);
+      }
+      /**
+       * Detach a tab back into its own floating DockablePanel. The inverse of
+       * `mergeWith`. Right-click on the tab button triggers this so a user
+       * who accidentally merged two panels can separate them again.
+       *
+       * Behaviour:
+       *  - The extracted panel re-parents to the screen, restores its label
+       *    and border, floats at an offset position, and is shown.
+       *  - If only one tab is left in the container after removal, the tab
+       *    bar is cleared and the remaining panel goes back to behaving as
+       *    a normal single-panel container.
+       */
+      detachTab(index) {
+        if (index < 0 || index >= this.tabs.length)
+          return;
+        const detached = this.tabs[index];
+        if (!detached || detached === this) {
+          const other = this.tabs.find((t, i) => i !== index && t !== this);
+          if (other)
+            this.detachTab(this.tabs.indexOf(other));
+          return;
+        }
+        this.tabs.splice(index, 1);
+        if (this.activeTab >= this.tabs.length)
+          this.activeTab = Math.max(0, this.tabs.length - 1);
+        detached.detach?.();
+        const root = this.screen;
+        if (root) {
+          root.append?.(detached);
+          detached.parent = root;
+        }
+        const hostCoords = this._getCoords();
+        const offsetLeft = (hostCoords?.xi ?? 0) + 4;
+        const offsetTop = (hostCoords?.yi ?? 0) + 2;
+        detached.position = {
+          left: offsetLeft,
+          top: offsetTop,
+          width: detached.options?.width ?? 40,
+          height: detached.options?.height ?? 15
+        };
+        detached.border = detached.options?.border ?? { type: "line" };
+        detached.show?.();
+        detached._invalidateCoords?.();
+        if (this.tabs.length <= 1) {
+          for (const btn of this.tabButtons)
+            btn.destroy();
+          this.tabButtons = [];
+          this.tabs = [];
+        } else {
+          this.updateTabs();
+        }
+        detached.emit("undock-tab");
+        this.emit("detach", detached);
+        this.screen?.render();
       }
       /**
        * Set dock position with visual feedback
@@ -6990,25 +7201,27 @@ var init_dockable_panel = __esm({
         if (this.screen) {
           const sw = this.screen.width;
           const sh = this.screen.height;
+          const left = state.x !== void 0 ? Math.max(0, Math.min(state.x, Math.max(0, sw - 5))) : this.position.left || 0;
+          const top = state.y !== void 0 ? Math.max(this.topConstraint, state.y) : this.position.top || 0;
           if (state.width !== void 0) {
-            const newWidth = Math.max(5, Math.min(state.width, sw));
+            const newWidth = Math.max(5, Math.min(state.width, sw - left));
             this.position.width = newWidth;
             this.panelState.width = newWidth;
           }
           if (state.height !== void 0) {
-            const newHeight = Math.max(3, Math.min(state.height, sh));
+            const newHeight = Math.max(3, Math.min(state.height, sh - top));
             this.position.height = newHeight;
             this.panelState.height = newHeight;
           }
           if (state.x !== void 0) {
             const pw = this.position.width || 40;
-            const newLeft = Math.max(0, Math.min(state.x, sw - pw));
+            const newLeft = Math.max(0, Math.min(left, sw - pw));
             this.position.left = newLeft;
             this.panelState.x = newLeft;
           }
           if (state.y !== void 0) {
             const ph = this.position.height || 20;
-            const newTop = Math.max(this.topConstraint, Math.min(state.y, sh - ph));
+            const newTop = Math.max(this.topConstraint, Math.min(top, sh - ph));
             this.position.top = newTop;
             this.panelState.y = newTop;
           }
@@ -7161,7 +7374,8 @@ var init_dockable_panel = __esm({
           if (this.maxWidth)
             newWidth = Math.min(newWidth, this.maxWidth);
           if (this.screen) {
-            newWidth = Math.min(newWidth, this.screen.width);
+            const left = typeof this.position.left === "number" ? this.position.left : 0;
+            newWidth = Math.min(newWidth, Math.max(5, this.screen.width - left));
           }
         }
         if (this.fitContentSettings.height) {
@@ -7171,7 +7385,8 @@ var init_dockable_panel = __esm({
           if (this.maxHeight)
             newHeight = Math.min(newHeight, this.maxHeight);
           if (this.screen) {
-            const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
+            const top = typeof this.position.top === "number" ? this.position.top : this.topConstraint;
+            const maxScreenHeight = Math.max(3, this.screen.height - top - this.bottomConstraint);
             newHeight = Math.min(newHeight, maxScreenHeight);
           }
         }
@@ -7267,12 +7482,16 @@ var init_dockable_panel = __esm({
         switch (this.dockPosition) {
           case "left":
             return direction === "right";
+          // Swipe right to undock left panel
           case "right":
             return direction === "left";
+          // Swipe left to undock right panel
           case "top":
             return direction === "down";
+          // Swipe down to undock top panel
           case "bottom":
             return direction === "up";
+          // Swipe up to undock bottom panel
           default:
             return false;
         }
@@ -7421,9 +7640,12 @@ var init_dropdown_menu = __esm({
             this.selectItem();
           } else if (key.name === "escape") {
             this.close();
+            this.emit("closed-by-escape");
           } else if (key.name === "tab") {
             this.emit(key.shift ? "tab-prev" : "tab-next");
             this.close();
+          } else if (key.name === "left" || key.name === "right") {
+            this.emit(key.name === "left" ? "menu-prev" : "menu-next");
           }
           return true;
         });
@@ -7472,6 +7694,7 @@ var init_dropdown_menu = __esm({
         console.log("[DropdownMenu] Clamped position:", { clampedLeft, clampedTop, width, height });
         this.left = clampedLeft;
         this.top = clampedTop;
+        this._invalidateCoords();
         console.log("[DropdownMenu] Calling show()");
         this.show();
         console.log("[DropdownMenu] Calling focus()");
@@ -7480,6 +7703,7 @@ var init_dropdown_menu = __esm({
         _DropdownMenu.openMenus.add(this);
         this.screen.trapFocus(this);
         this.attachOutsideClick();
+        this.screen.forceFullRedraw?.();
         this.screen.render();
       }
       openFor(anchor, align = "left") {
@@ -7511,7 +7735,11 @@ var init_dropdown_menu = __esm({
         }
         this.hide();
         this.detachOutsideClick();
-        this.screen.releaseFocusTrap();
+        this.screen.releaseFocusTrap(this);
+        const stillOurs = this.screen.getFocused?.() === this || this.screen.getFocused?.() == null;
+        if (!fromOutsideClick && stillOurs && this.anchor && !this.anchor.destroyed) {
+          this.anchor.focus();
+        }
         this.screen.render();
       }
       setItems(items) {
@@ -8266,7 +8494,7 @@ var init_lcd = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js"() {
     "use strict";
     init_contrib_canvas();
-    CharacterMasks = function() {
+    CharacterMasks = (function() {
       const a1 = 1 << 0, a2 = 1 << 1, b = 1 << 2, c = 1 << 3, d1 = 1 << 4, d2 = 1 << 5, e = 1 << 6, f = 1 << 7, g1 = 1 << 8, g2 = 1 << 9, h = 1 << 10, i = 1 << 11, j = 1 << 12, k = 1 << 13, l = 1 << 14, m = 1 << 15;
       return {
         " ": 0,
@@ -8312,7 +8540,7 @@ var init_lcd = __esm({
         "+": g1 | g2 | i | l,
         "*": g1 | g2 | h | i | j | k | l | m
       };
-    }();
+    })();
   }
 });
 
@@ -8631,8 +8859,7 @@ var init_blessed = __esm({
 var require_arrayWithHoles = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
     function _arrayWithHoles(r) {
-      if (Array.isArray(r))
-        return r;
+      if (Array.isArray(r)) return r;
     }
     module.exports = _arrayWithHoles, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
@@ -8647,21 +8874,16 @@ var require_iterableToArrayLimit = __commonJS({
         var e, n, i, u, a = [], f = true, o = false;
         try {
           if (i = (t = t.call(r)).next, 0 === l) {
-            if (Object(t) !== t)
-              return;
+            if (Object(t) !== t) return;
             f = false;
-          } else
-            for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true)
-              ;
+          } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true) ;
         } catch (r2) {
           o = true, n = r2;
         } finally {
           try {
-            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u))
-              return;
+            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
           } finally {
-            if (o)
-              throw n;
+            if (o) throw n;
           }
         }
         return a;
@@ -8676,8 +8898,7 @@ var require_arrayLikeToArray = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
     function _arrayLikeToArray(r, a) {
       (null == a || a > r.length) && (a = r.length);
-      for (var e = 0, n = Array(a); e < a; e++)
-        n[e] = r[e];
+      for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
       return n;
     }
     module.exports = _arrayLikeToArray, module.exports.__esModule = true, module.exports["default"] = module.exports;
@@ -8690,8 +8911,7 @@ var require_unsupportedIterableToArray = __commonJS({
     var arrayLikeToArray = require_arrayLikeToArray();
     function _unsupportedIterableToArray(r, a) {
       if (r) {
-        if ("string" == typeof r)
-          return arrayLikeToArray(r, a);
+        if ("string" == typeof r) return arrayLikeToArray(r, a);
         var t = {}.toString.call(r).slice(8, -1);
         return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? arrayLikeToArray(r, a) : void 0;
       }
@@ -8728,8 +8948,7 @@ var require_slicedToArray = __commonJS({
 var require_classCallCheck = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
     function _classCallCheck(a, n) {
-      if (!(a instanceof n))
-        throw new TypeError("Cannot call a class as a function");
+      if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
     }
     module.exports = _classCallCheck, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
@@ -8755,13 +8974,11 @@ var require_toPrimitive = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     function toPrimitive(t, r) {
-      if ("object" != _typeof(t) || !t)
-        return t;
+      if ("object" != _typeof(t) || !t) return t;
       var e = t[Symbol.toPrimitive];
       if (void 0 !== e) {
         var i = e.call(t, r || "default");
-        if ("object" != _typeof(i))
-          return i;
+        if ("object" != _typeof(i)) return i;
         throw new TypeError("@@toPrimitive must return a primitive value.");
       }
       return ("string" === r ? String : Number)(t);
@@ -8807,7 +9024,7 @@ var require_bundle = __commonJS({
   "../../sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
     (function(global, factory) {
       typeof exports === "object" && typeof module !== "undefined" ? factory(exports, require_slicedToArray(), require_classCallCheck(), require_createClass()) : typeof define === "function" && define.amd ? define(["exports", "@babel/runtime/helpers/slicedToArray", "@babel/runtime/helpers/classCallCheck", "@babel/runtime/helpers/createClass"], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global.automationEvents = {}, global._slicedToArray, global._classCallCheck, global._createClass));
-    })(exports, function(exports2, _slicedToArray, _classCallCheck, _createClass) {
+    })(exports, (function(exports2, _slicedToArray, _classCallCheck, _createClass) {
       "use strict";
       var createExtendedExponentialRampToValueAutomationEvent = function createExtendedExponentialRampToValueAutomationEvent2(value, endTime, insertTime) {
         return {
@@ -8911,7 +9128,7 @@ var require_bundle = __commonJS({
       var isSetTargetAutomationEvent = function isSetTargetAutomationEvent2(automationEvent) {
         return automationEvent.type === "setTarget";
       };
-      var AutomationEventList2 = /* @__PURE__ */ function() {
+      var AutomationEventList2 = /* @__PURE__ */ (function() {
         function AutomationEventList3(defaultValue) {
           _classCallCheck(this, AutomationEventList3);
           this._automationEvents = [];
@@ -9041,7 +9258,7 @@ var require_bundle = __commonJS({
             return this._defaultValue;
           }
         }]);
-      }();
+      })();
       var createCancelAndHoldAutomationEvent2 = function createCancelAndHoldAutomationEvent3(cancelTime) {
         return {
           cancelTime,
@@ -9084,7 +9301,7 @@ var require_bundle = __commonJS({
       exports2.createSetTargetAutomationEvent = createSetTargetAutomationEvent2;
       exports2.createSetValueAutomationEvent = createSetValueAutomationEvent2;
       exports2.createSetValueCurveAutomationEvent = createSetValueCurveAutomationEvent2;
-    });
+    }));
   }
 });
 
@@ -9109,28 +9326,27 @@ var require_events = __commonJS({
       };
     }
     function ProcessEmitWarning(warning) {
-      if (console && console.warn)
-        console.warn(warning);
+      if (console && console.warn) console.warn(warning);
     }
     var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value) {
       return value !== value;
     };
-    function EventEmitter23() {
-      EventEmitter23.init.call(this);
+    function EventEmitter24() {
+      EventEmitter24.init.call(this);
     }
-    module.exports = EventEmitter23;
+    module.exports = EventEmitter24;
     module.exports.once = once;
-    EventEmitter23.EventEmitter = EventEmitter23;
-    EventEmitter23.prototype._events = void 0;
-    EventEmitter23.prototype._eventsCount = 0;
-    EventEmitter23.prototype._maxListeners = void 0;
+    EventEmitter24.EventEmitter = EventEmitter24;
+    EventEmitter24.prototype._events = void 0;
+    EventEmitter24.prototype._eventsCount = 0;
+    EventEmitter24.prototype._maxListeners = void 0;
     var defaultMaxListeners = 10;
     function checkListener(listener) {
       if (typeof listener !== "function") {
         throw new TypeError('The "listener" argument must be of type Function. Received type ' + typeof listener);
       }
     }
-    Object.defineProperty(EventEmitter23, "defaultMaxListeners", {
+    Object.defineProperty(EventEmitter24, "defaultMaxListeners", {
       enumerable: true,
       get: function() {
         return defaultMaxListeners;
@@ -9142,14 +9358,14 @@ var require_events = __commonJS({
         defaultMaxListeners = arg;
       }
     });
-    EventEmitter23.init = function() {
+    EventEmitter24.init = function() {
       if (this._events === void 0 || this._events === Object.getPrototypeOf(this)._events) {
         this._events = /* @__PURE__ */ Object.create(null);
         this._eventsCount = 0;
       }
       this._maxListeners = this._maxListeners || void 0;
     };
-    EventEmitter23.prototype.setMaxListeners = function setMaxListeners(n) {
+    EventEmitter24.prototype.setMaxListeners = function setMaxListeners(n) {
       if (typeof n !== "number" || n < 0 || NumberIsNaN(n)) {
         throw new RangeError('The value of "n" is out of range. It must be a non-negative number. Received ' + n + ".");
       }
@@ -9158,16 +9374,15 @@ var require_events = __commonJS({
     };
     function _getMaxListeners(that) {
       if (that._maxListeners === void 0)
-        return EventEmitter23.defaultMaxListeners;
+        return EventEmitter24.defaultMaxListeners;
       return that._maxListeners;
     }
-    EventEmitter23.prototype.getMaxListeners = function getMaxListeners() {
+    EventEmitter24.prototype.getMaxListeners = function getMaxListeners() {
       return _getMaxListeners(this);
     };
-    EventEmitter23.prototype.emit = function emit(type) {
+    EventEmitter24.prototype.emit = function emit(type) {
       var args = [];
-      for (var i = 1; i < arguments.length; i++)
-        args.push(arguments[i]);
+      for (var i = 1; i < arguments.length; i++) args.push(arguments[i]);
       var doError = type === "error";
       var events = this._events;
       if (events !== void 0)
@@ -9242,11 +9457,11 @@ var require_events = __commonJS({
       }
       return target;
     }
-    EventEmitter23.prototype.addListener = function addListener(type, listener) {
+    EventEmitter24.prototype.addListener = function addListener(type, listener) {
       return _addListener(this, type, listener, false);
     };
-    EventEmitter23.prototype.on = EventEmitter23.prototype.addListener;
-    EventEmitter23.prototype.prependListener = function prependListener(type, listener) {
+    EventEmitter24.prototype.on = EventEmitter24.prototype.addListener;
+    EventEmitter24.prototype.prependListener = function prependListener(type, listener) {
       return _addListener(this, type, listener, true);
     };
     function onceWrapper() {
@@ -9265,17 +9480,17 @@ var require_events = __commonJS({
       state.wrapFn = wrapped;
       return wrapped;
     }
-    EventEmitter23.prototype.once = function once2(type, listener) {
+    EventEmitter24.prototype.once = function once2(type, listener) {
       checkListener(listener);
       this.on(type, _onceWrap(this, type, listener));
       return this;
     };
-    EventEmitter23.prototype.prependOnceListener = function prependOnceListener(type, listener) {
+    EventEmitter24.prototype.prependOnceListener = function prependOnceListener(type, listener) {
       checkListener(listener);
       this.prependListener(type, _onceWrap(this, type, listener));
       return this;
     };
-    EventEmitter23.prototype.removeListener = function removeListener(type, listener) {
+    EventEmitter24.prototype.removeListener = function removeListener(type, listener) {
       var list, events, position, i, originalListener;
       checkListener(listener);
       events = this._events;
@@ -9315,8 +9530,8 @@ var require_events = __commonJS({
       }
       return this;
     };
-    EventEmitter23.prototype.off = EventEmitter23.prototype.removeListener;
-    EventEmitter23.prototype.removeAllListeners = function removeAllListeners(type) {
+    EventEmitter24.prototype.off = EventEmitter24.prototype.removeListener;
+    EventEmitter24.prototype.removeAllListeners = function removeAllListeners(type) {
       var listeners, events, i;
       events = this._events;
       if (events === void 0)
@@ -9338,8 +9553,7 @@ var require_events = __commonJS({
         var key;
         for (i = 0; i < keys.length; ++i) {
           key = keys[i];
-          if (key === "removeListener")
-            continue;
+          if (key === "removeListener") continue;
           this.removeAllListeners(key);
         }
         this.removeAllListeners("removeListener");
@@ -9368,20 +9582,20 @@ var require_events = __commonJS({
         return unwrap ? [evlistener.listener || evlistener] : [evlistener];
       return unwrap ? unwrapListeners(evlistener) : arrayClone(evlistener, evlistener.length);
     }
-    EventEmitter23.prototype.listeners = function listeners(type) {
+    EventEmitter24.prototype.listeners = function listeners(type) {
       return _listeners(this, type, true);
     };
-    EventEmitter23.prototype.rawListeners = function rawListeners(type) {
+    EventEmitter24.prototype.rawListeners = function rawListeners(type) {
       return _listeners(this, type, false);
     };
-    EventEmitter23.listenerCount = function(emitter, type) {
+    EventEmitter24.listenerCount = function(emitter, type) {
       if (typeof emitter.listenerCount === "function") {
         return emitter.listenerCount(type);
       } else {
         return listenerCount.call(emitter, type);
       }
     };
-    EventEmitter23.prototype.listenerCount = listenerCount;
+    EventEmitter24.prototype.listenerCount = listenerCount;
     function listenerCount(type) {
       var events = this._events;
       if (events !== void 0) {
@@ -9394,7 +9608,7 @@ var require_events = __commonJS({
       }
       return 0;
     }
-    EventEmitter23.prototype.eventNames = function eventNames() {
+    EventEmitter24.prototype.eventNames = function eventNames() {
       return this._eventsCount > 0 ? ReflectOwnKeys(this._events) : [];
     };
     function arrayClone(arr, n) {
@@ -9644,6 +9858,181 @@ var SpecialKey;
   SpecialKey2["PageUp"] = "\x1B[5~";
   SpecialKey2["PageDown"] = "\x1B[6~";
 })(SpecialKey || (SpecialKey = {}));
+
+// ../../sdk/node_modules/tone/build/esm/index.js
+var esm_exports = {};
+__export(esm_exports, {
+  AMOscillator: () => AMOscillator,
+  AMSynth: () => AMSynth,
+  Abs: () => Abs,
+  Add: () => Add,
+  AmplitudeEnvelope: () => AmplitudeEnvelope,
+  Analyser: () => Analyser,
+  AudioToGain: () => AudioToGain,
+  AutoFilter: () => AutoFilter,
+  AutoPanner: () => AutoPanner,
+  AutoWah: () => AutoWah,
+  BaseContext: () => BaseContext,
+  BiquadFilter: () => BiquadFilter,
+  BitCrusher: () => BitCrusher,
+  Buffer: () => Buffer2,
+  BufferSource: () => BufferSource,
+  Buffers: () => Buffers,
+  Channel: () => Channel,
+  Chebyshev: () => Chebyshev,
+  Chorus: () => Chorus,
+  Clock: () => Clock,
+  Compressor: () => Compressor,
+  Context: () => Context,
+  Convolver: () => Convolver,
+  CrossFade: () => CrossFade,
+  DCMeter: () => DCMeter,
+  Delay: () => Delay,
+  Destination: () => Destination,
+  Distortion: () => Distortion,
+  Draw: () => Draw,
+  DuoSynth: () => DuoSynth,
+  EQ3: () => EQ3,
+  Emitter: () => Emitter,
+  Envelope: () => Envelope,
+  FFT: () => FFT,
+  FMOscillator: () => FMOscillator,
+  FMSynth: () => FMSynth,
+  FatOscillator: () => FatOscillator,
+  FeedbackCombFilter: () => FeedbackCombFilter,
+  FeedbackDelay: () => FeedbackDelay,
+  Filter: () => Filter,
+  Follower: () => Follower,
+  Freeverb: () => Freeverb,
+  Frequency: () => Frequency,
+  FrequencyClass: () => FrequencyClass,
+  FrequencyEnvelope: () => FrequencyEnvelope,
+  FrequencyShifter: () => FrequencyShifter,
+  Gain: () => Gain,
+  GainToAudio: () => GainToAudio,
+  Gate: () => Gate,
+  GrainPlayer: () => GrainPlayer,
+  GreaterThan: () => GreaterThan,
+  GreaterThanZero: () => GreaterThanZero,
+  IntervalTimeline: () => IntervalTimeline,
+  JCReverb: () => JCReverb,
+  LFO: () => LFO,
+  Limiter: () => Limiter,
+  Listener: () => Listener,
+  Loop: () => Loop,
+  LowpassCombFilter: () => LowpassCombFilter,
+  Master: () => Master,
+  MembraneSynth: () => MembraneSynth,
+  Merge: () => Merge,
+  MetalSynth: () => MetalSynth,
+  Meter: () => Meter,
+  MidSideCompressor: () => MidSideCompressor,
+  MidSideMerge: () => MidSideMerge,
+  MidSideSplit: () => MidSideSplit,
+  Midi: () => Midi,
+  MidiClass: () => MidiClass,
+  Mono: () => Mono,
+  MonoSynth: () => MonoSynth,
+  MultibandCompressor: () => MultibandCompressor,
+  MultibandSplit: () => MultibandSplit,
+  Multiply: () => Multiply,
+  Negate: () => Negate,
+  Noise: () => Noise,
+  NoiseSynth: () => NoiseSynth,
+  Offline: () => Offline,
+  OfflineContext: () => OfflineContext,
+  OmniOscillator: () => OmniOscillator,
+  OnePoleFilter: () => OnePoleFilter,
+  Oscillator: () => Oscillator,
+  PWMOscillator: () => PWMOscillator,
+  PanVol: () => PanVol,
+  Panner: () => Panner,
+  Panner3D: () => Panner3D,
+  Param: () => Param,
+  Part: () => Part,
+  Pattern: () => Pattern,
+  Phaser: () => Phaser,
+  PingPongDelay: () => PingPongDelay,
+  PitchShift: () => PitchShift,
+  Player: () => Player,
+  Players: () => Players,
+  PluckSynth: () => PluckSynth,
+  PolySynth: () => PolySynth,
+  Pow: () => Pow,
+  PulseOscillator: () => PulseOscillator,
+  Recorder: () => Recorder,
+  Reverb: () => Reverb,
+  Sampler: () => Sampler,
+  Scale: () => Scale,
+  ScaleExp: () => ScaleExp,
+  Sequence: () => Sequence,
+  Signal: () => Signal,
+  Solo: () => Solo,
+  Split: () => Split,
+  StateTimeline: () => StateTimeline,
+  StereoWidener: () => StereoWidener,
+  Subtract: () => Subtract,
+  SyncedSignal: () => SyncedSignal,
+  Synth: () => Synth,
+  Ticks: () => Ticks,
+  TicksClass: () => TicksClass,
+  Time: () => Time,
+  TimeClass: () => TimeClass,
+  Timeline: () => Timeline,
+  ToneAudioBuffer: () => ToneAudioBuffer,
+  ToneAudioBuffers: () => ToneAudioBuffers,
+  ToneAudioNode: () => ToneAudioNode,
+  ToneBufferSource: () => ToneBufferSource,
+  ToneEvent: () => ToneEvent,
+  ToneOscillatorNode: () => ToneOscillatorNode,
+  Transport: () => Transport,
+  TransportTime: () => TransportTime,
+  TransportTimeClass: () => TransportTimeClass,
+  Tremolo: () => Tremolo,
+  Unit: () => Units_exports,
+  UserMedia: () => UserMedia,
+  Vibrato: () => Vibrato,
+  Volume: () => Volume,
+  WaveShaper: () => WaveShaper,
+  Waveform: () => Waveform,
+  Zero: () => Zero,
+  connect: () => connect,
+  connectSeries: () => connectSeries,
+  connectSignal: () => connectSignal,
+  context: () => context,
+  dbToGain: () => dbToGain,
+  debug: () => Debug_exports,
+  defaultArg: () => defaultArg,
+  disconnect: () => disconnect,
+  disconnectSignal: () => disconnectSignal,
+  fanIn: () => fanIn,
+  ftom: () => ftom,
+  gainToDb: () => gainToDb,
+  getContext: () => getContext,
+  getDestination: () => getDestination,
+  getDraw: () => getDraw,
+  getListener: () => getListener,
+  getTransport: () => getTransport,
+  immediate: () => immediate,
+  intervalToFrequencyRatio: () => intervalToFrequencyRatio,
+  isArray: () => isArray,
+  isBoolean: () => isBoolean,
+  isDefined: () => isDefined,
+  isFunction: () => isFunction,
+  isNote: () => isNote,
+  isNumber: () => isNumber,
+  isObject: () => isObject,
+  isString: () => isString,
+  isUndef: () => isUndef,
+  loaded: () => loaded,
+  mtof: () => mtof,
+  now: () => now,
+  optionsFromArguments: () => optionsFromArguments,
+  setContext: () => setContext,
+  start: () => start,
+  supported: () => isSupported,
+  version: () => version
+});
 
 // ../../sdk/node_modules/tone/build/esm/core/type/Conversions.js
 function dbToGain(db) {
@@ -13331,6 +13720,20 @@ var createIsNativeOfflineAudioContext = (nativeOfflineAudioContextConstructor2) 
 // ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-secure-context.js
 var createIsSecureContext = (window3) => window3 !== null && window3.isSecureContext;
 
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-supported-promise.js
+var createIsSupportedPromise = async (cacheTestResult2, testAudioBufferCopyChannelMethodsSubarraySupport, testAudioContextCloseMethodSupport, testAudioContextDecodeAudioDataMethodTypeErrorSupport, testAudioContextOptionsSupport, testAudioNodeConnectMethodSupport, testAudioWorkletProcessorNoOutputsSupport, testChannelMergerNodeChannelCountSupport, testConstantSourceNodeAccurateSchedulingSupport, testConvolverNodeBufferReassignabilitySupport, testConvolverNodeChannelCountSupport, testDomExceptionContrucorSupport, testIsSecureContextSupport, testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport, testStereoPannerNodeDefaultValueSupport, testTransferablesSupport2) => {
+  if (cacheTestResult2(testAudioBufferCopyChannelMethodsSubarraySupport, testAudioBufferCopyChannelMethodsSubarraySupport) && cacheTestResult2(testAudioContextCloseMethodSupport, testAudioContextCloseMethodSupport) && cacheTestResult2(testAudioContextOptionsSupport, testAudioContextOptionsSupport) && cacheTestResult2(testAudioNodeConnectMethodSupport, testAudioNodeConnectMethodSupport) && cacheTestResult2(testChannelMergerNodeChannelCountSupport, testChannelMergerNodeChannelCountSupport) && cacheTestResult2(testConstantSourceNodeAccurateSchedulingSupport, testConstantSourceNodeAccurateSchedulingSupport) && cacheTestResult2(testConvolverNodeBufferReassignabilitySupport, testConvolverNodeBufferReassignabilitySupport) && cacheTestResult2(testConvolverNodeChannelCountSupport, testConvolverNodeChannelCountSupport) && cacheTestResult2(testDomExceptionContrucorSupport, testDomExceptionContrucorSupport) && cacheTestResult2(testIsSecureContextSupport, testIsSecureContextSupport) && cacheTestResult2(testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport, testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport)) {
+    const results = await Promise.all([
+      cacheTestResult2(testAudioContextDecodeAudioDataMethodTypeErrorSupport, testAudioContextDecodeAudioDataMethodTypeErrorSupport),
+      cacheTestResult2(testAudioWorkletProcessorNoOutputsSupport, testAudioWorkletProcessorNoOutputsSupport),
+      cacheTestResult2(testStereoPannerNodeDefaultValueSupport, testStereoPannerNodeDefaultValueSupport),
+      cacheTestResult2(testTransferablesSupport2, testTransferablesSupport2)
+    ]);
+    return results.every((result) => result);
+  }
+  return false;
+};
+
 // ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-element-audio-source-node-constructor.js
 var createMediaElementAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaElementAudioSourceNode2, getNativeContext2, isNativeOfflineAudioContext2) => {
   return class MediaElementAudioSourceNode extends audioNodeConstructor2 {
@@ -16366,6 +16769,150 @@ var createTestAudioBufferConstructorSupport = (nativeAudioBufferConstructor2) =>
   };
 };
 
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-copy-channel-methods-subarray-support.js
+var createTestAudioBufferCopyChannelMethodsSubarraySupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const nativeOfflineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    const nativeAudioBuffer = nativeOfflineAudioContext.createBuffer(1, 1, 44100);
+    if (nativeAudioBuffer.copyToChannel === void 0) {
+      return true;
+    }
+    const source = new Float32Array(2);
+    try {
+      nativeAudioBuffer.copyFromChannel(source, 0, 0);
+    } catch {
+      return false;
+    }
+    return true;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-close-method-support.js
+var createTestAudioContextCloseMethodSupport = (nativeAudioContextConstructor2) => {
+  return () => {
+    if (nativeAudioContextConstructor2 === null) {
+      return false;
+    }
+    if (nativeAudioContextConstructor2.prototype !== void 0 && nativeAudioContextConstructor2.prototype.close !== void 0) {
+      return true;
+    }
+    const audioContext = new nativeAudioContextConstructor2();
+    const isAudioContextClosable = audioContext.close !== void 0;
+    try {
+      audioContext.close();
+    } catch {
+    }
+    return isAudioContextClosable;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-decode-audio-data-method-type-error-support.js
+var createTestAudioContextDecodeAudioDataMethodTypeErrorSupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return Promise.resolve(false);
+    }
+    const offlineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    return new Promise((resolve) => {
+      let isPending = true;
+      const resolvePromise = (err) => {
+        if (isPending) {
+          isPending = false;
+          offlineAudioContext.startRendering();
+          resolve(err instanceof TypeError);
+        }
+      };
+      let promise;
+      try {
+        promise = offlineAudioContext.decodeAudioData(null, () => {
+        }, resolvePromise);
+      } catch (err) {
+        resolvePromise(err);
+      }
+      if (promise !== void 0) {
+        promise.catch(resolvePromise);
+      }
+    });
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-options-support.js
+var createTestAudioContextOptionsSupport = (nativeAudioContextConstructor2) => {
+  return () => {
+    if (nativeAudioContextConstructor2 === null) {
+      return false;
+    }
+    let audioContext;
+    try {
+      audioContext = new nativeAudioContextConstructor2({ latencyHint: "balanced" });
+    } catch {
+      return false;
+    }
+    audioContext.close();
+    return true;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-node-connect-method-support.js
+var createTestAudioNodeConnectMethodSupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const nativeOfflineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    const nativeGainNode = nativeOfflineAudioContext.createGain();
+    const isSupported2 = nativeGainNode.connect(nativeGainNode) === nativeGainNode;
+    nativeGainNode.disconnect(nativeGainNode);
+    return isSupported2;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-no-outputs-support.js
+var createTestAudioWorkletProcessorNoOutputsSupport = (nativeAudioWorkletNodeConstructor2, nativeOfflineAudioContextConstructor2) => {
+  return async () => {
+    if (nativeAudioWorkletNodeConstructor2 === null) {
+      return true;
+    }
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const blob = new Blob([
+      'let c,p;class A extends AudioWorkletProcessor{constructor(){super();this.port.onmessage=(e)=>{p=e.data;p.onmessage=()=>{p.postMessage(c);p.close()};this.port.postMessage(0)}}process(){c=1}}registerProcessor("a",A)'
+    ], {
+      type: "application/javascript; charset=utf-8"
+    });
+    const messageChannel = new MessageChannel();
+    const offlineAudioContext = new nativeOfflineAudioContextConstructor2(1, 128, 44100);
+    const url = URL.createObjectURL(blob);
+    let isCallingProcess = false;
+    try {
+      await offlineAudioContext.audioWorklet.addModule(url);
+      const audioWorkletNode = new nativeAudioWorkletNodeConstructor2(offlineAudioContext, "a", { numberOfOutputs: 0 });
+      const oscillator = offlineAudioContext.createOscillator();
+      await new Promise((resolve) => {
+        audioWorkletNode.port.onmessage = () => resolve();
+        audioWorkletNode.port.postMessage(messageChannel.port2, [messageChannel.port2]);
+      });
+      audioWorkletNode.port.onmessage = () => isCallingProcess = true;
+      oscillator.connect(audioWorkletNode);
+      oscillator.start(0);
+      await offlineAudioContext.startRendering();
+      isCallingProcess = await new Promise((resolve) => {
+        messageChannel.port1.onmessage = ({ data }) => resolve(data === 1);
+        messageChannel.port1.postMessage(0);
+      });
+    } catch {
+    } finally {
+      messageChannel.port1.close();
+      URL.revokeObjectURL(url);
+    }
+    return isCallingProcess;
+  };
+};
+
 // ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-post-message-support.js
 var createTestAudioWorkletProcessorPostMessageSupport = (nativeAudioWorkletNodeConstructor2, nativeOfflineAudioContextConstructor2) => {
   return async () => {
@@ -16400,6 +16947,99 @@ var createTestAudioWorkletProcessorPostMessageSupport = (nativeAudioWorkletNodeC
   };
 };
 
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-channel-merger-node-channel-count-support.js
+var createTestChannelMergerNodeChannelCountSupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const offlineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    const nativeChannelMergerNode = offlineAudioContext.createChannelMerger();
+    if (nativeChannelMergerNode.channelCountMode === "max") {
+      return true;
+    }
+    try {
+      nativeChannelMergerNode.channelCount = 2;
+    } catch {
+      return true;
+    }
+    return false;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-constant-source-node-accurate-scheduling-support.js
+var createTestConstantSourceNodeAccurateSchedulingSupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const nativeOfflineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    if (nativeOfflineAudioContext.createConstantSource === void 0) {
+      return true;
+    }
+    const nativeConstantSourceNode = nativeOfflineAudioContext.createConstantSource();
+    return nativeConstantSourceNode.offset.maxValue !== Number.POSITIVE_INFINITY;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-buffer-reassignability-support.js
+var createTestConvolverNodeBufferReassignabilitySupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const offlineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    const nativeConvolverNode = offlineAudioContext.createConvolver();
+    nativeConvolverNode.buffer = offlineAudioContext.createBuffer(1, 1, offlineAudioContext.sampleRate);
+    try {
+      nativeConvolverNode.buffer = offlineAudioContext.createBuffer(1, 1, offlineAudioContext.sampleRate);
+    } catch {
+      return false;
+    }
+    return true;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-channel-count-support.js
+var createTestConvolverNodeChannelCountSupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return false;
+    }
+    const offlineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    const nativeConvolverNode = offlineAudioContext.createConvolver();
+    try {
+      nativeConvolverNode.channelCount = 1;
+    } catch {
+      return false;
+    }
+    return true;
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-is-secure-context-support.js
+var createTestIsSecureContextSupport = (window3) => {
+  return () => window3 !== null && window3.hasOwnProperty("isSecureContext");
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-media-stream-audio-source-node-media-stream-without-audio-track-support.js
+var createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport = (nativeAudioContextConstructor2) => {
+  return () => {
+    if (nativeAudioContextConstructor2 === null) {
+      return false;
+    }
+    const audioContext = new nativeAudioContextConstructor2();
+    try {
+      audioContext.createMediaStreamSource(new MediaStream());
+      return false;
+    } catch (err) {
+      return true;
+    } finally {
+      audioContext.close();
+    }
+  };
+};
+
 // ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-offline-audio-context-current-time-support.js
 var createTestOfflineAudioContextCurrentTimeSupport = (createNativeGainNode2, nativeOfflineAudioContextConstructor2) => {
   return () => {
@@ -16420,6 +17060,30 @@ var createTestOfflineAudioContextCurrentTimeSupport = (createNativeGainNode2, na
       };
       nativeOfflineAudioContext.startRendering();
     });
+  };
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-stereo-panner-node-default-value-support.js
+var createTestStereoPannerNodeDefaultValueSupport = (nativeOfflineAudioContextConstructor2) => {
+  return () => {
+    if (nativeOfflineAudioContextConstructor2 === null) {
+      return Promise.resolve(false);
+    }
+    const nativeOfflineAudioContext = new nativeOfflineAudioContextConstructor2(1, 1, 44100);
+    if (nativeOfflineAudioContext.createStereoPanner === void 0) {
+      return Promise.resolve(true);
+    }
+    if (nativeOfflineAudioContext.createConstantSource === void 0) {
+      return Promise.resolve(true);
+    }
+    const constantSourceNode = nativeOfflineAudioContext.createConstantSource();
+    const stereoPanner = nativeOfflineAudioContext.createStereoPanner();
+    constantSourceNode.channelCount = 1;
+    constantSourceNode.offset.value = 1;
+    stereoPanner.channelCount = 1;
+    constantSourceNode.start();
+    constantSourceNode.connect(stereoPanner).connect(nativeOfflineAudioContext.destination);
+    return nativeOfflineAudioContext.startRendering().then((buffer) => buffer.getChannelData(0)[0] !== 1);
   };
 };
 
@@ -16778,6 +17442,24 @@ var testAudioWorkletNodeOptionsClonability = (audioWorkletNodeOptions) => {
   }
 };
 
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-dom-exception-constructor-support.js
+var testDomExceptionConstructorSupport = () => {
+  try {
+    new DOMException();
+  } catch {
+    return false;
+  }
+  return true;
+};
+
+// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-transferables-support.js
+var testTransferablesSupport = () => new Promise((resolve) => {
+  const arrayBuffer = new ArrayBuffer(0);
+  const { port1, port2 } = new MessageChannel();
+  port1.onmessage = ({ data }) => resolve(data !== null);
+  port2.postMessage(arrayBuffer, [arrayBuffer]);
+});
+
 // ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-offset-clamping.js
 var wrapAudioBufferSourceNodeStartMethodOffsetClamping = (nativeAudioBufferSourceNode) => {
   nativeAudioBufferSourceNode.start = /* @__PURE__ */ ((start2) => {
@@ -16977,6 +17659,7 @@ var isAnyAudioContext = createIsAnyAudioContext(CONTEXT_STORE, isNativeAudioCont
 var isAnyAudioNode = createIsAnyAudioNode(AUDIO_NODE_STORE, isNativeAudioNode2);
 var isAnyAudioParam = createIsAnyAudioParam(AUDIO_PARAM_STORE, isNativeAudioParam);
 var isAnyOfflineAudioContext = createIsAnyOfflineAudioContext(CONTEXT_STORE, isNativeOfflineAudioContext);
+var isSupported = () => createIsSupportedPromise(cacheTestResult, createTestAudioBufferCopyChannelMethodsSubarraySupport(nativeOfflineAudioContextConstructor), createTestAudioContextCloseMethodSupport(nativeAudioContextConstructor), createTestAudioContextDecodeAudioDataMethodTypeErrorSupport(nativeOfflineAudioContextConstructor), createTestAudioContextOptionsSupport(nativeAudioContextConstructor), createTestAudioNodeConnectMethodSupport(nativeOfflineAudioContextConstructor), createTestAudioWorkletProcessorNoOutputsSupport(nativeAudioWorkletNodeConstructor, nativeOfflineAudioContextConstructor), createTestChannelMergerNodeChannelCountSupport(nativeOfflineAudioContextConstructor), createTestConstantSourceNodeAccurateSchedulingSupport(nativeOfflineAudioContextConstructor), createTestConvolverNodeBufferReassignabilitySupport(nativeOfflineAudioContextConstructor), createTestConvolverNodeChannelCountSupport(nativeOfflineAudioContextConstructor), testDomExceptionConstructorSupport, createTestIsSecureContextSupport(window2), createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport(nativeAudioContextConstructor), createTestStereoPannerNodeDefaultValueSupport(nativeOfflineAudioContextConstructor), testTransferablesSupport);
 
 // ../../sdk/node_modules/tone/build/esm/core/util/AdvancedTypeCheck.js
 function isAudioParam(arg) {
@@ -16994,6 +17677,19 @@ function isAudioContext(arg) {
 function isAudioBuffer(arg) {
   return arg instanceof audioBufferConstructor;
 }
+
+// ../../sdk/node_modules/tone/build/esm/core/util/Debug.js
+var Debug_exports = {};
+__export(Debug_exports, {
+  assert: () => assert,
+  assertContextRunning: () => assertContextRunning,
+  assertRange: () => assertRange,
+  assertUsedScheduleTime: () => assertUsedScheduleTime,
+  enterScheduledCallback: () => enterScheduledCallback,
+  log: () => log,
+  setLogger: () => setLogger,
+  warn: () => warn
+});
 
 // ../../sdk/node_modules/tone/build/esm/core/util/TypeCheck.js
 function isUndef(arg) {
@@ -17052,6 +17748,9 @@ function assertUsedScheduleTime(time) {
   }
 }
 var defaultLogger = console;
+function setLogger(logger) {
+  defaultLogger = logger;
+}
 function log(...args) {
   defaultLogger.log(...args);
 }
@@ -17533,12 +18232,8 @@ var Timeline = class _Timeline extends Tone {
 // ../../sdk/node_modules/tslib/tslib.es6.mjs
 function __decorate(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-  if (typeof Reflect === "object" && typeof Reflect.decorate === "function")
-    r = Reflect.decorate(decorators, target, key, desc);
-  else
-    for (var i = decorators.length - 1; i >= 0; i--)
-      if (d = decorators[i])
-        r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
   return c > 3 && r && Object.defineProperty(target, key, r), r;
 }
 function __awaiter(thisArg, _arguments, P, generator) {
@@ -19155,6 +19850,9 @@ var TimeClass = class _TimeClass extends TimeBaseClass {
     return this.context.now();
   }
 };
+function Time(value, units) {
+  return new TimeClass(getContext(), value, units);
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/type/Frequency.js
 var FrequencyClass = class _FrequencyClass extends TimeClass {
@@ -19418,6 +20116,9 @@ var scaleIndexToNote = [
   "A#",
   "B"
 ];
+function Frequency(value, units) {
+  return new FrequencyClass(getContext(), value, units);
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/type/TransportTime.js
 var TransportTimeClass = class extends TimeClass {
@@ -19432,6 +20133,9 @@ var TransportTimeClass = class extends TimeClass {
     return this.context.transport.seconds;
   }
 };
+function TransportTime(value, units) {
+  return new TransportTimeClass(getContext(), value, units);
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/context/ToneWithContext.js
 var ToneWithContext = class _ToneWithContext extends Tone {
@@ -20237,6 +20941,12 @@ function disconnect(srcNode, dstNode, outputNumber = 0, inputNumber = 0) {
     srcNode.disconnect();
   }
 }
+function fanIn(...nodes) {
+  const dstNode = nodes.pop();
+  if (isDefined(dstNode)) {
+    nodes.forEach((node) => connect(node, dstNode));
+  }
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/context/Gain.js
 var Gain = class _Gain extends ToneAudioNode {
@@ -20276,6 +20986,225 @@ var Gain = class _Gain extends ToneAudioNode {
     this._gainNode.disconnect();
     this.gain.dispose();
     return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/Split.js
+var Split = class _Split extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Split.getDefaults(), arguments, [
+      "channels"
+    ]);
+    super(options);
+    this.name = "Split";
+    this._splitter = this.input = this.output = this.context.createChannelSplitter(options.channels);
+    this._internalChannels = [this._splitter];
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      channels: 2
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._splitter.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/Analyser.js
+var Analyser = class _Analyser extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Analyser.getDefaults(), arguments, ["type", "size"]);
+    super(options);
+    this.name = "Analyser";
+    this._analyzers = [];
+    this._buffers = [];
+    this.input = this.output = this._gain = new Gain({ context: this.context });
+    this._split = new Split({
+      context: this.context,
+      channels: options.channels
+    });
+    this.input.connect(this._split);
+    assertRange(options.channels, 1);
+    for (let channel = 0; channel < options.channels; channel++) {
+      this._analyzers[channel] = this.context.createAnalyser();
+      this._split.connect(this._analyzers[channel], channel, 0);
+    }
+    this.size = options.size;
+    this.type = options.type;
+    this.smoothing = options.smoothing;
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      size: 1024,
+      smoothing: 0.8,
+      type: "fft",
+      channels: 1
+    });
+  }
+  /**
+   * Run the analysis given the current settings. If {@link channels} = 1,
+   * it will return a Float32Array. If {@link channels} > 1, it will
+   * return an array of Float32Arrays where each index in the array
+   * represents the analysis done on a channel.
+   */
+  getValue() {
+    this._analyzers.forEach((analyser, index) => {
+      const buffer = this._buffers[index];
+      if (this._type === "fft") {
+        analyser.getFloatFrequencyData(buffer);
+      } else if (this._type === "waveform") {
+        analyser.getFloatTimeDomainData(buffer);
+      }
+    });
+    if (this.channels === 1) {
+      return this._buffers[0];
+    } else {
+      return this._buffers;
+    }
+  }
+  /**
+   * The size of analysis. This must be a power of two in the range 16 to 16384.
+   */
+  get size() {
+    return this._analyzers[0].frequencyBinCount;
+  }
+  set size(size) {
+    this._analyzers.forEach((analyser, index) => {
+      analyser.fftSize = size * 2;
+      this._buffers[index] = new Float32Array(size);
+    });
+  }
+  /**
+   * The number of channels the analyser does the analysis on. Channel
+   * separation is done using {@link Split}
+   */
+  get channels() {
+    return this._analyzers.length;
+  }
+  /**
+   * The analysis function returned by analyser.getValue(), either "fft" or "waveform".
+   */
+  get type() {
+    return this._type;
+  }
+  set type(type) {
+    assert(type === "waveform" || type === "fft", `Analyser: invalid type: ${type}`);
+    this._type = type;
+  }
+  /**
+   * 0 represents no time averaging with the last analysis frame.
+   */
+  get smoothing() {
+    return this._analyzers[0].smoothingTimeConstant;
+  }
+  set smoothing(val) {
+    this._analyzers.forEach((a) => a.smoothingTimeConstant = val);
+  }
+  /**
+   * Clean up.
+   */
+  dispose() {
+    super.dispose();
+    this._analyzers.forEach((a) => a.disconnect());
+    this._split.dispose();
+    this._gain.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/MeterBase.js
+var MeterBase = class _MeterBase extends ToneAudioNode {
+  constructor() {
+    super(optionsFromArguments(_MeterBase.getDefaults(), arguments));
+    this.name = "MeterBase";
+    this.input = this.output = this._analyser = new Analyser({
+      context: this.context,
+      size: 256,
+      type: "waveform"
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._analyser.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/DCMeter.js
+var DCMeter = class _DCMeter extends MeterBase {
+  constructor() {
+    super(optionsFromArguments(_DCMeter.getDefaults(), arguments));
+    this.name = "DCMeter";
+    this._analyser.type = "waveform";
+    this._analyser.size = 256;
+  }
+  /**
+   * Get the signal value of the incoming signal
+   */
+  getValue() {
+    const value = this._analyser.getValue();
+    return value[0];
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/FFT.js
+var FFT = class _FFT extends MeterBase {
+  constructor() {
+    const options = optionsFromArguments(_FFT.getDefaults(), arguments, [
+      "size"
+    ]);
+    super(options);
+    this.name = "FFT";
+    this.normalRange = options.normalRange;
+    this._analyser.type = "fft";
+    this.size = options.size;
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      normalRange: false,
+      size: 1024,
+      smoothing: 0.8
+    });
+  }
+  /**
+   * Gets the current frequency data from the connected audio source.
+   * Returns the frequency data of length {@link size} as a Float32Array of decibel values.
+   */
+  getValue() {
+    const values = this._analyser.getValue();
+    return values.map((v) => this.normalRange ? dbToGain(v) : v);
+  }
+  /**
+   * The size of analysis. This must be a power of two in the range 16 to 16384.
+   * Determines the size of the array returned by {@link getValue} (i.e. the number of
+   * frequency bins). Large FFT sizes may be costly to compute.
+   */
+  get size() {
+    return this._analyser.size;
+  }
+  set size(size) {
+    this._analyser.size = size;
+  }
+  /**
+   * 0 represents no time averaging with the last analysis frame.
+   */
+  get smoothing() {
+    return this._analyser.smoothing;
+  }
+  set smoothing(val) {
+    this._analyser.smoothing = val;
+  }
+  /**
+   * Returns the frequency value in hertz of each of the indices of the FFT's {@link getValue} response.
+   * @example
+   * const fft = new Tone.FFT(32);
+   * console.log([0, 1, 2, 3, 4].map(index => fft.getFrequencyOfIndex(index)));
+   */
+  getFrequencyOfIndex(index) {
+    assert(0 <= index && index < this.size, `index must be greater than or equal to 0 and less than ${this.size}`);
+    return index * this.context.sampleRate / (this.size * 2);
   }
 };
 
@@ -20791,6 +21720,264 @@ var WaveShaper = class _WaveShaper extends SignalOperator {
   }
 };
 
+// ../../sdk/node_modules/tone/build/esm/signal/Abs.js
+var Abs = class extends SignalOperator {
+  constructor() {
+    super(...arguments);
+    this.name = "Abs";
+    this._abs = new WaveShaper({
+      context: this.context,
+      mapping: (val) => {
+        if (Math.abs(val) < 1e-3) {
+          return 0;
+        } else {
+          return Math.abs(val);
+        }
+      }
+    });
+    this.input = this._abs;
+    this.output = this._abs;
+  }
+  /**
+   * clean up
+   */
+  dispose() {
+    super.dispose();
+    this._abs.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/filter/OnePoleFilter.js
+var OnePoleFilter = class _OnePoleFilter extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_OnePoleFilter.getDefaults(), arguments, ["frequency", "type"]);
+    super(options);
+    this.name = "OnePoleFilter";
+    this._frequency = options.frequency;
+    this._type = options.type;
+    this.input = new Gain({ context: this.context });
+    this.output = new Gain({ context: this.context });
+    this._createFilter();
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      frequency: 880,
+      type: "lowpass"
+    });
+  }
+  /**
+   * Create a filter and dispose the old one
+   */
+  _createFilter() {
+    const oldFilter = this._filter;
+    const freq = this.toFrequency(this._frequency);
+    const t = 1 / (2 * Math.PI * freq);
+    if (this._type === "lowpass") {
+      const a0 = 1 / (t * this.context.sampleRate);
+      const b1 = a0 - 1;
+      this._filter = this.context.createIIRFilter([a0, 0], [1, b1]);
+    } else {
+      const b1 = 1 / (t * this.context.sampleRate) - 1;
+      this._filter = this.context.createIIRFilter([1, -1], [1, b1]);
+    }
+    this.input.chain(this._filter, this.output);
+    if (oldFilter) {
+      this.context.setTimeout(() => {
+        if (!this.disposed) {
+          this.input.disconnect(oldFilter);
+          oldFilter.disconnect();
+        }
+      }, this.blockTime);
+    }
+  }
+  /**
+   * The frequency value.
+   */
+  get frequency() {
+    return this._frequency;
+  }
+  set frequency(fq) {
+    this._frequency = fq;
+    this._createFilter();
+  }
+  /**
+   * The OnePole Filter type, either "highpass" or "lowpass"
+   */
+  get type() {
+    return this._type;
+  }
+  set type(t) {
+    this._type = t;
+    this._createFilter();
+  }
+  /**
+   * Get the frequency response curve. This curve represents how the filter
+   * responses to frequencies between 20hz-20khz.
+   * @param  len The number of values to return
+   * @return The frequency response curve between 20-20kHz
+   */
+  getFrequencyResponse(len = 128) {
+    const freqValues = new Float32Array(len);
+    for (let i = 0; i < len; i++) {
+      const norm = Math.pow(i / len, 2);
+      const freq = norm * (2e4 - 20) + 20;
+      freqValues[i] = freq;
+    }
+    const magValues = new Float32Array(len);
+    const phaseValues = new Float32Array(len);
+    this._filter.getFrequencyResponse(freqValues, magValues, phaseValues);
+    return magValues;
+  }
+  dispose() {
+    super.dispose();
+    this.input.dispose();
+    this.output.dispose();
+    this._filter.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/Follower.js
+var Follower = class _Follower extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Follower.getDefaults(), arguments, ["smoothing"]);
+    super(options);
+    this.name = "Follower";
+    this._abs = this.input = new Abs({ context: this.context });
+    this._lowpass = this.output = new OnePoleFilter({
+      context: this.context,
+      frequency: 1 / this.toSeconds(options.smoothing),
+      type: "lowpass"
+    });
+    this._abs.connect(this._lowpass);
+    this._smoothing = options.smoothing;
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      smoothing: 0.05
+    });
+  }
+  /**
+   * The amount of time it takes a value change to arrive at the updated value.
+   */
+  get smoothing() {
+    return this._smoothing;
+  }
+  set smoothing(smoothing) {
+    this._smoothing = smoothing;
+    this._lowpass.frequency = 1 / this.toSeconds(this.smoothing);
+  }
+  dispose() {
+    super.dispose();
+    this._abs.dispose();
+    this._lowpass.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/Meter.js
+var Meter = class _Meter extends MeterBase {
+  constructor() {
+    const options = optionsFromArguments(_Meter.getDefaults(), arguments, [
+      "smoothing"
+    ]);
+    super(options);
+    this.name = "Meter";
+    this.input = this.output = this._analyser = new Analyser({
+      context: this.context,
+      size: 256,
+      type: "waveform",
+      channels: options.channelCount
+    });
+    this.smoothing = options.smoothing;
+    this.normalRange = options.normalRange;
+    this._rms = new Array(options.channelCount);
+    this._rms.fill(0);
+  }
+  static getDefaults() {
+    return Object.assign(MeterBase.getDefaults(), {
+      smoothing: 0.8,
+      normalRange: false,
+      channelCount: 1
+    });
+  }
+  /**
+   * Use {@link getValue} instead. For the previous getValue behavior, use DCMeter.
+   * @deprecated
+   */
+  getLevel() {
+    warn("'getLevel' has been changed to 'getValue'");
+    return this.getValue();
+  }
+  /**
+   * Get the current value of the incoming signal.
+   * Output is in decibels when {@link normalRange} is `false`.
+   * If {@link channels} = 1, then the output is a single number
+   * representing the value of the input signal. When {@link channels} > 1,
+   * then each channel is returned as a value in a number array.
+   */
+  getValue() {
+    const aValues = this._analyser.getValue();
+    const channelValues = this.channels === 1 ? [aValues] : aValues;
+    const vals = channelValues.map((values, index) => {
+      const totalSquared = values.reduce((total, current) => total + current * current, 0);
+      const rms = Math.sqrt(totalSquared / values.length);
+      this._rms[index] = Math.max(rms, this._rms[index] * this.smoothing);
+      return this.normalRange ? this._rms[index] : gainToDb(this._rms[index]);
+    });
+    if (this.channels === 1) {
+      return vals[0];
+    } else {
+      return vals;
+    }
+  }
+  /**
+   * The number of channels of analysis.
+   */
+  get channels() {
+    return this._analyser.channels;
+  }
+  dispose() {
+    super.dispose();
+    this._analyser.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/analysis/Waveform.js
+var Waveform = class _Waveform extends MeterBase {
+  constructor() {
+    const options = optionsFromArguments(_Waveform.getDefaults(), arguments, ["size"]);
+    super(options);
+    this.name = "Waveform";
+    this._analyser.type = "waveform";
+    this.size = options.size;
+  }
+  static getDefaults() {
+    return Object.assign(MeterBase.getDefaults(), {
+      size: 1024
+    });
+  }
+  /**
+   * Return the waveform for the current time as a Float32Array where each value in the array
+   * represents a sample in the waveform.
+   */
+  getValue() {
+    return this._analyser.getValue();
+  }
+  /**
+   * The size of analysis. This must be a power of two in the range 16 to 16384.
+   * Determines the size of the array returned by {@link getValue}.
+   */
+  get size() {
+    return this._analyser.size;
+  }
+  set size(size) {
+    this._analyser.size = size;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/component/channel/Panner.js
 var Panner = class _Panner extends ToneAudioNode {
   constructor() {
@@ -21139,6 +22326,103 @@ var Channel = class _Channel extends ToneAudioNode {
 };
 Channel.buses = /* @__PURE__ */ new Map();
 
+// ../../sdk/node_modules/tone/build/esm/signal/GainToAudio.js
+var GainToAudio = class extends SignalOperator {
+  constructor() {
+    super(...arguments);
+    this.name = "GainToAudio";
+    this._norm = new WaveShaper({
+      context: this.context,
+      mapping: (x) => Math.abs(x) * 2 - 1
+    });
+    this.input = this._norm;
+    this.output = this._norm;
+  }
+  /**
+   * clean up
+   */
+  dispose() {
+    super.dispose();
+    this._norm.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/CrossFade.js
+var CrossFade = class _CrossFade extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_CrossFade.getDefaults(), arguments, ["fade"]);
+    super(options);
+    this.name = "CrossFade";
+    this._panner = this.context.createStereoPanner();
+    this._split = this.context.createChannelSplitter(2);
+    this._g2a = new GainToAudio({ context: this.context });
+    this.a = new Gain({
+      context: this.context,
+      gain: 0
+    });
+    this.b = new Gain({
+      context: this.context,
+      gain: 0
+    });
+    this.output = new Gain({ context: this.context });
+    this._internalChannels = [this.a, this.b];
+    this.fade = new Signal({
+      context: this.context,
+      units: "normalRange",
+      value: options.fade
+    });
+    readOnly(this, "fade");
+    this.context.getConstant(1).connect(this._panner);
+    this._panner.connect(this._split);
+    this._panner.channelCount = 1;
+    this._panner.channelCountMode = "explicit";
+    connect(this._split, this.a.gain, 0);
+    connect(this._split, this.b.gain, 1);
+    this.fade.chain(this._g2a, this._panner.pan);
+    this.a.connect(this.output);
+    this.b.connect(this.output);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      fade: 0.5
+    });
+  }
+  dispose() {
+    super.dispose();
+    this.a.dispose();
+    this.b.dispose();
+    this.output.dispose();
+    this.fade.dispose();
+    this._g2a.dispose();
+    this._panner.disconnect();
+    this._split.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/Merge.js
+var Merge = class _Merge extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Merge.getDefaults(), arguments, [
+      "channels"
+    ]);
+    super(options);
+    this.name = "Merge";
+    this._merger = this.output = this.input = this.context.createChannelMerger(options.channels);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      channels: 2
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._merger.disconnect();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/signal/Add.js
 var Add = class _Add extends Signal {
   constructor() {
@@ -21186,6 +22470,152 @@ var Multiply = class _Multiply extends Signal {
   dispose() {
     super.dispose();
     this._mult.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/signal/Negate.js
+var Negate = class extends SignalOperator {
+  constructor() {
+    super(...arguments);
+    this.name = "Negate";
+    this._multiply = new Multiply({
+      context: this.context,
+      value: -1
+    });
+    this.input = this._multiply;
+    this.output = this._multiply;
+  }
+  /**
+   * clean up
+   * @returns {Negate} this
+   */
+  dispose() {
+    super.dispose();
+    this._multiply.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/signal/Subtract.js
+var Subtract = class _Subtract extends Signal {
+  constructor() {
+    super(optionsFromArguments(_Subtract.getDefaults(), arguments, ["value"]));
+    this.override = false;
+    this.name = "Subtract";
+    this._sum = new Gain({ context: this.context });
+    this.input = this._sum;
+    this.output = this._sum;
+    this._neg = new Negate({ context: this.context });
+    this.subtrahend = this._param;
+    connectSeries(this._constantSource, this._neg, this._sum);
+  }
+  static getDefaults() {
+    return Object.assign(Signal.getDefaults(), {
+      value: 0
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._neg.dispose();
+    this._sum.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/MidSideMerge.js
+var MidSideMerge = class _MidSideMerge extends ToneAudioNode {
+  constructor() {
+    super(optionsFromArguments(_MidSideMerge.getDefaults(), arguments));
+    this.name = "MidSideMerge";
+    this.mid = new Gain({ context: this.context });
+    this.side = new Gain({ context: this.context });
+    this._left = new Add({ context: this.context });
+    this._leftMult = new Multiply({
+      context: this.context,
+      value: Math.SQRT1_2
+    });
+    this._right = new Subtract({ context: this.context });
+    this._rightMult = new Multiply({
+      context: this.context,
+      value: Math.SQRT1_2
+    });
+    this._merge = this.output = new Merge({ context: this.context });
+    this.mid.fan(this._left);
+    this.side.connect(this._left.addend);
+    this.mid.connect(this._right);
+    this.side.connect(this._right.subtrahend);
+    this._left.connect(this._leftMult);
+    this._right.connect(this._rightMult);
+    this._leftMult.connect(this._merge, 0, 0);
+    this._rightMult.connect(this._merge, 0, 1);
+  }
+  dispose() {
+    super.dispose();
+    this.mid.dispose();
+    this.side.dispose();
+    this._leftMult.dispose();
+    this._rightMult.dispose();
+    this._left.dispose();
+    this._right.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/MidSideSplit.js
+var MidSideSplit = class _MidSideSplit extends ToneAudioNode {
+  constructor() {
+    super(optionsFromArguments(_MidSideSplit.getDefaults(), arguments));
+    this.name = "MidSideSplit";
+    this._split = this.input = new Split({
+      channels: 2,
+      context: this.context
+    });
+    this._midAdd = new Add({ context: this.context });
+    this.mid = new Multiply({
+      context: this.context,
+      value: Math.SQRT1_2
+    });
+    this._sideSubtract = new Subtract({ context: this.context });
+    this.side = new Multiply({
+      context: this.context,
+      value: Math.SQRT1_2
+    });
+    this._split.connect(this._midAdd, 0);
+    this._split.connect(this._midAdd.addend, 1);
+    this._split.connect(this._sideSubtract, 0);
+    this._split.connect(this._sideSubtract.subtrahend, 1);
+    this._midAdd.connect(this.mid);
+    this._sideSubtract.connect(this.side);
+  }
+  dispose() {
+    super.dispose();
+    this.mid.dispose();
+    this.side.dispose();
+    this._midAdd.dispose();
+    this._sideSubtract.dispose();
+    this._split.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/Mono.js
+var Mono = class _Mono extends ToneAudioNode {
+  constructor() {
+    super(optionsFromArguments(_Mono.getDefaults(), arguments));
+    this.name = "Mono";
+    this.input = new Gain({ context: this.context });
+    this._merge = this.output = new Merge({
+      channels: 2,
+      context: this.context
+    });
+    this.input.connect(this._merge, 0, 0);
+    this.input.connect(this._merge, 0, 1);
+  }
+  dispose() {
+    super.dispose();
+    this._merge.dispose();
+    this.input.dispose();
     return this;
   }
 };
@@ -21432,6 +22862,84 @@ var Filter = class _Filter extends ToneAudioNode {
   }
 };
 
+// ../../sdk/node_modules/tone/build/esm/component/channel/MultibandSplit.js
+var MultibandSplit = class _MultibandSplit extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_MultibandSplit.getDefaults(), arguments, ["lowFrequency", "highFrequency"]);
+    super(options);
+    this.name = "MultibandSplit";
+    this.input = new Gain({ context: this.context });
+    this.output = void 0;
+    this.low = new Filter({
+      context: this.context,
+      frequency: 0,
+      type: "lowpass"
+    });
+    this._lowMidFilter = new Filter({
+      context: this.context,
+      frequency: 0,
+      type: "highpass"
+    });
+    this.mid = new Filter({
+      context: this.context,
+      frequency: 0,
+      type: "lowpass"
+    });
+    this.high = new Filter({
+      context: this.context,
+      frequency: 0,
+      type: "highpass"
+    });
+    this._internalChannels = [this.low, this.mid, this.high];
+    this.lowFrequency = new Signal({
+      context: this.context,
+      units: "frequency",
+      value: options.lowFrequency
+    });
+    this.highFrequency = new Signal({
+      context: this.context,
+      units: "frequency",
+      value: options.highFrequency
+    });
+    this.Q = new Signal({
+      context: this.context,
+      units: "positive",
+      value: options.Q
+    });
+    this.input.fan(this.low, this.high);
+    this.input.chain(this._lowMidFilter, this.mid);
+    this.lowFrequency.fan(this.low.frequency, this._lowMidFilter.frequency);
+    this.highFrequency.fan(this.mid.frequency, this.high.frequency);
+    this.Q.connect(this.low.Q);
+    this.Q.connect(this._lowMidFilter.Q);
+    this.Q.connect(this.mid.Q);
+    this.Q.connect(this.high.Q);
+    readOnly(this, ["high", "mid", "low", "highFrequency", "lowFrequency"]);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      Q: 1,
+      highFrequency: 2500,
+      lowFrequency: 400
+    });
+  }
+  /**
+   * Clean up.
+   */
+  dispose() {
+    super.dispose();
+    writable(this, ["high", "mid", "low", "highFrequency", "lowFrequency"]);
+    this.low.dispose();
+    this._lowMidFilter.dispose();
+    this.mid.dispose();
+    this.high.dispose();
+    this.lowFrequency.dispose();
+    this.highFrequency.dispose();
+    this.Q.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/core/context/Listener.js
 var ListenerInstance = class extends ToneAudioNode {
   constructor() {
@@ -21507,6 +23015,621 @@ onContextInit((context2) => {
 onContextClose((context2) => {
   context2.listener.dispose();
 });
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/Panner3D.js
+var Panner3D = class _Panner3D extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Panner3D.getDefaults(), arguments, ["positionX", "positionY", "positionZ"]);
+    super(options);
+    this.name = "Panner3D";
+    this._panner = this.input = this.output = this.context.createPanner();
+    this.panningModel = options.panningModel;
+    this.maxDistance = options.maxDistance;
+    this.distanceModel = options.distanceModel;
+    this.coneOuterGain = options.coneOuterGain;
+    this.coneOuterAngle = options.coneOuterAngle;
+    this.coneInnerAngle = options.coneInnerAngle;
+    this.refDistance = options.refDistance;
+    this.rolloffFactor = options.rolloffFactor;
+    this.positionX = new Param({
+      context: this.context,
+      param: this._panner.positionX,
+      value: options.positionX
+    });
+    this.positionY = new Param({
+      context: this.context,
+      param: this._panner.positionY,
+      value: options.positionY
+    });
+    this.positionZ = new Param({
+      context: this.context,
+      param: this._panner.positionZ,
+      value: options.positionZ
+    });
+    this.orientationX = new Param({
+      context: this.context,
+      param: this._panner.orientationX,
+      value: options.orientationX
+    });
+    this.orientationY = new Param({
+      context: this.context,
+      param: this._panner.orientationY,
+      value: options.orientationY
+    });
+    this.orientationZ = new Param({
+      context: this.context,
+      param: this._panner.orientationZ,
+      value: options.orientationZ
+    });
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      coneInnerAngle: 360,
+      coneOuterAngle: 360,
+      coneOuterGain: 0,
+      distanceModel: "inverse",
+      maxDistance: 1e4,
+      orientationX: 0,
+      orientationY: 0,
+      orientationZ: 0,
+      panningModel: "equalpower",
+      positionX: 0,
+      positionY: 0,
+      positionZ: 0,
+      refDistance: 1,
+      rolloffFactor: 1
+    });
+  }
+  /**
+   * Sets the position of the source in 3d space.
+   */
+  setPosition(x, y, z) {
+    this.positionX.value = x;
+    this.positionY.value = y;
+    this.positionZ.value = z;
+    return this;
+  }
+  /**
+   * Sets the orientation of the source in 3d space.
+   */
+  setOrientation(x, y, z) {
+    this.orientationX.value = x;
+    this.orientationY.value = y;
+    this.orientationZ.value = z;
+    return this;
+  }
+  /**
+   * The panning model. Either "equalpower" or "HRTF".
+   */
+  get panningModel() {
+    return this._panner.panningModel;
+  }
+  set panningModel(val) {
+    this._panner.panningModel = val;
+  }
+  /**
+   * A reference distance for reducing volume as source move further from the listener
+   */
+  get refDistance() {
+    return this._panner.refDistance;
+  }
+  set refDistance(val) {
+    this._panner.refDistance = val;
+  }
+  /**
+   * Describes how quickly the volume is reduced as source moves away from listener.
+   */
+  get rolloffFactor() {
+    return this._panner.rolloffFactor;
+  }
+  set rolloffFactor(val) {
+    this._panner.rolloffFactor = val;
+  }
+  /**
+   * The distance model used by,  "linear", "inverse", or "exponential".
+   */
+  get distanceModel() {
+    return this._panner.distanceModel;
+  }
+  set distanceModel(val) {
+    this._panner.distanceModel = val;
+  }
+  /**
+   * The angle, in degrees, inside of which there will be no volume reduction
+   */
+  get coneInnerAngle() {
+    return this._panner.coneInnerAngle;
+  }
+  set coneInnerAngle(val) {
+    this._panner.coneInnerAngle = val;
+  }
+  /**
+   * The angle, in degrees, outside of which the volume will be reduced
+   * to a constant value of coneOuterGain
+   */
+  get coneOuterAngle() {
+    return this._panner.coneOuterAngle;
+  }
+  set coneOuterAngle(val) {
+    this._panner.coneOuterAngle = val;
+  }
+  /**
+   * The gain outside of the coneOuterAngle
+   */
+  get coneOuterGain() {
+    return this._panner.coneOuterGain;
+  }
+  set coneOuterGain(val) {
+    this._panner.coneOuterGain = val;
+  }
+  /**
+   * The maximum distance between source and listener,
+   * after which the volume will not be reduced any further.
+   */
+  get maxDistance() {
+    return this._panner.maxDistance;
+  }
+  set maxDistance(val) {
+    this._panner.maxDistance = val;
+  }
+  dispose() {
+    super.dispose();
+    this._panner.disconnect();
+    this.orientationX.dispose();
+    this.orientationY.dispose();
+    this.orientationZ.dispose();
+    this.positionX.dispose();
+    this.positionY.dispose();
+    this.positionZ.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/channel/Recorder.js
+var Recorder = class _Recorder extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Recorder.getDefaults(), arguments);
+    super(options);
+    this.name = "Recorder";
+    this.input = new Gain({
+      context: this.context
+    });
+    assert(_Recorder.supported, "Media Recorder API is not available");
+    this._stream = this.context.createMediaStreamDestination();
+    this.input.connect(this._stream);
+    this._recorder = new MediaRecorder(this._stream.stream, {
+      mimeType: options.mimeType
+    });
+  }
+  static getDefaults() {
+    return ToneAudioNode.getDefaults();
+  }
+  /**
+   * The mime type is the format that the audio is encoded in. For Chrome
+   * that is typically webm encoded as "vorbis".
+   */
+  get mimeType() {
+    return this._recorder.mimeType;
+  }
+  /**
+   * Test if your platform supports the Media Recorder API. If it's not available,
+   * try installing this (polyfill)[https://www.npmjs.com/package/audio-recorder-polyfill].
+   */
+  static get supported() {
+    return theWindow !== null && Reflect.has(theWindow, "MediaRecorder");
+  }
+  /**
+   * Get the playback state of the Recorder, either "started", "stopped" or "paused"
+   */
+  get state() {
+    if (this._recorder.state === "inactive") {
+      return "stopped";
+    } else if (this._recorder.state === "paused") {
+      return "paused";
+    } else {
+      return "started";
+    }
+  }
+  /**
+   * Start/Resume the Recorder. Returns a promise which resolves
+   * when the recorder has started.
+   */
+  start() {
+    return __awaiter(this, void 0, void 0, function* () {
+      assert(this.state !== "started", "Recorder is already started");
+      const startPromise = new Promise((done) => {
+        const handleStart = () => {
+          this._recorder.removeEventListener("start", handleStart, false);
+          done();
+        };
+        this._recorder.addEventListener("start", handleStart, false);
+      });
+      if (this.state === "stopped") {
+        this._recorder.start();
+      } else {
+        this._recorder.resume();
+      }
+      return yield startPromise;
+    });
+  }
+  /**
+   * Stop the recorder. Returns a promise with the recorded content until this point
+   * encoded as {@link mimeType}
+   */
+  stop() {
+    return __awaiter(this, void 0, void 0, function* () {
+      assert(this.state !== "stopped", "Recorder is not started");
+      const dataPromise = new Promise((done) => {
+        const handleData = (e) => {
+          this._recorder.removeEventListener("dataavailable", handleData, false);
+          done(e.data);
+        };
+        this._recorder.addEventListener("dataavailable", handleData, false);
+      });
+      this._recorder.stop();
+      return yield dataPromise;
+    });
+  }
+  /**
+   * Pause the recorder
+   */
+  pause() {
+    assert(this.state === "started", "Recorder must be started");
+    this._recorder.pause();
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this.input.dispose();
+    this._stream.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/dynamics/Compressor.js
+var Compressor = class _Compressor extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Compressor.getDefaults(), arguments, ["threshold", "ratio"]);
+    super(options);
+    this.name = "Compressor";
+    this._compressor = this.context.createDynamicsCompressor();
+    this.input = this._compressor;
+    this.output = this._compressor;
+    this.threshold = new Param({
+      minValue: this._compressor.threshold.minValue,
+      maxValue: this._compressor.threshold.maxValue,
+      context: this.context,
+      convert: false,
+      param: this._compressor.threshold,
+      units: "decibels",
+      value: options.threshold
+    });
+    this.attack = new Param({
+      minValue: this._compressor.attack.minValue,
+      maxValue: this._compressor.attack.maxValue,
+      context: this.context,
+      param: this._compressor.attack,
+      units: "time",
+      value: options.attack
+    });
+    this.release = new Param({
+      minValue: this._compressor.release.minValue,
+      maxValue: this._compressor.release.maxValue,
+      context: this.context,
+      param: this._compressor.release,
+      units: "time",
+      value: options.release
+    });
+    this.knee = new Param({
+      minValue: this._compressor.knee.minValue,
+      maxValue: this._compressor.knee.maxValue,
+      context: this.context,
+      convert: false,
+      param: this._compressor.knee,
+      units: "decibels",
+      value: options.knee
+    });
+    this.ratio = new Param({
+      minValue: this._compressor.ratio.minValue,
+      maxValue: this._compressor.ratio.maxValue,
+      context: this.context,
+      convert: false,
+      param: this._compressor.ratio,
+      units: "positive",
+      value: options.ratio
+    });
+    readOnly(this, ["knee", "release", "attack", "ratio", "threshold"]);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      attack: 3e-3,
+      knee: 30,
+      ratio: 12,
+      release: 0.25,
+      threshold: -24
+    });
+  }
+  /**
+   * A read-only decibel value for metering purposes, representing the current amount of gain
+   * reduction that the compressor is applying to the signal. If fed no signal the value will be 0 (no gain reduction).
+   */
+  get reduction() {
+    return this._compressor.reduction;
+  }
+  dispose() {
+    super.dispose();
+    this._compressor.disconnect();
+    this.attack.dispose();
+    this.release.dispose();
+    this.threshold.dispose();
+    this.ratio.dispose();
+    this.knee.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/signal/GreaterThanZero.js
+var GreaterThanZero = class _GreaterThanZero extends SignalOperator {
+  constructor() {
+    super(optionsFromArguments(_GreaterThanZero.getDefaults(), arguments));
+    this.name = "GreaterThanZero";
+    this._thresh = this.output = new WaveShaper({
+      context: this.context,
+      length: 127,
+      mapping: (val) => {
+        if (val <= 0) {
+          return 0;
+        } else {
+          return 1;
+        }
+      }
+    });
+    this._scale = this.input = new Multiply({
+      context: this.context,
+      value: 1e4
+    });
+    this._scale.connect(this._thresh);
+  }
+  dispose() {
+    super.dispose();
+    this._scale.dispose();
+    this._thresh.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/signal/GreaterThan.js
+var GreaterThan = class _GreaterThan extends Signal {
+  constructor() {
+    const options = optionsFromArguments(_GreaterThan.getDefaults(), arguments, ["value"]);
+    super(options);
+    this.name = "GreaterThan";
+    this.override = false;
+    this._subtract = this.input = new Subtract({
+      context: this.context,
+      value: options.value
+    });
+    this._gtz = this.output = new GreaterThanZero({
+      context: this.context
+    });
+    this.comparator = this._param = this._subtract.subtrahend;
+    readOnly(this, "comparator");
+    this._subtract.connect(this._gtz);
+  }
+  static getDefaults() {
+    return Object.assign(Signal.getDefaults(), {
+      value: 0
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._gtz.dispose();
+    this._subtract.dispose();
+    this.comparator.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/dynamics/Gate.js
+var Gate = class _Gate extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Gate.getDefaults(), arguments, [
+      "threshold",
+      "smoothing"
+    ]);
+    super(options);
+    this.name = "Gate";
+    this._follower = new Follower({
+      context: this.context,
+      smoothing: options.smoothing
+    });
+    this._gt = new GreaterThan({
+      context: this.context,
+      value: dbToGain(options.threshold)
+    });
+    this.input = new Gain({ context: this.context });
+    this._gate = this.output = new Gain({ context: this.context });
+    this.input.connect(this._gate);
+    this.input.chain(this._follower, this._gt, this._gate.gain);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      smoothing: 0.1,
+      threshold: -40
+    });
+  }
+  /**
+   * The threshold of the gate in decibels
+   */
+  get threshold() {
+    return gainToDb(this._gt.value);
+  }
+  set threshold(thresh) {
+    this._gt.value = dbToGain(thresh);
+  }
+  /**
+   * The attack/decay speed of the gate.
+   * @see {@link Follower.smoothing}
+   */
+  get smoothing() {
+    return this._follower.smoothing;
+  }
+  set smoothing(smoothingTime) {
+    this._follower.smoothing = smoothingTime;
+  }
+  dispose() {
+    super.dispose();
+    this.input.dispose();
+    this._follower.dispose();
+    this._gt.dispose();
+    this._gate.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/dynamics/Limiter.js
+var Limiter = class _Limiter extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Limiter.getDefaults(), arguments, [
+      "threshold"
+    ]);
+    super(options);
+    this.name = "Limiter";
+    this._compressor = this.input = this.output = new Compressor({
+      context: this.context,
+      ratio: 20,
+      attack: 3e-3,
+      release: 0.01,
+      threshold: options.threshold
+    });
+    this.threshold = this._compressor.threshold;
+    readOnly(this, "threshold");
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      threshold: -12
+    });
+  }
+  /**
+   * A read-only decibel value for metering purposes, representing the current amount of gain
+   * reduction that the compressor is applying to the signal.
+   */
+  get reduction() {
+    return this._compressor.reduction;
+  }
+  dispose() {
+    super.dispose();
+    this._compressor.dispose();
+    this.threshold.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/dynamics/MidSideCompressor.js
+var MidSideCompressor = class _MidSideCompressor extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_MidSideCompressor.getDefaults(), arguments);
+    super(options);
+    this.name = "MidSideCompressor";
+    this._midSideSplit = this.input = new MidSideSplit({
+      context: this.context
+    });
+    this._midSideMerge = this.output = new MidSideMerge({
+      context: this.context
+    });
+    this.mid = new Compressor(Object.assign(options.mid, { context: this.context }));
+    this.side = new Compressor(Object.assign(options.side, { context: this.context }));
+    this._midSideSplit.mid.chain(this.mid, this._midSideMerge.mid);
+    this._midSideSplit.side.chain(this.side, this._midSideMerge.side);
+    readOnly(this, ["mid", "side"]);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      mid: {
+        ratio: 3,
+        threshold: -24,
+        release: 0.03,
+        attack: 0.02,
+        knee: 16
+      },
+      side: {
+        ratio: 6,
+        threshold: -30,
+        release: 0.25,
+        attack: 0.03,
+        knee: 10
+      }
+    });
+  }
+  dispose() {
+    super.dispose();
+    this.mid.dispose();
+    this.side.dispose();
+    this._midSideSplit.dispose();
+    this._midSideMerge.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/dynamics/MultibandCompressor.js
+var MultibandCompressor = class _MultibandCompressor extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_MultibandCompressor.getDefaults(), arguments);
+    super(options);
+    this.name = "MultibandCompressor";
+    this._splitter = this.input = new MultibandSplit({
+      context: this.context,
+      lowFrequency: options.lowFrequency,
+      highFrequency: options.highFrequency
+    });
+    this.lowFrequency = this._splitter.lowFrequency;
+    this.highFrequency = this._splitter.highFrequency;
+    this.output = new Gain({ context: this.context });
+    this.low = new Compressor(Object.assign(options.low, { context: this.context }));
+    this.mid = new Compressor(Object.assign(options.mid, { context: this.context }));
+    this.high = new Compressor(Object.assign(options.high, { context: this.context }));
+    this._splitter.low.chain(this.low, this.output);
+    this._splitter.mid.chain(this.mid, this.output);
+    this._splitter.high.chain(this.high, this.output);
+    readOnly(this, ["high", "mid", "low", "highFrequency", "lowFrequency"]);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      lowFrequency: 250,
+      highFrequency: 2e3,
+      low: {
+        ratio: 6,
+        threshold: -30,
+        release: 0.25,
+        attack: 0.03,
+        knee: 10
+      },
+      mid: {
+        ratio: 3,
+        threshold: -24,
+        release: 0.03,
+        attack: 0.02,
+        knee: 16
+      },
+      high: {
+        ratio: 3,
+        threshold: -24,
+        release: 0.03,
+        attack: 0.02,
+        knee: 16
+      }
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._splitter.dispose();
+    this.low.dispose();
+    this.mid.dispose();
+    this.high.dispose();
+    this.output.dispose();
+    return this;
+  }
+};
 
 // ../../sdk/node_modules/tone/build/esm/core/util/Decorator.js
 function range(min, max2 = Infinity) {
@@ -22143,6 +24266,157 @@ var FrequencyEnvelope = class _FrequencyEnvelope extends Envelope {
   }
 };
 
+// ../../sdk/node_modules/tone/build/esm/component/filter/Convolver.js
+var Convolver = class _Convolver extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Convolver.getDefaults(), arguments, ["url", "onload"]);
+    super(options);
+    this.name = "Convolver";
+    this._convolver = this.context.createConvolver();
+    this._buffer = new ToneAudioBuffer(options.url, (buffer) => {
+      this.buffer = buffer;
+      options.onload();
+    });
+    this.input = new Gain({ context: this.context });
+    this.output = new Gain({ context: this.context });
+    if (this._buffer.loaded) {
+      this.buffer = this._buffer;
+    }
+    this.normalize = options.normalize;
+    this.input.chain(this._convolver, this.output);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      normalize: true,
+      onload: noOp
+    });
+  }
+  /**
+   * Load an impulse response url as an audio buffer.
+   * Decodes the audio asynchronously and invokes
+   * the callback once the audio buffer loads.
+   * @param url The url of the buffer to load. filetype support depends on the browser.
+   */
+  load(url) {
+    return __awaiter(this, void 0, void 0, function* () {
+      this.buffer = yield this._buffer.load(url);
+    });
+  }
+  /**
+   * The convolver's buffer
+   */
+  get buffer() {
+    if (this._buffer.length) {
+      return this._buffer;
+    } else {
+      return null;
+    }
+  }
+  set buffer(buffer) {
+    if (buffer) {
+      this._buffer.set(buffer);
+    }
+    if (this._convolver.buffer) {
+      this.input.disconnect();
+      this._convolver.disconnect();
+      this._convolver = this.context.createConvolver();
+      this.input.chain(this._convolver, this.output);
+    }
+    const buff = this._buffer.get();
+    this._convolver.buffer = buff ? buff : null;
+  }
+  /**
+   * The normalize property of the ConvolverNode interface is a boolean that
+   * controls whether the impulse response from the buffer will be scaled by
+   * an equal-power normalization when the buffer attribute is set, or not.
+   */
+  get normalize() {
+    return this._convolver.normalize;
+  }
+  set normalize(norm) {
+    this._convolver.normalize = norm;
+  }
+  dispose() {
+    super.dispose();
+    this._buffer.dispose();
+    this._convolver.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/filter/EQ3.js
+var EQ3 = class _EQ3 extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_EQ3.getDefaults(), arguments, [
+      "low",
+      "mid",
+      "high"
+    ]);
+    super(options);
+    this.name = "EQ3";
+    this.output = new Gain({ context: this.context });
+    this._internalChannels = [];
+    this.input = this._multibandSplit = new MultibandSplit({
+      context: this.context,
+      highFrequency: options.highFrequency,
+      lowFrequency: options.lowFrequency
+    });
+    this._lowGain = new Gain({
+      context: this.context,
+      gain: options.low,
+      units: "decibels"
+    });
+    this._midGain = new Gain({
+      context: this.context,
+      gain: options.mid,
+      units: "decibels"
+    });
+    this._highGain = new Gain({
+      context: this.context,
+      gain: options.high,
+      units: "decibels"
+    });
+    this.low = this._lowGain.gain;
+    this.mid = this._midGain.gain;
+    this.high = this._highGain.gain;
+    this.Q = this._multibandSplit.Q;
+    this.lowFrequency = this._multibandSplit.lowFrequency;
+    this.highFrequency = this._multibandSplit.highFrequency;
+    this._multibandSplit.low.chain(this._lowGain, this.output);
+    this._multibandSplit.mid.chain(this._midGain, this.output);
+    this._multibandSplit.high.chain(this._highGain, this.output);
+    readOnly(this, ["low", "mid", "high", "lowFrequency", "highFrequency"]);
+    this._internalChannels = [this._multibandSplit];
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      high: 0,
+      highFrequency: 2500,
+      low: 0,
+      lowFrequency: 400,
+      mid: 0
+    });
+  }
+  /**
+   * Clean up.
+   */
+  dispose() {
+    super.dispose();
+    writable(this, ["low", "mid", "high", "lowFrequency", "highFrequency"]);
+    this._multibandSplit.dispose();
+    this.lowFrequency.dispose();
+    this.highFrequency.dispose();
+    this._lowGain.dispose();
+    this._midGain.dispose();
+    this._highGain.dispose();
+    this.low.dispose();
+    this.mid.dispose();
+    this.high.dispose();
+    this.Q.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/core/worklet/WorkletGlobalScope.js
 var workletContext = /* @__PURE__ */ new Set();
 function addToWorklet(classOrFunction) {
@@ -22394,6 +24668,105 @@ var feedbackCombFilter = (
 `
 );
 registerProcessor(workletName, feedbackCombFilter);
+
+// ../../sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.js
+var FeedbackCombFilter = class _FeedbackCombFilter extends ToneAudioWorklet {
+  constructor() {
+    const options = optionsFromArguments(_FeedbackCombFilter.getDefaults(), arguments, ["delayTime", "resonance"]);
+    super(options);
+    this.name = "FeedbackCombFilter";
+    this.input = new Gain({ context: this.context });
+    this.output = new Gain({ context: this.context });
+    this.delayTime = new Param({
+      context: this.context,
+      value: options.delayTime,
+      units: "time",
+      minValue: 0,
+      maxValue: 1,
+      param: this._dummyParam,
+      swappable: true
+    });
+    this.resonance = new Param({
+      context: this.context,
+      value: options.resonance,
+      units: "normalRange",
+      param: this._dummyParam,
+      swappable: true
+    });
+    readOnly(this, ["resonance", "delayTime"]);
+  }
+  _audioWorkletName() {
+    return workletName;
+  }
+  /**
+   * The default parameters
+   */
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      delayTime: 0.1,
+      resonance: 0.5
+    });
+  }
+  onReady(node) {
+    connectSeries(this.input, node, this.output);
+    const delayTime = node.parameters.get("delayTime");
+    this.delayTime.setParam(delayTime);
+    const feedback = node.parameters.get("feedback");
+    this.resonance.setParam(feedback);
+  }
+  dispose() {
+    super.dispose();
+    this.input.dispose();
+    this.output.dispose();
+    this.delayTime.dispose();
+    this.resonance.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/filter/LowpassCombFilter.js
+var LowpassCombFilter = class _LowpassCombFilter extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_LowpassCombFilter.getDefaults(), arguments, ["delayTime", "resonance", "dampening"]);
+    super(options);
+    this.name = "LowpassCombFilter";
+    this._combFilter = this.output = new FeedbackCombFilter({
+      context: this.context,
+      delayTime: options.delayTime,
+      resonance: options.resonance
+    });
+    this.delayTime = this._combFilter.delayTime;
+    this.resonance = this._combFilter.resonance;
+    this._lowpass = this.input = new OnePoleFilter({
+      context: this.context,
+      frequency: options.dampening,
+      type: "lowpass"
+    });
+    this._lowpass.connect(this._combFilter);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      dampening: 3e3,
+      delayTime: 0.1,
+      resonance: 0.5
+    });
+  }
+  /**
+   * The dampening control of the feedback
+   */
+  get dampening() {
+    return this._lowpass.frequency;
+  }
+  set dampening(fq) {
+    this._lowpass.frequency = fq;
+  }
+  dispose() {
+    super.dispose();
+    this._combFilter.dispose();
+    this._lowpass.dispose();
+    return this;
+  }
+};
 
 // ../../sdk/node_modules/tone/build/esm/core/util/StateTimeline.js
 var StateTimeline = class extends Timeline {
@@ -23230,6 +25603,52 @@ var Clock = class _Clock extends ToneWithContext {
 };
 Emitter.mixin(Clock);
 
+// ../../sdk/node_modules/tone/build/esm/core/context/Delay.js
+var Delay = class _Delay extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Delay.getDefaults(), arguments, [
+      "delayTime",
+      "maxDelay"
+    ]);
+    super(options);
+    this.name = "Delay";
+    const maxDelayInSeconds = this.toSeconds(options.maxDelay);
+    this._maxDelay = Math.max(maxDelayInSeconds, this.toSeconds(options.delayTime));
+    this._delayNode = this.input = this.output = this.context.createDelay(maxDelayInSeconds);
+    this.delayTime = new Param({
+      context: this.context,
+      param: this._delayNode.delayTime,
+      units: "time",
+      value: options.delayTime,
+      minValue: 0,
+      maxValue: this.maxDelay
+    });
+    readOnly(this, "delayTime");
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      delayTime: 0,
+      maxDelay: 1
+    });
+  }
+  /**
+   * The maximum delay time. This cannot be changed after
+   * the value is passed into the constructor.
+   */
+  get maxDelay() {
+    return this._maxDelay;
+  }
+  /**
+   * Clean up.
+   */
+  dispose() {
+    super.dispose();
+    this._delayNode.disconnect();
+    this.delayTime.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/core/context/Destination.js
 var DestinationInstance = class _DestinationInstance extends ToneAudioNode {
   constructor() {
@@ -23310,6 +25729,20 @@ onContextInit((context2) => {
 onContextClose((context2) => {
   context2.destination.dispose();
 });
+
+// ../../sdk/node_modules/tone/build/esm/core/context/Offline.js
+function Offline(callback_1, duration_1) {
+  return __awaiter(this, arguments, void 0, function* (callback, duration, channels = 2, sampleRate = getContext().sampleRate) {
+    const originalContext = getContext();
+    const context2 = new OfflineContext(channels, duration, sampleRate);
+    setContext(context2);
+    yield callback(context2);
+    const bufferPromise = context2.render();
+    setContext(originalContext);
+    const buffer = yield bufferPromise;
+    return new ToneAudioBuffer(buffer);
+  });
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffers.js
 var ToneAudioBuffers = class _ToneAudioBuffers extends Tone {
@@ -23448,6 +25881,9 @@ var MidiClass = class _MidiClass extends FrequencyClass {
     return new _MidiClass(this.context, this.toMidi() + interval);
   }
 };
+function Midi(value, units) {
+  return new MidiClass(getContext(), value, units);
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/type/Ticks.js
 var TicksClass = class extends TransportTimeClass {
@@ -23493,6 +25929,9 @@ var TicksClass = class extends TransportTimeClass {
     return this.valueOf() / this._getPPQ() * (60 / this._getBpm());
   }
 };
+function Ticks(value, units) {
+  return new TicksClass(getContext(), value, units);
+}
 
 // ../../sdk/node_modules/tone/build/esm/core/util/Draw.js
 var DrawInstance = class extends ToneWithContext {
@@ -24028,6 +26467,49 @@ var IntervalNode = class {
   }
 };
 
+// ../../sdk/node_modules/tone/build/esm/core/type/Units.js
+var Units_exports = {};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Effect.js
+var Effect = class extends ToneAudioNode {
+  constructor(options) {
+    super(options);
+    this.name = "Effect";
+    this._dryWet = new CrossFade({ context: this.context });
+    this.wet = this._dryWet.fade;
+    this.effectSend = new Gain({ context: this.context });
+    this.effectReturn = new Gain({ context: this.context });
+    this.input = new Gain({ context: this.context });
+    this.output = this._dryWet;
+    this.input.fan(this._dryWet.a, this.effectSend);
+    this.effectReturn.connect(this._dryWet.b);
+    this.wet.setValueAtTime(options.wet, 0);
+    this._internalChannels = [this.effectReturn, this.effectSend];
+    readOnly(this, "wet");
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      wet: 1
+    });
+  }
+  /**
+   * chains the effect in between the effectSend and effectReturn
+   */
+  connectEffect(effect) {
+    this._internalChannels.push(effect);
+    this.effectSend.chain(effect, this.effectReturn);
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this._dryWet.dispose();
+    this.effectSend.dispose();
+    this.effectReturn.dispose();
+    this.wet.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/signal/AudioToGain.js
 var AudioToGain = class extends SignalOperator {
   constructor() {
@@ -24046,6 +26528,26 @@ var AudioToGain = class extends SignalOperator {
   dispose() {
     super.dispose();
     this._norm.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/signal/Zero.js
+var Zero = class _Zero extends SignalOperator {
+  constructor() {
+    super(optionsFromArguments(_Zero.getDefaults(), arguments));
+    this.name = "Zero";
+    this._gain = new Gain({ context: this.context });
+    this.output = this._gain;
+    this.input = void 0;
+    connect(this.context.getConstant(0), this._gain);
+  }
+  /**
+   * clean up
+   */
+  dispose() {
+    super.dispose();
+    disconnect(this.context.getConstant(0), this._gain);
     return this;
   }
 };
@@ -25405,6 +27907,512 @@ var Oscillator = class _Oscillator extends Source {
 };
 Oscillator._periodicWaveCache = [];
 
+// ../../sdk/node_modules/tone/build/esm/source/oscillator/LFO.js
+var LFO = class _LFO extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_LFO.getDefaults(), arguments, [
+      "frequency",
+      "min",
+      "max"
+    ]);
+    super(options);
+    this.name = "LFO";
+    this._stoppedValue = 0;
+    this._units = "number";
+    this.convert = true;
+    this._fromType = Param.prototype._fromType;
+    this._toType = Param.prototype._toType;
+    this._is = Param.prototype._is;
+    this._clampValue = Param.prototype._clampValue;
+    this._oscillator = new Oscillator(options);
+    this.frequency = this._oscillator.frequency;
+    this._amplitudeGain = new Gain({
+      context: this.context,
+      gain: options.amplitude,
+      units: "normalRange"
+    });
+    this.amplitude = this._amplitudeGain.gain;
+    this._stoppedSignal = new Signal({
+      context: this.context,
+      units: "audioRange",
+      value: 0
+    });
+    this._zeros = new Zero({ context: this.context });
+    this._a2g = new AudioToGain({ context: this.context });
+    this._scaler = this.output = new Scale({
+      context: this.context,
+      max: options.max,
+      min: options.min
+    });
+    this.units = options.units;
+    this.min = options.min;
+    this.max = options.max;
+    this._oscillator.chain(this._amplitudeGain, this._a2g, this._scaler);
+    this._zeros.connect(this._a2g);
+    this._stoppedSignal.connect(this._a2g);
+    readOnly(this, ["amplitude", "frequency"]);
+    this.phase = options.phase;
+  }
+  static getDefaults() {
+    return Object.assign(Oscillator.getDefaults(), {
+      amplitude: 1,
+      frequency: "4n",
+      max: 1,
+      min: 0,
+      type: "sine",
+      units: "number"
+    });
+  }
+  /**
+   * Start the LFO.
+   * @param time The time the LFO will start
+   */
+  start(time) {
+    time = this.toSeconds(time);
+    this._stoppedSignal.setValueAtTime(0, time);
+    this._oscillator.start(time);
+    return this;
+  }
+  /**
+   * Stop the LFO.
+   * @param  time The time the LFO will stop
+   */
+  stop(time) {
+    time = this.toSeconds(time);
+    this._stoppedSignal.setValueAtTime(this._stoppedValue, time);
+    this._oscillator.stop(time);
+    return this;
+  }
+  /**
+   * Sync the start/stop/pause to the transport
+   * and the frequency to the bpm of the transport
+   * @example
+   * const lfo = new Tone.LFO("8n");
+   * lfo.sync().start(0);
+   * // the rate of the LFO will always be an eighth note, even as the tempo changes
+   */
+  sync() {
+    this._oscillator.sync();
+    this._oscillator.syncFrequency();
+    return this;
+  }
+  /**
+   * unsync the LFO from transport control
+   */
+  unsync() {
+    this._oscillator.unsync();
+    this._oscillator.unsyncFrequency();
+    return this;
+  }
+  /**
+   * After the oscillator waveform is updated, reset the `_stoppedSignal` value to match the updated waveform
+   */
+  _setStoppedValue() {
+    this._stoppedValue = this._oscillator.getInitialValue();
+    this._stoppedSignal.value = this._stoppedValue;
+  }
+  /**
+   * The minimum output of the LFO.
+   */
+  get min() {
+    return this._toType(this._scaler.min);
+  }
+  set min(min) {
+    min = this._fromType(min);
+    this._scaler.min = min;
+  }
+  /**
+   * The maximum output of the LFO.
+   */
+  get max() {
+    return this._toType(this._scaler.max);
+  }
+  set max(max2) {
+    max2 = this._fromType(max2);
+    this._scaler.max = max2;
+  }
+  /**
+   * The type of the oscillator.
+   * @see {@link Oscillator.type}
+   */
+  get type() {
+    return this._oscillator.type;
+  }
+  set type(type) {
+    this._oscillator.type = type;
+    this._setStoppedValue();
+  }
+  /**
+   * The oscillator's partials array.
+   * @see {@link Oscillator.partials}
+   */
+  get partials() {
+    return this._oscillator.partials;
+  }
+  set partials(partials) {
+    this._oscillator.partials = partials;
+    this._setStoppedValue();
+  }
+  /**
+   * The phase of the LFO.
+   */
+  get phase() {
+    return this._oscillator.phase;
+  }
+  set phase(phase) {
+    this._oscillator.phase = phase;
+    this._setStoppedValue();
+  }
+  /**
+   * The output units of the LFO.
+   */
+  get units() {
+    return this._units;
+  }
+  set units(val) {
+    const currentMin = this.min;
+    const currentMax = this.max;
+    this._units = val;
+    this.min = currentMin;
+    this.max = currentMax;
+  }
+  /**
+   * Returns the playback state of the source, either "started" or "stopped".
+   */
+  get state() {
+    return this._oscillator.state;
+  }
+  /**
+   * @param node the destination to connect to
+   * @param outputNum the optional output number
+   * @param inputNum the input number
+   */
+  connect(node, outputNum, inputNum) {
+    if (node instanceof Param || node instanceof Signal) {
+      this.convert = node.convert;
+      this.units = node.units;
+    }
+    connectSignal(this, node, outputNum, inputNum);
+    return this;
+  }
+  /**
+   * Disconnect the LFO.
+   */
+  disconnect(destination, outputNum = 0, inputNum = 0) {
+    disconnectSignal(this, destination, outputNum, inputNum);
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this._oscillator.dispose();
+    this._stoppedSignal.dispose();
+    this._zeros.dispose();
+    this._scaler.dispose();
+    this._a2g.dispose();
+    this._amplitudeGain.dispose();
+    this.amplitude.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/LFOEffect.js
+var LFOEffect = class extends Effect {
+  constructor(options) {
+    super(options);
+    this.name = "LFOEffect";
+    this._lfo = new LFO({
+      context: this.context,
+      frequency: options.frequency,
+      amplitude: options.depth
+    });
+    this.depth = this._lfo.amplitude;
+    this.frequency = this._lfo.frequency;
+    this.type = options.type;
+    readOnly(this, ["frequency", "depth"]);
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      frequency: 1,
+      type: "sine",
+      depth: 1
+    });
+  }
+  /**
+   * Start the effect.
+   */
+  start(time) {
+    this._lfo.start(time);
+    return this;
+  }
+  /**
+   * Stop the lfo
+   */
+  stop(time) {
+    this._lfo.stop(time);
+    return this;
+  }
+  /**
+   * Sync the filter to the transport.
+   * @see {@link LFO.sync}
+   */
+  sync() {
+    this._lfo.sync();
+    return this;
+  }
+  /**
+   * Unsync the filter from the transport.
+   */
+  unsync() {
+    this._lfo.unsync();
+    return this;
+  }
+  /**
+   * The type of the LFO's oscillator.
+   * @see {@link Oscillator.type}
+   * @example
+   * const autoFilter = new Tone.AutoFilter().start().toDestination();
+   * const noise = new Tone.Noise().start().connect(autoFilter);
+   * autoFilter.type = "square";
+   */
+  get type() {
+    return this._lfo.type;
+  }
+  set type(type) {
+    this._lfo.type = type;
+  }
+  dispose() {
+    super.dispose();
+    this._lfo.dispose();
+    this.frequency.dispose();
+    this.depth.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/AutoFilter.js
+var AutoFilter = class _AutoFilter extends LFOEffect {
+  constructor() {
+    const options = optionsFromArguments(_AutoFilter.getDefaults(), arguments, ["frequency", "baseFrequency", "octaves"]);
+    super(options);
+    this.name = "AutoFilter";
+    this.filter = new Filter(Object.assign(options.filter, {
+      context: this.context
+    }));
+    this.connectEffect(this.filter);
+    this._lfo.connect(this.filter.frequency);
+    this.octaves = options.octaves;
+    this.baseFrequency = options.baseFrequency;
+  }
+  static getDefaults() {
+    return Object.assign(LFOEffect.getDefaults(), {
+      baseFrequency: 200,
+      octaves: 2.6,
+      filter: {
+        type: "lowpass",
+        rolloff: -12,
+        Q: 1
+      }
+    });
+  }
+  /**
+   * The minimum value of the filter's cutoff frequency.
+   */
+  get baseFrequency() {
+    return this._lfo.min;
+  }
+  set baseFrequency(freq) {
+    this._lfo.min = this.toFrequency(freq);
+    this.octaves = this._octaves;
+  }
+  /**
+   * The maximum value of the filter's cutoff frequency.
+   */
+  get octaves() {
+    return this._octaves;
+  }
+  set octaves(oct) {
+    this._octaves = oct;
+    this._lfo.max = this._lfo.min * Math.pow(2, oct);
+  }
+  dispose() {
+    super.dispose();
+    this.filter.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/AutoPanner.js
+var AutoPanner = class _AutoPanner extends LFOEffect {
+  constructor() {
+    const options = optionsFromArguments(_AutoPanner.getDefaults(), arguments, ["frequency"]);
+    super(options);
+    this.name = "AutoPanner";
+    this._panner = new Panner({
+      context: this.context,
+      channelCount: options.channelCount
+    });
+    this.connectEffect(this._panner);
+    this._lfo.connect(this._panner.pan);
+    this._lfo.min = -1;
+    this._lfo.max = 1;
+  }
+  static getDefaults() {
+    return Object.assign(LFOEffect.getDefaults(), {
+      channelCount: 1
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._panner.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/signal/ScaleExp.js
+var ScaleExp = class _ScaleExp extends Scale {
+  constructor() {
+    const options = optionsFromArguments(_ScaleExp.getDefaults(), arguments, ["min", "max", "exponent"]);
+    super(options);
+    this.name = "ScaleExp";
+    this.input = this._exp = new Pow({
+      context: this.context,
+      value: options.exponent
+    });
+    this._exp.connect(this._mult);
+  }
+  static getDefaults() {
+    return Object.assign(Scale.getDefaults(), {
+      exponent: 1
+    });
+  }
+  /**
+   * Instead of interpolating linearly between the {@link min} and
+   * {@link max} values, setting the exponent will interpolate between
+   * the two values with an exponential curve.
+   */
+  get exponent() {
+    return this._exp.value;
+  }
+  set exponent(exp) {
+    this._exp.value = exp;
+  }
+  dispose() {
+    super.dispose();
+    this._exp.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/AutoWah.js
+var AutoWah = class _AutoWah extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_AutoWah.getDefaults(), arguments, [
+      "baseFrequency",
+      "octaves",
+      "sensitivity"
+    ]);
+    super(options);
+    this.name = "AutoWah";
+    this._follower = new Follower({
+      context: this.context,
+      smoothing: options.follower
+    });
+    this._sweepRange = new ScaleExp({
+      context: this.context,
+      min: 0,
+      max: 1,
+      exponent: 0.5
+    });
+    this._baseFrequency = this.toFrequency(options.baseFrequency);
+    this._octaves = options.octaves;
+    this._inputBoost = new Gain({ context: this.context });
+    this._bandpass = new Filter({
+      context: this.context,
+      rolloff: -48,
+      frequency: 0,
+      Q: options.Q
+    });
+    this._peaking = new Filter({
+      context: this.context,
+      type: "peaking"
+    });
+    this._peaking.gain.value = options.gain;
+    this.gain = this._peaking.gain;
+    this.Q = this._bandpass.Q;
+    this.effectSend.chain(this._inputBoost, this._follower, this._sweepRange);
+    this._sweepRange.connect(this._bandpass.frequency);
+    this._sweepRange.connect(this._peaking.frequency);
+    this.effectSend.chain(this._bandpass, this._peaking, this.effectReturn);
+    this._setSweepRange();
+    this.sensitivity = options.sensitivity;
+    readOnly(this, ["gain", "Q"]);
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      baseFrequency: 100,
+      octaves: 6,
+      sensitivity: 0,
+      Q: 2,
+      gain: 2,
+      follower: 0.2
+    });
+  }
+  /**
+   * The number of octaves that the filter will sweep above the baseFrequency.
+   */
+  get octaves() {
+    return this._octaves;
+  }
+  set octaves(octaves) {
+    this._octaves = octaves;
+    this._setSweepRange();
+  }
+  /**
+   * The follower's smoothing time
+   */
+  get follower() {
+    return this._follower.smoothing;
+  }
+  set follower(follower) {
+    this._follower.smoothing = follower;
+  }
+  /**
+   * The base frequency from which the sweep will start from.
+   */
+  get baseFrequency() {
+    return this._baseFrequency;
+  }
+  set baseFrequency(baseFreq) {
+    this._baseFrequency = this.toFrequency(baseFreq);
+    this._setSweepRange();
+  }
+  /**
+   * The sensitivity to control how responsive to the input signal the filter is.
+   */
+  get sensitivity() {
+    return gainToDb(1 / this._inputBoost.gain.value);
+  }
+  set sensitivity(sensitivity) {
+    this._inputBoost.gain.value = 1 / dbToGain(sensitivity);
+  }
+  /**
+   * sets the sweep range of the scaler
+   */
+  _setSweepRange() {
+    this._sweepRange.min = this._baseFrequency;
+    this._sweepRange.max = Math.min(this._baseFrequency * Math.pow(2, this._octaves), this.context.sampleRate / 2);
+  }
+  dispose() {
+    super.dispose();
+    this._follower.dispose();
+    this._sweepRange.dispose();
+    this._bandpass.dispose();
+    this._peaking.dispose();
+    this._inputBoost.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/effect/BitCrusher.worklet.js
 var workletName2 = "bit-crusher";
 var bitCrusherWorklet = (
@@ -25432,6 +28440,484 @@ var bitCrusherWorklet = (
 );
 registerProcessor(workletName2, bitCrusherWorklet);
 
+// ../../sdk/node_modules/tone/build/esm/effect/BitCrusher.js
+var BitCrusher = class _BitCrusher extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_BitCrusher.getDefaults(), arguments, ["bits"]);
+    super(options);
+    this.name = "BitCrusher";
+    this._bitCrusherWorklet = new BitCrusherWorklet({
+      context: this.context,
+      bits: options.bits
+    });
+    this.connectEffect(this._bitCrusherWorklet);
+    this.bits = this._bitCrusherWorklet.bits;
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      bits: 4
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._bitCrusherWorklet.dispose();
+    return this;
+  }
+};
+var BitCrusherWorklet = class _BitCrusherWorklet extends ToneAudioWorklet {
+  constructor() {
+    const options = optionsFromArguments(_BitCrusherWorklet.getDefaults(), arguments);
+    super(options);
+    this.name = "BitCrusherWorklet";
+    this.input = new Gain({ context: this.context });
+    this.output = new Gain({ context: this.context });
+    this.bits = new Param({
+      context: this.context,
+      value: options.bits,
+      units: "positive",
+      minValue: 1,
+      maxValue: 16,
+      param: this._dummyParam,
+      swappable: true
+    });
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioWorklet.getDefaults(), {
+      bits: 12
+    });
+  }
+  _audioWorkletName() {
+    return workletName2;
+  }
+  onReady(node) {
+    connectSeries(this.input, node, this.output);
+    const bits = node.parameters.get("bits");
+    this.bits.setParam(bits);
+  }
+  dispose() {
+    super.dispose();
+    this.input.dispose();
+    this.output.dispose();
+    this.bits.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Chebyshev.js
+var Chebyshev = class _Chebyshev extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_Chebyshev.getDefaults(), arguments, ["order"]);
+    super(options);
+    this.name = "Chebyshev";
+    this._shaper = new WaveShaper({
+      context: this.context,
+      length: 4096
+    });
+    this._order = options.order;
+    this.connectEffect(this._shaper);
+    this.order = options.order;
+    this.oversample = options.oversample;
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      order: 1,
+      oversample: "none"
+    });
+  }
+  /**
+   * get the coefficient for that degree
+   * @param  x the x value
+   * @param  degree
+   * @param  memo memoize the computed value. this speeds up computation greatly.
+   */
+  _getCoefficient(x, degree, memo) {
+    if (memo.has(degree)) {
+      return memo.get(degree);
+    } else if (degree === 0) {
+      memo.set(degree, 0);
+    } else if (degree === 1) {
+      memo.set(degree, x);
+    } else {
+      memo.set(degree, 2 * x * this._getCoefficient(x, degree - 1, memo) - this._getCoefficient(x, degree - 2, memo));
+    }
+    return memo.get(degree);
+  }
+  /**
+   * The order of the Chebyshev polynomial which creates the equation which is applied to the incoming
+   * signal through a Tone.WaveShaper. Must be an integer. The equations are in the form:
+   * ```
+   * order 2: 2x^2 + 1
+   * order 3: 4x^3 + 3x
+   * ```
+   * @min 1
+   * @max 100
+   */
+  get order() {
+    return this._order;
+  }
+  set order(order) {
+    assert(Number.isInteger(order), "'order' must be an integer");
+    this._order = order;
+    this._shaper.setMap((x) => {
+      return this._getCoefficient(x, order, /* @__PURE__ */ new Map());
+    });
+  }
+  /**
+   * The oversampling of the effect. Can either be "none", "2x" or "4x".
+   */
+  get oversample() {
+    return this._shaper.oversample;
+  }
+  set oversample(oversampling) {
+    this._shaper.oversample = oversampling;
+  }
+  dispose() {
+    super.dispose();
+    this._shaper.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/StereoEffect.js
+var StereoEffect = class extends ToneAudioNode {
+  constructor(options) {
+    super(options);
+    this.name = "StereoEffect";
+    this.input = new Gain({ context: this.context });
+    this.input.channelCount = 2;
+    this.input.channelCountMode = "explicit";
+    this._dryWet = this.output = new CrossFade({
+      context: this.context,
+      fade: options.wet
+    });
+    this.wet = this._dryWet.fade;
+    this._split = new Split({ context: this.context, channels: 2 });
+    this._merge = new Merge({ context: this.context, channels: 2 });
+    this.input.connect(this._split);
+    this.input.connect(this._dryWet.a);
+    this._merge.connect(this._dryWet.b);
+    readOnly(this, ["wet"]);
+  }
+  /**
+   * Connect the left part of the effect
+   */
+  connectEffectLeft(...nodes) {
+    this._split.connect(nodes[0], 0, 0);
+    connectSeries(...nodes);
+    connect(nodes[nodes.length - 1], this._merge, 0, 0);
+  }
+  /**
+   * Connect the right part of the effect
+   */
+  connectEffectRight(...nodes) {
+    this._split.connect(nodes[0], 1, 0);
+    connectSeries(...nodes);
+    connect(nodes[nodes.length - 1], this._merge, 0, 1);
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      wet: 1
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._dryWet.dispose();
+    this._split.dispose();
+    this._merge.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/StereoFeedbackEffect.js
+var StereoFeedbackEffect = class extends StereoEffect {
+  constructor(options) {
+    super(options);
+    this.feedback = new Signal({
+      context: this.context,
+      value: options.feedback,
+      units: "normalRange"
+    });
+    this._feedbackL = new Gain({ context: this.context });
+    this._feedbackR = new Gain({ context: this.context });
+    this._feedbackSplit = new Split({ context: this.context, channels: 2 });
+    this._feedbackMerge = new Merge({ context: this.context, channels: 2 });
+    this._merge.connect(this._feedbackSplit);
+    this._feedbackMerge.connect(this._split);
+    this._feedbackSplit.connect(this._feedbackL, 0, 0);
+    this._feedbackL.connect(this._feedbackMerge, 0, 0);
+    this._feedbackSplit.connect(this._feedbackR, 1, 0);
+    this._feedbackR.connect(this._feedbackMerge, 0, 1);
+    this.feedback.fan(this._feedbackL.gain, this._feedbackR.gain);
+    readOnly(this, ["feedback"]);
+  }
+  static getDefaults() {
+    return Object.assign(StereoEffect.getDefaults(), {
+      feedback: 0.5
+    });
+  }
+  dispose() {
+    super.dispose();
+    this.feedback.dispose();
+    this._feedbackL.dispose();
+    this._feedbackR.dispose();
+    this._feedbackSplit.dispose();
+    this._feedbackMerge.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Chorus.js
+var Chorus = class _Chorus extends StereoFeedbackEffect {
+  constructor() {
+    const options = optionsFromArguments(_Chorus.getDefaults(), arguments, [
+      "frequency",
+      "delayTime",
+      "depth"
+    ]);
+    super(options);
+    this.name = "Chorus";
+    this._depth = options.depth;
+    this._delayTime = options.delayTime / 1e3;
+    this._lfoL = new LFO({
+      context: this.context,
+      frequency: options.frequency,
+      min: 0,
+      max: 1
+    });
+    this._lfoR = new LFO({
+      context: this.context,
+      frequency: options.frequency,
+      min: 0,
+      max: 1,
+      phase: 180
+    });
+    this._delayNodeL = new Delay({ context: this.context });
+    this._delayNodeR = new Delay({ context: this.context });
+    this.frequency = this._lfoL.frequency;
+    readOnly(this, ["frequency"]);
+    this._lfoL.frequency.connect(this._lfoR.frequency);
+    this.connectEffectLeft(this._delayNodeL);
+    this.connectEffectRight(this._delayNodeR);
+    this._lfoL.connect(this._delayNodeL.delayTime);
+    this._lfoR.connect(this._delayNodeR.delayTime);
+    this.depth = this._depth;
+    this.type = options.type;
+    this.spread = options.spread;
+  }
+  static getDefaults() {
+    return Object.assign(StereoFeedbackEffect.getDefaults(), {
+      frequency: 1.5,
+      delayTime: 3.5,
+      depth: 0.7,
+      type: "sine",
+      spread: 180,
+      feedback: 0,
+      wet: 0.5
+    });
+  }
+  /**
+   * The depth of the effect. A depth of 1 makes the delayTime
+   * modulate between 0 and 2*delayTime (centered around the delayTime).
+   */
+  get depth() {
+    return this._depth;
+  }
+  set depth(depth) {
+    this._depth = depth;
+    const deviation = this._delayTime * depth;
+    this._lfoL.min = Math.max(this._delayTime - deviation, 0);
+    this._lfoL.max = this._delayTime + deviation;
+    this._lfoR.min = Math.max(this._delayTime - deviation, 0);
+    this._lfoR.max = this._delayTime + deviation;
+  }
+  /**
+   * The delayTime in milliseconds of the chorus. A larger delayTime
+   * will give a more pronounced effect. Nominal range a delayTime
+   * is between 2 and 20ms.
+   */
+  get delayTime() {
+    return this._delayTime * 1e3;
+  }
+  set delayTime(delayTime) {
+    this._delayTime = delayTime / 1e3;
+    this.depth = this._depth;
+  }
+  /**
+   * The oscillator type of the LFO.
+   */
+  get type() {
+    return this._lfoL.type;
+  }
+  set type(type) {
+    this._lfoL.type = type;
+    this._lfoR.type = type;
+  }
+  /**
+   * Amount of stereo spread. When set to 0, both LFO's will be panned centrally.
+   * When set to 180, LFO's will be panned hard left and right respectively.
+   */
+  get spread() {
+    return this._lfoR.phase - this._lfoL.phase;
+  }
+  set spread(spread) {
+    this._lfoL.phase = 90 - spread / 2;
+    this._lfoR.phase = spread / 2 + 90;
+  }
+  /**
+   * Start the effect.
+   */
+  start(time) {
+    this._lfoL.start(time);
+    this._lfoR.start(time);
+    return this;
+  }
+  /**
+   * Stop the lfo
+   */
+  stop(time) {
+    this._lfoL.stop(time);
+    this._lfoR.stop(time);
+    return this;
+  }
+  /**
+   * Sync the filter to the transport.
+   * @see {@link LFO.sync}
+   */
+  sync() {
+    this._lfoL.sync();
+    this._lfoR.sync();
+    return this;
+  }
+  /**
+   * Unsync the filter from the transport.
+   */
+  unsync() {
+    this._lfoL.unsync();
+    this._lfoR.unsync();
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this._lfoL.dispose();
+    this._lfoR.dispose();
+    this._delayNodeL.dispose();
+    this._delayNodeR.dispose();
+    this.frequency.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Distortion.js
+var Distortion = class _Distortion extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_Distortion.getDefaults(), arguments, ["distortion"]);
+    super(options);
+    this.name = "Distortion";
+    this._shaper = new WaveShaper({
+      context: this.context,
+      length: 4096
+    });
+    this._distortion = options.distortion;
+    this.connectEffect(this._shaper);
+    this.distortion = options.distortion;
+    this.oversample = options.oversample;
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      distortion: 0.4,
+      oversample: "none"
+    });
+  }
+  /**
+   * The amount of distortion. Nominal range is between 0 and 1.
+   */
+  get distortion() {
+    return this._distortion;
+  }
+  set distortion(amount) {
+    this._distortion = amount;
+    const k = amount * 100;
+    const deg = Math.PI / 180;
+    this._shaper.setMap((x) => {
+      if (Math.abs(x) < 1e-3) {
+        return 0;
+      } else {
+        return (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+      }
+    });
+  }
+  /**
+   * The oversampling of the effect. Can either be "none", "2x" or "4x".
+   */
+  get oversample() {
+    return this._shaper.oversample;
+  }
+  set oversample(oversampling) {
+    this._shaper.oversample = oversampling;
+  }
+  dispose() {
+    super.dispose();
+    this._shaper.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/FeedbackEffect.js
+var FeedbackEffect = class extends Effect {
+  constructor(options) {
+    super(options);
+    this.name = "FeedbackEffect";
+    this._feedbackGain = new Gain({
+      context: this.context,
+      gain: options.feedback,
+      units: "normalRange"
+    });
+    this.feedback = this._feedbackGain.gain;
+    readOnly(this, "feedback");
+    this.effectReturn.chain(this._feedbackGain, this.effectSend);
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      feedback: 0.125
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._feedbackGain.dispose();
+    this.feedback.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/FeedbackDelay.js
+var FeedbackDelay = class _FeedbackDelay extends FeedbackEffect {
+  constructor() {
+    const options = optionsFromArguments(_FeedbackDelay.getDefaults(), arguments, ["delayTime", "feedback"]);
+    super(options);
+    this.name = "FeedbackDelay";
+    this._delayNode = new Delay({
+      context: this.context,
+      delayTime: options.delayTime,
+      maxDelay: options.maxDelay
+    });
+    this.delayTime = this._delayNode.delayTime;
+    this.connectEffect(this._delayNode);
+    readOnly(this, "delayTime");
+  }
+  static getDefaults() {
+    return Object.assign(FeedbackEffect.getDefaults(), {
+      delayTime: 0.25,
+      maxDelay: 1
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._delayNode.dispose();
+    this.delayTime.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/effect/Freeverb.js
 var combFilterTunings = [
   1557 / 44100,
@@ -25443,6 +28929,183 @@ var combFilterTunings = [
   1188 / 44100,
   1116 / 44100
 ];
+var allpassFilterFrequencies = [225, 556, 441, 341];
+var Freeverb = class _Freeverb extends StereoEffect {
+  constructor() {
+    const options = optionsFromArguments(_Freeverb.getDefaults(), arguments, ["roomSize", "dampening"]);
+    super(options);
+    this.name = "Freeverb";
+    this._combFilters = [];
+    this._allpassFiltersL = [];
+    this._allpassFiltersR = [];
+    this.roomSize = new Signal({
+      context: this.context,
+      value: options.roomSize,
+      units: "normalRange"
+    });
+    this._allpassFiltersL = allpassFilterFrequencies.map((freq) => {
+      const allpassL = this.context.createBiquadFilter();
+      allpassL.type = "allpass";
+      allpassL.frequency.value = freq;
+      return allpassL;
+    });
+    this._allpassFiltersR = allpassFilterFrequencies.map((freq) => {
+      const allpassR = this.context.createBiquadFilter();
+      allpassR.type = "allpass";
+      allpassR.frequency.value = freq;
+      return allpassR;
+    });
+    this._combFilters = combFilterTunings.map((delayTime, index) => {
+      const lfpf = new LowpassCombFilter({
+        context: this.context,
+        dampening: options.dampening,
+        delayTime
+      });
+      if (index < combFilterTunings.length / 2) {
+        this.connectEffectLeft(lfpf, ...this._allpassFiltersL);
+      } else {
+        this.connectEffectRight(lfpf, ...this._allpassFiltersR);
+      }
+      this.roomSize.connect(lfpf.resonance);
+      return lfpf;
+    });
+    readOnly(this, ["roomSize"]);
+  }
+  static getDefaults() {
+    return Object.assign(StereoEffect.getDefaults(), {
+      roomSize: 0.7,
+      dampening: 3e3
+    });
+  }
+  /**
+   * The amount of dampening of the reverberant signal.
+   */
+  get dampening() {
+    return this._combFilters[0].dampening;
+  }
+  set dampening(d) {
+    this._combFilters.forEach((c) => c.dampening = d);
+  }
+  dispose() {
+    super.dispose();
+    this._allpassFiltersL.forEach((al) => al.disconnect());
+    this._allpassFiltersR.forEach((ar) => ar.disconnect());
+    this._combFilters.forEach((cf) => cf.dispose());
+    this.roomSize.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/component/filter/PhaseShiftAllpass.js
+var PhaseShiftAllpass = class extends ToneAudioNode {
+  constructor(options) {
+    super(options);
+    this.name = "PhaseShiftAllpass";
+    this.input = new Gain({ context: this.context });
+    this.output = new Gain({ context: this.context });
+    this.offset90 = new Gain({ context: this.context });
+    const allpassBank1Values = [
+      0.6923878,
+      0.9360654322959,
+      0.988229522686,
+      0.9987488452737
+    ];
+    const allpassBank2Values = [
+      0.4021921162426,
+      0.856171088242,
+      0.9722909545651,
+      0.9952884791278
+    ];
+    this._bank0 = this._createAllPassFilterBank(allpassBank1Values);
+    this._bank1 = this._createAllPassFilterBank(allpassBank2Values);
+    this._oneSampleDelay = this.context.createIIRFilter([0, 1], [1, 0]);
+    connectSeries(this.input, ...this._bank0, this._oneSampleDelay, this.output);
+    connectSeries(this.input, ...this._bank1, this.offset90);
+  }
+  /**
+   * Create all of the IIR filters from an array of values using the coefficient calculation.
+   */
+  _createAllPassFilterBank(bankValues) {
+    const nodes = bankValues.map((value) => {
+      const coefficients = [
+        [value * value, 0, -1],
+        [1, 0, -(value * value)]
+      ];
+      return this.context.createIIRFilter(coefficients[0], coefficients[1]);
+    });
+    return nodes;
+  }
+  dispose() {
+    super.dispose();
+    this.input.dispose();
+    this.output.dispose();
+    this.offset90.dispose();
+    this._bank0.forEach((f) => f.disconnect());
+    this._bank1.forEach((f) => f.disconnect());
+    this._oneSampleDelay.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/FrequencyShifter.js
+var FrequencyShifter = class _FrequencyShifter extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_FrequencyShifter.getDefaults(), arguments, ["frequency"]);
+    super(options);
+    this.name = "FrequencyShifter";
+    this.frequency = new Signal({
+      context: this.context,
+      units: "frequency",
+      value: options.frequency,
+      minValue: -this.context.sampleRate / 2,
+      maxValue: this.context.sampleRate / 2
+    });
+    this._sine = new ToneOscillatorNode({
+      context: this.context,
+      type: "sine"
+    });
+    this._cosine = new Oscillator({
+      context: this.context,
+      phase: -90,
+      type: "sine"
+    });
+    this._sineMultiply = new Multiply({ context: this.context });
+    this._cosineMultiply = new Multiply({ context: this.context });
+    this._negate = new Negate({ context: this.context });
+    this._add = new Add({ context: this.context });
+    this._phaseShifter = new PhaseShiftAllpass({ context: this.context });
+    this.effectSend.connect(this._phaseShifter);
+    this.frequency.fan(this._sine.frequency, this._cosine.frequency);
+    this._phaseShifter.offset90.connect(this._cosineMultiply);
+    this._cosine.connect(this._cosineMultiply.factor);
+    this._phaseShifter.connect(this._sineMultiply);
+    this._sine.connect(this._sineMultiply.factor);
+    this._sineMultiply.connect(this._negate);
+    this._cosineMultiply.connect(this._add);
+    this._negate.connect(this._add.addend);
+    this._add.connect(this.effectReturn);
+    const now2 = this.immediate();
+    this._sine.start(now2);
+    this._cosine.start(now2);
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      frequency: 0
+    });
+  }
+  dispose() {
+    super.dispose();
+    this.frequency.dispose();
+    this._add.dispose();
+    this._cosine.dispose();
+    this._cosineMultiply.dispose();
+    this._negate.dispose();
+    this._phaseShifter.dispose();
+    this._sine.dispose();
+    this._sineMultiply.dispose();
+    return this;
+  }
+};
 
 // ../../sdk/node_modules/tone/build/esm/effect/JCReverb.js
 var combFilterDelayTimes = [
@@ -25451,6 +29114,338 @@ var combFilterDelayTimes = [
   2053 / 25e3,
   2251 / 25e3
 ];
+var combFilterResonances = [0.773, 0.802, 0.753, 0.733];
+var allpassFilterFreqs = [347, 113, 37];
+var JCReverb = class _JCReverb extends StereoEffect {
+  constructor() {
+    const options = optionsFromArguments(_JCReverb.getDefaults(), arguments, ["roomSize"]);
+    super(options);
+    this.name = "JCReverb";
+    this._allpassFilters = [];
+    this._feedbackCombFilters = [];
+    this.roomSize = new Signal({
+      context: this.context,
+      value: options.roomSize,
+      units: "normalRange"
+    });
+    this._scaleRoomSize = new Scale({
+      context: this.context,
+      min: -0.733,
+      max: 0.197
+    });
+    this._allpassFilters = allpassFilterFreqs.map((freq) => {
+      const allpass = this.context.createBiquadFilter();
+      allpass.type = "allpass";
+      allpass.frequency.value = freq;
+      return allpass;
+    });
+    this._feedbackCombFilters = combFilterDelayTimes.map((delayTime, index) => {
+      const fbcf = new FeedbackCombFilter({
+        context: this.context,
+        delayTime
+      });
+      this._scaleRoomSize.connect(fbcf.resonance);
+      fbcf.resonance.value = combFilterResonances[index];
+      if (index < combFilterDelayTimes.length / 2) {
+        this.connectEffectLeft(...this._allpassFilters, fbcf);
+      } else {
+        this.connectEffectRight(...this._allpassFilters, fbcf);
+      }
+      return fbcf;
+    });
+    this.roomSize.connect(this._scaleRoomSize);
+    readOnly(this, ["roomSize"]);
+  }
+  static getDefaults() {
+    return Object.assign(StereoEffect.getDefaults(), {
+      roomSize: 0.5
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._allpassFilters.forEach((apf) => apf.disconnect());
+    this._feedbackCombFilters.forEach((fbcf) => fbcf.dispose());
+    this.roomSize.dispose();
+    this._scaleRoomSize.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Phaser.js
+var Phaser = class _Phaser extends StereoEffect {
+  constructor() {
+    const options = optionsFromArguments(_Phaser.getDefaults(), arguments, [
+      "frequency",
+      "octaves",
+      "baseFrequency"
+    ]);
+    super(options);
+    this.name = "Phaser";
+    this._lfoL = new LFO({
+      context: this.context,
+      frequency: options.frequency,
+      min: 0,
+      max: 1
+    });
+    this._lfoR = new LFO({
+      context: this.context,
+      frequency: options.frequency,
+      min: 0,
+      max: 1,
+      phase: 180
+    });
+    this._baseFrequency = this.toFrequency(options.baseFrequency);
+    this._octaves = options.octaves;
+    this.Q = new Signal({
+      context: this.context,
+      value: options.Q,
+      units: "positive"
+    });
+    this._filtersL = this._makeFilters(options.stages, this._lfoL);
+    this._filtersR = this._makeFilters(options.stages, this._lfoR);
+    this.frequency = this._lfoL.frequency;
+    this.frequency.value = options.frequency;
+    this.connectEffectLeft(...this._filtersL);
+    this.connectEffectRight(...this._filtersR);
+    this._lfoL.frequency.connect(this._lfoR.frequency);
+    this.baseFrequency = options.baseFrequency;
+    this.octaves = options.octaves;
+    this._lfoL.start();
+    this._lfoR.start();
+    readOnly(this, ["frequency", "Q"]);
+  }
+  static getDefaults() {
+    return Object.assign(StereoEffect.getDefaults(), {
+      frequency: 0.5,
+      octaves: 3,
+      stages: 10,
+      Q: 10,
+      baseFrequency: 350
+    });
+  }
+  _makeFilters(stages, connectToFreq) {
+    const filters = [];
+    for (let i = 0; i < stages; i++) {
+      const filter = this.context.createBiquadFilter();
+      filter.type = "allpass";
+      this.Q.connect(filter.Q);
+      connectToFreq.connect(filter.frequency);
+      filters.push(filter);
+    }
+    return filters;
+  }
+  /**
+   * The number of octaves the phase goes above the baseFrequency
+   */
+  get octaves() {
+    return this._octaves;
+  }
+  set octaves(octaves) {
+    this._octaves = octaves;
+    const max2 = this._baseFrequency * Math.pow(2, octaves);
+    this._lfoL.max = max2;
+    this._lfoR.max = max2;
+  }
+  /**
+   * The the base frequency of the filters.
+   */
+  get baseFrequency() {
+    return this._baseFrequency;
+  }
+  set baseFrequency(freq) {
+    this._baseFrequency = this.toFrequency(freq);
+    this._lfoL.min = this._baseFrequency;
+    this._lfoR.min = this._baseFrequency;
+    this.octaves = this._octaves;
+  }
+  dispose() {
+    super.dispose();
+    this.Q.dispose();
+    this._lfoL.dispose();
+    this._lfoR.dispose();
+    this._filtersL.forEach((f) => f.disconnect());
+    this._filtersR.forEach((f) => f.disconnect());
+    this.frequency.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/StereoXFeedbackEffect.js
+var StereoXFeedbackEffect = class extends StereoFeedbackEffect {
+  constructor(options) {
+    super(options);
+    this._feedbackL.disconnect();
+    this._feedbackL.connect(this._feedbackMerge, 0, 1);
+    this._feedbackR.disconnect();
+    this._feedbackR.connect(this._feedbackMerge, 0, 0);
+    readOnly(this, ["feedback"]);
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/PingPongDelay.js
+var PingPongDelay = class _PingPongDelay extends StereoXFeedbackEffect {
+  constructor() {
+    const options = optionsFromArguments(_PingPongDelay.getDefaults(), arguments, ["delayTime", "feedback"]);
+    super(options);
+    this.name = "PingPongDelay";
+    this._leftDelay = new Delay({
+      context: this.context,
+      maxDelay: options.maxDelay
+    });
+    this._rightDelay = new Delay({
+      context: this.context,
+      maxDelay: options.maxDelay
+    });
+    this._rightPreDelay = new Delay({
+      context: this.context,
+      maxDelay: options.maxDelay
+    });
+    this.delayTime = new Signal({
+      context: this.context,
+      units: "time",
+      value: options.delayTime
+    });
+    this.connectEffectLeft(this._leftDelay);
+    this.connectEffectRight(this._rightPreDelay, this._rightDelay);
+    this.delayTime.fan(this._leftDelay.delayTime, this._rightDelay.delayTime, this._rightPreDelay.delayTime);
+    this._feedbackL.disconnect();
+    this._feedbackL.connect(this._rightDelay);
+    readOnly(this, ["delayTime"]);
+  }
+  static getDefaults() {
+    return Object.assign(StereoXFeedbackEffect.getDefaults(), {
+      delayTime: 0.25,
+      maxDelay: 1
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._leftDelay.dispose();
+    this._rightDelay.dispose();
+    this._rightPreDelay.dispose();
+    this.delayTime.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/PitchShift.js
+var PitchShift = class _PitchShift extends FeedbackEffect {
+  constructor() {
+    const options = optionsFromArguments(_PitchShift.getDefaults(), arguments, ["pitch"]);
+    super(options);
+    this.name = "PitchShift";
+    this._frequency = new Signal({ context: this.context });
+    this._delayA = new Delay({
+      maxDelay: 1,
+      context: this.context
+    });
+    this._lfoA = new LFO({
+      context: this.context,
+      min: 0,
+      max: 0.1,
+      type: "sawtooth"
+    }).connect(this._delayA.delayTime);
+    this._delayB = new Delay({
+      maxDelay: 1,
+      context: this.context
+    });
+    this._lfoB = new LFO({
+      context: this.context,
+      min: 0,
+      max: 0.1,
+      type: "sawtooth",
+      phase: 180
+    }).connect(this._delayB.delayTime);
+    this._crossFade = new CrossFade({ context: this.context });
+    this._crossFadeLFO = new LFO({
+      context: this.context,
+      min: 0,
+      max: 1,
+      type: "triangle",
+      phase: 90
+    }).connect(this._crossFade.fade);
+    this._feedbackDelay = new Delay({
+      delayTime: options.delayTime,
+      context: this.context
+    });
+    this.delayTime = this._feedbackDelay.delayTime;
+    readOnly(this, "delayTime");
+    this._pitch = options.pitch;
+    this._windowSize = options.windowSize;
+    this._delayA.connect(this._crossFade.a);
+    this._delayB.connect(this._crossFade.b);
+    this._frequency.fan(this._lfoA.frequency, this._lfoB.frequency, this._crossFadeLFO.frequency);
+    this.effectSend.fan(this._delayA, this._delayB);
+    this._crossFade.chain(this._feedbackDelay, this.effectReturn);
+    const now2 = this.now();
+    this._lfoA.start(now2);
+    this._lfoB.start(now2);
+    this._crossFadeLFO.start(now2);
+    this.windowSize = this._windowSize;
+  }
+  static getDefaults() {
+    return Object.assign(FeedbackEffect.getDefaults(), {
+      pitch: 0,
+      windowSize: 0.1,
+      delayTime: 0,
+      feedback: 0
+    });
+  }
+  /**
+   * Repitch the incoming signal by some interval (measured in semi-tones).
+   * @example
+   * const pitchShift = new Tone.PitchShift().toDestination();
+   * const osc = new Tone.Oscillator().connect(pitchShift).start().toDestination();
+   * pitchShift.pitch = -12; // down one octave
+   * pitchShift.pitch = 7; // up a fifth
+   */
+  get pitch() {
+    return this._pitch;
+  }
+  set pitch(interval) {
+    this._pitch = interval;
+    let factor = 0;
+    if (interval < 0) {
+      this._lfoA.min = 0;
+      this._lfoA.max = this._windowSize;
+      this._lfoB.min = 0;
+      this._lfoB.max = this._windowSize;
+      factor = intervalToFrequencyRatio(interval - 1) + 1;
+    } else {
+      this._lfoA.min = this._windowSize;
+      this._lfoA.max = 0;
+      this._lfoB.min = this._windowSize;
+      this._lfoB.max = 0;
+      factor = intervalToFrequencyRatio(interval) - 1;
+    }
+    this._frequency.value = factor * (1.2 / this._windowSize);
+  }
+  /**
+   * The window size corresponds roughly to the sample length in a looping sampler.
+   * Smaller values are desirable for a less noticeable delay time of the pitch shifted
+   * signal, but larger values will result in smoother pitch shifting for larger intervals.
+   * A nominal range of 0.03 to 0.1 is recommended.
+   */
+  get windowSize() {
+    return this._windowSize;
+  }
+  set windowSize(size) {
+    this._windowSize = this.toSeconds(size);
+    this.pitch = this._pitch;
+  }
+  dispose() {
+    super.dispose();
+    this._frequency.dispose();
+    this._delayA.dispose();
+    this._delayB.dispose();
+    this._lfoA.dispose();
+    this._lfoB.dispose();
+    this._crossFade.dispose();
+    this._crossFadeLFO.dispose();
+    this._feedbackDelay.dispose();
+    return this;
+  }
+};
 
 // ../../sdk/node_modules/tone/build/esm/source/buffer/ToneBufferSource.js
 var ToneBufferSource = class _ToneBufferSource extends OneShotSource {
@@ -25797,6 +29792,349 @@ var _noiseBuffers = {
       _noiseCache.white = new ToneAudioBuffer().fromArray(buffer);
     }
     return _noiseCache.white;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Reverb.js
+var Reverb = class _Reverb extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_Reverb.getDefaults(), arguments, [
+      "decay"
+    ]);
+    super(options);
+    this.name = "Reverb";
+    this._convolver = this.context.createConvolver();
+    this.ready = Promise.resolve();
+    const decayTime = this.toSeconds(options.decay);
+    assertRange(decayTime, 1e-3);
+    this._decay = decayTime;
+    const preDelayTime = this.toSeconds(options.preDelay);
+    assertRange(preDelayTime, 0);
+    this._preDelay = preDelayTime;
+    this.generate();
+    this.connectEffect(this._convolver);
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      decay: 1.5,
+      preDelay: 0.01
+    });
+  }
+  /**
+   * The duration of the reverb.
+   */
+  get decay() {
+    return this._decay;
+  }
+  set decay(time) {
+    time = this.toSeconds(time);
+    assertRange(time, 1e-3);
+    this._decay = time;
+    this.generate();
+  }
+  /**
+   * The amount of time before the reverb is fully ramped in.
+   */
+  get preDelay() {
+    return this._preDelay;
+  }
+  set preDelay(time) {
+    time = this.toSeconds(time);
+    assertRange(time, 0);
+    this._preDelay = time;
+    this.generate();
+  }
+  /**
+   * Generate the Impulse Response. Returns a promise while the IR is being generated.
+   * @return Promise which returns this object.
+   */
+  generate() {
+    return __awaiter(this, void 0, void 0, function* () {
+      const previousReady = this.ready;
+      const context2 = new OfflineContext(2, this._decay + this._preDelay, this.context.sampleRate);
+      const noiseL = new Noise({ context: context2 });
+      const noiseR = new Noise({ context: context2 });
+      const merge = new Merge({ context: context2 });
+      noiseL.connect(merge, 0, 0);
+      noiseR.connect(merge, 0, 1);
+      const gainNode = new Gain({ context: context2 }).toDestination();
+      merge.connect(gainNode);
+      noiseL.start(0);
+      noiseR.start(0);
+      gainNode.gain.setValueAtTime(0, 0);
+      gainNode.gain.setValueAtTime(1, this._preDelay);
+      gainNode.gain.exponentialApproachValueAtTime(0, this._preDelay, this.decay);
+      const renderPromise = context2.render();
+      this.ready = renderPromise.then(noOp);
+      yield previousReady;
+      this._convolver.buffer = (yield renderPromise).get();
+      return this;
+    });
+  }
+  dispose() {
+    super.dispose();
+    this._convolver.disconnect();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/MidSideEffect.js
+var MidSideEffect = class extends Effect {
+  constructor(options) {
+    super(options);
+    this.name = "MidSideEffect";
+    this._midSideMerge = new MidSideMerge({ context: this.context });
+    this._midSideSplit = new MidSideSplit({ context: this.context });
+    this._midSend = this._midSideSplit.mid;
+    this._sideSend = this._midSideSplit.side;
+    this._midReturn = this._midSideMerge.mid;
+    this._sideReturn = this._midSideMerge.side;
+    this.effectSend.connect(this._midSideSplit);
+    this._midSideMerge.connect(this.effectReturn);
+  }
+  /**
+   * Connect the mid chain of the effect
+   */
+  connectEffectMid(...nodes) {
+    this._midSend.chain(...nodes, this._midReturn);
+  }
+  /**
+   * Connect the side chain of the effect
+   */
+  connectEffectSide(...nodes) {
+    this._sideSend.chain(...nodes, this._sideReturn);
+  }
+  dispose() {
+    super.dispose();
+    this._midSideSplit.dispose();
+    this._midSideMerge.dispose();
+    this._midSend.dispose();
+    this._sideSend.dispose();
+    this._midReturn.dispose();
+    this._sideReturn.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/StereoWidener.js
+var StereoWidener = class _StereoWidener extends MidSideEffect {
+  constructor() {
+    const options = optionsFromArguments(_StereoWidener.getDefaults(), arguments, ["width"]);
+    super(options);
+    this.name = "StereoWidener";
+    this.width = new Signal({
+      context: this.context,
+      value: options.width,
+      units: "normalRange"
+    });
+    readOnly(this, ["width"]);
+    this._twoTimesWidthMid = new Multiply({
+      context: this.context,
+      value: 2
+    });
+    this._twoTimesWidthSide = new Multiply({
+      context: this.context,
+      value: 2
+    });
+    this._midMult = new Multiply({ context: this.context });
+    this._twoTimesWidthMid.connect(this._midMult.factor);
+    this.connectEffectMid(this._midMult);
+    this._oneMinusWidth = new Subtract({ context: this.context });
+    this._oneMinusWidth.connect(this._twoTimesWidthMid);
+    connect(this.context.getConstant(1), this._oneMinusWidth);
+    this.width.connect(this._oneMinusWidth.subtrahend);
+    this._sideMult = new Multiply({ context: this.context });
+    this.width.connect(this._twoTimesWidthSide);
+    this._twoTimesWidthSide.connect(this._sideMult.factor);
+    this.connectEffectSide(this._sideMult);
+  }
+  static getDefaults() {
+    return Object.assign(MidSideEffect.getDefaults(), {
+      width: 0.5
+    });
+  }
+  dispose() {
+    super.dispose();
+    this.width.dispose();
+    this._midMult.dispose();
+    this._sideMult.dispose();
+    this._twoTimesWidthMid.dispose();
+    this._twoTimesWidthSide.dispose();
+    this._oneMinusWidth.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Tremolo.js
+var Tremolo = class _Tremolo extends StereoEffect {
+  constructor() {
+    const options = optionsFromArguments(_Tremolo.getDefaults(), arguments, [
+      "frequency",
+      "depth"
+    ]);
+    super(options);
+    this.name = "Tremolo";
+    this._lfoL = new LFO({
+      context: this.context,
+      type: options.type,
+      min: 1,
+      max: 0
+    });
+    this._lfoR = new LFO({
+      context: this.context,
+      type: options.type,
+      min: 1,
+      max: 0
+    });
+    this._amplitudeL = new Gain({ context: this.context });
+    this._amplitudeR = new Gain({ context: this.context });
+    this.frequency = new Signal({
+      context: this.context,
+      value: options.frequency,
+      units: "frequency"
+    });
+    this.depth = new Signal({
+      context: this.context,
+      value: options.depth,
+      units: "normalRange"
+    });
+    readOnly(this, ["frequency", "depth"]);
+    this.connectEffectLeft(this._amplitudeL);
+    this.connectEffectRight(this._amplitudeR);
+    this._lfoL.connect(this._amplitudeL.gain);
+    this._lfoR.connect(this._amplitudeR.gain);
+    this.frequency.fan(this._lfoL.frequency, this._lfoR.frequency);
+    this.depth.fan(this._lfoR.amplitude, this._lfoL.amplitude);
+    this.spread = options.spread;
+  }
+  static getDefaults() {
+    return Object.assign(StereoEffect.getDefaults(), {
+      frequency: 10,
+      type: "sine",
+      depth: 0.5,
+      spread: 180
+    });
+  }
+  /**
+   * Start the tremolo.
+   */
+  start(time) {
+    this._lfoL.start(time);
+    this._lfoR.start(time);
+    return this;
+  }
+  /**
+   * Stop the tremolo.
+   */
+  stop(time) {
+    this._lfoL.stop(time);
+    this._lfoR.stop(time);
+    return this;
+  }
+  /**
+   * Sync the effect to the transport.
+   */
+  sync() {
+    this._lfoL.sync();
+    this._lfoR.sync();
+    this.context.transport.syncSignal(this.frequency);
+    return this;
+  }
+  /**
+   * Unsync the filter from the transport
+   */
+  unsync() {
+    this._lfoL.unsync();
+    this._lfoR.unsync();
+    this.context.transport.unsyncSignal(this.frequency);
+    return this;
+  }
+  /**
+   * The oscillator type.
+   */
+  get type() {
+    return this._lfoL.type;
+  }
+  set type(type) {
+    this._lfoL.type = type;
+    this._lfoR.type = type;
+  }
+  /**
+   * Amount of stereo spread. When set to 0, both LFO's will be panned centrally.
+   * When set to 180, LFO's will be panned hard left and right respectively.
+   */
+  get spread() {
+    return this._lfoR.phase - this._lfoL.phase;
+  }
+  set spread(spread) {
+    this._lfoL.phase = 90 - spread / 2;
+    this._lfoR.phase = spread / 2 + 90;
+  }
+  dispose() {
+    super.dispose();
+    this._lfoL.dispose();
+    this._lfoR.dispose();
+    this._amplitudeL.dispose();
+    this._amplitudeR.dispose();
+    this.frequency.dispose();
+    this.depth.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/effect/Vibrato.js
+var Vibrato = class _Vibrato extends Effect {
+  constructor() {
+    const options = optionsFromArguments(_Vibrato.getDefaults(), arguments, [
+      "frequency",
+      "depth"
+    ]);
+    super(options);
+    this.name = "Vibrato";
+    this._delayNode = new Delay({
+      context: this.context,
+      delayTime: 0,
+      maxDelay: options.maxDelay
+    });
+    this._lfo = new LFO({
+      context: this.context,
+      type: options.type,
+      min: 0,
+      max: options.maxDelay,
+      frequency: options.frequency,
+      phase: -90
+      // offset the phase so the resting position is in the center
+    }).start().connect(this._delayNode.delayTime);
+    this.frequency = this._lfo.frequency;
+    this.depth = this._lfo.amplitude;
+    this.depth.value = options.depth;
+    readOnly(this, ["frequency", "depth"]);
+    this.effectSend.chain(this._delayNode, this.effectReturn);
+  }
+  static getDefaults() {
+    return Object.assign(Effect.getDefaults(), {
+      maxDelay: 5e-3,
+      frequency: 5,
+      depth: 0.1,
+      type: "sine"
+    });
+  }
+  /**
+   * Type of oscillator attached to the Vibrato.
+   */
+  get type() {
+    return this._lfo.type;
+  }
+  set type(type) {
+    this._lfo.type = type;
+  }
+  dispose() {
+    super.dispose();
+    this._delayNode.dispose();
+    this._lfo.dispose();
+    this.frequency.dispose();
+    this.depth.dispose();
+    return this;
   }
 };
 
@@ -26210,6 +30548,746 @@ var Loop = class _Loop extends ToneWithContext {
     super.dispose();
     this._event.dispose();
     return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/event/Part.js
+var Part = class _Part extends ToneEvent {
+  constructor() {
+    const options = optionsFromArguments(_Part.getDefaults(), arguments, [
+      "callback",
+      "events"
+    ]);
+    super(options);
+    this.name = "Part";
+    this._state = new StateTimeline("stopped");
+    this._events = /* @__PURE__ */ new Set();
+    this._state.increasing = true;
+    options.events.forEach((event) => {
+      if (isArray(event)) {
+        this.add(event[0], event[1]);
+      } else {
+        this.add(event);
+      }
+    });
+  }
+  static getDefaults() {
+    return Object.assign(ToneEvent.getDefaults(), {
+      events: []
+    });
+  }
+  /**
+   * Start the part at the given time.
+   * @param  time    When to start the part.
+   * @param  offset  The offset from the start of the part to begin playing at.
+   */
+  start(time, offset) {
+    const ticks = this.toTicks(time);
+    if (this._state.getValueAtTime(ticks) !== "started") {
+      offset = defaultArg(offset, this._loop ? this._loopStart : 0);
+      if (this._loop) {
+        offset = defaultArg(offset, this._loopStart);
+      } else {
+        offset = defaultArg(offset, 0);
+      }
+      const computedOffset = this.toTicks(offset);
+      this._state.add({
+        id: -1,
+        offset: computedOffset,
+        state: "started",
+        time: ticks
+      });
+      this._forEach((event) => {
+        this._startNote(event, ticks, computedOffset);
+      });
+    }
+    return this;
+  }
+  /**
+   * Start the event in the given event at the correct time given
+   * the ticks and offset and looping.
+   * @param  event
+   * @param  ticks
+   * @param  offset
+   */
+  _startNote(event, ticks, offset) {
+    ticks -= offset;
+    if (this._loop) {
+      if (event.startOffset >= this._loopStart && event.startOffset < this._loopEnd) {
+        if (event.startOffset < offset) {
+          ticks += this._getLoopDuration();
+        }
+        event.start(new TicksClass(this.context, ticks));
+      } else if (event.startOffset < this._loopStart && event.startOffset >= offset) {
+        event.loop = false;
+        event.start(new TicksClass(this.context, ticks));
+      }
+    } else if (event.startOffset >= offset) {
+      event.start(new TicksClass(this.context, ticks));
+    }
+  }
+  get startOffset() {
+    return this._startOffset;
+  }
+  set startOffset(offset) {
+    this._startOffset = offset;
+    this._forEach((event) => {
+      event.startOffset += this._startOffset;
+    });
+  }
+  /**
+   * Stop the part at the given time.
+   * @param  time  When to stop the part.
+   */
+  stop(time) {
+    const ticks = this.toTicks(time);
+    this._state.cancel(ticks);
+    this._state.setStateAtTime("stopped", ticks);
+    this._forEach((event) => {
+      event.stop(time);
+    });
+    return this;
+  }
+  /**
+   * Get/Set an Event's value at the given time.
+   * If a value is passed in and no event exists at
+   * the given time, one will be created with that value.
+   * If two events are at the same time, the first one will
+   * be returned.
+   * @example
+   * const part = new Tone.Part();
+   * part.at("1m"); // returns the part at the first measure
+   * part.at("2m", "C2"); // set the value at "2m" to C2.
+   * // if an event didn't exist at that time, it will be created.
+   * @param time The time of the event to get or set.
+   * @param value If a value is passed in, the value of the event at the given time will be set to it.
+   */
+  at(time, value) {
+    const timeInTicks = new TransportTimeClass(this.context, time).toTicks();
+    const tickTime = new TicksClass(this.context, 1).toSeconds();
+    const iterator = this._events.values();
+    let result = iterator.next();
+    while (!result.done) {
+      const event = result.value;
+      if (Math.abs(timeInTicks - event.startOffset) < tickTime) {
+        if (isDefined(value)) {
+          event.value = value;
+        }
+        return event;
+      }
+      result = iterator.next();
+    }
+    if (isDefined(value)) {
+      this.add(time, value);
+      return this.at(time);
+    } else {
+      return null;
+    }
+  }
+  add(time, value) {
+    if (time instanceof Object && Reflect.has(time, "time")) {
+      value = time;
+      time = value.time;
+    }
+    const ticks = this.toTicks(time);
+    let event;
+    if (value instanceof ToneEvent) {
+      event = value;
+      event.callback = this._tick.bind(this);
+    } else {
+      event = new ToneEvent({
+        callback: this._tick.bind(this),
+        context: this.context,
+        value
+      });
+    }
+    event.startOffset = ticks;
+    event.set({
+      humanize: this.humanize,
+      loop: this.loop,
+      loopEnd: this.loopEnd,
+      loopStart: this.loopStart,
+      playbackRate: this.playbackRate,
+      probability: this.probability
+    });
+    this._events.add(event);
+    this._restartEvent(event);
+    return this;
+  }
+  /**
+   * Restart the given event
+   */
+  _restartEvent(event) {
+    this._state.forEach((stateEvent) => {
+      if (stateEvent.state === "started") {
+        this._startNote(event, stateEvent.time, stateEvent.offset);
+      } else {
+        event.stop(new TicksClass(this.context, stateEvent.time));
+      }
+    });
+  }
+  remove(time, value) {
+    if (isObject(time) && time.hasOwnProperty("time")) {
+      value = time;
+      time = value.time;
+    }
+    time = this.toTicks(time);
+    this._events.forEach((event) => {
+      if (event.startOffset === time) {
+        if (isUndef(value) || isDefined(value) && event.value === value) {
+          this._events.delete(event);
+          event.dispose();
+        }
+      }
+    });
+    return this;
+  }
+  /**
+   * Remove all of the notes from the group.
+   */
+  clear() {
+    this._forEach((event) => event.dispose());
+    this._events.clear();
+    return this;
+  }
+  /**
+   * Cancel scheduled state change events: i.e. "start" and "stop".
+   * @param after The time after which to cancel the scheduled events.
+   */
+  cancel(after) {
+    this._forEach((event) => event.cancel(after));
+    this._state.cancel(this.toTicks(after));
+    return this;
+  }
+  /**
+   * Iterate over all of the events
+   */
+  _forEach(callback) {
+    if (this._events) {
+      this._events.forEach((event) => {
+        if (event instanceof _Part) {
+          event._forEach(callback);
+        } else {
+          callback(event);
+        }
+      });
+    }
+    return this;
+  }
+  /**
+   * Set the attribute of all of the events
+   * @param  attr  the attribute to set
+   * @param  value      The value to set it to
+   */
+  _setAll(attr, value) {
+    this._forEach((event) => {
+      event[attr] = value;
+    });
+  }
+  /**
+   * Internal tick method
+   * @param  time  The time of the event in seconds
+   */
+  _tick(time, value) {
+    if (!this.mute) {
+      this.callback(time, value);
+    }
+  }
+  /**
+   * Determine if the event should be currently looping
+   * given the loop boundaries of this Part.
+   * @param  event  The event to test
+   */
+  _testLoopBoundaries(event) {
+    if (this._loop && (event.startOffset < this._loopStart || event.startOffset >= this._loopEnd)) {
+      event.cancel(0);
+    } else if (event.state === "stopped") {
+      this._restartEvent(event);
+    }
+  }
+  get probability() {
+    return this._probability;
+  }
+  set probability(prob) {
+    this._probability = prob;
+    this._setAll("probability", prob);
+  }
+  get humanize() {
+    return this._humanize;
+  }
+  set humanize(variation) {
+    this._humanize = variation;
+    this._setAll("humanize", variation);
+  }
+  /**
+   * If the part should loop or not
+   * between Part.loopStart and
+   * Part.loopEnd. If set to true,
+   * the part will loop indefinitely,
+   * if set to a number greater than 1
+   * it will play a specific number of
+   * times, if set to false, 0 or 1, the
+   * part will only play once.
+   * @example
+   * const part = new Tone.Part();
+   * // loop the part 8 times
+   * part.loop = 8;
+   */
+  get loop() {
+    return this._loop;
+  }
+  set loop(loop) {
+    this._loop = loop;
+    this._forEach((event) => {
+      event.loopStart = this.loopStart;
+      event.loopEnd = this.loopEnd;
+      event.loop = loop;
+      this._testLoopBoundaries(event);
+    });
+  }
+  /**
+   * The loopEnd point determines when it will
+   * loop if Part.loop is true.
+   */
+  get loopEnd() {
+    return new TicksClass(this.context, this._loopEnd).toSeconds();
+  }
+  set loopEnd(loopEnd) {
+    this._loopEnd = this.toTicks(loopEnd);
+    if (this._loop) {
+      this._forEach((event) => {
+        event.loopEnd = loopEnd;
+        this._testLoopBoundaries(event);
+      });
+    }
+  }
+  /**
+   * The loopStart point determines when it will
+   * loop if Part.loop is true.
+   */
+  get loopStart() {
+    return new TicksClass(this.context, this._loopStart).toSeconds();
+  }
+  set loopStart(loopStart) {
+    this._loopStart = this.toTicks(loopStart);
+    if (this._loop) {
+      this._forEach((event) => {
+        event.loopStart = this.loopStart;
+        this._testLoopBoundaries(event);
+      });
+    }
+  }
+  /**
+   * The playback rate of the part
+   */
+  get playbackRate() {
+    return this._playbackRate;
+  }
+  set playbackRate(rate) {
+    this._playbackRate = rate;
+    this._setAll("playbackRate", rate);
+  }
+  /**
+   * The number of scheduled notes in the part.
+   */
+  get length() {
+    return this._events.size;
+  }
+  dispose() {
+    super.dispose();
+    this.clear();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/event/PatternGenerator.js
+function* upPatternGen(numValues) {
+  let index = 0;
+  while (index < numValues) {
+    index = clamp(index, 0, numValues - 1);
+    yield index;
+    index++;
+  }
+}
+function* downPatternGen(numValues) {
+  let index = numValues - 1;
+  while (index >= 0) {
+    index = clamp(index, 0, numValues - 1);
+    yield index;
+    index--;
+  }
+}
+function* infiniteGen(numValues, gen) {
+  while (true) {
+    yield* gen(numValues);
+  }
+}
+function* alternatingGenerator(numValues, directionUp) {
+  let index = directionUp ? 0 : numValues - 1;
+  while (true) {
+    index = clamp(index, 0, numValues - 1);
+    yield index;
+    if (directionUp) {
+      index++;
+      if (index >= numValues - 1) {
+        directionUp = false;
+      }
+    } else {
+      index--;
+      if (index <= 0) {
+        directionUp = true;
+      }
+    }
+  }
+}
+function* jumpUp(numValues) {
+  let index = 0;
+  let stepIndex = 0;
+  while (index < numValues) {
+    index = clamp(index, 0, numValues - 1);
+    yield index;
+    stepIndex++;
+    index += stepIndex % 2 ? 2 : -1;
+  }
+}
+function* jumpDown(numValues) {
+  let index = numValues - 1;
+  let stepIndex = 0;
+  while (index >= 0) {
+    index = clamp(index, 0, numValues - 1);
+    yield index;
+    stepIndex++;
+    index += stepIndex % 2 ? -2 : 1;
+  }
+}
+function* randomGen(numValues) {
+  while (true) {
+    const randomIndex = Math.floor(Math.random() * numValues);
+    yield randomIndex;
+  }
+}
+function* randomOnce(numValues) {
+  const copy = [];
+  for (let i = 0; i < numValues; i++) {
+    copy.push(i);
+  }
+  while (copy.length > 0) {
+    const randVal = copy.splice(Math.floor(copy.length * Math.random()), 1);
+    const index = clamp(randVal[0], 0, numValues - 1);
+    yield index;
+  }
+}
+function* randomWalk(numValues) {
+  let index = Math.floor(Math.random() * numValues);
+  while (true) {
+    if (index === 0) {
+      index++;
+    } else if (index === numValues - 1) {
+      index--;
+    } else if (Math.random() < 0.5) {
+      index--;
+    } else {
+      index++;
+    }
+    yield index;
+  }
+}
+function* PatternGenerator(numValues, pattern = "up") {
+  assert(numValues >= 1, "The number of values must be at least one");
+  switch (pattern) {
+    case "up":
+      yield* infiniteGen(numValues, upPatternGen);
+    case "down":
+      yield* infiniteGen(numValues, downPatternGen);
+    case "upDown":
+      yield* alternatingGenerator(numValues, true);
+    case "downUp":
+      yield* alternatingGenerator(numValues, false);
+    case "alternateUp":
+      yield* infiniteGen(numValues, jumpUp);
+    case "alternateDown":
+      yield* infiniteGen(numValues, jumpDown);
+    case "random":
+      yield* randomGen(numValues);
+    case "randomOnce":
+      yield* infiniteGen(numValues, randomOnce);
+    case "randomWalk":
+      yield* randomWalk(numValues);
+  }
+}
+
+// ../../sdk/node_modules/tone/build/esm/event/Pattern.js
+var Pattern = class _Pattern extends Loop {
+  constructor() {
+    const options = optionsFromArguments(_Pattern.getDefaults(), arguments, [
+      "callback",
+      "values",
+      "pattern"
+    ]);
+    super(options);
+    this.name = "Pattern";
+    this.callback = options.callback;
+    this._values = options.values;
+    this._pattern = PatternGenerator(options.values.length, options.pattern);
+    this._type = options.pattern;
+  }
+  static getDefaults() {
+    return Object.assign(Loop.getDefaults(), {
+      pattern: "up",
+      values: [],
+      callback: noOp
+    });
+  }
+  /**
+   * Internal function called when the notes should be called
+   */
+  _tick(time) {
+    const index = this._pattern.next();
+    this._index = index.value;
+    this._value = this._values[index.value];
+    this.callback(time, this._value);
+  }
+  /**
+   * The array of events.
+   */
+  get values() {
+    return this._values;
+  }
+  set values(val) {
+    this._values = val;
+    this.pattern = this._type;
+  }
+  /**
+   * The current value of the pattern.
+   */
+  get value() {
+    return this._value;
+  }
+  /**
+   * The current index of the pattern.
+   */
+  get index() {
+    return this._index;
+  }
+  /**
+   * The pattern type.
+   */
+  get pattern() {
+    return this._type;
+  }
+  set pattern(pattern) {
+    this._type = pattern;
+    this._pattern = PatternGenerator(this._values.length, this._type);
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/event/Sequence.js
+var Sequence = class _Sequence extends ToneEvent {
+  constructor() {
+    const options = optionsFromArguments(_Sequence.getDefaults(), arguments, ["callback", "events", "subdivision"]);
+    super(options);
+    this.name = "Sequence";
+    this._part = new Part({
+      callback: this._seqCallback.bind(this),
+      context: this.context
+    });
+    this._events = [];
+    this._eventsArray = [];
+    this._subdivision = this.toTicks(options.subdivision);
+    this.events = options.events;
+    this.loop = options.loop;
+    this.loopStart = options.loopStart;
+    this.loopEnd = options.loopEnd;
+    this.playbackRate = options.playbackRate;
+    this.probability = options.probability;
+    this.humanize = options.humanize;
+    this.mute = options.mute;
+    this.playbackRate = options.playbackRate;
+  }
+  static getDefaults() {
+    return Object.assign(omitFromObject(ToneEvent.getDefaults(), ["value"]), {
+      events: [],
+      loop: true,
+      loopEnd: 0,
+      loopStart: 0,
+      subdivision: "8n"
+    });
+  }
+  /**
+   * The internal callback for when an event is invoked
+   */
+  _seqCallback(time, value) {
+    if (value !== null && !this.mute) {
+      this.callback(time, value);
+    }
+  }
+  /**
+   * The sequence
+   */
+  get events() {
+    return this._events;
+  }
+  set events(s) {
+    this.clear();
+    this._eventsArray = s;
+    this._events = this._createSequence(this._eventsArray);
+    this._eventsUpdated();
+  }
+  /**
+   * Start the part at the given time.
+   * @param  time    When to start the part.
+   * @param  offset  The offset index to start at
+   */
+  start(time, offset) {
+    this._part.start(time, offset ? this._indexTime(offset) : offset);
+    return this;
+  }
+  /**
+   * Stop the part at the given time.
+   * @param  time  When to stop the part.
+   */
+  stop(time) {
+    this._part.stop(time);
+    return this;
+  }
+  /**
+   * The subdivision of the sequence. This can only be
+   * set in the constructor. The subdivision is the
+   * interval between successive steps.
+   */
+  get subdivision() {
+    return new TicksClass(this.context, this._subdivision).toSeconds();
+  }
+  /**
+   * Create a sequence proxy which can be monitored to create subsequences
+   */
+  _createSequence(array) {
+    return new Proxy(array, {
+      get: (target, property) => {
+        return target[property];
+      },
+      set: (target, property, value) => {
+        if (isString(property) && isFinite(parseInt(property, 10))) {
+          if (isArray(value)) {
+            target[property] = this._createSequence(value);
+          } else {
+            target[property] = value;
+          }
+        } else {
+          target[property] = value;
+        }
+        this._eventsUpdated();
+        return true;
+      }
+    });
+  }
+  /**
+   * When the sequence has changed, all of the events need to be recreated
+   */
+  _eventsUpdated() {
+    this._part.clear();
+    this._rescheduleSequence(this._eventsArray, this._subdivision, this.startOffset);
+    this.loopEnd = this.loopEnd;
+  }
+  /**
+   * reschedule all of the events that need to be rescheduled
+   */
+  _rescheduleSequence(sequence, subdivision, startOffset) {
+    sequence.forEach((value, index) => {
+      const eventOffset = index * subdivision + startOffset;
+      if (isArray(value)) {
+        this._rescheduleSequence(value, subdivision / value.length, eventOffset);
+      } else {
+        const startTime = new TicksClass(this.context, eventOffset, "i").toSeconds();
+        this._part.add(startTime, value);
+      }
+    });
+  }
+  /**
+   * Get the time of the index given the Sequence's subdivision
+   * @param  index
+   * @return The time of that index
+   */
+  _indexTime(index) {
+    return new TicksClass(this.context, index * this._subdivision + this.startOffset).toSeconds();
+  }
+  /**
+   * Clear all of the events
+   */
+  clear() {
+    this._part.clear();
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this._part.dispose();
+    return this;
+  }
+  //-------------------------------------
+  // PROXY CALLS
+  //-------------------------------------
+  get loop() {
+    return this._part.loop;
+  }
+  set loop(l) {
+    this._part.loop = l;
+  }
+  /**
+   * The index at which the sequence should start looping
+   */
+  get loopStart() {
+    return this._loopStart;
+  }
+  set loopStart(index) {
+    this._loopStart = index;
+    this._part.loopStart = this._indexTime(index);
+  }
+  /**
+   * The index at which the sequence should end looping
+   */
+  get loopEnd() {
+    return this._loopEnd;
+  }
+  set loopEnd(index) {
+    this._loopEnd = index;
+    if (index === 0) {
+      this._part.loopEnd = this._indexTime(this._eventsArray.length);
+    } else {
+      this._part.loopEnd = this._indexTime(index);
+    }
+  }
+  get startOffset() {
+    return this._part.startOffset;
+  }
+  set startOffset(start2) {
+    this._part.startOffset = start2;
+  }
+  get playbackRate() {
+    return this._part.playbackRate;
+  }
+  set playbackRate(rate) {
+    this._part.playbackRate = rate;
+  }
+  get probability() {
+    return this._part.probability;
+  }
+  set probability(prob) {
+    this._part.probability = prob;
+  }
+  get progress() {
+    return this._part.progress;
+  }
+  get humanize() {
+    return this._part.humanize;
+  }
+  set humanize(variation) {
+    this._part.humanize = variation;
+  }
+  /**
+   * The number of scheduled events
+   */
+  get length() {
+    return this._part.length;
   }
 };
 
@@ -27457,6 +32535,140 @@ var Synth = class _Synth extends Monophonic {
   }
 };
 
+// ../../sdk/node_modules/tone/build/esm/instrument/ModulationSynth.js
+var ModulationSynth = class _ModulationSynth extends Monophonic {
+  constructor() {
+    const options = optionsFromArguments(_ModulationSynth.getDefaults(), arguments);
+    super(options);
+    this.name = "ModulationSynth";
+    this._carrier = new Synth({
+      context: this.context,
+      oscillator: options.oscillator,
+      envelope: options.envelope,
+      onsilence: () => this.onsilence(this),
+      volume: -10
+    });
+    this._modulator = new Synth({
+      context: this.context,
+      oscillator: options.modulation,
+      envelope: options.modulationEnvelope,
+      volume: -10
+    });
+    this.oscillator = this._carrier.oscillator;
+    this.envelope = this._carrier.envelope;
+    this.modulation = this._modulator.oscillator;
+    this.modulationEnvelope = this._modulator.envelope;
+    this.frequency = new Signal({
+      context: this.context,
+      units: "frequency"
+    });
+    this.detune = new Signal({
+      context: this.context,
+      value: options.detune,
+      units: "cents"
+    });
+    this.harmonicity = new Multiply({
+      context: this.context,
+      value: options.harmonicity,
+      minValue: 0
+    });
+    this._modulationNode = new Gain({
+      context: this.context,
+      gain: 0
+    });
+    readOnly(this, [
+      "frequency",
+      "harmonicity",
+      "oscillator",
+      "envelope",
+      "modulation",
+      "modulationEnvelope",
+      "detune"
+    ]);
+  }
+  static getDefaults() {
+    return Object.assign(Monophonic.getDefaults(), {
+      harmonicity: 3,
+      oscillator: Object.assign(omitFromObject(OmniOscillator.getDefaults(), [
+        ...Object.keys(Source.getDefaults()),
+        "frequency",
+        "detune"
+      ]), {
+        type: "sine"
+      }),
+      envelope: Object.assign(omitFromObject(Envelope.getDefaults(), Object.keys(ToneAudioNode.getDefaults())), {
+        attack: 0.01,
+        decay: 0.01,
+        sustain: 1,
+        release: 0.5
+      }),
+      modulation: Object.assign(omitFromObject(OmniOscillator.getDefaults(), [
+        ...Object.keys(Source.getDefaults()),
+        "frequency",
+        "detune"
+      ]), {
+        type: "square"
+      }),
+      modulationEnvelope: Object.assign(omitFromObject(Envelope.getDefaults(), Object.keys(ToneAudioNode.getDefaults())), {
+        attack: 0.5,
+        decay: 0,
+        sustain: 1,
+        release: 0.5
+      })
+    });
+  }
+  /**
+   * Trigger the attack portion of the note
+   */
+  _triggerEnvelopeAttack(time, velocity) {
+    this._carrier._triggerEnvelopeAttack(time, velocity);
+    this._modulator._triggerEnvelopeAttack(time, velocity);
+  }
+  /**
+   * Trigger the release portion of the note
+   */
+  _triggerEnvelopeRelease(time) {
+    this._carrier._triggerEnvelopeRelease(time);
+    this._modulator._triggerEnvelopeRelease(time);
+    return this;
+  }
+  getLevelAtTime(time) {
+    time = this.toSeconds(time);
+    return this.envelope.getValueAtTime(time);
+  }
+  dispose() {
+    super.dispose();
+    this._carrier.dispose();
+    this._modulator.dispose();
+    this.frequency.dispose();
+    this.detune.dispose();
+    this.harmonicity.dispose();
+    this._modulationNode.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/instrument/AMSynth.js
+var AMSynth = class _AMSynth extends ModulationSynth {
+  constructor() {
+    super(optionsFromArguments(_AMSynth.getDefaults(), arguments));
+    this.name = "AMSynth";
+    this._modulationScale = new AudioToGain({
+      context: this.context
+    });
+    this.frequency.connect(this._carrier.frequency);
+    this.frequency.chain(this.harmonicity, this._modulator.frequency);
+    this.detune.fan(this._carrier.detune, this._modulator.detune);
+    this._modulator.chain(this._modulationScale, this._modulationNode.gain);
+    this._carrier.chain(this._modulationNode, this.output);
+  }
+  dispose() {
+    super.dispose();
+    this._modulationScale.dispose();
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/instrument/MonoSynth.js
 var MonoSynth = class _MonoSynth extends Monophonic {
   constructor() {
@@ -27545,6 +32757,161 @@ var MonoSynth = class _MonoSynth extends Monophonic {
     this.envelope.dispose();
     this.filterEnvelope.dispose();
     this.filter.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/instrument/DuoSynth.js
+var DuoSynth = class _DuoSynth extends Monophonic {
+  constructor() {
+    const options = optionsFromArguments(_DuoSynth.getDefaults(), arguments);
+    super(options);
+    this.name = "DuoSynth";
+    this.voice0 = new MonoSynth(Object.assign(options.voice0, {
+      context: this.context,
+      onsilence: () => this.onsilence(this)
+    }));
+    this.voice1 = new MonoSynth(Object.assign(options.voice1, {
+      context: this.context
+    }));
+    this.harmonicity = new Multiply({
+      context: this.context,
+      units: "positive",
+      value: options.harmonicity
+    });
+    this._vibrato = new LFO({
+      frequency: options.vibratoRate,
+      context: this.context,
+      min: -50,
+      max: 50
+    });
+    this._vibrato.start();
+    this.vibratoRate = this._vibrato.frequency;
+    this._vibratoGain = new Gain({
+      context: this.context,
+      units: "normalRange",
+      gain: options.vibratoAmount
+    });
+    this.vibratoAmount = this._vibratoGain.gain;
+    this.frequency = new Signal({
+      context: this.context,
+      units: "frequency",
+      value: 440
+    });
+    this.detune = new Signal({
+      context: this.context,
+      units: "cents",
+      value: options.detune
+    });
+    this.frequency.connect(this.voice0.frequency);
+    this.frequency.chain(this.harmonicity, this.voice1.frequency);
+    this._vibrato.connect(this._vibratoGain);
+    this._vibratoGain.fan(this.voice0.detune, this.voice1.detune);
+    this.detune.fan(this.voice0.detune, this.voice1.detune);
+    this.voice0.connect(this.output);
+    this.voice1.connect(this.output);
+    readOnly(this, [
+      "voice0",
+      "voice1",
+      "frequency",
+      "vibratoAmount",
+      "vibratoRate"
+    ]);
+  }
+  getLevelAtTime(time) {
+    time = this.toSeconds(time);
+    return this.voice0.envelope.getValueAtTime(time) + this.voice1.envelope.getValueAtTime(time);
+  }
+  static getDefaults() {
+    return deepMerge(Monophonic.getDefaults(), {
+      vibratoAmount: 0.5,
+      vibratoRate: 5,
+      harmonicity: 1.5,
+      voice0: deepMerge(omitFromObject(MonoSynth.getDefaults(), Object.keys(Monophonic.getDefaults())), {
+        filterEnvelope: {
+          attack: 0.01,
+          decay: 0,
+          sustain: 1,
+          release: 0.5
+        },
+        envelope: {
+          attack: 0.01,
+          decay: 0,
+          sustain: 1,
+          release: 0.5
+        }
+      }),
+      voice1: deepMerge(omitFromObject(MonoSynth.getDefaults(), Object.keys(Monophonic.getDefaults())), {
+        filterEnvelope: {
+          attack: 0.01,
+          decay: 0,
+          sustain: 1,
+          release: 0.5
+        },
+        envelope: {
+          attack: 0.01,
+          decay: 0,
+          sustain: 1,
+          release: 0.5
+        }
+      })
+    });
+  }
+  /**
+   * Trigger the attack portion of the note
+   */
+  _triggerEnvelopeAttack(time, velocity) {
+    this.voice0._triggerEnvelopeAttack(time, velocity);
+    this.voice1._triggerEnvelopeAttack(time, velocity);
+  }
+  /**
+   * Trigger the release portion of the note
+   */
+  _triggerEnvelopeRelease(time) {
+    this.voice0._triggerEnvelopeRelease(time);
+    this.voice1._triggerEnvelopeRelease(time);
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this.voice0.dispose();
+    this.voice1.dispose();
+    this.frequency.dispose();
+    this.detune.dispose();
+    this._vibrato.dispose();
+    this.vibratoRate.dispose();
+    this._vibratoGain.dispose();
+    this.harmonicity.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/instrument/FMSynth.js
+var FMSynth = class _FMSynth extends ModulationSynth {
+  constructor() {
+    const options = optionsFromArguments(_FMSynth.getDefaults(), arguments);
+    super(options);
+    this.name = "FMSynth";
+    this.modulationIndex = new Multiply({
+      context: this.context,
+      value: options.modulationIndex
+    });
+    this.frequency.connect(this._carrier.frequency);
+    this.frequency.chain(this.harmonicity, this._modulator.frequency);
+    this.frequency.chain(this.modulationIndex, this._modulationNode);
+    this.detune.fan(this._carrier.detune, this._modulator.detune);
+    this._modulator.connect(this._modulationNode.gain);
+    this._modulationNode.connect(this._carrier.frequency);
+    this._carrier.connect(this.output);
+  }
+  static getDefaults() {
+    return Object.assign(ModulationSynth.getDefaults(), {
+      modulationIndex: 10
+    });
+  }
+  dispose() {
+    super.dispose();
+    this.modulationIndex.dispose();
     return this;
   }
 };
@@ -27844,6 +33211,72 @@ var NoiseSynth = class _NoiseSynth extends Instrument {
     super.dispose();
     this.noise.dispose();
     this.envelope.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/instrument/PluckSynth.js
+var PluckSynth = class _PluckSynth extends Instrument {
+  constructor() {
+    const options = optionsFromArguments(_PluckSynth.getDefaults(), arguments);
+    super(options);
+    this.name = "PluckSynth";
+    this._noise = new Noise({
+      context: this.context,
+      type: "pink"
+    });
+    this.attackNoise = options.attackNoise;
+    this._lfcf = new LowpassCombFilter({
+      context: this.context,
+      dampening: options.dampening,
+      resonance: options.resonance
+    });
+    this.resonance = options.resonance;
+    this.release = options.release;
+    this._noise.connect(this._lfcf);
+    this._lfcf.connect(this.output);
+  }
+  static getDefaults() {
+    return deepMerge(Instrument.getDefaults(), {
+      attackNoise: 1,
+      dampening: 4e3,
+      resonance: 0.7,
+      release: 1
+    });
+  }
+  /**
+   * The dampening control. i.e. the lowpass filter frequency of the comb filter
+   * @min 0
+   * @max 7000
+   */
+  get dampening() {
+    return this._lfcf.dampening;
+  }
+  set dampening(fq) {
+    this._lfcf.dampening = fq;
+  }
+  triggerAttack(note, time) {
+    const freq = this.toFrequency(note);
+    time = this.toSeconds(time);
+    const delayAmount = 1 / freq;
+    this._lfcf.delayTime.setValueAtTime(delayAmount, time);
+    this._noise.start(time);
+    this._noise.stop(time + delayAmount * this.attackNoise);
+    this._lfcf.resonance.cancelScheduledValues(time);
+    this._lfcf.resonance.setValueAtTime(this.resonance, time);
+    return this;
+  }
+  /**
+   * Ramp down the {@link resonance} to 0 over the duration of the release time.
+   */
+  triggerRelease(time) {
+    this._lfcf.resonance.linearRampTo(0, this.release, time);
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this._noise.dispose();
+    this._lfcf.dispose();
     return this;
   }
 };
@@ -28406,6 +33839,326 @@ __decorate([
   timeRange(0)
 ], Sampler.prototype, "release", void 0);
 
+// ../../sdk/node_modules/tone/build/esm/signal/SyncedSignal.js
+var SyncedSignal = class extends Signal {
+  constructor() {
+    const options = optionsFromArguments(Signal.getDefaults(), arguments, [
+      "value",
+      "units"
+    ]);
+    super(options);
+    this.name = "SyncedSignal";
+    this.override = false;
+    this._lastVal = options.value;
+    this._synced = this.context.transport.scheduleRepeat(this._onTick.bind(this), "1i");
+    this._syncedCallback = this._anchorValue.bind(this);
+    this.context.transport.on("start", this._syncedCallback);
+    this.context.transport.on("pause", this._syncedCallback);
+    this.context.transport.on("stop", this._syncedCallback);
+    this._constantSource.disconnect();
+    this._constantSource.stop(0);
+    this._constantSource = this.output = new ToneConstantSource({
+      context: this.context,
+      offset: options.value,
+      units: options.units
+    }).start(0);
+    this.setValueAtTime(options.value, 0);
+  }
+  /**
+   * Callback which is invoked every tick.
+   */
+  _onTick(time) {
+    const val = super.getValueAtTime(this.context.transport.seconds);
+    if (this._lastVal !== val) {
+      this._lastVal = val;
+      this._constantSource.offset.setValueAtTime(val, time);
+    }
+  }
+  /**
+   * Anchor the value at the start and stop of the Transport
+   */
+  _anchorValue(time) {
+    const val = super.getValueAtTime(this.context.transport.seconds);
+    this._lastVal = val;
+    this._constantSource.offset.cancelAndHoldAtTime(time);
+    this._constantSource.offset.setValueAtTime(val, time);
+  }
+  getValueAtTime(time) {
+    const computedTime = new TransportTimeClass(this.context, time).toSeconds();
+    return super.getValueAtTime(computedTime);
+  }
+  setValueAtTime(value, time) {
+    const computedTime = new TransportTimeClass(this.context, time).toSeconds();
+    super.setValueAtTime(value, computedTime);
+    return this;
+  }
+  linearRampToValueAtTime(value, time) {
+    const computedTime = new TransportTimeClass(this.context, time).toSeconds();
+    super.linearRampToValueAtTime(value, computedTime);
+    return this;
+  }
+  exponentialRampToValueAtTime(value, time) {
+    const computedTime = new TransportTimeClass(this.context, time).toSeconds();
+    super.exponentialRampToValueAtTime(value, computedTime);
+    return this;
+  }
+  setTargetAtTime(value, startTime, timeConstant) {
+    const computedTime = new TransportTimeClass(this.context, startTime).toSeconds();
+    super.setTargetAtTime(value, computedTime, timeConstant);
+    return this;
+  }
+  cancelScheduledValues(startTime) {
+    const computedTime = new TransportTimeClass(this.context, startTime).toSeconds();
+    super.cancelScheduledValues(computedTime);
+    return this;
+  }
+  setValueCurveAtTime(values, startTime, duration, scaling) {
+    const computedTime = new TransportTimeClass(this.context, startTime).toSeconds();
+    duration = this.toSeconds(duration);
+    super.setValueCurveAtTime(values, computedTime, duration, scaling);
+    return this;
+  }
+  cancelAndHoldAtTime(time) {
+    const computedTime = new TransportTimeClass(this.context, time).toSeconds();
+    super.cancelAndHoldAtTime(computedTime);
+    return this;
+  }
+  setRampPoint(time) {
+    const computedTime = new TransportTimeClass(this.context, time).toSeconds();
+    super.setRampPoint(computedTime);
+    return this;
+  }
+  exponentialRampTo(value, rampTime, startTime) {
+    const computedTime = new TransportTimeClass(this.context, startTime).toSeconds();
+    super.exponentialRampTo(value, rampTime, computedTime);
+    return this;
+  }
+  linearRampTo(value, rampTime, startTime) {
+    const computedTime = new TransportTimeClass(this.context, startTime).toSeconds();
+    super.linearRampTo(value, rampTime, computedTime);
+    return this;
+  }
+  targetRampTo(value, rampTime, startTime) {
+    const computedTime = new TransportTimeClass(this.context, startTime).toSeconds();
+    super.targetRampTo(value, rampTime, computedTime);
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this.context.transport.clear(this._synced);
+    this.context.transport.off("start", this._syncedCallback);
+    this.context.transport.off("pause", this._syncedCallback);
+    this.context.transport.off("stop", this._syncedCallback);
+    this._constantSource.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/source/buffer/GrainPlayer.js
+var GrainPlayer = class _GrainPlayer extends Source {
+  constructor() {
+    const options = optionsFromArguments(_GrainPlayer.getDefaults(), arguments, ["url", "onload"]);
+    super(options);
+    this.name = "GrainPlayer";
+    this._loopStart = 0;
+    this._loopEnd = 0;
+    this._activeSources = [];
+    this.buffer = new ToneAudioBuffer({
+      onload: options.onload,
+      onerror: options.onerror,
+      reverse: options.reverse,
+      url: options.url
+    });
+    this._clock = new Clock({
+      context: this.context,
+      callback: this._tick.bind(this),
+      frequency: 1 / options.grainSize
+    });
+    this._playbackRate = options.playbackRate;
+    this._grainSize = options.grainSize;
+    this._overlap = options.overlap;
+    this.detune = options.detune;
+    this.overlap = options.overlap;
+    this.loop = options.loop;
+    this.playbackRate = options.playbackRate;
+    this.grainSize = options.grainSize;
+    this.loopStart = options.loopStart;
+    this.loopEnd = options.loopEnd;
+    this.reverse = options.reverse;
+    this._clock.on("stop", this._onstop.bind(this));
+  }
+  static getDefaults() {
+    return Object.assign(Source.getDefaults(), {
+      onload: noOp,
+      onerror: noOp,
+      overlap: 0.1,
+      grainSize: 0.2,
+      playbackRate: 1,
+      detune: 0,
+      loop: false,
+      loopStart: 0,
+      loopEnd: 0,
+      reverse: false
+    });
+  }
+  /**
+   * Internal start method
+   */
+  _start(time, offset, duration) {
+    offset = defaultArg(offset, 0);
+    offset = this.toSeconds(offset);
+    time = this.toSeconds(time);
+    const grainSize = 1 / this._clock.frequency.getValueAtTime(time);
+    this._clock.start(time, offset / grainSize);
+    if (duration) {
+      this.stop(time + this.toSeconds(duration));
+    }
+  }
+  /**
+   * Stop and then restart the player from the beginning (or offset)
+   * @param  time When the player should start.
+   * @param  offset The offset from the beginning of the sample to start at.
+   * @param  duration How long the sample should play. If no duration is given,
+   * 					it will default to the full length of the sample (minus any offset)
+   */
+  restart(time, offset, duration) {
+    super.restart(time, offset, duration);
+    return this;
+  }
+  _restart(time, offset, duration) {
+    this._stop(time);
+    this._start(time, offset, duration);
+  }
+  /**
+   * Internal stop method
+   */
+  _stop(time) {
+    this._clock.stop(time);
+  }
+  /**
+   * Invoked when the clock is stopped
+   */
+  _onstop(time) {
+    this._activeSources.forEach((source) => {
+      source.fadeOut = 0;
+      source.stop(time);
+    });
+    this.onstop(this);
+  }
+  /**
+   * Invoked on each clock tick. scheduled a new grain at this time.
+   */
+  _tick(time) {
+    const ticks = this._clock.getTicksAtTime(time);
+    const offset = ticks * this._grainSize;
+    this.log("offset", offset);
+    if (!this.loop && offset > this.buffer.duration) {
+      this.stop(time);
+      return;
+    }
+    const fadeIn = offset < this._overlap ? 0 : this._overlap;
+    const source = new ToneBufferSource({
+      context: this.context,
+      url: this.buffer,
+      fadeIn,
+      fadeOut: this._overlap,
+      loop: this.loop,
+      loopStart: this._loopStart,
+      loopEnd: this._loopEnd,
+      // compute the playbackRate based on the detune
+      playbackRate: intervalToFrequencyRatio(this.detune / 100)
+    }).connect(this.output);
+    source.start(time, this._grainSize * ticks);
+    source.stop(time + this._grainSize / this.playbackRate);
+    this._activeSources.push(source);
+    source.onended = () => {
+      const index = this._activeSources.indexOf(source);
+      if (index !== -1) {
+        this._activeSources.splice(index, 1);
+      }
+    };
+  }
+  /**
+   * The playback rate of the sample
+   */
+  get playbackRate() {
+    return this._playbackRate;
+  }
+  set playbackRate(rate) {
+    assertRange(rate, 1e-3);
+    this._playbackRate = rate;
+    this.grainSize = this._grainSize;
+  }
+  /**
+   * The loop start time.
+   */
+  get loopStart() {
+    return this._loopStart;
+  }
+  set loopStart(time) {
+    if (this.buffer.loaded) {
+      assertRange(this.toSeconds(time), 0, this.buffer.duration);
+    }
+    this._loopStart = this.toSeconds(time);
+  }
+  /**
+   * The loop end time.
+   */
+  get loopEnd() {
+    return this._loopEnd;
+  }
+  set loopEnd(time) {
+    if (this.buffer.loaded) {
+      assertRange(this.toSeconds(time), 0, this.buffer.duration);
+    }
+    this._loopEnd = this.toSeconds(time);
+  }
+  /**
+   * The direction the buffer should play in
+   */
+  get reverse() {
+    return this.buffer.reverse;
+  }
+  set reverse(rev) {
+    this.buffer.reverse = rev;
+  }
+  /**
+   * The size of each chunk of audio that the
+   * buffer is chopped into and played back at.
+   */
+  get grainSize() {
+    return this._grainSize;
+  }
+  set grainSize(size) {
+    this._grainSize = this.toSeconds(size);
+    this._clock.frequency.setValueAtTime(this._playbackRate / this._grainSize, this.now());
+  }
+  /**
+   * The duration of the cross-fade between successive grains.
+   */
+  get overlap() {
+    return this._overlap;
+  }
+  set overlap(time) {
+    const computedTime = this.toSeconds(time);
+    assertRange(computedTime, 0);
+    this._overlap = computedTime;
+  }
+  /**
+   * If all the buffer is loaded
+   */
+  get loaded() {
+    return this.buffer.loaded;
+  }
+  dispose() {
+    super.dispose();
+    this.buffer.dispose();
+    this._clock.dispose();
+    this._activeSources.forEach((source) => source.dispose());
+    return this;
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/source/buffer/Player.js
 var Player = class _Player extends Source {
   constructor() {
@@ -28782,16 +34535,354 @@ __decorate([
   timeRange(0)
 ], Player.prototype, "fadeOut", void 0);
 
+// ../../sdk/node_modules/tone/build/esm/source/buffer/Players.js
+var Players = class _Players extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_Players.getDefaults(), arguments, ["urls", "onload"], "urls");
+    super(options);
+    this.name = "Players";
+    this.input = void 0;
+    this._players = /* @__PURE__ */ new Map();
+    this._volume = this.output = new Volume({
+      context: this.context,
+      volume: options.volume
+    });
+    this.volume = this._volume.volume;
+    readOnly(this, "volume");
+    this._buffers = new ToneAudioBuffers({
+      urls: options.urls,
+      onload: options.onload,
+      baseUrl: options.baseUrl,
+      onerror: options.onerror
+    });
+    this.mute = options.mute;
+    this._fadeIn = options.fadeIn;
+    this._fadeOut = options.fadeOut;
+  }
+  static getDefaults() {
+    return Object.assign(Source.getDefaults(), {
+      baseUrl: "",
+      fadeIn: 0,
+      fadeOut: 0,
+      mute: false,
+      onload: noOp,
+      onerror: noOp,
+      urls: {},
+      volume: 0
+    });
+  }
+  /**
+   * Mute the output.
+   */
+  get mute() {
+    return this._volume.mute;
+  }
+  set mute(mute) {
+    this._volume.mute = mute;
+  }
+  /**
+   * The fadeIn time of the envelope applied to the source.
+   */
+  get fadeIn() {
+    return this._fadeIn;
+  }
+  set fadeIn(fadeIn) {
+    this._fadeIn = fadeIn;
+    this._players.forEach((player) => {
+      player.fadeIn = fadeIn;
+    });
+  }
+  /**
+   * The fadeOut time of the each of the sources.
+   */
+  get fadeOut() {
+    return this._fadeOut;
+  }
+  set fadeOut(fadeOut) {
+    this._fadeOut = fadeOut;
+    this._players.forEach((player) => {
+      player.fadeOut = fadeOut;
+    });
+  }
+  /**
+   * The state of the players object. Returns "started" if any of the players are playing.
+   */
+  get state() {
+    const playing = Array.from(this._players).some(([_, player]) => player.state === "started");
+    return playing ? "started" : "stopped";
+  }
+  /**
+   * True if the buffers object has a buffer by that name.
+   * @param name  The key or index of the buffer.
+   */
+  has(name) {
+    return this._buffers.has(name);
+  }
+  /**
+   * Get a player by name.
+   * @param  name  The players name as defined in the constructor object or `add` method.
+   */
+  player(name) {
+    assert(this.has(name), `No Player with the name ${name} exists on this object`);
+    if (!this._players.has(name)) {
+      const player = new Player({
+        context: this.context,
+        fadeIn: this._fadeIn,
+        fadeOut: this._fadeOut,
+        url: this._buffers.get(name)
+      }).connect(this.output);
+      this._players.set(name, player);
+    }
+    return this._players.get(name);
+  }
+  /**
+   * If all the buffers are loaded or not
+   */
+  get loaded() {
+    return this._buffers.loaded;
+  }
+  /**
+   * Add a player by name and url to the Players
+   * @param  name A unique name to give the player
+   * @param  url  Either the url of the buffer or a buffer which will be added with the given name.
+   * @param callback  The callback to invoke when the url is loaded.
+   * @example
+   * const players = new Tone.Players();
+   * players.add("gong", "https://tonejs.github.io/audio/berklee/gong_1.mp3", () => {
+   * 	console.log("gong loaded");
+   * 	players.player("gong").start();
+   * });
+   */
+  add(name, url, callback) {
+    assert(!this._buffers.has(name), "A buffer with that name already exists on this object");
+    this._buffers.add(name, url, callback);
+    return this;
+  }
+  /**
+   * Stop all of the players at the given time
+   * @param time The time to stop all of the players.
+   */
+  stopAll(time) {
+    this._players.forEach((player) => player.stop(time));
+    return this;
+  }
+  dispose() {
+    super.dispose();
+    this._volume.dispose();
+    this.volume.dispose();
+    this._players.forEach((player) => player.dispose());
+    this._buffers.dispose();
+    return this;
+  }
+};
+
+// ../../sdk/node_modules/tone/build/esm/source/UserMedia.js
+var UserMedia = class _UserMedia extends ToneAudioNode {
+  constructor() {
+    const options = optionsFromArguments(_UserMedia.getDefaults(), arguments, ["volume"]);
+    super(options);
+    this.name = "UserMedia";
+    this._volume = this.output = new Volume({
+      context: this.context,
+      volume: options.volume
+    });
+    this.volume = this._volume.volume;
+    readOnly(this, "volume");
+    this.mute = options.mute;
+  }
+  static getDefaults() {
+    return Object.assign(ToneAudioNode.getDefaults(), {
+      mute: false,
+      volume: 0
+    });
+  }
+  /**
+   * Open the media stream. If a string is passed in, it is assumed
+   * to be the label or id of the stream, if a number is passed in,
+   * it is the input number of the stream.
+   * @param  labelOrId The label or id of the audio input media device.
+   *                   With no argument, the default stream is opened.
+   * @return The promise is resolved when the stream is open.
+   */
+  open(labelOrId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      assert(_UserMedia.supported, "UserMedia is not supported");
+      if (this.state === "started") {
+        this.close();
+      }
+      const devices = yield _UserMedia.enumerateDevices();
+      if (isNumber(labelOrId)) {
+        this._device = devices[labelOrId];
+      } else {
+        this._device = devices.find((device) => {
+          return device.label === labelOrId || device.deviceId === labelOrId;
+        });
+        if (!this._device && devices.length > 0) {
+          this._device = devices[0];
+        }
+        assert(isDefined(this._device), `No matching device ${labelOrId}`);
+      }
+      const constraints = {
+        audio: {
+          echoCancellation: false,
+          sampleRate: this.context.sampleRate,
+          noiseSuppression: false,
+          mozNoiseSuppression: false
+        }
+      };
+      if (this._device) {
+        constraints.audio.deviceId = this._device.deviceId;
+      }
+      const stream = yield navigator.mediaDevices.getUserMedia(constraints);
+      if (!this._stream) {
+        this._stream = stream;
+        const mediaStreamNode = this.context.createMediaStreamSource(stream);
+        connect(mediaStreamNode, this.output);
+        this._mediaStream = mediaStreamNode;
+      }
+      return this;
+    });
+  }
+  /**
+   * Close the media stream
+   */
+  close() {
+    if (this._stream && this._mediaStream) {
+      this._stream.getAudioTracks().forEach((track) => {
+        track.stop();
+      });
+      this._stream = void 0;
+      this._mediaStream.disconnect();
+      this._mediaStream = void 0;
+    }
+    this._device = void 0;
+    return this;
+  }
+  /**
+   * Returns a promise which resolves with the list of audio input devices available.
+   * @return The promise that is resolved with the devices
+   * @example
+   * Tone.UserMedia.enumerateDevices().then((devices) => {
+   * 	// print the device labels
+   * 	console.log(devices.map(device => device.label));
+   * });
+   */
+  static enumerateDevices() {
+    return __awaiter(this, void 0, void 0, function* () {
+      const allDevices = yield navigator.mediaDevices.enumerateDevices();
+      return allDevices.filter((device) => {
+        return device.kind === "audioinput";
+      });
+    });
+  }
+  /**
+   * Returns the playback state of the source, "started" when the microphone is open
+   * and "stopped" when the mic is closed.
+   */
+  get state() {
+    return this._stream && this._stream.active ? "started" : "stopped";
+  }
+  /**
+   * Returns an identifier for the represented device that is
+   * persisted across sessions. It is un-guessable by other applications and
+   * unique to the origin of the calling application. It is reset when the
+   * user clears cookies (for Private Browsing, a different identifier is
+   * used that is not persisted across sessions). Returns undefined when the
+   * device is not open.
+   */
+  get deviceId() {
+    if (this._device) {
+      return this._device.deviceId;
+    } else {
+      return void 0;
+    }
+  }
+  /**
+   * Returns a group identifier. Two devices have the
+   * same group identifier if they belong to the same physical device.
+   * Returns null  when the device is not open.
+   */
+  get groupId() {
+    if (this._device) {
+      return this._device.groupId;
+    } else {
+      return void 0;
+    }
+  }
+  /**
+   * Returns a label describing this device (for example "Built-in Microphone").
+   * Returns undefined when the device is not open or label is not available
+   * because of permissions.
+   */
+  get label() {
+    if (this._device) {
+      return this._device.label;
+    } else {
+      return void 0;
+    }
+  }
+  /**
+   * Mute the output.
+   * @example
+   * const mic = new Tone.UserMedia();
+   * mic.open().then(() => {
+   * 	// promise resolves when input is available
+   * });
+   * // mute the output
+   * mic.mute = true;
+   */
+  get mute() {
+    return this._volume.mute;
+  }
+  set mute(mute) {
+    this._volume.mute = mute;
+  }
+  dispose() {
+    super.dispose();
+    this.close();
+    this._volume.dispose();
+    this.volume.dispose();
+    return this;
+  }
+  /**
+   * If getUserMedia is supported by the browser.
+   */
+  static get supported() {
+    return isDefined(navigator.mediaDevices) && isDefined(navigator.mediaDevices.getUserMedia);
+  }
+};
+
 // ../../sdk/node_modules/tone/build/esm/index.js
 function now() {
   return getContext().now();
 }
+function immediate() {
+  return getContext().immediate();
+}
 var Transport = getContext().transport;
+function getTransport() {
+  return getContext().transport;
+}
 var Destination = getContext().destination;
 var Master = getContext().destination;
+function getDestination() {
+  return getContext().destination;
+}
 var Listener = getContext().listener;
+function getListener() {
+  return getContext().listener;
+}
 var Draw = getContext().draw;
+function getDraw() {
+  return getContext().draw;
+}
 var context = getContext();
+function loaded() {
+  return ToneAudioBuffer.loaded();
+}
+var Buffer2 = ToneAudioBuffer;
+var Buffers = ToneAudioBuffers;
+var BufferSource = ToneBufferSource;
 
 // ../../sdk/dist-esm/engines/audio/audio-engine.js
 var AudioEngine = class {
@@ -28799,6 +34890,9 @@ var AudioEngine = class {
     this.synths = /* @__PURE__ */ new Map();
     this.musicPlayer = null;
     this.currentMusicState = null;
+    this.sfxReverb = null;
+    this.sfxEcho = null;
+    this.sfxSend = null;
     this.soundLibrary = /* @__PURE__ */ new Map();
     this.socket = null;
     this.initialized = false;
@@ -28806,7 +34900,12 @@ var AudioEngine = class {
       masterVolume: config.masterVolume ?? 0.7,
       musicVolume: config.musicVolume ?? 0.5,
       sfxVolume: config.sfxVolume ?? 0.8,
-      enabled: config.enabled ?? true
+      enabled: config.enabled ?? true,
+      // Carried through, not defaulted: no reverb unless one is asked for.
+      // Dropping it here meant a game could request reverb and silently get
+      // none, since initialise() reads it back off this config.
+      sfxReverb: config.sfxReverb,
+      sfxEcho: config.sfxEcho
     };
     this.socket = socket;
     const isBrowser = typeof globalThis !== "undefined" && globalThis.window !== void 0 && typeof globalThis.window.AudioContext !== "undefined";
@@ -28849,7 +34948,34 @@ var AudioEngine = class {
       if (!this.masterGain || !this.masterGain.gain) {
         this.masterGain = new Gain(this.config.masterVolume).toDestination();
         this.musicGain = new Gain(this.config.musicVolume).connect(this.masterGain);
-        this.sfxGain = new Gain(this.config.sfxVolume).connect(this.masterGain);
+        this.sfxGain = new Gain(this.config.sfxVolume);
+        this.sfxGain.connect(this.masterGain);
+        const reverb = this.config.sfxReverb;
+        const echo = this.config.sfxEcho;
+        const sendLevel = Math.max(reverb?.wet ?? 0, echo?.wet ?? 0);
+        if (sendLevel > 0) {
+          this.sfxSend = new Gain(sendLevel).connect(this.masterGain);
+          let sendDestination = this.sfxSend;
+          if (reverb && reverb.wet > 0) {
+            this.sfxReverb = new Reverb({
+              decay: reverb.decay ?? 3,
+              preDelay: reverb.preDelay ?? 0.02,
+              // Fully wet: on a send, any dry here would be a second copy
+              // of the dry path, phase-smearing the attack.
+              wet: 1
+            }).connect(sendDestination);
+            sendDestination = this.sfxReverb;
+          }
+          if (echo && echo.wet > 0) {
+            this.sfxEcho = new FeedbackDelay({
+              delayTime: echo.delayTime,
+              feedback: Math.min(0.9, echo.feedback),
+              wet: 1
+            }).connect(sendDestination);
+            sendDestination = this.sfxEcho;
+          }
+          this.sfxGain.connect(sendDestination);
+        }
         this.buildSoundLibrary();
         console.log("[AudioEngine] Audio system initialized");
       }
@@ -29892,6 +36018,34 @@ var AudioEngine = class {
    *
    * @returns Current audio config
    */
+  /**
+   * The raw AudioContext this engine's graph lives in.
+   *
+   * Web Audio forbids connecting nodes across contexts, so anything that
+   * wants to play into getMusicBus() has to be built on THIS context. Null
+   * until a user gesture has started the engine.
+   */
+  // Deliberately untyped: doors compile without the DOM lib (LiveChat is
+  // server-rendered), and naming AudioContext here broke their builds.
+  getAudioContext() {
+    if (typeof esm_exports === "undefined" || !esm_exports?.getContext)
+      return null;
+    const ctx = getContext();
+    return ctx?.rawContext ?? null;
+  }
+  /**
+   * The music bus, for another engine that produces music of its own.
+   *
+   * A tracker connected straight to the audio destination is OUTSIDE this
+   * mix entirely: master and music volume do nothing to it, and balancing it
+   * against the effects is guesswork. Connect it here instead and one set of
+   * volumes governs everything.
+   *
+   * Null until the engine has been initialised by a user gesture.
+   */
+  getMusicBus() {
+    return this.musicGain ?? null;
+  }
   getConfig() {
     return { ...this.config };
   }
@@ -29914,53 +36068,69 @@ var AudioEngine = class {
   }
 };
 
-// ../../sdk/dist-esm/engines/network/network-engine.js
-var import_events18 = __toESM(require_events());
+// ../../sdk/dist-esm/engines/audio/tracker-engine.js
+var InterpolationFilter;
+(function(InterpolationFilter2) {
+  InterpolationFilter2[InterpolationFilter2["None"] = 0] = "None";
+  InterpolationFilter2[InterpolationFilter2["Linear"] = 1] = "Linear";
+  InterpolationFilter2[InterpolationFilter2["Cubic"] = 2] = "Cubic";
+  InterpolationFilter2[InterpolationFilter2["Sinc8"] = 3] = "Sinc8";
+})(InterpolationFilter || (InterpolationFilter = {}));
+var PlaybackState;
+(function(PlaybackState2) {
+  PlaybackState2["Stopped"] = "stopped";
+  PlaybackState2["Playing"] = "playing";
+  PlaybackState2["Paused"] = "paused";
+  PlaybackState2["Loading"] = "loading";
+})(PlaybackState || (PlaybackState = {}));
 
-// ../../sdk/dist-esm/engines/network/broker/broker-client.js
+// ../../sdk/dist-esm/media/VoiceCapture.js
 var import_events6 = __toESM(require_events());
 
-// ../../sdk/dist-esm/engines/network/broker/lobby-broker.js
-var BROKER_KEY = Symbol.for("aex-lobby-broker");
-
-// ../../sdk/dist-esm/engines/network/modules/connection.js
-var import_events7 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/lobby.js
-var import_events8 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
-var import_events9 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/sync.js
-var import_events10 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/prediction.js
-var import_events11 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/interpolation.js
-var import_events12 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/presence.js
-var import_events13 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/social.js
-var import_events14 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
-var import_events15 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/replay.js
-var import_events16 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/security.js
-var import_events17 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/ai/ai-engine.js
+// ../../sdk/dist-esm/engines/network/network-engine.js
 var import_events19 = __toESM(require_events());
 
-// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+// ../../sdk/dist-esm/engines/network/broker/broker-client.js
+var import_events7 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/connection.js
+var import_events8 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/lobby.js
+var import_events9 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
+var import_events10 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/sync.js
+var import_events11 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/prediction.js
+var import_events12 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/interpolation.js
+var import_events13 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/presence.js
+var import_events14 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/social.js
+var import_events15 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
+var import_events16 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/replay.js
+var import_events17 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/security.js
+var import_events18 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events20 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+var import_events21 = __toESM(require_events());
 var TerrainType;
 (function(TerrainType2) {
   TerrainType2["Plains"] = "plains";
@@ -30010,19 +36180,19 @@ var UnitClass;
 })(UnitClass || (UnitClass = {}));
 
 // ../../sdk/dist-esm/components/level/level-manager.js
-var import_events21 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events22 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
+// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events23 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/quest/quest-system.js
+// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
 var import_events24 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/tactical/class-system.js
+// ../../sdk/dist-esm/components/quest/quest-system.js
 var import_events25 = __toESM(require_events());
+
+// ../../sdk/dist-esm/components/tactical/class-system.js
+var import_events26 = __toESM(require_events());
 var MovementType;
 (function(MovementType2) {
   MovementType2["Infantry"] = "Infantry";
@@ -30043,6 +36213,7 @@ var SkillTrigger;
 })(SkillTrigger || (SkillTrigger = {}));
 
 // ../../sdk/dist-esm/client/index.js
+var DOOR_UNLOAD_EVENT = "bbs:door-unload";
 var ClientDoor = class _ClientDoor extends EventEmitter {
   /**
    * Create a new Client-side BBS Door (runs in browser)
@@ -30061,7 +36232,6 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
    */
   constructor(config) {
     super();
-    this.ws = null;
     this.user = null;
     this.state = "idle";
     this.frameCount = 0;
@@ -30083,6 +36253,25 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
    * This allows client code to use `door.emit('audio:levels', data)` and have
    * it automatically sent to the server without requiring a separate method.
    */
+  /**
+   * Deliver an event to local listeners WITHOUT sending it to the server.
+   *
+   * Inbound events must use this. `emit` forwards anything in
+   * SERVER_FORWARD_EVENTS back to the server, and several of those events
+   * are also things the server SENDS us - video:frame and audio:data among
+   * them. Re-emitting one on arrival therefore bounced it straight back,
+   * the server rebroadcast it to the whole room, and every listening
+   * browser bounced it again: an amplification loop that multiplied the
+   * traffic on every hop.
+   *
+   * It corrupted the picture as well as the bandwidth. The echo carried the
+   * ECHOER's identity, so a viewer re-broadcast the speaker's frames as
+   * their own, and each tile alternated between two people - seen as
+   * "every second frame flickers".
+   */
+  emitLocal(event, ...args) {
+    return super.emit(event, ...args);
+  }
   emit(event, ...args) {
     if (_ClientDoor.SERVER_FORWARD_EVENTS.has(event)) {
       const socketIO = this.socketIO;
@@ -30100,21 +36289,25 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
     this.emit("init", this.config);
     if (typeof window !== "undefined") {
       window.addEventListener("beforeunload", () => this.shutdown());
+      window.addEventListener(DOOR_UNLOAD_EVENT, (event) => {
+        const doorId = event?.detail?.doorId;
+        if (!doorId || doorId === this.config.name?.toLowerCase() || doorId === this.config.id) {
+          this.shutdown();
+        }
+      });
     }
   }
   /**
-   * Start the door and connect to BBS
-   *
-   * @param wsUrl - WebSocket URL (default: ws://localhost:3001) - ignored if window.__BBS__ exists
+   * Start the door and connect to BBS via the existing Socket.IO connection.
+   * window.__BBS__ must be set by the frontend before this is called.
    */
-  start(wsUrl = "ws://localhost:3001") {
+  start() {
     if (this.state !== "idle" && this.state !== "shutdown") {
       console.warn("[ClientDoor] Door was in running state from previous session - resetting");
       this.state = "idle";
       this.frameCount = 0;
       this.lastFrameTime = 0;
       this.user = null;
-      this.ws = null;
       this.rpcRequests.clear();
     }
     this.state = "connecting";
@@ -30127,8 +36320,9 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         return;
       }
     }
-    console.log("[ClientDoor] Creating new WebSocket connection");
-    this.connectWebSocket(wsUrl);
+    console.error("[ClientDoor] window.__BBS__ not set; cannot start door.");
+    this.state = "idle";
+    this.emit("error", new Error("BBS connection unavailable"));
   }
   /**
    * Connect via existing Socket.IO connection (bundled door scenario)
@@ -30151,71 +36345,52 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
       if (socket && typeof socket.on === "function") {
         socket.on("audio:play", (data) => {
           console.log("[ClientDoor] Received audio:play event:", data);
-          this.emit("audio:play", data);
+          this.emitLocal("audio:play", data);
         });
         socket.on("audio:set-enabled", (data) => {
-          this.emit("audio:set-enabled", data);
+          this.emitLocal("audio:set-enabled", data);
         });
         socket.on("audio:set-volume", (data) => {
-          this.emit("audio:set-volume", data);
+          this.emitLocal("audio:set-volume", data);
         });
         socket.on("audio:start-streaming", (data) => {
           console.log("[ClientDoor] Received audio:start-streaming event:", data);
-          this.emit("audio:start-streaming", data);
+          this.emitLocal("audio:start-streaming", data);
         });
         socket.on("audio:stop-streaming", (data) => {
           console.log("[ClientDoor] Received audio:stop-streaming event:", data);
-          this.emit("audio:stop-streaming", data);
+          this.emitLocal("audio:stop-streaming", data);
         });
         socket.on("audio:mute", (data) => {
-          this.emit("audio:mute", data);
+          this.emitLocal("audio:mute", data);
+        });
+        socket.on("video:start-stream", (data) => {
+          console.log("[ClientDoor] Received video:start-stream event:", data);
+          this.emitLocal("video:start-stream", data);
+        });
+        socket.on("video:stop-stream", (data) => {
+          console.log("[ClientDoor] Received video:stop-stream event:", data);
+          this.emitLocal("video:stop-stream", data);
+        });
+        socket.on("video:frame", (data) => {
+          this.emitLocal("video:frame", data);
+        });
+        socket.on("video:cells", (data) => {
+          this.emitLocal("video:cells", data);
         });
         socket.on("audio:data", (data) => {
-          this.emit("audio:data", data);
+          this.emitLocal("audio:data", data);
+        });
+        socket.on("audio:select-device", (data) => {
+          this.emitLocal("audio:select-device", data);
+        });
+        socket.on("voice:speaking", (data) => {
+          this.emitLocal("voice:speaking", data);
         });
       }
       this.mainLoop();
     } catch (err) {
       console.error("[ClientDoor] Failed to connect via Socket.IO:", err);
-      this.state = "idle";
-      throw err;
-    }
-  }
-  /**
-   * Connect to BBS via WebSocket (standalone scenario)
-   * @private
-   */
-  connectWebSocket(url) {
-    if (typeof WebSocket === "undefined") {
-      throw new Error("WebSocket is not available. ClientDoor requires a browser environment.");
-    }
-    try {
-      this.ws = new WebSocket(url);
-      this.ws.onopen = () => {
-        console.log("Connected to BBS");
-        this.state = "running";
-        this.emit("ws:connected");
-      };
-      this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          this.handleMessage(message);
-        } catch (err) {
-          console.error("Failed to parse WebSocket message:", err);
-        }
-      };
-      this.ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        this.emit("ws:error", error);
-      };
-      this.ws.onclose = () => {
-        console.log("Disconnected from BBS");
-        this.state = "shutdown";
-        this.emit("ws:closed");
-        this.shutdown();
-      };
-    } catch (err) {
-      console.error("Failed to connect to BBS:", err);
       this.state = "idle";
       throw err;
     }
@@ -30233,13 +36408,11 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         this.mainLoop();
         break;
       case MessageType.INPUT:
-        console.log("[ClientDoor] ===== INPUT MESSAGE RECEIVED =====");
-        console.log("[ClientDoor] Message data:", JSON.stringify(message.data));
-        console.log("[ClientDoor] User:", this.user ? "exists" : "null");
+        if (globalThis.__DOOR_INPUT_DEBUG__) {
+          console.log("[ClientDoor] INPUT:", JSON.stringify(message.data));
+        }
         if (this.user) {
-          console.log("[ClientDoor] About to emit input event with:", message.data);
           this.emit("input", { user: this.user, key: message.data });
-          console.log("[ClientDoor] Input event emitted");
         } else {
           console.warn("[ClientDoor] No user set, ignoring input");
         }
@@ -30294,8 +36467,6 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         sessionId,
         message
       });
-    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
     }
   }
   /**
@@ -30491,10 +36662,6 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
     if (this.user) {
       this.emit("disconnect", this.user);
     }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
     this.emit("shutdown");
     this.removeAllListeners();
   }
@@ -30600,7 +36767,18 @@ ClientDoor.SERVER_FORWARD_EVENTS = /* @__PURE__ */ new Set([
   "audio:chunk",
   "audio:data",
   // Voice activity detection
-  "voice:speaking"
+  "voice:speaking",
+  "voice:level",
+  // Video streaming events
+  "video:started",
+  "video:stopped",
+  "video:error",
+  "video:frame",
+  // Compact binary frames: one byte per cell, deltas against the last.
+  "video:cells",
+  // Which microphone the browser actually opened, and what else exists.
+  "audio:device",
+  "audio:devices"
 ]);
 
 // client.ts

@@ -9,7 +9,6 @@ import {
   CellState,
   Point,
   Direction,
-  DrawSpeed,
   Stix,
   ClaimResult
 } from './types';
@@ -22,16 +21,39 @@ import {
   STARTING_LIVES,
   DEFAULT_TARGET_PERCENT,
   EXTRA_LIFE_PERCENT,
-  FAST_DRAW_BASE_POINTS,
-  SLOW_DRAW_BASE_POINTS,
+  FILL_ANIMATION_FRAMES,
+  LEVEL_CLEAR_WIPE_COLUMNS,
+  BONUS_PANEL_FRAMES,
+  INTRO_PANEL_FRAMES,
+  LETTER_END_OF_LEVEL_POINTS,
+  LETTER_WORD_COMPLETE_POINTS,
+  MARKER_CYCLE,
+  MARKER_CYCLE_FRAMES,
+  SKULL_CHEW_FRAMES,
+  GAME_OVER_BLINK_FRAMES,
+  SKULLS_PER_RELEASE,
   POINTS_PER_BONUS_PERCENT,
   BONUS_PERCENT_START,
   CHARS,
-  COLORS,
+  BG_COLORS,
+  CELL_WIDTH,
+  ART_PALETTE,
   getLevelConfig,
   DEFAULT_HIGHSCORES,
-  FUSE_START_DELAY
+  FUSE_START_DELAY,
+  SKILL_LEVELS,
+  LEVELS_PER_LAP,
+  FINAL_LAP_MESSAGE,
+  HURRY_SPEED_SCALE,
+  MULTIPLIER_REJOIN_CELLS,
+  MULTIPLIER_FIRST,
+  MULTIPLIER_CHAINED,
+  MULTIPLIER_CHAIN_MS,
+  WARP_OPENING_MS,
+  WARP_OPEN_MS,
+  SKULL_STUN_MS,
 } from './constants';
+import { Background, ArtCell, artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
 import { PowerUpSystem } from './powerups';
@@ -49,6 +71,44 @@ export class QixEngine {
   private powerUpSystem: PowerUpSystem;
   private lastMoveTime: number = 0;
 
+  /**
+   * The picture hidden behind the playfield, revealed as area is claimed.
+   * Null when the board has no art, in which case claimed area is drawn as
+   * a flat colour and the game plays exactly as before.
+   */
+  private background: Background | null = null;
+
+  /**
+   * A claim that is still being painted in.
+   *
+   * The area is won the instant the shape closes - the score and the
+   * percentage are credited then - but the ground is filled in over several
+   * frames, sweeping RIGHT TO LEFT, so the player sees the area being taken
+   * rather than it appearing all at once. `columns` holds the cells grouped
+   * by x, ordered right to left, and each tick consumes a slice of them.
+   */
+  private pendingFill: { columns: Point[][]; perTick: number } | null = null;
+
+  /**
+   * The end-of-level sequence, following the arcade.
+   *
+   *   reveal - the picture wipes in from the right, taking the player's
+   *            lines with it, until the whole image is showing;
+   *   bonus  - the BONUS tally sits over the finished picture;
+   *   clear  - the picture wipes away again;
+   *   intro  - the empty field announces what the next round needs.
+   */
+  private outro:
+    | {
+        phase: 'reveal' | 'bonus' | 'clear' | 'intro';
+        sweepX: number;
+        timer: number;
+        areaBonus: number;
+        wordBonus: number;
+        areaPercent: number;
+      }
+    | null = null;
+
   constructor(data: SuperQixData, renderCallback: RenderCallback) {
     this.data = data;
     this.renderCallback = renderCallback;
@@ -58,21 +118,35 @@ export class QixEngine {
   }
 
   /**
+   * Set the picture revealed as area is claimed.
+   *
+   * Loading it reads a file, so the door does that and hands the result in
+   * rather than initLevel blocking on I/O.
+   */
+  setBackground(background: Background | null): void {
+    this.background = background;
+  }
+
+  /**
    * Initialize a new level
    */
   initLevel(levelNum: number): void {
     const d = this.data;
     const config = getLevelConfig(levelNum);
 
+    const skill = SKILL_LEVELS[d.skill] ?? SKILL_LEVELS.medium;
+
     d.level = levelNum;
     d.claimedPercent = 0;
-    d.targetPercent = config.targetPercent;
+    // FAQ 4: the fill area is the operator's skill setting, not the level's.
+    d.targetPercent = skill.targetPercent;
     d.scoreMultiplier = 1;
     d.levelWord = config.word;
     d.collectedLetters = [];
     d.activeEffects = [];
     d.levelStartTime = Date.now();
     d.stopTimer = 0;
+    d.timeMeter = 0;
 
     // Initialize playfield
     d.fieldWidth = FIELD_WIDTH;
@@ -80,6 +154,7 @@ export class QixEngine {
     d.field = this.createField();
 
     // Initialize border path for Sparx patrol
+    d.internalLines = [];
     d.borderPath = this.createBorderPath();
 
     // Reset marker to bottom center of border
@@ -87,7 +162,6 @@ export class QixEngine {
       x: Math.floor(FIELD_WIDTH / 2),
       y: FIELD_HEIGHT - 1,
       isDrawing: false,
-      drawSpeed: null,
       hasShield: false,
       speedBoost: false,
       speedBoostTimer: 0
@@ -97,8 +171,27 @@ export class QixEngine {
     d.currentStix = null;
     d.fuse = null;
 
+    // A doorway does not survive the level it was opened on.
+    d.warp = null;
+    d.lastMultiplier = 1;
+    d.lastMultiplierAt = 0;
+    d.scoreMultiplier = 1;
+
+    // Abandon any claim still being painted in. The winning claim of the
+    // previous level is a large one, and its remaining columns would
+    // otherwise carry on painting into THIS level's fresh field - which
+    // handed the player a new level with chunks already filled in.
+    this.pendingFill = null;
+    this.outro = null;
+
     // Spawn enemies
-    this.enemySystem.initLevel(config);
+    // FAQ 4: "Difficulty refers mainly to how quickly/unpredictably and
+    // aggressively the Gremlin and Skulls move".
+    this.enemySystem.initLevel({
+      ...config,
+      qixSpeed: config.qixSpeed * skill.difficulty,
+      sparxSpeed: config.sparxSpeed * skill.difficulty,
+    });
 
     // Clear power-ups
     d.powerUps = [];
@@ -165,11 +258,20 @@ export class QixEngine {
     const now = Date.now();
     d.frameCount++;
 
+    // Paint in any claim still sweeping across the field
+    this.advanceFill();
+
+    // Fill the border Time Meter
+    this.advanceTimeMeter();
+
     // Update active effects
     this.powerUpSystem.updateEffects();
 
-    // Update enemies
-    this.enemySystem.update();
+    // Update enemies. A Hurry speeds them up along with the marker.
+    this.enemySystem.update(this.enemySpeedScale());
+
+    // Released letters and power-ups travel the field on their own.
+    this.powerUpSystem.updateMovement();
 
     // Update fuse if drawing and stopped
     if (d.marker.isDrawing && d.currentStix) {
@@ -189,21 +291,443 @@ export class QixEngine {
     // Check power-up collection
     this.powerUpSystem.checkCollection(d.marker);
 
+    // A free life at each of this skill's score thresholds (FAQ 4).
+    this.awardBonusLives();
+
+    // Walking into an open Warp doorway ends the level at once (FAQ 2.3.1).
+    if (this.enterWarpIfOpen()) return;
+
     // Check level complete
     if (d.claimedPercent >= d.targetPercent) {
       this.levelComplete();
       return;
     }
 
-    // Check word complete (auto-complete level)
+    // Spelling the whole word finishes the level on the spot (FAQ 2.3).
+    // The 10,000 per letter is paid by the end-of-level tally, which is
+    // also where the area bonus is worked out - there was a second flat
+    // 10,000 here, and the percentage was forced to 100 so that the area
+    // bonus paid out for ground the player never actually claimed.
     if (this.checkWordComplete()) {
-      d.score += 10000;  // Word bonus
-      d.claimedPercent = 100;
       this.levelComplete();
       return;
     }
 
     this.render();
+  }
+
+  /**
+   * How much faster everything is running right now.
+   *
+   * FAQ 2.3.1: a Hurry "Speeds up EVERYTHING in the game (including the
+   * music!) ... These are cumulative, so if you pick up several in quick
+   * succession, the game may get unmanageably fast." One Hurry was only
+   * ever speeding the marker up, which made it a pure benefit rather than
+   * the double-edged thing the arcade hands you.
+   */
+  enemySpeedScale(): number {
+    const hurries = this.data.activeEffects.filter(e => e.type === 'speed').length;
+    return Math.pow(HURRY_SPEED_SCALE, hurries);
+  }
+
+  /**
+   * Pay the skill level's bonus lives as the score passes them (FAQ 4).
+   *
+   * Hard mode lists none, so its table is empty and nothing is ever paid.
+   */
+  private awardBonusLives(): void {
+    const d = this.data;
+    const thresholds = (SKILL_LEVELS[d.skill] ?? SKILL_LEVELS.medium).bonusLives;
+
+    while (
+      d.bonusLivesAwarded < thresholds.length &&
+      d.score >= thresholds[d.bonusLivesAwarded]
+    ) {
+      d.lives++;
+      d.bonusLivesAwarded++;
+    }
+  }
+
+  /**
+   * Is the Warp doorway fully open?
+   *
+   * FAQ 2.3.1: it "takes a second or two to open, remains open for another
+   * second or so, then closes".
+   */
+  isWarpOpen(now: number = Date.now()): boolean {
+    const warp = this.data.warp;
+    if (!warp) return false;
+
+    const age = now - warp.openedAt;
+    return age >= WARP_OPENING_MS && age < WARP_OPENING_MS + WARP_OPEN_MS;
+  }
+
+  /**
+   * Step through an open doorway if the marker is standing in one.
+   *
+   * FAQ 2.3.1: "If you can move your diamond into it while it is fully
+   * open, you advance directly to the next level. (NOTE: if you warp, you
+   * get no end-of-level bonuses, e.g. for partially-spelled words.)" - so
+   * this deliberately does NOT go through startLevelOutro, which is where
+   * the bonuses are worked out and paid.
+   */
+  private enterWarpIfOpen(): boolean {
+    const d = this.data;
+    const warp = d.warp;
+    if (!warp || !this.isWarpOpen()) {
+      // A doorway that has closed is simply gone.
+      if (warp && Date.now() - warp.openedAt >= WARP_OPENING_MS + WARP_OPEN_MS) {
+        d.warp = null;
+      }
+      return false;
+    }
+
+    if (Math.round(d.marker.x) !== warp.x || Math.round(d.marker.y) !== warp.y) {
+      return false;
+    }
+
+    d.warp = null;
+    d.state = 'levelTransition';
+    d.transitionMessage = 'WARP';
+    d.transitionTimer = 30;
+    this.render();
+    return true;
+  }
+
+  /**
+   * Set the score multiplier for a claim about to be made (FAQ 2.4.1).
+   *
+   * "Multipliers occur when the point where you finish outlining an area is
+   * as close as possible (within about 2 pixels) to the point where you
+   * began. Achieving a multiplier will give you 20x normal points for the
+   * area filled. If you manage another multiplier within a second or two of
+   * the last one, it increases to 30x".
+   */
+  private applyRejoinMultiplier(endPoint: Point): void {
+    const d = this.data;
+    const start = d.currentStix?.points[0];
+    if (!start) return;
+
+    const distance = Math.max(
+      Math.abs(endPoint.x - start.x),
+      Math.abs(endPoint.y - start.y)
+    );
+
+    if (distance > MULTIPLIER_REJOIN_CELLS) {
+      d.scoreMultiplier = 1;
+      d.lastMultiplier = 1;
+      return;
+    }
+
+    const now = Date.now();
+    const chained =
+      d.lastMultiplier >= MULTIPLIER_FIRST &&
+      now - d.lastMultiplierAt <= MULTIPLIER_CHAIN_MS;
+
+    d.lastMultiplier = chained ? MULTIPLIER_CHAINED : MULTIPLIER_FIRST;
+    d.lastMultiplierAt = now;
+    d.scoreMultiplier = d.lastMultiplier;
+  }
+
+  /**
+   * Fill the border Time Meter, and release Skulls when it tops out.
+   *
+   * FAQ 1: "The outside border of the playing field is composed of squares
+   * which serve as a Time Meter. As you play, they change colour two at a
+   * time, until the whole border is red at which point two more Skulls are
+   * released onto the field and the counter resets and starts again." Later
+   * levels fill it faster (FAQ 1: "the timer counts down more quickly").
+   */
+  private advanceTimeMeter(): void {
+    const d = this.data;
+    const config = getLevelConfig(d.level);
+
+    d.timeMeter += GAME_TICK_MS / config.timeMeterMs;
+
+    if (d.timeMeter >= 1) {
+      d.timeMeter = 0;
+      this.enemySystem.releaseSkulls(SKULLS_PER_RELEASE, config.sparxSpeed);
+    }
+  }
+
+  /**
+   * Queue a won area to be painted in, sweeping right to left.
+   *
+   * Grouped by column and reversed so the highest x is filled first. The
+   * number of columns taken per tick is set so that any claim, from a
+   * two-cell sliver to most of the board, finishes in about the same time -
+   * a fixed per-column rate would make a big claim crawl.
+   */
+  private beginFill(points: Point[]): void {
+    if (points.length === 0) return;
+
+    const byColumn = new Map<number, Point[]>();
+    for (const point of points) {
+      const column = byColumn.get(point.x);
+      if (column) column.push(point);
+      else byColumn.set(point.x, [point]);
+    }
+
+    const columns = [...byColumn.keys()]
+      .sort((a, b) => b - a)          // right to left
+      .map(x => byColumn.get(x)!);
+
+    this.pendingFill = {
+      columns,
+      perTick: Math.max(1, Math.ceil(columns.length / FILL_ANIMATION_FRAMES)),
+    };
+  }
+
+  /**
+   * Has the Time Meter consumed this border square yet?
+   *
+   * The meter runs along the border path, and squares are consumed in pairs
+   * (FAQ 1: "they change colour two at a time"), so the boundary is rounded
+   * down to an even number of squares.
+   */
+  private isMeterFilled(x: number, y: number): boolean {
+    const d = this.data;
+    const path = d.borderPath;
+    if (path.length === 0) return false;
+
+    const index = path.findIndex(p => p.x === x && p.y === y);
+    if (index < 0) return false;
+
+    const consumed = Math.floor((d.timeMeter * path.length) / 2) * 2;
+    return index < consumed;
+  }
+
+  /** Paint the next slice of a sweeping claim. */
+  private advanceFill(): void {
+    const fill = this.pendingFill;
+    if (!fill) return;
+
+    for (let i = 0; i < fill.perTick && fill.columns.length > 0; i++) {
+      const column = fill.columns.shift()!;
+      for (const point of column) {
+        this.data.field[point.y][point.x] = 'claimed';
+      }
+    }
+
+    if (fill.columns.length === 0) this.pendingFill = null;
+  }
+
+  /**
+   * Write centred lines across the middle of the rendered field.
+   *
+   * Whole rendered rows are replaced rather than individual cells, because
+   * each cell is already a run of colour tags. Every replacement row is
+   * padded to the full width so the frame still measures SCREEN_WIDTH.
+   */
+  private overlayPanel(lines: string[], panel: Array<{ text: string; colour: string }>): void {
+    const width = FIELD_WIDTH * CELL_WIDTH;
+    const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+
+    panel.forEach((entry, i) => {
+      const row = top + i;
+      if (row < 0 || row >= lines.length) return;
+
+      const left = Math.max(0, Math.floor((width - entry.text.length) / 2));
+      const padded =
+        ' '.repeat(left) + entry.text + ' '.repeat(Math.max(0, width - left - entry.text.length));
+
+      lines[row] = `{black-bg}{${entry.colour}-fg}${padded}{/${entry.colour}-fg}{/black-bg}`;
+    });
+  }
+
+  /**
+   * The panel the end-of-level sequence is showing: the BONUS tally over the
+   * finished picture, then what the next round asks for.
+   */
+  private outroPanel(): Array<{ text: string; colour: string }> | null {
+    const outro = this.outro;
+    if (!outro) return null;
+
+    if (outro.phase === 'bonus') {
+      const row = (label: string, value: number) =>
+        `${label.padEnd(12)}${String(value).padStart(8)}`;
+      const panel = [
+        { text: 'BONUS', colour: 'lightcyan' },
+        { text: '', colour: 'white' },
+        { text: row(`AREA  ${outro.areaPercent}%`, outro.areaBonus), colour: 'lightblue' },
+        { text: row('WORD', outro.wordBonus), colour: 'lightblue' },
+      ];
+
+      // FAQ 3.1: clearing the sixteenth level is the end of a lap, and
+      // everyone in the picture - the girl in the convertible and every one
+      // of the cats - says the same three lines before you start again.
+      if (this.data.level >= LEVELS_PER_LAP) {
+        panel.push({ text: '', colour: 'white' });
+        for (const line of FINAL_LAP_MESSAGE) {
+          panel.push({ text: line, colour: 'lightyellow' });
+        }
+      }
+
+      return panel;
+    }
+
+    if (outro.phase === 'intro') {
+      // The lap wraps, so the level after the sixteenth is the first again.
+      const nextLevel = this.data.level >= LEVELS_PER_LAP ? 1 : this.data.level + 1;
+      const next = getLevelConfig(nextLevel);
+      return [
+        { text: 'CHALLENGE TO', colour: 'lightred' },
+        { text: `TAKE ${next.targetPercent}% AREA`, colour: 'lightred' },
+        { text: '', colour: 'white' },
+        { text: 'NEXT TRY', colour: 'lightred' },
+        { text: 'READY', colour: 'lightyellow' },
+      ];
+    }
+
+    return null;
+  }
+
+  /**
+   * The GAME OVER panel.
+   *
+   * The arcade blinks "GAME OVER / INSERT COIN" over the field; a BBS door
+   * has no coin slot, so it asks for a key. Nothing drew this state at all
+   * before - losing the last life simply froze the board.
+   */
+  private gameOverPanel(): Array<{ text: string; colour: string }> | null {
+    const d = this.data;
+    if (d.state !== 'gameover') return null;
+
+    const showPrompt = Math.floor(d.frameCount / GAME_OVER_BLINK_FRAMES) % 2 === 0;
+
+    return [
+      { text: 'GAME OVER', colour: 'lightred' },
+      { text: '', colour: 'white' },
+      { text: `SCORE ${d.score}`, colour: 'lightgreen' },
+      { text: `ROUND ${d.level}`, colour: 'lightgreen' },
+      { text: '', colour: 'white' },
+      { text: showPrompt ? 'PRESS ENTER' : '', colour: 'lightyellow' },
+    ];
+  }
+
+  /**
+   * Work out the end-of-level bonuses and start the arcade sequence.
+   *
+   * FAQ 2.4.2: "1000 points x (each 1% above required fill threshold)",
+   * "1000 points x (Key letters collected) if word is still incomplete",
+   * and "10,000 points x (Key letters collected) if word is completed".
+   * This is where banked letters finally pay: FAQ 2.3 says collecting them
+   * "will not give you any points until you complete the level".
+   */
+  private startLevelOutro(): void {
+    const d = this.data;
+
+    const above = Math.max(0, Math.floor(d.claimedPercent) - d.targetPercent);
+    const areaBonus = above * POINTS_PER_BONUS_PERCENT;
+
+    const perLetter = this.checkWordComplete()
+      ? LETTER_WORD_COMPLETE_POINTS
+      : LETTER_END_OF_LEVEL_POINTS;
+    const wordBonus = d.collectedLetters.length * perLetter;
+
+    d.score += areaBonus + wordBonus;
+
+    this.outro = {
+      phase: 'reveal',
+      sweepX: FIELD_WIDTH,
+      timer: 0,
+      areaBonus,
+      wordBonus,
+      areaPercent: Math.floor(d.claimedPercent),
+    };
+  }
+
+  /**
+   * Advance the end-of-level sequence one frame and repaint.
+   *
+   * Called by the door while the level is handed over - update() only runs
+   * while playing. Returns true while the sequence is still running.
+   */
+  advanceLevelOutro(): boolean {
+    const outro = this.outro;
+    if (!outro) return false;
+
+    switch (outro.phase) {
+      case 'reveal':
+        outro.sweepX -= LEVEL_CLEAR_WIPE_COLUMNS;
+        if (outro.sweepX <= 0) {
+          outro.sweepX = 0;
+          outro.phase = 'bonus';
+          outro.timer = BONUS_PANEL_FRAMES;
+        }
+        break;
+
+      case 'bonus':
+        outro.timer--;
+        if (outro.timer <= 0) {
+          outro.phase = 'clear';
+          outro.sweepX = FIELD_WIDTH;
+        }
+        break;
+
+      case 'clear':
+        outro.sweepX -= LEVEL_CLEAR_WIPE_COLUMNS;
+        if (outro.sweepX <= 0) {
+          outro.sweepX = 0;
+          outro.phase = 'intro';
+          outro.timer = INTRO_PANEL_FRAMES;
+        }
+        break;
+
+      case 'intro':
+        outro.timer--;
+        if (outro.timer <= 0) {
+          // Deliberately no repaint: the intro panel from the previous
+          // frame should stay up, and the door advances the level next,
+          // which paints the new one. Repainting here would flash the
+          // finished level's field again.
+          this.outro = null;
+          return false;
+        }
+        break;
+    }
+
+    this.render();
+    return true;
+  }
+
+  /** Is the end-of-level sequence still running? */
+  isRevealing(): boolean {
+    return this.outro !== null;
+  }
+
+  /**
+   * What the end-of-level sequence paints at this cell, if anything.
+   */
+  private outroCellAt(
+    x: number,
+    y: number,
+    cell: CellState
+  ): { ch: string; fg?: string; bg?: string; art?: ArtCell[] } | null {
+    const outro = this.outro;
+    if (!outro || cell === 'border') return null;
+
+    const picture = () =>
+      this.background
+        ? { ch: ' ', art: artForCell(this.background, x, y) }
+        : { ch: ' ', bg: BG_COLORS.claimed };
+    const bare = () => ({ ch: ' ', bg: BG_COLORS.unclaimed });
+
+    switch (outro.phase) {
+      case 'reveal':
+        return x >= outro.sweepX ? picture() : null;
+      case 'bonus':
+        return picture();
+      case 'clear':
+        return x >= outro.sweepX ? bare() : picture();
+      case 'intro':
+        return bare();
+    }
+  }
+
+  /** Is a claim still sweeping across the field? */
+  isFilling(): boolean {
+    return this.pendingFill !== null;
   }
 
   /**
@@ -236,7 +760,31 @@ export class QixEngine {
 
     const nextCell = d.field[nextY][nextX];
 
+    // Stepping off safe ground into open field starts a line by itself.
+    //
+    // The arcade holds a Draw button to detach, but that assumes a stick
+    // and a button under one hand. In a BBS terminal the arrow keys are
+    // the whole controller, so an arrow pointed into unclaimed area IS the
+    // intent to draw - nothing else can be meant by it, since without
+    // drawing that move is simply refused.
+    if (!d.marker.isDrawing && nextCell === 'unclaimed') {
+      this.startDrawing();
+    }
+
     if (d.marker.isDrawing && d.currentStix) {
+      // Retracing one step back along the line (FAQ 2.1: backtracking IS
+      // allowed in Super Qix). The line shortens and the abandoned cell goes
+      // back to open field. Deliberately does NOT reset stopTimer: FAQ 2.2
+      // says "backtracking counts as not moving for the purposes of the
+      // Fuse", so the fuse keeps burning while the player reverses out.
+      if (this.drawingSystem.isBacktrack({ x: nextX, y: nextY })) {
+        if (this.drawingSystem.retractStix()) {
+          d.marker.x = nextX;
+          d.marker.y = nextY;
+        }
+        return;
+      }
+
       // Drawing mode - can move into unclaimed or back to border/claimed
       if (nextCell === 'unclaimed') {
         // Extend stix
@@ -246,16 +794,26 @@ export class QixEngine {
           d.stopTimer = 0;  // Reset fuse timer
         }
       } else if (nextCell === 'border' || nextCell === 'claimed') {
+        // Rejoining close to where the line left pays a multiplier, so it
+        // has to be settled before the claim is scored.
+        this.applyRejoinMultiplier({ x: nextX, y: nextY });
+
         // Complete stix - claim area
         const result = this.drawingSystem.completeStix({ x: nextX, y: nextY });
         if (result.success) {
           d.marker.x = nextX;
           d.marker.y = nextY;
           d.marker.isDrawing = false;
-          d.marker.drawSpeed = null;
           d.currentStix = null;
           d.fuse = null;
           d.stopTimer = 0;
+
+          // The area is won now - score and percentage are credited
+          // immediately - but the ground is painted in over the next few
+          // frames, sweeping right to left.
+          if (result.filled) {
+            this.beginFill(result.filled);
+          }
 
           // Award points
           if (result.points) {
@@ -265,11 +823,18 @@ export class QixEngine {
             d.claimedPercent += result.percent;
           }
 
-          // Spawn power-up chance
+          // The multiplier is spent on the claim that earned it.
+          d.scoreMultiplier = 1;
+
+          // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
+          // bonus, even one too small to have scored a single point.
           this.powerUpSystem.trySpawnPowerUp();
 
-          // Update border path for Sparx
-          d.borderPath = this.updateBorderPath();
+          // Update border path for Sparx, then re-anchor existing Sparx to
+          // it - the rebuilt array reorders points, so a stale pathIndex
+          // would otherwise teleport a Sparx onto the marker's landing cell.
+          d.borderPath = this.rebuildPatrolPath();
+          this.enemySystem.reanchorBorderPositions();
         }
       } else if (nextCell === 'stix') {
         // Can't cross own stix - die!
@@ -277,33 +842,40 @@ export class QixEngine {
         return;
       }
     } else {
-      // Not drawing - can only move on border or claimed area
-      if (nextCell === 'border' || nextCell === 'claimed') {
+      // Not drawing: the outer frame, and the EDGES of claimed ground only.
+      // The inside of a claimed region is not walkable - see isWalkable.
+      if (this.drawingSystem.isWalkable({ x: nextX, y: nextY })) {
+        d.marker.x = nextX;
+        d.marker.y = nextY;
+      } else if (
+        !this.drawingSystem.isWalkable({ x: d.marker.x, y: d.marker.y }) &&
+        (nextCell === 'border' || nextCell === 'claimed')
+      ) {
+        // Escape hatch: a claim can bury the cell the marker is standing on,
+        // and a marker with nowhere legal to go would be stuck for good. From
+        // a buried cell, any safe ground is allowed until it is back on an edge.
         d.marker.x = nextX;
         d.marker.y = nextY;
       }
-      // If trying to move into unclaimed without drawing, stay put
+      // Moving into unclaimed area without drawing: stay put
     }
   }
 
   /**
-   * Start drawing (slow)
+   * Detach from the edge and start drawing.
+   *
+   * Super Qix has a single Draw button - there is no slow/fast choice
+   * (FAQ 2.5.3: "There's no longer an option to complete lines quickly
+   * for safety or slowly for extra points"), so one entry point.
    */
-  handleSlowDraw(): void {
-    this.startDrawing('slow');
-  }
-
-  /**
-   * Start drawing (fast)
-   */
-  handleFastDraw(): void {
-    this.startDrawing('fast');
+  handleDraw(): void {
+    this.startDrawing();
   }
 
   /**
    * Start drawing in the current direction
    */
-  private startDrawing(speed: DrawSpeed): void {
+  private startDrawing(): void {
     const d = this.data;
 
     if (d.marker.isDrawing) return;
@@ -313,10 +885,8 @@ export class QixEngine {
     if (currentCell !== 'border' && currentCell !== 'claimed') return;
 
     d.marker.isDrawing = true;
-    d.marker.drawSpeed = speed;
     d.currentStix = {
       points: [{ x: d.marker.x, y: d.marker.y }],
-      speed,
       startTime: Date.now()
     };
     d.stopTimer = 0;
@@ -332,44 +902,71 @@ export class QixEngine {
   }
 
   /**
-   * Update border path to include claimed area edges
+   * Rebuild the path the Skulls patrol.
+   *
+   * The frame and the edges of claimed ground, plus every line the player
+   * has finished. FAQ 2.2: the Skulls "can follow any line on the screen
+   * (including internal lines which you can't travel on anymore)" - a line
+   * the marker can no longer reach, because a later claim buried it, is
+   * still a road for them, and that is how a Skull cuts you off from a
+   * direction you thought was safe.
+   *
+   * A buried line is spliced into the walk beside the cell it joins, and
+   * walked out and back again, so the patrol stays a single continuous tour
+   * - a Skull that turns down one of these has to come back out of it
+   * rather than jumping across the board.
    */
-  private updateBorderPath(): Point[] {
+  rebuildPatrolPath(): Point[] {
     const d = this.data;
     const path: Point[] = [];
-    const visited = new Set<string>();
+    const onPath = new Set<string>();
+    const key = (p: Point) => `${p.x},${p.y}`;
 
-    // Find all border and claimed edge cells
     for (let y = 0; y < FIELD_HEIGHT; y++) {
       for (let x = 0; x < FIELD_WIDTH; x++) {
         const cell = d.field[y][x];
-        if (cell === 'border') {
+        const walkable =
+          cell === 'border' ||
+          (cell === 'claimed' && this.drawingSystem.touchesUnclaimed(x, y));
+
+        if (walkable && !onPath.has(`${x},${y}`)) {
+          onPath.add(`${x},${y}`);
           path.push({ x, y });
-        } else if (cell === 'claimed') {
-          // Check if adjacent to unclaimed (edge of claimed area)
-          const neighbors = [
-            { x: x - 1, y },
-            { x: x + 1, y },
-            { x, y: y - 1 },
-            { x, y: y + 1 }
-          ];
-          for (const n of neighbors) {
-            if (n.x >= 0 && n.x < FIELD_WIDTH && n.y >= 0 && n.y < FIELD_HEIGHT) {
-              if (d.field[n.y][n.x] === 'unclaimed') {
-                const key = `${x},${y}`;
-                if (!visited.has(key)) {
-                  visited.add(key);
-                  path.push({ x, y });
-                }
-                break;
-              }
-            }
-          }
         }
       }
     }
 
+    for (const line of d.internalLines) {
+      // Only the part of it the marker has lost access to.
+      const buried = line.filter(p => !onPath.has(key(p)));
+      if (buried.length === 0) continue;
+
+      for (const p of buried) onPath.add(key(p));
+
+      // Out along the buried line and back, spliced in beside whichever
+      // cell of the walk it starts closest to.
+      const detour = [...buried, ...buried.slice(0, -1).reverse()];
+      const joinAt = this.closestIndex(path, buried[0]);
+      path.splice(joinAt + 1, 0, ...detour);
+    }
+
     return path;
+  }
+
+  /** Where in a path the cell closest to `to` sits. */
+  private closestIndex(path: Point[], to: Point): number {
+    let best = 0;
+    let bestDistance = Infinity;
+
+    path.forEach((point, index) => {
+      const distance = Math.hypot(point.x - to.x, point.y - to.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+
+    return best;
   }
 
   /**
@@ -378,21 +975,25 @@ export class QixEngine {
   private checkCollisions(): boolean {
     const d = this.data;
 
-    // Check Qix collision (only while drawing)
+    // The Gremlin, while drawing. FAQ 2.3.1 is explicit that the Shield
+    // "will NOT protect you from the Gremlin hitting either you or your
+    // line" - it used to, which made the Shield a free pass against the
+    // one enemy the arcade never lets you buy your way past.
     if (d.marker.isDrawing && d.currentStix) {
       if (this.enemySystem.checkQixCollision(d.marker, d.currentStix.points)) {
-        if (d.marker.hasShield) {
-          d.marker.hasShield = false;
-          return false;  // Shield saved us
-        }
         return true;
       }
     }
 
-    // Check Sparx collision (always)
-    if (this.enemySystem.checkSparxCollision(d.marker)) {
+    // Skulls, always. This is what the Shield is for: it "will protect you
+    // from one encounter with a Skull" and "will also stun the Skull in
+    // question for one second".
+    const struck = this.enemySystem.sparxTouching(d.marker);
+    if (struck) {
       if (d.marker.hasShield) {
         d.marker.hasShield = false;
+        struck.frozen = true;
+        struck.frozenTimer = Math.ceil(SKULL_STUN_MS / GAME_TICK_MS);
         return false;
       }
       return true;
@@ -416,6 +1017,14 @@ export class QixEngine {
 
     d.lives--;
 
+    // Where the marker goes back to.
+    //
+    // NOT the level's spawn point. Losing a life in a far corner and being
+    // sent back to the middle of the bottom edge costs the whole walk out
+    // again, and reads as the game having reset itself. The marker returns
+    // to where it LEFT safe ground - the start of the line it was drawing.
+    const retreat = d.currentStix?.points[0];
+
     // Clear current stix
     if (d.currentStix) {
       for (const point of d.currentStix.points) {
@@ -426,19 +1035,47 @@ export class QixEngine {
     }
     d.currentStix = null;
     d.marker.isDrawing = false;
-    d.marker.drawSpeed = null;
+    // FAQ 2.2: "If you should die, all but two Skulls will disappear."
+    this.enemySystem.cullSkullsAfterDeath();
     d.fuse = null;
     d.stopTimer = 0;
 
     if (d.lives <= 0) {
       d.state = 'gameover';
-    } else {
-      // Reset marker to safe position
-      d.marker.x = Math.floor(FIELD_WIDTH / 2);
-      d.marker.y = FIELD_HEIGHT - 1;
+    } else if (retreat && this.drawingSystem.isWalkable(retreat)) {
+      // Back to where the line started - safe ground by definition, since
+      // that is what a line has to start from.
+      d.marker.x = retreat.x;
+      d.marker.y = retreat.y;
+    } else if (!this.drawingSystem.isWalkable({ x: d.marker.x, y: d.marker.y })) {
+      // Killed on ground a claim has since buried: fall back to the
+      // nearest safe cell rather than the spawn point.
+      const safe = this.nearestWalkable(d.marker.x, d.marker.y);
+      d.marker.x = safe.x;
+      d.marker.y = safe.y;
     }
+    // Otherwise the marker is already on safe ground: leave it alone.
 
     this.render();
+  }
+
+  /**
+   * The closest cell the marker may stand on, searched outwards in rings.
+   */
+  private nearestWalkable(fromX: number, fromY: number): Point {
+    for (let r = 1; r < Math.max(FIELD_WIDTH, FIELD_HEIGHT); r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+
+          const point = { x: fromX + dx, y: fromY + dy };
+          if (this.drawingSystem.isWalkable(point)) return point;
+        }
+      }
+    }
+
+    // The frame is always walkable, so this is unreachable in practice.
+    return { x: Math.floor(FIELD_WIDTH / 2), y: FIELD_HEIGHT - 1 };
   }
 
   /**
@@ -458,16 +1095,17 @@ export class QixEngine {
   private levelComplete(): void {
     const d = this.data;
 
-    // Bonus for percentage above target
-    if (d.claimedPercent > BONUS_PERCENT_START) {
-      const bonusPercent = d.claimedPercent - BONUS_PERCENT_START;
-      d.score += bonusPercent * POINTS_PER_BONUS_PERCENT;
-    }
+    // The area and word bonuses are worked out and credited by
+    // startLevelOutro, which also owns the tally the player is shown.
+    // There was a second area bonus here as well, so every cleared level
+    // paid for the same percentage twice.
 
     // Extra life for 98%+
     if (d.claimedPercent >= EXTRA_LIFE_PERCENT) {
       d.lives++;
     }
+
+    this.startLevelOutro();
 
     d.state = 'levelTransition';
     d.transitionMessage = `LEVEL ${d.level} COMPLETE!`;
@@ -481,7 +1119,16 @@ export class QixEngine {
    */
   advanceLevel(): void {
     const d = this.data;
-    d.level++;
+
+    // FAQ 3: "Once you uncover them all, you go back to level 1 and
+    // continue playing to increase your score."
+    if (d.level >= LEVELS_PER_LAP) {
+      d.level = 1;
+      d.lap = (d.lap || 1) + 1;
+    } else {
+      d.level++;
+    }
+
     this.initLevel(d.level);
     d.state = 'playing';
   }
@@ -493,12 +1140,20 @@ export class QixEngine {
     const d = this.data;
     const lines: string[] = [];
 
-    // Create render buffer
-    const buffer: string[][] = [];
+    // Render buffer holds a glyph plus its own fg/bg, painted directly per
+    // layer - not a char code looked up afterwards. Terrain cells share the
+    // same space glyph (border/unclaimed/claimed/stix are all blocks), so a
+    // char->color lookup can no longer tell them apart; bg is now what
+    // carries the meaning.
+    // `art` carries the CELL_WIDTH characters of the hidden picture that sit
+    // behind this cell, each with its own colours. A claimed cell is drawn
+    // as those characters; everything else uses ch/fg/bg.
+    type Cell = { ch: string; fg?: string; bg?: string; art?: ArtCell[] };
+    const buffer: Cell[][] = [];
     for (let y = 0; y < FIELD_HEIGHT; y++) {
       buffer[y] = [];
       for (let x = 0; x < FIELD_WIDTH; x++) {
-        buffer[y][x] = ' ';
+        buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
       }
     }
 
@@ -506,18 +1161,39 @@ export class QixEngine {
     for (let y = 0; y < FIELD_HEIGHT; y++) {
       for (let x = 0; x < FIELD_WIDTH; x++) {
         const cell = d.field[y][x];
+
+        // The end-of-level sequence paints the field itself: the picture
+        // once the reveal has passed a column, plain ground once the
+        // clearing wipe has.
+        const outroCell = this.outroCellAt(x, y, cell);
+        if (outroCell) {
+          buffer[y][x] = outroCell;
+          continue;
+        }
+
         switch (cell) {
           case 'border':
-            buffer[y][x] = CHARS.border;
+            // The frame is also the Time Meter: the squares already
+            // consumed show red, two at a time, until the whole border
+            // is red and two more Skulls are released (FAQ 1).
+            buffer[y][x] = {
+              ch: ' ',
+              bg: this.isMeterFilled(x, y) ? BG_COLORS.borderMeter : BG_COLORS.border,
+            };
             break;
           case 'unclaimed':
-            buffer[y][x] = CHARS.unclaimed;
+            buffer[y][x] = { ch: ' ', bg: BG_COLORS.unclaimed };
             break;
           case 'claimed':
-            buffer[y][x] = CHARS.claimed;
+            // Claiming ground is what uncovers the picture. With no art
+            // loaded this falls back to the flat colour it used to be.
+            buffer[y][x] = this.background
+              ? { ch: ' ', art: artForCell(this.background, x, y) }
+              : { ch: ' ', bg: BG_COLORS.claimed };
             break;
           case 'stix':
-            buffer[y][x] = d.currentStix?.speed === 'slow' ? CHARS.stixSlow : CHARS.stixFast;
+            // The line being drawn is yellow (FAQ 2.1).
+            buffer[y][x] = { ch: ' ', bg: BG_COLORS.stix };
             break;
         }
       }
@@ -525,10 +1201,10 @@ export class QixEngine {
 
     // Draw current stix
     if (d.currentStix) {
-      const char = d.currentStix.speed === 'slow' ? CHARS.stixSlow : CHARS.stixFast;
+      const bg = BG_COLORS.stix;
       for (const point of d.currentStix.points) {
         if (point.y >= 0 && point.y < FIELD_HEIGHT && point.x >= 0 && point.x < FIELD_WIDTH) {
-          buffer[point.y][point.x] = char;
+          buffer[point.y][point.x] = { ch: ' ', bg };
         }
       }
     }
@@ -539,14 +1215,14 @@ export class QixEngine {
       const qx = Math.floor(qix.x);
       const qy = Math.floor(qix.y);
       if (qy >= 0 && qy < FIELD_HEIGHT && qx >= 0 && qx < FIELD_WIDTH) {
-        buffer[qy][qx] = char;
+        buffer[qy][qx] = { ch: char, fg: 'white', bg: BG_COLORS.qix };
       }
       // Draw segments
       for (const seg of qix.segments) {
         const sx = Math.floor(seg.x);
         const sy = Math.floor(seg.y);
         if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-          buffer[sy][sx] = CHARS.qix;
+          buffer[sy][sx] = { ch: CHARS.qix, fg: 'white', bg: BG_COLORS.qix };
         }
       }
     }
@@ -556,7 +1232,14 @@ export class QixEngine {
       const sx = Math.floor(sparx.x);
       const sy = Math.floor(sparx.y);
       if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-        buffer[sy][sx] = sparx.isSuper ? CHARS.superSparx : CHARS.sparx;
+        // Every Skull looks the same: there are no Super Skulls.
+        // Skulls chew, alternating an open and a closed mouth.
+        const chewing = Math.floor(d.frameCount / SKULL_CHEW_FRAMES) % 2 === 0;
+        buffer[sy][sx] = {
+          ch: chewing ? CHARS.sparx : CHARS.sparxChew,
+          fg: 'lightyellow',
+          bg: BG_COLORS.sparx
+        };
       }
     }
 
@@ -565,7 +1248,8 @@ export class QixEngine {
       const fx = Math.floor(d.fuse.x);
       const fy = Math.floor(d.fuse.y);
       if (fy >= 0 && fy < FIELD_HEIGHT && fx >= 0 && fx < FIELD_WIDTH) {
-        buffer[fy][fx] = d.frameCount % 2 === 0 ? CHARS.fuse : CHARS.fuseHead;
+        const char = d.frameCount % 2 === 0 ? CHARS.fuse : CHARS.fuseHead;
+        buffer[fy][fx] = { ch: char, fg: 'black', bg: BG_COLORS.fuse };
       }
     }
 
@@ -575,7 +1259,7 @@ export class QixEngine {
         const px = Math.floor(powerUp.x);
         const py = Math.floor(powerUp.y);
         if (py >= 0 && py < FIELD_HEIGHT && px >= 0 && px < FIELD_WIDTH) {
-          buffer[py][px] = powerUp.letter || CHARS.powerUp;
+          buffer[py][px] = { ch: powerUp.letter || CHARS.powerUp, fg: 'white', bg: BG_COLORS.powerUp };
         }
       }
     }
@@ -584,42 +1268,55 @@ export class QixEngine {
     const mx = d.marker.x;
     const my = d.marker.y;
     if (my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
-      buffer[my][mx] = d.marker.isDrawing ? CHARS.markerDrawing : CHARS.marker;
+      // The arcade marker is an animated sprite. No glyph: the cycling
+      // block IS the sprite, and a character on top only muddies it
+      // against the picture behind.
+      const cycle = MARKER_CYCLE[
+        Math.floor(d.frameCount / MARKER_CYCLE_FRAMES) % MARKER_CYCLE.length
+      ];
+      buffer[my][mx] = { ch: ' ', bg: cycle };
     }
 
-    // Convert buffer to tagged string
+    // Convert buffer to tagged string.
+    //
+    // Each logical cell is painted CELL_WIDTH characters wide so that a cell
+    // is as wide as it is tall on screen (see CELL_WIDTH in constants.ts).
+    // A glyph occupies the first column of its cell and the remainder is
+    // padded with spaces carrying the same colours, so the block stays solid.
     for (let y = 0; y < buffer.length; y++) {
       let line = '';
       for (let x = 0; x < buffer[y].length; x++) {
-        const char = buffer[y][x];
+        const { ch, fg, bg, art } = buffer[y][x];
 
-        if (char === CHARS.marker) {
-          line += `{${COLORS.marker}-fg}${char}{/}`;
-        } else if (char === CHARS.markerDrawing) {
-          line += `{${COLORS.markerDrawing}-fg}${char}{/}`;
-        } else if (char === CHARS.qix || char === CHARS.qixAlt) {
-          line += `{${COLORS.qix}-fg}${char}{/}`;
-        } else if (char === CHARS.sparx) {
-          line += `{${COLORS.sparx}-fg}${char}{/}`;
-        } else if (char === CHARS.superSparx) {
-          line += `{${COLORS.superSparx}-fg}${char}{/}`;
-        } else if (char === CHARS.fuse || char === CHARS.fuseHead) {
-          line += `{${COLORS.fuse}-fg}${char}{/}`;
-        } else if (char === CHARS.border) {
-          line += `{${COLORS.border}-fg}${char}{/}`;
-        } else if (char === CHARS.unclaimed) {
-          line += `{${COLORS.unclaimed}-fg}${char}{/}`;
-        } else if (char === CHARS.stixFast) {
-          line += `{${COLORS.stixFast}-fg}${char}{/}`;
-        } else if (char === CHARS.stixSlow) {
-          line += `{${COLORS.stixSlow}-fg}${char}{/}`;
-        } else if (char === CHARS.powerUp || /[A-Z]/.test(char)) {
-          line += `{${COLORS.powerUp}-fg}${char}{/}`;
-        } else {
-          line += char;
+        // Revealed picture: each art character keeps its own colours, so the
+        // two columns of a cell can differ - which is what makes it read as
+        // artwork rather than a coloured block.
+        if (art) {
+          for (const part of art) {
+            const artFg = ART_PALETTE[part.fg] || 'white';
+            const artBg = ART_PALETTE[part.bg] || 'black';
+            line += `{${artBg}-bg}{${artFg}-fg}${part.char}{/${artFg}-fg}{/${artBg}-bg}`;
+          }
+          continue;
         }
+
+        let cellStr = ch + ' '.repeat(CELL_WIDTH - 1);
+        if (fg) cellStr = `{${fg}-fg}${cellStr}{/${fg}-fg}`;
+        if (bg) cellStr = `{${bg}-bg}${cellStr}{/${bg}-bg}`;
+        line += cellStr;
       }
       lines.push(line);
+    }
+
+    // The end-of-level sequence and the game-over screen speak for
+    // themselves. Without any of this the field simply froze.
+    const panel = this.gameOverPanel() ?? this.outroPanel();
+    if (panel) {
+      this.overlayPanel(lines, panel);
+    } else if (d.transitionMessage && d.state === 'levelTransition') {
+      this.overlayPanel(lines, [
+        { text: d.transitionMessage, colour: 'lightyellow' },
+      ]);
     }
 
     this.renderCallback(lines.join('\n'));

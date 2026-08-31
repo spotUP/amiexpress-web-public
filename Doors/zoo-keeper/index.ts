@@ -172,9 +172,24 @@ function formatHUD(): string {
 /**
  * Show main menu
  */
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
+
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
 
   // Clear game area
   gameArea.setContent("");
@@ -370,9 +385,26 @@ function startGame(): void {
       gameData.state === "platform" ||
       gameData.state === "stampede"
     ) {
+      pollHeldDirections();
       game?.update();
     }
   }, GAME_TICK_MS);
+}
+
+/**
+ * Step the keeper for whichever directions are held down.
+ *
+ * Called once per game tick, replacing movement driven by the character
+ * stream - that stream is the client's auto-repeat (one character, a ~400ms
+ * gap, then a burst), which is what made movement stutter.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["up", "down", "left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+      game?.handleDirection(dir);
+    }
+  }
 }
 
 /**
@@ -441,7 +473,7 @@ function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
       break;
 
     case "down":
@@ -449,7 +481,7 @@ function handleMenuInput(key: InputKey): void {
         MENU_OPTIONS.length - 1,
         gameData.menuSelection + 1
       );
-      showMenu();
+      renderMenu();
       break;
 
     case "enter":
@@ -488,6 +520,9 @@ function handleGameInput(key: InputKey): void {
     case "down":
     case "left":
     case "right":
+      // Held keys drive movement when real key edges are available; acting
+      // on the character too would move twice per press.
+      if (inputManager?.isKeyStateActive()) break;
       game?.handleDirection(key as Direction);
       break;
 
@@ -698,6 +733,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'ZooKeeper'
   });

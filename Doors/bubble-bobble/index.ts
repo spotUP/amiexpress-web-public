@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
 import { BubbleBobbleGame } from "./game/bubble-bobble-game";
@@ -88,6 +89,7 @@ let hudBox: ReturnType<typeof blessed.box>;
 let footerBox: ReturnType<typeof blessed.box>;
 let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
+let inputManager: DoorInputManager | null = null;
 let game: BubbleBobbleGame | null = null;
 let doorContext: any; // Will be set on start
 let gamepadManager: GamepadInputManager | null = null;
@@ -144,9 +146,24 @@ function formatHUD(): string {
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  {green-fg}LIVES: ${livesStr}{/}  ${hurryStr}`;
 }
 
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
+
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
   gameArea.setContent("");
 
   if (menuBox) menuBox.destroy();
@@ -297,7 +314,10 @@ function startGame(): void {
 
   if (gameLoop) clearInterval(gameLoop);
   gameLoop = setInterval(() => {
-    if (gameData.state === "playing") game?.update();
+    if (gameData.state === "playing") {
+      pollHeldDirections();
+      game?.update();
+    }
   }, GAME_TICK_MS);
 }
 
@@ -406,13 +426,13 @@ function normalizeKey(key: string): InputKey {
 function handleMenuInput(key: InputKey): void {
   if (key === "up") {
     gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-    showMenu();
+    renderMenu();
   } else if (key === "down") {
     gameData.menuSelection = Math.min(
       MENU_OPTIONS.length - 1,
       gameData.menuSelection + 1
     );
-    showMenu();
+    renderMenu();
   } else if (key === "enter" || key === "bubble") {
     if (gameData.menuSelection === 0) startGame();
     else if (gameData.menuSelection === 1) showHighscores();
@@ -427,11 +447,30 @@ function handleMenuInput(key: InputKey): void {
   }
 }
 
+/**
+ * Move for whichever directions are held down.
+ *
+ * Called once per game tick, replacing movement driven by the character
+ * stream (the client's auto-repeat: one character, a ~400ms gap, then a
+ * burst). Jump and bubble stay on the character path - they are taps.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+      game?.handleMove(dir);
+    }
+  }
+}
+
 function handleGameInput(key: InputKey): void {
+  // Held keys drive movement when real key edges are available; acting on
+  // the character too would move twice per press.
+  const heldDrivesMovement = !!inputManager?.isKeyStateActive();
   if (key === "left") {
-    game?.handleMove("left");
+    if (!heldDrivesMovement) game?.handleMove("left");
   } else if (key === "right") {
-    game?.handleMove("right");
+    if (!heldDrivesMovement) game?.handleMove("right");
   } else if (key === "jump" || key === "up") {
     game?.handleJump();
   } else if (key === "bubble") {
@@ -562,6 +601,10 @@ let keepAlive: ReturnType<typeof setInterval> | null = null;
 // doorContext already declared above
 
 function cleanup(): void {
+  if (inputManager) {
+    inputManager.disable();
+    inputManager = null;
+  }
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
@@ -599,6 +642,18 @@ door.onStart(async (ctx: any) => {
   screen.clearRegion(0, screen.width, 0, screen.height);
   screen.alloc();
 
+  // Real key-down/key-up edges, so movement can be driven by which
+  // keys are actually held instead of the client's auto-repeat.
+  inputManager = new DoorInputManager(ctx, screen, {
+    enableGameMode: true,   // Game needs raw keyboard input
+    enableGrabKeys: true,   // Capture all keys for game controls
+    enableMouse: false,     // No mouse interaction in this game
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
+    debug: false,
+    debugName: 'BubbleBobble'
+  });
+  inputManager.enable();
+
   // Set up gamepad support
   gamepadManager = new GamepadInputManager(ctx.session);
 
@@ -629,14 +684,14 @@ door.onStart(async (ctx: any) => {
   gamepadManager.on('dpad:up', () => {
     if (gameData.state === 'menu') {
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
     }
   });
 
   gamepadManager.on('dpad:down', () => {
     if (gameData.state === 'menu') {
       gameData.menuSelection = Math.min(3, gameData.menuSelection + 1);
-      showMenu();
+      renderMenu();
     }
   });
 

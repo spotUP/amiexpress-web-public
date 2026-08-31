@@ -44,6 +44,16 @@ function createInitialGameData() {
         riverObjectIdCounter: 0,
         flyTimer: 0,
         alligatorTimer: 0,
+        ladyFrogTimer: 0,
+        otterTimer: 0,
+        snakes: [],
+        snakeIdCounter: 0,
+        carryingLadyFrog: false,
+        furthestRow: 12,
+        hopPointsThisHome: 0,
+        startingLives: constants_1.STARTING_LIVES,
+        extraLifeAwarded: false,
+        frogStartTime: Date.now(),
         highscores: [...constants_1.DEFAULT_HIGHSCORES],
         menuSelection: 0,
         playerName: "",
@@ -66,6 +76,9 @@ let hudBox;
 let footerBox;
 let menuBox = null;
 let gameLoop = null;
+/** How long the finished board stays up between levels, in ticks. */
+const LEVEL_COMPLETE_FRAMES = 40;
+let levelCompleteFrames = 0;
 let game = null;
 let doorContext; // Will be set on start
 let inputManager = null;
@@ -119,18 +132,46 @@ function initScreen() {
 /**
  * Format HUD display
  */
+/**
+ * The status line, laid out like the cabinet's (FAQ 6.2): the player's score
+ * with the high score beside it, the level, and how many frogs are left.
+ */
 function formatHUD() {
-    const scoreStr = gameData.score.toString().padStart(8, "0");
-    const livesStr = "*".repeat(Math.max(0, gameData.lives));
+    const scoreStr = gameData.score.toString().padStart(6, "0");
+    const best = Math.max(gameData.score, ...gameData.highscores.map(h => h.score));
+    const hiStr = best.toString().padStart(6, "0");
+    // 256 frogs is one of the operator's settings, so the row of them has to
+    // give up and count at some point.
+    const livesStr = gameData.lives > 8
+        ? `x${gameData.lives}`
+        : "*".repeat(Math.max(0, gameData.lives));
     const homesStr = gameData.homesCompleted.toString();
-    return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  {green-fg}HOMES: ${homesStr}/5{/}  {red-fg}LIVES: ${livesStr}{/}`;
+    return (`{yellow-fg}1-UP ${scoreStr}{/}  ` +
+        `{white-fg}HI-SCORE ${hiStr}{/}  ` +
+        `{cyan-fg}LEVEL ${gameData.level}{/}  ` +
+        `{green-fg}HOMES ${homesStr}/5{/}  ` +
+        `{red-fg}FROGS ${livesStr}{/}`);
 }
 /**
  * Show main menu
  */
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu() {
     gameData.state = "menu";
     gameData.menuSelection = 0;
+    renderMenu();
+}
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu() {
     gameArea.setContent("");
     if (menuBox) {
         menuBox.destroy();
@@ -152,7 +193,12 @@ function showMenu() {
         const selected = index === gameData.menuSelection;
         const prefix = selected ? "> " : "  ";
         const color = selected ? "cyan" : "white";
-        menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
+        // The lives row shows its setting and Enter steps through them. On the
+        // cabinet this was an operator switch (FAQ 6.3).
+        const label = option === "Lives"
+            ? `${option}: ${gameData.startingLives}`
+            : option;
+        menuContent.push(`{${color}-fg}${prefix}${label}{/}`);
     });
     menuBox = blessed_1.default.box({
         fixed: true,
@@ -254,16 +300,24 @@ function showHelp() {
     });
     screen.render();
 }
+/** Step to the next of the cabinet's life settings (FAQ 6.3). */
+function cycleLives() {
+    const next = (constants_1.LIVES_OPTIONS.indexOf(gameData.startingLives) + 1) % constants_1.LIVES_OPTIONS.length;
+    gameData.startingLives = constants_1.LIVES_OPTIONS[next];
+}
 /**
  * Start the game
  */
 function startGame() {
     gameData.state = "playing";
     gameData.score = 0;
-    gameData.lives = constants_1.STARTING_LIVES;
+    // FAQ 6.3: the cabinet was set to 3, 5, 7 or 256 frogs.
+    gameData.lives = gameData.startingLives;
+    gameData.extraLifeAwarded = false;
     gameData.level = 1;
     gameData.homesCompleted = 0;
     gameData.homes = [];
+    gameData.carryingLadyFrog = false;
     if (menuBox) {
         menuBox.destroy();
         menuBox = null;
@@ -278,7 +332,18 @@ function startGame() {
         clearInterval(gameLoop);
     gameLoop = setInterval(() => {
         if (gameData.state === "playing") {
+            pollHeldDirections();
             game?.update();
+        }
+        else if (gameData.state === "levelComplete") {
+            // Hold the finished board for a couple of seconds, then move on. The
+            // engine used to schedule this with a setTimeout of its own, which
+            // advanced the level whether or not the door was still showing it.
+            levelCompleteFrames++;
+            if (levelCompleteFrames >= LEVEL_COMPLETE_FRAMES) {
+                levelCompleteFrames = 0;
+                game?.advanceLevel();
+            }
         }
     }, constants_1.GAME_TICK_MS);
 }
@@ -342,25 +407,29 @@ function handleMenuInput(key) {
     switch (key) {
         case "up":
             gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-            showMenu();
+            renderMenu();
             break;
         case "down":
             gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
-            showMenu();
+            renderMenu();
             break;
         case "enter":
         case "space":
-            switch (gameData.menuSelection) {
-                case 0:
+            switch (constants_1.MENU_OPTIONS[gameData.menuSelection]) {
+                case "Start Game":
                     startGame();
                     break;
-                case 1:
+                case "Lives":
+                    cycleLives();
+                    renderMenu();
+                    break;
+                case "High Scores":
                     showHighscores();
                     break;
-                case 2:
+                case "Help":
                     showHelp();
                     break;
-                case 3:
+                case "Quit":
                     cleanup();
                     doorContext?.close();
                     break;
@@ -374,6 +443,24 @@ function handleMenuInput(key) {
     }
 }
 /**
+ * Hop for whichever directions are held down.
+ *
+ * Frogger is a hopper, not a continuous mover: one press is one hop. So
+ * unlike the free-roaming games this keeps a deliberate delay before a held
+ * key starts repeating - the same shape GrandMaster uses for its discrete
+ * grid steps - and repeats slowly after that. Holding a direction should
+ * walk the frog forward, not fire it across the road.
+ */
+function pollHeldDirections() {
+    if (!inputManager?.isKeyStateActive())
+        return;
+    for (const dir of ["up", "down", "left", "right"]) {
+        if (inputManager.consumeRepeat(dir, { initialDelay: 250, repeatRate: 140 })) {
+            game?.handleDirection(dir);
+        }
+    }
+}
+/**
  * Handle game input
  */
 function handleGameInput(key) {
@@ -382,6 +469,10 @@ function handleGameInput(key) {
         case "down":
         case "left":
         case "right":
+            // Held keys drive hopping when real key edges are available; acting on
+            // the character too would hop twice per press.
+            if (inputManager?.isKeyStateActive())
+                break;
             game?.handleDirection(key);
             break;
         case "p":
@@ -569,11 +660,16 @@ door.onStart(async (ctx) => {
         // Use defaults
     }
     initScreen();
+    screen.program.write('\x1b[2J');
+    screen.program.write('\x1b[H');
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     // Set up input management (enables mouse, keyboard routing)
     inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
         enableGameMode: true, // Game needs raw keyboard input
         enableGrabKeys: true, // Capture all keys for game controls
         enableMouse: true, // Enable mouse events
+        trackHeldKeys: true, // Move from held keys, not the auto-repeat stream
         debug: false,
         debugName: 'Frogger'
     });
@@ -587,7 +683,7 @@ door.onStart(async (ctx) => {
         }
         else if (gameData.state === 'menu') {
             gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-            showMenu();
+            renderMenu();
         }
     });
     gamepadManager.on('dpad:down', () => {
@@ -596,7 +692,7 @@ door.onStart(async (ctx) => {
         }
         else if (gameData.state === 'menu') {
             gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
-            showMenu();
+            renderMenu();
         }
     });
     gamepadManager.on('dpad:left', () => {

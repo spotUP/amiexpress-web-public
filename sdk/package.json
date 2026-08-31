@@ -77,6 +77,10 @@
       "require": "./dist/engines/ui/ansi-editor/index.js",
       "default": "./dist/engines/ui/ansi-editor/index.js"
     },
+    "./engines/ui/ansi-editor/core/file-ops": {
+      "types": "./dist/engines/ui/ansi-editor/core/file-ops.d.ts",
+      "default": "./dist/engines/ui/ansi-editor/core/file-ops.js"
+    },
     "./utils/wasm-loader": {
       "types": "./dist/utils/wasm-loader.d.ts",
       "default": "./dist/utils/wasm-loader.js"

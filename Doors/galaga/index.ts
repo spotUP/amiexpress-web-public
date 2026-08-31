@@ -145,9 +145,24 @@ function formatHUD(): string {
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}STAGE: ${gameData.stage}{/}  {red-fg}LIVES: ${livesStr}{/}  {white-fg}HIT: ${accuracy}%{/}`;
 }
 
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
+
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
   gameArea.setContent("");
 
   if (menuBox) menuBox.destroy();
@@ -304,6 +319,7 @@ function startGame(): void {
 
   gameLoop = setInterval(() => {
     if (gameData.state === "playing") {
+      pollHeldControls();
       game?.update();
     }
   }, GAME_TICK_MS);
@@ -352,14 +368,14 @@ function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
       break;
     case "down":
       gameData.menuSelection = Math.min(
         MENU_OPTIONS.length - 1,
         gameData.menuSelection + 1
       );
-      showMenu();
+      renderMenu();
       break;
     case "enter":
     case "fire":
@@ -387,7 +403,50 @@ function handleMenuInput(key: InputKey): void {
   }
 }
 
+/**
+ * Which controls the game currently believes are down, so that edges are
+ * only sent when they actually change.
+ */
+const keyStateMirror: Record<string, boolean> = {
+  left: false,
+  right: false,
+  fire: false,
+};
+
+/**
+ * Mirror the real held keys into the game's own key-down/key-up model.
+ *
+ * The game already thinks in presses and releases, but the character stream
+ * has no releases - so this door used to send a key-down and fake the
+ * matching key-up on a 100ms timer, and never released "fire" at all. The
+ * ship therefore moved in 100ms twitches however long the key was held.
+ * With real edges the game gets a true press and a true release, and its
+ * own movement code runs continuously the way it was written to.
+ */
+function pollHeldControls(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+
+  for (const control of ["left", "right", "fire"]) {
+    const held = inputManager.isHeld(control === "fire" ? "space" : control);
+    if (held === keyStateMirror[control]) continue;
+
+    keyStateMirror[control] = held;
+    if (held) {
+      game?.handleKeyDown(control as any);
+    } else {
+      game?.handleKeyUp(control as any);
+    }
+  }
+}
+
 function handleGameInput(key: InputKey): void {
+  // Held keys drive the ship when real key edges are available; acting on
+  // the character too would double up on every press.
+  if (inputManager?.isKeyStateActive() &&
+      (key === "left" || key === "right" || key === "fire")) {
+    return;
+  }
+
   switch (key) {
     case "left":
       game?.handleKeyDown("left");
@@ -589,6 +648,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'Galaga'
   });
@@ -628,14 +688,14 @@ door.onStart(async (ctx: any) => {
   gamepadManager.on('dpad:up', () => {
     if (gameData.state === 'menu') {
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-      showMenu();
+      renderMenu();
     }
   });
 
   gamepadManager.on('dpad:down', () => {
     if (gameData.state === 'menu') {
       gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
-      showMenu();
+      renderMenu();
     }
   });
 

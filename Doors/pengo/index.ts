@@ -122,9 +122,24 @@ function formatHUD(): string {
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  {red-fg}LIVES: ${livesStr}{/}`;
 }
 
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
+
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
   gameArea.setContent("");
 
   if (menuBox) menuBox.destroy();
@@ -308,7 +323,10 @@ function startGame(): void {
 
   if (gameLoop) clearInterval(gameLoop);
   gameLoop = setInterval(() => {
-    if (gameData.state === "playing") game?.update();
+    if (gameData.state === "playing") {
+      pollHeldDirections();
+      game?.update();
+    }
   }, GAME_TICK_MS);
 }
 
@@ -367,13 +385,13 @@ function normalizeKey(key: string): InputKey {
 function handleMenuInput(key: InputKey): void {
   if (key === "up") {
     gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-    showMenu();
+    renderMenu();
   } else if (key === "down") {
     gameData.menuSelection = Math.min(
       MENU_OPTIONS.length - 1,
       gameData.menuSelection + 1
     );
-    showMenu();
+    renderMenu();
   } else if (key === "enter" || key === "push") {
     if (gameData.menuSelection === 0) startGame();
     else if (gameData.menuSelection === 1) showHighscores();
@@ -388,8 +406,28 @@ function handleMenuInput(key: InputKey): void {
   }
 }
 
+/**
+ * Step the player for whichever directions are held down.
+ *
+ * Called once per game tick. This replaces reacting to the character
+ * stream, which arrives as the client's auto-repeat - one character, a
+ * ~400ms gap, then a burst - and made movement stutter. Holding a key now
+ * moves at a steady rate from the moment it goes down.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["up", "down", "left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+      game?.handleDirection(dir);
+    }
+  }
+}
+
 function handleGameInput(key: InputKey): void {
   if (key === "up" || key === "down" || key === "left" || key === "right") {
+    // Held keys drive movement when real key edges are available; acting on
+    // the character too would move twice per press.
+    if (inputManager?.isKeyStateActive()) return;
     game?.handleDirection(key as Direction);
   } else if (key === "push") {
     game?.handlePush();
@@ -585,6 +623,7 @@ door.onStart(async (ctx: any) => {
     enableGameMode: true,   // Game needs raw keyboard input
     enableGrabKeys: true,   // Capture all keys for game controls
     enableMouse: true,      // Enable mouse events
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
     debug: false,
     debugName: 'Pengo'
   });

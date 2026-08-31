@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { JoustGame } from "./game/joust-game";
 import { rpcHandlers } from "./server";
 import { JoustData, InputKey, Direction } from "./game/types";
@@ -86,6 +87,7 @@ let hudBox: ReturnType<typeof blessed.box>;
 let footerBox: ReturnType<typeof blessed.box>;
 let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
+let inputManager: DoorInputManager | null = null;
 let game: JoustGame | null = null;
 let doorContext: any; // Will be set on start
 
@@ -139,9 +141,24 @@ function formatHUD(): string {
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}WAVE: ${gameData.wave}{/}  {red-fg}LIVES: ${livesStr}{/}`;
 }
 
+/**
+ * Enter the main menu: reset to the first option, then draw it.
+ *
+ * Use this when ARRIVING at the menu. To redraw the menu after the
+ * selection moves, call renderMenu() - calling showMenu() there would
+ * reset menuSelection back to 0 on every keypress, which is exactly the
+ * bug that made arrow up/down appear to do nothing.
+ */
 function showMenu(): void {
   gameData.state = "menu";
   gameData.menuSelection = 0;
+  renderMenu();
+}
+
+/**
+ * Draw the main menu for the CURRENT selection, without changing it.
+ */
+function renderMenu(): void {
   gameArea.setContent("");
 
   if (menuBox) menuBox.destroy();
@@ -288,7 +305,10 @@ function startGame(): void {
 
   if (gameLoop) clearInterval(gameLoop);
   gameLoop = setInterval(() => {
-    if (gameData.state === "playing") game?.update();
+    if (gameData.state === "playing") {
+      pollHeldDirections();
+      game?.update();
+    }
   }, GAME_TICK_MS);
 }
 
@@ -397,13 +417,13 @@ function normalizeKey(key: string): InputKey {
 function handleMenuInput(key: InputKey): void {
   if (key === "up") {
     gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
-    showMenu();
+    renderMenu();
   } else if (key === "down") {
     gameData.menuSelection = Math.min(
       MENU_OPTIONS.length - 1,
       gameData.menuSelection + 1
     );
-    showMenu();
+    renderMenu();
   } else if (key === "enter" || key === "flap") {
     if (gameData.menuSelection === 0) startGame();
     else if (gameData.menuSelection === 1) showHighscores();
@@ -418,11 +438,31 @@ function handleMenuInput(key: InputKey): void {
   }
 }
 
+/**
+ * Move the rider for whichever directions are held down.
+ *
+ * Called once per game tick. Replaces reacting to the character stream,
+ * which is the client's auto-repeat - one character, a ~400ms gap, then a
+ * burst - and made movement stutter. Flap stays on the character path: it
+ * is a tap, not something you hold.
+ */
+function pollHeldDirections(): void {
+  if (!inputManager?.isKeyStateActive()) return;
+  for (const dir of ["left", "right"] as Direction[]) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+      game?.handleDirection(dir);
+    }
+  }
+}
+
 function handleGameInput(key: InputKey): void {
+  // Held keys drive movement when real key edges are available; acting on
+  // the character too would move twice per press.
+  const heldDrivesMovement = !!inputManager?.isKeyStateActive();
   if (key === "left") {
-    game?.handleDirection("left");
+    if (!heldDrivesMovement) game?.handleDirection("left");
   } else if (key === "right") {
-    game?.handleDirection("right");
+    if (!heldDrivesMovement) game?.handleDirection("right");
   } else if (key === "flap" || key === "up") {
     game?.handleFlap();
   } else if (key === "p") {
@@ -551,6 +591,10 @@ let keepAlive: ReturnType<typeof setInterval> | null = null;
 // doorContext already declared above
 
 function cleanup(): void {
+  if (inputManager) {
+    inputManager.disable();
+    inputManager = null;
+  }
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
@@ -582,6 +626,18 @@ door.onStart(async (ctx: any) => {
   screen.program.write('\x1b[H');
   screen.clearRegion(0, screen.width, 0, screen.height);
   screen.alloc();
+
+  // Real key-down/key-up edges, so movement can be driven by which
+  // keys are actually held instead of the client's auto-repeat.
+  inputManager = new DoorInputManager(ctx, screen, {
+    enableGameMode: true,   // Game needs raw keyboard input
+    enableGrabKeys: true,   // Capture all keys for game controls
+    enableMouse: false,     // No mouse interaction in this game
+    trackHeldKeys: true,    // Move from held keys, not the auto-repeat stream
+    debug: false,
+    debugName: 'Joust'
+  });
+  inputManager.enable();
   showMenu();
 });
 

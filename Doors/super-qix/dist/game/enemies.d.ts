@@ -2,7 +2,7 @@
  * Super Qix - Enemy System
  * Handles Qix, Sparx, and Fuse behavior
  */
-import { SuperQixData, Point, LevelConfig } from './types';
+import { SuperQixData, Qix, Sparx, Point, LevelConfig } from './types';
 /**
  * Enemy system managing Qix, Sparx, and Fuse
  */
@@ -20,23 +20,134 @@ export declare class EnemySystem {
     /**
      * Create a new Sparx
      */
+    /**
+     * Create a Skull.
+     *
+     * FAQ 2.2: "Two of these start directly opposite you at the beginning of
+     * each level, and move in opposite directions around the edge of the
+     * screen." Opposite means half a lap round the border path from the
+     * marker, and the pair then walks away from each other.
+     */
     private createSparx;
     /**
-     * Main update loop
+     * The point on the border path directly opposite the marker - half a lap
+     * away, so a Skull released there is as far from the player as the path
+     * allows.
      */
-    update(): void;
+    private oppositeMarkerIndex;
+    /**
+     * Release more Skulls onto the field.
+     *
+     * FAQ 1: when the Time Meter fills, "two more Skulls are released onto the
+     * field and the counter resets"; FAQ 2.2 says they come from the
+     * centre-top. They join the ones already patrolling.
+     */
+    releaseSkulls(count: number, speedMult?: number): void;
+    /**
+     * Cull the Skulls back to the two a level starts with.
+     *
+     * FAQ 2.2: "If you should die, all but two Skulls will disappear."
+     */
+    cullSkullsAfterDeath(): void;
+    /**
+     * Main update loop.
+     *
+     * `speedScale` is what a Hurry multiplies everything by: FAQ 2.3.1 says
+     * it "Speeds up EVERYTHING in the game", not just the marker.
+     */
+    update(speedScale?: number): void;
     /**
      * Get current level config
      */
     private getLevelConfig;
     /**
+     * Nearest unclaimed cell to a point, searched outwards in rings.
+     *
+     * Used to free a Qix that ended up inside claimed ground - which happens
+     * when a completed stix converts the cells it is standing on.
+     */
+    private findNearestOpenCell;
+    /**
+     * How strongly the Gremlin steers towards the marker, 0 (pure wander) to
+     * 1 (straight at them).
+     *
+     * There is always a slight lean, so it drifts into whichever corner the
+     * player is working in. Detaching to draw raises it, and on later levels
+     * it rises further - the "zoom towards you every time you detach" the FAQ
+     * describes for the upper levels.
+     */
+    private markerPull;
+    /**
+     * Split a Gremlin in two.
+     *
+     * FAQ 2.2: "In later levels, the Gremlin will actually split into multiple
+     * independently-moving copies of himself", and FAQ 2.5.3 notes there is
+     * "usually only one Gremlin in Super Qix (though he sometimes divides into
+     * two or more during a level)". The copy starts where the original is,
+     * heading the other way.
+     */
+    splitQix(qix: Qix): Qix | null;
+    /**
+     * Should the Gremlin divide this tick?
+     *
+     * Only on later levels, and only rarely, so a level normally has the one
+     * Gremlin the FAQ describes.
+     */
+    maybeSplitQix(): void;
+    /**
+     * Is this position off limits to a Qix?
+     *
+     * The Qix roams the unclaimed interior only. The playable range is the
+     * non-border cells, x in [1, FIELD_WIDTH-2] and y in [1, FIELD_HEIGHT-2] -
+     * the SAME range the movement code keeps it inside, so the bounce test and
+     * the bounds can never disagree.
+     *
+     * A stix is deliberately not blocking: running over the player's line is
+     * how the Qix kills, and checkQixCollision handles that.
+     */
+    private isBlockedForQix;
+    /**
      * Update a single Qix
+     *
+     * Previously the Qix glued itself to the edge of the playfield and stopped
+     * moving: the bounce test fired at FIELD_HEIGHT-1 (the border row) but the
+     * position was then clamped to FIELD_HEIGHT-2, so in the gap between the
+     * two the Qix was pushed back every tick without its velocity ever being
+     * reversed. vy stayed at full speed into the wall forever, the random
+     * per-bounce jitter shook the other axis down to nothing, and it parked on
+     * the bottom row - measured at 98% of ticks against a wall, moving on only
+     * 2% of them, visiting 13 of 576 cells. That is also why it killed the
+     * player on nearly every draw: it sat exactly where the marker starts.
+     *
+     * Movement is now axis-separated reflection against isBlockedForQix, so a
+     * wall reverses the component that hit it and the Qix keeps its speed.
      */
     private updateQix;
+    /**
+     * Re-anchor every Sparx's pathIndex after d.borderPath has been rebuilt.
+     *
+     * rebuildPatrolPath() rebuilds the array by re-scanning the field, so a
+     * claim can change both its length and the order of its points - the old
+     * pathIndex no longer names the same physical cell. Left unfixed, the next
+     * updateSparx() snaps sparx.x/y to whatever cell the stale index now
+     * lands on, which can be right on top of the marker that just finished
+     * drawing and trips checkSparxCollision. Re-anchoring to the nearest
+     * point keeps each Sparx where it visually was.
+     */
+    reanchorBorderPositions(): void;
     /**
      * Update a single Sparx
      */
     private updateSparx;
+    /**
+     * Turn a Skull round, if it is allowed to.
+     *
+     * FAQ 2.2: "Skulls will never instantly reverse direction on a line (i.e.
+     * after you dodge around one by drawing a small box, they can't
+     * immediately turn around and chase you)". A reversal is therefore
+     * refused while one is still fresh.
+     */
+    reverseSkull(sparx: Sparx, now?: number): boolean;
     /**
      * Update fuse (burns along stix when player stops)
      */
@@ -45,6 +156,14 @@ export declare class EnemySystem {
      * Check Qix collision with marker or stix
      */
     checkQixCollision(marker: Point, stix: Point[]): boolean;
+    /**
+     * The Skull touching the marker, if any.
+     *
+     * The caller needs the Skull itself and not just a yes/no, because a
+     * Shield "will also stun the Skull in question for one second"
+     * (FAQ 2.3.1) - you cannot stun an answer of `true`.
+     */
+    sparxTouching(marker: Point): Sparx | null;
     /**
      * Check Sparx collision with marker
      */

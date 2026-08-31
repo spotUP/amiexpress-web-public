@@ -12,6 +12,13 @@ interface HighScore {
     date: string;
 }
 /**
+ * Get the highscores file path
+ *
+ * Exported so a regression test can assert it resolves inside the door's
+ * own directory rather than under the backend's cwd.
+ */
+export declare function getHighscorePath(): string;
+/**
  * RPC Handler: Get highscores
  */
 export declare function getHighscores(): {
