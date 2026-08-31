@@ -57,6 +57,10 @@ export async function traversalIsRefusedAtEveryArgument(): Promise<void> {
       `not refused: door=${door} file=${file}`
     );
   }
+  // The '.'-listing shortcut must not bypass containment when the DOOR
+  // argument is the traversal - the review's reproduction, pinned.
+  assert.throws(() => resolveAssetPath('..', 'sprites', '.'), /outside/);
+  assert.throws(() => resolveAssetPath('../web', 'sprites', '.'), /outside/);
 }
 
 export async function theGuardIsResolvedPathsNotStrings(): Promise<void> {
