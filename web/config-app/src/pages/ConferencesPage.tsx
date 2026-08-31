@@ -142,10 +142,21 @@ export function ConferencesPage() {
   const handleDelete = async (conf: ConferenceConfig) => {
     const confirmed = await confirm({
       title: 'Delete Conference',
-      message: `Are you sure you want to delete conference ${conf.conference_id}?`,
+      message:
+        `Remove conference ${conf.conference_id}${conf.name ? ` (${conf.name})` : ''}?\n\n` +
+        `This edits ConfConfig.info: NAME.${conf.conference_id} and ` +
+        `LOCATION.${conf.conference_id} go, and NCONFS drops by one. ` +
+        `Conf${conf.conference_id}.info is deleted.\n\n` +
+        `Its DIRECTORY is NOT touched - every message posted there and every ` +
+        `file uploaded to it stays on disk, and you remove it yourself when ` +
+        `you are sure.\n\n` +
+        `Only the last conference can go: a user's access is stored by ` +
+        `position, so renumbering the others would silently change who can ` +
+        `reach what.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
-      type: 'danger'
+      type: 'danger',
+      requireTypedConfirmation: String(conf.conference_id),
     });
     if (confirmed) {
       deleteMutation.mutate(conf.conference_id);
