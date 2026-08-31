@@ -5021,9 +5021,22 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
     unsigned long top_index = 0;
     int rows = g->visible_rows;
     int need_redraw = 1;
+    int name_width;
 
     if (rows < 1) {
         rows = 1;
+    }
+
+    /* The name column takes whatever the panel has left after the command
+     * column and the '+' marker. Computed from the geometry, not hardcoded:
+     * a fixed 40 overflowed an 80-column board and BUBBLEBOBBLE wrapped out
+     * of the frame on the live one. */
+    name_width = g->cols - 4 - 12 - 1 - 2;
+    if (name_width < 8) {
+        name_width = 8;
+    }
+    if (name_width > 60) {
+        name_width = 60;
     }
 
     for (;;) {
@@ -5032,41 +5045,63 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
 
         if (need_redraw) {
             char title[96];
+            char panel[64];
 
             ansi_begin(&buf, frame, framecap);
             ansi_clear(&buf);
             ansi_cursor(&buf, 0);
 
-            strcpy(title, "Doors on this board   ");
+            /* The same chrome as every other screen here: a blue bar at the
+             * top, one panel between it and the footer, a blue bar at the
+             * bottom. ui_compute_geometry owns those numbers - the first
+             * version of this screen invented its own and drew rows past
+             * the panel's bottom border. */
+            strcpy(title, "DoorRepo v");
+            strcat(title, DOOR_VERSION);
+            strcat(title, "   ");
             ui_append_ulong(title, (unsigned long) g_board_count);
-            strcat(title, " installed");
-            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+            strcat(title, " doors on this board");
+            ui_draw_bar(&buf, 1, g->cols, title);
+
+            strcpy(panel, "BOARD (");
+            ui_append_ulong(panel, (unsigned long) g_board_count);
+            strcat(panel, ")");
+            ansi_box(&buf, g->pane_top, g->list_left, g->pane_height,
+                     g->cols, ANSI_CYAN, panel);
 
             if (g_board_count == 0) {
-                ansi_text(&buf, 3, 3, "The BBS reported no installed doors.",
-                          g->cols - 6);
+                ansi_color(&buf, ANSI_WHITE, ANSI_BLACK, 0);
+                ansi_text(&buf, g->pane_top + 1, g->list_left + 2,
+                          "The BBS reported no installed doors.", g->cols - 4);
             } else {
                 for (i = 0; i < rows; i++) {
                     unsigned long r = top_index + (unsigned long) i;
-                    char line[BOARD_CMD_MAX + BOARD_NAME_MAX + 24];
+                    char line[160];
                     int is_sel;
 
                     if (r >= (unsigned long) g_board_count) {
                         break;
                     }
                     is_sel = (r == selected);
-                    sprintf(line, "%-12.12s %-40.40s %s",
-                            g_board[r].cmd, g_board[r].name,
-                            g_board[r].has_archive ? "+" : " ");
-                    ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
-                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+
+                    sprintf(line, "%-12.12s %-*.*s %c",
+                            g_board[r].cmd,
+                            name_width, name_width, g_board[r].name,
+                            g_board[r].has_archive ? '+' : ' ');
+
+                    if (is_sel) {
+                        ansi_color(&buf, ANSI_BLACK, ANSI_WHITE, 0);
+                    } else {
+                        ansi_color(&buf, ANSI_WHITE, ANSI_BLACK, 0);
+                    }
+                    ansi_text(&buf, g->pane_top + 1 + i, g->list_left + 2,
+                              line, g->cols - 4);
                 }
                 ansi_reset(&buf);
             }
 
-            ansi_color(&buf, 3, 0, 0);
-            ansi_text(&buf, g->rows - 1, 3, "F=Files  Q=Quit", g->cols - 6);
-            ansi_reset(&buf);
+            ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols,
+                        "F=Files  Q=Quit");
             ansi_flush(&buf);
             need_redraw = 0;
         }
