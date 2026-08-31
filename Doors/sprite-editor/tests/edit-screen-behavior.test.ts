@@ -227,6 +227,92 @@ export async function shiftCommaAndShiftPeriodDoNotTypeIntoTheCell(): Promise<vo
   }
 }
 
+/**
+ * Studio 2c fix round 1: the controller signed off dropping the old hand
+ * string's orphaned 'S' from the exclusion set (no binding has ever
+ * produced it - there is no S-s binding anywhere in this door), which
+ * widens what cell mode accepts: a bare 'S' is now an ordinary glyph like
+ * any other letter, where the old hand-written string silently swallowed
+ * it for no discoverable reason. Pins BOTH halves so a future change
+ * can't silently regress the sign-off or silently reintroduce a collision:
+ * (1) the derived set must not contain 'S', and (2) typing it must
+ * actually reach setCell.
+ */
+export async function typingCapitalSPaintsAGlyphIntentionallyNotExcluded(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture',
+    cellW: 2,
+    cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }, null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    // No binding in the table may derive the glyph 'S' - if one ever does
+    // (e.g. a future S-s binding), this assertion forces whoever adds it to
+    // decide about the collision deliberately, rather than have the
+    // exclusion set silently swallow 'S' again.
+    assert.ok(!(edit as any).bindingSet.excludedGlyphKeys.has('S'),
+      "no binding may derive the glyph 'S' - the controller signed off on this being unexcluded");
+
+    const canvasBox = screen.children[0];
+    const before = canvasBox.getContent();
+
+    pressChar(screen, 'S'); // no S-s binding exists, so only the keypress fires
+
+    assert.notStrictEqual(canvasBox.getContent(), before,
+      "typing 'S' in cell mode must reach setCell as an ordinary glyph, not be silently swallowed");
+    assert.ok(canvasBox.getContent().includes('S'),
+      "the painted cell must contain the typed glyph 'S'");
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Studio 2c fix round 1 (minor, closed while here): space is excluded via
+ * its own table entry (bindings.ts's 'space' -> ' ' alias), precisely so
+ * the keypress fallback that fires for the SAME physical keystroke as the
+ * dedicated space handler is a no-op. Compares the double-fire against a
+ * solo fire of just the dedicated handler: they must produce identical
+ * canvas content, proving the fallback never runs setCell(' ') on top of
+ * the glyph the dedicated handler just painted.
+ */
+export async function spaceExclusionMakesTheKeypressFallbackANoOp(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture',
+    cellW: 2,
+    cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }, null]]] } },
+  };
+
+  const soloScreen = makeFakeScreen();
+  const solo = new EditScreen(soloScreen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  let soloContent: string;
+  try {
+    pressKey(soloScreen, 'space'); // only the dedicated paint handler fires
+    soloContent = soloScreen.children[0].getContent();
+  } finally {
+    solo.destroy();
+  }
+
+  const doubleScreen = makeFakeScreen();
+  const double = new EditScreen(doubleScreen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    // Real blessed fires BOTH the 'space' key binding (paints the current
+    // glyph) AND the 'keypress' event (ch=' ') for the same physical
+    // keystroke - the same double-fire every other bound key gets.
+    pressKey(doubleScreen, 'space');
+    for (const kp of doubleScreen._keypressHandlers) kp(' ');
+
+    assert.strictEqual(doubleScreen.children[0].getContent(), soloContent,
+      "the keypress fallback for space must be a no-op: space's key is in the derived exclusion " +
+      'set precisely so it cannot overwrite the just-painted glyph with a blank cell');
+  } finally {
+    double.destroy();
+  }
+}
+
 export async function shiftXDoesNotTypeIntoTheCell(): Promise<void> {
   // Exactly ONE animation: S-x's own op (deleteAnimation) refuses ("cannot
   // delete the last animation") and leaves the doc untouched, isolating
