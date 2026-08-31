@@ -13,7 +13,7 @@ import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
 import { rpcHandlers } from "./server";
 import { normalizeKey, directionForKey, canBindKey, keyLabel, helpControlLines, } from "./game/controls";
-import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, SKILL_LEVELS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, } from "./game/constants";
+import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, SKILL_LEVELS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, QIX_STEP_SCALE, QIX_NUDGE_CHANCE, QIX_BASE_PULL, QIX_BASE_SPEED, getLevelConfig, } from "./game/constants";
 // Export RPC handlers for hybrid mode
 export { rpcHandlers };
 /**
@@ -874,6 +874,12 @@ function cleanup() {
 // Door lifecycle hooks
 door.onStart(async (ctx) => {
     doorContext = ctx;
+    // TEMPORARY (2026-08-31): prints the pacing constants the RUNNING door
+    // actually holds, so "I see no difference" can be settled by reading the
+    // log instead of trusting a rebuild. Remove with the input tracing below.
+    console.log(`[SuperQix BOOT] stepScale=${QIX_STEP_SCALE} nudgeChance=${QIX_NUDGE_CHANCE} ` +
+        `basePull=${QIX_BASE_PULL} L1=${(QIX_BASE_SPEED * getLevelConfig(1).qixSpeed * QIX_STEP_SCALE * 1000 / GAME_TICK_MS).toFixed(1)}c/s ` +
+        `L16=${(QIX_BASE_SPEED * getLevelConfig(16).qixSpeed * QIX_STEP_SCALE * 1000 / GAME_TICK_MS).toFixed(1)}c/s`);
     gameData = createInitialGameData();
     // Frogger's pattern: the board already knows who is playing, so nobody
     // should have to type their own name in.

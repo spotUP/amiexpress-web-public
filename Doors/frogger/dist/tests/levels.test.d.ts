@@ -52,9 +52,24 @@ export declare function laneFiveIsACrocodileOnLevelsFiveAndTen(): Promise<void>;
  */
 export declare function snakesArriveAtLevelsThreeAndSeven(): Promise<void>;
 /**
- * FAQ-7c: "the cars travel on the roadway from left to right".
+ * A recorded DEPARTURE from the FAQ.
+ *
+ * FAQ 7 says "the cars travel on the roadway from left to right", and every
+ * road lane was built that way. The arcade does not do that: its road lanes
+ * ALTERNATE, which is the entire reason the same FAQ can go on to advise
+ * "try to find 'lanes' in between the vehicles" and warn about being
+ * trapped. Traffic that all runs one way makes gaps line up into a single
+ * moving column instead of the shifting grid the game is built around.
+ *
+ * Reported 2026-08-31: "all car lanes drive in the same direction thats not
+ * how it should be, the original frogger has different directions."
+ *
+ * The rule is the FAQ's OWN water rule applied to the road, which is what
+ * the arcade does: odd lanes right to left, even lanes left to right. Lane 1
+ * is the bottom row nearest the start bank, and it runs right to left, as
+ * the arcade's first row of cars does.
  */
-export declare function everyRoadLaneRunsLeftToRight(): Promise<void>;
+export declare function theRoadLanesAlternateLikeTheArcade(): Promise<void>;
 /**
  * FAQ-7d: "Lanes #1, #3, and #5 go from right to left. Lanes #2 and #4 go
  * from left to right." Every water lane used to run the opposite way.
