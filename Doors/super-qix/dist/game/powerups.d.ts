@@ -42,6 +42,22 @@ export declare class PowerUpSystem {
      * Skulls patrol.
      */
     updateMovement(): void;
+    /**
+     * Turn a flying letter away from whatever it just met.
+     *
+     * Each axis is tried on its own, so a letter meeting a wall head-on
+     * reverses and one meeting a corner reverses both - the same reflection
+     * the Gremlin uses.
+     */
+    private bounce;
+    /**
+     * Take every bonus standing on ground the player has just claimed.
+     *
+     * FAQ 5.2's whole strategy is boxing letters in rather than chasing them
+     * down: "you can sometimes zip out into the field and quickly catch them
+     * before they get too far" is the alternative, not the only way.
+     */
+    collectEnclosed(cells: Point[]): void;
     /** Anchor a bonus to the line network at the closest point on it. */
     private joinEdge;
     /** One step along the lines. */

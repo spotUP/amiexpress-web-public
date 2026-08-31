@@ -38,7 +38,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, lastMultiplierAt: 0, lastMultiplier: 1,
+    stopTimer: 0, timeMeter: 0, invulnerableUntil: 0, lastMultiplierAt: 0, lastMultiplier: 1,
     warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
@@ -162,6 +162,7 @@ export async function aTinyClaimCanScoreNothingAndStillOfferABonus(): Promise<vo
     checkCollection: () => { /* not under test */ },
     updateEffects: () => { /* not under test */ },
     updateMovement: () => { /* not under test */ },
+    collectEnclosed: () => { /* not under test */ },
   } as unknown as PowerUpSystem;
   void original;
 
@@ -344,8 +345,16 @@ export async function aLetterDriftsTowardsTheFarWall(): Promise<void> {
   assert.ok(letter.x < FIELD_WIDTH - 1, 'and not leave the field');
 }
 
-/** Once it reaches the wall it travels around the edge instead of stopping. */
-export async function aLetterAtTheWallTravelsAroundTheEdge(): Promise<void> {
+/**
+ * A letter FLIES: it bounces off the edge of the open field and carries on
+ * across it, rather than settling onto the lines.
+ *
+ * Reported live 2026-08-31: "freed letters should fly freely over the blue
+ * background and i should be able to catch them bur framing them or running
+ * in to them". Walking the border put a letter out of reach of a claim and
+ * left it circling the frame.
+ */
+export async function aLetterBouncesOffTheEdgeAndKeepsFlying(): Promise<void> {
   const { data } = quietLevel();
   const powerUps = new PowerUpSystem(data);
 
@@ -356,17 +365,20 @@ export async function aLetterAtTheWallTravelsAroundTheEdge(): Promise<void> {
   data.powerUps.push(letter);
   powerUps.launch(letter);
 
-  for (let i = 0; i < 200; i++) powerUps.updateMovement();
+  const seen = new Set<string>();
+  for (let i = 0; i < 400; i++) {
+    powerUps.updateMovement();
+    seen.add(`${Math.round(letter.x)},${Math.round(letter.y)}`);
 
-  assert.strictEqual(letter.drift, 'edge', 'it should be walking the edge by now');
+    const cell = data.field[Math.round(letter.y)]?.[Math.round(letter.x)];
+    assert.ok(
+      cell === 'unclaimed' || cell === 'stix',
+      `a letter should stay in the open field, found it on ${cell}`
+    );
+  }
 
-  const before = { x: letter.x, y: letter.y };
-  for (let i = 0; i < 20; i++) powerUps.updateMovement();
-
-  assert.ok(
-    letter.x !== before.x || letter.y !== before.y,
-    'and it should still be moving'
-  );
+  assert.notStrictEqual(letter.drift, 'edge', 'it should still be flying');
+  assert.ok(seen.size > 20, `it should be crossing the field, saw ${seen.size} cells`);
 }
 
 /**
@@ -391,4 +403,93 @@ export async function aPowerUpFollowsTheNearestLines(): Promise<void> {
     cell === 'border' || cell === 'claimed',
     `a power-up should end up on a line, found "${cell}"`
   );
+}
+
+/**
+ * Boxing a letter in catches it.
+ *
+ * Reported live: "i should be able to catch them bur framing them or running
+ * in to them". Running into one already worked; enclosing one did nothing,
+ * which is the half FAQ 5.2's spelling-bee strategy is actually built on.
+ */
+export async function claimingTheGroundUnderALetterCatchesIt(): Promise<void> {
+  const { data } = quietLevel();
+  const powerUps = new PowerUpSystem(data);
+
+  data.levelWord = 'CASTLE';
+  const letter: PowerUp = {
+    id: 1, type: 'letter', letter: 'C', x: 12, y: 9,
+    collected: false, spawnTime: Date.now(),
+  };
+  data.powerUps.push(letter);
+
+  powerUps.collectEnclosed([{ x: 12, y: 9 }, { x: 13, y: 9 }]);
+
+  assert.ok(letter.collected, 'the letter should have been taken');
+  assert.deepStrictEqual(data.collectedLetters, ['C'], 'and banked');
+}
+
+/** A claim somewhere else leaves it alone. */
+export async function aClaimElsewhereDoesNotCatchALetter(): Promise<void> {
+  const { data } = quietLevel();
+  const powerUps = new PowerUpSystem(data);
+
+  const letter: PowerUp = {
+    id: 1, type: 'letter', letter: 'C', x: 12, y: 9,
+    collected: false, spawnTime: Date.now(),
+  };
+  data.powerUps.push(letter);
+
+  powerUps.collectEnclosed([{ x: 30, y: 4 }, { x: 31, y: 4 }]);
+
+  assert.ok(!letter.collected, 'a claim across the board should not reach it');
+}
+
+/** Running into one still works. */
+export async function runningIntoALetterStillCatchesIt(): Promise<void> {
+  const { data } = quietLevel();
+  const powerUps = new PowerUpSystem(data);
+
+  data.levelWord = 'CASTLE';
+  const letter: PowerUp = {
+    id: 1, type: 'letter', letter: 'A', x: data.marker.x, y: data.marker.y,
+    collected: false, spawnTime: Date.now(),
+  };
+  data.powerUps.push(letter);
+
+  powerUps.checkCollection(data.marker);
+
+  assert.ok(letter.collected);
+  assert.deepStrictEqual(data.collectedLetters, ['A']);
+}
+
+/**
+ * Drawing round a letter, in the game rather than in isolation, catches it.
+ *
+ * The other tests call the collector directly; this one plays the move, so
+ * the engine's own call site is covered too.
+ */
+export async function drawingRoundALetterInPlayCatchesIt(): Promise<void> {
+  const { engine, data } = quietLevel();
+
+  data.levelWord = 'CASTLE';
+  data.qixList = [{
+    id: 1, x: 5, y: 5, vx: 0, vy: 0, speed: 0,
+    segments: [], frozen: true, frozenTimer: 1e6,
+  }];
+
+  // A letter sitting on the ground the claim is about to take.
+  const letter: PowerUp = {
+    id: 1, type: 'letter', letter: 'C',
+    x: data.marker.x, y: data.marker.y - 1,
+    collected: false, spawnTime: Date.now(),
+  };
+  data.powerUps.push(letter);
+
+  step(engine, 'up');
+  step(engine, 'right');
+  step(engine, 'down');
+
+  assert.ok(letter.collected, 'the claim should have taken the letter');
+  assert.deepStrictEqual(data.collectedLetters, ['C']);
 }

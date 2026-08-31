@@ -172,6 +172,13 @@ export interface SuperQixData {
         y: number;
         openedAt: number;
     } | null;
+    /**
+     * Until when the marker cannot lose another life.
+     *
+     * Set on death: the enemy that killed you is still standing on you the
+     * next frame, and without a moment's grace every life goes at once.
+     */
+    invulnerableUntil: number;
     /** When the last rejoin multiplier was scored, for chaining (FAQ 2.4.1). */
     lastMultiplierAt: number;
     /** What that multiplier was: 1, then 20, then 30 while the chain holds. */

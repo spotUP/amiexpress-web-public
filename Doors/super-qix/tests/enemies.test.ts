@@ -460,3 +460,66 @@ export async function skullsPatrolLinesTheMarkerCanNoLongerUse(): Promise<void> 
     'a Skull should step onto a buried line from beside it, not jump to it'
   );
 }
+
+/**
+ * One death costs one life, not all of them.
+ *
+ * Reported live 2026-08-31: "i seem to have only one life in qix, i died my
+ * first live on a skull and got game over". The enemy that kills you has not
+ * moved by the next frame, so it killed again, and again: measured at three
+ * lives gone in three frames, about a tenth of a second.
+ */
+export async function oneDeathCostsOneLife(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+
+  // A Skull standing exactly on the marker, frozen so it cannot wander off.
+  const index = data.borderPath.findIndex(
+    p => p.x === data.marker.x && p.y === data.marker.y
+  );
+  data.sparxList = [{
+    id: 1, x: data.marker.x, y: data.marker.y, pathIndex: index, direction: 1,
+    speed: 0, lastReversedAt: 0, frozen: true, frozenTimer: 1e6,
+  }];
+
+  const lives = data.lives;
+  for (let frame = 0; frame < 10; frame++) engine.update();
+
+  assert.strictEqual(
+    data.lives, lives - 1,
+    `ten frames on one Skull cost ${lives - data.lives} lives`
+  );
+  assert.strictEqual(data.state, 'playing', 'and the game is still going');
+}
+
+/** The grace runs out, so the same Skull can kill again later. */
+export async function theGraceAfterADeathRunsOut(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+
+  const index = data.borderPath.findIndex(
+    p => p.x === data.marker.x && p.y === data.marker.y
+  );
+  data.sparxList = [{
+    id: 1, x: data.marker.x, y: data.marker.y, pathIndex: index, direction: 1,
+    speed: 0, lastReversedAt: 0, frozen: true, frozenTimer: 1e6,
+  }];
+
+  engine.update();
+  const afterFirst = data.lives;
+
+  // Wind the clock past the grace period.
+  data.invulnerableUntil = Date.now() - 1;
+  engine.update();
+
+  assert.strictEqual(
+    data.lives, afterFirst - 1,
+    'once the grace is over the Skull is deadly again'
+  );
+}
