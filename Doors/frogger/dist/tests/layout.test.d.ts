@@ -32,4 +32,15 @@ export declare function theBoardFillsTheScreenWidth(): Promise<void>;
 export declare function theHudKeepsItsSingleRow(): Promise<void>;
 /** The panes tile the screen: HUD, board, footer, with nothing overlapping. */
 export declare function theThreePanesTileTheScreen(): Promise<void>;
+/**
+ * The menu box has to be wide enough for the block title.
+ *
+ * Reported live 2026-08-31 with a screenshot: "menu broken every second line
+ * black". The title is 61 columns; the box was sized to 54 by eye, so every
+ * title row wrapped and each letter came apart across two rows with a black
+ * line through it. Same fault as the board's, in a second place.
+ */
+export declare function theMenuBoxFitsTheTitle(): Promise<void>;
+/** Every line of the title fits the width it is centred into. */
+export declare function theTitleFitsTheWidthItIsGiven(): Promise<void>;
 //# sourceMappingURL=layout.test.d.ts.map

@@ -287,7 +287,10 @@ function renderMenu() {
     if (menuBox) {
         menuBox.destroy();
     }
-    const width = 54;
+    // Wide enough for the block title, which is what it is: sizing this by
+    // eye is what made every title row wrap and show as a doubled, broken
+    // letterform with a black line through it.
+    const width = Math.max(54, (0, attract_1.titleWidth)());
     // The same block title the attract screen uses, so the door has one look
     // rather than two - the menu used to carry a figlet in slashes.
     const menuContent = [...(0, attract_1.titleLines)(width)];
@@ -321,6 +324,9 @@ function renderMenu() {
         width: width + 2,
         height: menuContent.length + 2,
         tags: true,
+        // The content is laid out to `width` already; re-wrapping it is what
+        // broke the title.
+        wrap: false,
         border: { type: "line" },
         style: { fg: "white", bg: "black", border: { fg: "green" } },
         content: menuContent.join("\n"),
