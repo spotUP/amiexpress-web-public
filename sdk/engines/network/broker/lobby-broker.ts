@@ -236,6 +236,19 @@ export class LobbyBroker {
       return;
     }
 
+    if (!asSpectator && lobby.state === 'countdown') {
+      // Somebody arrived while the host was counting down. Take the seat
+      // and stop the clock rather than turning them away: the countdown can
+      // be started by a host sitting alone (one player is enough, so a host
+      // can play bots), and refusing here is how two people who both wanted
+      // a game ended up in two lobbies. The host starts again with a real
+      // opponent, which is what they were waiting for.
+      this.clearCountdown(lobby.id);
+      lobby.state = 'waiting';
+      lobby.countdown = 0;
+      this.broadcastToLobby(lobby.id, 'lobby:countdown', { seconds: 0, cancelled: true });
+    }
+
     if (!asSpectator && lobby.state !== 'waiting') {
       callback?.({ success: false, error: 'Game already in progress' });
       return;
@@ -342,7 +355,15 @@ export class LobbyBroker {
     let targetLobby: Lobby | null = null;
     for (const lobby of this.lobbies.values()) {
       if (
-        lobby.state === 'waiting' &&
+        // 'countdown' counts as joinable, not just 'waiting'. A host alone
+        // in a 1v1 lobby can start a countdown - one player is enough, so a
+        // host can play bots - and the moment that happens the lobby stops
+        // being 'waiting' and matchmaking cannot see it. The next person
+        // searching then opens a second lobby beside it and the two never
+        // meet, which is what "two browsers, two accounts, neither sees the
+        // other" looked like (reported live 2026-08-31). A game that has
+        // actually STARTED is another matter and stays excluded.
+        (lobby.state === 'waiting' || lobby.state === 'countdown') &&
         !lobby.isPrivate &&
         lobby.players.length < lobby.maxPlayers &&
         lobby.settings?.mode === data.mode &&

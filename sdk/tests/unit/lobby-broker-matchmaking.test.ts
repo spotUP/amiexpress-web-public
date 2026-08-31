@@ -161,4 +161,42 @@ describe('two players asking for the same mode', () => {
     expect(c.lobby.id).not.toBe(a.lobby.id);
     expect(c.lobby.players.length).toBe(1);
   });
+
+  it('still matches into a lobby whose host has started a countdown', async () => {
+    // The shape that hid two DIFFERENT accounts from each other on the live
+    // board. A host alone in a 1v1 lobby can start a countdown - one player
+    // is enough, deliberately, so a host can play bots - and the lobby then
+    // stops being 'waiting'. Matchmaking only looked at 'waiting', so the
+    // next person searching opened a second lobby beside it and neither
+    // ever saw the other.
+    const broker = freshBroker();
+    const host = new FakeClient(31, 'sysop', 1);
+    const late = new FakeClient(32, 'spot', 2);
+
+    const opened = await matchmake(broker, host, 'versus_1v1');
+    broker.handleEvent(host.clientId, 'lobby:start_countdown', { seconds: 30 });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const found = await matchmake(broker, late, 'versus_1v1');
+
+    expect(found.lobby.id).toBe(opened.lobby.id);
+    expect(found.lobby.players.length).toBe(2);
+    // And the clock stops, so the arrival is actually in the game rather
+    // than watching it start without them.
+    expect(found.lobby.state).toBe('waiting');
+  });
+
+  it('never matches into a game that has actually started', async () => {
+    const broker = freshBroker();
+    const host = new FakeClient(41, 'sysop', 1);
+    const late = new FakeClient(42, 'spot', 2);
+
+    const opened = await matchmake(broker, host, 'versus_1v1');
+    const lobby = (broker as any).lobbies.get(opened.lobby.id);
+    lobby.state = 'playing';
+
+    const found = await matchmake(broker, late, 'versus_1v1');
+
+    expect(found.lobby.id).not.toBe(opened.lobby.id);
+  });
 });
