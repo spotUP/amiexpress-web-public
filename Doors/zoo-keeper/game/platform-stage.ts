@@ -4,6 +4,9 @@
  */
 
 import {
+  Cell, EMPTY, paint, zekeCell, zeldaCell, monkeyCell, coconutCell, wallCell, bonusCell,
+} from './sprites';
+import {
   ZooKeeperData,
   Platform,
   Coconut,
@@ -357,38 +360,38 @@ export class PlatformStageGame {
     const lines: string[] = [];
 
     // Create render buffer
-    const buffer: string[][] = [];
+    const buffer: Cell[][] = [];
     for (let y = 0; y < GAME_AREA.height; y++) {
       buffer[y] = [];
       for (let x = 0; x < GAME_AREA.width; x++) {
-        buffer[y][x] = ' ';
+        buffer[y][x] = EMPTY;
       }
     }
 
     // Draw tree trunk (in center)
     const trunkX = 38;
     for (let y = 0; y < GAME_AREA.height - 1; y++) {
-      buffer[y][trunkX] = '|';
-      buffer[y][trunkX + 1] = '|';
-      buffer[y][trunkX + 2] = '|';
+      buffer[y][trunkX] = wallCell('|');
+      buffer[y][trunkX + 1] = wallCell('|');
+      buffer[y][trunkX + 2] = wallCell('|');
     }
 
     // Draw tree top
     for (let x = trunkX - 5; x <= trunkX + 7; x++) {
-      buffer[0][x] = '^';
-      buffer[1][x] = '*';
+      buffer[0][x] = bonusCell('^');
+      buffer[1][x] = bonusCell('*');
     }
 
     // Draw Zelda
     const zeldaScreenY = ps.zelda.y - GAME_AREA.top;
     if (zeldaScreenY >= 0 && zeldaScreenY < buffer.length) {
-      buffer[zeldaScreenY][ps.zelda.x] = CHARS.zelda;
+      buffer[zeldaScreenY][ps.zelda.x] = zeldaCell();
     }
 
     // Draw monkey
     const monkeyScreenY = ps.monkey.y - GAME_AREA.top;
     if (monkeyScreenY >= 0 && monkeyScreenY < buffer.length) {
-      buffer[monkeyScreenY][ps.monkey.x] = CHARS.monkey;
+      buffer[monkeyScreenY][ps.monkey.x] = monkeyCell();
     }
 
     // Draw platforms
@@ -398,7 +401,7 @@ export class PlatformStageGame {
         for (let x = 0; x < platform.width; x++) {
           const px = Math.floor(platform.x) + x;
           if (px >= 0 && px < GAME_AREA.width) {
-            buffer[screenY][px] = '=';
+            buffer[screenY][px] = wallCell('=');
           }
         }
       }
@@ -409,42 +412,26 @@ export class PlatformStageGame {
       const screenY = Math.floor(coconut.y) - GAME_AREA.top;
       const screenX = Math.floor(coconut.x);
       if (screenY >= 0 && screenY < buffer.length && screenX >= 0 && screenX < GAME_AREA.width) {
-        buffer[screenY][screenX] = CHARS.coconut;
+        buffer[screenY][screenX] = coconutCell();
       }
     }
 
     // Draw ground
     for (let x = 0; x < GAME_AREA.width; x++) {
-      buffer[GAME_AREA.height - 1][x] = '#';
+      buffer[GAME_AREA.height - 1][x] = wallCell('#');
     }
 
     // Draw Zeke
     const zekeScreenY = d.zeke.y - GAME_AREA.top;
     if (zekeScreenY >= 0 && zekeScreenY < buffer.length) {
-      buffer[zekeScreenY][Math.floor(d.zeke.x)] = CHARS.zeke;
+      buffer[zekeScreenY][Math.floor(d.zeke.x)] = zekeCell(Boolean(d.zeke.hasNet));
     }
 
     // Convert buffer to tagged string
     for (let y = 0; y < buffer.length; y++) {
       let line = '';
       for (let x = 0; x < buffer[y].length; x++) {
-        const char = buffer[y][x];
-
-        if (char === CHARS.zeke) {
-          line += `{${COLORS.zeke}-fg}${char}{/}`;
-        } else if (char === CHARS.zelda) {
-          line += `{${COLORS.zelda}-fg}${char}{/}`;
-        } else if (char === CHARS.monkey) {
-          line += `{${COLORS.monkey}-fg}${char}{/}`;
-        } else if (char === CHARS.coconut) {
-          line += `{${COLORS.coconut}-fg}${char}{/}`;
-        } else if (char === '=' || char === '#') {
-          line += `{green-fg}${char}{/}`;
-        } else if (char === '|' || char === '^' || char === '*') {
-          line += `{yellow-fg}${char}{/}`;
-        } else {
-          line += char;
-        }
+        line += paint(buffer[y][x]);
       }
       lines.push(line);
     }
