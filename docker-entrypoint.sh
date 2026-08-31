@@ -173,6 +173,29 @@ sync_tracked() {
     ih=$(file_hash "$src")
 
     if [ ! -f "$dst" ]; then
+        # Absent from the volume means one of two different things, and the
+        # manifest is what tells them apart.
+        #
+        # With a manifest entry, a previous deploy PLACED this file and it is
+        # gone now - the sysop deleted it. Re-creating it silently undoes
+        # that. Observed on the live board 2026-08-31: DOORMAN deleted a
+        # door, and Commands/BBSCmd/vsys.info was back after the next push,
+        # so the door reappeared in the listing. Every door deletion reverted
+        # on the next deploy.
+        #
+        # The entry is still written, so the deletion outlasts later deploys
+        # AND a later image that changes the file: without it the next run
+        # would find no baseline, treat the file as new, and copy it back.
+        mh=$(manifest_hash "$rel")
+        if [ -n "$mh" ]; then
+            echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
+            TRACKED_KEPT=$((TRACKED_KEPT + 1))
+            return 0
+        fi
+
+        # No entry: the image ships it and this board has never had it. That
+        # is a genuinely new file and must arrive.
+        #
         # A failed copy must not be recorded as written. This file has no
         # `set -e`, so an unchecked cp fails silently - and the manifest would
         # then claim a baseline for a file that is not there, which is worse
