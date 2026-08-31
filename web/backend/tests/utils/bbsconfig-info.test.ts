@@ -126,6 +126,22 @@ describe('bbsConfig.info', () => {
     expect(config.telnet_port).toBe(60000);
   });
 
+  it('takes the ports from the text companion too, where the key also repeats', () => {
+    // The live bbsConfig.info.txt is written from the icon, so it inherited
+    // the duplicate: FTPDATAPORT with the port list on line 15, and a bare
+    // FTPDATAPORT on line 55. The text companion is the newer snapshot and
+    // wins over the icon, so last-wins here emptied the ports no matter what
+    // the icon said.
+    fs.writeFileSync(
+      path.join(testDir, 'bbsConfig.info.txt'),
+      'BBS_NAME=Boards\nFTPDATAPORT=40101,40102,40103\nIDLE_TIMEOUT=10\nFTPDATAPORT\n'
+    );
+
+    const config = loadBBSConfig(testDir);
+
+    expect(config.ftp_data_ports).toBe('40101,40102,40103');
+  });
+
   it('answers a repeated key the way FindToolType does, with the first', () => {
     // The file carries SMTP_HOST twice, and FTPDATAPORT as both a value and a
     // bare flag. icon.library returns the first match (tooltypes.e:215-218).

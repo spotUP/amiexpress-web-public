@@ -410,6 +410,10 @@ function parseTooltypesTextFile(filePath: string): Map<string, string> {
       if (eqIdx === -1) {
         const keyOnly = normalizeTooltypeKey(line);
         if (!TOOLTYPE_MAP[keyOnly]) continue;
+        // First wins, as in the icon: this file carries FTPDATAPORT twice,
+        // once with the sysop's port list and once as a bare flag further
+        // down, and the flag used to overwrite the list with nothing.
+        if (toolTypes.has(keyOnly)) continue;
         toolTypes.set(keyOnly, '');
         continue;
       }
@@ -420,6 +424,7 @@ function parseTooltypesTextFile(filePath: string): Map<string, string> {
 
       const key = normalizeTooltypeKey(rawKey);
       if (!TOOLTYPE_MAP[key]) continue;
+      if (toolTypes.has(key)) continue;
 
       toolTypes.set(key, value);
     }
@@ -595,9 +600,11 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       const parsed = parser.parse(buffer);
       for (const [rawKey, rawValue] of parsed.toolTypes.entries()) {
         const key = normalizeTooltypeKey(rawKey);
+        // First wins here too - otherwise the next save writes the later,
+        // emptier duplicate back over the value it should have kept.
         if (TOOLTYPE_MAP[key]) {
-          existing.set(key, rawValue);
-        } else {
+          if (!existing.has(key)) existing.set(key, rawValue);
+        } else if (!existing.has(rawKey.toUpperCase())) {
           existing.set(rawKey.toUpperCase(), rawValue);
         }
       }
