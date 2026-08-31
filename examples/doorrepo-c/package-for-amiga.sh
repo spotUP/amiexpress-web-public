@@ -85,10 +85,22 @@ curl -fsS "$api/health"                        -o "$PKG/samples/health.json"
 # success on the first run of this script.
 curl -fsS "$api/list.txt"                      -o "$STAGE/list.txt"
 head -c 3000 "$STAGE/list.txt"                 > "$PKG/samples/list-first-lines.txt"
-curl -fsS "$api/files/TELSER40.LHA"            -o "$PKG/samples/files-TELSER40.txt"
-curl -fsS "$api/diz/ABS-PLC2.LHA"              -o "$PKG/samples/diz-ABS-PLC2.txt"
-curl -fsS "$api/doc/TELSER40.LHA"              -o "$STAGE/doc.txt"
-head -c 2000 "$STAGE/doc.txt"                  > "$PKG/samples/doc-TELSER40.txt"
+# The archive to sample is CHOSEN FROM THE CATALOG, not named here. The
+# first two versions of this script pinned TELSER40.LHA and ABS-PLC2.LHA;
+# the catalog is curated, TELSER40 was removed from it, and the next build
+# of this archive died on a 404 for a file nobody had touched. Field 10 of
+# list.txt is has_doc, so this picks a row that actually has documentation
+# to capture.
+SAMPLE=$(awk -F'|' 'NR>1 && $10==1 {print $1; exit}' "$STAGE/list.txt")
+[ -n "$SAMPLE" ] || { echo "[ERROR] no catalog row with documentation to sample"; exit 1; }
+echo "[INFO] sampling $SAMPLE"
+SAMPLE_ENC=$(printf '%s' "$SAMPLE" | sed 's/ /%20/g')
+curl -fsS "$api/files/$SAMPLE_ENC"             -o "$PKG/samples/files-sample.txt"
+curl -fsS "$api/diz/$SAMPLE_ENC"               -o "$PKG/samples/diz-sample.txt" || \
+  echo "(this archive has no FILE_ID.DIZ)"     > "$PKG/samples/diz-sample.txt"
+curl -fsS "$api/doc/$SAMPLE_ENC"               -o "$STAGE/doc.txt"
+head -c 2000 "$STAGE/doc.txt"                  > "$PKG/samples/doc-sample.txt"
+printf '%s\n' "$SAMPLE"                        > "$PKG/samples/WHICH-ARCHIVE.txt"
 curl -fsS "$api/manifest?q=AETRIV10"           -o "$PKG/samples/manifest-AETRIV10.json"
 curl -fsS -D "$PKG/samples/archive-headers.txt" -o /dev/null "$api/archive/AETRIV10.LHA"
 
