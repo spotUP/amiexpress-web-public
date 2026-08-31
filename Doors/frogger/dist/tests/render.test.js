@@ -28,6 +28,8 @@ exports.theHedgeIsTextured = theHedgeIsTextured;
 exports.theBanksAreTextured = theBanksAreTextured;
 exports.aSnakeOnALogIsVisible = aSnakeOnALogIsVisible;
 exports.aDyingFrogBlinks = aDyingFrogBlinks;
+exports.theBoardIsPureAscii = theBoardIsPureAscii;
+exports.theFrogStandsOutFromEveryLane = theFrogStandsOutFromEveryLane;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const constants_1 = require("../game/constants");
@@ -236,5 +238,32 @@ async function aDyingFrogBlinks() {
     assert_1.default.strictEqual(on.ch, constants_1.FROG_GLYPH, 'showing on one frame');
     assert_1.default.strictEqual(on.fg, constants_1.SPRITE_FG.frogDying, 'in the dying colour');
     assert_1.default.notStrictEqual(off.ch, constants_1.FROG_GLYPH, 'and gone on the next');
+}
+/**
+ * Nothing outside 7-bit ASCII is ever drawn.
+ *
+ * Reported live 2026-08-31: "we cant use unicode characters in frogger".
+ * The board goes through blessed with fullUnicode off, so a Unicode glyph
+ * arrives mangled or not at all - the sprites showed as nothing.
+ */
+async function theBoardIsPureAscii() {
+    for (const level of [1, 3, 5, 7]) {
+        const { game, data } = (0, fixture_1.startedLevel)(level);
+        data.snakes.push({ id: 1, x: 5, y: 6, direction: 1, speed: 1 });
+        const frame = frameOf(game).join('\n');
+        const offenders = [...frame].filter(ch => ch.charCodeAt(0) > 126);
+        assert_1.default.strictEqual(offenders.length, 0, `level ${level} drew non-ASCII: ${[...new Set(offenders)].join(' ')}`);
+    }
+}
+/**
+ * The frog is never the same colour as the ground it stands on.
+ *
+ * Reported live: "i cant see the grog when i stand on green as the grog is
+ * the same green."
+ */
+async function theFrogStandsOutFromEveryLane() {
+    for (const ground of [constants_1.BG_COLORS.bank, constants_1.BG_COLORS.water, constants_1.BG_COLORS.road, constants_1.BG_COLORS.log]) {
+        assert_1.default.notStrictEqual(constants_1.SPRITE_FG.frog, ground, `the frog would be invisible on ${ground}`);
+    }
 }
 //# sourceMappingURL=render.test.js.map

@@ -306,3 +306,40 @@ export async function aDyingFrogBlinks(): Promise<void> {
   assert.strictEqual(on.fg, SPRITE_FG.frogDying, 'in the dying colour');
   assert.notStrictEqual(off.ch, FROG_GLYPH, 'and gone on the next');
 }
+
+/**
+ * Nothing outside 7-bit ASCII is ever drawn.
+ *
+ * Reported live 2026-08-31: "we cant use unicode characters in frogger".
+ * The board goes through blessed with fullUnicode off, so a Unicode glyph
+ * arrives mangled or not at all - the sprites showed as nothing.
+ */
+export async function theBoardIsPureAscii(): Promise<void> {
+  for (const level of [1, 3, 5, 7]) {
+    const { game, data } = startedLevel(level);
+    data.snakes.push({ id: 1, x: 5, y: 6, direction: 1, speed: 1 });
+
+    const frame = frameOf(game).join('\n');
+    const offenders = [...frame].filter(ch => ch.charCodeAt(0) > 126);
+
+    assert.strictEqual(
+      offenders.length, 0,
+      `level ${level} drew non-ASCII: ${[...new Set(offenders)].join(' ')}`
+    );
+  }
+}
+
+/**
+ * The frog is never the same colour as the ground it stands on.
+ *
+ * Reported live: "i cant see the grog when i stand on green as the grog is
+ * the same green."
+ */
+export async function theFrogStandsOutFromEveryLane(): Promise<void> {
+  for (const ground of [BG_COLORS.bank, BG_COLORS.water, BG_COLORS.road, BG_COLORS.log]) {
+    assert.notStrictEqual(
+      SPRITE_FG.frog, ground,
+      `the frog would be invisible on ${ground}`
+    );
+  }
+}

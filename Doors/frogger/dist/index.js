@@ -287,36 +287,38 @@ function renderMenu() {
     if (menuBox) {
         menuBox.destroy();
     }
-    const menuContent = [
-        "{green-fg}",
-        "  _____                                 ",
-        " |  ___| __ ___   __ _  __ _  ___ _ __  ",
-        " | |_ | '__/ _ \\ / _` |/ _` |/ _ \\ '__| ",
-        " |  _|| | | (_) | (_| | (_| |  __/ |    ",
-        " |_|  |_|  \\___/ \\__, |\\__, |\\___|_|    ",
-        "                 |___/ |___/            ",
-        "{/}",
-        "",
-        "{white-fg}Classic 1981 Konami Arcade Game{/}",
-        "",
-    ];
+    const width = 54;
+    // The same block title the attract screen uses, so the door has one look
+    // rather than two - the menu used to carry a figlet in slashes.
+    const menuContent = [...(0, attract_1.titleLines)(width)];
+    menuContent.push("");
+    menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
+    menuContent.push("");
+    // A strip of the board itself: the traffic, the river and its footing,
+    // in the colours the game draws them in.
+    menuContent.push(laneStrip(width));
+    menuContent.push("");
     constants_1.MENU_OPTIONS.forEach((option, index) => {
         const selected = index === gameData.menuSelection;
-        const prefix = selected ? "> " : "  ";
-        const color = selected ? "cyan" : "white";
         // The lives row shows its setting and Enter steps through them. On the
         // cabinet this was an operator switch (FAQ 6.3).
         const label = option === "Lives"
             ? `${option}: ${gameData.startingLives}`
             : option;
-        menuContent.push(`{${color}-fg}${prefix}${label}{/}`);
+        const text = selected ? `> ${label} <` : `  ${label}  `;
+        const pad = Math.max(0, Math.floor((width - text.length) / 2));
+        menuContent.push(selected
+            ? `${" ".repeat(pad)}{blue-bg}{lightyellow-fg}${text}{/lightyellow-fg}{/blue-bg}`
+            : `${" ".repeat(pad)}{white-fg}${text}{/white-fg}`);
     });
+    menuContent.push("");
+    menuContent.push(centred("UP/DOWN to choose, ENTER to confirm", width, "gray"));
     menuBox = blessed_1.default.box({
         fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
-        width: 50,
+        width: width + 2,
         height: menuContent.length + 2,
         tags: true,
         border: { type: "line" },
@@ -324,6 +326,33 @@ function renderMenu() {
         content: menuContent.join("\n"),
     });
     screen.render();
+}
+/** Centre a plain string and colour it. */
+function centred(text, width, colour) {
+    const pad = Math.max(0, Math.floor((width - text.length) / 2));
+    return `${" ".repeat(pad)}{${colour}-fg}${text}{/${colour}-fg}`;
+}
+/**
+ * A strip of the board, drawn in the game's own colours: the road, a car,
+ * the river, a log, a turtle set and the bank.
+ */
+function laneStrip(width) {
+    const run = [
+        { bg: constants_1.BG_COLORS.road, cells: 3 },
+        { bg: constants_1.BG_COLORS.car, cells: 2 },
+        { bg: constants_1.BG_COLORS.road, cells: 3 },
+        { bg: constants_1.BG_COLORS.water, cells: 2 },
+        { bg: constants_1.BG_COLORS.log, cells: 4 },
+        { bg: constants_1.BG_COLORS.water, cells: 2 },
+        { bg: constants_1.BG_COLORS.turtle, cells: 3 },
+        { bg: constants_1.BG_COLORS.water, cells: 2 },
+        { bg: constants_1.BG_COLORS.bank, cells: 3 },
+    ];
+    const drawn = run.reduce((n, part) => n + part.cells, 0);
+    const pad = Math.max(0, Math.floor((width - drawn) / 2));
+    return " ".repeat(pad) + run
+        .map(part => `{${part.bg}-bg}${" ".repeat(part.cells)}{/${part.bg}-bg}`)
+        .join("");
 }
 /**
  * Show high scores

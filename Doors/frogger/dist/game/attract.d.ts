@@ -21,7 +21,13 @@ export declare const ATTRACT_BLINK_FRAMES = 10;
  * shaded edge, ' ' for nothing.
  */
 export declare function titleGrid(): string[];
-/** The title painted green with its yellow shading, centred to `width`. */
+/**
+ * The title, painted as blocks of background colour rather than as '#'
+ * characters: a green face with the arcade logo's yellow shading beside it.
+ *
+ * Drawn the way the board is drawn, so the letters read as solid shapes on
+ * a terminal instead of as a wall of punctuation.
+ */
 export declare function titleLines(width: number): string[];
 /**
  * The point table (FAQ 6.3), in the arcade's own wording and colours: the

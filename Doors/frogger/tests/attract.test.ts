@@ -54,9 +54,14 @@ export async function theTitleIsShaded(): Promise<void> {
 
   assert.ok(shaded, 'the letters should have a shaded edge');
 
+  // Painted as blocks of background colour, not as '#' characters.
   const painted = attractScreen('points', createData(), WIDTH, 0).join('\n');
-  assert.ok(painted.includes('{green-fg}'), 'the face of the letters is green');
-  assert.ok(painted.includes('{yellow-fg}'), 'the shading is yellow');
+  assert.ok(painted.includes('{green-bg}'), 'the face of the letters is green');
+  assert.ok(painted.includes('{yellow-bg}'), 'the shading is yellow');
+  assert.ok(
+    !/\{green-fg\}#/.test(painted),
+    'the title should be blocks, not hashes'
+  );
 }
 
 /**

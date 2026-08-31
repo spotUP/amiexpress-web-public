@@ -43,4 +43,19 @@ export declare function theBanksAreTextured(): Promise<void>;
 export declare function aSnakeOnALogIsVisible(): Promise<void>;
 /** A dying frog blinks. */
 export declare function aDyingFrogBlinks(): Promise<void>;
+/**
+ * Nothing outside 7-bit ASCII is ever drawn.
+ *
+ * Reported live 2026-08-31: "we cant use unicode characters in frogger".
+ * The board goes through blessed with fullUnicode off, so a Unicode glyph
+ * arrives mangled or not at all - the sprites showed as nothing.
+ */
+export declare function theBoardIsPureAscii(): Promise<void>;
+/**
+ * The frog is never the same colour as the ground it stands on.
+ *
+ * Reported live: "i cant see the grog when i stand on green as the grog is
+ * the same green."
+ */
+export declare function theFrogStandsOutFromEveryLane(): Promise<void>;
 //# sourceMappingURL=render.test.d.ts.map

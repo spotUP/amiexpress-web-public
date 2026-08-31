@@ -144,7 +144,10 @@ export const CELL_WIDTH = 2;
 export const BG_COLORS = {
   road: 'black',
   water: 'blue',
-  bank: 'green',
+  // The banks and the median are magenta, as they are in the reference
+  // ANSI. They used to be green, and the frog is green: a frog standing on
+  // the bank was invisible, which is exactly what was reported.
+  bank: 'magenta',
   hedge: 'green',
 
   car: 'red',
@@ -205,7 +208,10 @@ export const SPRITE_FG = {
 };
 
 /** The frog, and the frog you carry home. */
-export const FROG_GLYPH = '\u03a9';
+// ASCII only, everywhere in this door. The board is drawn through blessed
+// with fullUnicode off, so anything outside 7-bit ASCII arrives mangled or
+// not at all - which is why the sprites showed as nothing.
+export const FROG_GLYPH = '@';
 
 /** The grain along a log, and the ends that round it off. */
 export const LOG_GRAIN = '-.';
@@ -217,19 +223,19 @@ export const TURTLE_GLYPH = ':O:';
 
 /** The jaws of a crocodile or an otter, and the bodies behind them. */
 export const MOUTH_GLYPH = '><';
-export const CROCODILE_BODY = '\u2261';
+export const CROCODILE_BODY = '=';
 export const OTTER_BODY = '~';
 
 /** The snake, riding a log or patrolling the median. */
-export const SNAKE_GLYPH = '\u00a7';
+export const SNAKE_GLYPH = 'S';
 
 /** The texture of the banks and the median, and of the hedge up top. */
-export const BANK_TEXTURE = '\u00b7:';
-export const HEDGE_TEXTURE = '\u2591';
+export const BANK_TEXTURE = '.:';
+export const HEDGE_TEXTURE = '#';
 
 /** The sides of a home, and what can be sitting in one. */
-export const HOME_LEFT = '\u2590';
-export const HOME_RIGHT = '\u258c';
+export const HOME_LEFT = '[';
+export const HOME_RIGHT = ']';
 export const FLY_GLYPH = '*';
 
 // Colors for rendering
