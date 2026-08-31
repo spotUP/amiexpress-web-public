@@ -4711,7 +4711,13 @@ static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
 
                 sprintf(line, "%-11s %.60s", flow_command_name(h->id), h->summary);
                 ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
-                ansi_text(b, UI_HEADER_ROWS + 2 + i, 3, line, g->cols - 6);
+                /* _raw: no padding. This screen is drawn onto one that was
+                 * just cleared, so padding each row out to the box width
+                 * writes spaces over blank space - 1036 bytes of a 2559
+                 * byte paint, measured on a captured session. Bytes are
+                 * milliseconds here: every 198 of them is an XIM message
+                 * costing about 45ms of 68K emulation. */
+                ansi_text_raw(b, UI_HEADER_ROWS + 2 + i, 3, line, g->cols - 6);
             }
 
             {

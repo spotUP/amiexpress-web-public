@@ -61,6 +61,11 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
     b->len = 0;
     b->cap = capacity;
     b->overflow = 0;
+    /* Nothing is known about the terminal's colour at the start of a frame:
+     * the BBS may have written between this frame and the last. */
+    b->last_fg = -1;
+    b->last_bg = -1;
+    b->last_bold = -1;
 }
 
 void ansi_flush(ansi_buf *b)
@@ -85,6 +90,9 @@ void ansi_clear(ansi_buf *b)
      * ownership belongs), but clearing is the operation that turns a stray
      * attribute into a full-screen one, so it defends itself. */
     put_str(b, "\033[0m\033[2J\033[H");
+    b->last_fg = -1;
+    b->last_bg = -1;
+    b->last_bold = -1;
 }
 
 void ansi_goto(ansi_buf *b, int row, int col)
@@ -98,6 +106,16 @@ void ansi_goto(ansi_buf *b, int row, int col)
 
 void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 {
+    /* Already showing exactly this? Then the sequence is bytes for
+     * nothing - and on this door bytes are milliseconds, because every
+     * 198 of them is an XIM message costing about 45ms of 68K emulation. */
+    if (b->last_fg == fg && b->last_bg == bg && b->last_bold == (bold ? 1 : 0)) {
+        return;
+    }
+    b->last_fg = fg;
+    b->last_bg = bg;
+    b->last_bold = bold ? 1 : 0;
+
     put_str(b, "\033[");
     put_int(b, bold ? 1 : 0);
     put_char(b, ';');
@@ -112,6 +130,11 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 void ansi_reset(ansi_buf *b)
 {
     put_str(b, "\033[0m");
+    /* The terminal is back to defaults; nothing is known about its colour
+     * any more, so the next ansi_color() must write itself out. */
+    b->last_fg = -1;
+    b->last_bg = -1;
+    b->last_bold = -1;
 }
 
 void ansi_cursor(ansi_buf *b, int visible)

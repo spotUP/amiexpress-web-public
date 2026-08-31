@@ -116,6 +116,101 @@ static void test_a_panel_too_small_to_have_an_inside_draws_nothing(void)
     check("nothing is emitted for a degenerate panel", b.len == 0);
 }
 
+
+/* A colour the terminal is already showing costs bytes and buys nothing.
+ *
+ * Measured on a captured DoorRepo session (XIM_DEBUG, 2026-09-01): one
+ * full /help paint is 2559 bytes and carries 25 colour sequences, of which
+ * NINETEEN repeat the colour already in effect - 190 wasted bytes. That
+ * matters here far more than it would on a wire: the door pays about 45ms
+ * of 68K emulation per 198-byte XIM message, so bytes are milliseconds.
+ */
+static void test_a_repeated_colour_is_not_sent_twice(void)
+{
+    ansi_buf b;
+    char frame[512];
+    int first, second;
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    first = b.len;
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    second = b.len;
+
+    check("the same colour again writes nothing", second == first);
+}
+
+static void test_a_different_colour_is_still_sent(void)
+{
+    ansi_buf b;
+    char frame[512];
+    int first, second;
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    first = b.len;
+    ansi_color(&b, ANSI_YELLOW, ANSI_BLUE, 0);
+    second = b.len;
+
+    check("a change is written", second > first);
+}
+
+static void test_bold_counts_as_a_change(void)
+{
+    ansi_buf b;
+    char frame[512];
+    int first, second;
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    first = b.len;
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 1);
+    second = b.len;
+
+    check("bold on the same colours is a change", second > first);
+}
+
+static void test_a_reset_forgets_what_was_set(void)
+{
+    /* ansi_reset() and ansi_clear() put the terminal back to defaults, so
+     * the next colour must be written even if it matches what was asked
+     * for before the reset. Skipping it would leave the text in whatever
+     * the reset left behind - the class of bug that turned a whole screen
+     * blue once already (see the clear test above). */
+    ansi_buf b;
+    char frame[512];
+    int before, after;
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    ansi_reset(&b);
+    before = b.len;
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    after = b.len;
+
+    check("a colour after a reset is written again", after > before);
+}
+
+static void test_each_frame_starts_without_assumptions(void)
+{
+    /* Frames are flushed to a BBS that may write its own output between
+     * them. Carrying the tracked colour across a flush would mean skipping
+     * a sequence the terminal no longer has set. */
+    ansi_buf b;
+    char frame[512];
+    int before, after;
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+
+    ansi_begin(&b, frame, (long) sizeof(frame));
+    before = b.len;
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    after = b.len;
+
+    check("a new frame writes its first colour", after > before);
+}
+
 int main(void)
 {
     test_clear_cannot_inherit_a_colour();
@@ -123,6 +218,11 @@ int main(void)
     test_a_panel_paints_over_what_is_behind_it();
     test_a_panel_sets_the_background_it_paints_with();
     test_a_panel_too_small_to_have_an_inside_draws_nothing();
+    test_a_repeated_colour_is_not_sent_twice();
+    test_a_different_colour_is_still_sent();
+    test_bold_counts_as_a_change();
+    test_a_reset_forgets_what_was_set();
+    test_each_frame_starts_without_assumptions();
 
     if (failures == 0) {
         printf("ALL TESTS PASSED\n");
