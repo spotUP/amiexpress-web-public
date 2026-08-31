@@ -480,8 +480,14 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       // here did not appear in the list it was created from until a restart -
       // the same reason the .info edit route reloads, and the same reload.
       try {
-        const { initializeDoors } = require('../handlers/door.handler');
-        await initializeDoors();
+        // reloadDoorCommands, NOT initializeDoors: the door list is built from
+        // commandCache, and initializeDoors only READS that cache. Reloading
+        // the doors without reloading the commands re-reads the same stale
+        // map, so a registration written a moment ago is not in it - a door
+        // added through this admin never appeared until a restart, and an
+        // edited one read back with the tooltypes it had at startup.
+        const { reloadDoorCommands } = require('../handlers/command-execution.handler');
+        await reloadDoorCommands(config.get('dataDir'), 1, 0);
       } catch (reloadError) {
         console.error('[config] door registry reload failed (registration written):', reloadError);
       }
@@ -537,8 +543,14 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       // door the sysop just edited reads back with its old tooltypes and the
       // change looks lost until a restart. Same reload the delete path runs.
       try {
-        const { initializeDoors } = require('../handlers/door.handler');
-        await initializeDoors();
+        // reloadDoorCommands, NOT initializeDoors: the door list is built from
+        // commandCache, and initializeDoors only READS that cache. Reloading
+        // the doors without reloading the commands re-reads the same stale
+        // map, so a registration written a moment ago is not in it - a door
+        // added through this admin never appeared until a restart, and an
+        // edited one read back with the tooltypes it had at startup.
+        const { reloadDoorCommands } = require('../handlers/command-execution.handler');
+        await reloadDoorCommands(config.get('dataDir'), 1, 0);
       } catch (reloadError) {
         console.error('[config] door registry reload failed (disk write succeeded):', reloadError);
       }
@@ -599,8 +611,14 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       // door cache, and the registry getDoors() answers the admin from.
       await refreshDoorCache();
       try {
-        const { initializeDoors } = require('../handlers/door.handler');
-        await initializeDoors();
+        // reloadDoorCommands, NOT initializeDoors: the door list is built from
+        // commandCache, and initializeDoors only READS that cache. Reloading
+        // the doors without reloading the commands re-reads the same stale
+        // map, so a registration written a moment ago is not in it - a door
+        // added through this admin never appeared until a restart, and an
+        // edited one read back with the tooltypes it had at startup.
+        const { reloadDoorCommands } = require('../handlers/command-execution.handler');
+        await reloadDoorCommands(config.get('dataDir'), 1, 0);
       } catch (reloadError) {
         console.error('[config] door registry reload failed (delete succeeded):', reloadError);
       }
