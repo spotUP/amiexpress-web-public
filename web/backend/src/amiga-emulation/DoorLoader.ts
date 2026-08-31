@@ -15,6 +15,7 @@ import { notifySysop } from "../utils/sysop-alert.util.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { DoorLogger } from "./DoorLogger.js";
 import { SharedBBSData } from "./structures/GlobalStructures.js";
+import { assertDoorSegmentsFit, DOOR_EXIT_TRAP_ADDR } from "./memory-map.js";
 import { debugLog } from '../utils/debug-log';
 
 export class DoorLoader {
@@ -23,7 +24,7 @@ export class DoorLoader {
   private config: DoorConfig;
   private stackBaseAddr: number = 0;
   private stackSizeBytes: number = 0;
-  private readonly exitTrapAddress = 0x1ff000;
+  private readonly exitTrapAddress = DOOR_EXIT_TRAP_ADDR;
   private logger: DoorLogger | null = null;
   private sharedBBSData: SharedBBSData | null = null;
   private symbolResolver: SymbolResolver | null = null;
@@ -260,6 +261,12 @@ debugLog(`  ${segInfo}`);
         this.emulator.registerCodeRegion(seg.address, seg.size);
       }
     }
+
+    // Refuse a door whose hunks would land on the emulator's own structures.
+    // MUST come before load(): HUNK_BSS is zeroed as it loads, so by the time
+    // load() returns, exec.library's LVO table is already blank and the door
+    // dies with no usable diagnosis. See memory-map.ts.
+    assertDoorSegmentsFit(hunkFile.segments, path.basename(executablePath));
 
     // Load segments into memory (pass fileName for synthetic relocations)
     hunkLoader.load(this.emulator, hunkFile, this.config.executablePath);

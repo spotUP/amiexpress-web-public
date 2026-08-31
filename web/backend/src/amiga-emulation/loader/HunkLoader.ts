@@ -1,4 +1,5 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
+import { DOOR_SEGMENT_BASE } from "../memory-map";
 
 /**
  * Amiga Hunk File Format Loader
@@ -734,7 +735,7 @@ console.log(
     // that need to load multiple binaries side-by-side (e.g. the
     // AREXX service preloading rexxc after RexxMast) pass an explicit
     // baseAddress to avoid overwriting the prior binary.
-    let currentAddress = (baseAddress ?? 0x2000) >>> 0;
+    let currentAddress = (baseAddress ?? DOOR_SEGMENT_BASE) >>> 0;
 
     for (let i = 0; i < segmentSizes.length; i++) {
       const sizeBytes = segmentSizes[i] * 4;
