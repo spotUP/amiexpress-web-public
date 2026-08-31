@@ -92,7 +92,21 @@ console.error('[LanguageConfigService] Error reading Languages/ directory:', err
     }
   }
 
-  async getLanguage(id: number): Promise<Language | null> {
+  /**
+   * Resolve the language the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position. Looking that number up as a database rowid is a different
+   * namespace: with the table empty every edit throws "not found", and with
+   * the table partly filled it edits a DIFFERENT record. Disk first, mirror as
+   * the fallback - the same resolution ComputerConfigService.getComputerType
+   * uses, and the same fault the doors page had.
+   */
+async getLanguage(id: number): Promise<Language | null> {
+    const onDisk = await this.getLanguages();
+    const fromDisk = onDisk.find(l => l.id === id);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getLanguage(id);
   }
 

@@ -218,12 +218,27 @@ console.error(`[NodeConfigService] Failed to initialize node directory ${nodeDir
     if (!oldConfig) throw new Error(`Node config for node ${nodeIndex} not found`);
 
     const mergedConfig = { ...oldConfig, ...validated };
-    const newConfig = this.configRepo.updateNodeConfig(nodeIndex, validated);
 
+    // DISK FIRST. The mirror holds one row (node_number=1) against eight node
+    // icons, so updateNodeConfig() threw for every other node - BEFORE the
+    // .info was written, so nothing reached the file the BBS reads. And
+    // NodesPage is the only page in the admin with no onError on any
+    // mutation, so it failed in complete silence.
     this.writeNodeInfoFile(nodeIndex, mergedConfig);
-    
+
     // Ensure directory exists even on update (in case it was manually deleted)
     this.initializeNodeDirectory(nodeIndex);
+
+    // The mirror is best-effort: a node that only exists on disk has no row,
+    // and that must not turn a successful save into an error.
+    let mirrored: NodeConfig | null = null;
+    try {
+      mirrored = this.configRepo.updateNodeConfig(nodeIndex, validated);
+    } catch (mirrorError) {
+console.error(`[NodeConfigService] Mirror update failed for node ${nodeIndex} (disk write succeeded):`, mirrorError);
+    }
+
+    const newConfig: NodeConfig = mirrored ?? mergedConfig;
 
     this.configRepo.logConfigChange('node_config', newConfig.id, 'UPDATE',
       context.userId, context.username, oldConfig, newConfig,

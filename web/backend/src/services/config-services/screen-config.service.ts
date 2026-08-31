@@ -67,7 +67,21 @@ console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
     }
   }
 
-  async getScreenType(id: number): Promise<ScreenType | null> {
+  /**
+   * Resolve the screen type the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position. Looking that number up as a database rowid is a different
+   * namespace: with the table empty every edit throws "not found", and with
+   * the table partly filled it edits a DIFFERENT record. Disk first, mirror as
+   * the fallback - the same resolution ComputerConfigService.getComputerType
+   * uses, and the same fault the doors page had.
+   */
+async getScreenType(id: number): Promise<ScreenType | null> {
+    const onDisk = await this.getAllScreenTypes();
+    const fromDisk = onDisk.find(t => t.id === id);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getScreenTypeById(id);
   }
 

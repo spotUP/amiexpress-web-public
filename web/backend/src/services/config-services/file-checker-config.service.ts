@@ -4,6 +4,7 @@
  */
 
 import type { Database } from '../../database';
+import { getSystemTime } from '../../utils/date-time.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { FileChecker, FileCheckerError } from '../../database/types';
 import { FileCheckerSchema, FileCheckerErrorSchema, type RequestContext } from '../config.schemas';
@@ -96,7 +97,21 @@ console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', err
     }
   }
 
-  async getFileChecker(id: number): Promise<FileChecker | null> {
+  /**
+   * Resolve the file checker the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position. Looking that number up as a database rowid is a different
+   * namespace: with the table empty every edit throws "not found", and with
+   * the table partly filled it edits a DIFFERENT record. Disk first, mirror as
+   * the fallback - the same resolution ComputerConfigService.getComputerType
+   * uses, and the same fault the doors page had.
+   */
+async getFileChecker(id: number): Promise<FileChecker | null> {
+    const onDisk = await this.getAllFileCheckers();
+    const fromDisk = onDisk.find(c => c.id === id);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getFileCheckerById(id);
   }
 
@@ -144,13 +159,24 @@ console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', err
       this.deleteFileCheckerInfoFile(oldChecker.checker_name);
     }
 
-    const success = this.configRepo.updateFileChecker(id, validated);
-    if (!success) throw new Error(`Failed to update file checker ${id}`);
+    // The edit itself, not a value read back out of a store. getFileChecker
+    // resolves against DISK, which still holds the old value at this point.
+    const newChecker: FileChecker = {
+      ...oldChecker,
+      ...validated,
+      updated_at: getSystemTime()
+    };
 
-    const newChecker = await this.getFileChecker(id);
-    if (!newChecker) throw new Error('Failed to retrieve updated file checker');
-
+    // DISK FIRST: the checker's own icon is what the BBS reads
+    // (express.e:18556). The mirror holds two rows against fifteen files, so
+    // `if (!success) throw` failed thirteen of them before writing anything.
     this.writeFileCheckerInfoFile(newChecker);
+
+    try {
+      this.configRepo.updateFileChecker(id, validated);
+    } catch (mirrorError) {
+console.error(`[FileCheckerConfigService] Mirror update failed for checker ${id} (disk write succeeded):`, mirrorError);
+    }
 
     this.configRepo.logConfigChange('file_checkers', id, 'UPDATE',
       context.userId, context.username, oldChecker, newChecker,
