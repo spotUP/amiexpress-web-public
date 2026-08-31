@@ -1176,4 +1176,13 @@ int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap);
  * what was understood. Returns "" for FLOW_CMD_UNKNOWN. */
 const char *flow_command_name(int command);
 
+/* The command bar's autocomplete: which commands match what has been typed,
+ * most relevant first, and the tail of the best match. See flow.c.
+ *
+ * FLOW_CMD_MAX_SUGGESTIONS is every command there is - the bar opens with
+ * the whole list, which is the point of it. */
+#define FLOW_CMD_MAX_SUGGESTIONS 24
+int flow_command_suggest(const char *typed, int *ids, int cap);
+const char *flow_command_ghost(const char *typed);
+
 #endif /* DOORREPO_FLOW_H */

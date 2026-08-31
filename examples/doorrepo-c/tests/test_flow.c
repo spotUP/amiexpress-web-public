@@ -3075,6 +3075,133 @@ TEST(command_bar_names_every_command_it_answers)
 }
 
 
+
+/* --- The command bar's autocomplete ---------------------------------- */
+
+static int suggest_has(const int *ids, int count, int wanted)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (ids[i] == wanted) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+TEST(autocomplete_shows_everything_before_a_letter_is_typed)
+{
+    /* The report: "no auto complete so I have no idea what commands there
+     * are". Opening the bar has to answer that question by itself. */
+    int ids[40];
+    int count = flow_command_suggest("", ids, 40);
+
+    ASSERT_EQ(count, 19, "every command is offered");
+    ASSERT_TRUE(suggest_has(ids, count, FLOW_CMD_HELP), "help among them");
+    ASSERT_TRUE(suggest_has(ids, count, FLOW_CMD_QUIT), "and quit");
+}
+
+TEST(autocomplete_narrows_as_the_letters_arrive)
+{
+    int ids[40];
+    int count = flow_command_suggest("in", ids, 40);
+
+    ASSERT_TRUE(count >= 2, "install and installed at least");
+    ASSERT_EQ(ids[0], FLOW_CMD_INSTALL, "install leads");
+    ASSERT_TRUE(suggest_has(ids, count, FLOW_CMD_INSTALLED), "installed offered too");
+    ASSERT_TRUE(!suggest_has(ids, count, FLOW_CMD_QUIT), "quit is not a match");
+}
+
+TEST(autocomplete_puts_what_a_name_starts_with_first)
+{
+    /* Someone typing "in" wants install, not uninstall - even though both
+     * contain the letters. */
+    /* "install" is the case that tells the two rules apart: uninstall
+     * CONTAINS it and sits earlier in the table than installed, which
+     * STARTS with it. A plain contains-match would offer uninstall second
+     * and bury the command actually being typed towards. */
+    int ids[40];
+    int count = flow_command_suggest("install", ids, 40);
+    int installed_at = -1;
+    int uninstall_at = -1;
+    int i;
+
+    ASSERT_EQ(ids[0], FLOW_CMD_INSTALL, "the exact word leads");
+    for (i = 0; i < count; i++) {
+        /* FIRST occurrence of each - where the eye lands. Taking the last
+         * one hid a version that offered uninstall second and repeated it
+         * at the end. */
+        if (ids[i] == FLOW_CMD_INSTALLED && installed_at < 0) {
+            installed_at = i;
+        }
+        if (ids[i] == FLOW_CMD_UNINSTALL && uninstall_at < 0) {
+            uninstall_at = i;
+        }
+    }
+
+    ASSERT_TRUE(installed_at >= 0, "installed is offered");
+    ASSERT_TRUE(uninstall_at >= 0, "uninstall is offered as well");
+    ASSERT_TRUE(installed_at < uninstall_at, "what it STARTS comes before what merely contains it");
+}
+
+TEST(autocomplete_ignores_the_slash_and_the_case)
+{
+    int ids[40];
+
+    ASSERT_EQ(flow_command_suggest("/HE", ids, 40), 1, "one match");
+    ASSERT_EQ(ids[0], FLOW_CMD_HELP, "help, however it was typed");
+}
+
+TEST(autocomplete_stops_once_an_argument_is_being_typed)
+{
+    /* "find dung" is a search for dung. Completing the word after the space
+     * to a command name would be noise, and would fight the typing. */
+    int ids[40];
+
+    ASSERT_EQ(flow_command_suggest("find ", ids, 40), 0, "nothing after the space");
+    ASSERT_EQ(flow_command_suggest("find dung", ids, 40), 0, "nor mid-argument");
+}
+
+TEST(autocomplete_offers_nothing_for_a_word_no_command_contains)
+{
+    int ids[40];
+
+    ASSERT_EQ(flow_command_suggest("dungeon", ids, 40), 0, "a search, not a command");
+}
+
+TEST(autocomplete_never_writes_past_the_callers_array)
+{
+    int ids[4];
+    int count;
+
+    ids[3] = -1;
+    count = flow_command_suggest("", ids, 3);
+    ASSERT_EQ(count, 3, "stops at the cap");
+    ASSERT_EQ(ids[3], -1, "and does not touch what is past it");
+    ASSERT_EQ(flow_command_suggest("", ids, 0), 0, "no room at all");
+    ASSERT_EQ(flow_command_suggest("", (int *) 0, 4), 0, "nowhere to write");
+}
+
+TEST(the_ghost_is_the_rest_of_the_best_match)
+{
+    ASSERT_STR_EQ(flow_command_ghost("in"), "stall", "in -> install");
+    ASSERT_STR_EQ(flow_command_ghost("/un"), "install", "the slash it opened on");
+    ASSERT_STR_EQ(flow_command_ghost("HEL"), "p", "any case");
+    ASSERT_STR_EQ(flow_command_ghost("help"), "", "nothing left to add");
+}
+
+TEST(the_ghost_stays_empty_when_it_would_be_a_guess)
+{
+    /* "stall" appears inside install, but nobody typing it asked for
+     * install - completing there would put a command on the line that was
+     * never asked for. */
+    ASSERT_STR_EQ(flow_command_ghost("stall"), "", "a middle match is not a completion");
+    ASSERT_STR_EQ(flow_command_ghost(""), "", "nothing typed");
+    ASSERT_STR_EQ(flow_command_ghost("find dung"), "", "an argument is not a command");
+    ASSERT_STR_EQ(flow_command_ghost((const char *) 0), "", "no line at all");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -3360,6 +3487,15 @@ int main(void)
     RUN_TEST(command_bar_treats_anything_else_as_a_search);
     RUN_TEST(command_bar_survives_nothing_at_all);
     RUN_TEST(command_bar_names_every_command_it_answers);
+    RUN_TEST(autocomplete_shows_everything_before_a_letter_is_typed);
+    RUN_TEST(autocomplete_narrows_as_the_letters_arrive);
+    RUN_TEST(autocomplete_puts_what_a_name_starts_with_first);
+    RUN_TEST(autocomplete_ignores_the_slash_and_the_case);
+    RUN_TEST(autocomplete_stops_once_an_argument_is_being_typed);
+    RUN_TEST(autocomplete_offers_nothing_for_a_word_no_command_contains);
+    RUN_TEST(autocomplete_never_writes_past_the_callers_array);
+    RUN_TEST(the_ghost_is_the_rest_of_the_best_match);
+    RUN_TEST(the_ghost_stays_empty_when_it_would_be_a_guess);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

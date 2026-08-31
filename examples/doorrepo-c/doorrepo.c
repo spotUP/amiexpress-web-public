@@ -4724,11 +4724,179 @@ static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
 }
 
 /* Reads a line into `out`. Returns 0 when the sysop changed their mind. */
+/* The summary /help prints for a command, or "" when it has none. */
+static const char *ui_help_summary(int id)
+{
+    int i;
+
+    for (i = 0; i < UI_HELP_COUNT; i++) {
+        if (ui_help_lines[i].id == id) {
+            return ui_help_lines[i].summary;
+        }
+    }
+    return "";
+}
+
+/* How many suggestions the bar shows at once. Eight is most of the
+ * nineteen without covering the list the sysop is choosing FROM. */
+#define UI_CMDBAR_ROWS 8
+
+/* The command bar, with the completion LIVECHAT has had all along.
+ *
+ * "The / commands in the doorrepo door have no auto complete so I have no
+ * idea what commands there are." It was a bare line prompt: the nineteen
+ * commands were discoverable only through /help, which is itself one of the
+ * nineteen. So the bar now opens with the whole list showing and narrows as
+ * the letters arrive - the same shape as LIVECHAT's dropdown and as this
+ * door's own FILTER panel, which already refilters on every keystroke
+ * rather than dropping to a line prompt.
+ *
+ * Up/Down walk the list, TAB completes to whatever is highlighted, and
+ * ENTER runs it. ENTER completing first is deliberate: with "install"
+ * highlighted on screen, running install is what the display just promised
+ * - and it rescues the ambiguous words ("in") that flow_parse_command can
+ * only treat as a search.
+ *
+ * A line with a space in it is an argument being typed ("find dungeon"),
+ * and the suggestions get out of the way. That is also how to search for a
+ * word that happens to start a command name.
+ */
 static int ui_command_bar(ansi_buf *b, char *frame, long framecap,
                           const ui_geometry *g, char *out, int outcap)
 {
+    int len = 0;
+    int sel = 0;
+    int top = 0;
+    int row = g->rows - UI_FOOTER_ROWS + 2;
+
     out[0] = '\0';
-    return ui_text_prompt(b, frame, framecap, g, "/", out, outcap);
+
+    for (;;) {
+        int ids[FLOW_CMD_MAX_SUGGESTIONS];
+        int count = flow_command_suggest(out, ids, FLOW_CMD_MAX_SUGGESTIONS);
+        int shown = (count < UI_CMDBAR_ROWS) ? count : UI_CMDBAR_ROWS;
+        const char *ghost = "";
+        char line[160];
+        int key;
+        int i;
+
+        if (sel >= count) {
+            sel = (count > 0) ? count - 1 : 0;
+        }
+        if (sel < top) {
+            top = sel;
+        } else if (sel >= top + UI_CMDBAR_ROWS) {
+            top = sel - UI_CMDBAR_ROWS + 1;
+        }
+        if (top < 0) {
+            top = 0;
+        }
+
+        /* The grey tail after the cursor is the rest of the HIGHLIGHTED
+         * command, not always the first one - otherwise walking the list
+         * with the arrows and pressing TAB would complete to something
+         * other than what the eye is on. */
+        if (count > 0 && len > 0) {
+            const char *name = flow_command_name(ids[sel]);
+            if (strncmp(out, name, (size_t) len) == 0) {
+                ghost = name + len;
+            }
+        }
+
+        ansi_begin(b, frame, framecap);
+
+        for (i = 0; i < shown; i++) {
+            int id = ids[top + i];
+            int panel_row = row - shown + i;
+            int selected = (top + i == sel);
+
+            sprintf(line, " %-11s %.58s", flow_command_name(id),
+                    ui_help_summary(id));
+            ansi_fill(b, panel_row, 1, g->cols,
+                      selected ? ANSI_BLACK : ANSI_WHITE,
+                      selected ? ANSI_CYAN : ANSI_BLUE);
+            ansi_color(b, selected ? ANSI_BLACK : ANSI_WHITE,
+                       selected ? ANSI_CYAN : ANSI_BLUE, selected);
+            ansi_text(b, panel_row, 2, line, g->cols - 2);
+        }
+
+        ansi_fill(b, row, 1, g->cols, ANSI_WHITE, ANSI_BLUE);
+        ansi_color(b, ANSI_YELLOW, ANSI_BLUE, 1);
+        sprintf(line, "/%.100s", out);
+        ansi_text(b, row, 2, line, g->cols - 2);
+        if (ghost[0] != '\0') {
+            /* Dim, so it reads as an offer rather than as typed text. */
+            ansi_color(b, ANSI_CYAN, ANSI_BLUE, 0);
+            ansi_text(b, row, 3 + len, ghost, g->cols - 3 - len);
+        }
+        ansi_goto(b, row, 3 + len);
+        ansi_cursor(b, 1);
+        ansi_flush(b);
+
+        key = ui_read_key();
+
+        if (key == UI_KEY_ENTER) {
+            /* Run what is highlighted, not the half-word underneath it. */
+            if (count > 0) {
+                const char *name = flow_command_name(ids[sel]);
+                if (len == 0 || strncmp(out, name, (size_t) len) == 0) {
+                    strncpy(out, name, (size_t) outcap - 1);
+                    out[outcap - 1] = '\0';
+                    len = (int) strlen(out);
+                }
+            }
+            ansi_begin(b, frame, framecap);
+            ansi_cursor(b, 0);
+            ansi_reset(b);
+            ansi_flush(b);
+            return (out[0] != '\0') ? 1 : 0;
+        }
+        if (key == 9) {                      /* TAB completes, and stays */
+            if (count > 0) {
+                const char *name = flow_command_name(ids[sel]);
+                if (len == 0 || strncmp(out, name, (size_t) len) == 0) {
+                    strncpy(out, name, (size_t) outcap - 1);
+                    out[outcap - 1] = '\0';
+                    len = (int) strlen(out);
+                }
+            }
+            continue;
+        }
+        if (key == UI_KEY_UP) {
+            if (sel > 0) {
+                sel--;
+            }
+            continue;
+        }
+        if (key == UI_KEY_DOWN) {
+            if (sel + 1 < count) {
+                sel++;
+            }
+            continue;
+        }
+        if (key == 27 || key >= 1000) {
+            continue;                        /* stray escapes mean nothing */
+        }
+        if (key == 8 || key == 127) {
+            if (len > 0) {
+                out[--len] = '\0';
+            }
+            sel = 0;
+            top = 0;
+        } else if (key == 21) {              /* CTRL-U clears */
+            len = 0;
+            out[0] = '\0';
+            sel = 0;
+            top = 0;
+        } else if (key >= 32 && key < 127 && len < outcap - 1) {
+            /* Typed as typed. The parser lowercases the verb itself, and an
+             * argument ("find Dungeon") is the user's own text. */
+            out[len++] = (char) key;
+            out[len] = '\0';
+            sel = 0;
+            top = 0;
+        }
+    }
 }
 
 /* Defined further down; the dispatcher below needs both. */

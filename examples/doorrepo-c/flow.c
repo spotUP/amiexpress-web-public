@@ -2400,6 +2400,133 @@ const char *flow_command_name(int command)
     return "";
 }
 
+/* The command bar's autocomplete.
+ *
+ * "The / commands in the doorrepo door have no auto complete so I have no
+ * idea what commands there are" - the bar was a bare line prompt, so the
+ * nineteen commands it answers were discoverable only by finding /help,
+ * which is itself one of the nineteen. LIVECHAT has had this for a while
+ * and is the model: a list that appears the moment the bar opens, narrows
+ * as you type, and can be walked with the arrow keys.
+ *
+ * The matching lives here rather than in the drawing code so it can be
+ * tested, and so the door and any future front end cannot disagree about
+ * what "in" means.
+ *
+ * Order matters and is deliberate: everything the typed text STARTS a name
+ * with comes first, in table order, then everything that merely contains
+ * it. Someone typing "in" wants install before uninstall.
+ *
+ * @param typed  what is on the line, with or without the leading slash
+ * @param ids    filled with FLOW_CMD_* values, most relevant first
+ * @param cap    how many ids will fit
+ * @return       how many were written
+ */
+int flow_command_suggest(const char *typed, int *ids, int cap)
+{
+    char word[24];
+    unsigned long len = 0;
+    int count = 0;
+    int i;
+
+    if (ids == (int *) 0 || cap <= 0) {
+        return 0;
+    }
+    if (typed == (const char *) 0) {
+        typed = "";
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+    if (*typed == '/') {
+        typed++;
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+
+    /* Only the verb is completed. Once there is a space the argument is
+     * being typed - "find dung" is a search for dung, and offering to
+     * complete it to a command name there would be noise. */
+    while (typed[len] != '\0' && typed[len] != ' ' && typed[len] != '\t'
+           && len + 1 < sizeof(word)) {
+        word[len] = (char) tolower((unsigned char) typed[len]);
+        len++;
+    }
+    word[len] = '\0';
+    if (typed[len] == ' ' || typed[len] == '\t') {
+        return 0;
+    }
+
+    /* Nothing typed yet: the whole list. This is the case the report was
+     * actually about - opening the bar has to SHOW what there is. */
+    for (i = 0; i < FLOW_COMMAND_COUNT && count < cap; i++) {
+        if (len == 0
+            || strncmp(word, flow_commands[i].name, (size_t) len) == 0) {
+            ids[count++] = flow_commands[i].id;
+        }
+    }
+    if (len == 0) {
+        return count;
+    }
+
+    for (i = 0; i < FLOW_COMMAND_COUNT && count < cap; i++) {
+        const char *name = flow_commands[i].name;
+
+        if (strncmp(word, name, (size_t) len) == 0) {
+            continue;                        /* already in, as a prefix */
+        }
+        if (strstr(name, word) != (const char *) 0) {
+            ids[count++] = flow_commands[i].id;
+        }
+    }
+
+    return count;
+}
+
+/* What is left of the best match after what has been typed.
+ *
+ * The grey tail LIVECHAT draws after the cursor, and what TAB and RIGHT
+ * accept. Empty when the typed text is not the start of any command - there
+ * is nothing honest to offer, and offering the rest of a command the letters
+ * only appear in the middle of would complete to something never asked for.
+ */
+const char *flow_command_ghost(const char *typed)
+{
+    char word[24];
+    unsigned long len = 0;
+    int i;
+
+    if (typed == (const char *) 0) {
+        return "";
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+    if (*typed == '/') {
+        typed++;
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+    while (typed[len] != '\0' && typed[len] != ' ' && typed[len] != '\t'
+           && len + 1 < sizeof(word)) {
+        word[len] = (char) tolower((unsigned char) typed[len]);
+        len++;
+    }
+    word[len] = '\0';
+    if (len == 0 || typed[len] != '\0') {
+        return "";
+    }
+
+    for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+        if (strncmp(word, flow_commands[i].name, (size_t) len) == 0) {
+            return flow_commands[i].name + len;
+        }
+    }
+    return "";
+}
+
 int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap)
 {
     char verb[24];
