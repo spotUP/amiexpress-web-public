@@ -172,6 +172,21 @@ const UPPERCASE_VALUE_FIELDS = new Set<string>([
 ]);
 
 /**
+ * The six values express.e:938-952 tests PASSWORD_SECURITY against.
+ *
+ * It compares the tooltype to each in turn and falls through to PWD_LEGACY
+ * for anything else (express.e:951), so a board whose file says `bcrypt` -
+ * which is what this admin used to offer - is running LEGACY hashing right
+ * now. Reading it back as LEGACY is not a rewrite of the sysop's value; it is
+ * the value, as the BBS resolves it. Without this the form would show a
+ * setting the board does not have, and the first save of that field would be
+ * rejected by its own schema.
+ */
+const PASSWORD_SECURITY_VALUES = new Set<string>([
+  'LEGACY', 'PBKDF2_5', 'PBKDF2_50', 'PBKDF2_100', 'PBKDF2_1000', 'PBKDF2_10000',
+]);
+
+/**
  * The case a field's value is read back in.
  *
  * A <select> whose value matches none of its options renders as though the
@@ -182,7 +197,14 @@ const UPPERCASE_VALUE_FIELDS = new Set<string>([
  */
 export function normalizeConfigValueCase(field: string, value: string): string {
   if (LOWERCASE_VALUE_FIELDS.has(field)) return value.toLowerCase();
-  if (UPPERCASE_VALUE_FIELDS.has(field)) return value.toUpperCase();
+  if (UPPERCASE_VALUE_FIELDS.has(field)) {
+    const upper = value.toUpperCase();
+    if (field === 'password_security' && !PASSWORD_SECURITY_VALUES.has(upper)) {
+      // express.e:951 - anything it does not recognise IS legacy.
+      return 'LEGACY';
+    }
+    return upper;
+  }
   return value;
 }
 

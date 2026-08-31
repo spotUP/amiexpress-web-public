@@ -46,6 +46,24 @@ describe('PASSWORD_SECURITY offers what express.e:938-952 tests for', () => {
     expect(SystemConfigSchema.partial().safeParse({ password_security: value }).success).toBe(false);
   });
 
+  it('reads a board that still says bcrypt as LEGACY, which is what it runs', () => {
+    // express.e:951 falls through to PWD_LEGACY for anything it does not
+    // recognise, so a file written by the previous admin - PASSWORD_SECURITY
+    // =bcrypt - IS a legacy board. Reading it as anything else would show the
+    // sysop a setting they do not have, and the first save of that field
+    // would be rejected by its own schema.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pwsec-old-'));
+    try {
+      fs.writeFileSync(path.join(root, 'bbsConfig.info.txt'), 'PASSWORD_SECURITY=bcrypt\n');
+      expect(loadBBSConfig(root).password_security).toBe('LEGACY');
+
+      fs.writeFileSync(path.join(root, 'bbsConfig.info.txt'), 'PASSWORD_SECURITY=pbkdf2_1000\n');
+      expect(loadBBSConfig(root).password_security).toBe('PBKDF2_1000');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('round-trips a value through bbsConfig.info in express.e spelling', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pwsec-'));
     try {
