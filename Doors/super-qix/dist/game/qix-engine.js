@@ -585,11 +585,19 @@ export class QixEngine {
      * Enter skips straight to the next level.
      */
     skipOutro() {
-        if (!this.outro)
-            return false;
+        // Clear BOTH, and check nothing first.
+        //
+        // This used to bail on `if (!this.outro) return false`, which meant that
+        // once the animation had run out the panel was still up - held by
+        // transitionTimer alone - and Enter did nothing for the last second and
+        // a half of every hand-over. Reported as "pressing enter to dismiss the
+        // dialog between levels dont work", and traced to a keypress that
+        // arrived correctly in state=levelTransition with outroRunning=false and
+        // transitionTimer=43.
+        const wasRunning = this.outro !== null || this.data.transitionTimer > 0;
         this.outro = null;
         this.data.transitionTimer = 0;
-        return true;
+        return wasRunning;
     }
     /** Is the end-of-level sequence still running? */
     isRevealing() {

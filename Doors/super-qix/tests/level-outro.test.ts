@@ -384,6 +384,56 @@ export async function enterSkipsTheHandOver(): Promise<void> {
   assert.ok(!engine.advanceLevelOutro(), 'with nothing left to advance');
 }
 
+/**
+ * Enter must dismiss the hand-over even after the animation has finished.
+ *
+ * Reported 2026-08-31: "pressing enter to dismiss the dialog between levels
+ * dont work." Traced live, one keypress settled it:
+ *
+ *   raw="\r" normalized="enter" state=levelTransition outroRunning=false
+ *   transitionTimer=43
+ *
+ * The key arrived, in the right state. But the outro sequence had already
+ * ended and the panel was being held up by transitionTimer alone, and
+ * skipOutro bailed out on `if (!this.outro) return false` BEFORE clearing
+ * that timer. So for the last second and a half of every level hand-over,
+ * Enter did nothing at all.
+ *
+ * enterSkipsTheHandOver never caught it because it only ever pressed Enter
+ * while the animation was still running.
+ */
+export async function enterDismissesTheHandOverAfterTheAnimationEnds(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => { /* no display in tests */ });
+
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+  data.sparxList = [];
+  data.claimedPercent = data.targetPercent + 1;
+  engine.update();
+
+  // Run the sequence out, exactly as the door's game loop does.
+  let frames = 0;
+  while (engine.advanceLevelOutro()) {
+    if (++frames > 1000) throw new Error('the sequence should terminate');
+  }
+
+  assert.strictEqual(engine.isRevealing(), false, 'the animation should be over');
+  assert.ok(
+    data.transitionTimer > 0,
+    `the panel should still be held up by the timer, it was ${data.transitionTimer}`
+  );
+
+  // This is the moment the player presses Enter and nothing happened.
+  engine.skipOutro();
+
+  assert.strictEqual(
+    data.transitionTimer, 0,
+    'Enter must clear the hand-over timer, not just the animation'
+  );
+}
+
 /** Skipping when there is nothing to skip does nothing. */
 export async function skippingWithNoHandOverRunningIsHarmless(): Promise<void> {
   const data = createData();
