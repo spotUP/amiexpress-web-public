@@ -65,4 +65,25 @@ export declare function ridingOffTheEdgeKillsTheFrog(): Promise<void>;
 export declare function aDivingTurtleDrownsTheFrog(): Promise<void>;
 /** The turtle widths follow the FAQ's set-of-three diagram. */
 export declare function aTurtleSetIsThreeCellsWide(): Promise<void>;
+/**
+ * A diving turtle set warns before it goes under.
+ *
+ * Reported live 2026-08-31: "we need to animate the crocodiles before they
+ * dive so i have a chanse to get off". A set used to snap from solid to gone
+ * with no tell at all, so standing on one was a coin flip.
+ */
+export declare function aDivingSetWarnsBeforeItGoesUnder(): Promise<void>;
+/** A set that is only sinking is still solid ground. */
+export declare function aSinkingSetIsStillFooting(): Promise<void>;
+/** The warning lasts long enough to react to. */
+export declare function theWarningIsLongEnoughToHopOff(): Promise<void>;
+/**
+ * Losing the last frog shows a GAME OVER screen.
+ *
+ * Reported live: "there is no game over screen in frogger?" - the state was
+ * set and nothing ever drew it, so the board simply froze.
+ */
+export declare function losingTheLastFrogShowsGameOver(): Promise<void>;
+/** ...and the prompt blinks. */
+export declare function theGameOverPromptBlinks(): Promise<void>;
 //# sourceMappingURL=hazards.test.d.ts.map

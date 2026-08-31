@@ -423,15 +423,24 @@ class FroggerGame {
     updateTurtle(obj) {
         if (obj.type !== 'turtle' || !obj.canDive)
             return;
+        obj.diveStage = obj.diveStage ?? 'up';
         obj.diveTimer = (obj.diveTimer || 0) + constants_1.GAME_TICK_MS;
-        if (obj.isDiving && obj.diveTimer >= constants_1.TURTLE_DIVE_DURATION) {
-            obj.isDiving = false;
+        // Up, then going down, then under, then up again. The middle stage is
+        // the warning: the set is drawn lower but is still solid ground, so a
+        // player watching the water has time to hop off. Without it a set
+        // vanished from under the frog with no tell at all.
+        const stages = [
+            { stage: 'up', ms: constants_1.TURTLE_SURFACE_DURATION },
+            { stage: 'sinking', ms: constants_1.TURTLE_WARNING_MS },
+            { stage: 'down', ms: constants_1.TURTLE_DIVE_DURATION },
+        ];
+        const here = stages.findIndex(s => s.stage === obj.diveStage);
+        if (obj.diveTimer >= stages[here].ms) {
+            obj.diveStage = stages[(here + 1) % stages.length].stage;
             obj.diveTimer = 0;
         }
-        else if (!obj.isDiving && obj.diveTimer >= constants_1.TURTLE_SURFACE_DURATION) {
-            obj.isDiving = true;
-            obj.diveTimer = 0;
-        }
+        // Only a set that is fully under drowns the frog on it.
+        obj.isDiving = obj.diveStage === 'down';
     }
     /** Walk the median snakes back and forth. */
     updateSnakes() {
@@ -878,11 +887,46 @@ class FroggerGame {
             flush();
             lines.push(line);
         }
+        // Losing the last frog used to leave the board frozen with nothing on
+        // it: the state was set, and nothing ever drew it.
+        if (d.state === 'gameover')
+            this.overlayGameOver(lines);
         lines.push('');
         const timeBar = '='.repeat(Math.max(0, Math.floor(d.timeRemaining / 2)));
         const timeColor = d.timeRemaining <= 10 ? 'red' : 'yellow';
         lines.push(`{${timeColor}-fg}TIME: [${timeBar.padEnd(30, ' ')}]{/}`);
         this.renderCallback(lines.join('\n'));
+    }
+    /**
+     * The GAME OVER panel, laid over the middle of the board.
+     *
+     * The cabinet blinks GAME OVER and asks for a coin; a BBS door has no
+     * coin slot, so it asks for a key.
+     */
+    overlayGameOver(lines) {
+        const d = this.data;
+        const width = constants_1.GRID_WIDTH * constants_1.CELL_WIDTH;
+        const showPrompt = Math.floor(d.frameCount / constants_1.GAME_OVER_BLINK_FRAMES) % 2 === 0;
+        const panel = [
+            { text: 'GAME OVER', colour: 'lightred' },
+            { text: '', colour: 'white' },
+            { text: `SCORE ${d.score}`, colour: 'lightgreen' },
+            { text: `LEVEL ${d.level}`, colour: 'lightgreen' },
+            { text: `HOMES ${d.homesCompleted} OF 5`, colour: 'lightgreen' },
+            { text: '', colour: 'white' },
+            { text: showPrompt ? 'PRESS ENTER' : '', colour: 'lightyellow' },
+        ];
+        const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+        panel.forEach((row, i) => {
+            const y = top + i;
+            if (y >= lines.length)
+                return;
+            const pad = Math.max(0, Math.floor((width - row.text.length) / 2));
+            lines[y] =
+                `{black-bg}${' '.repeat(pad)}` +
+                    `{${row.colour}-fg}${row.text}{/${row.colour}-fg}` +
+                    `${' '.repeat(Math.max(0, width - pad - row.text.length))}{/black-bg}`;
+        });
     }
     /** The ground: road, water, the banks and the median, and the hedge. */
     paintLanes(bgs, chars, fgs, put) {
@@ -989,8 +1033,15 @@ class FroggerGame {
                     // Under the surface: nothing to stand on, and nothing to see.
                     return { text: ' '.repeat(span), fg: 'white', bg: constants_1.BG_COLORS.water };
                 }
-                const turtles = constants_1.TURTLE_GLYPH.repeat(Math.ceil(span / constants_1.TURTLE_GLYPH.length));
-                return { text: turtles.slice(0, span), fg: constants_1.SPRITE_FG.turtle };
+                // A sinking set is drawn low, and dimmer, so the tell is visible
+                // at a glance rather than only to someone counting seconds.
+                const sinking = obj.diveStage === 'sinking';
+                const glyph = sinking ? constants_1.TURTLE_SINKING_GLYPH : constants_1.TURTLE_GLYPH;
+                const turtles = glyph.repeat(Math.ceil(span / glyph.length));
+                return {
+                    text: turtles.slice(0, span),
+                    fg: sinking ? constants_1.SPRITE_FG.turtleSinking : constants_1.SPRITE_FG.turtle,
+                };
             }
             case 'crocodile': {
                 const body = constants_1.CROCODILE_BODY.repeat(span);

@@ -27,6 +27,11 @@ exports.aLaneAlreadyFastDoesNotSpeedUpTwice = aLaneAlreadyFastDoesNotSpeedUpTwic
 exports.ridingOffTheEdgeKillsTheFrog = ridingOffTheEdgeKillsTheFrog;
 exports.aDivingTurtleDrownsTheFrog = aDivingTurtleDrownsTheFrog;
 exports.aTurtleSetIsThreeCellsWide = aTurtleSetIsThreeCellsWide;
+exports.aDivingSetWarnsBeforeItGoesUnder = aDivingSetWarnsBeforeItGoesUnder;
+exports.aSinkingSetIsStillFooting = aSinkingSetIsStillFooting;
+exports.theWarningIsLongEnoughToHopOff = theWarningIsLongEnoughToHopOff;
+exports.losingTheLastFrogShowsGameOver = losingTheLastFrogShowsGameOver;
+exports.theGameOverPromptBlinks = theGameOverPromptBlinks;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const constants_1 = require("../game/constants");
@@ -249,6 +254,10 @@ async function aDivingTurtleDrownsTheFrog() {
     const lane = (0, fixture_1.laneOf)(data, 'water', 1);
     const turtle = lane.objects.find(t => t.canDive);
     assert_1.default.ok(turtle, 'lane 1 should have a diving set');
+    // diveStage is the state; isDiving is derived from it each tick, so
+    // setting only the derived field is undone by the next update.
+    turtle.diveStage = 'down';
+    turtle.diveTimer = 0;
     turtle.isDiving = true;
     data.frog.y = lane.y;
     data.frog.x = turtle.x;
@@ -262,5 +271,101 @@ async function aTurtleSetIsThreeCellsWide() {
     const { data } = (0, fixture_1.startedLevel)(1);
     const turtle = (0, fixture_1.laneOf)(data, 'water', 1).objects[0];
     assert_1.default.strictEqual(turtle.width, constants_1.OBJECT_WIDTHS.turtle);
+}
+/**
+ * A diving turtle set warns before it goes under.
+ *
+ * Reported live 2026-08-31: "we need to animate the crocodiles before they
+ * dive so i have a chanse to get off". A set used to snap from solid to gone
+ * with no tell at all, so standing on one was a coin flip.
+ */
+async function aDivingSetWarnsBeforeItGoesUnder() {
+    const { game, data } = (0, fixture_1.startedLevel)(2);
+    const lane = (0, fixture_1.laneOf)(data, 'water', 1);
+    const turtle = lane.objects.find(t => t.canDive);
+    turtle.diveStage = 'up';
+    turtle.diveTimer = 0;
+    const seen = [];
+    for (let i = 0; i < 400; i++) {
+        game.update();
+        const stage = turtle.diveStage;
+        if (seen[seen.length - 1] !== stage)
+            seen.push(stage);
+        if (seen.length >= 4)
+            break;
+    }
+    assert_1.default.deepStrictEqual(seen.slice(0, 3), ['up', 'sinking', 'down'], `a set should sink before it dives, saw ${seen.join(' -> ')}`);
+}
+/** A set that is only sinking is still solid ground. */
+async function aSinkingSetIsStillFooting() {
+    const { game, data } = (0, fixture_1.startedLevel)(2);
+    const lane = (0, fixture_1.laneOf)(data, 'water', 1);
+    const turtle = lane.objects.find(t => t.canDive);
+    turtle.diveStage = 'sinking';
+    turtle.diveTimer = 0;
+    // A real tick, so the game works out for itself whether a sinking set is
+    // deadly - asserting against a hand-set isDiving would prove nothing.
+    data.frog.y = lane.y;
+    data.frog.x = turtle.x;
+    const lives = data.lives;
+    game.update();
+    assert_1.default.strictEqual(turtle.diveStage, 'sinking', 'still on its way down');
+    assert_1.default.ok(!turtle.isDiving, 'and not yet counted as under');
+    assert_1.default.strictEqual(data.lives, lives, 'a sinking set has not drowned anybody yet');
+    assert_1.default.ok(data.frog.onObject, 'and it still carries the frog');
+}
+/** The warning lasts long enough to react to. */
+async function theWarningIsLongEnoughToHopOff() {
+    // A hop is one tick of input; the warning has to be worth several.
+    assert_1.default.ok(constants_1.TURTLE_WARNING_MS >= 800, `${constants_1.TURTLE_WARNING_MS}ms is not enough time to notice and move`);
+}
+/**
+ * Losing the last frog shows a GAME OVER screen.
+ *
+ * Reported live: "there is no game over screen in frogger?" - the state was
+ * set and nothing ever drew it, so the board simply froze.
+ */
+async function losingTheLastFrogShowsGameOver() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    let frame = '';
+    game.renderCallback =
+        (c) => { frame = c; };
+    data.lives = 1;
+    data.score = 1234;
+    data.frog.y = 10;
+    data.frog.x = 20;
+    // Walk into a car.
+    const road = data.lanes.find(l => l.type === 'road' && l.y === 10);
+    road.objects = [{
+            id: 1, type: 'car', x: data.frog.x, y: road.y,
+            lane: road.lane, width: 2, speed: road.speed,
+        }];
+    game.checkCollisions();
+    // Run the death animation out.
+    for (let i = 0; i < 40 && data.state !== 'gameover'; i++)
+        game.update();
+    assert_1.default.strictEqual(data.state, 'gameover', 'the game should be over');
+    data.frameCount = 0;
+    game.render();
+    const text = frame.replace(/\{[^}]*\}/g, '');
+    assert_1.default.ok(text.includes('GAME OVER'), 'it should say so');
+    assert_1.default.ok(text.includes('SCORE 1234'), 'with the score');
+    assert_1.default.ok(text.includes('PRESS ENTER'), 'and what to do next');
+}
+/** ...and the prompt blinks. */
+async function theGameOverPromptBlinks() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    let frame = '';
+    game.renderCallback =
+        (c) => { frame = c; };
+    data.state = 'gameover';
+    data.frameCount = 0;
+    game.render();
+    const on = frame.includes('PRESS ENTER');
+    data.frameCount = constants_1.GAME_OVER_BLINK_FRAMES;
+    game.render();
+    const off = frame.includes('PRESS ENTER');
+    assert_1.default.ok(on, 'showing on one frame');
+    assert_1.default.ok(!off, 'and gone a blink later');
 }
 //# sourceMappingURL=hazards.test.js.map

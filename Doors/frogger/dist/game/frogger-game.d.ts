@@ -173,6 +173,13 @@ export declare class FroggerGame {
      * fill the eighty-column screen exactly.
      */
     render(): void;
+    /**
+     * The GAME OVER panel, laid over the middle of the board.
+     *
+     * The cabinet blinks GAME OVER and asks for a coin; a BBS door has no
+     * coin slot, so it asks for a key.
+     */
+    private overlayGameOver;
     /** The ground: road, water, the banks and the median, and the hedge. */
     private paintLanes;
     /** The five homes cut into the hedge. */

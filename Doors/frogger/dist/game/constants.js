@@ -8,8 +8,8 @@
  * and snakes. Everything the door used to guess at is read from here.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OTTER_INTERVAL_MS = exports.LADY_FROG_INTERVAL_MS = exports.HOME_CROCODILE_DURATION_MS = exports.HOME_CROCODILE_INTERVAL_MS = exports.FLY_DURATION_MS = exports.FLY_SPAWN_INTERVAL_MS = exports.RIVER_HURRY_MULTIPLIER = exports.RIVER_HURRY_AFTER_SECONDS = exports.LANE4_SPEEDUP_AFTER_MS = exports.LANE4_FAST_MULTIPLIER = exports.BLOCK_LENGTH = exports.BLOCK_START = exports.LANE5_CROCODILE_COUNT = exports.LEVEL_TABLE = exports.COLORS = exports.FLY_GLYPH = exports.HOME_RIGHT = exports.HOME_LEFT = exports.HEDGE_TEXTURE = exports.BANK_TEXTURE = exports.SNAKE_GLYPH = exports.OTTER_BODY = exports.CROCODILE_BODY = exports.MOUTH_GLYPH = exports.TURTLE_GLYPH = exports.LOG_END_RIGHT = exports.LOG_END_LEFT = exports.LOG_GRAIN = exports.FROG_GLYPH = exports.SPRITE_FG = exports.BG_COLORS = exports.CELL_WIDTH = exports.SCORES = exports.OBJECT_WIDTHS = exports.TURTLE_SURFACE_DURATION = exports.TURTLE_DIVE_DURATION = exports.HOME_CENTRE_OFFSET = exports.HOME_WIDTH = exports.HOME_POSITIONS = exports.LANE_CONFIG = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.EXTRA_LIFE_SCORE = exports.STARTING_LIVES = exports.LIVES_OPTIONS = exports.INITIAL_TIME = exports.GAME_TICK_MS = exports.GAME_AREA_HEIGHT = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
-exports.SPRITES = exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.MAX_NAME_LENGTH = void 0;
+exports.HOME_CROCODILE_INTERVAL_MS = exports.FLY_DURATION_MS = exports.FLY_SPAWN_INTERVAL_MS = exports.RIVER_HURRY_MULTIPLIER = exports.RIVER_HURRY_AFTER_SECONDS = exports.LANE4_SPEEDUP_AFTER_MS = exports.LANE4_FAST_MULTIPLIER = exports.BLOCK_LENGTH = exports.BLOCK_START = exports.LANE5_CROCODILE_COUNT = exports.LEVEL_TABLE = exports.COLORS = exports.FLY_GLYPH = exports.HOME_RIGHT = exports.HOME_LEFT = exports.HEDGE_TEXTURE = exports.BANK_TEXTURE = exports.SNAKE_GLYPH = exports.OTTER_BODY = exports.CROCODILE_BODY = exports.MOUTH_GLYPH = exports.TURTLE_GLYPH = exports.LOG_END_RIGHT = exports.LOG_END_LEFT = exports.LOG_GRAIN = exports.FROG_GLYPH = exports.SPRITE_FG = exports.BG_COLORS = exports.CELL_WIDTH = exports.SCORES = exports.OBJECT_WIDTHS = exports.TURTLE_SINKING_GLYPH = exports.GAME_OVER_BLINK_FRAMES = exports.TURTLE_DIVE_DURATION = exports.TURTLE_WARNING_MS = exports.TURTLE_SURFACE_DURATION = exports.HOME_CENTRE_OFFSET = exports.HOME_WIDTH = exports.HOME_POSITIONS = exports.LANE_CONFIG = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.EXTRA_LIFE_SCORE = exports.STARTING_LIVES = exports.LIVES_OPTIONS = exports.INITIAL_TIME = exports.GAME_TICK_MS = exports.GAME_AREA_HEIGHT = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.SPRITES = exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.MAX_NAME_LENGTH = exports.OTTER_INTERVAL_MS = exports.LADY_FROG_INTERVAL_MS = exports.HOME_CROCODILE_DURATION_MS = void 0;
 exports.getLevelConfig = getLevelConfig;
 // Screen dimensions
 exports.SCREEN_WIDTH = 80;
@@ -75,9 +75,20 @@ exports.HOME_WIDTH = 3;
  * forgiving in a way the arcade is famous for not being.
  */
 exports.HOME_CENTRE_OFFSET = 1;
-// Turtle dive timing
-exports.TURTLE_DIVE_DURATION = 2000; // ms underwater
-exports.TURTLE_SURFACE_DURATION = 4000; // ms above water
+/**
+ * Turtle dive timing.
+ *
+ * A set does not vanish from under the frog without warning: it spends
+ * TURTLE_WARNING_MS half-submerged first, still solid, which is the
+ * player's cue to hop off. The arcade animates the same tell.
+ */
+exports.TURTLE_SURFACE_DURATION = 4000; // ms fully up
+exports.TURTLE_WARNING_MS = 1200; // ms going down, still footing
+exports.TURTLE_DIVE_DURATION = 2000; // ms under, and deadly
+/** How fast the GAME OVER prompt blinks, in ticks per state. */
+exports.GAME_OVER_BLINK_FRAMES = 12;
+/** A turtle on its way down, drawn lower than one riding high. */
+exports.TURTLE_SINKING_GLYPH = '.o.';
 /**
  * Widths in grid cells.
  *
@@ -171,6 +182,7 @@ exports.BG_COLORS = {
 exports.SPRITE_FG = {
     log: 'gray',
     turtle: 'lightgreen',
+    turtleSinking: 'green', // dimmer: the set is on its way under
     crocodile: 'lightgreen',
     crocodileMouth: 'lightred',
     otter: 'lightcyan',
