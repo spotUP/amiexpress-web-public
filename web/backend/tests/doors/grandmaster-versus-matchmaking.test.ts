@@ -112,3 +112,39 @@ describe('two users in the 1v1 versus lobby', () => {
     expect(seen.length).toBeGreaterThan(0);
   });
 });
+
+describe('starting a match', () => {
+  let Manager: any;
+
+  beforeAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    Manager = require(path.join(DOOR, 'dist/network/network-manager')).GrandmasterNetworkManager;
+  });
+
+  beforeEach(() => {
+    delete (globalThis as any)[Symbol.for('aex-lobby-broker')];
+  });
+
+  it('does not run a lobby countdown - the game screen has its own', async () => {
+    // There were two: the lobby counted 3, then the game screen counted
+    // 3-2-1-GO. Six seconds and two clocks before every match. The game
+    // screen's is the one worth keeping, so the lobby starts outright.
+    const host = new Manager(fakeSession(600, 'sysop', 1));
+    const guest = new Manager(fakeSession(601, 'spot', 2));
+
+    await host.joinQueue('versus_1v1');
+    await guest.joinQueue('versus_1v1');
+
+    const countdowns: any[] = [];
+    const started: any[] = [];
+    guest.on('match:starting', () => countdowns.push('starting'));
+    guest.on('match:started', () => started.push('started'));
+
+    await host.startMatch();
+    await new Promise((r) => setTimeout(r, 400));
+
+    // The match begins; what must NOT happen is a multi-second lobby clock
+    // ticking before it. 400ms is far below the 3s countdown this replaced.
+    expect(started.length).toBeGreaterThan(0);
+  });
+});

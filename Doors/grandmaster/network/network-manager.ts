@@ -449,11 +449,20 @@ export class GrandmasterNetworkManager extends EventEmitter {
 
   /**
    * Start match (host only)
-   * Uses SDK lobby system's countdown mechanism
+   *
+   * Starts the game outright rather than running the lobby's own countdown.
+   * There were TWO: the lobby counted 3 and then the game screen counted
+   * 3-2-1-GO, so every match began with six seconds of waiting and two
+   * different clocks (reported 2026-08-31). The game screen's is the one
+   * worth keeping - it is on the screen the player is about to play on,
+   * and it is where "GO!" belongs.
+   *
+   * The broker's countdown path still exists and is still what a host's
+   * explicit "start in N seconds" would use; nothing here removes it.
    */
   async startMatch(): Promise<void> {
     console.log(`[GrandmasterNetworkManager] startMatch called`);
-    this.network.lobby.startCountdown(3);
+    this.network.lobby.startGame();
   }
 
   /**
