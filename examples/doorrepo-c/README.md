@@ -368,28 +368,31 @@ same thing:
 | -D-DOR11.LHA           7k|| by Loop/Abuse / ABS            2 ads             |
 | ...                      ||   ______    ________.  /\    ______.__________   |   FILE_ID.DIZ,
 +--------------------------++--------------------------------------------------+   line for line
-|ENTER/R=Get  U=Uninstall  S=Strip ads  M=Access  A=Archive  V=Doc  Q=Quit      |
+|ENTER/D=Get  U=Uninstall  S=Strip ads  M=Access  T=Config  A=Archive  Q=Quit    |
 +------------------------------------------------------------------------------+
 ```
 
 | Key | Does |
 |-----|------|
 | cursor up/down, PgUp/PgDn, Home/End | move the selection |
-| `ENTER` or `R` | download the selected archive (confirm first), verify its digest, optionally extract |
+| `ENTER` or `D` | download the selected archive (confirm first), verify its digest, optionally extract |
 | `I` | install it as a BBS command: extract, write the command config, offer to strip ads |
 | `U` | uninstall it again (only shown for an installed door) |
 | `S` | strip the ad files from an installed door (only shown when it has any) |
 | `M` | edit the access level of an installed door - typing a new level also doubles as disable/restore, remembering the level it replaced (only shown for an installed door). Edits the `.info`'s `ACCESS`/`DRACCESS` lines in place; every other tooltype (`BBSCMD`, `NAME`, `DESCRIPTION`, `MULTINODE`, `PRIORITY`, `CATEGORY`, a custom `STACK`, anything else the file carries) is preserved byte-for-byte |
 | `A` | show what is inside the archive, with ad files flagged |
 | `V` | show the door's own documentation - offered only for a door that has any |
-| `F` | filter by text - live, over the rows already loaded, no refetch |
+| `/` | filter by text - live, over the rows already loaded, no refetch |
+| `T` | edit the command config - TYPE, STACK or MENUNAME - rewriting that one line of the `.info` in place and copying every other byte through |
+| `H` | what this door has done: installs, uninstalls, strips and config edits, read back out of its log |
+| `X` | hide an archive from the repo (owner mode only) |
 | `C` | cycle the door type (the types actually present, so it never offers an empty one) |
 | `L` | open a dedicated screen listing only the doors this door has installed, with its own `U=Uninstall`/`S=Strip` |
 | `Q` | leave the door |
 
 The footer is width-budgeted, not truncated: on a narrow terminal, or a row
 whose optional keys all apply at once (an installed door with both ads and
-documentation, for example), the lowest-priority keys - `F`, `C`, then `L` -
+documentation, for example), the lowest-priority keys - `/`, `C`, then `L` -
 may not display, in that order, before anything higher-priority (`S`, `M`,
 `A`, `V`) or the mandatory `Q=Quit` is ever dropped. This is deliberate, the
 same trade-off every optional key in this footer already accepts, not a bug -

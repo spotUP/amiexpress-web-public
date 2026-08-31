@@ -1886,8 +1886,8 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * width-budgeted, see flow.h - guarantees Q=Quit is never the one that
      * gets cut, unlike the old strcat-then-truncate-at-cols shape this
      * replaced, which silently dropped it on any row with ads AND doc). */
-    optional[n++] = "F=Find";
-    optional[n++] = "C=System";
+    optional[n++] = "/=Find";
+    optional[n++] = "C=Type";
     optional[n++] = "L=Installed";
     optional[n++] = "H=History";
     optional[n++] = "K=Patterns";
@@ -1895,11 +1895,11 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
         optional[n++] = "O=Owner";
     }
     if (owner_is_logged_in()) {
-        optional[n++] = "D=Hide";
+        optional[n++] = "X=Hide";
     }
 
     len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
-                                installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install",
+                                installed ? "ENTER/D=Get  U=Uninstall" : "ENTER/D=Get  I=Install",
                                 optional, n, "Q=Quit");
     if (len < 0) {
         bar[0] = '\0'; /* unreachable with this door's fixed short strings and bar[160] */
@@ -4872,7 +4872,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                                         (unsigned long) g.visible_rows);
             break;
         case UI_KEY_ENTER:
-        case 'r': case 'R':
+        case 'd': case 'D':
             if (view.count > 0) {
                 const dr_entry *sel = &cat->rows[view.index[selected]];
                 char question[160];
@@ -4903,7 +4903,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 need_full_redraw = 1;
             }
             break;
-        case 'f': case 'F':
+        case '/':
             /* Filter in place over the rows already loaded - no refetch. */
             ui_filter_prompt(&buf, frame, (long) sizeof(frame), &g, &view, cat);
             selected = 0;
@@ -5060,7 +5060,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             (void) ae_key();
             need_full_redraw = 1;
             break;
-        case 'd': case 'D':
+        case 'x': case 'X':
             if (owner_is_enabled() && view.count > 0) {
                 const dr_entry *sel = &cat->rows[view.index[selected]];
                 char question[160];
@@ -5190,7 +5190,7 @@ static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
         }
         optional[n++] = "A=Archive";
         len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
-                                    "ENTER/R=Get  U=Uninstall",
+                                    "ENTER/D=Get  U=Uninstall",
                                     optional, n, "Q=Back");
     }
     if (len < 0) {
@@ -6304,7 +6304,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                                         (unsigned long) g.visible_rows);
             break;
         case UI_KEY_ENTER:
-        case 'r': case 'R':
+        case 'd': case 'D':
             if (view.count > 0) {
                 const dr_entry *sel = &cat->rows[view.index[selected]];
                 char question[160];
@@ -6584,7 +6584,7 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
         page_number = (int) info.page_number;
         print_page(cat, &info, filter_desc);
 
-        ae_put("Selection (number), [N]ext [P]rev [T]ype [S]earch [A]ll [L]ist installed [Q]uit: ", 0);
+        ae_put("Selection (number), [N]ext [P]rev [C]ycle type [/]Find [R]eset [L]ist installed [Q]uit: ", 0);
         get_trimmed_line(input, sizeof(input));
 
         if (carrier_lost()) {
@@ -6624,11 +6624,15 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
         case 'p': case 'P':
             page_number -= 1;
             break;
-        case 't': case 'T':
+        /* The same letters the ANSI screens use: C cycles the type filter,
+         * / finds, R resets. This screen used to say T for type, S for
+         * search and A for all - three letters that mean Config, Strip and
+         * Archive everywhere else in the same door. */
+        case 'c': case 'C':
             return BROWSE_FILTER_TYPE;
-        case 's': case 'S':
+        case '/':
             return BROWSE_FILTER_SEARCH;
-        case 'a': case 'A':
+        case 'r': case 'R':
             return BROWSE_ALL;
         case 'l': case 'L':
             installed_loop_plain(cfg, cat);
