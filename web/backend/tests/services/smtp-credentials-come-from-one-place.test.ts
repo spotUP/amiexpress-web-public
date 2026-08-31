@@ -25,7 +25,7 @@ jest.mock('../../src/database', () => ({
   },
 }));
 
-import { getMailOptions, clearMailCache } from '../../src/services/mail-notification.service';
+import { getMailOptions, clearMailCache, usesImplicitTls } from '../../src/services/mail-notification.service';
 import { saveBBSConfig } from '../../src/services/bbs-config-file.service';
 import { config as appConfig } from '../../src/config';
 
@@ -73,5 +73,36 @@ describe('the SMTP credentials the mailer is handed', () => {
     const options = await getMailOptions();
 
     expect(options!.username).toBe('olduser');
+  });
+});
+
+describe('the connection the SMTP test opens', () => {
+  // "The SMTP test just spins" - gmail on port 465 with the SSL box unticked.
+  // 465 is SMTPS: the server expects TLS from the first byte and never sends
+  // a plaintext greeting, so connecting without `secure` does not fail, it
+  // WAITS. nodemailer's default greeting timeout is 30s and its socket
+  // timeout 10 minutes, and the spinner has nothing to say in the meantime.
+  it('is implicit TLS on 465 whatever the SSL flag says', () => {
+    expect(usesImplicitTls(465, false)).toBe(true);
+    expect(usesImplicitTls(465, true)).toBe(true);
+  });
+
+  it('honours the SSL flag on every other port', () => {
+    // express.e:31814 reads SMTP_SSL as a flag; it stays the sysop's choice.
+    expect(usesImplicitTls(587, false)).toBe(false);
+    expect(usesImplicitTls(25, false)).toBe(false);
+    expect(usesImplicitTls(2525, true)).toBe(true);
+  });
+
+  it('carries timeouts, so a wrong port answers instead of hanging', () => {
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '..', '..', 'src', 'services', 'mail-notification.service.ts'),
+      'utf8'
+    );
+    expect(source).toContain('connectionTimeout');
+    expect(source).toContain('greetingTimeout');
+    expect(source).toContain('socketTimeout');
+    // Both transports: the one that sends mail and the one the test opens.
+    expect(source.split('...SMTP_TIMEOUTS').length - 1).toBe(2);
   });
 });

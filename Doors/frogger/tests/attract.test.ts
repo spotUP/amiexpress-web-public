@@ -280,3 +280,67 @@ export async function theDemoStartsOnTheBank(): Promise<void> {
   const { data } = startedLevel(1);
   assert.strictEqual(data.frog.y, GRID_HEIGHT - 1);
 }
+
+/**
+ * Every row of the title starts at the same column.
+ *
+ * Reported live 2026-08-31 with a screenshot: "the frogger logo looks like
+ * some rows etc are offset". titleGrid trimmed the trailing spaces off each
+ * row, so the rows came out different lengths - 60, 61, 60, 60, 61 - and
+ * titleLines centres by row length, so each row was padded by a different
+ * amount and the letters sheared apart.
+ */
+export async function everyTitleRowIsTheSameLength(): Promise<void> {
+  const grid = titleGrid();
+  const lengths = new Set(grid.map(row => row.length));
+
+  assert.strictEqual(
+    lengths.size, 1,
+    `the title rows are ${grid.map(r => r.length).join(', ')} long`
+  );
+}
+
+/**
+ * ...and the ink starts at the same column on every row.
+ *
+ * Measured by where the first COLOURED run begins, not by counting leading
+ * spaces: the title is painted as background colour, so once the tags are
+ * stripped the whole line is spaces and counting them measures nothing.
+ */
+export async function everyTitleRowStartsAtTheSameColumn(): Promise<void> {
+  const inkColumn = (line: string) => {
+    let column = 0;
+    const parts = line.split(/(\{[a-z]+-bg\}|\{\/[a-z]+-bg\})/);
+    let painted = false;
+
+    for (const part of parts) {
+      if (part.startsWith('{/')) { painted = false; continue; }
+      if (part.startsWith('{')) { painted = true; continue; }
+      if (painted) return column;
+      column += part.length;
+    }
+    return column;
+  };
+
+  const columns = new Set(titleLines(80).map(inkColumn));
+
+  assert.strictEqual(
+    columns.size, 1,
+    `the rows start at columns ${[...columns].join(', ')}`
+  );
+}
+
+/** The letters line up: each column is the same letter on every row. */
+export async function theLettersLineUpAcrossRows(): Promise<void> {
+  const grid = titleGrid();
+
+  // The first column that has ink in it should be the same on the rows that
+  // make up the upright of the F - the letter is a straight stem.
+  const inkAt = (row: string) => row.indexOf('#');
+
+  assert.strictEqual(
+    inkAt(grid[0]), inkAt(grid[2]),
+    "the F's stem should be in one column on every row"
+  );
+  assert.strictEqual(inkAt(grid[2]), inkAt(grid[4]));
+}

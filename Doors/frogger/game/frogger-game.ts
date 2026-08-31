@@ -395,14 +395,22 @@ export class FroggerGame {
     let newX = frog.x;
     let newY = frog.y;
 
+    // A hop always lands on a whole cell.
+    //
+    // Riding a log leaves the frog on a fractional x, and hopping straight
+    // up from one kept that fraction - so whether the frog counted as being
+    // in a home came down to which way the fraction happened to round, and
+    // a frog visibly over the opening could die for missing it. The frog is
+    // drawn on a cell; it should land on one too.
     switch (direction) {
-      case 'up':    newY = Math.max(0, frog.y - 1); break;
-      case 'down':  newY = Math.min(GRID_HEIGHT - 1, frog.y + 1); break;
+      case 'up':    newX = Math.round(frog.x); newY = Math.max(0, frog.y - 1); break;
+      case 'down':  newX = Math.round(frog.x); newY = Math.min(GRID_HEIGHT - 1, frog.y + 1); break;
       case 'left':  newX = Math.max(0, Math.round(frog.x) - 1); break;
       case 'right': newX = Math.min(GRID_WIDTH - 1, Math.round(frog.x) + 1); break;
     }
 
     if (newX === frog.x && newY === frog.y) return;
+
 
     frog.direction = direction;
     frog.isJumping = true;

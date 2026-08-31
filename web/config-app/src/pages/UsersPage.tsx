@@ -379,10 +379,14 @@ export function UsersPage() {
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     className="input-field w-full font-mono"
                     required
-                    disabled={!!editingUser}
+                    maxLength={31}
                   />
                   {editingUser && (
-                    <p className="text-xs text-bbs-muted mt-1">Username cannot be changed</p>
+                    <p className="text-xs text-status-warn mt-1">
+                      Renaming changes the account. It does NOT rewrite history:
+                      messages, the callers log and file uploaders keep the name
+                      they were written with.
+                    </p>
                   )}
                 </div>
 

@@ -36,10 +36,6 @@ const NOT_SAVED_BY_THE_ROUTE: Record<string, string> = {
   // Handled on its own, hashed rather than assigned.
   password: 'hashed separately, never assigned straight through',
   confirmPassword: 'never leaves the browser',
-  // The form disables this while editing and says "Username cannot be
-  // changed"; a rename is not a field edit on a board where the username is
-  // the identity in user.data.
-  username: 'disabled while editing, and the form says so',
 };
 
 describe('Users: what the form can send, the route must write', () => {
@@ -140,5 +136,34 @@ describe('Access Levels: every flag survives being written and read back', () =>
       .map(([name]) => name);
 
     expect(unexpectedlyGranted).toEqual(['ACS.DOWNLOAD']);
+  });
+});
+
+describe('renaming a user', () => {
+  // The form disabled the field and said "Username cannot be changed". The
+  // write path had always supported it - userToStruct puts `user.username`
+  // into the record's name field - so what was missing was validation, not
+  // the ability.
+  const routes = () =>
+    fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'api', 'config-routes.ts'), 'utf8');
+
+  it('is handled by the route', () => {
+    expect(routes()).toContain('updates.username !== undefined');
+    expect(routes()).toContain('updatedUser.username = wanted');
+  });
+
+  it('refuses an empty name, an over-long one, and a name already taken', () => {
+    const source = routes();
+    expect(source).toContain('Username cannot be empty');
+    expect(source).toContain('Username cannot be longer than 31 characters');
+    expect(source).toContain('already exists');
+  });
+
+  it('is no longer disabled on the form, and warns about history', () => {
+    const page = fs.readFileSync(USERS_PAGE, 'utf8');
+    expect(page).not.toContain('Username cannot be changed');
+    // A rename does not rewrite messages or the callers log; saying so is the
+    // difference between a feature and a surprise.
+    expect(page).toContain('does NOT rewrite history');
   });
 });

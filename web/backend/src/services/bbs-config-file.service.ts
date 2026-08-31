@@ -853,7 +853,7 @@ function getDefaultConfig(): BBSConfigData {
  */
 const SENSITIVE_TOOLTYPES = [
   'SMTP_PASSWORD',
-  'SMTP_USERNAME', // Can contain auth tokens
+  // SMTP_USERNAME is NOT stripped: express.e:31810 reads it out of this file.
   'SENDGRID_API_KEY',
   'REGKEY',
   'FTP_PASSWORD',

@@ -32,6 +32,9 @@ exports.aSinkingSetIsStillFooting = aSinkingSetIsStillFooting;
 exports.theWarningIsLongEnoughToHopOff = theWarningIsLongEnoughToHopOff;
 exports.losingTheLastFrogShowsGameOver = losingTheLastFrogShowsGameOver;
 exports.theGameOverPromptBlinks = theGameOverPromptBlinks;
+exports.gettingHomeIsDecidedByTheCellTheFrogIsDrawnOn = gettingHomeIsDecidedByTheCellTheFrogIsDrawnOn;
+exports.missingTheHomeByAWholeCellStillKills = missingTheHomeByAWholeCellStillKills;
+exports.aHopLandsOnAWholeCell = aHopLandsOnAWholeCell;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const constants_1 = require("../game/constants");
@@ -367,5 +370,59 @@ async function theGameOverPromptBlinks() {
     const off = frame.includes('PRESS ENTER');
     assert_1.default.ok(on, 'showing on one frame');
     assert_1.default.ok(!off, 'and gone a blink later');
+}
+/**
+ * Whether a frog gets home is decided by the cell it is DRAWN on.
+ *
+ * Reported live 2026-08-31 with a screenshot: "i placed my frog in the
+ * second home now and got game over". Riding a log leaves the frog on a
+ * fractional x, and a hop used to keep that fraction - so the frog could be
+ * drawn on the home's cell and still be judged against a position half a
+ * cell away. A hop now lands on a whole cell, which is the one it is drawn
+ * on, so what the player sees is what is tested.
+ */
+async function gettingHomeIsDecidedByTheCellTheFrogIsDrawnOn() {
+    for (const fraction of [0, 0.1, 0.3, 0.5, 0.7, 0.9]) {
+        const { game, data } = (0, fixture_1.startedLevel)(1);
+        const lane = data.lanes.find(l => l.type === 'water' && l.lane === 5);
+        const centre = data.homes[1].x + constants_1.HOME_CENTRE_OFFSET;
+        data.frog.y = lane.y;
+        data.frog.x = centre + fraction;
+        // The cell the player can see the frog on.
+        const drawnOn = Math.round(data.frog.x);
+        const shouldGetHome = drawnOn === centre;
+        const lives = data.lives;
+        game.handleDirection('up');
+        assert_1.default.strictEqual(data.homes[1].occupied, shouldGetHome, `drawn on cell ${drawnOn}, home centre ${centre}: expected ` +
+            `${shouldGetHome ? 'a home' : 'a miss'} at ${fraction} of a cell`);
+        assert_1.default.strictEqual(data.lives, shouldGetHome ? lives : lives - 1, `and the life to match at ${fraction}`);
+    }
+}
+/** Landing on a cell that is not a home still kills, as the FAQ requires. */
+async function missingTheHomeByAWholeCellStillKills() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    const lane = data.lanes.find(l => l.type === 'water' && l.lane === 5);
+    data.frog.y = lane.y;
+    data.frog.x = data.homes[1].x + constants_1.HOME_CENTRE_OFFSET + 1;
+    const lives = data.lives;
+    game.handleDirection('up');
+    assert_1.default.ok(!data.homes[1].occupied, 'one cell off is still a miss');
+    assert_1.default.strictEqual(data.lives, lives - 1);
+}
+/**
+ * A hop lands on a whole cell.
+ *
+ * Checked on open water, where nothing picks the frog up again: riding an
+ * object deliberately puts it back on the object's own fractional position,
+ * a whole number of cells along it.
+ */
+async function aHopLandsOnAWholeCell() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    const lane = data.lanes.find(l => l.type === 'water' && l.lane === 2);
+    lane.objects = []; // nothing to be carried by
+    data.frog.y = lane.y + 1;
+    data.frog.x = 14.7;
+    game.handleDirection('up');
+    assert_1.default.strictEqual(data.frog.x, Math.round(14.7), `the frog landed on ${data.frog.x}`);
 }
 //# sourceMappingURL=hazards.test.js.map

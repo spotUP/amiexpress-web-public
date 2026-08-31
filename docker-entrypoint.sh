@@ -109,7 +109,22 @@ fi
 # When in doubt, default to VOLUME-OWNED. False positives in IMAGE-OWNED
 # silently nuke sysop edits.
 
-IMAGE_OWNED_INFO="ConfConfig.info Doors.info NamesNotAllowed.info Access.info Commands.info ComputerList.info Drives.info ScreenTypes.info Protocols.info Storage.info Private.info HELP.info Languages.info Utils.info FCheck.info Zoom.info Areas.info AmiXnet.info UUCP.info batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info Conf.DB"
+IMAGE_OWNED_INFO="Doors.info NamesNotAllowed.info Access.info Commands.info Protocols.info Storage.info Private.info HELP.info Utils.info Zoom.info Areas.info AmiXnet.info UUCP.info batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info Conf.DB"
+
+# TRACKED: the image is authoritative until the sysop changes it.
+#
+# These four were IMAGE-OWNED, under a comment saying "there is no
+# sysop/admin path that legitimately modifies these". There is - they are
+# exactly what the admin's Computers, Drives, Screen Types and Conferences
+# pages write - so every save was reverted on the next restart, logged as
+# "hash drift". The drift WAS the sysop.
+#
+# They are not VOLUME-OWNED either: seeding once and never updating means a
+# genuine fix in the image never reaches a board, silently. Tracked splits
+# the difference by remembering what the last deploy wrote: a file still
+# matching that is untouched and may be updated; one that differs was edited
+# and is left alone. See sync_tracked.
+TRACKED_INFO="ConfConfig.info ComputerList.info Drives.info ScreenTypes.info Languages.info FCheck.info"
 
 VOLUME_OWNED_INFO="Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info SysopStats.info"
 
@@ -121,6 +136,89 @@ echo "[Entrypoint] Syncing root configuration files..."
 # IMAGE-OWNED: always overwrite from image if hashes differ (or if missing).
 # Compare with md5sum so we don't churn mtimes on every restart for unchanged
 # files. FORCE_REINIT_CONFIG=1 forces unconditional overwrite for both classes.
+# Where the last deploy's hashes live, and how they are read.
+#
+# One `md5sum`-shaped line per tracked path: "<hash> <relative path>".
+DEPLOY_MANIFEST="$BBS_DATA_DIR/.deployed-manifest"
+DEPLOY_MANIFEST_NEXT="$BBS_DATA_DIR/.deployed-manifest.next"
+
+manifest_hash() {
+    [ -f "$DEPLOY_MANIFEST" ] || return 0
+    awk -v k="$1" '$2 == k { print $1; exit }' "$DEPLOY_MANIFEST"
+}
+
+file_hash() {
+    md5sum "$1" 2>/dev/null | awk '{print $1}'
+}
+
+# Sync one file the sysop is allowed to own.
+#
+#   missing on the volume          -> copy it, and remember what we wrote
+#   volume matches the manifest    -> untouched since the last deploy, so the
+#                                     image may update it
+#   volume differs from manifest   -> the sysop edited it; keep theirs, and
+#                                     keep the old baseline so we can still
+#                                     tell next time
+#   no manifest entry yet          -> ADOPT what is on the volume and change
+#                                     nothing. First run after this landed
+#                                     must not overwrite edits it has no
+#                                     baseline for.
+sync_tracked() {
+    local rel="$1"
+    local src="$DEFAULT_DATA_DIR/$rel"
+    local dst="$BBS_DATA_DIR/$rel"
+    [ -f "$src" ] || return 0
+
+    local ih vh mh
+    ih=$(file_hash "$src")
+
+    if [ ! -f "$dst" ]; then
+        mkdir -p "$(dirname "$dst")"
+        cp "$src" "$dst"
+        echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
+        TRACKED_CREATED=$((TRACKED_CREATED + 1))
+        return 0
+    fi
+
+    vh=$(file_hash "$dst")
+    mh=$(manifest_hash "$rel")
+
+    if [ -z "$mh" ]; then
+        # First run with no baseline. Record the IMAGE's hash, not the
+        # volume's: the manifest means "what the image last put here", so a
+        # file that already differs is recognised as edited on the very next
+        # deploy. Recording the volume's hash instead would declare the
+        # sysop's own edit to be the baseline, and the next deploy would
+        # overwrite it as untouched - which a test of this function caught it
+        # doing.
+        echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
+        TRACKED_ADOPTED=$((TRACKED_ADOPTED + 1))
+        return 0
+    fi
+
+    if [ "$vh" = "$mh" ]; then
+        if [ "$vh" != "$ih" ]; then
+            cp "$src" "$dst"
+            TRACKED_UPDATED=$((TRACKED_UPDATED + 1))
+        fi
+        echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
+        return 0
+    fi
+
+    if [ "$vh" = "$ih" ]; then
+        # The board and the image agree again - the sysop reverted, or the
+        # image caught up with them. The divergence is over, so tracking
+        # resumes; without this a file stayed sysop-owned for ever and never
+        # took another update.
+        echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
+        return 0
+    fi
+
+    # Edited on the board. Keep it, and keep the baseline it diverged from.
+    echo "$mh $rel" >> "$DEPLOY_MANIFEST_NEXT"
+    TRACKED_KEPT=$((TRACKED_KEPT + 1))
+}
+
 sync_image_owned() {
     local file="$1"
     local src="$DEFAULT_DATA_DIR/$file"
@@ -159,6 +257,12 @@ sync_volume_owned() {
 
 for f in $IMAGE_OWNED_INFO; do sync_image_owned "$f"; done
 for f in $VOLUME_OWNED_INFO; do sync_volume_owned "$f"; done
+
+# Tracked files and the whole Commands tree: the image leads until the sysop
+# takes over a file. Counters are reported after the directory pass below.
+TRACKED_CREATED=0; TRACKED_UPDATED=0; TRACKED_KEPT=0; TRACKED_ADOPTED=0
+rm -f "$DEPLOY_MANIFEST_NEXT"
+for f in $TRACKED_INFO; do sync_tracked "$f"; done
 
 # Also mirror the entire Access/ directory (ACS.*.info, AREA.*.info,
 # PRESET.*.info) — these are pure permission tables, never edited by the
@@ -305,7 +409,11 @@ else
     # Now: copy file by file, skip runtime data, report what changed, and let
     # a real failure be loud.
     echo "[Entrypoint] Syncing code directories from image..."
-    for sync_dir in Doors Commands Screens Libs C; do
+    # Commands is NOT in this list. It holds the door definitions the admin
+    # edits - Commands/BBSCmd/<CMD>.info - and a blanket overwrite reverted
+    # every door edit on the next restart. It goes through sync_tracked
+    # below, which lets the image lead until the sysop takes a file over.
+    for sync_dir in Doors Screens Libs C; do
         [ -d "$DEFAULT_DATA_DIR/$sync_dir" ] || continue
 
         # One tar stream, not a file-by-file loop.
@@ -333,6 +441,26 @@ else
 
         echo "[Entrypoint]   Synced $sync_dir from image"
     done
+
+    # Commands/: every door's definition, and the one directory in this list
+    # a sysop edits through the admin.
+    echo "[Entrypoint] Syncing Commands (tracked)..."
+    if [ -d "$DEFAULT_DATA_DIR/Commands" ]; then
+        COMMANDS_LIST=$(mktemp)
+        (cd "$DEFAULT_DATA_DIR" && find Commands -type f -print) > "$COMMANDS_LIST"
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            sync_tracked "$rel"
+        done < "$COMMANDS_LIST"
+        rm -f "$COMMANDS_LIST"
+    fi
+
+    # Anything the manifest still names that the image no longer ships stays
+    # on the volume untouched; it simply stops being tracked.
+    if [ -f "$DEPLOY_MANIFEST_NEXT" ]; then
+        mv "$DEPLOY_MANIFEST_NEXT" "$DEPLOY_MANIFEST"
+    fi
+    echo "[Entrypoint]   Tracked: $TRACKED_CREATED created, $TRACKED_UPDATED updated, $TRACKED_KEPT kept (edited on this board), $TRACKED_ADOPTED adopted"
 
     # Say, on the volume itself, that the sync finished.
     #

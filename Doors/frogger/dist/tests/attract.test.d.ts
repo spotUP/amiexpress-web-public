@@ -45,4 +45,24 @@ export declare function theDemoHopsWhenTheRoadIsClear(): Promise<void>;
 export declare function theDemoWillNotHopIntoWater(): Promise<void>;
 /** A demo game is a game like any other: it starts on the bank. */
 export declare function theDemoStartsOnTheBank(): Promise<void>;
+/**
+ * Every row of the title starts at the same column.
+ *
+ * Reported live 2026-08-31 with a screenshot: "the frogger logo looks like
+ * some rows etc are offset". titleGrid trimmed the trailing spaces off each
+ * row, so the rows came out different lengths - 60, 61, 60, 60, 61 - and
+ * titleLines centres by row length, so each row was padded by a different
+ * amount and the letters sheared apart.
+ */
+export declare function everyTitleRowIsTheSameLength(): Promise<void>;
+/**
+ * ...and the ink starts at the same column on every row.
+ *
+ * Measured by where the first COLOURED run begins, not by counting leading
+ * spaces: the title is painted as background colour, so once the tags are
+ * stripped the whole line is spaces and counting them measures nothing.
+ */
+export declare function everyTitleRowStartsAtTheSameColumn(): Promise<void>;
+/** The letters line up: each column is the same letter on every row. */
+export declare function theLettersLineUpAcrossRows(): Promise<void>;
 //# sourceMappingURL=attract.test.d.ts.map

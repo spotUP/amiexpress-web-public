@@ -101,10 +101,10 @@ endif
 LIVE_HOST = http://bbs.uprough.net
 
 CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c json_lite.c owner_auth.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h json_lite.h owner_auth.h
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h json_lite.h owner_auth.h dirlist.h
 
-NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c
-AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c
+NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c dirlist_native.c
+AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c dirlist_amiga.c
 
 # tools/probe_fetch.c is a head-less diagnostic, not part of the door: it
 # pulls one archive through the same http.c/netio.c path with no catalog and
@@ -187,11 +187,15 @@ TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
 .PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite test-owner-auth
 
-test: syntax test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite test-owner-auth
+test: syntax test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite test-owner-auth test-dirlist
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
 	./build-test-flow
+
+test-dirlist: dirlist_native.c tests/test_dirlist.c dirlist.h
+	$(CC) $(TEST_CFLAGS) dirlist_native.c tests/test_dirlist.c -o build-test-dirlist
+	./build-test-dirlist
 
 test-json-lite: json_lite.c tests/test_json_lite.c json_lite.h
 	$(CC) $(TEST_CFLAGS) json_lite.c tests/test_json_lite.c -o build-test-json-lite

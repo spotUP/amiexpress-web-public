@@ -71,6 +71,19 @@ const DISK_ONLY_FIELDS = new Set<string>([
   'password_security',
   'strict_password_policy',
 
+  // express.e:31810 reads SMTP_USERNAME out of bbsConfig.info, into
+  // mailOptions.username. It is the account name the relay authenticates -
+  // not a secret in the way its password is - and encrypting it into the
+  // database left the disk value empty, so the field read back blank after
+  // every save while its own badge said "bbsConfig.info : SMTP_USERNAME".
+  //
+  // Its PASSWORD stays encrypted. express.e:31811 reads that from the icon
+  // too, so a real Amiga cannot authenticate without it - a parity gap taken
+  // deliberately, because unlike AUTOVAL_PASSWORD (a shared board password
+  // callers type) an SMTP password is the sysop's own credential and does not
+  // belong in a file the Configuration Files page will happily display.
+  'smtp_username',
+
   // ACP.e:2630 reads SYSTEM_PASSWORD out of bbsConfig.info - it is the
   // password the sysop types at the local console, and the gate that checks it
   // reads the disk. Encrypting it into the database left the disk value empty,

@@ -38,6 +38,11 @@ export function SecurityPage() {
   // Memoised: the effect below depends on it, and a fresh [] each render
   // would re-run it every time.
   const levels: number[] = useMemo(() => levelsQuery.data?.data?.levels ?? [], [levelsQuery.data]);
+  /** The levels users actually hold, and which ACS file serves each. */
+  const inUse: Array<{ level: number; users: number; servedBy: number | null }> = useMemo(
+    () => levelsQuery.data?.data?.inUse ?? [],
+    [levelsQuery.data]
+  );
   // Memoised for the same reason as `levels`: a fresh [] each render would
   // re-run the filter below on every render.
   const permissions: string[] = useMemo(
@@ -168,6 +173,54 @@ export function SecurityPage() {
         <p className="text-bbs-muted">
           No ACS level files found in the Access directory.
         </p>
+      )}
+
+      {/* The levels USERS hold, and which file each is served from.
+          Listing only the files made this page look invented: a board whose
+          new users are level 30 saw 10/20/50/255 and no way to tell that a
+          level-30 caller is served out of ACS.20 (express.e:3025 rounds down
+          to a multiple of five, then walks down). */}
+      {inUse.length > 0 && (
+        <div className="p-3 rounded border border-bbs-muted/30 text-sm">
+          <p className="mb-2 text-content-secondary">
+            What your users actually have. AmiExpress rounds a level down to a
+            multiple of five and walks down until it finds a file
+            (express.e:3025).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {inUse.map(row => {
+              const exact = row.servedBy === row.level;
+              return (
+                <button
+                  key={row.level}
+                  onClick={() => row.servedBy !== null && setSelectedLevel(row.servedBy)}
+                  className={`px-2 py-1 rounded border text-left ${
+                    exact ? 'border-status-ok/50' : 'border-status-warn/50'
+                  }`}
+                  title={
+                    row.servedBy === null
+                      ? 'No ACS file matches - this level gets nothing'
+                      : exact
+                        ? `Served by its own ACS.${row.level}.info`
+                        : `Served by ACS.${row.servedBy}.info - there is no ACS.${row.level}.info`
+                  }
+                >
+                  <span className="text-content-primary">Level {row.level}</span>
+                  <span className="ml-2 text-content-muted">
+                    {row.users} user{row.users === 1 ? '' : 's'}
+                  </span>
+                  <span className="ml-2 text-content-muted">
+                    {row.servedBy === null
+                      ? '-> nothing'
+                      : exact
+                        ? '-> its own file'
+                        : `-> ACS.${row.servedBy}.info`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Flags for the selected level */}
