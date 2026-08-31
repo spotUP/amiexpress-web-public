@@ -30,4 +30,19 @@ export declare function theMenuIsDrivenByMenuSelection(): Promise<void>;
  * menu off the left edge.
  */
 export declare function noPopupIsWiderThanItsParent(): Promise<void>;
+/** Nothing may exceed the width it was asked for, or the box wraps. */
+export declare function noMenuLineExceedsItsWidth(): Promise<void>;
+/** The selected row is marked the way Arkanoid marks it. */
+export declare function theSelectedRowIsPickedOut(): Promise<void>;
+/** A settings row shows what it is set to. */
+export declare function aSettingsRowShowsItsValue(): Promise<void>;
+/**
+ * The selection wraps at both ends, as a cabinet does.
+ *
+ * Several doors clamped instead, so holding down on the last row felt broken
+ * when the row was merely last.
+ */
+export declare function theSelectionWrapsAtBothEnds(): Promise<void>;
+/** Arkanoid's brick strip is NOT inherited by every door. */
+export declare function noDoorInheritsArkanoidsBricks(): Promise<void>;
 //# sourceMappingURL=menu.test.d.ts.map

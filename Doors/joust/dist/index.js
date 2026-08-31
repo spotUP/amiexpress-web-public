@@ -4,6 +4,7 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { JoustGame } from "./game/joust-game";
 import { rpcHandlers } from "./server";
@@ -159,10 +160,16 @@ function renderMenu() {
         "{white-fg}Williams Electronics 1982{/}",
         "",
     ];
-    MENU_OPTIONS.forEach((option, index) => {
-        const selected = index === gameData.menuSelection;
-        menuContent.push(`{${selected ? "yellow" : "white"}-fg}${selected ? "> " : "  "}${option}{/}`);
-    });
+    // Arkanoid's menu, from the shared arcade shell: centred rows, the
+    // selected one picked out, and one hint line. The door keeps its own
+    // logo above this - Arkanoid's title is two lines of text, and these
+    // games have their own.
+    menuContent.push(...arcadeMenu({
+        title: [],
+        options: MENU_OPTIONS,
+        selection: gameData.menuSelection,
+        width: 38,
+    }));
     menuBox = blessed.box({
         fixed: true,
         parent: gameArea,
@@ -382,11 +389,11 @@ function normalizeKey(key) {
 }
 function handleMenuInput(key) {
     if (key === "up") {
-        gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+        gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
         renderMenu();
     }
     else if (key === "down") {
-        gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+        gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
         renderMenu();
     }
     else if (key === "enter" || key === "flap") {

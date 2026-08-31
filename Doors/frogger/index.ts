@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
@@ -383,24 +384,17 @@ function renderMenu(): void {
   menuContent.push("");
 
 
-  MENU_OPTIONS.forEach((option, index) => {
-    const selected = index === gameData.menuSelection;
-
-    // The lives row shows its setting and Enter steps through them. On the
-    // cabinet this was an operator switch (FAQ 6.3).
-    const label = option === "Lives"
-      ? `${option}: ${gameData.startingLives}`
-      : option;
-
-    const text = selected ? `> ${label} <` : `  ${label}  `;
-    const pad = Math.max(0, Math.floor((width - text.length) / 2));
-
-    menuContent.push(
-      selected
-        ? `${" ".repeat(pad)}{blue-bg}{lightyellow-fg}${text}{/lightyellow-fg}{/blue-bg}`
-        : `${" ".repeat(pad)}{white-fg}${text}{/white-fg}`
-    );
-  });
+  // The shared arcade menu. The lives row keeps its value - on the cabinet
+  // this was an operator switch (FAQ 6.3) - which is what MenuOption's
+  // `value` is for.
+  menuContent.push(...arcadeMenu({
+    title: [],
+    options: MENU_OPTIONS.map(option => option === "Lives"
+      ? { label: option, value: String(gameData.startingLives) }
+      : option),
+    selection: gameData.menuSelection,
+    width,
+  }));
 
   menuContent.push("");
   menuContent.push(centred("UP/DOWN to choose, ENTER to confirm", width, "gray"));

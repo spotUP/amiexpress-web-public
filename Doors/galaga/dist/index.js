@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.rpcHandlers = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-input-manager");
 const galaga_game_1 = require("./game/galaga-game");
@@ -166,12 +167,16 @@ function renderMenu() {
         "{white-fg}Classic 1981 Namco Space Shooter{/}",
         "",
     ];
-    constants_1.MENU_OPTIONS.forEach((option, index) => {
-        const selected = index === gameData.menuSelection;
-        const prefix = selected ? "> " : "  ";
-        const color = selected ? "yellow" : "white";
-        menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
-    });
+    // Arkanoid's menu, from the shared arcade shell: centred rows, the
+    // selected one picked out, and one hint line. The door keeps its own
+    // logo above this - Arkanoid's title is two lines of text, and these
+    // games have their own.
+    menuContent.push(...(0, arcade_1.arcadeMenu)({
+        title: [],
+        options: constants_1.MENU_OPTIONS,
+        selection: gameData.menuSelection,
+        width: 43,
+    }));
     menuBox = blessed_1.default.box({
         fixed: true,
         parent: gameArea,
@@ -338,11 +343,11 @@ function normalizeKey(key) {
 function handleMenuInput(key) {
     switch (key) {
         case "up":
-            gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+            gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, -1);
             renderMenu();
             break;
         case "down":
-            gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+            gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, +1);
             renderMenu();
             break;
         case "enter":
@@ -634,13 +639,13 @@ door.onStart(async (ctx) => {
     // D-pad for menu navigation
     gamepadManager.on('dpad:up', () => {
         if (gameData.state === 'menu') {
-            gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+            gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, -1);
             renderMenu();
         }
     });
     gamepadManager.on('dpad:down', () => {
         if (gameData.state === 'menu') {
-            gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+            gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, +1);
             renderMenu();
         }
     });

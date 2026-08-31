@@ -9,6 +9,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
@@ -399,18 +400,17 @@ function renderMenu(): void {
     "",
   ];
 
-  MENU_OPTIONS.forEach((option, index) => {
-    const selected = index === gameData.menuSelection;
-    const prefix = selected ? "{cyan-fg}> " : "{white-fg}  ";
-
-    // The skill row shows what it is set to, and Enter cycles it. In the
-    // arcade this was an operator switch inside the cabinet (FAQ 4).
-    const label = option === SKILL_ROW
-      ? `${option}: ${SKILL_LEVELS[gameData.skill].label}`
-      : option;
-
-    menuContent.push(`${prefix}${label}{/}`);
-  });
+  // The shared arcade menu. The skill row keeps what it is set to - in the
+  // arcade an operator switch inside the cabinet (FAQ 4) - carried as the
+  // MenuOption's `value`.
+  menuContent.push(...arcadeMenu({
+    title: [],
+    options: MENU_OPTIONS.map(option => option === SKILL_ROW
+      ? { label: option, value: SKILL_LEVELS[gameData.skill].label }
+      : option),
+    selection: gameData.menuSelection,
+    width: 52,
+  }));
 
   menuBox = blessed.box({
     fixed: true,
@@ -840,15 +840,12 @@ function handleInput(key: string): void {
 function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
-      gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+      gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
       renderMenu();
       break;
 
     case "down":
-      gameData.menuSelection = Math.min(
-        MENU_OPTIONS.length - 1,
-        gameData.menuSelection + 1
-      );
+      gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
       renderMenu();
       break;
 

@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
@@ -193,12 +194,16 @@ function renderMenu(): void {
     "",
   ];
 
-  MENU_OPTIONS.forEach((option, index) => {
-    const selected = index === gameData.menuSelection;
-    const prefix = selected ? "> " : "  ";
-    const color = selected ? "yellow" : "white";
-    menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
-  });
+  // Arkanoid's menu, from the shared arcade shell: centred rows, the
+  // selected one picked out, and one hint line. The door keeps its own
+  // logo above this - Arkanoid's title is two lines of text, and these
+  // games have their own.
+  menuContent.push(...arcadeMenu({
+    title: [],
+    options: MENU_OPTIONS,
+    selection: gameData.menuSelection,
+    width: 43,
+  }));
 
   menuBox = blessed.box({
     fixed: true,
@@ -379,14 +384,11 @@ function normalizeKey(key: string): InputKey {
 function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
-      gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+      gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
       renderMenu();
       break;
     case "down":
-      gameData.menuSelection = Math.min(
-        MENU_OPTIONS.length - 1,
-        gameData.menuSelection + 1
-      );
+      gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
       renderMenu();
       break;
     case "enter":
@@ -699,14 +701,14 @@ door.onStart(async (ctx: any) => {
   // D-pad for menu navigation
   gamepadManager.on('dpad:up', () => {
     if (gameData.state === 'menu') {
-      gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+      gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
       renderMenu();
     }
   });
 
   gamepadManager.on('dpad:down', () => {
     if (gameData.state === 'menu') {
-      gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+      gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
       renderMenu();
     }
   });
