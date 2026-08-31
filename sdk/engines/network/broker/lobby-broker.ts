@@ -317,7 +317,28 @@ export class LobbyBroker {
       this.handleLeaveLobby(clientId);
     }
 
-    // Find a waiting matchmaking lobby with the same mode
+    // Find a waiting lobby with the same mode.
+    //
+    // If two people are online and both ask for the same game, they must end
+    // up in the same lobby. Every extra condition here is a way for that to
+    // fail quietly, and two of them did (reported live 2026-08-31: two
+    // browsers in the 1v1 versus lobby, neither seeing the other):
+    //
+    //   - `settings.matchmaking === true` excluded any lobby that was not
+    //     itself created by matchmaking. A player who opened a lobby by any
+    //     other route was invisible to the next person searching, who then
+    //     made a second lobby beside them.
+    //
+    //   - "don't match against yourself" compared the BBS USER id, so two
+    //     sessions of one account - two browsers, the case anybody testing
+    //     this reaches for first - were treated as the same person and
+    //     deliberately kept apart. A session is a player; that is what the
+    //     clientId identifies.
+    //
+    // What is left is the minimum that has to be true: a game of this mode,
+    // open, public, with room. The OLDEST such lobby wins, so two players
+    // searching at the same moment converge on one rather than picking
+    // different ones.
     let targetLobby: Lobby | null = null;
     for (const lobby of this.lobbies.values()) {
       if (
@@ -325,12 +346,12 @@ export class LobbyBroker {
         !lobby.isPrivate &&
         lobby.players.length < lobby.maxPlayers &&
         lobby.settings?.mode === data.mode &&
-        lobby.settings?.matchmaking === true &&
-        // Don't match against yourself
-        !lobby.players.some(p => p.id === client.playerId)
+        // Not a lobby THIS SESSION is already sitting in.
+        this.clientLobbies.get(clientId) !== lobby.id
       ) {
-        targetLobby = lobby;
-        break;
+        if (!targetLobby || lobby.created < targetLobby.created) {
+          targetLobby = lobby;
+        }
       }
     }
 

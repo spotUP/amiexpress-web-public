@@ -33,14 +33,25 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         this.gameEngine = null;
         this.network = new network_engine_1.NetworkEngine();
         // Get player info from session
-        this.localPlayerId = bbsSession.user?.id || `player-${Date.now()}`;
-        this.localPlayerName = bbsSession.user?.username || 'Player';
-        // Generate a stable numeric ID from user ID for SDK lobby system
-        this.localPlayerNumericId = typeof bbsSession.user?.id === 'number'
-            ? bbsSession.user.id
-            : this.hashStringToNumber(this.localPlayerId || 'unknown');
-        // Connect via in-process broker for BBS multiplayer
         const nodeId = bbsSession.bbsSession?.nodeNumber ?? bbsSession.nodeNumber ?? 1;
+        // A PLAYER IS A SESSION, not an account.
+        //
+        // This used to be the BBS user id alone, and two sessions of one account
+        // - two browsers, which is what anybody testing multiplayer reaches for
+        // first - came out as the same player. The broker then kept them apart
+        // on purpose ("don't match against yourself") and each sat in a lobby of
+        // their own, seeing nobody. Reported live 2026-08-31.
+        //
+        // The node is what makes a session: this board gives each connection its
+        // own node, so <user>@<node> is one seat at one keyboard. It stays
+        // stable for as long as that session lives, which is what the lobby, the
+        // scores and the reconnect all need.
+        this.localPlayerId = bbsSession.user?.id
+            ? `${bbsSession.user.id}@${nodeId}`
+            : `player-${nodeId}-${Date.now()}`;
+        this.localPlayerName = bbsSession.user?.username || 'Player';
+        this.localPlayerNumericId = this.hashStringToNumber(this.localPlayerId);
+        // Connect via in-process broker for BBS multiplayer
         this.network.connectBroker({
             playerId: this.localPlayerNumericId,
             playerName: this.localPlayerName,
