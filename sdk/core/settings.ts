@@ -30,6 +30,33 @@ export class DoorSettingsError extends Error {
   }
 }
 
+/** How far above a compiled door's `dist/` the declaration may sit. */
+const DOOR_ROOT_SEARCH_DEPTH = 3;
+
+/**
+ * The directory a door's settings actually live in.
+ *
+ * `__dirname` is not the same place in development as it is on the board: the
+ * backend imports `index.ts` in development and `dist/index.js` in production
+ * (`door.handler.ts`), so a compiled door asks from `Doors/<door>/dist` while
+ * the admin writes to `Doors/<door>`. Walking up for the declaration makes
+ * both ask the same question, and makes `readDoorSettings(__dirname)` - what
+ * every door is told to call - correct in both.
+ *
+ * The declaration is what identifies the root. A door without one has no
+ * settings anywhere, so the directory it asked about comes back unchanged.
+ */
+export function resolveDoorRoot(startDir: string): string {
+  let dir = path.resolve(startDir);
+  for (let depth = 0; depth <= DOOR_ROOT_SEARCH_DEPTH; depth++) {
+    if (fs.existsSync(path.join(dir, MANIFEST_FILE))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(startDir);
+}
+
 function assertSetting(doorDir: string, setting: unknown, index: number): DoorSetting {
   const where = `settings[${index}]`;
   if (!setting || typeof setting !== 'object') {
@@ -60,33 +87,34 @@ function assertSetting(doorDir: string, setting: unknown, index: number): DoorSe
  * door the admin shows exactly as it does today.
  */
 export function readManifest(doorDir: string): DoorSettingsManifest | null {
-  const file = path.join(doorDir, MANIFEST_FILE);
+  const root = resolveDoorRoot(doorDir);
+  const file = path.join(root, MANIFEST_FILE);
   if (!fs.existsSync(file)) return null;
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch (error) {
-    throw new DoorSettingsError(doorDir, `is not valid JSON (${(error as Error).message})`);
+    throw new DoorSettingsError(root, `is not valid JSON (${(error as Error).message})`);
   }
 
   const manifest = parsed as Partial<DoorSettingsManifest>;
   if (!manifest || typeof manifest !== 'object') {
-    throw new DoorSettingsError(doorDir, 'is not an object');
+    throw new DoorSettingsError(root, 'is not an object');
   }
   if (!manifest.command || typeof manifest.command !== 'string') {
-    throw new DoorSettingsError(doorDir, 'has no command');
+    throw new DoorSettingsError(root, 'has no command');
   }
   if (!Array.isArray(manifest.settings)) {
-    throw new DoorSettingsError(doorDir, 'has no settings array');
+    throw new DoorSettingsError(root, 'has no settings array');
   }
 
-  const settings = manifest.settings.map((s, i) => assertSetting(doorDir, s, i));
+  const settings = manifest.settings.map((s, i) => assertSetting(root, s, i));
 
   const seen = new Set<string>();
   for (const s of settings) {
     if (seen.has(s.key)) {
-      throw new DoorSettingsError(doorDir, `declares ${s.key} twice`);
+      throw new DoorSettingsError(root, `declares ${s.key} twice`);
     }
     seen.add(s.key);
   }
@@ -96,7 +124,7 @@ export function readManifest(doorDir: string): DoorSettingsManifest | null {
 
 /** The raw values file, or an empty object. Unvalidated on purpose. */
 export function readValues(doorDir: string): Record<string, unknown> {
-  const file = path.join(doorDir, VALUES_FILE);
+  const file = path.join(resolveDoorRoot(doorDir), VALUES_FILE);
   if (!fs.existsSync(file)) return {};
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -109,13 +137,38 @@ export function readValues(doorDir: string): Record<string, unknown> {
 }
 
 /**
+ * One stored value, as the setting declares it.
+ *
+ * A value of the wrong type falls back to the default rather than reaching the
+ * door as a string where it expects a number - the sysop's editor and a
+ * hand-written settings.json are both allowed to be sloppy; the door is not
+ * the place to find out.
+ */
+function coerce(setting: DoorSetting, raw: unknown): string | number | boolean {
+  switch (setting.type) {
+    case 'number': {
+      const n = typeof raw === 'number' ? raw : Number(raw);
+      return Number.isFinite(n) ? n : (setting.default as number ?? 0);
+    }
+    case 'boolean':
+      return typeof raw === 'boolean' ? raw : raw === 'true' || raw === 1;
+    case 'choice': {
+      const allowed = (setting.choices ?? []).map(c => c.value);
+      return allowed.includes(String(raw))
+        ? String(raw)
+        : (setting.default as string ?? allowed[0]);
+    }
+    default:
+      return String(raw);
+  }
+}
+
+/**
  * What the door should use: declared defaults, with the sysop's values over
  * them.
  *
  * A key in settings.json that the door does not declare is ignored - a door
- * that dropped a setting should not be handed it back - and a value of the
- * wrong type falls back to the default rather than reaching the door as a
- * string where it expects a number.
+ * that dropped a setting should not be handed it back.
  */
 export function readDoorSettings(doorDir: string): DoorSettingValues {
   const manifest = readManifest(doorDir);
@@ -126,30 +179,38 @@ export function readDoorSettings(doorDir: string): DoorSettingValues {
 
   for (const setting of manifest.settings) {
     const raw = values[setting.key];
-    const fallback = setting.default;
 
     if (raw === undefined || raw === null) {
-      if (fallback !== undefined) out[setting.key] = fallback;
+      if (setting.default !== undefined) out[setting.key] = setting.default;
       continue;
     }
 
-    switch (setting.type) {
-      case 'number': {
-        const n = typeof raw === 'number' ? raw : Number(raw);
-        out[setting.key] = Number.isFinite(n) ? n : (fallback as number ?? 0);
-        break;
-      }
-      case 'boolean':
-        out[setting.key] = typeof raw === 'boolean' ? raw : raw === 'true' || raw === 1;
-        break;
-      case 'choice': {
-        const allowed = (setting.choices ?? []).map(c => c.value);
-        out[setting.key] = allowed.includes(String(raw)) ? String(raw) : (fallback as string ?? allowed[0]);
-        break;
-      }
-      default:
-        out[setting.key] = String(raw);
-    }
+    out[setting.key] = coerce(setting, raw);
+  }
+
+  return out;
+}
+
+/**
+ * Only what the sysop actually set - no defaults.
+ *
+ * For a door that is migrating off a configuration file of its own: its old
+ * file must keep working for one release, and a default cannot be allowed to
+ * overwrite a value that file supplies. Layer it defaults -> old file ->
+ * these, and a key nobody has touched in the admin stays whatever the old
+ * file says.
+ */
+export function readDoorSettingOverrides(doorDir: string): Partial<DoorSettingValues> {
+  const manifest = readManifest(doorDir);
+  if (!manifest) return {};
+
+  const values = readValues(doorDir);
+  const out: DoorSettingValues = {};
+
+  for (const setting of manifest.settings) {
+    const raw = values[setting.key];
+    if (raw === undefined || raw === null || raw === '') continue;
+    out[setting.key] = coerce(setting, raw);
   }
 
   return out;

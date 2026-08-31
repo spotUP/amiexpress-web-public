@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readDoorSettings, readManifest, DoorSettingsError } from '../core/settings';
+import { readDoorSettings, readDoorSettingOverrides, readManifest, resolveDoorRoot, DoorSettingsError } from '../core/settings';
 
 const MANIFEST = {
   command: 'TESTDOOR',
@@ -100,5 +100,66 @@ describe('door settings', () => {
     ] });
 
     expect(() => readManifest(doorDir)).toThrow(/declares port twice/);
+  });
+
+  // The backend imports a door's index.ts in development and its
+  // dist/index.js in production (door.handler.ts), so the SAME
+  // readDoorSettings(__dirname) call arrives from two different directories
+  // while the admin only ever writes to one of them.
+  describe('a compiled door asking from its dist directory', () => {
+    let distDir: string;
+
+    beforeEach(() => {
+      distDir = path.join(doorDir, 'dist');
+      fs.mkdirSync(distDir);
+    });
+
+    it('finds the declaration and the values the admin wrote one level up', () => {
+      writeManifest(MANIFEST);
+      writeValues({ server: 'wall.uprough.net' });
+
+      expect(resolveDoorRoot(distDir)).toBe(doorDir);
+      expect(readDoorSettings(distDir).server).toBe('wall.uprough.net');
+    });
+
+    it('reads nothing from a directory whose door has no declaration', () => {
+      expect(readDoorSettings(distDir)).toEqual({});
+      expect(resolveDoorRoot(distDir)).toBe(distDir);
+    });
+
+    it('prefers a declaration in the directory it was given', () => {
+      writeManifest(MANIFEST);
+      fs.writeFileSync(path.join(distDir, 'door.settings.json'), JSON.stringify({
+        command: 'INNER', settings: [{ key: 'server', label: 'Server', type: 'string', default: 'inner' }],
+      }));
+
+      expect(readDoorSettings(distDir).server).toBe('inner');
+    });
+  });
+
+  // A door migrating off its own config file layers defaults -> old file ->
+  // what the sysop set. A default that came back as a "value" would silently
+  // overwrite the old file.
+  describe('overrides only', () => {
+    it('returns just the keys the sysop actually set', () => {
+      writeManifest(MANIFEST);
+      writeValues({ port: 6697 });
+
+      expect(readDoorSettingOverrides(doorDir)).toEqual({ port: 6697 });
+    });
+
+    it('is empty when the sysop has set nothing, defaults and all', () => {
+      writeManifest(MANIFEST);
+
+      expect(readDoorSettingOverrides(doorDir)).toEqual({});
+      expect(readDoorSettings(doorDir).port).toBe(6667);
+    });
+
+    it('treats an empty secret as unset, the way the admin sends it back', () => {
+      writeManifest(MANIFEST);
+      writeValues({ password: '', server: 'wall.uprough.net' });
+
+      expect(readDoorSettingOverrides(doorDir)).toEqual({ server: 'wall.uprough.net' });
+    });
   });
 });

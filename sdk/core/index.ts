@@ -43,7 +43,7 @@ export type {
   // Internal
   RawDoorSession,
 } from './types';
-export { readDoorSettings, readManifest, readValues, DoorSettingsError, MANIFEST_FILE, VALUES_FILE } from './settings';
+export { readDoorSettings, readDoorSettingOverrides, readManifest, readValues, resolveDoorRoot, DoorSettingsError, MANIFEST_FILE, VALUES_FILE } from './settings';
 
 // Export enums (these are values, not types)
 export { AnsiColor, AnsiStyle, SpecialKey } from './types';
