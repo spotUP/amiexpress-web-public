@@ -3,7 +3,9 @@
  * Supports .ANS (ANSI), .ASC (ASCII), .XB (XBin) formats
  */
 
-import { decodeCP437, encodeCP437, cp437ByteToChar, charToCP437Byte } from './cp437';
+import {
+  decodeCP437, encodeCP437, cp437ByteToChar, charToCP437Byte, decoderForFont,
+} from './cp437';
 import type { Cell } from '../types';
 import * as Canvas from './canvas';
 
@@ -145,12 +147,32 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
   // Parse SAUCE record (if present)
   const sauce = parseSAUCE(data) || undefined;
 
-  // Get content (without SAUCE)
-  const contentLength = sauce ? sauce.fileSize : data.length;
+  // Get content (without SAUCE).
+  //
+  // SAUCE's fileSize says where the art ends, but plenty of files carry a
+  // zero (or a nonsense value) there. Taking it literally loads nothing and
+  // renders a blank screen, so fall back to everything up to the SAUCE
+  // record itself, less the EOF marker that conventionally precedes it.
+  let contentLength = data.length;
+  if (sauce) {
+    const beforeSauce = Math.max(0, data.length - 128);
+    const trimmed = beforeSauce > 0 && data[beforeSauce - 1] === 0x1a
+      ? beforeSauce - 1
+      : beforeSauce;
+
+    contentLength = sauce.fileSize > 0 && sauce.fileSize <= trimmed
+      ? sauce.fileSize
+      : trimmed;
+  }
   const content = data.slice(0, contentLength);
 
   // Parse ANSI content
   const width = sauce?.tInfo1 || 80;
+
+  // Amiga art is Latin-1, not CP437 (see decoderForFont). Eleven of the
+  // sixteen Super Qix backgrounds are Amiga pieces, and every one of them
+  // came out as box-drawing before this.
+  const byteToChar = decoderForFont(sauce?.tInfoS);
   const height = sauce?.tInfo2 || 25;
   const iceColors = sauce ? (sauce.tFlags & 1) === 1 : false;
 
@@ -314,7 +336,7 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
         if (y >= height) break;
       }
 
-      const char = cp437ByteToChar(byte);
+      const char = byteToChar(byte);
       if (x < width && y < height) {
         Canvas.setCell(canvas, x, y, {
           char,
