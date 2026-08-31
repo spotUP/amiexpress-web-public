@@ -318,7 +318,16 @@ function spawnHarness(
     const t0 = Date.now();
     const proc = spawn("npx", args, {
       cwd: REPO_ROOT,
-      env: { ...process.env, FORCE_COLOR: "0" },
+      // The harness lives in web/backend but is spawned from the repo root,
+      // where there is no tsconfig.json - so tsx transpiled it with decorators
+      // disabled and every probe died on chat.handler.ts's parameter
+      // decorators, whatever door was being probed. Point tsx at the config
+      // that actually governs that source tree.
+      env: {
+        ...process.env,
+        FORCE_COLOR: "0",
+        TSX_TSCONFIG_PATH: path.join(REPO_ROOT, "web/backend/tsconfig.json"),
+      },
       stdio: ["pipe", "pipe", "pipe"],
       // detached + new process group → kill(-pid) reaches every child.
       // Without this, SIGKILL on the npx wrapper leaves the grandchild
