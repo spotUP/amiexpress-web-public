@@ -2,6 +2,7 @@
  * Pipe Dream - Game Engine
  * 1989 LucasArts puzzle game
  */
+import { cellSprite, paint, asCursor } from './sprites';
 import { QUEUE_SIZE, SCORES, PIPE_CONNECTIONS, PIPE_CHARS, OPPOSITE, DIRECTION_VECTORS, getLevelConfig, getPipesForLevel, } from './constants';
 export class PipeDreamGame {
     constructor(data, renderCallback, onGameOver, onLevelComplete) {
@@ -331,41 +332,11 @@ export class PipeDreamGame {
             for (let x = 0; x < gridW; x++) {
                 const cell = this.data.grid[y][x];
                 const isCursor = x === this.data.cursor.x && y === this.data.cursor.y;
-                let cellStr = '';
-                if (cell.isObstacle) {
-                    cellStr = '{gray-fg}XXX{/}';
-                }
-                else if (cell.pipe) {
-                    const char = PIPE_CHARS[cell.pipe];
-                    const isFilled = cell.fillLevel > 50;
-                    const isPartial = cell.fillLevel > 0 && cell.fillLevel <= 50;
-                    if (cell.pipe === 'start') {
-                        cellStr = `{green-fg}[${this.data.startDirection === 'right' ? '>' : this.data.startDirection === 'left' ? '<' : this.data.startDirection === 'up' ? '^' : 'v'}]{/}`;
-                    }
-                    else if (cell.pipe === 'end') {
-                        cellStr = '{magenta-fg}[E]{/}';
-                    }
-                    else if (cell.pipe === 'reservoir') {
-                        const fillChar = isFilled ? '~' : isPartial ? '.' : ' ';
-                        cellStr = isFilled ? `{cyan-fg}[${fillChar}]{/}` : `{blue-fg}[${fillChar}]{/}`;
-                    }
-                    else {
-                        // Regular pipe
-                        const color = isFilled ? 'cyan' : isPartial ? 'blue' : 'yellow';
-                        cellStr = `{${color}-fg} ${char} {/}`;
-                    }
-                }
-                else {
-                    // Empty cell
-                    cellStr = ' . ';
-                }
-                // Cursor highlight
-                if (isCursor) {
-                    output += `{white-bg}{black-fg}${cellStr.replace(/{[^}]+}/g, '')}{/}`;
-                }
-                else {
-                    output += cellStr;
-                }
+                const arrow = this.data.startDirection === 'right' ? '>' :
+                    this.data.startDirection === 'left' ? '<' :
+                        this.data.startDirection === 'up' ? '^' : 'v';
+                const sprite = cellSprite(cell.pipe, cell.fillLevel, cell.isObstacle, arrow);
+                output += isCursor ? asCursor(sprite) : paint(sprite);
             }
             output += '|\n';
         }
