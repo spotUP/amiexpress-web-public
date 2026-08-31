@@ -12,6 +12,7 @@ import { ConferenceConfigSchema, type RequestContext } from '../config.schemas';
 import { ConferenceSetupService } from '../conference-setup.service';
 import { loadConfConfig } from '../conf-config.service';
 import { notifyConferencesChanged } from '../conference-change-bus';
+import { ConferenceRemovalService, type ConferenceRemovalOptions } from '../conference-removal.service';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -312,51 +313,71 @@ console.error(`[ConferenceConfigService] Mirror update failed for conference ${c
   }
 
   /**
-   * Remove a conference.
+   * Remove a conference, from any position.
    *
-   * What this used to do: delete the conference_config row and unlink
-   * Conf<N>.info. That is not a delete, it is half of one. ConfConfig.info
-   * still advertised the conference - NCONFS unchanged, NAME.<N> and
-   * LOCATION.<N> still there - so express.e:31849 went on building it into
-   * the conference list, users who had access could still join it, and what
-   * they joined had no icon behind it: no NDIRS, no message base, no file
-   * paths.
+   * This used to refuse anything but the last one. The refusal was honest -
+   * a conference is a POSITION, and renumbering moves what every account can
+   * reach - but it left the sysop stuck: on a fourteen-conference board,
+   * removing number three meant removing eleven others first.
    *
-   * What it deliberately does NOT do is delete the conference's DIRECTORY.
-   * That holds every message ever posted there and every file ever uploaded,
-   * and no confirmation dialog is worth that. The path is returned so the
-   * sysop can remove it themselves once they are sure.
+   * So the renumbering is done properly instead, by ConferenceRemovalService,
+   * which moves EVERYTHING keyed by position together: the conference list,
+   * the icons, every account's access string, the per-user read pointers and
+   * the Amiga-side Conf.DB. It copies all of that first.
+   *
+   * The conference's DIRECTORY is still a separate decision, because it holds
+   * every message posted there and every file uploaded to it. It is kept
+   * unless the caller asks for it, and reported either way.
    */
   async deleteConferenceConfig(
     conferenceId: number,
-    context: RequestContext
-  ): Promise<{ deleted: boolean; keptOnDisk: string | null; nconfs: number }> {
+    context: RequestContext,
+    options: ConferenceRemovalOptions = {}
+  ): Promise<{
+    deleted: boolean;
+    keptOnDisk: string | null;
+    filesRemoved: string | null;
+    renumbered: boolean;
+    usersMigrated: number;
+    nconfs: number;
+  }> {
     const oldConfig = await this.getConferenceConfig(conferenceId);
-    if (!oldConfig) return { deleted: false, keptOnDisk: null, nconfs: 0 };
-
-    // ConfConfig.info FIRST. It is the file that decides whether the
-    // conference exists at all, and it is the one that refuses when removing
-    // this conference would renumber the others - see removeLastConference.
-    // Doing it first means a refusal changes nothing.
-    const { nconfs, location } = await this.conferenceSetup.removeLastConference(conferenceId);
+    if (!oldConfig) {
+      return {
+        deleted: false,
+        keptOnDisk: null,
+        filesRemoved: null,
+        renumbered: false,
+        usersMigrated: 0,
+        nconfs: 0,
+      };
+    }
 
     const bbsRoot = appConfig.get('dataDir');
-    const confInfoPath = path.join(bbsRoot, `Conf${conferenceId}.info`);
-    if (fs.existsSync(confInfoPath)) {
-      try {
-        fs.unlinkSync(confInfoPath);
-console.log(`[ConferenceConfigService] Deleted ${confInfoPath}`);
-      } catch (error) {
-console.error(`[ConferenceConfigService] Failed to delete ${confInfoPath}:`, error);
-      }
-    }
+
+    // Imported here rather than at the top of the file. Both are module-level
+    // singletons that construct on import, and pulling them into this
+    // module's import graph took tests/api/config-routes.test.ts from twelve
+    // passing tests to a suite that could not start at all. A write path runs
+    // rarely; an import runs every time anything touches this service.
+    const { userFileManager } = await import('../UserFileManager');
+    const { conferenceFileManager } = await import('../ConferenceFileManager');
+
+    const removal = new ConferenceRemovalService(bbsRoot, {
+      users: userFileManager,
+      sqlite: (this.database as unknown as { db?: { prepare(sql: string): { run(...p: unknown[]): unknown } } }).db,
+      confDb: conferenceFileManager,
+    });
+
+    // Disk first, and it throws before touching anything if the conference
+    // does not exist or is the last one standing.
+    const result = await removal.remove(conferenceId, options);
 
     // The mirror is best-effort and comes last: a conference that only ever
     // existed on disk has no row, and that must not turn a completed removal
     // into an error.
-    let deleted = false;
     try {
-      deleted = this.configRepo.deleteConferenceConfig(conferenceId);
+      this.configRepo.deleteConferenceConfig(conferenceId);
     } catch (mirrorError) {
 console.error(`[ConferenceConfigService] Mirror delete failed for conference ${conferenceId} (disk already updated):`, mirrorError);
     }
@@ -367,11 +388,13 @@ console.error(`[ConferenceConfigService] Mirror delete failed for conference ${c
 
     await this.refreshRunningBoard();
 
-    const confDir = location ? path.join(bbsRoot, location.replace(/^.*:/, '')) : '';
     return {
       deleted: true,
-      keptOnDisk: confDir && fs.existsSync(confDir) ? confDir : null,
-      nconfs,
+      keptOnDisk: result.keptOnDisk,
+      filesRemoved: result.filesRemoved,
+      renumbered: result.renumbered,
+      usersMigrated: result.usersMigrated,
+      nconfs: result.nconfs,
     };
   }
 }

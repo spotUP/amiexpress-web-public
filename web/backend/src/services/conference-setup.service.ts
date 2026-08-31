@@ -383,54 +383,6 @@ console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
 console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(currentNconfs, conferenceId)}, NAME.${conferenceId}=${conferenceName}`);
   }
 
-  /**
-   * Remove the LAST conference from ConfConfig.info.
-   *
-   * Only the last, and that is not a limitation of this code - it is what
-   * AmiExpress's own data model allows. A conference is a POSITION:
-   * express.e:8506 tests `user.conferenceAccess[confNum-1]="X"`, and
-   * express.e:31849 walks `FOR i:=1 TO cmds.numConf` reading NAME.i and
-   * LOCATION.i. Deleting conference 7 of 14 and closing the gap would shift
-   * 8..14 down by one, so every user who could reach conference 8 would
-   * silently be holding access to what used to be 9 - on every account, with
-   * nothing to show it happened.
-   *
-   * Leaving a hole instead is no better: NCONFS is a COUNT, so a gap either
-   * truncates the conferences above it or leaves a named conference with no
-   * icon behind it, which is the state the previous delete left the board in.
-   *
-   * So: the last one comes off the end, and the rest is the sysop's call.
-   */
-  async removeLastConference(conferenceId: number): Promise<{ nconfs: number; location: string }> {
-    const confConfigPath = path.join(this.bbsRoot, 'ConfConfig.info');
-    if (!fs.existsSync(confConfigPath)) {
-      throw new Error('ConfConfig.info not found');
-    }
-
-    const toolTypes = readTooltypeMap(confConfigPath);
-    const nconfs = parseInt(toolTypes.get('NCONFS') ?? '0', 10) || 0;
-
-    if (conferenceId !== nconfs) {
-      throw new Error(
-        `Only the last conference can be removed. This board has ${nconfs}; ` +
-        `removing ${conferenceId} would renumber the ones above it, and a user's ` +
-        `conference access is stored by POSITION (express.e:8506) - every account ` +
-        `would silently gain or lose access. Remove ${nconfs} first, or empty ` +
-        `conference ${conferenceId} and leave it in place.`
-      );
-    }
-    if (nconfs <= 1) {
-      throw new Error('A board must keep at least one conference');
-    }
-
-    const location = toolTypes.get(`LOCATION.${conferenceId}`) ?? '';
-
-    applyTooltypes(confConfigPath, [['NCONFS', String(nconfs - 1)]], {
-      removeKeys: key => key === `NAME.${conferenceId}` || key === `LOCATION.${conferenceId}`,
-    });
-
-    return { nconfs: nconfs - 1, location };
-  }
 
   /**
    * Update Conf{N}.info file with conference settings

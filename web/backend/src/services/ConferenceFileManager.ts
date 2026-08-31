@@ -261,6 +261,33 @@ console.error(`[ConferenceFileManager] Error writing conference "${conf.name}":`
   }
 
   /**
+   * Splice one slot out of Conf.DB.
+   *
+   * Conf.DB is fixed-size records indexed from zero, so removing conference n
+   * means dropping record n-1 and letting the rest fall left - the same shift
+   * ConfConfig.info gets, because the two are the same list seen from the two
+   * sides of the board. Leaving the record in place would keep a conference
+   * the BBS no longer has in every Amiga door that reads this file.
+   */
+  removeSlot(slotNumber: number): void {
+    if (!fs.existsSync(this.confDBPath)) return;
+
+    const buffer = fs.readFileSync(this.confDBPath);
+    if (buffer.length === 0 || buffer.length % this.CONFBASE_SIZE !== 0) {
+console.warn('[ConferenceFileManager] Conf.DB is not a whole number of records; leaving it alone');
+      return;
+    }
+
+    const count = buffer.length / this.CONFBASE_SIZE;
+    if (slotNumber < 0 || slotNumber >= count) return;
+
+    const before = buffer.subarray(0, slotNumber * this.CONFBASE_SIZE);
+    const after = buffer.subarray((slotNumber + 1) * this.CONFBASE_SIZE);
+    fs.writeFileSync(this.confDBPath, Buffer.concat([before, after]));
+console.log(`[ConferenceFileManager] Removed Conf.DB slot ${slotNumber} (${count} -> ${count - 1})`);
+  }
+
+  /**
    * Update conference in Conf.DB (modify existing slot)
    */
   updateConferenceFile(conf: Conference, slotNumber: number): void {

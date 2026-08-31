@@ -345,22 +345,37 @@ console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError)
     try {
       const conferenceId = parseInt(req.params.conferenceId, 10);
       const context = getRequestContext(req);
-      const result = await configService.deleteConferenceConfig(conferenceId, context);
+
+      // Opt-in, and only on the exact string: deleting a conference's
+      // directory destroys every message and upload in it, so a stray
+      // truthy value must not be enough to trigger it.
+      const removeFiles =
+        req.query?.removeFiles === 'true' || req.body?.removeFiles === true;
+
+      const result = await configService.deleteConferenceConfig(conferenceId, context, {
+        removeFiles,
+      });
 
       if (!result.deleted) {
         return handleError(res, new Error(`Conference ${conferenceId} configuration not found`));
       }
 
-      // Say what was left behind. The conference's directory holds every
-      // message posted there and every file uploaded to it, and removing that
-      // is the sysop's decision, not a side effect of a button.
-      sendResponse(
-        res,
-        result,
-        result.keptOnDisk
-          ? `Conference removed. Its files are still on disk at ${result.keptOnDisk} - delete them yourself when you are sure.`
-          : 'Conference removed'
-      );
+      // Say what moved and what was left behind. Renumbering rewrites every
+      // account's access string, which the sysop should hear about from the
+      // thing that did it.
+      const parts: string[] = ['Conference removed'];
+      if (result.renumbered) {
+        parts.push(
+          `the conferences above it moved down one, and ${result.usersMigrated} account(s) had their access rewritten to match`
+        );
+      }
+      if (result.filesRemoved) {
+        parts.push(`its files were deleted from ${result.filesRemoved}`);
+      } else if (result.keptOnDisk) {
+        parts.push(`its files are still on disk at ${result.keptOnDisk}`);
+      }
+
+      sendResponse(res, result, parts.join(' - '));
     } catch (error) {
       handleError(res, error);
     }

@@ -287,8 +287,9 @@ class ApiClient {
     });
   }
 
-  async deleteConferenceConfig(confNumber: number) {
-    return this.request<ApiResponse>(`${API_BASE}/config/conferences/${confNumber}`, {
+  async deleteConferenceConfig(confNumber: number, removeFiles = false) {
+    const query = removeFiles ? '?removeFiles=true' : '';
+    return this.request<ApiResponse>(`${API_BASE}/config/conferences/${confNumber}${query}`, {
       method: 'DELETE',
     });
   }
