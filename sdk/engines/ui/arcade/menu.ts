@@ -91,6 +91,27 @@ function centre(text: string, width: number): string {
   return ' '.repeat(pad) + fitted;
 }
 
+/**
+ * Centre a string and colour ONLY the string.
+ *
+ * The padding that centres a line is layout, not content, so it must sit
+ * outside the colour span. Wrapping the centred line as a whole put the
+ * padding inside the tag, and on the selected row - the one with a
+ * background colour - that painted the blue from the left edge of the box up
+ * to the text: reported as "the dark blue selection bleeds to the left". It
+ * bled to the left ONLY because `centre` pads on the left alone, so the
+ * asymmetry was the tell.
+ *
+ * A foreground-only row hides the same fault, since colouring spaces looks
+ * like colouring nothing. Every row goes through here regardless, so the
+ * next row that gains a background does not reintroduce it.
+ */
+function centreTagged(text: string, width: number, tags: string): string {
+  const fitted = text.length > width ? text.slice(0, width) : text;
+  const pad = Math.max(0, Math.floor((width - fitted.length) / 2));
+  return `${' '.repeat(pad)}${tags}${fitted}{/}`;
+}
+
 /** The widest hint that fits, preferring the caller's own. */
 function hintFor(width: number, given?: string): string {
   if (given) return given;
@@ -116,10 +137,10 @@ export function arcadeMenu(spec: ArcadeMenuSpec): string[] {
   const lines: string[] = [];
 
   for (const line of title) {
-    lines.push(
-      `{${MENU_COLORS.titleBg}-bg}{${MENU_COLORS.title}-fg}` +
-      `${centre(line, width)}{/}`
-    );
+    lines.push(centreTagged(
+      line, width,
+      `{${MENU_COLORS.titleBg}-bg}{${MENU_COLORS.title}-fg}`
+    ));
   }
 
   if (spec.accent && spec.accent.length) {
@@ -131,17 +152,23 @@ export function arcadeMenu(spec: ArcadeMenuSpec): string[] {
 
   options.forEach((option, index) => {
     const selected = index === selection;
-    const text = centre(optionText(option, selected), width);
-    lines.push(selected
-      ? `{${MENU_COLORS.selectedBg}-bg}{${MENU_COLORS.selected}-fg}${text}{/}`
-      : `{${MENU_COLORS.option}-fg}${text}{/}`);
+    lines.push(centreTagged(
+      optionText(option, selected), width,
+      selected
+        ? `{${MENU_COLORS.selectedBg}-bg}{${MENU_COLORS.selected}-fg}`
+        : `{${MENU_COLORS.option}-fg}`
+    ));
   });
 
   lines.push('');
-  lines.push(`{${MENU_COLORS.hint}-fg}${centre(hintFor(width, spec.hint), width)}{/}`);
+  lines.push(centreTagged(
+    hintFor(width, spec.hint), width, `{${MENU_COLORS.hint}-fg}`
+  ));
 
   if (spec.subtitle) {
-    lines.push(`{${MENU_COLORS.subtitle}-fg}${centre(spec.subtitle, width)}{/}`);
+    lines.push(centreTagged(
+      spec.subtitle, width, `{${MENU_COLORS.subtitle}-fg}`
+    ));
   }
 
   return lines;

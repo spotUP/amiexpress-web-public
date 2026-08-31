@@ -10,6 +10,7 @@ import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
 import { FroggerGame } from "./game/frogger-game";
+import { menuLines } from "./game/menu-content";
 import { rpcHandlers } from "./server";
 import { FroggerData, GameState, InputKey, Direction } from "./game/types";
 import {
@@ -389,25 +390,11 @@ function renderMenu(): void {
   // The same block title the attract screen uses, so the door has one look
   // rather than two - the menu used to carry a figlet in slashes.
   // No title: the logo is already at the top of the screen.
-  const menuContent: string[] = [];
-  menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
-  menuContent.push("");
-
-
-  // The shared arcade menu. The lives row keeps its value - on the cabinet
-  // this was an operator switch (FAQ 6.3) - which is what MenuOption's
-  // `value` is for.
-  menuContent.push(...arcadeMenu({
-    title: [],
-    options: MENU_OPTIONS.map(option => option === "Lives"
-      ? { label: option, value: String(gameData.startingLives) }
-      : option),
+  const menuContent = menuLines({
+    startingLives: gameData.startingLives,
     selection: gameData.menuSelection,
     width,
-  }));
-
-  menuContent.push("");
-  menuContent.push(centred("UP/DOWN to choose, ENTER to confirm", width, "gray"));
+  });
 
   menuBox = blessed.box({
     fixed: true,
@@ -426,12 +413,6 @@ function renderMenu(): void {
   });
 
   screen.render();
-}
-
-/** Centre a plain string and colour it. */
-function centred(text: string, width: number, colour: string): string {
-  const pad = Math.max(0, Math.floor((width - text.length) / 2));
-  return `${" ".repeat(pad)}{${colour}-fg}${text}{/${colour}-fg}`;
 }
 
 /**
