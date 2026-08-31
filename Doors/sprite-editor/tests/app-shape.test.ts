@@ -52,3 +52,15 @@ export async function startHoldsTheDoorOpenUntilDestroy(): Promise<void> {
     'and destroy() must resolve it, or quitting hangs the door');
 }
 
+/** Constructed is not enabled: without enable() the backend drops every key. */
+export async function theInputManagerIsEnabled(): Promise<void> {
+  assert.ok(/this\.inputManager\.enable\(\)/.test(app),
+    'DoorInputManager must be enabled or the door is input-dead');
+}
+
+/** This blessed port has no right-align token; a literal {|} on screen is the bug. */
+export async function theStatusBarUsesNoUnsupportedTags(): Promise<void> {
+  assert.ok(!app.includes("'{|}'") && !app.includes('{|}'),
+    'the {|} token renders literally in this blessed port - pad by width instead');
+}
+

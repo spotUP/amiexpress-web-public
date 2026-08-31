@@ -65,6 +65,11 @@ export class StudioApp {
       enableGrabKeys: false,
       enableMouse: true,
     });
+    // enable() installs the BBS-to-blessed key bridge
+    // (bbsSession.doorInputHandler); without it the backend drops every
+    // keystroke and the door is input-dead - constructed is not enabled.
+    // Every sibling blessed door calls this (ansi-editor, door-manager).
+    this.inputManager.enable();
 
     this.state = initialState();
     this.buildLayout();
@@ -160,8 +165,13 @@ export class StudioApp {
 
   private apply(next: BrowserState): void {
     if (next === this.state) return;
+    const before = selection(this.state);
     this.state = next;
-    this.tick = 0; // a new selection starts its animation from the top
+    const after = selection(next);
+    if (before.door !== after.door || before.sprite !== after.sprite ||
+        before.animation !== after.animation) {
+      this.tick = 0; // a new SELECTION starts from the top; a focus move does not
+    }
     this.refresh();
   }
 
@@ -195,12 +205,14 @@ export class StudioApp {
     focus(this.animationsList, this.state.pane === 'animations');
 
     const sel = selection(this.state);
-    this.statusBar.setContent(
+    const left =
       `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
       `{white-fg}${sel.sprite ?? '-'}{/} / ` +
-      `{lightcyan-fg}${sel.animation ?? '-'}{/}` +
-      '{|}{gray-fg}TAB panes  ARROWS move  Q quit{/}'
-    );
+      `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
+    const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
+    const visible = (tagged: string) => tagged.replace(/\{[^}]*\}/g, '').length;
+    const gap = Math.max(1, (this.screen.width as number) - visible(left) - visible(right));
+    this.statusBar.setContent(left + ' '.repeat(gap) + right);
     this.paintPreview();
   }
 
