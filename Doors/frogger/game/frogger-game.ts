@@ -859,6 +859,91 @@ export class FroggerGame {
   }
 
   /**
+   * One move of the machine playing itself, for attract mode.
+   *
+   * Deliberately cautious rather than clever: it only hops when the row it
+   * is hopping into has something to land on, edges towards a free home on
+   * the last row, and otherwise waits. A demo that dies every few seconds
+   * reads as a broken game rather than an invitation to play.
+   */
+  demoStep(): void {
+    const d = this.data;
+    if (d.frog.isDead || d.state !== 'playing') return;
+
+    const targetY = d.frog.y - 1;
+    if (targetY < 0) return;
+
+    const lane = d.lanes.find(l => l.y === targetY);
+    if (!lane) return;
+
+    switch (lane.type) {
+      case 'safe':
+        this.handleDirection('up');
+        return;
+
+      case 'road':
+        if (this.roadIsClear(lane, d.frog.x)) this.handleDirection('up');
+        return;
+
+      case 'water':
+        if (this.footingAt(lane, d.frog.x)) this.handleDirection('up');
+        return;
+
+      case 'home':
+        this.demoAimForHome();
+        return;
+    }
+  }
+
+  /** Is the cell the demo wants to hop into free of traffic? */
+  private roadIsClear(lane: Lane, x: number): boolean {
+    const margin = 1.5;
+
+    return !lane.objects.some(obj => {
+      const width = (obj as Vehicle).width;
+      // Widen the car by the margin, and by where it will be next tick, so
+      // the demo does not hop into the space something is about to fill.
+      const ahead = obj.x + obj.speed * (GAME_TICK_MS / 1000) * 4;
+      const from = Math.min(obj.x, ahead) - margin;
+      const to = Math.max(obj.x, ahead) + width + margin;
+      return x >= from && x <= to;
+    });
+  }
+
+  /** Is there something to stand on where the demo wants to hop? */
+  private footingAt(lane: Lane, x: number): boolean {
+    return (lane.objects as RiverObject[]).some(obj => {
+      if (obj.type === 'turtle' && obj.isDiving) return false;
+      if (!this.overlaps(x, obj.x, obj.width)) return false;
+
+      // Never aim for a mouth or a snake.
+      if ((obj.type === 'crocodile' || obj.type === 'otter') && this.inMouth(x, obj)) return false;
+      if (obj.snakeAt !== null && obj.snakeAt !== undefined &&
+          Math.round(x) === Math.round(obj.x + obj.snakeAt)) return false;
+
+      return true;
+    });
+  }
+
+  /** Line the demo up with a free home, then hop in. */
+  private demoAimForHome(): void {
+    const d = this.data;
+
+    const free = d.homes.filter(h => !h.occupied && !h.hasAlligator);
+    if (free.length === 0) return;
+
+    const target = free.reduce((best, home) =>
+      Math.abs(home.x - d.frog.x) < Math.abs(best.x - d.frog.x) ? home : best
+    );
+
+    const centre = target.x + HOME_CENTRE_OFFSET;
+    const here = Math.round(d.frog.x);
+
+    if (here === centre) this.handleDirection('up');
+    else this.handleDirection(here < centre ? 'right' : 'left');
+  }
+
+  /**
    * Render the game
    */
   render(): void {

@@ -150,6 +150,21 @@ export declare class FroggerGame {
      */
     private resetFrogPosition;
     /**
+     * One move of the machine playing itself, for attract mode.
+     *
+     * Deliberately cautious rather than clever: it only hops when the row it
+     * is hopping into has something to land on, edges towards a free home on
+     * the last row, and otherwise waits. A demo that dies every few seconds
+     * reads as a broken game rather than an invitation to play.
+     */
+    demoStep(): void;
+    /** Is the cell the demo wants to hop into free of traffic? */
+    private roadIsClear;
+    /** Is there something to stand on where the demo wants to hop? */
+    private footingAt;
+    /** Line the demo up with a free home, then hop in. */
+    private demoAimForHome;
+    /**
      * Render the game
      */
     render(): void;

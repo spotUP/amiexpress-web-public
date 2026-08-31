@@ -15,6 +15,7 @@ const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-
 const frogger_game_1 = require("./game/frogger-game");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
+const attract_1 = require("./game/attract");
 const constants_1 = require("./game/constants");
 /**
  * Create initial game data
@@ -79,6 +80,14 @@ let gameLoop = null;
 /** How long the finished board stays up between levels, in ticks. */
 const LEVEL_COMPLETE_FRAMES = 40;
 let levelCompleteFrames = 0;
+/** Attract mode state: which panel is up, and the demo game behind it. */
+let attractLoop = null;
+let attractPhase = "points";
+let attractFrames = 0;
+let demoGame = null;
+let demoData = null;
+/** How often the demo player takes a hop, in ticks. */
+const DEMO_HOP_FRAMES = 6;
 let game = null;
 let doorContext; // Will be set on start
 let inputManager = null;
@@ -163,7 +172,96 @@ function formatHUD() {
  * reset menuSelection back to 0 on every keypress, which is exactly the
  * bug that made arrow up/down appear to do nothing.
  */
+/**
+ * Attract mode: what the cabinet does when nobody is playing.
+ *
+ * Title over the point table, then the score ranking, then the invitation to
+ * play, then the machine playing itself, round and round. Any key drops into
+ * the menu - on the cabinet that is the coin slot.
+ */
+function startAttract() {
+    stopAttract();
+    gameData.state = "attract";
+    attractPhase = attract_1.ATTRACT_ORDER[0];
+    attractFrames = 0;
+    if (menuBox) {
+        menuBox.destroy();
+        menuBox = null;
+    }
+    footerBox.setContent("{gray-fg}Press any key to play{/}");
+    renderAttract();
+    attractLoop = setInterval(() => {
+        attractFrames++;
+        if (attractPhase === "demo")
+            runDemoFrame();
+        else
+            renderAttract();
+        if (attractFrames >= attract_1.ATTRACT_FRAMES[attractPhase]) {
+            attractPhase = (0, attract_1.nextPhase)(attractPhase);
+            attractFrames = 0;
+            if (attractPhase === "demo")
+                startDemo();
+            else
+                stopDemo();
+        }
+    }, constants_1.GAME_TICK_MS);
+}
+/** Tear the attract loop down, whether or not it is running. */
+function stopAttract() {
+    if (attractLoop) {
+        clearInterval(attractLoop);
+        attractLoop = null;
+    }
+    stopDemo();
+}
+/** Paint the current attract panel. */
+function renderAttract() {
+    const width = gameArea.width || 80;
+    const lines = (0, attract_1.attractScreen)(attractPhase, gameData, width, attractFrames);
+    gameArea.setContent(lines.join("\n"));
+    hudBox.setContent(formatHUD());
+    screen.render();
+}
+/**
+ * Start the machine playing itself.
+ *
+ * On its OWN game state, so a demo can never touch the player's score, the
+ * high score table or the lives setting.
+ */
+function startDemo() {
+    demoData = createInitialGameData();
+    demoData.highscores = gameData.highscores;
+    demoData.state = "playing";
+    demoGame = new frogger_game_1.FroggerGame(demoData, (content) => {
+        gameArea.setContent(content);
+        screen.render();
+    });
+    demoGame.initLevel();
+}
+function stopDemo() {
+    demoGame = null;
+    demoData = null;
+}
+/** One tick of the demo game. */
+function runDemoFrame() {
+    if (!demoGame || !demoData) {
+        startDemo();
+        return;
+    }
+    // The demo hops at a human pace rather than every tick.
+    if (attractFrames % DEMO_HOP_FRAMES === 0)
+        demoGame.demoStep();
+    demoGame.update();
+    // A demo that has run out of frogs goes back to the title.
+    if (demoData.state !== "playing") {
+        attractPhase = (0, attract_1.nextPhase)("demo");
+        attractFrames = 0;
+        stopDemo();
+    }
+}
 function showMenu() {
+    stopAttract();
+    footerBox.setContent("{gray-fg}Arrow Keys: Hop | P: Pause | Q: Quit{/}");
     gameData.state = "menu";
     gameData.menuSelection = 0;
     renderMenu();
@@ -370,6 +468,11 @@ function handleInput(key) {
             break;
         case "enterName":
             handleNameEntryInput(inputKey);
+            break;
+        case "attract":
+            // Any key at all leaves the attract loop and opens the menu, which is
+            // this cabinet's coin slot.
+            showMenu();
             break;
         case "levelComplete":
             // Wait for transition
@@ -624,6 +727,7 @@ async function handleNameEntryInput(key) {
 let keepAlive = null;
 // doorContext already declared above
 function cleanup() {
+    stopAttract();
     if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;
@@ -775,7 +879,7 @@ door.onStart(async (ctx) => {
             showMenu();
         }
     });
-    showMenu();
+    startAttract();
 });
 door.onInput((ctx, key) => {
     handleInput(key.raw || key.key || key);
