@@ -4,6 +4,9 @@
  */
 
 import {
+  Cell, EMPTY, paint, starCell, bulletCell, alienCell, playerCell, explosionCell,
+} from './sprites';
+import {
   GalagaData,
   Alien,
   AlienType,
@@ -588,11 +591,11 @@ export class GalagaGame {
    */
   render(): void {
     // Create render buffer
-    const buffer: string[][] = [];
+    const buffer: Cell[][] = [];
     for (let y = 0; y < GAME_AREA_HEIGHT; y++) {
       buffer[y] = [];
       for (let x = 0; x < GAME_AREA_WIDTH; x++) {
-        buffer[y][x] = ' ';
+        buffer[y][x] = EMPTY;
       }
     }
 
@@ -601,7 +604,7 @@ export class GalagaGame {
       const x = Math.floor(star.x);
       const y = Math.floor(star.y);
       if (x >= 0 && x < GAME_AREA_WIDTH && y >= 0 && y < GAME_AREA_HEIGHT) {
-        buffer[y][x] = star.brightness === 0 ? '.' : star.brightness === 1 ? '+' : '*';
+        buffer[y][x] = starCell(star.brightness);
       }
     }
 
@@ -611,13 +614,10 @@ export class GalagaGame {
       const x = Math.floor(alien.x);
       const y = Math.floor(alien.y);
       if (x >= 0 && x < GAME_AREA_WIDTH && y >= 0 && y < GAME_AREA_HEIGHT) {
-        let char = 'w';
-        switch (alien.type) {
-          case 'bee': char = 'w'; break;
-          case 'butterfly': char = 'M'; break;
-          case 'boss': char = alien.capturedFighter ? '@' : '@'; break;
-        }
-        buffer[y][x] = char;
+        const char =
+          alien.type === 'bee' ? 'w' :
+          alien.type === 'butterfly' ? 'M' : '@';
+        buffer[y][x] = alienCell(char, alien.type, Boolean(alien.capturedFighter));
       }
     }
 
@@ -626,7 +626,7 @@ export class GalagaGame {
       const x = Math.floor(bullet.x);
       const y = Math.floor(bullet.y);
       if (x >= 0 && x < GAME_AREA_WIDTH && y >= 0 && y < GAME_AREA_HEIGHT) {
-        buffer[y][x] = bullet.isEnemy ? '.' : '|';
+        buffer[y][x] = bulletCell(bullet.isEnemy);
       }
     }
 
@@ -637,7 +637,7 @@ export class GalagaGame {
       if (x >= 0 && x < GAME_AREA_WIDTH && y >= 0 && y < GAME_AREA_HEIGHT) {
         const chars = ['*', '+', 'o', '.'];
         const charIndex = Math.floor(exp.frame / 3) % chars.length;
-        buffer[y][x] = chars[charIndex];
+        buffer[y][x] = explosionCell(chars[charIndex]);
       }
     }
 
@@ -646,11 +646,11 @@ export class GalagaGame {
       const px = Math.floor(this.data.player.x);
       const py = this.data.player.y;
       if (this.data.player.hasDualFighter) {
-        if (px > 0) buffer[py][px - 1] = '^';
-        buffer[py][px] = 'A';
-        if (px < GAME_AREA_WIDTH - 1) buffer[py][px + 1] = '^';
+        if (px > 0) buffer[py][px - 1] = playerCell('^');
+        buffer[py][px] = playerCell('A');
+        if (px < GAME_AREA_WIDTH - 1) buffer[py][px + 1] = playerCell('^');
       } else {
-        buffer[py][px] = 'A';
+        buffer[py][px] = playerCell('A');
       }
     }
 
@@ -659,24 +659,7 @@ export class GalagaGame {
     for (let y = 0; y < GAME_AREA_HEIGHT; y++) {
       let line = '';
       for (let x = 0; x < GAME_AREA_WIDTH; x++) {
-        const char = buffer[y][x];
-        if (char === 'A' || char === '^') {
-          line += `{cyan-fg}${char}{/}`;
-        } else if (char === 'w') {
-          line += `{yellow-fg}${char}{/}`;
-        } else if (char === 'M') {
-          line += `{red-fg}${char}{/}`;
-        } else if (char === '@') {
-          line += `{green-fg}${char}{/}`;
-        } else if (char === '|') {
-          line += `{white-fg}${char}{/}`;
-        } else if (char === '*' || char === '+' || char === 'o') {
-          line += `{yellow-fg}${char}{/}`;
-        } else if (char === '.') {
-          line += `{gray-fg}${char}{/}`;
-        } else {
-          line += char;
-        }
+        line += paint(buffer[y][x]);
       }
       lines.push(line);
     }
