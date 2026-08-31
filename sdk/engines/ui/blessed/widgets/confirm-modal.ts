@@ -20,6 +20,60 @@ import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
 import { calculateDialogWidth, MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
+/**
+ * Colours a terminal draws light enough that black text reads better on them.
+ * Anything else takes white.
+ */
+const LIGHT_FILLS = new Set([
+  'white', 'yellow', 'green', 'cyan', 'lightblue', 'lightgreen', 'lightcyan',
+  'lightyellow', 'lightwhite', 'brightwhite', 'brightyellow', 'brightgreen',
+  'brightcyan',
+]);
+
+export interface ConfirmButtonStyle {
+  fg: string;
+  bg: string;
+  bold?: boolean;
+  border: { fg: string };
+  focus: { fg: string; bg: string; bold: boolean; border: { fg: string } };
+  hover: { fg: string; bg: string; bold: boolean; border: { fg: string } };
+}
+
+/**
+ * How a confirm dialog's buttons are painted, idle and active.
+ *
+ * Both buttons used to be built filled and framed in their own role colour,
+ * so the dialog showed two framed, filled buttons and nothing said which one
+ * Enter would press - and the idle one, white text on a mid-tone fill, was
+ * unreadable. Reported from DOORMAN's delete dialog on 2026-08-31.
+ *
+ * Idle is the role colour as TEXT on the modal's black, with the border drawn
+ * in black so no frame shows. Focused fills with the role colour and frames
+ * itself in it, over a foreground chosen to be legible on that fill. The
+ * button keeps its cells either way, so nothing moves when focus does - only
+ * what is painted into them.
+ *
+ * @param colour the button's role colour (red for a destructive confirm,
+ *               green for the safe way out)
+ */
+export function confirmButtonStyle(colour: string): ConfirmButtonStyle {
+  const activeFg = LIGHT_FILLS.has(colour) ? 'black' : 'white';
+  const active = { fg: activeFg, bg: colour, bold: true, border: { fg: colour } };
+
+  return {
+    fg: colour,
+    bg: 'black',
+    bold: true,
+    // Drawn in the modal's own background: the cells stay, the frame does not
+    // show. Removing the border outright would move both buttons whenever
+    // focus changed.
+    border: { fg: 'black' },
+    focus: active,
+    // The mouse and the keyboard must agree about which button is active.
+    hover: { ...active },
+  };
+}
+
 export interface ConfirmModalOptions extends ElementOptions {
   /** Dialog title */
   title?: string;
@@ -153,13 +207,7 @@ export class ConfirmModal extends Box {
       mouse: true,
       clickable: true,
       focusable: true,
-      style: {
-        fg: 'white',
-        bg: confirmColor,
-        border: { fg: confirmColor },
-        hover: { bg: 'lightblue', fg: 'black' },
-        focus: { bg: 'lightblue', fg: 'black' },
-      } as any,
+      style: confirmButtonStyle(confirmColor) as any,
     });
 
     // Cancel button (if not single button mode)
@@ -177,13 +225,7 @@ export class ConfirmModal extends Box {
         mouse: true,
         clickable: true,
         focusable: true,
-        style: {
-          fg: 'white',
-          bg: cancelColor,
-          border: { fg: cancelColor },
-          hover: { bg: 'lightblue', fg: 'black' },
-          focus: { bg: 'lightblue', fg: 'black' },
-        } as any,
+        style: confirmButtonStyle(cancelColor) as any,
       });
     }
 
