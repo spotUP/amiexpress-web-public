@@ -32,6 +32,8 @@ exports.theMenuBoxFitsTheTitle = theMenuBoxFitsTheTitle;
 exports.theTitleFitsTheWidthItIsGiven = theTitleFitsTheWidthItIsGiven;
 exports.theScreenIsLogoStatusAndBoard = theScreenIsLogoStatusAndBoard;
 exports.theLogoFitsTheScreen = theLogoFitsTheScreen;
+exports.theScoreLineIsCentredUnderTheLogo = theScoreLineIsCentredUnderTheLogo;
+exports.theMenuHasNoColourBlockStrip = theMenuHasNoColourBlockStrip;
 const assert_1 = __importDefault(require("assert"));
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const constants_1 = require("../game/constants");
@@ -152,5 +154,35 @@ async function theLogoFitsTheScreen() {
         const visible = line.replace(/\{[^}]*\}/g, '');
         assert_1.default.ok(visible.length <= constants_1.SCREEN_WIDTH, `a logo line is ${visible.length} columns on an ${constants_1.SCREEN_WIDTH}-column screen`);
     }
+}
+/**
+ * The score line is centred under the logo, with a blank row between.
+ *
+ * Reported 2026-08-31 with a screenshot: the score line sat directly against
+ * the bottom of the block logo and ran hard against the left edge, while
+ * everything else on the screen is centred.
+ */
+async function theScoreLineIsCentredUnderTheLogo() {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+    assert_1.default.ok(/hudBox = blessed\.box\(\{[\s\S]*?top: LOGO_HEIGHT \+ 1,/.test(index), 'the score line should sit one row below the logo, leaving a blank row');
+    assert_1.default.ok(/top: LOGO_HEIGHT \+ 2,[\s\S]*?height: GAME_AREA_HEIGHT,/.test(index), 'and the board should move down with it rather than being overlapped');
+    assert_1.default.ok(/return centreTagged\(/.test(index), 'the score line should be centred');
+    // The centring must measure PAINTED width, not the markup.
+    const fn = index.slice(index.indexOf('function centreTagged'));
+    assert_1.default.ok(/replace\(\/\\\{\[\^\}\]\*\\\}\/g, ""\)/.test(fn) || /\{\[\^\}\]\*\\?\}/.test(fn), 'centreTagged must strip colour tags before measuring');
+}
+/**
+ * The menu carries no strip of coloured blocks.
+ *
+ * Reported 2026-08-31: "remove these color things from the frogger menu, they
+ * are a leftover from arkanoid."
+ */
+async function theMenuHasNoColourBlockStrip() {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+    assert_1.default.ok(!/laneStrip/.test(index), 'the block strip and its helper should be gone');
 }
 //# sourceMappingURL=layout.test.js.map

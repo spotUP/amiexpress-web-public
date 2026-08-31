@@ -54,4 +54,19 @@ export declare function theTitleFitsTheWidthItIsGiven(): Promise<void>;
 export declare function theScreenIsLogoStatusAndBoard(): Promise<void>;
 /** The logo fits the screen it is drawn across. */
 export declare function theLogoFitsTheScreen(): Promise<void>;
+/**
+ * The score line is centred under the logo, with a blank row between.
+ *
+ * Reported 2026-08-31 with a screenshot: the score line sat directly against
+ * the bottom of the block logo and ran hard against the left edge, while
+ * everything else on the screen is centred.
+ */
+export declare function theScoreLineIsCentredUnderTheLogo(): Promise<void>;
+/**
+ * The menu carries no strip of coloured blocks.
+ *
+ * Reported 2026-08-31: "remove these color things from the frogger menu, they
+ * are a leftover from arkanoid."
+ */
+export declare function theMenuHasNoColourBlockStrip(): Promise<void>;
 //# sourceMappingURL=layout.test.d.ts.map
