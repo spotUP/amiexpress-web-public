@@ -90,7 +90,7 @@ describe('an .info whose tooltype entries are not all length-prefixed', () => {
     fs.writeFileSync(file, conf1);
 
     const info = parseInfoFile(file);
-    updateTooltype(info, 'NDIRS', '4');
+    updateTooltype(info, 'NDIRS', '4', false);
 
     expect(() => writeInfoFile(info)).not.toThrow();
 
@@ -107,7 +107,7 @@ describe('an .info whose tooltype entries are not all length-prefixed', () => {
     fs.writeFileSync(file, conf1);
 
     const info = parseInfoFile(file);
-    updateTooltype(info, 'NDIRS', '3');
+    updateTooltype(info, 'NDIRS', '3', false);
     writeInfoFile(info);
 
     // Walk the written array the strict way - a prefix on every entry.
@@ -139,7 +139,7 @@ describe('an .info whose tooltype entries are not all length-prefixed', () => {
     expect(trailing.toString('latin1', 0, 4)).toBe('FORM');
 
     const info = parseInfoFile(file);
-    updateTooltype(info, 'NDIRS', '9');
+    updateTooltype(info, 'NDIRS', '9', false);
     writeInfoFile(info);
 
     const out = fs.readFileSync(file);
