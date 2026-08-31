@@ -3,6 +3,12 @@
  * engine. Same discipline as edit-screen-shape.test.ts - source-shape
  * checks with COMMENTS STRIPPED first, since the naive greps matched
  * commented-out code before.
+ *
+ * ArtSession itself lives in art-screen.ts (extracted from app.ts for
+ * parity with EditScreen/edit-screen.ts); app.ts keeps only the 'm'
+ * wiring - the hide/show around it, the double-open guard, and the
+ * browser's own apply() deafness. Tests below read whichever file the
+ * shape they pin actually lives in.
  */
 
 import assert from 'assert';
@@ -13,9 +19,13 @@ const raw = readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
 /** The source with line and block comments removed. */
 const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
+const artScreenRaw = readFileSync(join(__dirname, '..', 'art-screen.ts'), 'utf8');
+/** art-screen.ts with line and block comments removed. */
+const artScreenCode = artScreenRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
 export async function artModeUsesTheAssetHelpers(): Promise<void> {
   for (const op of ['listArt(', 'readArt(', 'writeArt(']) {
-    assert.ok(code.includes(op), `art mode must use ${op} from assets`);
+    assert.ok(artScreenCode.includes(op), `art mode must use ${op} from assets`);
   }
 }
 
@@ -30,7 +40,7 @@ export async function theBrowserPanesHideAndShowAroundArtMode(): Promise<void> {
 }
 
 export async function theArtEditorWidgetIsDestroyedOnExit(): Promise<void> {
-  assert.ok(/this\.editor\?\.destroy\(\)/.test(code) || /this\.editor\.destroy\(\)/.test(code),
+  assert.ok(/this\.editor\?\.destroy\(\)/.test(artScreenCode) || /this\.editor\.destroy\(\)/.test(artScreenCode),
     'the ANSIEditor instance must be destroyed when art mode exits');
 }
 
