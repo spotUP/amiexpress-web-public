@@ -2355,3 +2355,140 @@ int flow_run_decision(const char *command, int enabled)
 
     return FLOW_RUN_OK;
 }
+
+/* ---- The command bar ---------------------------------------------------- */
+
+typedef struct {
+    const char *name;
+    int id;
+} flow_command_entry;
+
+/* Ordered as the help screen prints them: what a sysop does most, first. */
+static const flow_command_entry flow_commands[] = {
+    { "help",      FLOW_CMD_HELP },
+    { "get",       FLOW_CMD_GET },
+    { "install",   FLOW_CMD_INSTALL },
+    { "uninstall", FLOW_CMD_UNINSTALL },
+    { "files",     FLOW_CMD_FILES },
+    { "doc",       FLOW_CMD_DOC },
+    { "archive",   FLOW_CMD_ARCHIVE },
+    { "strip",     FLOW_CMD_STRIP },
+    { "access",    FLOW_CMD_ACCESS },
+    { "config",    FLOW_CMD_CONFIG },
+    { "history",   FLOW_CMD_HISTORY },
+    { "installed", FLOW_CMD_INSTALLED },
+    { "find",      FLOW_CMD_FIND },
+    { "type",      FLOW_CMD_TYPE },
+    { "reset",     FLOW_CMD_RESET },
+    { "hide",      FLOW_CMD_HIDE },
+    { "owner",     FLOW_CMD_OWNER },
+    { "patterns",  FLOW_CMD_PATTERNS },
+    { "quit",      FLOW_CMD_QUIT }
+};
+
+#define FLOW_COMMAND_COUNT ((int) (sizeof(flow_commands) / sizeof(flow_commands[0])))
+
+const char *flow_command_name(int command)
+{
+    int i;
+
+    for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+        if (flow_commands[i].id == command) {
+            return flow_commands[i].name;
+        }
+    }
+    return "";
+}
+
+int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap)
+{
+    char verb[24];
+    const char *p;
+    const char *rest;
+    unsigned long vlen = 0;
+    int i;
+    int match = -1;
+    int matches = 0;
+
+    if (arg_out != (char *) 0 && arg_cap > 0) {
+        arg_out[0] = '\0';
+    }
+    if (line == (const char *) 0) {
+        return FLOW_CMD_UNKNOWN;
+    }
+
+    p = line;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p == '/') {
+        p++;                         /* the bar opened on it; typing it is fine */
+    }
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p == '\0') {
+        return FLOW_CMD_UNKNOWN;
+    }
+
+    /* The verb is the first word. */
+    while (p[vlen] != '\0' && p[vlen] != ' ' && p[vlen] != '\t'
+           && vlen + 1 < sizeof(verb)) {
+        verb[vlen] = (char) tolower((unsigned char) p[vlen]);
+        vlen++;
+    }
+    verb[vlen] = '\0';
+
+    rest = p + vlen;
+    while (*rest == ' ' || *rest == '\t') {
+        rest++;
+    }
+
+    /* Exact first, then an unambiguous prefix. "install" must not be
+     * ambiguous with "installed" when it is typed in full. */
+    for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+        if (strcmp(verb, flow_commands[i].name) == 0) {
+            match = i;
+            matches = 1;
+            break;
+        }
+    }
+    if (matches != 1) {
+        matches = 0;
+        for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+            if (strncmp(verb, flow_commands[i].name, (size_t) vlen) == 0) {
+                match = i;
+                matches++;
+            }
+        }
+    }
+
+    if (matches != 1) {
+        /* Not a command, or too short to tell which. The whole line is a
+         * search term - "/dungeon" finds dungeon, which is what a bar that
+         * opened on "/" should do. */
+        if (arg_out != (char *) 0 && arg_cap > 0) {
+            unsigned long n = 0;
+            while (p[n] != '\0' && n + 1 < arg_cap) {
+                arg_out[n] = p[n];
+                n++;
+            }
+            arg_out[n] = '\0';
+        }
+        return FLOW_CMD_UNKNOWN;
+    }
+
+    if (arg_out != (char *) 0 && arg_cap > 0) {
+        unsigned long n = 0;
+        while (rest[n] != '\0' && n + 1 < arg_cap) {
+            arg_out[n] = rest[n];
+            n++;
+        }
+        while (n > 0 && (arg_out[n - 1] == ' ' || arg_out[n - 1] == '\t')) {
+            n--;
+        }
+        arg_out[n] = '\0';
+    }
+
+    return flow_commands[match].id;
+}

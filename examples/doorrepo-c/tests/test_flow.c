@@ -2986,6 +2986,95 @@ TEST(doors_row_enabled_refuses_a_row_without_the_field)
 }
 
 
+
+/* ---------------------------------------------------------------------
+ * The command bar
+ *
+ * It exists because the footer cannot advertise this door - sixteen keys on
+ * the catalog screen, four of them visible at eighty columns.
+ */
+
+TEST(command_bar_reads_a_verb_and_its_argument)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("find dungeon", arg, sizeof(arg)), FLOW_CMD_FIND, "find");
+    ASSERT_STR_EQ(arg, "dungeon", "the argument");
+
+    ASSERT_EQ(flow_parse_command("install", arg, sizeof(arg)), FLOW_CMD_INSTALL, "no argument");
+    ASSERT_STR_EQ(arg, "", "empty argument");
+
+    ASSERT_EQ(flow_parse_command("  type   XIM  ", arg, sizeof(arg)), FLOW_CMD_TYPE,
+              "blanks around it all");
+    ASSERT_STR_EQ(arg, "XIM", "argument trimmed both ends");
+}
+
+TEST(command_bar_takes_the_slash_it_opened_on)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("/help", arg, sizeof(arg)), FLOW_CMD_HELP, "leading slash");
+    ASSERT_EQ(flow_parse_command("help", arg, sizeof(arg)), FLOW_CMD_HELP, "without one");
+    ASSERT_EQ(flow_parse_command("HELP", arg, sizeof(arg)), FLOW_CMD_HELP, "any case");
+}
+
+TEST(command_bar_accepts_an_unambiguous_prefix)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("unin", arg, sizeof(arg)), FLOW_CMD_UNINSTALL, "unin");
+    ASSERT_EQ(flow_parse_command("hist", arg, sizeof(arg)), FLOW_CMD_HISTORY, "hist");
+    /* install and installed share a prefix, so a short one is not a command
+     * and falls through to the search - it must never guess between two. */
+    ASSERT_EQ(flow_parse_command("inst", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "ambiguous");
+    /* ...but typed in full it is exact, even though it prefixes the other. */
+    ASSERT_EQ(flow_parse_command("install", arg, sizeof(arg)), FLOW_CMD_INSTALL, "exact wins");
+    ASSERT_EQ(flow_parse_command("installed", arg, sizeof(arg)), FLOW_CMD_INSTALLED, "the longer one");
+}
+
+TEST(command_bar_treats_anything_else_as_a_search)
+{
+    char arg[64];
+
+    /* A bar that opened on "/" should find what you type into it. */
+    ASSERT_EQ(flow_parse_command("dungeon", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "not a command");
+    ASSERT_STR_EQ(arg, "dungeon", "the whole line is the search term");
+
+    ASSERT_EQ(flow_parse_command("/two words", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "two words");
+    ASSERT_STR_EQ(arg, "two words", "both of them");
+}
+
+TEST(command_bar_survives_nothing_at_all)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "empty");
+    ASSERT_STR_EQ(arg, "", "no argument");
+    ASSERT_EQ(flow_parse_command("/", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "just the slash");
+    ASSERT_EQ(flow_parse_command("   ", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "blanks");
+    ASSERT_EQ(flow_parse_command((const char *) 0, arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "NULL");
+}
+
+TEST(command_bar_names_every_command_it_answers)
+{
+    /* The help screen prints these, so a command with no name would print a
+     * blank line and look like a bug. */
+    ASSERT_STR_EQ(flow_command_name(FLOW_CMD_GET), "get", "get");
+    ASSERT_STR_EQ(flow_command_name(FLOW_CMD_UNINSTALL), "uninstall", "uninstall");
+    ASSERT_STR_EQ(flow_command_name(FLOW_CMD_UNKNOWN), "", "unknown has no name");
+    {
+        int id;
+        int missing = 0;
+        for (id = FLOW_CMD_HELP; id <= FLOW_CMD_QUIT; id++) {
+            if (flow_command_name(id)[0] == '\0') {
+                missing++;
+            }
+        }
+        ASSERT_EQ(missing, 0, "every id in the range has a name");
+    }
+}
+
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -3265,6 +3354,12 @@ int main(void)
     RUN_TEST(run_decision_checks_disabled_before_the_command);
     RUN_TEST(doors_row_enabled_reads_the_flag_the_snapshot_writes);
     RUN_TEST(doors_row_enabled_refuses_a_row_without_the_field);
+    RUN_TEST(command_bar_reads_a_verb_and_its_argument);
+    RUN_TEST(command_bar_takes_the_slash_it_opened_on);
+    RUN_TEST(command_bar_accepts_an_unambiguous_prefix);
+    RUN_TEST(command_bar_treats_anything_else_as_a_search);
+    RUN_TEST(command_bar_survives_nothing_at_all);
+    RUN_TEST(command_bar_names_every_command_it_answers);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

@@ -1886,10 +1886,14 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * width-budgeted, see flow.h - guarantees Q=Quit is never the one that
      * gets cut, unlike the old strcat-then-truncate-at-cols shape this
      * replaced, which silently dropped it on any row with ads AND doc). */
-    optional[n++] = "/=Find";
-    optional[n++] = "C=Type";
+    /* The screen-level keys are no longer listed one by one. They could
+     * never all fit - sixteen keys, four slots at eighty columns - and the
+     * ones that fell off the end were live and advertised nowhere, which is
+     * how a sysop came to ask what T did. "/" opens the bar, and /help
+     * lists everything including these. The row-scoped keys above stay on
+     * the bar, because those are the ones pressed constantly. */
     optional[n++] = "L=Installed";
-    optional[n++] = "H=History";
+    optional[n++] = "C=Type";
     optional[n++] = "K=Patterns";
     if (owner_is_enabled() && !owner_is_logged_in()) {
         optional[n++] = "O=Owner";
@@ -1898,9 +1902,13 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
         optional[n++] = "X=Hide";
     }
 
+    /* "/=Cmds" is MANDATORY, not optional. It is the way to reach everything
+     * this bar cannot fit, so it is the one part that must never be the one
+     * dropped - an optional entry for it fell off at eighty columns, which
+     * is exactly the width most of this board's users are on. */
     len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                 installed ? "ENTER/D=Get  U=Uninstall" : "ENTER/D=Get  I=Install",
-                                optional, n, "Q=Quit");
+                                optional, n, "/=Cmds  Q=Quit");
     if (len < 0) {
         bar[0] = '\0'; /* unreachable with this door's fixed short strings and bar[160] */
     }
@@ -4590,6 +4598,233 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
     (void) ae_key();
 }
 
+/* ---------------------------------------------------------------------
+ * The command bar, and the help it finally gives this door somewhere to put
+ *
+ * The footer cannot advertise this door: the catalog screen answers sixteen
+ * keys and eighty columns fit four of them, which is how `T` came to be live
+ * and advertised nowhere until a sysop asked what it did. "/" opens a line
+ * where any of them can be typed out in full, with an argument the keys
+ * would need a second prompt for - "find dungeon", "type XIM".
+ *
+ * The keys are not going anywhere: one keypress beats typing for the things
+ * done constantly. This is for the rest, for arguments, and for anyone who
+ * cannot see a footer at all.
+ */
+
+/* What each command does, printed by /help. Kept beside flow_commands[] in
+ * flow.c: the parser owns the names, this owns the sentences. */
+typedef struct {
+    int id;
+    const char *summary;
+} ui_help_line;
+
+static const ui_help_line ui_help_lines[] = {
+    { FLOW_CMD_HELP,      "this list" },
+    { FLOW_CMD_GET,       "download the selected archive" },
+    { FLOW_CMD_INSTALL,   "install it as a BBS command" },
+    { FLOW_CMD_UNINSTALL, "remove an installed door" },
+    { FLOW_CMD_FILES,     "browse a door's own files on disk" },
+    { FLOW_CMD_DOC,       "read its documentation" },
+    { FLOW_CMD_ARCHIVE,   "list what is inside the archive" },
+    { FLOW_CMD_STRIP,     "remove the ad files from a door" },
+    { FLOW_CMD_ACCESS,    "edit the access level  (access 255)" },
+    { FLOW_CMD_CONFIG,    "edit TYPE, STACK or MENUNAME" },
+    { FLOW_CMD_HISTORY,   "what this door has done" },
+    { FLOW_CMD_INSTALLED, "the doors this board has" },
+    { FLOW_CMD_FIND,      "search the catalog  (find dungeon)" },
+    { FLOW_CMD_TYPE,      "filter by door type  (type XIM)" },
+    { FLOW_CMD_RESET,     "clear the filters" },
+    { FLOW_CMD_HIDE,      "hide an archive from the repo  (owner)" },
+    { FLOW_CMD_OWNER,     "owner mode" },
+    { FLOW_CMD_PATTERNS,  "the junk patterns this repo has learned" },
+    { FLOW_CMD_QUIT,      "leave the door" }
+};
+
+#define UI_HELP_COUNT ((int) (sizeof(ui_help_lines) / sizeof(ui_help_lines[0])))
+
+static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g)
+{
+    int rows = g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS - 2;
+    int top = 0;
+    int need_redraw = 1;
+
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    for (;;) {
+        int key;
+
+        if (need_redraw) {
+            int i;
+
+            ansi_begin(b, frame, framecap);
+            ansi_clear(b);
+            ansi_cursor(b, 0);
+            ui_draw_bar(b, 1, g->cols, "DoorRepo - Commands");
+            ansi_box(b, UI_HEADER_ROWS + 1, 1,
+                     g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS, g->cols - 1,
+                     ANSI_CYAN, "Type / then any of these");
+
+            for (i = 0; i < rows && top + i < UI_HELP_COUNT; i++) {
+                char line[120];
+                const ui_help_line *h = &ui_help_lines[top + i];
+
+                sprintf(line, "%-11s %.60s", flow_command_name(h->id), h->summary);
+                ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+                ansi_text(b, UI_HEADER_ROWS + 2 + i, 3, line, g->cols - 6);
+            }
+
+            {
+                char bar[160];
+                int len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                                "Up/Down  PgUp/PgDn",
+                                                (const char *const *) 0, 0,
+                                                "Q=Back");
+                if (len < 0) {
+                    bar[0] = '\0';
+                }
+                ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
+            }
+
+            ansi_flush(b);
+            need_redraw = 0;
+        }
+
+        key = ui_read_key();
+        if (key == 'q' || key == 'Q') {
+            return;
+        }
+        {
+            int action = ui_nav_action(key);
+            int before = top;
+
+            if (action == FLOW_NAV_UP && top > 0) {
+                top--;
+            } else if (action == FLOW_NAV_DOWN && top + rows < UI_HELP_COUNT) {
+                top++;
+            } else if (action == FLOW_NAV_PGUP) {
+                top = (top > rows) ? top - rows : 0;
+            } else if (action == FLOW_NAV_PGDN) {
+                top = (top + rows < UI_HELP_COUNT - rows)
+                    ? top + rows
+                    : ((UI_HELP_COUNT > rows) ? UI_HELP_COUNT - rows : 0);
+            } else if (action == FLOW_NAV_HOME) {
+                top = 0;
+            } else if (action == FLOW_NAV_END) {
+                top = (UI_HELP_COUNT > rows) ? UI_HELP_COUNT - rows : 0;
+            }
+            if (top != before) {
+                need_redraw = 1;
+            }
+        }
+    }
+}
+
+/* Reads a line into `out`. Returns 0 when the sysop changed their mind. */
+static int ui_command_bar(ansi_buf *b, char *frame, long framecap,
+                          const ui_geometry *g, char *out, int outcap)
+{
+    out[0] = '\0';
+    return ui_text_prompt(b, frame, framecap, g, "/", out, outcap);
+}
+
+/* Defined further down; the dispatcher below needs both. */
+static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
+                           ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g);
+static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
+                            char *frame, long framecap, const ui_geometry *g);
+
+/* What the bar could not do itself, because it changes the caller's own
+ * view rather than acting on disk. */
+#define UI_POST_NONE    0
+#define UI_POST_DOC     1
+#define UI_POST_ARCHIVE 2
+
+/* Runs a row-scoped command on the selected entry.
+ *
+ * The keys already do exactly these things, so this hands over to the same
+ * functions rather than growing a second copy of each action - the whole
+ * point of the bar is another way IN, not another implementation.
+ *
+ * Returns a UI_POST_* code for the two that are view state rather than work:
+ * the caller owns info_mode.
+ */
+static int ui_dispatch_row_command(const dr_config *cfg, dr_catalog *cat,
+                                   const ui_view *view, unsigned long selected,
+                                   int cmd, const char *arg, ansi_buf *b,
+                                   char *frame, long framecap,
+                                   const ui_geometry *g)
+{
+    const dr_entry *sel = &cat->rows[view->index[selected]];
+    const char *cmdname;
+
+    (void) arg;
+
+    switch (cmd) {
+    case FLOW_CMD_GET:
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        download_and_verify(cfg, sel);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        break;
+    case FLOW_CMD_INSTALL:
+        install_door(cfg, sel, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_UNINSTALL:
+        uninstall_door(cfg, sel->archive, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_STRIP:
+        strip_installed_door(cfg, sel->archive, sel->junk, b, frame, framecap);
+        break;
+    case FLOW_CMD_ACCESS:
+        do_edit_access(cfg, sel, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_CONFIG:
+        do_edit_tooltype(cfg, sel, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_FILES:
+        cmdname = index_lookup(cfg, sel->archive);
+        if (cmdname != (const char *) 0 && cmdname[0] != '\0') {
+            files_loop_ansi(cfg, cmdname, frame, framecap, g);
+        } else {
+            ui_notice(b, frame, framecap, g, "Not installed",
+                      "This archive has no directory on this board yet.",
+                      "Install it first, or use /archive to look inside it.");
+        }
+        break;
+    case FLOW_CMD_DOC:
+        return UI_POST_DOC;
+    case FLOW_CMD_ARCHIVE:
+        return UI_POST_ARCHIVE;
+    case FLOW_CMD_HIDE:
+    case FLOW_CMD_OWNER:
+    case FLOW_CMD_PATTERNS:
+        /* Owner-side actions keep their keys: they are gated on owner mode
+         * and one of them deletes from the repository itself, which is not
+         * something to reach by typing a prefix at a prompt. */
+        ui_notice(b, frame, framecap, g, "Use the key",
+                  "Owner actions are on their own keys - O, K and X -",
+                  "and are not reachable from the command bar.");
+        break;
+    default:
+        ui_notice(b, frame, framecap, g, "Not here",
+                  "That command does not apply to this screen.",
+                  "Type /help for the list.");
+        break;
+    }
+
+    return UI_POST_NONE;
+}
+
 /* Defined below (the "Installed doors screen" section) - forward declared
  * here so this loop's 'l'/'L' case (Task 4) can call it before its own
  * definition appears in the file. */
@@ -4903,13 +5138,90 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 need_full_redraw = 1;
             }
             break;
-        case '/':
-            /* Filter in place over the rows already loaded - no refetch. */
-            ui_filter_prompt(&buf, frame, (long) sizeof(frame), &g, &view, cat);
-            selected = 0;
-            top_index = 0;
+        case '/': {
+            /* The command bar. Everything the footer cannot fit, typed out
+             * in full, with the arguments the keys would need a second
+             * prompt for. An unrecognised line is a search, so "/dungeon"
+             * still finds dungeon - which is what a bar that opened on "/"
+             * should do. */
+            char cmdline[128];
+            char arg[96];
+            int cmd;
+
+            if (!ui_command_bar(&buf, frame, (long) sizeof(frame), &g,
+                                cmdline, (int) sizeof(cmdline) - 1)) {
+                need_full_redraw = 1;
+                break;                       /* changed their mind */
+            }
+
+            cmd = flow_parse_command(cmdline, arg, sizeof(arg));
             need_full_redraw = 1;
+
+            switch (cmd) {
+            case FLOW_CMD_HELP:
+                ui_help_screen(&buf, frame, (long) sizeof(frame), &g);
+                break;
+            case FLOW_CMD_HISTORY:
+                history_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+                break;
+            case FLOW_CMD_INSTALLED:
+                board_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+                break;
+            case FLOW_CMD_TYPE:
+                ui_view_cycle_type(&view, cat);
+                ui_view_rebuild(&view, cat);
+                selected = 0;
+                top_index = 0;
+                break;
+            case FLOW_CMD_RESET:
+                view.text[0] = '\0';
+                view.type[0] = '\0';
+                ui_view_rebuild(&view, cat);
+                selected = 0;
+                top_index = 0;
+                break;
+            case FLOW_CMD_FIND:
+            case FLOW_CMD_UNKNOWN:
+                /* Either "find <text>" or a bare line that is not a
+                 * command: both are a search for what was typed. An empty
+                 * one clears the filter rather than matching nothing. */
+                strncpy(view.text, arg, sizeof(view.text) - 1);
+                view.text[sizeof(view.text) - 1] = '\0';
+                ui_view_rebuild(&view, cat);
+                selected = 0;
+                top_index = 0;
+                break;
+            case FLOW_CMD_QUIT:
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 1);
+                ansi_reset(&buf);
+                ansi_clear(&buf);
+                ansi_flush(&buf);
+                return BROWSE_QUIT;
+            default:
+                /* Everything else acts on the selected row, and the keys
+                 * already do exactly that - so the bar hands over rather
+                 * than growing a second copy of each action. */
+                if (view.count > 0) {
+                    int post = ui_dispatch_row_command(cfg, cat, &view, selected,
+                                                       cmd, arg, &buf, frame,
+                                                       (long) sizeof(frame), &g);
+                    if (post == UI_POST_DOC) {
+                        info_mode = (info_mode == UI_INFO_DOC) ? UI_INFO_DIZ : UI_INFO_DOC;
+                        info_scroll = 0;
+                    } else if (post == UI_POST_ARCHIVE) {
+                        info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
+                        info_scroll = 0;
+                    }
+                } else {
+                    ui_notice(&buf, frame, (long) sizeof(frame), &g, "Nothing selected",
+                              "That command works on the highlighted row,",
+                              "and the list is empty.");
+                }
+                break;
+            }
             break;
+        }
         case 'a': case 'A':
             info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
             info_scroll = 0;

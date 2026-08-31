@@ -1121,4 +1121,59 @@ int flow_log_line_is_action(const char *line);
  * blank command would hand the BBS an empty command line. */
 int flow_run_decision(const char *command, int enabled);
 
+/* ---- The command bar ------------------------------------------------------
+ *
+ * "/" opens a line where a command can be typed out in full, with an
+ * argument. It exists because the footer cannot advertise this door: the
+ * catalog screen answers sixteen keys and eighty columns fit four of them,
+ * so `T` was live and advertised nowhere until a sysop asked what it did.
+ * A bar also takes arguments the keys need a second prompt for - "find
+ * dungeon", "stack 65536", "type XIM" - and gives "help" somewhere to live.
+ *
+ * The keys stay. One keypress beats typing for the things done constantly;
+ * this is for the rest, and for anyone who cannot see the footer at all
+ * (the non-ANSI screen).
+ */
+
+#define FLOW_CMD_UNKNOWN    0   /* not a command - treat the line as a search */
+#define FLOW_CMD_HELP       1
+#define FLOW_CMD_GET        2
+#define FLOW_CMD_INSTALL    3
+#define FLOW_CMD_UNINSTALL  4
+#define FLOW_CMD_FILES      5
+#define FLOW_CMD_DOC        6
+#define FLOW_CMD_ARCHIVE    7
+#define FLOW_CMD_STRIP      8
+#define FLOW_CMD_ACCESS     9
+#define FLOW_CMD_CONFIG    10
+#define FLOW_CMD_HISTORY   11
+#define FLOW_CMD_INSTALLED 12
+#define FLOW_CMD_FIND      13
+#define FLOW_CMD_TYPE      14
+#define FLOW_CMD_RESET     15
+#define FLOW_CMD_HIDE      16
+#define FLOW_CMD_OWNER     17
+#define FLOW_CMD_PATTERNS  18
+#define FLOW_CMD_QUIT      19
+
+/* Parses one typed line into a command and its argument.
+ *
+ * A leading "/" is optional (the bar is already open by the time this is
+ * called, but a sysop who types it anyway is not wrong). The verb is matched
+ * case-insensitively, and an UNAMBIGUOUS PREFIX is accepted - "inst" is
+ * install, "i" is not, because install and installed both start with it.
+ *
+ * An unrecognised first word is NOT an error: FLOW_CMD_UNKNOWN is returned
+ * with the WHOLE line in `arg_out`, so the caller can treat it as a search
+ * term. Typing "/dungeon" finds dungeon, which is what a person expects
+ * from a bar that opened on "/".
+ *
+ * `arg_out` receives the rest of the line with surrounding blanks removed,
+ * or "" when there is none. Returns the command id. */
+int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap);
+
+/* The command's canonical name, for the help screen and for echoing back
+ * what was understood. Returns "" for FLOW_CMD_UNKNOWN. */
+const char *flow_command_name(int command);
+
 #endif /* DOORREPO_FLOW_H */
