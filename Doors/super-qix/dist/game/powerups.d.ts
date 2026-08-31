@@ -34,6 +34,21 @@ export declare class PowerUpSystem {
      */
     private collectPowerUp;
     /**
+     * Take a letter.
+     *
+     * FAQ 2.3: "Collecting the Letters needed to spell the level's name will
+     * not give you any points until you complete the level ... Getting Letters
+     * you already have or which are not part of the current word give you an
+     * instant 500 points."
+     */
+    private collectLetter;
+    /**
+     * Drop whatever power-up is running, because a new one has been taken.
+     * Hurry is the exception: only the most recent is cancelled, so a stack of
+     * them keeps some of its benefit.
+     */
+    private clearActivePowerUps;
+    /**
      * Apply speed boost effect
      */
     private applySpeedBoost;

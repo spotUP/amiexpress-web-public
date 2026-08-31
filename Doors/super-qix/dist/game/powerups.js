@@ -2,7 +2,7 @@
  * Super Qix - Power-Up System
  * Handles power-up spawning, effects, and letter collection
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, POWERUP_SPAWN_CHANCE, SPEED_BOOST_DURATION, FREEZE_DURATION, LETTER_POINTS, WORD_COMPLETE_POINTS } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, POWERUP_SPAWN_CHANCE, SPEED_BOOST_DURATION, FREEZE_DURATION, SPARE_LETTER_POINTS, ONE_UP_CHANCE } from './constants';
 /**
  * Power-up system for spawning and managing power-ups
  */
@@ -75,6 +75,10 @@ export class PowerUpSystem {
      */
     selectPowerUpType() {
         const types = ['speed', 'shield', 'freeze', 'letter'];
+        // The 1-UP is rarer than anything else (FAQ 2.3.1).
+        if (Math.random() < ONE_UP_CHANCE) {
+            return 'oneUp';
+        }
         // Warp is rare
         if (Math.random() < 0.05) {
             return 'warp';
@@ -124,6 +128,14 @@ export class PowerUpSystem {
     collectPowerUp(powerUp) {
         const d = this.data;
         powerUp.collected = true;
+        // FAQ 2.3.1: "The Power-ups are mutually exclusive, i.e. if you have a
+        // Shield and then pick up a Hurry, you will lose the Shield and begin
+        // moving faster. The exception seems to be the stacking-effect of
+        // multiple Hurry's: getting another Power-up such as Freeze will only
+        // cancel the LAST Hurry". A letter is a bonus, not a power-up.
+        if (powerUp.type !== 'letter') {
+            this.clearActivePowerUps(powerUp.type);
+        }
         switch (powerUp.type) {
             case 'speed':
                 this.applySpeedBoost();
@@ -135,20 +147,60 @@ export class PowerUpSystem {
                 this.applyFreeze();
                 break;
             case 'warp':
-                // Skip to next level - handled by engine
-                d.claimedPercent = d.targetPercent + 1;
+                // FAQ 2.3.1: the Warp "opens a small doorway at the point you picked
+                // it up". Reaching it while open is what advances the level; picking
+                // the power-up up does not by itself.
+                d.warp = { x: powerUp.x, y: powerUp.y, openedAt: Date.now() };
+                break;
+            case 'oneUp':
+                // FAQ 2.3.1: "An extremely rare bonus, which gives you one free life."
+                d.lives++;
                 break;
             case 'letter':
-                if (powerUp.letter) {
-                    d.collectedLetters.push(powerUp.letter);
-                    d.score += LETTER_POINTS;
-                    // Check if word complete
-                    if (this.isWordComplete()) {
-                        d.score += WORD_COMPLETE_POINTS;
-                    }
-                }
+                this.collectLetter(powerUp.letter);
                 break;
         }
+    }
+    /**
+     * Take a letter.
+     *
+     * FAQ 2.3: "Collecting the Letters needed to spell the level's name will
+     * not give you any points until you complete the level ... Getting Letters
+     * you already have or which are not part of the current word give you an
+     * instant 500 points."
+     */
+    collectLetter(letter) {
+        const d = this.data;
+        if (!letter)
+            return;
+        const needed = d.levelWord.includes(letter);
+        const alreadyHave = d.collectedLetters.includes(letter);
+        if (needed && !alreadyHave) {
+            // Banked, not paid. The end-of-level bonus settles it.
+            d.collectedLetters.push(letter);
+            return;
+        }
+        d.score += SPARE_LETTER_POINTS;
+    }
+    /**
+     * Drop whatever power-up is running, because a new one has been taken.
+     * Hurry is the exception: only the most recent is cancelled, so a stack of
+     * them keeps some of its benefit.
+     */
+    clearActivePowerUps(incoming) {
+        const d = this.data;
+        if (incoming === 'speed')
+            return; // Hurries stack
+        const lastSpeed = d.activeEffects.map(e => e.type).lastIndexOf('speed');
+        if (lastSpeed >= 0) {
+            d.activeEffects.splice(lastSpeed, 1);
+            if (!d.activeEffects.some(e => e.type === 'speed')) {
+                d.marker.speedBoost = false;
+                d.marker.speedBoostTimer = 0;
+            }
+        }
+        d.marker.hasShield = false;
+        d.activeEffects = d.activeEffects.filter(e => e.type === 'speed');
     }
     /**
      * Apply speed boost effect

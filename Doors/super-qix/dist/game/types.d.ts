@@ -5,7 +5,7 @@
 export type Direction = 'up' | 'down' | 'left' | 'right';
 export type GameState = 'menu' | 'playing' | 'paused' | 'levelComplete' | 'gameover' | 'highscores' | 'enterName' | 'levelTransition';
 export type CellState = 'unclaimed' | 'claimed' | 'border' | 'stix';
-export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter';
+export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter' | 'oneUp';
 export interface Point {
     x: number;
     y: number;
@@ -134,6 +134,12 @@ export interface SuperQixData {
      * Skulls are released and it resets.
      */
     timeMeter: number;
+    /** An open Warp doorway, if one has been released (FAQ 2.3.1). */
+    warp: {
+        x: number;
+        y: number;
+        openedAt: number;
+    } | null;
     transitionTimer: number;
     transitionMessage: string;
 }

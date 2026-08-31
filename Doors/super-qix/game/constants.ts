@@ -60,6 +60,38 @@ export const DRAW_BASE_POINTS = 10;  // Per % claimed
 // A completed claim is painted in over several frames, sweeping right
 // to left, rather than appearing all at once.
 export const FILL_ANIMATION_FRAMES = 12;
+
+// Clearing a level wipes the picture in from the right, taking the
+// player's lines with it. Columns uncovered per frame.
+export const LEVEL_CLEAR_WIPE_COLUMNS = 1;
+
+// How long each panel of the level-clear sequence stays up, in frames.
+export const BONUS_PANEL_FRAMES = 75;   // ~2.5s
+export const INTRO_PANEL_FRAMES = 60;   // ~2s
+
+// The arcade marker is an animated sprite rather than a flat dot. It cycles
+// through these so it stands out against both the blue field and whatever
+// picture has been uncovered.
+export const MARKER_CYCLE = [
+  'lightred', 'lightyellow', 'lightgreen', 'lightcyan', 'lightblue', 'lightmagenta',
+];
+export const MARKER_CYCLE_FRAMES = 3;
+
+// Frames per Skull chew frame - they alternate an open and closed mouth.
+export const SKULL_CHEW_FRAMES = 6;
+
+// How fast the GAME OVER prompt blinks, in frames.
+export const GAME_OVER_BLINK_FRAMES = 15;
+
+// Letters (FAQ 2.3 / 2.4.2). A letter you NEED scores nothing when picked
+// up - it pays at the end of the level. A letter you do not need pays at once.
+export const LETTER_END_OF_LEVEL_POINTS = 1000;    // per letter, word unfinished
+export const LETTER_WORD_COMPLETE_POINTS = 10000;  // per letter, word finished
+export const SPARE_LETTER_POINTS = 500;            // duplicate or not in the word
+
+// FAQ 2.3.1: the 1-UP is "an extremely rare bonus".
+export const ONE_UP_CHANCE = 0.02;
+
 export const LETTER_POINTS = 1000;
 export const WORD_COMPLETE_POINTS = 10000;
 export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on separation
@@ -68,10 +100,10 @@ export const SPLIT_QIX_MULTIPLIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];  // Based on s
 // How strongly the Gremlin steers towards the marker (FAQ 2.2: its bounce is
 // "weighted somewhat towards your marker", and on later levels it will "zoom
 // towards you every time you detach from a wall").
-export const QIX_BASE_PULL = 0.08;      // always a slight lean
-export const QIX_LEVEL_PULL = 0.12;     // added by level 16
-export const QIX_DRAWING_PULL = 0.25;   // added while the player is exposed
-export const QIX_MAX_PULL = 0.6;        // never a perfect homing missile
+export const QIX_BASE_PULL = 0.03;      // always a slight lean
+export const QIX_LEVEL_PULL = 0.09;     // added by level 16
+export const QIX_DRAWING_PULL = 0.08;   // added while the player is exposed
+export const QIX_MAX_PULL = 0.25;        // never a perfect homing missile
 
 // The Gremlin divides on later levels, rarely, and never without limit
 // (FAQ 2.2 / 2.5.3: usually one, sometimes two or more).
@@ -79,9 +111,9 @@ export const QIX_SPLIT_FROM_LEVEL = 7;
 export const QIX_SPLIT_CHANCE_PER_TICK = 0.0015;
 export const QIX_MAX_COPIES = 3;
 
-export const QIX_BASE_SPEED = 2;
+export const QIX_BASE_SPEED = 1.1;
 export const QIX_SEGMENT_COUNT = 5;
-export const SPARX_BASE_SPEED = 1.5;
+export const SPARX_BASE_SPEED = 0.55;
 // FAQ 2.5.3: "There are no Super Skulls capable of chasing your marker
 // up an unfinished line." Skulls never promote.
 //
@@ -94,8 +126,8 @@ export const SKULLS_AT_LEVEL_START = 2;
 // FAQ 2.2: a Skull never instantly reverses on a line, so a turn is
 // refused while the last one is still fresh.
 export const SKULL_REVERSE_COOLDOWN_MS = 1000;
-export const FUSE_BASE_SPEED = 2;
-export const FUSE_START_DELAY = 500;  // ms before fuse starts
+export const FUSE_BASE_SPEED = 1.2;
+export const FUSE_START_DELAY = 3000;  // ms before fuse starts
 
 // Power-up parameters
 export const POWERUP_SPAWN_CHANCE = 0.25;  // 25% chance on area claim
@@ -109,7 +141,10 @@ export const CHARS = {
   markerDrawing: '@',
   qix: '*',
   qixAlt: '%',
-  sparx: '+',
+  // The Skulls chew: alternating these two reads as a mouth opening and
+  // closing, the way the arcade sprite animates.
+  sparx: '8',
+  sparxChew: 'O',
   superSparx: 'X',
   fuse: '~',
   fuseHead: '*',
@@ -170,7 +205,7 @@ export const BG_COLORS = {
   // The border doubles as the Time Meter: squares turn red as it fills
   // (FAQ 1), and when the whole border is red two more Skulls arrive.
   borderMeter: 'red',
-  unclaimed: 'black',
+  unclaimed: 'blue',
   claimed: 'blue',
   // FAQ 2.1: the line you are drawing is YELLOW, and turns BLUE once it
   // reconnects and becomes safe. There is no slow/fast draw in Super
@@ -437,6 +472,12 @@ export const POWERUP_EFFECTS: Record<PowerUpType, {
     description: 'Skip level',
     char: 'W',
     color: 'magenta'
+  },
+  oneUp: {
+    duration: 0,
+    description: 'Extra life',
+    char: '1',
+    color: 'lightred'
   },
   letter: {
     duration: 0,

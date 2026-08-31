@@ -2,7 +2,7 @@
  * Super Qix - Core Game Engine
  * Main game logic and state management
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, BONUS_PERCENT_START, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, LEVEL_CLEAR_WIPE_COLUMNS, BONUS_PANEL_FRAMES, INTRO_PANEL_FRAMES, LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, MARKER_CYCLE, MARKER_CYCLE_FRAMES, SKULL_CHEW_FRAMES, GAME_OVER_BLINK_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY } from './constants';
 import { artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
@@ -29,6 +29,16 @@ export class QixEngine {
          * by x, ordered right to left, and each tick consumes a slice of them.
          */
         this.pendingFill = null;
+        /**
+         * The end-of-level sequence, following the arcade.
+         *
+         *   reveal - the picture wipes in from the right, taking the player's
+         *            lines with it, until the whole image is showing;
+         *   bonus  - the BONUS tally sits over the finished picture;
+         *   clear  - the picture wipes away again;
+         *   intro  - the empty field announces what the next round needs.
+         */
+        this.outro = null;
         this.data = data;
         this.renderCallback = renderCallback;
         this.drawingSystem = new DrawingSystem(data);
@@ -78,6 +88,12 @@ export class QixEngine {
         // Clear stix
         d.currentStix = null;
         d.fuse = null;
+        // Abandon any claim still being painted in. The winning claim of the
+        // previous level is a large one, and its remaining columns would
+        // otherwise carry on painting into THIS level's fresh field - which
+        // handed the player a new level with chunks already filled in.
+        this.pendingFill = null;
+        this.outro = null;
         // Spawn enemies
         this.enemySystem.initLevel(config);
         // Clear power-ups
@@ -250,6 +266,177 @@ export class QixEngine {
         if (fill.columns.length === 0)
             this.pendingFill = null;
     }
+    /**
+     * Write centred lines across the middle of the rendered field.
+     *
+     * Whole rendered rows are replaced rather than individual cells, because
+     * each cell is already a run of colour tags. Every replacement row is
+     * padded to the full width so the frame still measures SCREEN_WIDTH.
+     */
+    overlayPanel(lines, panel) {
+        const width = FIELD_WIDTH * CELL_WIDTH;
+        const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+        panel.forEach((entry, i) => {
+            const row = top + i;
+            if (row < 0 || row >= lines.length)
+                return;
+            const left = Math.max(0, Math.floor((width - entry.text.length) / 2));
+            const padded = ' '.repeat(left) + entry.text + ' '.repeat(Math.max(0, width - left - entry.text.length));
+            lines[row] = `{black-bg}{${entry.colour}-fg}${padded}{/${entry.colour}-fg}{/black-bg}`;
+        });
+    }
+    /**
+     * The panel the end-of-level sequence is showing: the BONUS tally over the
+     * finished picture, then what the next round asks for.
+     */
+    outroPanel() {
+        const outro = this.outro;
+        if (!outro)
+            return null;
+        if (outro.phase === 'bonus') {
+            const row = (label, value) => `${label.padEnd(12)}${String(value).padStart(8)}`;
+            return [
+                { text: 'BONUS', colour: 'lightcyan' },
+                { text: '', colour: 'white' },
+                { text: row(`AREA  ${outro.areaPercent}%`, outro.areaBonus), colour: 'lightblue' },
+                { text: row('WORD', outro.wordBonus), colour: 'lightblue' },
+            ];
+        }
+        if (outro.phase === 'intro') {
+            const next = getLevelConfig(this.data.level + 1);
+            return [
+                { text: 'CHALLENGE TO', colour: 'lightred' },
+                { text: `TAKE ${next.targetPercent}% AREA`, colour: 'lightred' },
+                { text: '', colour: 'white' },
+                { text: 'NEXT TRY', colour: 'lightred' },
+                { text: 'READY', colour: 'lightyellow' },
+            ];
+        }
+        return null;
+    }
+    /**
+     * The GAME OVER panel.
+     *
+     * The arcade blinks "GAME OVER / INSERT COIN" over the field; a BBS door
+     * has no coin slot, so it asks for a key. Nothing drew this state at all
+     * before - losing the last life simply froze the board.
+     */
+    gameOverPanel() {
+        const d = this.data;
+        if (d.state !== 'gameover')
+            return null;
+        const showPrompt = Math.floor(d.frameCount / GAME_OVER_BLINK_FRAMES) % 2 === 0;
+        return [
+            { text: 'GAME OVER', colour: 'lightred' },
+            { text: '', colour: 'white' },
+            { text: `SCORE ${d.score}`, colour: 'lightgreen' },
+            { text: `ROUND ${d.level}`, colour: 'lightgreen' },
+            { text: '', colour: 'white' },
+            { text: showPrompt ? 'PRESS ENTER' : '', colour: 'lightyellow' },
+        ];
+    }
+    /**
+     * Work out the end-of-level bonuses and start the arcade sequence.
+     *
+     * FAQ 2.4.2: "1000 points x (each 1% above required fill threshold)",
+     * "1000 points x (Key letters collected) if word is still incomplete",
+     * and "10,000 points x (Key letters collected) if word is completed".
+     * This is where banked letters finally pay: FAQ 2.3 says collecting them
+     * "will not give you any points until you complete the level".
+     */
+    startLevelOutro() {
+        const d = this.data;
+        const above = Math.max(0, Math.floor(d.claimedPercent) - d.targetPercent);
+        const areaBonus = above * POINTS_PER_BONUS_PERCENT;
+        const perLetter = this.checkWordComplete()
+            ? LETTER_WORD_COMPLETE_POINTS
+            : LETTER_END_OF_LEVEL_POINTS;
+        const wordBonus = d.collectedLetters.length * perLetter;
+        d.score += areaBonus + wordBonus;
+        this.outro = {
+            phase: 'reveal',
+            sweepX: FIELD_WIDTH,
+            timer: 0,
+            areaBonus,
+            wordBonus,
+            areaPercent: Math.floor(d.claimedPercent),
+        };
+    }
+    /**
+     * Advance the end-of-level sequence one frame and repaint.
+     *
+     * Called by the door while the level is handed over - update() only runs
+     * while playing. Returns true while the sequence is still running.
+     */
+    advanceLevelOutro() {
+        const outro = this.outro;
+        if (!outro)
+            return false;
+        switch (outro.phase) {
+            case 'reveal':
+                outro.sweepX -= LEVEL_CLEAR_WIPE_COLUMNS;
+                if (outro.sweepX <= 0) {
+                    outro.sweepX = 0;
+                    outro.phase = 'bonus';
+                    outro.timer = BONUS_PANEL_FRAMES;
+                }
+                break;
+            case 'bonus':
+                outro.timer--;
+                if (outro.timer <= 0) {
+                    outro.phase = 'clear';
+                    outro.sweepX = FIELD_WIDTH;
+                }
+                break;
+            case 'clear':
+                outro.sweepX -= LEVEL_CLEAR_WIPE_COLUMNS;
+                if (outro.sweepX <= 0) {
+                    outro.sweepX = 0;
+                    outro.phase = 'intro';
+                    outro.timer = INTRO_PANEL_FRAMES;
+                }
+                break;
+            case 'intro':
+                outro.timer--;
+                if (outro.timer <= 0) {
+                    // Deliberately no repaint: the intro panel from the previous
+                    // frame should stay up, and the door advances the level next,
+                    // which paints the new one. Repainting here would flash the
+                    // finished level's field again.
+                    this.outro = null;
+                    return false;
+                }
+                break;
+        }
+        this.render();
+        return true;
+    }
+    /** Is the end-of-level sequence still running? */
+    isRevealing() {
+        return this.outro !== null;
+    }
+    /**
+     * What the end-of-level sequence paints at this cell, if anything.
+     */
+    outroCellAt(x, y, cell) {
+        const outro = this.outro;
+        if (!outro || cell === 'border')
+            return null;
+        const picture = () => this.background
+            ? { ch: ' ', art: artForCell(this.background, x, y) }
+            : { ch: ' ', bg: BG_COLORS.claimed };
+        const bare = () => ({ ch: ' ', bg: BG_COLORS.unclaimed });
+        switch (outro.phase) {
+            case 'reveal':
+                return x >= outro.sweepX ? picture() : null;
+            case 'bonus':
+                return picture();
+            case 'clear':
+                return x >= outro.sweepX ? bare() : picture();
+            case 'intro':
+                return bare();
+        }
+    }
     /** Is a claim still sweeping across the field? */
     isFilling() {
         return this.pendingFill !== null;
@@ -287,6 +474,16 @@ export class QixEngine {
             return;
         }
         const nextCell = d.field[nextY][nextX];
+        // Stepping off safe ground into open field starts a line by itself.
+        //
+        // The arcade holds a Draw button to detach, but that assumes a stick
+        // and a button under one hand. In a BBS terminal the arrow keys are
+        // the whole controller, so an arrow pointed into unclaimed area IS the
+        // intent to draw - nothing else can be meant by it, since without
+        // drawing that move is simply refused.
+        if (!d.marker.isDrawing && nextCell === 'unclaimed') {
+            this.startDrawing();
+        }
         if (d.marker.isDrawing && d.currentStix) {
             // Retracing one step back along the line (FAQ 2.1: backtracking IS
             // allowed in Super Qix). The line shortens and the abandoned cell goes
@@ -465,6 +662,13 @@ export class QixEngine {
     handleDeath() {
         const d = this.data;
         d.lives--;
+        // Where the marker goes back to.
+        //
+        // NOT the level's spawn point. Losing a life in a far corner and being
+        // sent back to the middle of the bottom edge costs the whole walk out
+        // again, and reads as the game having reset itself. The marker returns
+        // to where it LEFT safe ground - the start of the line it was drawing.
+        const retreat = d.currentStix?.points[0];
         // Clear current stix
         if (d.currentStix) {
             for (const point of d.currentStix.points) {
@@ -482,12 +686,39 @@ export class QixEngine {
         if (d.lives <= 0) {
             d.state = 'gameover';
         }
-        else {
-            // Reset marker to safe position
-            d.marker.x = Math.floor(FIELD_WIDTH / 2);
-            d.marker.y = FIELD_HEIGHT - 1;
+        else if (retreat && this.drawingSystem.isWalkable(retreat)) {
+            // Back to where the line started - safe ground by definition, since
+            // that is what a line has to start from.
+            d.marker.x = retreat.x;
+            d.marker.y = retreat.y;
         }
+        else if (!this.drawingSystem.isWalkable({ x: d.marker.x, y: d.marker.y })) {
+            // Killed on ground a claim has since buried: fall back to the
+            // nearest safe cell rather than the spawn point.
+            const safe = this.nearestWalkable(d.marker.x, d.marker.y);
+            d.marker.x = safe.x;
+            d.marker.y = safe.y;
+        }
+        // Otherwise the marker is already on safe ground: leave it alone.
         this.render();
+    }
+    /**
+     * The closest cell the marker may stand on, searched outwards in rings.
+     */
+    nearestWalkable(fromX, fromY) {
+        for (let r = 1; r < Math.max(FIELD_WIDTH, FIELD_HEIGHT); r++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    if (Math.abs(dx) !== r && Math.abs(dy) !== r)
+                        continue;
+                    const point = { x: fromX + dx, y: fromY + dy };
+                    if (this.drawingSystem.isWalkable(point))
+                        return point;
+                }
+            }
+        }
+        // The frame is always walkable, so this is unreachable in practice.
+        return { x: Math.floor(FIELD_WIDTH / 2), y: FIELD_HEIGHT - 1 };
     }
     /**
      * Check if word is complete
@@ -504,15 +735,15 @@ export class QixEngine {
      */
     levelComplete() {
         const d = this.data;
-        // Bonus for percentage above target
-        if (d.claimedPercent > BONUS_PERCENT_START) {
-            const bonusPercent = d.claimedPercent - BONUS_PERCENT_START;
-            d.score += bonusPercent * POINTS_PER_BONUS_PERCENT;
-        }
+        // The area and word bonuses are worked out and credited by
+        // startLevelOutro, which also owns the tally the player is shown.
+        // There was a second area bonus here as well, so every cleared level
+        // paid for the same percentage twice.
         // Extra life for 98%+
         if (d.claimedPercent >= EXTRA_LIFE_PERCENT) {
             d.lives++;
         }
+        this.startLevelOutro();
         d.state = 'levelTransition';
         d.transitionMessage = `LEVEL ${d.level} COMPLETE!`;
         d.transitionTimer = 90; // 3 seconds at 30fps
@@ -544,6 +775,14 @@ export class QixEngine {
         for (let y = 0; y < FIELD_HEIGHT; y++) {
             for (let x = 0; x < FIELD_WIDTH; x++) {
                 const cell = d.field[y][x];
+                // The end-of-level sequence paints the field itself: the picture
+                // once the reveal has passed a column, plain ground once the
+                // clearing wipe has.
+                const outroCell = this.outroCellAt(x, y, cell);
+                if (outroCell) {
+                    buffer[y][x] = outroCell;
+                    continue;
+                }
                 switch (cell) {
                     case 'border':
                         // The frame is also the Time Meter: the squares already
@@ -603,9 +842,11 @@ export class QixEngine {
             const sy = Math.floor(sparx.y);
             if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
                 // Every Skull looks the same: there are no Super Skulls.
+                // Skulls chew, alternating an open and a closed mouth.
+                const chewing = Math.floor(d.frameCount / SKULL_CHEW_FRAMES) % 2 === 0;
                 buffer[sy][sx] = {
-                    ch: CHARS.sparx,
-                    fg: 'white',
+                    ch: chewing ? CHARS.sparx : CHARS.sparxChew,
+                    fg: 'lightyellow',
                     bg: BG_COLORS.sparx
                 };
             }
@@ -633,12 +874,11 @@ export class QixEngine {
         const mx = d.marker.x;
         const my = d.marker.y;
         if (my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
-            const drawing = d.marker.isDrawing;
-            buffer[my][mx] = {
-                ch: drawing ? CHARS.markerDrawing : CHARS.marker,
-                fg: 'black',
-                bg: drawing ? BG_COLORS.markerDrawing : BG_COLORS.marker
-            };
+            // The arcade marker is an animated sprite. No glyph: the cycling
+            // block IS the sprite, and a character on top only muddies it
+            // against the picture behind.
+            const cycle = MARKER_CYCLE[Math.floor(d.frameCount / MARKER_CYCLE_FRAMES) % MARKER_CYCLE.length];
+            buffer[my][mx] = { ch: ' ', bg: cycle };
         }
         // Convert buffer to tagged string.
         //
@@ -669,6 +909,17 @@ export class QixEngine {
                 line += cellStr;
             }
             lines.push(line);
+        }
+        // The end-of-level sequence and the game-over screen speak for
+        // themselves. Without any of this the field simply froze.
+        const panel = this.gameOverPanel() ?? this.outroPanel();
+        if (panel) {
+            this.overlayPanel(lines, panel);
+        }
+        else if (d.transitionMessage && d.state === 'levelTransition') {
+            this.overlayPanel(lines, [
+                { text: d.transitionMessage, colour: 'lightyellow' },
+            ]);
         }
         this.renderCallback(lines.join('\n'));
     }

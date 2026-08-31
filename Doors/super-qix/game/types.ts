@@ -21,7 +21,7 @@ export type GameState =
 export type CellState = 'unclaimed' | 'claimed' | 'border' | 'stix';
 
 // Power-up types
-export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter';
+export type PowerUpType = 'speed' | 'shield' | 'freeze' | 'warp' | 'letter' | 'oneUp';
 
 // Position interface
 export interface Point {
@@ -192,6 +192,9 @@ export interface SuperQixData {
    * Skulls are released and it resets.
    */
   timeMeter: number;
+
+  /** An open Warp doorway, if one has been released (FAQ 2.3.1). */
+  warp: { x: number; y: number; openedAt: number } | null;
 
   // Transition
   transitionTimer: number;

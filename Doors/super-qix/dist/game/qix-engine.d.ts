@@ -31,6 +31,16 @@ export declare class QixEngine {
      * by x, ordered right to left, and each tick consumes a slice of them.
      */
     private pendingFill;
+    /**
+     * The end-of-level sequence, following the arcade.
+     *
+     *   reveal - the picture wipes in from the right, taking the player's
+     *            lines with it, until the whole image is showing;
+     *   bonus  - the BONUS tally sits over the finished picture;
+     *   clear  - the picture wipes away again;
+     *   intro  - the empty field announces what the next round needs.
+     */
+    private outro;
     constructor(data: SuperQixData, renderCallback: RenderCallback);
     /**
      * Set the picture revealed as area is claimed.
@@ -84,6 +94,50 @@ export declare class QixEngine {
     private isMeterFilled;
     /** Paint the next slice of a sweeping claim. */
     private advanceFill;
+    /**
+     * Write centred lines across the middle of the rendered field.
+     *
+     * Whole rendered rows are replaced rather than individual cells, because
+     * each cell is already a run of colour tags. Every replacement row is
+     * padded to the full width so the frame still measures SCREEN_WIDTH.
+     */
+    private overlayPanel;
+    /**
+     * The panel the end-of-level sequence is showing: the BONUS tally over the
+     * finished picture, then what the next round asks for.
+     */
+    private outroPanel;
+    /**
+     * The GAME OVER panel.
+     *
+     * The arcade blinks "GAME OVER / INSERT COIN" over the field; a BBS door
+     * has no coin slot, so it asks for a key. Nothing drew this state at all
+     * before - losing the last life simply froze the board.
+     */
+    private gameOverPanel;
+    /**
+     * Work out the end-of-level bonuses and start the arcade sequence.
+     *
+     * FAQ 2.4.2: "1000 points x (each 1% above required fill threshold)",
+     * "1000 points x (Key letters collected) if word is still incomplete",
+     * and "10,000 points x (Key letters collected) if word is completed".
+     * This is where banked letters finally pay: FAQ 2.3 says collecting them
+     * "will not give you any points until you complete the level".
+     */
+    private startLevelOutro;
+    /**
+     * Advance the end-of-level sequence one frame and repaint.
+     *
+     * Called by the door while the level is handed over - update() only runs
+     * while playing. Returns true while the sequence is still running.
+     */
+    advanceLevelOutro(): boolean;
+    /** Is the end-of-level sequence still running? */
+    isRevealing(): boolean;
+    /**
+     * What the end-of-level sequence paints at this cell, if anything.
+     */
+    private outroCellAt;
     /** Is a claim still sweeping across the field? */
     isFilling(): boolean;
     /**
@@ -118,6 +172,10 @@ export declare class QixEngine {
      * Handle player death
      */
     private handleDeath;
+    /**
+     * The closest cell the marker may stand on, searched outwards in rings.
+     */
+    private nearestWalkable;
     /**
      * Check if word is complete
      */

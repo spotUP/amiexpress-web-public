@@ -59,6 +59,7 @@ function createInitialGameData() {
         levelStartTime: Date.now(),
         stopTimer: 0,
         timeMeter: 0,
+        warp: null,
         transitionTimer: 0,
         transitionMessage: "",
     };
@@ -143,19 +144,31 @@ function initScreen() {
         style: {
             border: { fg: "gray" },
         },
-        content: "{gray-fg}Arrows: Move | Space: Draw | P: Pause | Q: Quit{/}",
+        content: "{gray-fg}Arrows: Move and Draw | P: Pause | Q: Quit{/}",
     });
 }
 /**
  * Format HUD display
  */
 function formatHUD() {
-    const scoreStr = gameData.score.toString().padStart(8, "0");
-    const livesStr = "*".repeat(gameData.lives);
-    const percentStr = Math.floor(gameData.claimedPercent)
-        .toString()
-        .padStart(2, " ");
-    return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LVL: ${gameData.level}{/}  {green-fg}CLAIMED: ${percentStr}%{/}  {red-fg}LIVES: ${livesStr}{/}`;
+    // Laid out like the arcade: score, the round, the level's word with the
+    // letters already collected picked out, and the ratio claimed so far
+    // against what the level needs.
+    const scoreStr = gameData.score.toString().padStart(6, "0");
+    const livesStr = "*".repeat(Math.max(0, gameData.lives));
+    const ratio = Math.floor(gameData.claimedPercent);
+    const word = (gameData.levelWord || "")
+        .split("")
+        .map(letter => gameData.collectedLetters.includes(letter)
+        ? `{lightyellow-fg}${letter}{/lightyellow-fg}`
+        : `{gray-fg}${letter}{/gray-fg}`)
+        .join("");
+    return (`{lightred-fg}SCORE{/lightred-fg} {lightgreen-fg}${scoreStr}{/lightgreen-fg}  ` +
+        `{lightred-fg}ROUND{/lightred-fg} {lightgreen-fg}${gameData.level}{/lightgreen-fg}  ` +
+        `{lightcyan-fg}[{/lightcyan-fg}${word}{lightcyan-fg}]{/lightcyan-fg}  ` +
+        `{lightred-fg}RATIO{/lightred-fg} {lightyellow-fg}${ratio}%{/lightyellow-fg}` +
+        `{lightred-fg}/${gameData.targetPercent}%{/lightred-fg}  ` +
+        `{red-fg}${livesStr}{/red-fg}`);
 }
 /**
  * Enter the main menu: reset to the first option, then draw it.
@@ -368,7 +381,20 @@ async function startGame() {
             }
             engine?.update();
         }
+        else if (gameData.state === "gameover") {
+            // Keep painting so the GAME OVER prompt blinks. Nothing drew this
+            // state at all before, so losing the last life froze the board.
+            gameData.frameCount++;
+            engine?.render();
+        }
         else if (gameData.state === "levelTransition") {
+            // The arcade hand-over: the picture wipes in from the right taking
+            // the player's lines with it, the BONUS tally sits over the
+            // finished image, the picture wipes away, and the next round
+            // announces itself. Only then does the level advance.
+            const stillPlaying = engine?.advanceLevelOutro() ?? false;
+            if (stillPlaying)
+                return;
             gameData.transitionTimer--;
             if (gameData.transitionTimer <= 0) {
                 // Reveal a different picture on the next level. The load is async;
@@ -407,8 +433,15 @@ function handleInput(key) {
         case "enterName":
             handleNameEntryInput(inputKey);
             break;
+        case "levelTransition":
+            // The level is being handed over. Swallow input rather than
+            // falling through to the default below, which sent the player back
+            // to the MENU on any keypress - clearing a level looked like the
+            // game quitting on you.
+            break;
         default:
-            showMenu();
+            // An unknown state should not throw the player out of their game.
+            break;
     }
 }
 /**

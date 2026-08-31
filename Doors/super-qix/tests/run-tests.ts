@@ -17,6 +17,8 @@ const TEST_MODULES = [
   './drawing.test',
   './enemies.test',
   './gremlin-and-fuse.test',
+  './presentation.test',
+  './level-outro.test',
 ];
 
 (async () => {

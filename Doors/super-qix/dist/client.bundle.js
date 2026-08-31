@@ -32,10 +32,10 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/events.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/events.js
 var EventEmitter2;
 var init_events = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/events.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/events.js"() {
     "use strict";
     EventEmitter2 = class {
       constructor() {
@@ -106,7 +106,7 @@ var init_events = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/colors.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/colors.js
 function match(r1, g1, b1) {
   if (typeof r1 === "string") {
     const hex = r1;
@@ -464,7 +464,7 @@ function textWidth(text) {
 }
 var _cache, xterm, colors, vcolors, ccolors, colorNames, ccolorsMap, ncolors, ESC, CSI, attrs, cursor, screen, tagRegex, defaultFg, defaultBg, _parseTagsCache, _parseTagsCacheLimit, ansiRegex, _stripAnsiCache, _stripAnsiCacheLimit;
 var init_colors = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/colors.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/colors.js"() {
     "use strict";
     _cache = {};
     xterm = [
@@ -794,7 +794,7 @@ var init_colors = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js
 function getBreakpointName(width) {
   if (width < BREAKPOINT_XS)
     return "xs";
@@ -817,7 +817,7 @@ function enforceMinTouchHeight(height, touchFriendly) {
 }
 var MIN_TOUCH_HEIGHT, BREAKPOINT_XS, BREAKPOINT_SM, BREAKPOINT_MD, SWIPE_THRESHOLD, SWIPE_THRESHOLD_VERTICAL, SWIPE_MAX_TIME, LONG_PRESS_TIME, DOUBLE_TAP_INTERVAL, DEFAULT_PADDING, MOBILE_PADDING;
 var init_responsive_constants = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js"() {
     "use strict";
     MIN_TOUCH_HEIGHT = 3;
     BREAKPOINT_XS = 50;
@@ -833,10 +833,10 @@ var init_responsive_constants = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js
 var TouchGestureHandler;
 var init_touch_gestures = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js"() {
     "use strict";
     init_responsive_constants();
     TouchGestureHandler = class {
@@ -1068,7 +1068,7 @@ var init_touch_gestures = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js
 function applyResponsiveMixin(element, options = {}) {
   const behavior = new ResponsiveBehavior(element, options);
   element._responsiveBehavior = behavior;
@@ -1096,7 +1096,7 @@ function applyResponsiveMixin(element, options = {}) {
 }
 var ResponsiveBehavior;
 var init_responsive_mixin = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js"() {
     "use strict";
     init_responsive_constants();
     init_touch_gestures();
@@ -1290,14 +1290,14 @@ var init_responsive_mixin = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/box.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/box.js
 var box_exports = {};
 __export(box_exports, {
   Box: () => Box
 });
 var Box;
 var init_box = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/box.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/box.js"() {
     "use strict";
     init_element();
     init_responsive_constants();
@@ -1403,10 +1403,10 @@ var init_box = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/element.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/element.js
 var ESC2, Element;
 var init_element = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/element.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/element.js"() {
     "use strict";
     init_events();
     init_colors();
@@ -4307,10 +4307,10 @@ var init_element = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/program.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/program.js
 var ESC3;
 var init_program = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/program.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/program.js"() {
     "use strict";
     init_events();
     init_colors();
@@ -4318,24 +4318,24 @@ var init_program = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/keybindings.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/keybindings.js
 var init_keybindings = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/keybindings.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/keybindings.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/responsive-layout.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-layout.js
 var init_responsive_layout = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/responsive-layout.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-layout.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/screen.js
+// ../../sdk/dist-esm/engines/ui/blessed/core/screen.js
 var ESC4;
 var init_screen = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/core/screen.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/core/screen.js"() {
     "use strict";
     init_element();
     init_program();
@@ -4346,18 +4346,18 @@ var init_screen = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/text.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/text.js
 var init_text = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/text.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/text.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/list.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/list.js
 var ESC5;
 var init_list = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/list.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/list.js"() {
     "use strict";
     init_element();
     init_colors();
@@ -4365,26 +4365,26 @@ var init_list = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/form.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/form.js
 var init_form = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/form.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/form.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/textbox.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/textbox.js
 var init_textbox = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/textbox.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/textbox.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/button.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/button.js
 var Button;
 var init_button = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/button.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/button.js"() {
     "use strict";
     init_element();
     init_responsive_constants();
@@ -4571,94 +4571,94 @@ var init_button = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js
 var init_progressbar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js"() {
     "use strict";
     init_element();
     init_responsive_constants();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/table.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/table.js
 var init_table = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/table.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/table.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/log.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/log.js
 var init_log = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/log.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/log.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/scrollablebox.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/scrollablebox.js
 var init_scrollablebox = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/scrollablebox.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/scrollablebox.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js
 var init_scrollabletext = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js"() {
     "use strict";
     init_text();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js
 var init_checkbox = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js"() {
     "use strict";
     init_box();
     init_responsive_constants();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js
 var init_radiobutton = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js"() {
     "use strict";
     init_box();
     init_responsive_constants();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/radioset.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/radioset.js
 var init_radioset = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/radioset.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/radioset.js"() {
     "use strict";
     init_box();
     init_radiobutton();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/overlay.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/overlay.js
 var ESC6;
 var init_overlay = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/overlay.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/overlay.js"() {
     "use strict";
     init_box();
     ESC6 = String.fromCharCode(27);
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js
 var init_modal_helpers = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/message.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/message.js
 var init_message = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/message.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/message.js"() {
     "use strict";
     init_box();
     init_button();
@@ -4668,9 +4668,9 @@ var init_message = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/question.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/question.js
 var init_question = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/question.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/question.js"() {
     "use strict";
     init_box();
     init_button();
@@ -4680,9 +4680,9 @@ var init_question = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/prompt.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/prompt.js
 var init_prompt = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/prompt.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/prompt.js"() {
     "use strict";
     init_box();
     init_textbox();
@@ -4693,9 +4693,9 @@ var init_prompt = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/loading.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/loading.js
 var init_loading = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/loading.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/loading.js"() {
     "use strict";
     init_box();
     init_overlay();
@@ -4703,45 +4703,45 @@ var init_loading = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/line.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/line.js
 var init_line = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/line.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/line.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille.js
 var init_drawille = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/bresenham.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/bresenham.js
 var init_bresenham = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/bresenham.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/bresenham.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/gl-matrix.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/gl-matrix.js
 var init_gl_matrix = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/gl-matrix.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/gl-matrix.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/utils.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/utils.js
 var init_utils = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/utils.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/utils.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille-canvas.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille-canvas.js
 var init_drawille_canvas = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille-canvas.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille-canvas.js"() {
     "use strict";
     init_drawille();
     init_bresenham();
@@ -4750,25 +4750,25 @@ var init_drawille_canvas = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contrib-canvas.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-canvas.js
 var init_contrib_canvas = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contrib-canvas.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-canvas.js"() {
     "use strict";
     init_box();
     init_drawille_canvas();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/lodash.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/lodash.js
 var init_lodash = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/lodash.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/lodash.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/line-chart.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/line-chart.js
 var init_line_chart = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/line-chart.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/line-chart.js"() {
     "use strict";
     init_contrib_canvas();
     init_box();
@@ -4777,9 +4777,9 @@ var init_line_chart = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/listbar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/listbar.js
 var init_listbar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/listbar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/listbar.js"() {
     "use strict";
     init_box();
     init_button();
@@ -4787,66 +4787,66 @@ var init_listbar = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js
 var init_bigtext = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/filemanager.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/filemanager.js
 var init_filemanager = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/filemanager.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/filemanager.js"() {
     "use strict";
     init_list();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/listtable.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/listtable.js
 var init_listtable = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/listtable.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/listtable.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/ansiimage.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/ansiimage.js
 var init_ansiimage = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/ansiimage.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/ansiimage.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/terminal.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/terminal.js
 var init_terminal = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/terminal.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/terminal.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/layout.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/layout.js
 var init_layout = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/layout.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/layout.js"() {
     "use strict";
     init_box();
     init_responsive_constants();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/passbox.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/passbox.js
 var init_passbox = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/passbox.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/passbox.js"() {
     "use strict";
     init_textbox();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/filebox.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/filebox.js
 var init_filebox = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/filebox.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/filebox.js"() {
     "use strict";
     init_list();
     init_box();
@@ -4854,59 +4854,59 @@ var init_filebox = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/image.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/image.js
 var init_image = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/image.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/image.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/viewport.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/viewport.js
 var init_viewport = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/viewport.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/viewport.js"() {
     "use strict";
     init_box();
     init_responsive_constants();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/canvas.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/canvas.js
 var init_canvas = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/canvas.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/canvas.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/iframe.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/iframe.js
 var init_iframe = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/iframe.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/iframe.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/video.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/video.js
 var init_video = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/video.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/video.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contextmenu.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/contextmenu.js
 var init_contextmenu = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contextmenu.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/contextmenu.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/panel.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/panel.js
 var Panel;
 var init_panel = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/panel.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/panel.js"() {
     "use strict";
     init_box();
     init_responsive_constants();
@@ -5251,10 +5251,10 @@ var init_panel = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js
 var DockablePanel;
 var init_dockable_panel = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js"() {
     "use strict";
     init_panel();
     init_box();
@@ -7558,19 +7558,19 @@ var init_dockable_panel = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js
 var init_kanban_board = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js"() {
     "use strict";
     init_box();
     init_list();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js
 var DropdownMenu;
 var init_dropdown_menu = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js"() {
     "use strict";
     init_element();
     DropdownMenu = class _DropdownMenu extends Element {
@@ -7857,9 +7857,9 @@ var init_dropdown_menu = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js
 var init_menu_bar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js"() {
     "use strict";
     init_element();
     init_box();
@@ -7867,25 +7867,25 @@ var init_menu_bar = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js
 var init_mobile_carousel = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js"() {
     "use strict";
     init_box();
     init_listbar();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/AutocompleteManager.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/AutocompleteManager.js
 var init_AutocompleteManager = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/AutocompleteManager.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/AutocompleteManager.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/autocomplete.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete.js
 var init_autocomplete = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/autocomplete.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete.js"() {
     "use strict";
     init_box();
     init_list();
@@ -7893,9 +7893,9 @@ var init_autocomplete = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js
 var init_autocomplete_textbox = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js"() {
     "use strict";
     init_element();
     init_list();
@@ -7903,9 +7903,9 @@ var init_autocomplete_textbox = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js
 var init_tabpanel = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js"() {
     "use strict";
     init_box();
     init_button();
@@ -7913,9 +7913,9 @@ var init_tabpanel = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/accordion.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/accordion.js
 var init_accordion = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/accordion.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/accordion.js"() {
     "use strict";
     init_box();
     init_button();
@@ -7923,9 +7923,9 @@ var init_accordion = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/collapsible.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/collapsible.js
 var init_collapsible = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/collapsible.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/collapsible.js"() {
     "use strict";
     init_box();
     init_button();
@@ -7933,18 +7933,18 @@ var init_collapsible = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/stacked-gauge.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-gauge.js
 var init_stacked_gauge = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/stacked-gauge.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-gauge.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/colorpicker.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/colorpicker.js
 var ColorPicker;
 var init_colorpicker = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/colorpicker.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/colorpicker.js"() {
     "use strict";
     init_box();
     init_button();
@@ -8037,18 +8037,18 @@ var init_colorpicker = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/tree.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/tree.js
 var init_tree = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/tree.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/tree.js"() {
     "use strict";
     init_box();
     init_list();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/fileexplorer.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/fileexplorer.js
 var init_fileexplorer = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/fileexplorer.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/fileexplorer.js"() {
     "use strict";
     init_box();
     init_tree();
@@ -8056,9 +8056,9 @@ var init_fileexplorer = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js
 var init_doc_modal = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js"() {
     "use strict";
     init_box();
     init_bigtext();
@@ -8068,9 +8068,9 @@ var init_doc_modal = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
 var init_confirm_modal = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
     "use strict";
     init_box();
     init_button();
@@ -8080,17 +8080,17 @@ var init_confirm_modal = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js
 var init_canvas2 = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js"() {
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js
 var ANSI_REGEX, ANSIUtils;
 var init_ansi_utils = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js"() {
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js"() {
     "use strict";
     ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
     ANSIUtils = class {
@@ -8355,18 +8355,18 @@ var init_ansi_utils = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js
 var init_editor_state = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js"() {
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js"() {
     "use strict";
     init_ansi_utils();
     init_canvas2();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js
 var init_ansi_editor = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js"() {
     "use strict";
     init_box();
     init_canvas();
@@ -8382,9 +8382,9 @@ var init_ansi_editor = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js
 var init_login_modal = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js"() {
     "use strict";
     init_box();
     init_textbox();
@@ -8395,9 +8395,9 @@ var init_login_modal = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js
 var init_category_picker = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js"() {
     "use strict";
     init_box();
     init_list();
@@ -8406,25 +8406,25 @@ var init_category_picker = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js
 var init_fkey_bar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js
 var init_status_bar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js
 var init_search_modal = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js"() {
     "use strict";
     init_box();
     init_list();
@@ -8434,17 +8434,17 @@ var init_search_modal = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js
 var init_audio_level_bar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js
 var init_multiplayer_lobby = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js"() {
     "use strict";
     init_box();
     init_list();
@@ -8456,42 +8456,42 @@ var init_multiplayer_lobby = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/bar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/bar.js
 var init_bar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/bar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/bar.js"() {
     "use strict";
     init_contrib_canvas();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/donut.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/donut.js
 var init_donut = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/donut.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/donut.js"() {
     "use strict";
     init_contrib_canvas();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/gauge.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/gauge.js
 var init_gauge = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/gauge.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/gauge.js"() {
     "use strict";
     init_contrib_canvas();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/gauge-list.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/gauge-list.js
 var init_gauge_list = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/gauge-list.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/gauge-list.js"() {
     "use strict";
     init_contrib_canvas();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/lcd.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js
 var CharacterMasks;
 var init_lcd = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/lcd.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js"() {
     "use strict";
     init_contrib_canvas();
     CharacterMasks = (function() {
@@ -8544,57 +8544,57 @@ var init_lcd = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/map-data.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/map-data.js
 var init_map_data = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/map-data.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/map-data.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/map.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/map.js
 var init_map = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/map.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/map.js"() {
     "use strict";
     init_contrib_canvas();
     init_map_data();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/markdown.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/markdown.js
 var init_markdown = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/markdown.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/markdown.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/picture.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/picture.js
 var init_picture = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/picture.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/picture.js"() {
     "use strict";
     init_box();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/sparkline.js
+// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/sparkline.js
 var init_sparkline = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/sparkline.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/sparkline.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/sparkline.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/sparkline.js
 var init_sparkline2 = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/sparkline.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/sparkline.js"() {
     "use strict";
     init_box();
     init_sparkline();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/stacked-bar.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-bar.js
 var init_stacked_bar = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/stacked-bar.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-bar.js"() {
     "use strict";
     init_contrib_canvas();
     init_box();
@@ -8602,17 +8602,17 @@ var init_stacked_bar = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contrib-log.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-log.js
 var init_contrib_log = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contrib-log.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-log.js"() {
     "use strict";
     init_element();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contrib-table.js
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-table.js
 var init_contrib_table = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/widgets/contrib-table.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-table.js"() {
     "use strict";
     init_box();
     init_list();
@@ -8620,24 +8620,24 @@ var init_contrib_table = __esm({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/layouts/grid.js
+// ../../sdk/dist-esm/engines/ui/blessed/layouts/grid.js
 var init_grid = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/layouts/grid.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/layouts/grid.js"() {
     "use strict";
     init_utils();
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/layouts/carousel.js
+// ../../sdk/dist-esm/engines/ui/blessed/layouts/carousel.js
 var init_carousel = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/layouts/carousel.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/layouts/carousel.js"() {
     "use strict";
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/index.js
+// ../../sdk/dist-esm/engines/ui/blessed/index.js
 var init_blessed = __esm({
-  "../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/blessed/index.js"() {
+  "../../sdk/dist-esm/engines/ui/blessed/index.js"() {
     "use strict";
     init_screen();
     init_element();
@@ -9674,7 +9674,7 @@ var require_events = __commonJS({
   }
 });
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/client/event-emitter.js
+// ../../sdk/dist-esm/client/event-emitter.js
 var EventEmitter = class {
   constructor() {
     this.events = /* @__PURE__ */ new Map();
@@ -9749,7 +9749,7 @@ var EventEmitter = class {
   }
 };
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/common/protocol.js
+// ../../sdk/dist-esm/common/protocol.js
 var MessageType;
 (function(MessageType2) {
   MessageType2["CONNECT"] = "connect";
@@ -9806,11 +9806,11 @@ var ProtocolHelper = class {
   }
 };
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ui/ui-engine.js
+// ../../sdk/dist-esm/engines/ui/ui-engine.js
 init_blessed();
 init_dockable_panel();
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/core/types.js
+// ../../sdk/dist-esm/core/types.js
 var AnsiColor;
 (function(AnsiColor2) {
   AnsiColor2[AnsiColor2["Black"] = 0] = "Black";
@@ -34884,7 +34884,7 @@ var Buffer2 = ToneAudioBuffer;
 var Buffers = ToneAudioBuffers;
 var BufferSource = ToneBufferSource;
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/audio/audio-engine.js
+// ../../sdk/dist-esm/engines/audio/audio-engine.js
 var AudioEngine = class {
   constructor(config = {}, socket) {
     this.synths = /* @__PURE__ */ new Map();
@@ -36068,7 +36068,7 @@ var AudioEngine = class {
   }
 };
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/audio/tracker-engine.js
+// ../../sdk/dist-esm/engines/audio/tracker-engine.js
 var InterpolationFilter;
 (function(InterpolationFilter2) {
   InterpolationFilter2[InterpolationFilter2["None"] = 0] = "None";
@@ -36084,52 +36084,52 @@ var PlaybackState;
   PlaybackState2["Loading"] = "loading";
 })(PlaybackState || (PlaybackState = {}));
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/media/VoiceCapture.js
+// ../../sdk/dist-esm/media/VoiceCapture.js
 var import_events6 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/network-engine.js
+// ../../sdk/dist-esm/engines/network/network-engine.js
 var import_events19 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/broker/broker-client.js
+// ../../sdk/dist-esm/engines/network/broker/broker-client.js
 var import_events7 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/connection.js
+// ../../sdk/dist-esm/engines/network/modules/connection.js
 var import_events8 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/lobby.js
+// ../../sdk/dist-esm/engines/network/modules/lobby.js
 var import_events9 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/matchmaking.js
+// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
 var import_events10 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/sync.js
+// ../../sdk/dist-esm/engines/network/modules/sync.js
 var import_events11 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/prediction.js
+// ../../sdk/dist-esm/engines/network/modules/prediction.js
 var import_events12 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/interpolation.js
+// ../../sdk/dist-esm/engines/network/modules/interpolation.js
 var import_events13 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/presence.js
+// ../../sdk/dist-esm/engines/network/modules/presence.js
 var import_events14 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/social.js
+// ../../sdk/dist-esm/engines/network/modules/social.js
 var import_events15 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/leaderboard.js
+// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
 var import_events16 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/replay.js
+// ../../sdk/dist-esm/engines/network/modules/replay.js
 var import_events17 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/network/modules/security.js
+// ../../sdk/dist-esm/engines/network/modules/security.js
 var import_events18 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/ai/ai-engine.js
+// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events20 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
 var import_events21 = __toESM(require_events());
 var TerrainType;
 (function(TerrainType2) {
@@ -36179,19 +36179,19 @@ var UnitClass;
   UnitClass2["Thief"] = "Thief";
 })(UnitClass || (UnitClass = {}));
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/components/level/level-manager.js
+// ../../sdk/dist-esm/components/level/level-manager.js
 var import_events22 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/components/inventory/inventory-system.js
+// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events23 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/components/dialogue/dialogue-system.js
+// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
 var import_events24 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/components/quest/quest-system.js
+// ../../sdk/dist-esm/components/quest/quest-system.js
 var import_events25 = __toESM(require_events());
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/components/tactical/class-system.js
+// ../../sdk/dist-esm/components/tactical/class-system.js
 var import_events26 = __toESM(require_events());
 var MovementType;
 (function(MovementType2) {
@@ -36212,7 +36212,7 @@ var SkillTrigger;
   SkillTrigger2["Conditional"] = "Conditional";
 })(SkillTrigger || (SkillTrigger = {}));
 
-// ../../../../..~/Code/amiexpress-web/sdk/dist-esm/client/index.js
+// ../../sdk/dist-esm/client/index.js
 var DOOR_UNLOAD_EVENT = "bbs:door-unload";
 var ClientDoor = class _ClientDoor extends EventEmitter {
   /**

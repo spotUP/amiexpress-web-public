@@ -65,7 +65,7 @@ function createData(): SuperQixData {
     lastUpdateTime: Date.now(),
     frameCount: 0,
     levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0,
+    stopTimer: 0, timeMeter: 0, warp: null,
 
     transitionTimer: 0,
     transitionMessage: '',
@@ -210,11 +210,9 @@ export async function completingAClaimDoesNotTeleportSparxOntoTheMarker(): Promi
       data.lives, livesBeforeTick - 1,
       'expected the un-reanchored stale index to kill the player (RED case did not reproduce - scenario needs adjusting)'
     );
-    assert.notStrictEqual(
-      [data.marker.x, data.marker.y].join(','),
-      [landingX, landingY].join(','),
-      'expected the death to reset the marker off its landing cell'
-    );
+    // Losing a life no longer teleports the marker to the spawn point -
+    // it retreats to where its line began - so the lives count above is
+    // what proves the death, not the marker moving.
   }
 
   // GREEN: identical scenario, real (unstubbed) code path.

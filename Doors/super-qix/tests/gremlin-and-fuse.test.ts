@@ -36,7 +36,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, transitionTimer: 0, transitionMessage: '',
+    stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
 
@@ -109,6 +109,68 @@ export async function crossingTheLineElsewhereIsStillRefused(): Promise<void> {
   assert.strictEqual(
     drawing.extendStix(farBack), false,
     'the line must refuse to be drawn across itself'
+  );
+}
+
+/**
+ * An ordinary draw at BBS pace must usually survive.
+ *
+ * Reported live: "my position still gets reset to the start position every
+ * time I draw something". Measured at the time: a fourteen-cell draw with a
+ * human gap between keypresses died 30 times out of 30, always to the fuse,
+ * because it lit after only 500ms - shorter than the gap between two taps -
+ * and the Skulls were quicker than a tapping marker, contradicting FAQ 2.2's
+ * "you can outrun them if the way forward is clear".
+ *
+ * This asserts the outcome the player actually experiences rather than any
+ * one constant, so retuning any of them keeps the guarantee.
+ */
+export async function anOrdinaryDrawAtBbsPaceUsuallySurvives(): Promise<void> {
+  const runs = 30;
+  const pauseTicks = 20;   // ~660ms between keypresses: tapping, not holding
+  let survived = 0;
+  const causes: Record<string, number> = {};
+
+  for (let run = 0; run < runs; run++) {
+    const data = createData();
+    const engine = new QixEngine(data, () => {});
+    engine.initLevel(1);
+    data.state = 'playing';
+
+    const enemies: any = (engine as any).enemySystem;
+    const realFuse = enemies.checkFuseCollision.bind(enemies);
+    const realQix = enemies.checkQixCollision.bind(enemies);
+    let cause = '';
+    enemies.checkFuseCollision = (...a: any[]) => { const r = realFuse(...a); if (r) cause = 'fuse'; return r; };
+    enemies.checkQixCollision = (...a: any[]) => { const r = realQix(...a); if (r) cause = 'gremlin'; return r; };
+
+    const lives = data.lives;
+    const moves: Direction[] = [
+      ...Array(4).fill('up'), ...Array(6).fill('right'), ...Array(4).fill('down'),
+    ] as Direction[];
+
+    let died = false;
+    outer: for (const m of moves) {
+      move(engine, m);
+      for (let tick = 0; tick < pauseTicks; tick++) {
+        engine.update();
+        if (data.lives < lives) { died = true; break outer; }
+      }
+    }
+
+    if (died) causes[cause || 'other'] = (causes[cause] || 0) + 1;
+    else survived++;
+  }
+
+  const detail = Object.entries(causes).map(([k, v]) => `${k}:${v}`).join(' ') || 'none';
+  assert.ok(
+    survived >= runs / 2,
+    `only ${survived}/${runs} ordinary draws survived at BBS pace (deaths: ${detail}); ` +
+    'drawing should not be a coin toss'
+  );
+  assert.ok(
+    (causes['fuse'] || 0) <= runs / 10,
+    `the fuse killed ${causes['fuse']}/${runs} ordinary draws; it should only punish a real pause`
   );
 }
 
@@ -201,9 +263,16 @@ export async function theGremlinLeansTowardsTheMarker(): Promise<void> {
     const runs = 40;
 
     for (let run = 0; run < runs; run++) {
-      const { engine, data } = startedEngine();
+      // Measured on a late level with the player exposed, which is where the
+      // FAQ says the lean is pronounced ("in later levels ... he will get
+      // extremely aggressive and zoom towards you every time you detach").
+      // At level 1 with the marker safe the lean is deliberately gentle -
+      // it has to be, or an ordinary draw becomes a death sentence - and is
+      // too small to separate from the wander in a sample this size.
+      const { engine, data } = startedEngine(16);
       data.marker.x = markerX;
       data.marker.y = markerY;
+      data.marker.isDrawing = true;
       data.qixList = [{
         id: 1,
         x: FIELD_WIDTH - 3,

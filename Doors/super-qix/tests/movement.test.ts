@@ -35,7 +35,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, transitionTimer: 0, transitionMessage: '',
+    stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
 
@@ -80,13 +80,41 @@ export async function beforeDrawingTheMarkerIsConfinedToTheOuterFrame(): Promise
   assert.strictEqual(data.marker.x, startX - 1, 'moving along the bottom frame should work');
   assert.strictEqual(data.marker.y, FIELD_HEIGHT - 1);
 
-  // Off the frame into open field without drawing: refused.
-  const before = { x: data.marker.x, y: data.marker.y };
+  // Off the frame into open field: this STARTS a line rather than being
+  // refused. The arcade holds a Draw button to detach, but in a BBS terminal
+  // the arrow keys are the whole controller, so an arrow pointed into open
+  // field is the intent to draw - nothing else could be meant by it.
+  assert.strictEqual(data.marker.isDrawing, false, 'not drawing while on the frame');
   move(engine, 'up');
-  assert.deepStrictEqual(
-    { x: data.marker.x, y: data.marker.y }, before,
-    'stepping off the frame into unclaimed area without drawing must be refused'
+  assert.strictEqual(
+    data.marker.isDrawing, true,
+    'stepping off the frame into open field should start a line'
   );
+  assert.strictEqual(data.marker.y, FIELD_HEIGHT - 2, 'and the marker should have moved');
+  assert.ok(data.currentStix, 'a stix should have been started');
+}
+
+/**
+ * The marker still cannot wander off the frame by accident in the sense that
+ * matters: a move into open field is always a deliberate draw, and a move
+ * into ground it may not stand on is still refused.
+ */
+export async function movingIntoUnwalkableClaimedGroundIsStillRefused(): Promise<void> {
+  const { engine, data } = startedEngine();
+
+  // Bury a block of claimed ground against the bottom frame.
+  for (let y = FIELD_HEIGHT - 6; y <= FIELD_HEIGHT - 2; y++) {
+    for (let x = 10; x <= 14; x++) data.field[y][x] = 'claimed';
+  }
+
+  // Stand on the edge of it and try to step into the middle.
+  data.marker.x = 12;
+  data.marker.y = FIELD_HEIGHT - 6;
+  data.marker.isDrawing = false;
+
+  move(engine, 'down');
+  assert.strictEqual(data.marker.y, FIELD_HEIGHT - 6, 'the marker entered buried ground');
+  assert.strictEqual(data.marker.isDrawing, false, 'and it must not have started drawing there');
 }
 
 /**
@@ -166,6 +194,82 @@ export async function aMarkerBuriedByItsOwnClaimCanEscape(): Promise<void> {
   assert.notStrictEqual(
     data.marker.y, buried.y,
     'a marker with no legal move must still be able to leave a buried cell'
+  );
+}
+
+/**
+ * Losing a life must not send the marker back to the level's spawn point.
+ *
+ * Reported live: "the player position still gets reset to the start location
+ * sometimes it should not". Dying in a far corner and reappearing at the
+ * middle of the bottom edge costs the whole walk out again and reads as the
+ * game resetting itself. The marker now retreats to where its line began -
+ * the point it last left safe ground.
+ */
+export async function dyingRetreatsToWhereTheLineBeganNotTheSpawnPoint(): Promise<void> {
+  const { engine, data } = startedEngine();
+
+  const spawn = { x: data.marker.x, y: data.marker.y };
+
+  // Walk well away from the spawn point, then draw out into the field.
+  for (let i = 0; i < 12; i++) move(engine, 'left');
+  const departure = { x: data.marker.x, y: data.marker.y };
+  assert.notDeepStrictEqual(departure, spawn, 'the marker should have moved away first');
+
+  engine.handleDraw();
+  for (let i = 0; i < 4; i++) move(engine, 'up');
+  assert.ok(data.currentStix, 'a line should be in progress');
+
+  // A Gremlin takes them out in the middle of the field.
+  data.qixList = [{
+    id: 1, x: data.marker.x, y: data.marker.y, vx: 0, vy: 0, speed: 0,
+    segments: [{ x: data.marker.x, y: data.marker.y }], frozen: true, frozenTimer: 999999,
+  }];
+  const livesBefore = data.lives;
+  engine.update();
+
+  assert.strictEqual(data.lives, livesBefore - 1, 'the player should have died');
+  assert.deepStrictEqual(
+    { x: data.marker.x, y: data.marker.y }, departure,
+    'the marker should return to where it left safe ground'
+  );
+  assert.notDeepStrictEqual(
+    { x: data.marker.x, y: data.marker.y }, spawn,
+    'and must NOT be teleported back to the spawn point'
+  );
+
+  // Wherever it lands, it must be somewhere it may legally stand.
+  const drawing: any = (engine as any).drawingSystem;
+  assert.strictEqual(
+    drawing.isWalkable({ x: data.marker.x, y: data.marker.y }), true,
+    'the marker must come back on safe ground'
+  );
+}
+
+/**
+ * A death with no line in progress leaves the marker exactly where it is -
+ * a Skull catching you on the frame should not move you either.
+ */
+export async function dyingOnTheFrameLeavesTheMarkerWhereItStood(): Promise<void> {
+  const { engine, data } = startedEngine();
+
+  for (let i = 0; i < 8; i++) move(engine, 'left');
+  const stood = { x: data.marker.x, y: data.marker.y };
+
+  // Frozen so the patrol update does not walk it off the marker before the
+  // collision check runs - pathIndex 0 is the top-left corner, not here.
+  data.sparxList = [{
+    id: 1, x: stood.x, y: stood.y, pathIndex: 0, direction: 1,
+    speed: 0, lastReversedAt: 0, frozen: true, frozenTimer: 999999,
+  }];
+
+  const livesBefore = data.lives;
+  engine.update();
+
+  assert.strictEqual(data.lives, livesBefore - 1, 'the Skull should have caught the marker');
+  assert.deepStrictEqual(
+    { x: data.marker.x, y: data.marker.y }, stood,
+    'a death on safe ground should leave the marker where it stood'
   );
 }
 
