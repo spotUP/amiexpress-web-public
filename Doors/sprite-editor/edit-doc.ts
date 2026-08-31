@@ -65,12 +65,11 @@ export function selectFrame(doc: EditDoc, index: number): EditDoc {
 
 export function addFrame(doc: EditDoc, mode: 'blank' | 'duplicate'): EditDoc {
   const frames = [...doc.sprite.animations[doc.animation].frames];
-  const before = frames.length;
   const source = mode === 'duplicate'
-    ? JSON.parse(JSON.stringify(frames[before - 1]))
+    ? JSON.parse(JSON.stringify(frames[doc.frame]))
     : blankFrame(doc.sprite);
-  frames.push(source);
-  return withFrames(doc, frames, before);
+  frames.splice(doc.frame + 1, 0, source);
+  return withFrames(doc, frames, doc.frame + 1);
 }
 
 export function deleteFrame(doc: EditDoc): EditDoc {

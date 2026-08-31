@@ -62,12 +62,11 @@ function selectFrame(doc, index) {
 }
 function addFrame(doc, mode) {
     const frames = [...doc.sprite.animations[doc.animation].frames];
-    const before = frames.length;
     const source = mode === 'duplicate'
-        ? JSON.parse(JSON.stringify(frames[before - 1]))
+        ? JSON.parse(JSON.stringify(frames[doc.frame]))
         : blankFrame(doc.sprite);
-    frames.push(source);
-    return withFrames(doc, frames, before);
+    frames.splice(doc.frame + 1, 0, source);
+    return withFrames(doc, frames, doc.frame + 1);
 }
 function deleteFrame(doc) {
     const frames = [...doc.sprite.animations[doc.animation].frames];

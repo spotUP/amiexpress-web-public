@@ -34,19 +34,20 @@ export async function openingClonesAndSelectsTheFirstAnimation(): Promise<void> 
 export async function frameOperationsBehave(): Promise<void> {
   let doc = pengo();
   doc = selectAnimation(doc, 'death');
+  doc = selectFrame(doc, 1); // mid-animation, so insert-after is observable
   const frames = () => doc.sprite.animations['death'].frames.length;
   const before = frames();
 
   doc = addFrame(doc, 'duplicate');
   assert.strictEqual(frames(), before + 1);
-  assert.strictEqual(doc.frame, before, 'the new frame is selected');
+  assert.strictEqual(doc.frame, 2, 'the duplicate sits right AFTER the source');
   assert.deepStrictEqual(
-    currentFrame(doc), doc.sprite.animations['death'].frames[before - 1],
-    'a duplicate equals its source'
+    currentFrame(doc), doc.sprite.animations['death'].frames[1],
+    'and it duplicates the frame the artist was looking at, not the last one'
   );
 
   doc = moveFrame(doc, -1);
-  assert.strictEqual(doc.frame, before - 1, 'moved back one slot');
+  assert.strictEqual(doc.frame, 1, 'moved back one slot');
 
   doc = deleteFrame(doc);
   assert.strictEqual(frames(), before);
