@@ -1,0 +1,63 @@
+DoorRepo - the palette, and what each colour currently means
+=============================================================================
+
+Eight colours, foreground and background, plus a bold flag. That is the
+whole range. On most terminals bold brightens the foreground, so the
+practical palette is sixteen foregrounds over eight backgrounds. A real
+Amiga running a real terminal is the constraint here, not the browser.
+
+  0  black      4  blue
+  1  red        5  magenta
+  2  green      6  cyan
+  3  yellow     7  white
+
+How the door uses them today
+----------------------------
+
+Counted from the source, most-used first, so you can see the actual weight
+of each rather than a designer's intention:
+
+  white on black            body text everywhere - list rows, DIZ, docs,
+                            file listings, history
+  yellow on black, bold     anything the user must notice: an empty state,
+                            a refusal, "nothing to show here"
+  white on blue, bold       the header bar
+  cyan on black             panel borders and their labels
+  yellow on blue, bold      the header's highlighted field
+  green on black, bold      success, and an enabled door
+  cyan on black, bold       footer key legend
+  red on black, bold        failures, and a junk/ad file in a listing
+
+Two rules behind that, worth keeping whatever the design becomes:
+
+  RED MEANS SOMETHING WENT WRONG OR IS UNWANTED. It is used for failed
+  actions in the history and for advertising files inside an archive.
+  Nothing decorative is red.
+
+  GREEN MEANS THE THING IS LIVE. An enabled door, a completed action.
+
+What is safe to change
+----------------------
+
+Everything else. The border colour, the header treatment, whether panels
+have shadows, whether the selected row is reverse-video or a coloured bar,
+the footer's look, the box characters. None of that is load-bearing.
+
+What is NOT yours to colour
+---------------------------
+
+The FILE_ID.DIZ shown in the detail pane is another artist's work, taken
+from the archive as it was authored. The door prints it verbatim - its own
+colours, its own line breaks, clipped but never re-wrapped and never
+recoloured. Design AROUND it, not over it.
+
+The same goes for documentation and AmigaGuide text.
+
+One caution about backgrounds
+-----------------------------
+
+A filled background over the whole screen costs bytes on every repaint,
+and a good number of these users are on a modem. The door repaints the
+list and the detail pane on every keypress. Large flat fills are fine;
+per-cell colour changes across a full-width region are what get
+expensive - each one is an escape sequence.
