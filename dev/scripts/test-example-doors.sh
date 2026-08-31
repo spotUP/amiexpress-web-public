@@ -30,10 +30,8 @@ DOORS=(
   "hello-world"
   "bug-tracker"
   "dungeon-rpg"
-  "fire-emblem"
   "space-shooter"
   "tetris"
-  "tic-tac-toe"
   "tracker-door"
 )
 

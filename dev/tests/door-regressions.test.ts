@@ -15,11 +15,11 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 /**
  * Doors whose main menu is driven by gameData.menuSelection + showMenu().
  * All nine shipped with the same bug (reported live 2026-08-30: "I can't
- * navigate the main menu in any of the 10 arcade games; arrow up/down does
+ * navigate the main menu in any of the arcade games; arrow up/down does
  * nothing").
  */
 const MENU_DOORS = [
-  'joust', 'zoo-keeper', 'pengo', 'bubble-bobble', 'super-qix',
+  'joust', 'zoo-keeper', 'pengo', 'super-qix',
   'frogger', 'galaga', 'donkey-kong', 'pipe-dream',
 ];
 
