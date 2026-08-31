@@ -44,6 +44,16 @@ function createInitialGameData() {
         riverObjectIdCounter: 0,
         flyTimer: 0,
         alligatorTimer: 0,
+        ladyFrogTimer: 0,
+        otterTimer: 0,
+        snakes: [],
+        snakeIdCounter: 0,
+        carryingLadyFrog: false,
+        furthestRow: 12,
+        hopPointsThisHome: 0,
+        startingLives: constants_1.STARTING_LIVES,
+        extraLifeAwarded: false,
+        frogStartTime: Date.now(),
         highscores: [...constants_1.DEFAULT_HIGHSCORES],
         menuSelection: 0,
         playerName: "",
@@ -66,6 +76,9 @@ let hudBox;
 let footerBox;
 let menuBox = null;
 let gameLoop = null;
+/** How long the finished board stays up between levels, in ticks. */
+const LEVEL_COMPLETE_FRAMES = 40;
+let levelCompleteFrames = 0;
 let game = null;
 let doorContext; // Will be set on start
 let inputManager = null;
@@ -119,11 +132,25 @@ function initScreen() {
 /**
  * Format HUD display
  */
+/**
+ * The status line, laid out like the cabinet's (FAQ 6.2): the player's score
+ * with the high score beside it, the level, and how many frogs are left.
+ */
 function formatHUD() {
-    const scoreStr = gameData.score.toString().padStart(8, "0");
-    const livesStr = "*".repeat(Math.max(0, gameData.lives));
+    const scoreStr = gameData.score.toString().padStart(6, "0");
+    const best = Math.max(gameData.score, ...gameData.highscores.map(h => h.score));
+    const hiStr = best.toString().padStart(6, "0");
+    // 256 frogs is one of the operator's settings, so the row of them has to
+    // give up and count at some point.
+    const livesStr = gameData.lives > 8
+        ? `x${gameData.lives}`
+        : "*".repeat(Math.max(0, gameData.lives));
     const homesStr = gameData.homesCompleted.toString();
-    return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  {green-fg}HOMES: ${homesStr}/5{/}  {red-fg}LIVES: ${livesStr}{/}`;
+    return (`{yellow-fg}1-UP ${scoreStr}{/}  ` +
+        `{white-fg}HI-SCORE ${hiStr}{/}  ` +
+        `{cyan-fg}LEVEL ${gameData.level}{/}  ` +
+        `{green-fg}HOMES ${homesStr}/5{/}  ` +
+        `{red-fg}FROGS ${livesStr}{/}`);
 }
 /**
  * Show main menu
@@ -166,7 +193,12 @@ function renderMenu() {
         const selected = index === gameData.menuSelection;
         const prefix = selected ? "> " : "  ";
         const color = selected ? "cyan" : "white";
-        menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
+        // The lives row shows its setting and Enter steps through them. On the
+        // cabinet this was an operator switch (FAQ 6.3).
+        const label = option === "Lives"
+            ? `${option}: ${gameData.startingLives}`
+            : option;
+        menuContent.push(`{${color}-fg}${prefix}${label}{/}`);
     });
     menuBox = blessed_1.default.box({
         fixed: true,
@@ -268,16 +300,24 @@ function showHelp() {
     });
     screen.render();
 }
+/** Step to the next of the cabinet's life settings (FAQ 6.3). */
+function cycleLives() {
+    const next = (constants_1.LIVES_OPTIONS.indexOf(gameData.startingLives) + 1) % constants_1.LIVES_OPTIONS.length;
+    gameData.startingLives = constants_1.LIVES_OPTIONS[next];
+}
 /**
  * Start the game
  */
 function startGame() {
     gameData.state = "playing";
     gameData.score = 0;
-    gameData.lives = constants_1.STARTING_LIVES;
+    // FAQ 6.3: the cabinet was set to 3, 5, 7 or 256 frogs.
+    gameData.lives = gameData.startingLives;
+    gameData.extraLifeAwarded = false;
     gameData.level = 1;
     gameData.homesCompleted = 0;
     gameData.homes = [];
+    gameData.carryingLadyFrog = false;
     if (menuBox) {
         menuBox.destroy();
         menuBox = null;
@@ -294,6 +334,16 @@ function startGame() {
         if (gameData.state === "playing") {
             pollHeldDirections();
             game?.update();
+        }
+        else if (gameData.state === "levelComplete") {
+            // Hold the finished board for a couple of seconds, then move on. The
+            // engine used to schedule this with a setTimeout of its own, which
+            // advanced the level whether or not the door was still showing it.
+            levelCompleteFrames++;
+            if (levelCompleteFrames >= LEVEL_COMPLETE_FRAMES) {
+                levelCompleteFrames = 0;
+                game?.advanceLevel();
+            }
         }
     }, constants_1.GAME_TICK_MS);
 }
@@ -365,17 +415,21 @@ function handleMenuInput(key) {
             break;
         case "enter":
         case "space":
-            switch (gameData.menuSelection) {
-                case 0:
+            switch (constants_1.MENU_OPTIONS[gameData.menuSelection]) {
+                case "Start Game":
                     startGame();
                     break;
-                case 1:
+                case "Lives":
+                    cycleLives();
+                    renderMenu();
+                    break;
+                case "High Scores":
                     showHighscores();
                     break;
-                case 2:
+                case "Help":
                     showHelp();
                     break;
-                case 3:
+                case "Quit":
                     cleanup();
                     doorContext?.close();
                     break;
