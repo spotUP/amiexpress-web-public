@@ -97,7 +97,7 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
 
         return (
           <div key={setting.key} className="space-y-1">
-            <label htmlFor={id} className="block text-sm text-content-primary">
+            <label htmlFor={id} className="form-label">
               {setting.label}
             </label>
 
@@ -107,14 +107,14 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
                 type="checkbox"
                 checked={value === true}
                 onChange={e => set(setting.key, e.target.checked)}
-                className="h-4 w-4"
+                className="h-4 w-4 accent-accent"
               />
             ) : setting.type === 'choice' ? (
               <select
                 id={id}
                 value={String(value ?? '')}
                 onChange={e => set(setting.key, e.target.value)}
-                className="w-full bg-surface-raised border border-bbs-muted/40 rounded px-2 py-1 text-sm"
+                className="input-field w-full"
               >
                 {(setting.choices ?? []).map(choice => (
                   <option key={choice.value} value={choice.value}>{choice.label}</option>
@@ -132,7 +132,7 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
                   setting.key,
                   setting.type === 'number' ? Number(e.target.value) : e.target.value
                 )}
-                className="w-full bg-surface-raised border border-bbs-muted/40 rounded px-2 py-1 text-sm font-mono"
+                className="input-field w-full font-mono"
               />
             )}
 
@@ -147,7 +147,7 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
         type="button"
         onClick={() => saveMutation.mutate()}
         disabled={!dirty || saveMutation.isPending}
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-bbs-accent/20 border border-bbs-accent/50 text-sm disabled:opacity-50"
+        className="btn-secondary inline-flex items-center gap-2 disabled:opacity-50"
       >
         {saveMutation.isPending
           ? <Loader2 className="h-4 w-4 animate-spin" />

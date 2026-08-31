@@ -53,6 +53,55 @@ describe('Tailwind bbs-* colour tokens', () => {
     expect(report, `Undefined colours compile to nothing:\n${report}`).toBe('');
   });
 
+  /**
+   * The ramp namespaces, not just the legacy bbs-* aliases.
+   *
+   * `bg-surface-raised` shipped in the door settings form and rendered with no
+   * background at all - white fields in a dark admin - because `surface` has
+   * numbered steps and no `raised`. The guard above only knew about bbs-*, so
+   * nothing caught it. A misspelt token compiles to nothing and fails silently
+   * on screen; that is exactly what a test is for.
+   */
+  it('defines every surface/content/status step the admin pages use', () => {
+    const colors = (tailwindConfig.theme?.extend?.colors ?? {}) as Record<string, unknown>;
+    const steps = (family: string) => {
+      const value = colors[family];
+      return new Set(
+        value && typeof value === 'object' ? Object.keys(value as Record<string, string>) : []
+      );
+    };
+    const known: Record<string, Set<string>> = {
+      surface: steps('surface'),
+      content: steps('content'),
+      status: steps('status'),
+    };
+
+    const RAMP_CLASS =
+      /\b(?:bg|text|border|divide|ring|outline|shadow|fill|stroke|caret|accent|decoration|placeholder|from|via|to)-(surface|content|status)-([a-z0-9]+(?:-[a-z0-9]+)*)/g;
+
+    const missing = new Map<string, string[]>();
+    for (const file of sourceFiles(SRC_DIR)) {
+      const text = readFileSync(file, 'utf8');
+      for (const match of text.matchAll(RAMP_CLASS)) {
+        const [, family, step] = match;
+        // `bg-surface-2/40` and the like: the opacity suffix is not the step.
+        const name = step.split('/')[0];
+        if (known[family].has(name)) continue;
+        const key = `${family}-${name}`;
+        const users = missing.get(key) ?? [];
+        const relative = file.slice(SRC_DIR.length + 1);
+        if (!users.includes(relative)) users.push(relative);
+        missing.set(key, users);
+      }
+    }
+
+    const report = [...missing.entries()]
+      .map(([name, files]) => `${name} (used in ${files.join(', ')})`)
+      .join('\n');
+
+    expect(report, `Undefined ramp steps compile to nothing:\n${report}`).toBe('');
+  });
+
   it('resolves every theme value to a custom property declared in tokens.css', () => {
     // A misspelled var name still compiles; the element just renders with no
     // colour at all. This catches that at test time instead of on screen.

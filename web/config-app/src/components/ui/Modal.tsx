@@ -50,8 +50,8 @@ export function Modal({
         <DialogPrimitive.Content
           className={`fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full ${maxWidth} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg shadow-xl ${
             showHeader
-              ? 'border border-bbs-primary bg-bbs-surface p-6'
-              : 'border-2 border-bbs-accent bg-bbs-bg'
+              ? 'border border-border bg-surface-1 p-6'
+              : 'border border-border bg-surface-1'
           }`}
         >
           <DialogPrimitive.Title
