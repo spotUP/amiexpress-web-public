@@ -2364,6 +2364,10 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return this.conferenceRepo!.createConference(...args);
   }
 
+  ensureConferenceRow(...args: Parameters<ConferenceRepository['ensureConferenceRow']>) {
+    return this.conferenceRepo!.ensureConferenceRow(...args);
+  }
+
   async syncConferencesFromDisk(...args: Parameters<ConferenceRepository['syncConferencesFromDisk']>) {
     return this.conferenceRepo!.syncConferencesFromDisk(...args);
   }

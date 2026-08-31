@@ -148,65 +148,71 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
     context: RequestContext
   ): Promise<ConferenceConfig> {
     const validated = ConferenceConfigSchema.parse(config) as Omit<ConferenceConfig, 'id' | 'created_at' | 'updated_at'>;
+    const conferenceId = validated.conference_id;
+
+    const bbsRoot = appConfig.get('dataDir');
+    const confConfig = loadConfConfig(bbsRoot);
+    const confEntry = confConfig?.entries[conferenceId - 1];
+
+    // The name the sysop typed, not a lookup of an entry that does not exist
+    // yet. This read `entries[id - 1]` for a conference being CREATED, always
+    // missed, and fell back to "Conference N" - so the name on the form was
+    // discarded every time.
+    const conferenceName = validated.name?.trim() || confEntry?.name || `Conference ${conferenceId}`;
+    // Conf7, not Conf07: that is what every other conference on a board is
+    // called, and what the entrypoint creates.
+    const location = confEntry?.location || `Conf${conferenceId}`;
+
+    // DISK FIRST, then the mirror, then the config row - in that order,
+    // because the order is what the database enforces.
+    //
+    // This used to insert the conference_config row first, and
+    // conference_config.conference_id REFERENCES conferences(id)
+    // (database.ts:1650). It only ever worked because the mirror happened to
+    // carry rows for conferences that no longer existed; the moment those
+    // were pruned, creating a conference answered "FOREIGN KEY constraint
+    // failed". A row describing a conference the mirror has never heard of
+    // was always wrong - the constraint was right and the order was not.
+    await this.conferenceSetup.setupConference({
+      conferenceId,
+      conferenceName,
+      location,
+      ndirs: validated.ndirs || 1,
+      minAccessLevel: validated.min_access_level || 0,
+      maxAccessLevel: validated.max_access_level || 255,
+      forceNewscan: validated.force_newscan || false,
+      excludeFTP: validated.exclude_ftp || false,
+      privateConf: validated.private_conf || false,
+      readOnly: validated.read_only || false
+    });
+console.log(`[ConferenceConfigService] Created Conf${conferenceId}.info`);
+
+    // Registered only once the files exist: the opposite order leaves a named
+    // conference with nothing behind it if the setup fails, which is the ghost
+    // state the delete bug used to produce. An unregistered directory is
+    // harmless by comparison.
+    //
+    // And no try/catch around either: a conference that is not on disk does
+    // not exist, so swallowing the failure and writing a config row for it
+    // would report success for nothing.
+    await this.conferenceSetup.updateConfConfig(conferenceId, conferenceName, location);
+console.log(`[ConferenceConfigService] Registered conference ${conferenceId} in ConfConfig.info`);
+
+    // Rebuilds the board's list and mirrors the new conference into the
+    // conferences table, which is what the config row below points at.
+    await this.refreshRunningBoard();
+
+    // Explicitly, not as a side effect of the refresh: that reaches the mirror
+    // through the change bus, which only carries anything once the server has
+    // booted and subscribed. The foreign key does not care why the row is
+    // missing.
+    this.database.ensureConferenceRow(conferenceId, conferenceName, location);
+
     const newConfig = this.configRepo.createConferenceConfig(validated);
-
-    try {
-      const bbsRoot = appConfig.get('dataDir');
-      const confConfig = loadConfConfig(bbsRoot);
-      const confEntry = confConfig?.entries[newConfig.conference_id - 1];
-
-      // The name the sysop typed, not a lookup of an entry that does not
-      // exist yet. This read `entries[id - 1]` for a conference being
-      // CREATED, always missed, and fell back to "Conference N" - so the
-      // name on the form was discarded every time.
-      const conferenceName =
-        validated.name?.trim() || confEntry?.name || `Conference ${newConfig.conference_id}`;
-      // Conf7, not Conf07: that is what every other conference on a board is
-      // called, and what the entrypoint creates.
-      const location = confEntry?.location || `Conf${newConfig.conference_id}`;
-
-      await this.conferenceSetup.setupConference({
-        conferenceId: newConfig.conference_id,
-        conferenceName,
-        location,
-        ndirs: validated.ndirs || 1,
-        minAccessLevel: validated.min_access_level || 0,
-        maxAccessLevel: validated.max_access_level || 255,
-        forceNewscan: validated.force_newscan || false,
-        excludeFTP: validated.exclude_ftp || false,
-        privateConf: validated.private_conf || false,
-        readOnly: validated.read_only || false
-      });
-console.log(`[ConferenceConfigService] Created Conf${newConfig.conference_id}.info`);
-
-      // Register it LAST, and only once the files exist.
-      //
-      // setupConference builds the icon, the directory tree, the DIR files
-      // and the counters - and never touched ConfConfig.info, which is the
-      // file that decides whether a conference exists at all.
-      // express.e:31849 walks `FOR i:=1 TO cmds.numConf` reading NAME.i and
-      // LOCATION.i from it, so a conference missing from it is invisible to
-      // the BBS however complete its directory is. That is the mirror of the
-      // delete that left NAME.n behind with no icon.
-      //
-      // Last, because the opposite order leaves a named conference with
-      // nothing behind it if the setup fails - the ghost state again. An
-      // unregistered directory is harmless by comparison.
-      await this.conferenceSetup.updateConfConfig(
-        newConfig.conference_id,
-        conferenceName,
-        location
-      );
-console.log(`[ConferenceConfigService] Registered conference ${newConfig.conference_id} in ConfConfig.info`);
-    } catch (error) {
-console.error(`[ConferenceConfigService] Failed to create disk structure:`, error);
-    }
 
     this.configRepo.logConfigChange('conference_config', newConfig.id, 'CREATE',
       context.userId, context.username, undefined, newConfig,
       context.ipAddress, context.userAgent);
-
-    await this.refreshRunningBoard();
 
     return newConfig;
   }

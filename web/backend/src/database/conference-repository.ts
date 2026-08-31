@@ -202,6 +202,47 @@ console.error(`[Database] Failed to sync conference to disk:`, error);
   }
 
   /**
+   * Make sure the mirror has a row for this conference, and say nothing if it
+   * already does.
+   *
+   * conference_config.conference_id REFERENCES conferences(id)
+   * (database.ts:1650), so the config row cannot exist before the mirror row.
+   * Creating a conference used to work only because the mirror carried rows
+   * for conferences that had been deleted; pruning those turned it into
+   * "FOREIGN KEY constraint failed" on the sysop's next Add Conference.
+   *
+   * The full sync runs moments later off the disk and will correct the name;
+   * this exists so the create does not depend on that having happened yet.
+   */
+  ensureConferenceRow(id: number, name: string, location?: string): void {
+    if (!Number.isInteger(id) || id < 1) return;
+
+    const existing = this.prepare('SELECT id FROM conferences WHERE id = ?').get(id);
+    if (existing) return;
+
+    try {
+      this.prepare('INSERT INTO conferences (id, name, description) VALUES (?, ?, ?)').run(
+        id,
+        name,
+        location || null
+      );
+    } catch (error) {
+      // conferences.name is UNIQUE. A board with two conferences of the same
+      // name is the sysop's business, not a reason to fail the create, so the
+      // row goes in under a name the disk sync will overwrite.
+      try {
+        this.prepare('INSERT INTO conferences (id, name, description) VALUES (?, ?, ?)').run(
+          id,
+          `${name} (${id})`,
+          location || null
+        );
+      } catch (fallbackError) {
+console.error(`[ConferenceRepository] could not mirror conference ${id}:`, fallbackError);
+      }
+    }
+  }
+
+  /**
    * Drop mirror rows for conferences the disk no longer has.
    *
    * This sync inserted and renamed and never removed, so a board that went
