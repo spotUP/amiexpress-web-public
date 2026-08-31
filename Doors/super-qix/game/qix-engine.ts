@@ -1199,6 +1199,26 @@ export class QixEngine {
       }
     }
 
+    // The lines the player has already closed off stay drawn over the
+    // picture they revealed.
+    //
+    // FAQ 2.1: the line you are drawing is yellow and "turns blue and
+    // becomes 'Safe' if you can connect the other end either back to the
+    // border or to part of a previously-finished line". Nothing drew them,
+    // so the moment a claim filled in, the shape the player had just drawn
+    // vanished into the artwork and the board lost its geometry.
+    for (const line of d.internalLines) {
+      for (const point of line) {
+        if (point.y < 0 || point.y >= FIELD_HEIGHT) continue;
+        if (point.x < 0 || point.x >= FIELD_WIDTH) continue;
+        // Only where the claim actually took the ground: a line's ends sit
+        // on the frame, which is drawn as the Time Meter.
+        if (d.field[point.y][point.x] !== 'claimed') continue;
+
+        buffer[point.y][point.x] = { ch: ' ', bg: BG_COLORS.stixSafe };
+      }
+    }
+
     // Draw current stix
     if (d.currentStix) {
       const bg = BG_COLORS.stix;

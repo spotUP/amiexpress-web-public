@@ -228,3 +228,55 @@ export async function theDrawnLineIsBrighterThanTheArtItCrosses(): Promise<void>
   assert.notStrictEqual(BG_COLORS.stix, BG_COLORS.claimed);
   assert.notStrictEqual(BG_COLORS.stix, BG_COLORS.unclaimed);
 }
+
+/**
+ * A line the player closed off stays drawn over the picture it revealed.
+ *
+ * Reported live 2026-08-31: "the yellow lines are removed when the bg
+ * fills". FAQ 2.1: the line you are drawing is yellow and "turns blue and
+ * becomes 'Safe' if you can connect the other end either back to the border
+ * or to part of a previously-finished line" - so it does not disappear, it
+ * changes colour. Nothing drew the finished lines at all, so every claim
+ * swallowed the shape the player had just made.
+ */
+export async function aFinishedLineStaysDrawnOverTheClaim(): Promise<void> {
+  const data = createData();
+  let last = '';
+  const engine = new QixEngine(data, c => { last = c; });
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.qixList = [];
+  data.sparxList = [];
+
+  const step = (dir: Direction) => {
+    (engine as unknown as { lastMoveTime: number }).lastMoveTime = 0;
+    engine.handleDirection(dir);
+  };
+
+  // Out from the bottom edge, along, and back: a closed shape.
+  step('up');
+  step('right');
+  step('right');
+  step('down');
+
+  assert.ok(!data.marker.isDrawing, 'the shape should have closed');
+  assert.strictEqual(data.internalLines.length, 1, 'and been recorded');
+
+  // Paint the claim all the way in, then look at the board.
+  for (let i = 0; i < FILL_ANIMATION_FRAMES + FIELD_WIDTH; i++) engine.update();
+  engine.render();
+
+  assert.ok(
+    last.includes(`{${BG_COLORS.stixSafe}-bg}`),
+    `the finished line should still be drawn, in ${BG_COLORS.stixSafe}`
+  );
+}
+
+/** ...and it is a different colour from the line still being drawn. */
+export async function aFinishedLineIsNotTheSameColourAsALiveOne(): Promise<void> {
+  assert.notStrictEqual(BG_COLORS.stixSafe, BG_COLORS.stix);
+  assert.notStrictEqual(
+    BG_COLORS.stixSafe, BG_COLORS.unclaimed,
+    'a safe line must not look like open field'
+  );
+}
