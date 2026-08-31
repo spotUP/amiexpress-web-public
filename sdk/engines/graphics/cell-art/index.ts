@@ -20,3 +20,6 @@ export { parseSprite, frameAt, blitSprite } from './sprite';
 export type { Sprite, SpriteAnimation } from './sprite';
 
 export { loadSpriteSheet } from './load';
+
+export { compilePixels, decompilePixels } from './halfblock';
+export type { PixelGrid } from './halfblock';
