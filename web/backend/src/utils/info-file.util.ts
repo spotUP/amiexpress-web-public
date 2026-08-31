@@ -169,6 +169,120 @@ function looksLikeTooltypeBytes(buf: Buffer, start: number, len: number): boolea
  * the bytes at position+4 follow the `(len, string+\0)` pattern for at
  * least one entry.
  */
+/**
+ * Walk the DiskObject to the tooltype array's real offset.
+ *
+ * The scanner below hunts for the array by looking for a plausible count
+ * word anywhere after byte 40. That guesses, and it guesses wrong in two
+ * directions on this board's own files:
+ *
+ * It requires EVERY entry to carry a 4-byte length prefix. The board's own
+ * Conf<N>.info and Node<N>.info carry a correct count and a prefix on the
+ * FIRST entry only; the rest are bare NUL-terminated strings. Twenty-one
+ * files in this checkout are written that way - Conf1..14, Node1..6 - so the
+ * parse fell back to scraping ASCII out of the bytes, which marks the file
+ * `_fallback`, and writeInfoFile then refused it outright. That is how
+ * "tooltype array structure not recognised" reached the sysop the first time
+ * he edited a conference.
+ *
+ * It does not need guessing. The offset is computable: DiskObject is 78
+ * bytes, DrawerData another 56 when do_DrawerData is set, then the render
+ * image and the select image when their Gadget pointers are set (an Image is
+ * 20 bytes plus ((width+15)/16)*2*height*depth of planes), then the default
+ * tool string when do_DefaultTool is set. What follows is the array.
+ *
+ * Field offsets are from the file layout, not from a struct on this machine:
+ * ga_GadgetRender is at 22 and ga_SelectRender at 26 because Gadget starts at
+ * byte 4 and its own GadgetRender is at +18.
+ *
+ * Measured over every .info in this repo before it was written: on the 1012
+ * icons both approaches can read, they return the same offset and the same
+ * strings; the structural walk reads 43 more (this checkout's 21 plus the
+ * worktrees' copies) and there is no file the scanner reads that it cannot.
+ * The scanner stays behind it for anything whose header does not describe its
+ * own layout.
+ */
+function locateTooltypeArrayStructural(
+  buf: Buffer
+): { countOffset: number; entriesEnd: number; strings: string[] } | null {
+  if (buf.length < 78) return null;
+
+  const gadgetRender = buf.readUInt32BE(22);
+  const selectRender = buf.readUInt32BE(26);
+  const defaultTool = buf.readUInt32BE(50);
+  const toolTypes = buf.readUInt32BE(54);
+  const drawerData = buf.readUInt32BE(66);
+
+  // A NULL do_ToolTypes means the icon genuinely carries none.
+  if (toolTypes === 0) return null;
+
+  let pos = 78;
+  if (drawerData !== 0) pos += 56;
+
+  const skipImage = (at: number): number => {
+    if (at + 20 > buf.length) return -1;
+    const width = buf.readUInt16BE(at + 4);
+    const height = buf.readUInt16BE(at + 6);
+    const depth = buf.readUInt16BE(at + 8);
+    if (width === 0 || height === 0 || depth === 0 || depth > 8) return -1;
+    const rowBytes = Math.ceil(width / 16) * 2;
+    return at + 20 + rowBytes * height * depth;
+  };
+
+  if (gadgetRender !== 0) {
+    pos = skipImage(pos);
+    if (pos < 0) return null;
+  }
+  if (selectRender !== 0) {
+    pos = skipImage(pos);
+    if (pos < 0) return null;
+  }
+  if (defaultTool !== 0) {
+    if (pos + 4 > buf.length) return null;
+    const len = buf.readUInt32BE(pos);
+    if (len > 4096) return null;
+    pos += 4 + len;
+  }
+
+  if (pos + 4 > buf.length) return null;
+  const count = buf.readUInt32BE(pos);
+  if (count < 8 || count > 804 || count % 4 !== 0) return null;
+
+  const countOffset = pos;
+  const numEntries = count / 4 - 1;
+  const strings: string[] = [];
+  pos += 4;
+
+  for (let i = 0; i < numEntries; i++) {
+    if (pos + 4 > buf.length) return null;
+
+    // The standard form: a 4-byte length, then the string and its NUL.
+    const entryLen = buf.readUInt32BE(pos);
+    if (
+      entryLen >= 2 &&
+      entryLen <= 512 &&
+      pos + 4 + entryLen <= buf.length &&
+      buf[pos + 4 + entryLen - 1] === 0 &&
+      looksLikeTooltypeBytes(buf, pos + 4, entryLen)
+    ) {
+      strings.push(buf.toString('latin1', pos + 4, pos + 4 + entryLen - 1));
+      pos += 4 + entryLen;
+      continue;
+    }
+
+    // The form this board's files actually use for entries 2..n: no length,
+    // just the string and its NUL.
+    const end = buf.indexOf(0, pos);
+    if (end < 0 || end - pos < 1 || end - pos > 512) return null;
+    if (!looksLikeTooltypeBytes(buf, pos, end - pos + 1)) return null;
+    strings.push(buf.toString('latin1', pos, end));
+    pos = end + 1;
+  }
+
+  if (strings.length === 0) return null;
+  return { countOffset, entriesEnd: pos, strings };
+}
+
 function locateTooltypeArray(buf: Buffer): { countOffset: number; entriesEnd: number; strings: string[] } | null {
   for (let scan = 40; scan < buf.length - 8; scan++) {
     // Candidate count field at `scan`. Skip misaligned candidates early.
@@ -344,7 +458,11 @@ export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
     };
   }
 
-  const located = locateTooltypeArray(buffer);
+  // Structural first: it reads the offset out of the DiskObject instead of
+  // hunting for it, so it finds the arrays the scanner cannot parse and does
+  // not land in the middle of a bitmap. The scanner stays as the fallback for
+  // anything whose header does not describe its own layout.
+  const located = locateTooltypeArrayStructural(buffer) ?? locateTooltypeArray(buffer);
   if (located) {
     const tooltypes: Tooltype[] = [];
     for (const s of located.strings) {
