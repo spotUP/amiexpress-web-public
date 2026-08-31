@@ -80,6 +80,22 @@ describe('dos.library Execute() runs the archiver', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  test('finds the archive when the assign differs in case from the directory', () => {
+    // AmigaDOS is case-insensitive, so "Doors:" may reach the path layer as
+    // "doors/". On macOS the filesystem hides that; on Linux it does not, and
+    // this suite failed only in CI:
+    //
+    //   extraction failed: ENOENT, open '/tmp/.../doors/tiny-nested.lha'
+    //
+    // The guard above it passed, because amigafs.existsSync resolves case and
+    // the extractor's plain fs.open does not. The archive has to reach the
+    // extractor as the path it really has on disk.
+    const { d0 } = runExecute(root, '"LhA" x "doors:tiny-nested.lha" "doors:OUT/"');
+
+    expect(d0).toBe(DOSTRUE);
+    expect(fs.existsSync(path.join(root, 'Doors', 'OUT', 'root.txt'))).toBe(true);
+  });
+
   test('LhA x <archive> <dest> extracts every member, creating directories', () => {
     const { d0 } = runExecute(
       root,
