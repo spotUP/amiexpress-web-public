@@ -44,6 +44,7 @@ exports.createApp = createApp;
 const path = __importStar(require("path"));
 const run_door_1 = require("./run-door");
 const installed_footer_1 = require("./installed-footer");
+const type_badge_1 = require("./type-badge");
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
 const archive_browse_view_1 = require("./archive-browse-view");
@@ -85,10 +86,6 @@ function formatSize(bytes) {
     if (bytes < 1048576)
         return `${Math.round(bytes / 1024)} KB`;
     return `${Math.round(bytes / 1048576)} MB`;
-}
-function typeBadge(type) {
-    return { TS: 'TS', typescript: 'TS', SDK: 'TS', XIM: '68', SIM: 'SI', TIM: 'TI', FIM: 'FI',
-        AMI: '68', amiga: '68', RX: 'RX', AREXX: 'RX', ARexx: 'RX', RXD: 'RX' }[type] ?? '??';
 }
 function getCatalogSvc() {
     for (const k of Object.keys(require.cache))
@@ -349,7 +346,7 @@ class InstalledView extends ViewManager_1.BaseView {
     refresh(selectIdx = 0) {
         const w = this.layout.width;
         const items = this.doors.map(d => {
-            const badge = `[${typeBadge(d.type)}]`;
+            const badge = `[${(0, type_badge_1.typeBadge)(d.type)}]`;
             const sz = formatSize(d.size).padStart(6);
             const nameW = Math.max(6, w - 14);
             const name = d.name.length > nameW ? d.name.slice(0, nameW - 1) + '…' : d.name.padEnd(nameW);

@@ -7,6 +7,7 @@
 import * as path from 'path';
 import { runSelectedDoor } from './run-door';
 import { installedFooter } from './installed-footer';
+import { typeBadge } from './type-badge';
 import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
 import { ActionLog, installLogPanel } from './action-log';
 import { ArchiveBrowseView } from './archive-browse-view';
@@ -85,10 +86,6 @@ function formatSize(bytes: number): string {
   return `${Math.round(bytes / 1048576)} MB`;
 }
 
-function typeBadge(type: string): string {
-  return ({ TS:'TS', typescript:'TS', SDK:'TS', XIM:'68', SIM:'SI', TIM:'TI', FIM:'FI',
-            AMI:'68', amiga:'68', RX:'RX', AREXX:'RX', ARexx:'RX', RXD:'RX' } as any)[type] ?? '??';
-}
 
 function getCatalogSvc(): any {
   for (const k of Object.keys(require.cache))
