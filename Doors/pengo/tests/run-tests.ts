@@ -9,6 +9,7 @@
 
 const TEST_MODULES = [
   './sprites.test',
+  './menu.test',
 ];
 
 (async () => {
