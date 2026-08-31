@@ -439,7 +439,22 @@ console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
         door_args: door.args || '',
         working_directory: '',
         priority: `P${door.priority || 0}`,
-        door_options: []
+        // door_options stays empty on purpose. It is the doors TABLE's column
+        // for per-door flags and has no source on disk - a door's flags are
+        // its .info tooltypes, which the list already carries. Filling it with
+        // the door's SETTINGS would conflate two different things; whether a
+        // door has settings is its own field.
+        door_options: [],
+        // Whether this door describes its own settings, so the list can say
+        // which doors are configurable without asking each one.
+        has_settings: (() => {
+          try {
+            const dir = doorDirectoryFor(config.get('dataDir'), door);
+            return dir ? fsSync.existsSync(path.join(dir, 'door.settings.json')) : false;
+          } catch {
+            return false;
+          }
+        })()
       }));
 
 console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
