@@ -34,3 +34,21 @@ export async function theLayoutIsPercentageBased(): Promise<void> {
                    (app.match(/height: '\d+%'/g) || []).length;
   assert.ok(percents >= 3, `expected percentage-sized panes, found ${percents}`);
 }
+
+/**
+ * The door holds itself open.
+ *
+ * CoreDoor.execute() awaits its input loop ONLY for doors that register
+ * onInput handlers. A blessed door routes keys through the screen instead,
+ * so start() must await a promise resolved on destroy - the ANSI editor's
+ * pattern - or execute() returns as soon as setup finishes. Shipped
+ * without it once: opening SPRITED cleared the screen and dropped
+ * straight back to the BBS.
+ */
+export async function startHoldsTheDoorOpenUntilDestroy(): Promise<void> {
+  assert.ok(/await new Promise<void>\(\(resolve\) => \{\s*\n\s*this\.exitResolve = resolve;/.test(app),
+    'start() must await the stay-alive promise');
+  assert.ok(/this\.exitResolve\(\);/.test(app),
+    'and destroy() must resolve it, or quitting hangs the door');
+}
+

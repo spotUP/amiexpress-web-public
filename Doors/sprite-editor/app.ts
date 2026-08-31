@@ -43,6 +43,8 @@ export class StudioApp {
   private statusBar: any = null;
 
   private playback: ReturnType<typeof setInterval> | null = null;
+  /** Resolves start()'s stay-alive promise; the door exits when it fires. */
+  private exitResolve: (() => void) | null = null;
   private tick = 0;
   /** The loaded sheet for the current selection, cached per selection. */
   private loaded: { key: string; sprite: Sprite } | null = null;
@@ -75,6 +77,17 @@ export class StudioApp {
       this.tick++;
       this.paintPreview();
     }, PLAYBACK_MS);
+
+    // Hold the door OPEN. CoreDoor.execute() only awaits its input loop
+    // when a door registers onInput handlers; this door routes every key
+    // through the blessed screen instead, so without this await execute()
+    // falls straight through to the close handlers - reported live as
+    // "it just cleared the screen". The ANSI editor holds itself open the
+    // same way. The promise resolves on destroy, whichever path calls it.
+    await new Promise<void>((resolve) => {
+      this.exitResolve = resolve;
+      this.screen.once('destroy', resolve);
+    });
   }
 
   private buildLayout(): void {
@@ -220,9 +233,16 @@ export class StudioApp {
     }
     if (this.inputManager) { this.inputManager.disable(); this.inputManager = null; }
     if (this.screen) {
+      // removeAllListeners would also strip the stay-alive 'destroy'
+      // listener, so resolve it by hand - destroy must ALWAYS release
+      // start()'s await, or the door hangs instead of exiting.
       this.screen.removeAllListeners();
       this.screen.destroy();
       this.screen = null;
+    }
+    if (this.exitResolve) {
+      this.exitResolve();
+      this.exitResolve = null;
     }
   }
 }
