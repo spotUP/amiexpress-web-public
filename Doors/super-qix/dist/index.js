@@ -11,6 +11,7 @@ import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
+import { attractScreen, nextPhase, ATTRACT_ORDER, ATTRACT_FRAMES, ATTRACT_IDLE_FRAMES, } from "./game/attract";
 import { rpcHandlers } from "./server";
 import { normalizeKey, directionForKey, canBindKey, keyLabel, helpControlLines, } from "./game/controls";
 import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, SKILL_LEVELS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, } from "./game/constants";
@@ -102,6 +103,17 @@ let inputManager = null;
  * three initials are not a BBS name.
  */
 let bbsUsername = "";
+/**
+ * The attract loop: what an idle cabinet does instead of sitting on a menu.
+ *
+ * Driven on its own interval rather than the game loop, because the game
+ * loop only runs while a round is being played.
+ */
+let attractLoop = null;
+let attractPhase = "points";
+let attractFrames = 0;
+let menuIdleFrames = 0;
+let menuIdleLoop = null;
 /**
  * Initialize neo-blessed screen
  */
@@ -213,9 +225,84 @@ function formatHUD() {
  * bug that made arrow up/down appear to do nothing.
  */
 function showMenu() {
+    stopAttract();
     gameData.state = "menu";
     gameData.menuSelection = 0;
     renderMenu();
+    startMenuIdle();
+}
+/**
+ * Hand the screen over to the cabinet.
+ *
+ * A machine left alone cycles what the game is worth, who has done best and
+ * an invitation to play. Any key drops straight back to the menu.
+ */
+function startAttract() {
+    stopMenuIdle();
+    stopAttract();
+    gameData.state = "attract";
+    attractPhase = ATTRACT_ORDER[0];
+    attractFrames = 0;
+    renderAttract();
+    attractLoop = setInterval(() => {
+        attractFrames++;
+        renderAttract();
+        if (attractFrames >= ATTRACT_FRAMES[attractPhase]) {
+            attractPhase = nextPhase(attractPhase);
+            attractFrames = 0;
+        }
+    }, GAME_TICK_MS);
+}
+/** Tear the attract loop down, whether or not it is running. */
+function stopAttract() {
+    if (attractLoop) {
+        clearInterval(attractLoop);
+        attractLoop = null;
+    }
+}
+function renderAttract() {
+    if (gameArea)
+        gameArea.setContent("");
+    if (menuBox)
+        menuBox.destroy();
+    const width = 54;
+    const content = attractScreen(attractPhase, gameData, width, attractFrames);
+    menuBox = blessed.box({
+        fixed: true,
+        parent: gameArea,
+        top: "center",
+        left: "center",
+        width: width + 2,
+        height: content.length + 2,
+        tags: true,
+        border: { type: "line" },
+        style: { border: { fg: "magenta" }, bg: "black" },
+        content: content.join("\n"),
+    });
+    screen.render();
+}
+/**
+ * Count the menu down to the attract loop.
+ *
+ * Reset by every keypress, so the cabinet only takes over when the board is
+ * genuinely being ignored.
+ */
+function startMenuIdle() {
+    stopMenuIdle();
+    menuIdleFrames = 0;
+    menuIdleLoop = setInterval(() => {
+        if (gameData.state !== "menu")
+            return;
+        if (++menuIdleFrames >= ATTRACT_IDLE_FRAMES)
+            startAttract();
+    }, GAME_TICK_MS);
+}
+function stopMenuIdle() {
+    if (menuIdleLoop) {
+        clearInterval(menuIdleLoop);
+        menuIdleLoop = null;
+    }
+    menuIdleFrames = 0;
 }
 /**
  * Draw the main menu for the CURRENT selection, without changing it.
@@ -566,6 +653,12 @@ async function startGame() {
  */
 function handleInput(key) {
     const inputKey = normalizeKey(key);
+    // Any key at all wakes the cabinet up.
+    if (gameData.state === "attract") {
+        showMenu();
+        return;
+    }
+    menuIdleFrames = 0;
     switch (gameData.state) {
         case "menu":
             handleMenuInput(inputKey);
@@ -845,6 +938,8 @@ async function handleNameEntryInput(key) {
 let keepAlive = null;
 // doorContext already declared above
 function cleanup() {
+    stopAttract();
+    stopMenuIdle();
     if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;

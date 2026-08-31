@@ -22,6 +22,7 @@ const TEST_MODULES = [
   './levels-and-skill.test',
   './powerups.test',
   './controls.test',
+  './attract.test',
 ];
 
 (async () => {
