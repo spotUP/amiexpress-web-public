@@ -55,6 +55,7 @@ const settings_screen_1 = require("./ui/settings-screen");
 const lobby_screen_1 = require("./ui/lobby-screen");
 const versus_screen_1 = require("./ui/versus-screen");
 const spectator_screen_1 = require("./ui/spectator-screen");
+const solo_broadcast_1 = require("./network/solo-broadcast");
 const leaderboard_screen_1 = require("./ui/leaderboard-screen");
 const attract_screen_1 = require("./ui/attract-screen");
 const handler_1 = require("./input/handler");
@@ -717,8 +718,24 @@ class GrandmasterApp {
         const gamepadMapper = this.createGamepadMapper();
         // Create game screen
         const gameScreen = new game_screen_1.GameScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, gamepadMapper);
+        // Publish this game so "Watch a game" can find it.
+        //
+        // Only the versus lobby ever registered anything, so every solo mode was
+        // invisible to spectators and the watch list was always empty. Strictly
+        // best-effort: a board with no broker still plays.
+        const broadcast = new solo_broadcast_1.SoloBroadcast({
+            network: this.ensureNetwork(),
+            mode,
+            getState: () => (this.gameEngine ? this.gameEngine.getState() : null),
+        });
+        await broadcast.start();
         // Run game loop
-        await gameScreen.run();
+        try {
+            await gameScreen.run();
+        }
+        finally {
+            await broadcast.stop();
+        }
         gamepadMapper.destroy();
         // Submit score and replay
         await this.submitScore(userId, username);
@@ -729,6 +746,18 @@ class GrandmasterApp {
         // Clean up
         this.gameEngine = null;
         this.state.currentMode = null;
+    }
+    /**
+     * The network manager, created on first use.
+     *
+     * showSpectate and the versus lobby both built this by hand; a solo game
+     * needs it too, so there is one place that does it.
+     */
+    ensureNetwork() {
+        if (!this.network) {
+            this.network = new network_manager_1.GrandmasterNetworkManager(this.session.bbsSession);
+        }
+        return this.network;
     }
     /**
      * Show multiplayer lobby
@@ -1390,12 +1419,10 @@ class GrandmasterApp {
         this.currentScreen = 'lobby';
         this.inputManager.suspend();
         const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
-        if (!this.network) {
-            this.network = new network_manager_1.GrandmasterNetworkManager(this.session.bbsSession);
-        }
+        const network = this.ensureNetwork();
         let games = [];
         try {
-            games = await this.network.listLobbies({ includeInProgress: true });
+            games = await network.listLobbies({ includeInProgress: true });
         }
         catch (error) {
             console.error('[GRANDMASTER] Failed to list games to watch:', error);
@@ -1451,7 +1478,7 @@ class GrandmasterApp {
             return;
         }
         try {
-            await this.network.spectateLobby(target.id);
+            await network.spectateLobby(target.id);
         }
         catch (error) {
             console.error('[GRANDMASTER] Failed to start watching:', error);
@@ -1460,13 +1487,13 @@ class GrandmasterApp {
         }
         const spectator = new spectator_screen_1.SpectatorScreen({
             screen: this.screen,
-            network: this.network,
+            network,
             sounds: this.sounds,
             title: `${target.mode} - ${target.playerNames.join(', ')}`,
         });
         await spectator.run();
         spectator.cleanup();
-        await this.network.leaveLobby();
+        await network.leaveLobby();
         this.inputManager.resume();
     }
     /**

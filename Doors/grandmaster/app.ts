@@ -37,6 +37,7 @@ import { SettingsScreen } from './ui/settings-screen';
 import { LobbyScreen } from './ui/lobby-screen';
 import { VersusScreen } from './ui/versus-screen';
 import { SpectatorScreen } from './ui/spectator-screen';
+import { SoloBroadcast } from './network/solo-broadcast';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
@@ -784,8 +785,24 @@ export class GrandmasterApp {
       gamepadMapper
     );
 
+    // Publish this game so "Watch a game" can find it.
+    //
+    // Only the versus lobby ever registered anything, so every solo mode was
+    // invisible to spectators and the watch list was always empty. Strictly
+    // best-effort: a board with no broker still plays.
+    const broadcast = new SoloBroadcast({
+      network: this.ensureNetwork(),
+      mode,
+      getState: () => (this.gameEngine ? (this.gameEngine.getState() as any) : null),
+    });
+    await broadcast.start();
+
     // Run game loop
-    await gameScreen.run();
+    try {
+      await gameScreen.run();
+    } finally {
+      await broadcast.stop();
+    }
     gamepadMapper.destroy();
 
     // Submit score and replay
@@ -800,6 +817,19 @@ export class GrandmasterApp {
     // Clean up
     this.gameEngine = null;
     this.state.currentMode = null;
+  }
+
+  /**
+   * The network manager, created on first use.
+   *
+   * showSpectate and the versus lobby both built this by hand; a solo game
+   * needs it too, so there is one place that does it.
+   */
+  private ensureNetwork(): GrandmasterNetworkManager {
+    if (!this.network) {
+      this.network = new GrandmasterNetworkManager(this.session.bbsSession);
+    }
+    return this.network;
   }
 
   /**
@@ -1579,13 +1609,11 @@ export class GrandmasterApp {
     this.inputManager.suspend();
     const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
 
-    if (!this.network) {
-      this.network = new GrandmasterNetworkManager(this.session.bbsSession);
-    }
+    const network = this.ensureNetwork();
 
     let games: Array<{ id: string; name: string; players: number; maxPlayers: number; mode: string; state: string; playerNames: string[] }> = [];
     try {
-      games = await this.network.listLobbies({ includeInProgress: true });
+      games = await network.listLobbies({ includeInProgress: true });
     } catch (error) {
       console.error('[GRANDMASTER] Failed to list games to watch:', error);
     }
@@ -1649,7 +1677,7 @@ export class GrandmasterApp {
     }
 
     try {
-      await this.network.spectateLobby(target.id);
+      await network.spectateLobby(target.id);
     } catch (error) {
       console.error('[GRANDMASTER] Failed to start watching:', error);
       this.inputManager.resume();
@@ -1658,14 +1686,14 @@ export class GrandmasterApp {
 
     const spectator = new SpectatorScreen({
       screen: this.screen,
-      network: this.network,
+      network,
       sounds: this.sounds,
       title: `${target.mode} - ${target.playerNames.join(', ')}`,
     });
 
     await spectator.run();
     spectator.cleanup();
-    await this.network.leaveLobby();
+    await network.leaveLobby();
     this.inputManager.resume();
   }
 

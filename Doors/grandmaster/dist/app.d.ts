@@ -137,6 +137,13 @@ export declare class GrandmasterApp {
      */
     private startGame;
     /**
+     * The network manager, created on first use.
+     *
+     * showSpectate and the versus lobby both built this by hand; a solo game
+     * needs it too, so there is one place that does it.
+     */
+    private ensureNetwork;
+    /**
      * Show multiplayer lobby
      */
     private showLobby;
