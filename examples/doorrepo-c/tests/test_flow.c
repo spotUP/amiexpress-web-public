@@ -1108,6 +1108,43 @@ TEST(build_info_content_no_prior_access_omits_draccess)
     ASSERT_TRUE(strstr(out, "ACCESS=0") != (char *) 0, "ACCESS=0 still present");
 }
 
+TEST(build_info_content_negative_access_omits_the_tooltype)
+{
+    /* express.e:4703 - `IF access=0 THEN RETURN TRUE`, and that TRUE is
+     * RESULT_NOT_ALLOWED (axenums.e:23). So ACCESS=0 DENIES a door to
+     * everyone, and a door meant for everyone must carry no ACCESS line at
+     * all. Writing 0 is what made every door DoorRepo installed invisible
+     * in the doors listing while still runnable by typing its command -
+     * caught on the live board with CALC, 2026-08-31. */
+    char out[320];
+
+    flow_build_info_content(out, sizeof(out), "XIM", "CALC", "CALC.rexx", -1, -1);
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:CALC/CALC.rexx\nSTACK=65536\n",
+                  "no ACCESS line at all");
+    ASSERT_TRUE(strstr(out, "ACCESS") == (char *) 0, "not even a commented one");
+}
+
+TEST(build_info_content_negative_access_still_appends_draccess)
+{
+    char out[320];
+
+    flow_build_info_content(out, sizeof(out), "XIM", "CALC", "CALC.rexx", -1, 20);
+    /* "\nACCESS=", not "ACCESS=" - the latter also matches inside
+     * "DRACCESS=20", which is exactly the line this case expects to find. */
+    ASSERT_TRUE(strstr(out, "\nACCESS=") == (char *) 0, "no ACCESS line of its own");
+    ASSERT_TRUE(strstr(out, "DRACCESS=20") != (char *) 0, "prior access still remembered");
+}
+
+TEST(build_info_content_255_still_denies_all_but_sysop)
+{
+    /* express.e:4704 is `IF (access>acsLevel)`, so 255 stays the disable
+     * sentinel the M-key path relies on. */
+    char out[320];
+
+    flow_build_info_content(out, sizeof(out), "XIM", "CALC", "CALC.rexx", 255, -1);
+    ASSERT_TRUE(strstr(out, "ACCESS=255") != (char *) 0, "255 still written");
+}
+
 TEST(build_info_content_with_prior_access_appends_draccess)
 {
     char out[320];
@@ -2794,6 +2831,10 @@ int main(void)
     RUN_TEST(doors_row_rejects_an_empty_command);
     RUN_TEST(doors_row_ignores_extra_trailing_columns);
     RUN_TEST(doors_row_tolerates_crlf);
+
+        RUN_TEST(build_info_content_negative_access_omits_the_tooltype);
+    RUN_TEST(build_info_content_negative_access_still_appends_draccess);
+    RUN_TEST(build_info_content_255_still_denies_all_but_sysop);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

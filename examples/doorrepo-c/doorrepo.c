@@ -3563,9 +3563,15 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
      * out of it, and for an ARexx script those differ - XIM would try to
      * execute a text file. See flow_effective_door_type() for the express.e
      * references. */
+    /* -1, not 0: a negative access writes NO ACCESS tooltype, which is how a
+     * door is installed available to everyone. ACCESS=0 does the opposite -
+     * express.e:4703 is `IF access=0 THEN RETURN TRUE`, and that TRUE is
+     * RESULT_NOT_ALLOWED - so every door installed here used to be invisible
+     * in the doors listing while still runnable by typing its command.
+     * Caught on the live board with CALC, 2026-08-31. */
     if (flow_build_info_content(info_content, sizeof(info_content),
                                  flow_effective_door_type(entry->type, binary_rel),
-                                 cmdname, binary_rel, 0, -1) < 0) {
+                                 cmdname, binary_rel, -1, -1) < 0) {
         ae_put("Install failed: the command config would not fit its buffer.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);

@@ -717,16 +717,35 @@ int flow_build_info_content(char *out, unsigned long outsize,
         return -1;
     }
 
-    sprintf(access_buf, "%ld", access);
+    /* A NEGATIVE access means "write no ACCESS tooltype at all", which is
+     * not the same as ACCESS=0 and is the only correct way to install a
+     * door everyone may run. express.e:4703 reads
+     *
+     *     IF access=0 THEN RETURN TRUE
+     *
+     * and that TRUE is RESULT_NOT_ALLOWED (axenums.e:23), so ACCESS=0
+     * DENIES a door to everyone. This function used to write it on every
+     * install, which made every door DoorRepo installed invisible in the
+     * doors listing while still runnable by typing its command. Observed
+     * on the live board with CALC, 2026-08-31. The 255 end of the range is
+     * unaffected: express.e:4704 is `IF (access>acsLevel)`, so 255 still
+     * means sysop-only, which is what the disable path relies on. */
+    if (access >= 0) {
+        sprintf(access_buf, "%ld", access);
+    } else {
+        access_buf[0] = '\0';
+    }
     if (prior_access >= 0) {
         sprintf(prior_access_buf, "%ld", prior_access);
     } else {
         prior_access_buf[0] = '\0';
     }
 
-    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\nACCESS=\n")
-                            + strlen(type) + strlen(cmd) + strlen(binary_rel)
-                            + strlen(access_buf));
+    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\n")
+                            + strlen(type) + strlen(cmd) + strlen(binary_rel));
+    if (access >= 0) {
+        need += (unsigned long) (strlen("ACCESS=\n") + strlen(access_buf));
+    }
     if (prior_access >= 0) {
         need += (unsigned long) (strlen("DRACCESS=\n") + strlen(prior_access_buf));
     }
@@ -749,9 +768,12 @@ int flow_build_info_content(char *out, unsigned long outsize,
     strcat(out, cmd);
     strcat(out, "/");
     strcat(out, binary_rel);
-    strcat(out, "\nSTACK=65536\nACCESS=");
-    strcat(out, access_buf);
-    strcat(out, "\n");
+    strcat(out, "\nSTACK=65536\n");
+    if (access >= 0) {
+        strcat(out, "ACCESS=");
+        strcat(out, access_buf);
+        strcat(out, "\n");
+    }
     if (prior_access >= 0) {
         strcat(out, "DRACCESS=");
         strcat(out, prior_access_buf);
