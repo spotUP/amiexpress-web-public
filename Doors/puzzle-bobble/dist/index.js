@@ -4,6 +4,7 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { arcadeMenu, moveSelection } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { PuzzleBobbleGame } from "./game/puzzle-bobble-game";
 import { rpcHandlers } from "./server";
 import { GRID_WIDTH, GRID_HEIGHT, GAME_TICK_MS, SHOOTER_Y, MENU_OPTIONS, DEFAULT_HIGHSCORES, getColorsForLevel, } from "./game/constants";
@@ -132,10 +133,16 @@ function showMenu() {
         "{white-fg}Taito 1994 (Bust-A-Move){/}",
         "",
     ];
-    MENU_OPTIONS.forEach((option, index) => {
-        const selected = index === gameData.menuSelection;
-        menuContent.push(`{${selected ? "yellow" : "white"}-fg}${selected ? "> " : "  "}${option}{/}`);
-    });
+    // Arkanoid's menu, from the shared arcade shell: centred rows, the
+    // selected one picked out, and one hint line. The door keeps its own
+    // logo above this - Arkanoid's title is two lines of text, and these
+    // games have their own.
+    menuContent.push(...arcadeMenu({
+        title: [],
+        options: MENU_OPTIONS,
+        selection: gameData.menuSelection,
+        width: 40,
+    }));
     menuBox = blessed.box({
         fixed: true,
         parent: gameArea,
@@ -353,11 +360,11 @@ function normalizeKey(key) {
 }
 function handleMenuInput(key) {
     if (key === "up") {
-        gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+        gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
         showMenu();
     }
     else if (key === "down") {
-        gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+        gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
         showMenu();
     }
     else if (key === "enter" || key === "shoot") {

@@ -56,8 +56,9 @@ export async function theMenuIsDrivenByMenuSelection(): Promise<void> {
     'menu input must reach handleMenuInput'
   );
   assert.ok(
-    /index === gameData\.menuSelection/.test(src),
-    'the rendered menu must highlight the selected row from gameData'
+    /selection: gameData\.menuSelection/.test(src),
+    'the rendered menu must take its selection from gameData - it is drawn by the ' +
+    'shared arcade menu now, which is given the selection rather than reading it'
   );
   assert.ok(MENU_OPTIONS.length > 1, 'there should be something to navigate');
 }
@@ -89,4 +90,87 @@ export async function noPopupIsWiderThanItsParent(): Promise<void> {
       );
     }
   }
+}
+
+/**
+ * The shared arcade menu, which nine doors now draw through.
+ *
+ * Tested from here because pengo was the pilot adoption. The module lives in
+ * sdk/engines/ui/arcade so a fix reaches every door at once - the same menu
+ * was written nine times, and three separate hand-sweeps over those copies
+ * (ghost borders, arrow keys, the wrap fix) each missed doors.
+ */
+
+import {
+  arcadeMenu, moveSelection, optionText, visibleLength,
+} from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
+
+/** Nothing may exceed the width it was asked for, or the box wraps. */
+export async function noMenuLineExceedsItsWidth(): Promise<void> {
+  for (const width of [30, 40, 54]) {
+    const lines = arcadeMenu({
+      title: ['A LONG ENOUGH TITLE'],
+      options: ['Start Game', { label: 'Difficulty', value: 'MEDIUM' }, 'Quit'],
+      selection: 1,
+      width,
+      subtitle: 'Classic Arcade Action!',
+    });
+
+    for (const line of lines) {
+      assert.ok(
+        visibleLength(line) <= width,
+        `a line of ${visibleLength(line)} columns in a ${width}-column menu will wrap: ` +
+        JSON.stringify(line.replace(/\{[^}]*\}/g, ''))
+      );
+    }
+  }
+}
+
+/** The selected row is marked the way Arkanoid marks it. */
+export async function theSelectedRowIsPickedOut(): Promise<void> {
+  const lines = arcadeMenu({
+    title: [], options: ['One', 'Two', 'Three'], selection: 1, width: 30,
+  });
+  const painted = lines.join('\n');
+
+  assert.ok(/> Two </.test(painted.replace(/\{[^}]*\}/g, '')), 'the selected row gets the markers');
+  assert.ok(!/> One </.test(painted.replace(/\{[^}]*\}/g, '')), 'and only the selected row');
+  assert.ok(/-bg\}/.test(painted), 'the selected row is highlighted, not merely marked');
+}
+
+/** A settings row shows what it is set to. */
+export async function aSettingsRowShowsItsValue(): Promise<void> {
+  assert.strictEqual(optionText({ label: 'Skill', value: 'HARD' }, false), '  Skill: HARD  ');
+  assert.strictEqual(optionText({ label: 'Skill', value: 'HARD' }, true), '> Skill: HARD <');
+  assert.strictEqual(optionText('Quit', false), '  Quit  ');
+}
+
+/**
+ * The selection wraps at both ends, as a cabinet does.
+ *
+ * Several doors clamped instead, so holding down on the last row felt broken
+ * when the row was merely last.
+ */
+export async function theSelectionWrapsAtBothEnds(): Promise<void> {
+  assert.strictEqual(moveSelection(0, 4, -1), 3, 'up from the first row reaches the last');
+  assert.strictEqual(moveSelection(3, 4, +1), 0, 'down from the last row returns to the first');
+  assert.strictEqual(moveSelection(1, 4, +1), 2);
+  assert.strictEqual(moveSelection(0, 0, +1), 0, 'an empty menu cannot move anywhere');
+}
+
+/** Arkanoid's brick strip is NOT inherited by every door. */
+export async function noDoorInheritsArkanoidsBricks(): Promise<void> {
+  const lines = arcadeMenu({ title: ['X'], options: ['A'], selection: 0, width: 20 });
+  const accented = arcadeMenu({
+    title: ['X'], options: ['A'], selection: 0, width: 20, accent: ['{red-bg}  {/}'],
+  });
+
+  assert.ok(
+    accented.length > lines.length,
+    'a door that wants an accent supplies its own'
+  );
+  assert.ok(
+    !lines.some(l => /-bg\}\s+\{\//.test(l) && !/> A </.test(l)),
+    'the default menu draws no decorative block strip'
+  );
 }

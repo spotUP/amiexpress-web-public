@@ -7,6 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.rpcHandlers = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const pengo_game_1 = require("./game/pengo-game");
 const server_1 = require("./server");
@@ -125,25 +126,28 @@ function renderMenu() {
     // resolved to left: -5 and hung five columns off the left edge, which is
     // exactly how it was reported: the title showing as "ngo" and the items
     // clipped.
-    const lines = ["{cyan-fg}P E N G O{/}", ""];
-    constants_1.MENU_OPTIONS.forEach((option, index) => {
-        const selected = index === gameData.menuSelection;
-        lines.push(selected
-            ? `{blue-bg}{white-fg}> ${option} <{/}`
-            : `{white-fg}  ${option}  {/}`);
+    // Arkanoid's menu, from the shared arcade shell rather than a tenth
+    // private copy of it. The width is the box's interior.
+    const width = 40;
+    const lines = (0, arcade_1.arcadeMenu)({
+        title: ['  P E N G O  ', '   SNO-BEES  '],
+        options: constants_1.MENU_OPTIONS,
+        selection: gameData.menuSelection,
+        width,
+        subtitle: 'Classic 1982 Sega Arcade Action!',
     });
-    lines.push("");
-    lines.push("{gray-fg}UP/DOWN to choose, ENTER to confirm{/}");
     menuBox = new blessed_1.Box({
         parent: screen,
         top: "center",
         left: "center",
-        width: 44,
+        width: width + 2,
         height: lines.length + 2,
         tags: true,
         border: { type: "line" },
         style: { border: { fg: "cyan" }, bg: "black", fg: "white" },
-        content: lines.map(l => `  ${l}`).join("\n"),
+        // arcadeMenu already centres each line for this width; prefixing spaces
+        // here would shift the whole menu right of centre.
+        content: lines.join("\n"),
     });
     screen.render();
 }
@@ -288,11 +292,11 @@ function normalizeKey(key) {
 }
 function handleMenuInput(key) {
     if (key === "up") {
-        gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+        gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, -1);
         renderMenu();
     }
     else if (key === "down") {
-        gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+        gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, +1);
         renderMenu();
     }
     else if (key === "enter" || key === "push") {
