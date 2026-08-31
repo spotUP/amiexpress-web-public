@@ -222,11 +222,12 @@ removal is off.
 Two reasons it would have been wrong to do, both measured rather than
 assumed:
 
-- **DOORMAN can do something DOORREPO cannot.** Its Upload reads a file from
-  the sysop's own machine over the web terminal's transfer channel and
-  installs it. A 68K door has no path to that, here or on a real board.
-  DOORREPO installs from the repo catalog, which covers a door that already
-  exists somewhere and not "the archive on my desktop".
+- **Upload is not a requirement.** DOORMAN's Upload reads a file from the
+  sysop's own machine over the web terminal's transfer channel, which a 68K
+  door has no path to on any board. The sysop settled it on 2026-08-31: it
+  is not needed. Doors arrive through the repo catalog. So this is not a
+  capability gap to be closed, and no work is queued for it - DOORREPO does
+  every DOORMAN task that is actually wanted.
 - **The one gap that COULD be closed, was.** ENTER now runs a door from
   DOORREPO's board list via RETURNCOMMAND (XIM 136), the same
   queue-then-exit order DOORMAN uses and for the same reason - two doors
