@@ -657,55 +657,6 @@ console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.loc
 }
 
 /**
- * Is there anything behind this registration?
- *
- * A <CMD>.info whose LOCATION resolves to nothing cannot run, but it still
- * OWNS the command name: dispatch finds it in the cache and answers with an
- * error instead of falling through, and the internal-command router hands
- * any name present in commandCache.bbscmd straight to the door
- * (command-handler/internal-commands.ts). On 30 August a Doors/ wipe left 277
- * such registrations across the Commands tree - `BR`, `BV`, `BADD`,
- * `BROADCAST`, and `G`, which is 5D-LogOff registered under the internal
- * goodbye command's name, so logging off was impossible until the .info was
- * removed by hand.
- *
- * This diverges from express.e deliberately. express.e resolves the .info
- * (configFileExists, express.e:4632) and then LoadSegs whatever LOCATION
- * names, error and all; a real board's registrations do not go stale behind
- * the sysop's back, and this one's did.
- *
- * The rule is conservative on purpose. A MISSING FILE inside an existing door
- * directory stays registered: that is exactly what a TypeScript door
- * replacing an Amiga binary looks like - nothing named Doors/bbslink/bbslink
- * has ever existed on this board and 24 live commands point at it. Only a
- * registration whose DIRECTORY is gone as well counts as dead, which is the
- * shape a wiped door leaves behind.
- *
- * @param baseDir absolute path to the BBS data directory
- * @param cmd a definition from loadCommandFromInfo (its location is already
- *            normalised: assigns stripped, ':' turned into '/')
- */
-export function commandLocationIsLive(baseDir: string, cmd: CommandDefinition): boolean {
-  // express.e:4732 - INTERNAL is read and dispatched BEFORE LOCATION is
-  // looked at, so an internal alias needs nothing on disk.
-  if (cmd.internal) return true;
-
-  // express.e:4295 - an MCI command IS its MCI_TEXT; there is no file to find.
-  if (cmd.type === DoorType.MCI) return true;
-
-  if (!cmd.location) return true;
-
-  const resolved = path.isAbsolute(cmd.location)
-    ? cmd.location
-    : path.join(baseDir, cmd.location);
-
-  // amigafs, not fs: an Amiga volume is case-insensitive and a LOCATION is
-  // written in whatever case the sysop's icon carries.
-  if (amigafs.existsSync(resolved)) return true;
-  return amigafs.existsSync(path.dirname(resolved));
-}
-
-/**
  * Scan command directory for available commands
  * Implements express.e:4630-4670 command lookup hierarchy
  *
@@ -749,7 +700,6 @@ export function scanCommandDirectory(
   nodeId?: number
 ): Map<string, CommandDefinition> {
   const commands = new Map<string, CommandDefinition>();
-  const skipped: string[] = [];
 
   // Build search paths in priority order — shared with the freshness check
   // in command-execution.handler.ts, which must watch exactly the
@@ -771,16 +721,6 @@ export function scanCommandDirectory(
         const cmd = loadCommandFromInfo(fullPath);
 
         if (cmd) {
-          // A registration with nothing behind it is not a command. Dropped
-          // here rather than at dispatch so it disappears from the cache,
-          // the door registry and every list built from them at once, and
-          // so the internal command it was shadowing becomes reachable
-          // again. See commandLocationIsLive.
-          if (!commandLocationIsLive(baseDir, cmd)) {
-            skipped.push(`${cmd.name} -> ${cmd.location}`);
-            continue;
-          }
-
           const existing = commands.get(cmd.name);
 
           // First one wins (conference/node commands have higher priority than global)
@@ -790,15 +730,6 @@ export function scanCommandDirectory(
         }
       }
     }
-  }
-
-  // Say what was dropped and where it pointed. A sysop looking for a command
-  // that "just stopped answering" needs to see the LOCATION that no longer
-  // resolves, not silence.
-  if (skipped.length > 0) {
-    console.warn(
-      `  [${commandType}] ${skipped.length} registration(s) skipped - LOCATION missing: ${skipped.join(', ')}`
-    );
   }
 
   return commands;

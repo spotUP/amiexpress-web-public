@@ -26,26 +26,11 @@ describe('BBSCmd freshness', () => {
   let cmdDir: string;
 
   function writeInfo(name: string, location: string): void {
-    installDoor(baseDir, location);
     fs.writeFileSync(
       path.join(cmdDir, `${name}.info`),
       `TYPE=XIM\nLOCATION=${location}\nSTACK=65536\nACCESS=0\n`,
       'latin1'
     );
-  }
-
-  /**
-   * Put the door itself on disk beside its registration.
-   *
-   * A registration whose LOCATION resolves to nothing is dropped at load
-   * (commandLocationIsLive, amiga-command-parser.util.ts) so a wiped door
-   * cannot go on shadowing an internal command. These tests are about
-   * freshness, not liveness, so their fixtures have to be real installs.
-   */
-  function installDoor(root: string, location: string): void {
-    const full = path.join(root, location.replace(/^Doors:/i, 'Doors/'));
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, 'door');
   }
 
   beforeEach(() => {
@@ -164,7 +149,6 @@ describe('BBSCmd freshness', () => {
     expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
 
     // Step 1: the empty file appears. This DOES change the directory.
-    installDoor(baseDir, 'Doors:HALFWAY/bin/halfway');
     const target = path.join(cmdDir, 'HALFWAY.info');
     fs.writeFileSync(target, '', 'latin1');
     expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
@@ -229,7 +213,6 @@ describe('BBSCmd freshness', () => {
       // not read the same.
       const dir = path.join(emptyBase, 'Commands', 'BBSCmd');
       fs.mkdirSync(dir, { recursive: true });
-      installDoor(emptyBase, 'Doors:FIRST/first');
       fs.writeFileSync(
         path.join(dir, 'FIRST.info'),
         'TYPE=XIM\nLOCATION=Doors:FIRST/first\nSTACK=65536\nACCESS=0\n',
