@@ -819,39 +819,80 @@ class FroggerGame {
             this.handleDirection(here < centre ? 'right' : 'left');
     }
     /**
-     * Render the game
+     * Render the game.
+     *
+     * Drawn as blocks of background colour rather than ASCII sprites, the way
+     * Grandmaster and Super Qix draw their boards: a solid red block reads as
+     * a car where a '#' reads as punctuation. Each logical cell is CELL_WIDTH
+     * characters wide so that a cell comes out roughly square on a terminal,
+     * and forty of them fill the screen exactly.
      */
     render() {
         const d = this.data;
-        const lines = [];
+        // One background colour per cell, plus an optional foreground glyph for
+        // the few things that need one.
         const buffer = [];
         for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
-            buffer[y] = [];
-            for (let x = 0; x < constants_1.GRID_WIDTH; x++)
-                buffer[y][x] = ' ';
+            buffer[y] = new Array(constants_1.GRID_WIDTH).fill(constants_1.BG_COLORS.road);
         }
-        // Lane backgrounds
-        for (const lane of d.lanes) {
-            const bg = lane.type === 'road' ? '.' :
-                lane.type === 'water' ? '~' :
-                    lane.type === 'safe' ? '_' : ' ';
-            for (let x = 0; x < constants_1.GRID_WIDTH; x++)
-                buffer[lane.y][x] = bg;
+        this.paintLanes(buffer);
+        this.paintHomes(buffer);
+        this.paintObjects(buffer);
+        this.paintSnakes(buffer);
+        this.paintFrog(buffer);
+        const lines = buffer.map(row => {
+            let line = '';
+            let run = '';
+            let colour = '';
+            const flush = () => {
+                if (!run)
+                    return;
+                line += `{${colour}-bg}${run}{/${colour}-bg}`;
+                run = '';
+            };
+            for (const bg of row) {
+                if (bg !== colour) {
+                    flush();
+                    colour = bg;
+                }
+                run += ' '.repeat(constants_1.CELL_WIDTH);
+            }
+            flush();
+            return line;
+        });
+        lines.push('');
+        const timeBar = '='.repeat(Math.max(0, Math.floor(d.timeRemaining / 2)));
+        const timeColor = d.timeRemaining <= 10 ? 'red' : 'yellow';
+        lines.push(`{${timeColor}-fg}TIME: [${timeBar.padEnd(30, ' ')}]{/}`);
+        this.renderCallback(lines.join('\n'));
+    }
+    /** The ground: road, water, the banks and the median. */
+    paintLanes(buffer) {
+        for (const lane of this.data.lanes) {
+            const bg = lane.type === 'road' ? constants_1.BG_COLORS.road :
+                lane.type === 'water' ? constants_1.BG_COLORS.water :
+                    lane.type === 'safe' ? constants_1.BG_COLORS.bank :
+                        constants_1.BG_COLORS.hedge;
+            buffer[lane.y].fill(bg);
         }
-        // Homes, with whatever is sitting in them
-        for (const home of d.homes) {
-            const glyph = home.occupied ? ['[', '*', ']'] :
-                home.hasAlligator ? ['[', 'C', ']'] :
-                    home.hasFly ? ['[', 'F', ']'] :
-                        ['[', ' ', ']'];
-            for (let i = 0; i < glyph.length; i++) {
+    }
+    /** The five homes cut into the hedge along the top. */
+    paintHomes(buffer) {
+        for (const home of this.data.homes) {
+            const bg = home.occupied ? constants_1.BG_COLORS.homeOccupied :
+                home.hasAlligator ? constants_1.BG_COLORS.homeCrocodile :
+                    home.hasFly ? constants_1.BG_COLORS.homeFly :
+                        constants_1.BG_COLORS.homeEmpty;
+            for (let i = 0; i < constants_1.HOME_WIDTH; i++) {
                 const x = home.x + i;
                 if (x >= 0 && x < constants_1.GRID_WIDTH)
-                    buffer[0][x] = glyph[i];
+                    buffer[0][x] = bg;
             }
         }
-        // Everything in a lane
-        for (const lane of d.lanes) {
+    }
+    /** Everything travelling in a lane. */
+    paintObjects(buffer) {
+        for (const lane of this.data.lanes) {
             for (const raw of lane.objects) {
                 const obj = raw;
                 const width = obj.width ?? 2;
@@ -859,108 +900,75 @@ class FroggerGame {
                     const x = Math.floor(obj.x + dx);
                     if (x < 0 || x >= constants_1.GRID_WIDTH)
                         continue;
-                    buffer[obj.y][x] = this.glyphFor(obj, dx, width);
+                    buffer[obj.y][x] = this.colourFor(obj, dx, width);
                 }
-                // A snake or the lady frog riding this one sits on top of it.
+                // Riders sit on top of whatever is carrying them.
                 if (obj.snakeAt !== null && obj.snakeAt !== undefined) {
                     const x = Math.floor(obj.x + obj.snakeAt);
                     if (x >= 0 && x < constants_1.GRID_WIDTH)
-                        buffer[obj.y][x] = 'S';
+                        buffer[obj.y][x] = constants_1.BG_COLORS.snake;
                 }
                 if (obj.ladyFrogAt !== null && obj.ladyFrogAt !== undefined) {
                     const x = Math.floor(obj.x + obj.ladyFrogAt);
                     if (x >= 0 && x < constants_1.GRID_WIDTH)
-                        buffer[obj.y][x] = 'P';
+                        buffer[obj.y][x] = constants_1.BG_COLORS.ladyFrog;
                 }
             }
         }
-        // Median snakes
-        for (const snake of d.snakes) {
+    }
+    /** The snakes patrolling the median. */
+    paintSnakes(buffer) {
+        for (const snake of this.data.snakes) {
             const x = Math.floor(snake.x);
             if (x >= 0 && x < constants_1.GRID_WIDTH && snake.y >= 0 && snake.y < constants_1.GRID_HEIGHT) {
-                buffer[snake.y][x] = 'S';
+                buffer[snake.y][x] = constants_1.BG_COLORS.snake;
             }
         }
-        // The frog
-        const fx = Math.floor(d.frog.x);
-        const fy = d.frog.y;
-        if (fx >= 0 && fx < constants_1.GRID_WIDTH && fy >= 0 && fy < constants_1.GRID_HEIGHT) {
-            if (!d.frog.isDead) {
-                buffer[fy][fx] = d.frog.isJumping
-                    ? (d.frog.direction === 'up' ? '^' :
-                        d.frog.direction === 'down' ? 'v' :
-                            d.frog.direction === 'left' ? '<' : '>')
-                    : '@';
-            }
-            else {
-                const deathChars = ['X', 'x', '+', '.', ' '];
-                const frame = Math.min(Math.floor(d.frog.deathFrame / 4), deathChars.length - 1);
-                buffer[fy][fx] = deathChars[frame];
-            }
-        }
-        for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
-            let line = '';
-            for (let x = 0; x < constants_1.GRID_WIDTH; x++)
-                line += this.paint(buffer[y][x]);
-            lines.push(line);
-        }
-        lines.push('');
-        const timeBar = '='.repeat(Math.max(0, Math.floor(d.timeRemaining / 2)));
-        const timeColor = d.timeRemaining <= 10 ? 'red' : 'yellow';
-        lines.push(`{${timeColor}-fg}TIME: [${timeBar.padEnd(30, ' ')}]{/}`);
-        this.renderCallback(lines.join('\n'));
     }
-    /** The character for one cell of an object. */
-    glyphFor(obj, dx, width) {
+    /** The player. */
+    paintFrog(buffer) {
+        const d = this.data;
+        const x = Math.floor(d.frog.x);
+        const y = d.frog.y;
+        if (x < 0 || x >= constants_1.GRID_WIDTH || y < 0 || y >= constants_1.GRID_HEIGHT)
+            return;
+        if (!d.frog.isDead) {
+            buffer[y][x] = constants_1.BG_COLORS.frog;
+            return;
+        }
+        // The death blinks rather than spelling out an X: at one cell there is
+        // no room for an animation, but a flashing block is unmistakable.
+        const on = Math.floor(d.frog.deathFrame / 3) % 2 === 0;
+        if (on)
+            buffer[y][x] = constants_1.BG_COLORS.frogDying;
+    }
+    /**
+     * The colour of one cell of a moving object.
+     *
+     * A crocodile and an otter are drawn with their mouth in a different
+     * colour, because landing on the mouth is fatal and landing on the back is
+     * not - the player has to be able to see which end is which.
+     */
+    colourFor(obj, dx, width) {
         switch (obj.type) {
-            case 'car':
-            case 'racecar':
-                return '#';
-            case 'truck':
-                return 'T';
-            case 'log':
-                return '=';
+            case 'car': return constants_1.BG_COLORS.car;
+            case 'racecar': return constants_1.BG_COLORS.racecar;
+            case 'truck': return constants_1.BG_COLORS.truck;
+            case 'log': return constants_1.BG_COLORS.log;
             case 'turtle':
-                return obj.isDiving ? '~' : 'o';
+                return obj.isDiving
+                    ? constants_1.BG_COLORS.turtleDiving
+                    : constants_1.BG_COLORS.turtle;
             case 'crocodile':
             case 'otter': {
-                // Draw the mouth end differently, since landing on it is fatal.
                 const mouth = obj.speed >= 0 ? dx === width - 1 : dx === 0;
-                return mouth ? 'V' : (obj.type === 'otter' ? 'w' : 'c');
+                if (obj.type === 'otter') {
+                    return mouth ? constants_1.BG_COLORS.otterMouth : constants_1.BG_COLORS.otter;
+                }
+                return mouth ? constants_1.BG_COLORS.crocodileMouth : constants_1.BG_COLORS.crocodile;
             }
             default:
-                return '#';
-        }
-    }
-    paint(char) {
-        switch (char) {
-            case '@':
-            case '^':
-            case 'v':
-            case '<':
-            case '>':
-                return `{green-fg}${char}{/}`;
-            case '#': return `{red-fg}${char}{/}`;
-            case 'T': return `{yellow-fg}${char}{/}`;
-            case '=': return `{yellow-fg}${char}{/}`;
-            case 'o': return `{green-fg}${char}{/}`;
-            case 'c':
-            case 'w': return `{lightgreen-fg}${char}{/}`;
-            case 'V': return `{red-fg}${char}{/}`;
-            case 'S': return `{magenta-fg}${char}{/}`;
-            case 'P': return `{magenta-fg}${char}{/}`;
-            case '*': return `{cyan-fg}${char}{/}`;
-            case '[':
-            case ']': return `{cyan-fg}${char}{/}`;
-            case 'C': return `{lightgreen-fg}${char}{/}`;
-            case 'F': return `{magenta-fg}${char}{/}`;
-            case '~': return `{blue-fg}${char}{/}`;
-            case '.': return `{gray-fg}${char}{/}`;
-            case '_': return `{green-fg}${char}{/}`;
-            case 'X':
-            case 'x':
-            case '+': return `{red-fg}${char}{/}`;
-            default: return char;
+                return constants_1.BG_COLORS.car;
         }
     }
 }

@@ -126,6 +126,51 @@ export const SCORES = {
   timeBonus: 10,
 };
 
+/**
+ * How wide one grid cell is drawn, in characters.
+ *
+ * A terminal cell is about twice as tall as it is wide, so a logical cell
+ * two characters across comes out roughly square - the same trick Super Qix
+ * and Grandmaster use. Forty cells at two characters fills the 80-column
+ * screen exactly.
+ */
+export const CELL_WIDTH = 2;
+
+/**
+ * The board is drawn as blocks of background colour rather than as ASCII
+ * sprites. A '#' for a car and an '=' for a log read as text; a solid red
+ * block and a solid brown one read as a car and a log.
+ */
+export const BG_COLORS = {
+  road: 'black',
+  water: 'blue',
+  bank: 'green',
+  hedge: 'green',
+
+  car: 'red',
+  truck: 'white',
+  racecar: 'magenta',
+
+  log: 'yellow',          // dark yellow reads as wood
+  turtle: 'green',
+  turtleDiving: 'blue',
+  crocodile: 'cyan',     // told apart from the turtles by colour and mouth
+  crocodileMouth: 'lightred',
+  otter: 'lightcyan',
+  otterMouth: 'lightred',
+
+  snake: 'lightmagenta',
+  ladyFrog: 'lightmagenta',
+
+  frog: 'lightgreen',
+  frogDying: 'lightred',
+
+  homeEmpty: 'black',
+  homeOccupied: 'lightgreen',
+  homeFly: 'lightyellow',
+  homeCrocodile: 'lightred',
+};
+
 // Colors for rendering
 export const COLORS = {
   frog: 'green',

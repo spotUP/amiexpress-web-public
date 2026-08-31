@@ -165,11 +165,32 @@ export declare class FroggerGame {
     /** Line the demo up with a free home, then hop in. */
     private demoAimForHome;
     /**
-     * Render the game
+     * Render the game.
+     *
+     * Drawn as blocks of background colour rather than ASCII sprites, the way
+     * Grandmaster and Super Qix draw their boards: a solid red block reads as
+     * a car where a '#' reads as punctuation. Each logical cell is CELL_WIDTH
+     * characters wide so that a cell comes out roughly square on a terminal,
+     * and forty of them fill the screen exactly.
      */
     render(): void;
-    /** The character for one cell of an object. */
-    private glyphFor;
-    private paint;
+    /** The ground: road, water, the banks and the median. */
+    private paintLanes;
+    /** The five homes cut into the hedge along the top. */
+    private paintHomes;
+    /** Everything travelling in a lane. */
+    private paintObjects;
+    /** The snakes patrolling the median. */
+    private paintSnakes;
+    /** The player. */
+    private paintFrog;
+    /**
+     * The colour of one cell of a moving object.
+     *
+     * A crocodile and an otter are drawn with their mouth in a different
+     * colour, because landing on the mouth is fatal and landing on the back is
+     * not - the player has to be able to see which end is which.
+     */
+    private colourFor;
 }
 //# sourceMappingURL=frogger-game.d.ts.map
