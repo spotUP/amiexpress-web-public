@@ -14,6 +14,7 @@ interface DoorFormData {
   door_command: string;
   description: string;
   door_type: string;
+  door_path: string;
   runtime_env: string;
   min_security_level: number;
   time_limit: number;
@@ -39,6 +40,7 @@ export function DoorsPage() {
     door_command: '',
     description: '',
     door_type: 'XIM',
+    door_path: '',
     runtime_env: 'vamos',
     min_security_level: 0,
     time_limit: 30,
@@ -101,6 +103,7 @@ export function DoorsPage() {
       door_command: '',
       description: '',
       door_type: 'XIM',
+      door_path: '',
       runtime_env: 'vamos',
       min_security_level: 0,
       time_limit: 30,
@@ -120,6 +123,7 @@ export function DoorsPage() {
       door_command: door.door_command,
       description: door.description,
       door_type: door.door_type,
+      door_path: door.door_path,
       runtime_env: door.runtime_env,
       min_security_level: door.min_security_level,
       time_limit: door.time_limit,
@@ -465,6 +469,25 @@ export function DoorsPage() {
                   </select>
                 </div>
 
+                <div className="md:col-span-2">
+                  <label htmlFor="door_path" className="label">Path *</label>
+                  <input
+                    id="door_path"
+                    type="text"
+                    value={formData.door_path}
+                    onChange={(e) => setFormData({ ...formData, door_path: e.target.value })}
+                    className="input-field w-full"
+                    placeholder="BBS:Doors/MyDoor/MyDoor"
+                    required
+                  />
+                  <p className="text-sm text-bbs-muted mt-2">
+                    Written to the door's LOCATION tooltype, which is how
+                    AmiExpress finds the program to run. The form had no field
+                    for it and DoorSchema requires it, so Create Door could
+                    never succeed.
+                  </p>
+                </div>
+
                 <div>
                   <label htmlFor="runtime_env" className="label">Runtime *</label>
                   <select
@@ -520,8 +543,11 @@ export function DoorsPage() {
                   </label>
                   <p className="text-sm text-bbs-muted mt-2">
                     AmiExpress has no on/off switch for a command, so turning a
-                    door off parks its access level at 255 and remembers the
-                    level above, restoring it when you switch the door back on.
+                    door off parks its access level out of reach and remembers
+                    the level above, restoring it when you switch the door back
+                    on. The parking level is 32767, not 255: express.e:4704
+                    tests access &gt; acsLevel, so a level-255 sysop could still
+                    run a door parked at 255.
                     This is what DOORREPO does, and it reads the same door.
                   </p>
                 </div>

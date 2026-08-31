@@ -263,7 +263,11 @@ export const DoorSchema = z.object({
   priority: z.enum(['P0', 'P1', 'P2', 'P3', 'P4']).optional(),
   door_options: z.array(z.string()).optional(),
   runtime_env: z.enum(DOOR_RUNTIME_ENVS).optional(),
-  min_security_level: z.number().int().min(1).max(255).optional(),
+  // 0 is a real value here, not an absence: the API's own
+  // doorNormalAccessLevel() serves 0 for a door with no ACCESS tooltype, so
+  // min(1) meant the schema rejected its own output and Add Door - which
+  // posts 0 - could never succeed.
+  min_security_level: z.number().int().min(0).max(255).optional(),
   max_security_level: z.number().int().min(1).max(255).optional(),
   required_flags: z.string().max(100).optional(),
   time_limit: z.number().int().min(0).optional(),
