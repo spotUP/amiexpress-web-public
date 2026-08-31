@@ -8,6 +8,7 @@
  */
 
 import assert from 'assert';
+import * as fs from 'fs';
 import { join } from 'path';
 import {
   DOORS_ROOT,
@@ -15,6 +16,9 @@ import {
   listSprites,
   readSprite,
   resolveAssetPath,
+  writeSprite,
+  writeArt,
+  listArt,
 } from '../assets';
 
 export async function doorsRootIsTheDoorsDirectory(): Promise<void> {
@@ -73,4 +77,35 @@ export async function theGuardIsResolvedPathsNotStrings(): Promise<void> {
   // And the honest case still passes.
   const ok = resolveAssetPath('pengo', 'sprites', 'pengo.sprite.json');
   assert.strictEqual(ok, join(DOORS_ROOT, 'pengo', 'sprites', 'pengo.sprite.json'));
+}
+
+export async function writeSpriteRoundTripsThroughDisk(): Promise<void> {
+  const scratchDoor = 'sprite-editor'; // our own door: safe scratch space
+  const sprite = readSprite('pengo', 'egg.sprite.json');
+  const renamed = { ...sprite, name: 'scratch-egg' };
+
+  writeSprite(scratchDoor, 'scratch-egg.sprite.json', renamed);
+  try {
+    const back = readSprite(scratchDoor, 'scratch-egg.sprite.json');
+    assert.deepStrictEqual(back, renamed, 'what was written is what loads');
+  } finally {
+    fs.unlinkSync(resolveAssetPath(scratchDoor, 'sprites', 'scratch-egg.sprite.json'));
+  }
+}
+
+export async function writesAreGuardedLikeReads(): Promise<void> {
+  const sprite = readSprite('pengo', 'egg.sprite.json');
+  assert.throws(
+    () => writeSprite('..', 'x.sprite.json', sprite), /outside/,
+    'a write outside the fence is the worst version of the traversal bug'
+  );
+  assert.throws(
+    () => writeSprite('pengo', '../../evil.sprite.json', sprite), /outside/
+  );
+}
+
+export async function artListingsAndWritesAreGuarded(): Promise<void> {
+  assert.throws(() => writeArt('..', 'x.ans', Buffer.from('x')), /outside/);
+  const arts = listArt('pengo'); // no art/ directory yet - empty, not a throw
+  assert.deepStrictEqual(arts, []);
 }

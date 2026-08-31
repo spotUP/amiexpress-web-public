@@ -104,6 +104,32 @@ export function parseSprite(raw: unknown, source = 'sprite'): Sprite {
   return { name: s.name, cellW: s.cellW, cellH: s.cellH, animations };
 }
 
+/**
+ * A sprite as its on-disk JSON - the exact inverse of parseSprite.
+ *
+ * Validates by round-tripping through parseSprite BEFORE returning, so a
+ * corrupted in-memory document throws here rather than writing a file
+ * that fails the next door load.
+ */
+export function serializeSprite(sprite: Sprite): string {
+  const raw = {
+    name: sprite.name,
+    cellW: sprite.cellW,
+    cellH: sprite.cellH,
+    animations: Object.fromEntries(
+      Object.entries(sprite.animations).map(([name, anim]) => [name, {
+        ticksPerFrame: anim.ticksPerFrame,
+        loop: anim.loop,
+        frames: anim.frames.map(frame =>
+          frame.map(row =>
+            row.map(cell => (cell ? [cell.char, cell.fg, cell.bg] : null)))),
+      }])
+    ),
+  };
+  parseSprite(raw, `${sprite.name} (serializing)`); // throws before disk
+  return JSON.stringify(raw, null, 1) + '\n';
+}
+
 /** Which frame is showing at game tick N. Pure. */
 export function frameAt(anim: SpriteAnimation, tick: number): CellBuffer {
   const step = Math.max(1, anim.ticksPerFrame);

@@ -16,7 +16,7 @@ export {
 } from './cells';
 export type { Cell, CellRow, CellBuffer } from './cells';
 
-export { parseSprite, frameAt, blitSprite } from './sprite';
+export { parseSprite, serializeSprite, frameAt, blitSprite } from './sprite';
 export type { Sprite, SpriteAnimation } from './sprite';
 
 export { loadSpriteSheet } from './load';

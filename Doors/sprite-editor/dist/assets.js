@@ -51,6 +51,10 @@ exports.resolveAssetPath = resolveAssetPath;
 exports.listDoorsWithSprites = listDoorsWithSprites;
 exports.listSprites = listSprites;
 exports.readSprite = readSprite;
+exports.writeSprite = writeSprite;
+exports.listArt = listArt;
+exports.readArt = readArt;
+exports.writeArt = writeArt;
 const fs = __importStar(require("fs"));
 const path_1 = require("path");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
@@ -112,4 +116,32 @@ function listSprites(door) {
 function readSprite(door, file) {
     const path = resolveAssetPath(door, 'sprites', file);
     return (0, cell_art_1.parseSprite)(JSON.parse(fs.readFileSync(path, 'utf8')), file);
+}
+/** Write one sheet: guarded path, validated content, atomic replace. */
+function writeSprite(door, file, sprite) {
+    const path = resolveAssetPath(door, 'sprites', file);
+    const json = (0, cell_art_1.serializeSprite)(sprite); // throws before any disk touch
+    const tmp = `${path}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, path); // atomic on the same filesystem
+}
+/** `*.ans` files in a door's art/ directory, sorted; [] when none. */
+function listArt(door) {
+    try {
+        const dir = resolveAssetPath(door, 'art', '.');
+        return fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.ans')).sort();
+    }
+    catch {
+        return []; // no art/ directory is a normal state, not an error
+    }
+}
+function readArt(door, file) {
+    return fs.readFileSync(resolveAssetPath(door, 'art', file));
+}
+function writeArt(door, file, data) {
+    const path = resolveAssetPath(door, 'art', file);
+    fs.mkdirSync((0, path_1.dirname)(path), { recursive: true });
+    const tmp = `${path}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, path);
 }
