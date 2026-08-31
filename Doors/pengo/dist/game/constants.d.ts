@@ -3,16 +3,24 @@
  */
 import { LevelConfig, HighScore } from './types';
 export declare const SCREEN_WIDTH = 80;
-export declare const SCREEN_HEIGHT = 24;
-export declare const GRID_WIDTH = 15;
-export declare const GRID_HEIGHT = 10;
+/**
+ * A door owns the whole 80x25 terminal. The BBS proper keeps to 80x23
+ * because it needs rows for its prompt, but that constraint is the BBS's,
+ * not a game's - designing the board to 24 rows wasted a row that was
+ * always there.
+ */
+export declare const SCREEN_HEIGHT = 25;
+export declare const GRID_WIDTH = 16;
+export declare const GRID_HEIGHT = 11;
 /**
  * Cell geometry for the sprite renderer: every maze cell is a 5x2 block of
- * characters, so the 15x10 maze is a 75x20 board - the full terminal, with
- * the HUD above and the hint below.
+ * characters, so the 16x11 maze is an 80x22 board - the full terminal
+ * width, edge to edge, with the HUD above and the hint on the bottom row.
  *
- * GRID_HEIGHT dropped from 13 to 10 to buy the second sprite row: 13 cells
- * x 2 rows was 26 rows on a 24-row screen. Approved in the design doc.
+ * The row budget: HUD 1 + board 22 + hint 1 = 24 of the 25 rows a door
+ * gets; a twelfth maze row would need 26. The maze dropped from 13 rows to
+ * buy the second sprite row (13 x 2 = 26). It holds 11, not the 10 the
+ * first pass shipped - that pass budgeted 24 rows and wasted one.
  */
 export declare const CELL_W = 5;
 export declare const CELL_H = 2;
