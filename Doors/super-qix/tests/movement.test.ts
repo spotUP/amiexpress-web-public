@@ -35,7 +35,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
+    stopTimer: 0, gremlinsCaptured: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
 

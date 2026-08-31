@@ -20,7 +20,7 @@ import { SuperQixData } from '../game/types';
 import {
   FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES,
   LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, SPARE_LETTER_POINTS,
-  POINTS_PER_BONUS_PERCENT, EXTRA_LIFE_PERCENT, BG_COLORS,
+  POINTS_PER_BONUS_PERCENT, EXTRA_LIFE_PERCENT, BG_COLORS, CAPTURE_POINTS,
 } from '../game/constants';
 
 function createData(): SuperQixData {
@@ -38,7 +38,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, invulnerableUntil: 0, lastMultiplierAt: 0, lastMultiplier: 1,
+    stopTimer: 0, gremlinsCaptured: 0, timeMeter: 0, invulnerableUntil: 0, lastMultiplierAt: 0, lastMultiplier: 1,
     warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
@@ -60,6 +60,111 @@ function clearedLevel(claimed: number, letters: string[]): {
   engine.update();
 
   return { engine, data, frame: () => last, gained: data.score - before };
+}
+
+/**
+ * Clear a level having sealed `captured` Gremlins into claimed ground.
+ *
+ * The count is planted rather than played out: whether the game DERIVES it
+ * correctly is what sealingAGremlinIntoAClaimCountsAsACapture proves, driving
+ * a real claim. What is under test here is the payment - that the level's end
+ * turns a count into points and a row on the panel.
+ */
+function clearedLevelWithCaptures(captured: number): {
+  engine: QixEngine; data: SuperQixData; frame: () => string; gained: number;
+} {
+  const data = createData();
+  let last = '';
+  const engine = new QixEngine(data, c => { last = c; });
+  engine.initLevel(1);
+  data.state = 'playing';
+  data.sparxList = [];
+  data.qixList = [];
+  data.gremlinsCaptured = captured;
+
+  const before = data.score;
+  data.claimedPercent = data.targetPercent;   // exactly the target: no area bonus
+  engine.update();
+
+  return { engine, data, frame: () => last, gained: data.score - before };
+}
+
+/** Everything the panel shows, over the whole hand-over, with tags stripped. */
+function outroText(engine: QixEngine, frame: () => string): string {
+  let seen = '';
+  let frames = 0;
+  while (engine.advanceLevelOutro()) {
+    seen += frame().replace(/\{[^}]*\}/g, '') + '\n';
+    if (++frames > 1000) throw new Error('the sequence should terminate');
+  }
+  return seen;
+}
+
+/**
+ * Q-3c. A recorded DEPARTURE from the FAQ, agreed with the user: FAQ 2.2 says
+ * trapping a Gremlin gets you no bonus points, and QUIX (quix.c:299) pays 250.
+ * We follow the reference, because the same FAQ section calls trapping the
+ * most spectacular play in the game.
+ */
+export async function theLevelEndPaysForEachCapturedGremlin(): Promise<void> {
+  const none = clearedLevelWithCaptures(0);
+  const three = clearedLevelWithCaptures(3);
+
+  assert.strictEqual(
+    none.gained, 0,
+    'clearing at exactly the target with no captures should pay nothing'
+  );
+  assert.strictEqual(
+    three.gained, 3 * CAPTURE_POINTS,
+    `three captures should pay 3 x ${CAPTURE_POINTS}, got ${three.gained}`
+  );
+}
+
+/** Q-3d. The tally has a row for it, beside AREA and WORD. */
+export async function theBonusPanelShowsACaptureRow(): Promise<void> {
+  const { engine, frame } = clearedLevelWithCaptures(2);
+  const text = outroText(engine, frame);
+
+  assert.ok(text.includes('CAPTURE'), 'the BONUS tally should carry a CAPTURE row');
+  assert.ok(
+    text.includes('x2'),
+    'the row should say how many were caught'
+  );
+  assert.ok(
+    text.includes(String(2 * CAPTURE_POINTS)),
+    `the row should show ${2 * CAPTURE_POINTS} points`
+  );
+}
+
+/**
+ * Q-3e. And it is absent when nothing was caught. A CAPTURE 0 row on every
+ * level would read as a mechanic the player kept failing at, rather than one
+ * most levels never reach.
+ */
+export async function theBonusPanelOmitsTheCaptureRowWhenThereWereNone(): Promise<void> {
+  const { engine, frame } = clearedLevelWithCaptures(0);
+  const text = outroText(engine, frame);
+
+  assert.ok(text.includes('BONUS'), 'the tally itself should still be shown');
+  assert.ok(text.includes('AREA'), 'and its AREA row');
+  assert.ok(
+    !text.includes('CAPTURE'),
+    'a level that caught nothing must not show a CAPTURE row at all'
+  );
+}
+
+/** Q-3f. The count is what THIS level caught, not a running total. */
+export async function theCaptureCountResetsBetweenLevels(): Promise<void> {
+  const data = createData();
+  const engine = new QixEngine(data, () => {});
+  engine.initLevel(1);
+  data.gremlinsCaptured = 3;
+
+  engine.initLevel(2);
+  assert.strictEqual(
+    data.gremlinsCaptured, 0,
+    'starting a level should clear what the previous one caught'
+  );
 }
 
 /** FAQ-2.4.2: 1,000 points for each 1% above the threshold. */

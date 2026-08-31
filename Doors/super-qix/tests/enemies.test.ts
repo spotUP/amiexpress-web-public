@@ -22,6 +22,7 @@ import {
   FIELD_WIDTH, FIELD_HEIGHT, STARTING_LIVES, GAME_TICK_MS, CELL_WIDTH,
   SKULLS_AT_LEVEL_START, SKULLS_PER_RELEASE, SKULL_REVERSE_COOLDOWN_MS,
   SPARX_BASE_SPEED, MARKER_MOVE_DELAY, getLevelConfig,
+  MAX_GREMLINS, GREMLIN_ADDED_EVERY, LEVEL_CONFIGS, LEVELS_PER_LAP,
 } from '../game/constants';
 
 function createData(): SuperQixData {
@@ -39,7 +40,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
+    stopTimer: 0, gremlinsCaptured: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
 
@@ -54,6 +55,102 @@ function startedEngine(level = 1): { engine: QixEngine; data: SuperQixData } {
 function move(engine: QixEngine, dir: Direction): void {
   (engine as any).lastMoveTime = 0;
   engine.handleDirection(dir);
+}
+
+/**
+ * Q-2a. The first level is one Gremlin, as it has always been. This is the
+ * floor the escalation grows from, and it is asserted on the SPAWNED list
+ * rather than the config, so it covers the wiring as well as the formula.
+ */
+export async function levelOneStartsWithOneGremlin(): Promise<void> {
+  const { data } = startedEngine(1);
+  assert.strictEqual(data.qixList.length, 1, 'level 1 should start with a single Gremlin');
+}
+
+/**
+ * Q-2b. QUIX adds a Gremlin per screen; we add one every fourth level, so a
+ * 16-level lap arrives at the cap exactly as it ends.
+ */
+export async function aGremlinIsAddedEveryFourthLevel(): Promise<void> {
+  const expected: Array<[number, number]> = [
+    [1, 1], [4, 1],
+    [5, 2], [8, 2],
+    [9, 3], [12, 3],
+    [13, 4], [16, 4],
+  ];
+
+  for (const [level, count] of expected) {
+    const { data } = startedEngine(level);
+    assert.strictEqual(
+      data.qixList.length, count,
+      `level ${level} should start with ${count} Gremlin(s), got ${data.qixList.length}`
+    );
+  }
+
+  assert.strictEqual(GREMLIN_ADDED_EVERY, 4, 'the step is four levels');
+}
+
+/**
+ * Q-2c. The field is 38x18 of playable ground. QUIX's own ten Gremlins would
+ * leave nowhere to draw, so the count stops at MAX_GREMLINS - and it must not
+ * be handed back when a lap wraps, or level 17 would undo level 16.
+ */
+export async function theGremlinCountStopsAtTheCap(): Promise<void> {
+  for (const level of [17, 20, 33, 100]) {
+    const { data } = startedEngine(level);
+    assert.strictEqual(
+      data.qixList.length, MAX_GREMLINS,
+      `level ${level} should hold the cap of ${MAX_GREMLINS}, got ${data.qixList.length}`
+    );
+  }
+
+  // Specifically: the lap wrap must not reset it. Level 17 reuses level 1's
+  // row of the table, whose own qixCount is 1.
+  assert.strictEqual(
+    LEVEL_CONFIGS[0].qixCount, 1,
+    'this test is only meaningful while the table row level 17 reuses says 1'
+  );
+  assert.strictEqual(getLevelConfig(17).qixCount, MAX_GREMLINS);
+}
+
+/**
+ * Q-2e. A recorded DEPARTURE from the reference.
+ *
+ * QUIX ties its whole clock to the count - `udelay((10 - quixnum) * 30)` -
+ * so more Gremlins also means a faster game. We deliberately do not: our
+ * pacing was measured against a BBS terminal, where a human taps arrow keys
+ * about 660ms apart, and speeding the game up with the count would undo that
+ * tuning. Only the count and the fill's worth move.
+ *
+ * This asserts it by checking that getLevelConfig changes NOTHING but
+ * qixCount against the table it reads from.
+ */
+export async function theGremlinCountDoesNotChangeTheGamesSpeed(): Promise<void> {
+  const timed: Array<keyof typeof LEVEL_CONFIGS[0]> = [
+    'qixSpeed', 'sparxSpeed', 'sparxCount', 'timeMeterMs', 'fuseSpeed', 'targetPercent',
+  ];
+
+  for (let level = 1; level <= LEVELS_PER_LAP * 2; level++) {
+    const config = getLevelConfig(level);
+    const row = LEVEL_CONFIGS[(level - 1) % LEVELS_PER_LAP];
+    for (const key of timed) {
+      assert.strictEqual(
+        (config as any)[key], (row as any)[key],
+        `level ${level}: ${String(key)} must come from the table unchanged, ` +
+        'the Gremlin count is not allowed to move the clock'
+      );
+    }
+  }
+
+  // And the two levels at opposite ends of the escalation run at one speed.
+  assert.notStrictEqual(
+    getLevelConfig(1).qixCount, getLevelConfig(13).qixCount,
+    'the counts must differ, or this proves nothing'
+  );
+  assert.strictEqual(
+    getLevelConfig(1).qixSpeed, LEVEL_CONFIGS[0].qixSpeed,
+    'one Gremlin or four, the speed is the table\'s'
+  );
 }
 
 /** FAQ-1b / FAQ-2.2g: exactly two Skulls, wherever you are in the game. */

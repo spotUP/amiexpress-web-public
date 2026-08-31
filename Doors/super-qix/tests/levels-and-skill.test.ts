@@ -12,12 +12,15 @@
  */
 
 import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
 import { QixEngine } from '../game/qix-engine';
+import { PowerUpSystem } from '../game/powerups';
 import { SuperQixData } from '../game/types';
 import {
   FIELD_WIDTH, FIELD_HEIGHT, LEVELS_PER_LAP,
   LEVEL_CONFIGS, getLevelConfig, DEFAULT_HIGHSCORES,
-  SKILL_LEVELS, FINAL_LAP_MESSAGE,
+  SKILL_LEVELS, FINAL_LAP_MESSAGE, MAX_LIVES, EXTRA_LIFE_PERCENT,
 } from '../game/constants';
 
 function createData(skill: 'easy' | 'medium' | 'hard' = 'medium'): SuperQixData {
@@ -37,7 +40,7 @@ function createData(skill: 'easy' | 'medium' | 'hard' = 'medium'): SuperQixData 
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, invulnerableUntil: 0, lastMultiplierAt: 0, lastMultiplier: 1,
+    stopTimer: 0, gremlinsCaptured: 0, timeMeter: 0, invulnerableUntil: 0, lastMultiplierAt: 0, lastMultiplier: 1,
     warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
@@ -59,6 +62,11 @@ export async function theLevelWordsAreTheArcadeNames(): Promise<void> {
  * FAQ-3b: "There are no changes that I can detect between the initial L.1
  * and the L.1 you come back to after finishing L.16. Even the enemy speeds
  * are the same."
+ *
+ * The Gremlin COUNT is the one deliberate exception and is not checked here -
+ * see theGremlinCountStopsAtTheCap. It holds at the cap across the wrap
+ * instead of dropping back to one, so a second lap does not hand back the
+ * Gremlins the first one earned.
  */
 export async function theSecondLapIsIdenticalToTheFirst(): Promise<void> {
   for (let level = 1; level <= LEVELS_PER_LAP; level++) {
@@ -71,6 +79,127 @@ export async function theSecondLapIsIdenticalToTheFirst(): Promise<void> {
     assert.strictEqual(second.timeMeterMs, first.timeMeterMs, `timeMeter at L${level}`);
     assert.strictEqual(second.word, first.word, `word at L${level}`);
   }
+}
+
+/**
+ * Q-4a. Lives stop at the ceiling however they are earned.
+ *
+ * All three routes are exercised - the skill level's score thresholds, the
+ * 98% claim and the 1-UP power-up - because a ceiling honoured by two of the
+ * three is not a ceiling, and each of them used to be its own bare `lives++`.
+ */
+export async function livesStopAtTheCeilingHoweverTheyAreEarned(): Promise<void> {
+  // Route 1: the skill level's score thresholds.
+  {
+    const data = createData('easy');
+    const engine = new QixEngine(data, () => {});
+    engine.initLevel(1);
+    data.lives = MAX_LIVES;
+    data.score = 1_000_000;   // past every threshold easy mode lists
+    (engine as any).awardBonusLives();
+    assert.strictEqual(
+      data.lives, MAX_LIVES,
+      `the score thresholds pushed lives to ${data.lives}, past the ceiling`
+    );
+    assert.ok(
+      data.bonusLivesAwarded > 0,
+      'the thresholds must actually have been reached, or this proves nothing'
+    );
+  }
+
+  // Route 2: claiming 98% of the board.
+  {
+    const data = createData();
+    const engine = new QixEngine(data, () => {});
+    engine.initLevel(1);
+    data.state = 'playing';
+    data.sparxList = [];
+    data.qixList = [];
+    data.lives = MAX_LIVES;
+    data.claimedPercent = EXTRA_LIFE_PERCENT;
+    engine.update();
+    assert.strictEqual(
+      data.lives, MAX_LIVES,
+      `a 98% claim pushed lives to ${data.lives}, past the ceiling`
+    );
+  }
+
+  // Route 3: the 1-UP power-up.
+  {
+    const data = createData();
+    const engine = new QixEngine(data, () => {});
+    engine.initLevel(1);
+    const powerUps: any = (engine as any).powerUpSystem as PowerUpSystem;
+    data.lives = MAX_LIVES;
+    data.powerUps = [{
+      id: 1, type: 'oneUp', x: data.marker.x, y: data.marker.y,
+      letter: '', collected: false, spawnedAt: Date.now(), vx: 0, vy: 0,
+    } as any];
+    powerUps.checkCollection(data.marker);
+    assert.strictEqual(
+      data.powerUps[0].collected, true,
+      'the 1-UP must actually have been picked up, or this proves nothing'
+    );
+    assert.strictEqual(
+      data.lives, MAX_LIVES,
+      `a 1-UP pushed lives to ${data.lives}, past the ceiling`
+    );
+  }
+
+  // And below the ceiling a life is still a life.
+  {
+    const data = createData();
+    const engine = new QixEngine(data, () => {});
+    engine.initLevel(1);
+    const powerUps: any = (engine as any).powerUpSystem as PowerUpSystem;
+    data.lives = MAX_LIVES - 1;
+    data.powerUps = [{
+      id: 1, type: 'oneUp', x: data.marker.x, y: data.marker.y,
+      letter: '', collected: false, spawnedAt: Date.now(), vx: 0, vy: 0,
+    } as any];
+    powerUps.checkCollection(data.marker);
+    assert.strictEqual(
+      data.lives, MAX_LIVES,
+      'a 1-UP below the ceiling must still pay - the cap is not a freeze'
+    );
+  }
+}
+
+/**
+ * Q-4b. One function owns the ceiling.
+ *
+ * Asserted against the source, because the defect this guards against is not
+ * a wrong number - it is a FOURTH award site being added later with a bare
+ * `lives++` that quietly ignores the cap. A behavioural test cannot see a
+ * route that does not exist yet; this can.
+ */
+export async function everyLifeAwardGoesThroughOneFunction(): Promise<void> {
+  const gameDir = path.join(__dirname, '..', 'game');
+  const offenders: string[] = [];
+
+  for (const file of fs.readdirSync(gameDir).filter(f => f.endsWith('.ts'))) {
+    const source = fs.readFileSync(path.join(gameDir, file), 'utf8');
+    source.split('\n').forEach((line, i) => {
+      if (/\blives\s*(\+\+|\+=)/.test(line)) {
+        // constants.ts owns the one legitimate increment: grantLife's own.
+        if (file === 'constants.ts') return;
+        offenders.push(`game/${file}:${i + 1}: ${line.trim()}`);
+      }
+    });
+  }
+
+  assert.deepStrictEqual(
+    offenders, [],
+    'these award lives without going through grantLife, so they ignore ' +
+    `MAX_LIVES:\n  ${offenders.join('\n  ')}`
+  );
+
+  // And grantLife is genuinely where the increment lives.
+  const constants = fs.readFileSync(path.join(gameDir, 'constants.ts'), 'utf8');
+  assert.ok(
+    /export function grantLife[\s\S]*?d\.lives\+\+/.test(constants),
+    'grantLife should be the one place a life is added'
+  );
 }
 
 /**

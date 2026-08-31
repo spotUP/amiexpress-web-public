@@ -5,19 +5,69 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { HighScore } from './game/types';
-import { DEFAULT_HIGHSCORES, MAX_HIGHSCORES } from './game/constants';
+import { HighScore, KeyMap } from './game/types';
+import {
+  DEFAULT_HIGHSCORES,
+  MAX_HIGHSCORES,
+  MAX_NAME_LENGTH,
+  DEFAULT_KEY_MAP,
+} from './game/constants';
 
-// Path to high scores file
-const HIGHSCORES_PATH = path.join(__dirname, 'highscores.json');
+/**
+ * The door's own directory, wherever it is running from.
+ *
+ * __dirname is Doors/super-qix when the door runs from TypeScript source
+ * (dev - door.handler.ts prefers the .ts entry outside production) and
+ * Doors/super-qix/dist when it runs compiled. Walking up to the directory
+ * holding package.json gives the door root in both cases, so dev and the
+ * live board use ONE file instead of drifting apart.
+ *
+ * This is what HIGHSCORES_PATH used to get wrong: it was
+ * path.join(__dirname, 'highscores.json'), which under the compiled door is
+ * inside dist/ - and every deploy rebuilds dist/, so the board was wiped
+ * each time. Arkanoid was fixed for exactly this; Super Qix never was.
+ *
+ * It must NOT be derived from process.cwd() either: the backend runs with
+ * cwd web/backend, which is outside the Doors volume entirely.
+ *
+ * startAt exists so a test can prove the walk actually climbs out of dist/.
+ * Under tsx, __dirname already IS the door root, so a test that only looked
+ * at the resolved path would pass just as happily on the broken version.
+ */
+export function getDoorRoot(startAt: string = __dirname): string {
+  let dir = startAt;
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return __dirname;
+}
+
+/**
+ * Where the high scores live.
+ *
+ * Exported so a regression test can assert it resolves inside the door's own
+ * directory rather than into the dist/ a deploy replaces.
+ */
+export function getHighscorePath(): string {
+  return path.join(getDoorRoot(), 'highscores.json');
+}
+
+/** Where per-player settings live, beside the high scores. */
+export function getSettingsPath(): string {
+  return path.join(getDoorRoot(), 'settings.json');
+}
 
 /**
  * Load high scores from disk
  */
 function loadHighscores(): HighScore[] {
   try {
-    if (fs.existsSync(HIGHSCORES_PATH)) {
-      const data = fs.readFileSync(HIGHSCORES_PATH, 'utf-8');
+    const filePath = getHighscorePath();
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
       return JSON.parse(data);
     }
   } catch (error) {
@@ -31,10 +81,44 @@ function loadHighscores(): HighScore[] {
  */
 function saveHighscores(scores: HighScore[]): void {
   try {
-    fs.writeFileSync(HIGHSCORES_PATH, JSON.stringify(scores, null, 2));
+    fs.writeFileSync(getHighscorePath(), JSON.stringify(scores, null, 2));
   } catch (error) {
     console.error('[Super Qix] Error saving highscores:', error);
   }
+}
+
+/** Every player's settings, keyed by BBS handle. */
+type SettingsFile = Record<string, { keyMap: KeyMap }>;
+
+function loadSettingsFile(): SettingsFile {
+  try {
+    const filePath = getSettingsPath();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as SettingsFile;
+    }
+  } catch (error) {
+    console.error('[Super Qix] Error loading settings:', error);
+  }
+  return {};
+}
+
+/**
+ * Only the four directions, and only strings.
+ *
+ * The file is on disk beside a game anyone can play; a malformed or
+ * hand-edited entry must not be able to put a non-key into the dispatch map.
+ */
+function sanitiseKeyMap(candidate: unknown): KeyMap {
+  const result: KeyMap = { ...DEFAULT_KEY_MAP };
+  if (!candidate || typeof candidate !== 'object') return result;
+
+  for (const direction of ['up', 'down', 'left', 'right'] as const) {
+    const value = (candidate as Record<string, unknown>)[direction];
+    if (typeof value === 'string' && value.length > 0 && value.length <= 16) {
+      result[direction] = value;
+    }
+  }
+  return result;
 }
 
 /**
@@ -59,8 +143,13 @@ export const rpcHandlers = {
   }): Promise<{ success: boolean; rank: number }> => {
     const { name, score, level, maxPercent } = params;
 
-    // Validate input
-    if (!name || name.length === 0 || name.length > 3) {
+    // Validate input.
+    //
+    // The cap used to be 3, and it REJECTED rather than truncated: a player
+    // whose BBS handle was longer than three characters could not be
+    // recorded at all. It is MAX_NAME_LENGTH now, and the entry is trimmed
+    // to it rather than refused.
+    if (!name || name.length === 0 || name.length > MAX_NAME_LENGTH) {
       return { success: false, rank: -1 };
     }
     if (score < 0 || level < 1) {
@@ -72,7 +161,7 @@ export const rpcHandlers = {
 
     // Create new entry
     const newEntry: HighScore = {
-      name: name.toUpperCase().substring(0, 3),
+      name: name.toUpperCase().substring(0, MAX_NAME_LENGTH),
       score,
       level,
       maxPercent: Math.min(100, Math.max(0, maxPercent)),
@@ -108,6 +197,41 @@ export const rpcHandlers = {
   resetHighscores: async (): Promise<{ success: boolean }> => {
     saveHighscores([...DEFAULT_HIGHSCORES]);
     return { success: true };
+  },
+
+  /**
+   * This player's saved key bindings, or the defaults if they have none.
+   *
+   * Keyed by BBS handle so two players on the same board keep their own,
+   * and stored outside dist/ so a deploy does not throw them away.
+   */
+  getSettings: async (params: { user: string }): Promise<{ keyMap: KeyMap }> => {
+    const user = (params?.user ?? '').trim().toUpperCase();
+    if (!user) return { keyMap: { ...DEFAULT_KEY_MAP } };
+
+    const all = loadSettingsFile();
+    return { keyMap: sanitiseKeyMap(all[user]?.keyMap) };
+  },
+
+  /**
+   * Remember this player's key bindings.
+   */
+  saveSettings: async (params: {
+    user: string;
+    keyMap: KeyMap;
+  }): Promise<{ success: boolean }> => {
+    const user = (params?.user ?? '').trim().toUpperCase();
+    if (!user) return { success: false };
+
+    try {
+      const all = loadSettingsFile();
+      all[user] = { keyMap: sanitiseKeyMap(params.keyMap) };
+      fs.writeFileSync(getSettingsPath(), JSON.stringify(all, null, 2));
+      return { success: true };
+    } catch (error) {
+      console.error('[Super Qix] Error saving settings:', error);
+      return { success: false };
+    }
   }
 };
 

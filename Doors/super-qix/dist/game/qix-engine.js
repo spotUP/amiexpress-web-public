@@ -2,7 +2,7 @@
  * Super Qix - Core Game Engine
  * Main game logic and state management
  */
-import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, LEVEL_CLEAR_WIPE_COLUMNS, BONUS_PANEL_FRAMES, INTRO_PANEL_FRAMES, LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, MARKER_CYCLE, MARKER_CYCLE_FRAMES, SKULL_CHEW_FRAMES, GAME_OVER_BLINK_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY, SKILL_LEVELS, LEVELS_PER_LAP, FINAL_LAP_MESSAGE, HURRY_SPEED_SCALE, MULTIPLIER_REJOIN_CELLS, MULTIPLIER_FIRST, MULTIPLIER_CHAINED, MULTIPLIER_CHAIN_MS, WARP_OPENING_MS, WARP_OPEN_MS, SKULL_STUN_MS, RESPAWN_INVULNERABLE_MS, INVULNERABLE_BLINK_FRAMES, } from './constants';
+import { FIELD_WIDTH, FIELD_HEIGHT, GAME_TICK_MS, EXTRA_LIFE_PERCENT, FILL_ANIMATION_FRAMES, LEVEL_CLEAR_WIPE_COLUMNS, BONUS_PANEL_FRAMES, INTRO_PANEL_FRAMES, LETTER_END_OF_LEVEL_POINTS, LETTER_WORD_COMPLETE_POINTS, MARKER_CYCLE, MARKER_CYCLE_FRAMES, SKULL_CHEW_FRAMES, GAME_OVER_BLINK_FRAMES, SKULLS_PER_RELEASE, POINTS_PER_BONUS_PERCENT, CAPTURE_POINTS, grantLife, CHARS, BG_COLORS, CELL_WIDTH, ART_PALETTE, getLevelConfig, FUSE_START_DELAY, SKILL_LEVELS, LEVELS_PER_LAP, FINAL_LAP_MESSAGE, HURRY_SPEED_SCALE, MULTIPLIER_REJOIN_CELLS, MULTIPLIER_FIRST, MULTIPLIER_CHAINED, MULTIPLIER_CHAIN_MS, WARP_OPENING_MS, WARP_OPEN_MS, SKULL_STUN_MS, RESPAWN_INVULNERABLE_MS, INVULNERABLE_BLINK_FRAMES, } from './constants';
 import { artForCell } from './background';
 import { DrawingSystem } from './drawing';
 import { EnemySystem } from './enemies';
@@ -72,6 +72,8 @@ export class QixEngine {
         d.levelStartTime = Date.now();
         d.stopTimer = 0;
         d.timeMeter = 0;
+        // What THIS level catches, not a running total across the game.
+        d.gremlinsCaptured = 0;
         // Initialize playfield
         d.fieldWidth = FIELD_WIDTH;
         d.fieldHeight = FIELD_HEIGHT;
@@ -181,7 +183,7 @@ export class QixEngine {
         if (d.marker.isDrawing && d.currentStix) {
             d.stopTimer += GAME_TICK_MS;
             if (d.stopTimer > FUSE_START_DELAY) {
-                this.enemySystem.updateFuse(d.currentStix.points);
+                this.lightFuse();
             }
         }
         // Check collisions
@@ -236,7 +238,7 @@ export class QixEngine {
         const thresholds = (SKILL_LEVELS[d.skill] ?? SKILL_LEVELS.medium).bonusLives;
         while (d.bonusLivesAwarded < thresholds.length &&
             d.score >= thresholds[d.bonusLivesAwarded]) {
-            d.lives++;
+            grantLife(d);
             d.bonusLivesAwarded++;
         }
     }
@@ -434,6 +436,15 @@ export class QixEngine {
                 { text: row(`AREA  ${outro.areaPercent}%`, outro.areaBonus), colour: 'lightblue' },
                 { text: row('WORD', outro.wordBonus), colour: 'lightblue' },
             ];
+            // Only when there is something to show. A CAPTURE 0 row every level
+            // would read as a mechanic the player had failed at, rather than one
+            // most levels never reach.
+            if (outro.capturedGremlins > 0) {
+                panel.push({
+                    text: row(`CAPTURE x${outro.capturedGremlins}`, outro.captureBonus),
+                    colour: 'lightblue',
+                });
+            }
             // FAQ 3.1: clearing the sixteenth level is the end of a lap, and
             // everyone in the picture - the girl in the convertible and every one
             // of the cats - says the same three lines before you start again.
@@ -497,13 +508,18 @@ export class QixEngine {
             ? LETTER_WORD_COMPLETE_POINTS
             : LETTER_END_OF_LEVEL_POINTS;
         const wordBonus = d.collectedLetters.length * perLetter;
-        d.score += areaBonus + wordBonus;
+        // Gremlins sealed into claimed ground over the whole level (Q-3c).
+        const capturedGremlins = d.gremlinsCaptured;
+        const captureBonus = capturedGremlins * CAPTURE_POINTS;
+        d.score += areaBonus + wordBonus + captureBonus;
         this.outro = {
             phase: 'reveal',
             sweepX: FIELD_WIDTH,
             timer: 0,
             areaBonus,
             wordBonus,
+            captureBonus,
+            capturedGremlins,
             areaPercent: Math.floor(d.claimedPercent),
         };
     }
@@ -712,8 +728,17 @@ export class QixEngine {
                 }
             }
             else if (nextCell === 'stix') {
-                // Can't cross own stix - die!
-                this.handleDeath();
+                // FAQ 2.1: "You are not allowed to cross your own line, which can
+                // result in painting yourself into a corner if you're not careful."
+                // Not allowed means REFUSED - and painting yourself into a corner is
+                // only worth warning about if it does not kill you outright. QUIX
+                // agrees: qmoves.c:226-230 refuses the move rather than ending a life.
+                //
+                // The corner is dangerous because the Fuse is coming. Trying to cross
+                // LIGHTS it (qmoves.c:214-219), so a player wedged against their own
+                // line is on the clock rather than merely stuck, and the refusal is
+                // not a safe haven.
+                this.lightFuse();
                 return;
             }
         }
@@ -734,6 +759,26 @@ export class QixEngine {
             }
             // Moving into unclaimed area without drawing: stay put
         }
+    }
+    /**
+     * Light the Fuse on the line being drawn, and advance it a step.
+     *
+     * QUIX lights the fuse from two places: the player standing still
+     * (qmoves.c:214-219) and a move it has just refused. Both routes share this
+     * one implementation so the fuse cannot behave differently depending on
+     * which of them started it.
+     *
+     * A route that lights it early has to carry the stop timer with it, or the
+     * next tick would find the timer below the delay and stop advancing the
+     * fuse it just lit.
+     */
+    lightFuse() {
+        const d = this.data;
+        if (!d.marker.isDrawing || !d.currentStix)
+            return;
+        if (d.stopTimer < FUSE_START_DELAY)
+            d.stopTimer = FUSE_START_DELAY;
+        this.enemySystem.updateFuse(d.currentStix.points);
     }
     /**
      * Detach from the edge and start drawing.
@@ -956,7 +1001,7 @@ export class QixEngine {
         // paid for the same percentage twice.
         // Extra life for 98%+
         if (d.claimedPercent >= EXTRA_LIFE_PERCENT) {
-            d.lives++;
+            grantLife(d);
         }
         this.startLevelOutro();
         d.state = 'levelTransition';

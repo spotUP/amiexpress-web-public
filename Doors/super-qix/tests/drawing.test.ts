@@ -30,7 +30,7 @@ function createData(): SuperQixData {
     activeEffects: [], borderPath: [], internalLines: [],
     highscores: [], menuSelection: 0, playerName: '', playerNameCursor: 0,
     lastUpdateTime: Date.now(), frameCount: 0, levelStartTime: Date.now(),
-    stopTimer: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
+    stopTimer: 0, gremlinsCaptured: 0, timeMeter: 0, warp: null, transitionTimer: 0, transitionMessage: '',
   };
 }
 
@@ -61,6 +61,51 @@ function drawSmallBox(engine: QixEngine): void {
   move(engine, 'up'); move(engine, 'up'); move(engine, 'up');
   move(engine, 'right'); move(engine, 'right'); move(engine, 'right');
   move(engine, 'down'); move(engine, 'down'); move(engine, 'down');
+}
+
+/**
+ * Q-2d. QUIX pays (area / 2) * quixnum (qarea.c:192): the same ground is
+ * worth more when more Gremlins were loose on it.
+ *
+ * Both Gremlins are frozen in the SAME corner, well away from the box being
+ * drawn, so the claim itself is identical in both runs - the region that gets
+ * filled, the percentage and the multiplier are all unchanged, and the only
+ * thing that differs is how many Gremlins were on the board.
+ */
+export async function theSameClaimIsWorthMoreWithMoreGremlins(): Promise<void> {
+  function scoreWith(gremlins: number): { score: number; percent: number } {
+    const { engine, data } = startedEngine();
+    data.qixList = [];
+    for (let i = 0; i < gremlins; i++) {
+      data.qixList.push({
+        id: i + 1, x: 5 + i, y: 5, vx: 0, vy: 0, speed: 0,
+        segments: [{ x: 5 + i, y: 5 }], frozen: true, frozenTimer: 999999,
+      });
+    }
+    data.score = 0;
+    drawSmallBox(engine);
+    return { score: data.score, percent: data.claimedPercent };
+  }
+
+  const one = scoreWith(1);
+  const two = scoreWith(2);
+
+  assert.ok(one.score > 0, 'the one-Gremlin claim should have scored something');
+  assert.strictEqual(
+    two.percent, one.percent,
+    'the two runs must claim the same ground, or the comparison is meaningless'
+  );
+
+  // The award is floored once, at the end, so doubling the count does not
+  // double the awarded figure exactly: floor(2x) - 2*floor(x) is 0 or 1, and
+  // never anything else. Asserting the exact double would be asserting an
+  // arithmetic identity that the floor does not hold.
+  const gap = two.score - one.score * 2;
+  assert.ok(
+    gap === 0 || gap === 1,
+    `the same claim should pay double with two Gremlins loose, give or take ` +
+    `the one point the floor can swallow: ${one.score} with one, ${two.score} with two`
+  );
 }
 
 /**

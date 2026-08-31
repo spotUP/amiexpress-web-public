@@ -19,10 +19,37 @@ export declare const FAST_DRAW_DELAY = 50;
 export declare const STARTING_LIVES = 3;
 export declare const EXTRA_LIFE_PERCENT = 98;
 export declare const EXTRA_LIFE_SCORE = 50000;
+/**
+ * The most lives the marker can hold at once (QUIX's MAXMEN).
+ *
+ * The HUD has room for a fixed row of markers, and a player sitting on
+ * twenty lives is not playing the same game any more.
+ */
+export declare const MAX_LIVES = 8;
+/**
+ * Award one life, up to the ceiling.
+ *
+ * Lives arrive from three unrelated places - the 98% claim, the skill level's
+ * score thresholds and the 1-UP power-up - and a ceiling honoured by two of
+ * the three is not a ceiling. Every award goes through here.
+ */
+export declare function grantLife(d: {
+    lives: number;
+}): void;
 export declare const DEFAULT_TARGET_PERCENT = 75;
 export declare const BONUS_PERCENT_START = 76;
 export declare const POINTS_PER_BONUS_PERCENT = 1000;
 export declare const DRAW_BASE_POINTS = 10;
+/**
+ * What sealing a Gremlin into claimed ground is worth (QUIX's quix.c:299).
+ *
+ * A recorded DEPARTURE from the FAQ. FAQ 2.2, on trapping half of a divided
+ * Gremlin: "I don't think this gets you any bonus points, unfortunately."
+ * Agreed with the user against the FAQ, because the same section calls
+ * trapping the most spectacular play in the game, and the reference pays for
+ * it. Paid once per Gremlin at the end of the level, not per claim.
+ */
+export declare const CAPTURE_POINTS = 250;
 export declare const FILL_ANIMATION_FRAMES = 12;
 export declare const LEVEL_CLEAR_WIPE_COLUMNS = 1;
 export declare const BONUS_PANEL_FRAMES = 75;
@@ -124,15 +151,39 @@ export declare const BG_COLORS: {
 export declare const LEVEL_CONFIGS: LevelConfig[];
 /** How many levels make up one lap of the game (FAQ 3). */
 export declare const LEVELS_PER_LAP = 16;
+/** The most Gremlins that can share a board at once. */
+export declare const MAX_GREMLINS = 4;
+/** One more Gremlin every this many levels, until the cap. */
+export declare const GREMLIN_ADDED_EVERY = 4;
+/**
+ * How many Gremlins a level starts with.
+ *
+ * QUIX scales its whole game by this figure - `quixnum++` per screen, up to
+ * ten - and pays the fill by it (qarea.c:192). We take the axis but not the
+ * numbers: ten Gremlins on a 38x18 field leaves nowhere to draw, so the cap
+ * is four and one arrives every fourth level, which puts a 16-level lap at
+ * the cap exactly as it ends.
+ *
+ * Unlike everything else in a level's configuration, this does NOT reset when
+ * a lap does. QUIX never resets it either, and the count is the difficulty
+ * axis the whole scheme rests on - handing back three Gremlins at level 17
+ * would undo the lap the player just finished.
+ */
+export declare function gremlinsForLevel(level: number): number;
 /**
  * The configuration for a level.
  *
  * FAQ 3: "There are no changes that I can detect between the initial L.1 and
  * the L.1 you come back to after finishing L.16. Even the enemy speeds are
  * the same, which, after you've gotten used to the craziness of the upper
- * levels, almost makes for a relaxing vacation!" - so a lap is a lap, and
- * nothing here scales with how many of them you have played. The skill level
- * is what moves the enemy speeds (FAQ 4).
+ * levels, almost makes for a relaxing vacation!" - so a lap is a lap, and the
+ * enemy SPEEDS and timings do not scale with how many of them you have
+ * played. The skill level is what moves the speeds (FAQ 4).
+ *
+ * The Gremlin COUNT is the one exception, and a deliberate one: see
+ * gremlinsForLevel. The table's own qixCount column is the floor the formula
+ * grew out of and no longer decides anything by itself, so that a second lap
+ * does not hand back the Gremlins the first one earned.
  */
 export declare function getLevelConfig(level: number): LevelConfig;
 /**
@@ -223,6 +274,23 @@ export declare const DEFAULT_HIGHSCORES: {
     date: string;
 }[];
 export declare const MAX_HIGHSCORES = 10;
-export declare const MAX_NAME_LENGTH = 3;
+/**
+ * The longest name the high score table records.
+ *
+ * The arcade takes three initials. A BBS handle is not three characters, and
+ * the save RPC used to REJECT anything longer outright - so a player called
+ * SPOTUP could not get on the board at all, which is the same fault Frogger
+ * had. Ten, matching Arkanoid.
+ *
+ * This constant already existed at 3 and was ignored: index.ts and server.ts
+ * both hardcoded the figure, so raising it here alone would have changed
+ * nothing. Both now read it.
+ */
+export declare const MAX_NAME_LENGTH = 10;
 export declare const BACKGROUND_PATTERNS: Record<string, (x: number, y: number) => string>;
+/**
+ * The default movement bindings. Defined by the key layer, re-exported here
+ * because the door imports its constants from one place.
+ */
+export { DEFAULT_KEY_MAP, REDRAW_KEY } from './controls';
 //# sourceMappingURL=constants.d.ts.map

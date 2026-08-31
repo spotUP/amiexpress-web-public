@@ -12,7 +12,8 @@ import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers
 import { QixEngine } from "./game/qix-engine";
 import { loadBackgroundForLevel } from "./game/background";
 import { rpcHandlers } from "./server";
-import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, SKILL_LEVELS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, } from "./game/constants";
+import { normalizeKey, directionForKey, canBindKey, keyLabel, helpControlLines, } from "./game/controls";
+import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, SKILL_LEVELS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, } from "./game/constants";
 // Export RPC handlers for hybrid mode
 export { rpcHandlers };
 /**
@@ -64,7 +65,10 @@ function createInitialGameData() {
         lastUpdateTime: Date.now(),
         frameCount: 0,
         levelStartTime: Date.now(),
-        stopTimer: 0,
+        stopTimer: 0, gremlinsCaptured: 0,
+        keyMap: { ...DEFAULT_KEY_MAP },
+        remapDirection: 0,
+        remapMessage: "",
         timeMeter: 0,
         warp: null,
         transitionTimer: 0,
@@ -90,6 +94,14 @@ let engine = null;
 let isDrawKeyHeld = false;
 let doorContext; // Will be set on start
 let inputManager = null;
+/**
+ * The player's BBS handle, taken from the session.
+ *
+ * It names their saved key bindings and goes on the high score board, so a
+ * handle longer than three characters can finally be recorded - the arcade's
+ * three initials are not a BBS name.
+ */
+let bbsUsername = "";
 /**
  * Initialize neo-blessed screen
  */
@@ -151,8 +163,23 @@ function initScreen() {
         style: {
             border: { fg: "gray" },
         },
-        content: "{gray-fg}Arrows: Move and Draw | P: Pause | Q: Quit{/}",
+        content: footerText(),
     });
+}
+/**
+ * The footer's one-line reminder, from the same bindings the help screen
+ * uses - so a remap moves both, and neither can go stale on its own.
+ */
+function footerText() {
+    const move = [
+        keyLabel(gameData.keyMap.up),
+        keyLabel(gameData.keyMap.down),
+        keyLabel(gameData.keyMap.left),
+        keyLabel(gameData.keyMap.right),
+    ].every(label => label.startsWith("Arrow"))
+        ? "Arrows"
+        : "Your keys";
+    return `{gray-fg}${move}: Move and Draw | P: Pause | Ctrl-D: Redraw | Q: Quit{/}`;
 }
 /**
  * Format HUD display
@@ -311,11 +338,11 @@ function showHelp() {
         "Letters spell word for auto-complete!",
         "",
         "{white-fg}CONTROLS:{/}",
-        "Arrow Keys - Move marker",
-        "Z          - Slow Draw (2x points)",
-        "X          - Fast Draw",
-        "P          - Pause",
-        "Q          - Quit",
+        // Generated from the LIVE key map, so a remap shows up here and the
+        // list cannot drift. It had: this block still advertised "Z - Slow
+        // Draw (2x points)" and "X - Fast Draw" long after FAQ 2.5.3 was
+        // honoured and the door was given the one draw button it really has.
+        ...helpControlLines(gameData.keyMap),
         "",
         "{gray-fg}Press any key to return{/}",
     ];
@@ -356,6 +383,109 @@ async function applyLevelBackground(level) {
 }
 /** The menu row that carries the skill setting (FAQ 4). */
 const SKILL_ROW = "Skill";
+/** The menu row that opens the key remapper. */
+const KEYS_ROW = "Keys";
+/** The directions the remap screen asks for, in QUIX's order. */
+const REMAP_ORDER = ["up", "down", "left", "right"];
+/**
+ * Open the remapper and ask for the first direction.
+ */
+function showRemapScreen() {
+    gameData.state = "remapKeys";
+    gameData.remapDirection = 0;
+    gameData.remapMessage = "";
+    renderRemapScreen();
+}
+function renderRemapScreen() {
+    const asking = REMAP_ORDER[gameData.remapDirection];
+    const content = [
+        "{yellow-fg}MOVEMENT KEYS{/}",
+        "",
+        ...REMAP_ORDER.map((direction, index) => {
+            const bound = keyLabel(gameData.keyMap[direction]);
+            const label = `Move ${direction}`.padEnd(12);
+            if (index < gameData.remapDirection) {
+                return `{green-fg}${label}${bound}{/}`;
+            }
+            if (index === gameData.remapDirection) {
+                return `{white-fg}${label}{/}{yellow-fg}press a key{/}`;
+            }
+            return `{gray-fg}${label}${bound}{/}`;
+        }),
+        "",
+        gameData.remapMessage
+            ? `{red-fg}${gameData.remapMessage}{/}`
+            : `{cyan-fg}Press the key for "move ${asking}"{/}`,
+        "",
+        "{gray-fg}Esc to cancel - the arrow keys always work{/}",
+    ];
+    if (menuBox) {
+        menuBox.destroy();
+    }
+    menuBox = blessed.box({
+        fixed: true,
+        parent: gameArea,
+        top: "center",
+        left: "center",
+        width: 46,
+        height: content.length + 2,
+        tags: true,
+        border: { type: "line" },
+        style: {
+            border: { fg: "yellow" },
+            bg: "black",
+        },
+        content: content.join("\n"),
+    });
+    screen.render();
+}
+/**
+ * One key per direction, in order, then save and return to the menu.
+ *
+ * Escape abandons the whole thing, leaving the bindings exactly as they
+ * were - a half-finished remap that kept the first two would be worse than
+ * none at all.
+ */
+function handleRemapInput(key) {
+    if (key === "escape") {
+        showMenu();
+        return;
+    }
+    const direction = REMAP_ORDER[gameData.remapDirection];
+    const verdict = canBindKey(key, direction);
+    if (!verdict.ok) {
+        gameData.remapMessage = verdict.reason ?? "That key cannot be used";
+        renderRemapScreen();
+        return;
+    }
+    gameData.keyMap[direction] = key;
+    gameData.remapMessage = "";
+    gameData.remapDirection++;
+    if (gameData.remapDirection >= REMAP_ORDER.length) {
+        void persistSettings();
+        footerBox?.setContent(footerText());
+        showMenu();
+        return;
+    }
+    renderRemapScreen();
+}
+/**
+ * Remember the bindings for this BBS user.
+ *
+ * Best-effort: a board with no writable Doors volume should still let the
+ * player play with the keys they just chose for this session.
+ */
+async function persistSettings() {
+    try {
+        await rpcHandlers.saveSettings({
+            user: bbsUsername,
+            keyMap: gameData.keyMap,
+        });
+    }
+    catch (error) {
+        console.error("[Super Qix] Could not save settings:", error);
+    }
+}
 /** Step to the next skill level. */
 function cycleSkill() {
     const order = ["easy", "medium", "hard"];
@@ -397,7 +527,10 @@ async function startGame() {
             // throttle, so this sets responsiveness, not speed.
             if (inputManager?.isKeyStateActive()) {
                 for (const dir of ["up", "down", "left", "right"]) {
-                    if (inputManager.isHeld(dir))
+                    // The bound key, not the direction's name: after a remap the
+                    // client reports the key the player actually holds down, and
+                    // asking for "up" would find nothing held.
+                    if (inputManager.isHeld(gameData.keyMap[dir]))
                         engine?.handleDirection(dir);
                 }
             }
@@ -455,6 +588,9 @@ function handleInput(key) {
         case "enterName":
             handleNameEntryInput(inputKey);
             break;
+        case "remapKeys":
+            handleRemapInput(inputKey);
+            break;
         case "levelTransition":
             // The level is being handed over. Enter cuts the sequence short -
             // the reveal, the tally and the announcement run for several seconds
@@ -471,30 +607,6 @@ function handleInput(key) {
             // An unknown state should not throw the player out of their game.
             break;
     }
-}
-/**
- * Normalize key input
- */
-function normalizeKey(key) {
-    if (key === "\x1b[A" || key === "w" || key === "W")
-        return "up";
-    if (key === "\x1b[B" || key === "s" || key === "S")
-        return "down";
-    if (key === "\x1b[C" || key === "d" || key === "D")
-        return "right";
-    if (key === "\x1b[D" || key === "a" || key === "A")
-        return "left";
-    if (key === " ")
-        return "space";
-    if (key === "\r" || key === "\n")
-        return "enter";
-    if (key === "\x1b" || key === "\x1b\x1b")
-        return "escape";
-    if (key === "\x7f" || key === "\b")
-        return "backspace";
-    if (key === "\t")
-        return "tab";
-    return key.toLowerCase();
 }
 /**
  * Handle menu input
@@ -522,6 +634,9 @@ function handleMenuInput(key) {
                 case "High Scores":
                     showHighscores();
                     break;
+                case KEYS_ROW:
+                    showRemapScreen();
+                    break;
                 case "Help":
                     showHelp();
                     break;
@@ -542,24 +657,36 @@ function handleMenuInput(key) {
  * Handle game input
  */
 function handleGameInput(key) {
+    // The arrow keys and WASD answer for themselves; a remapped key is
+    // consulted on top of them, so remapping never takes the arrows away.
+    const direction = directionForKey(key, gameData.keyMap);
+    if (direction) {
+        // When real key-down/key-up edges are available the game loop drives
+        // movement from the held keys instead (see the gameLoop below), which
+        // is what removes the client's ~400ms auto-repeat gap. Acting on the
+        // character here as well would move the marker twice per press.
+        //
+        // A REMAPPED key is acted on here regardless: the loop can only see it
+        // if the client reports that key by name, and a binding that silently
+        // did nothing on some clients would be worse than no binding at all.
+        // handleDirection throttles itself, so the overlap costs nothing.
+        const isDefaultBinding = key === direction;
+        if (!isDefaultBinding || !inputManager?.isKeyStateActive()) {
+            engine?.handleDirection(direction);
+        }
+        return;
+    }
     switch (key) {
-        case "up":
-        case "down":
-        case "left":
-        case "right":
-            // When real key-down/key-up edges are available the game loop drives
-            // movement from the held keys instead (see the gameLoop below), which
-            // is what removes the client's ~400ms auto-repeat gap. Acting on the
-            // character here as well would move the marker twice per press.
-            if (inputManager?.isKeyStateActive())
-                break;
-            engine?.handleDirection(key);
-            break;
         // Super Qix has ONE draw button - no slow/fast choice (FAQ 2.5.3).
         case "space":
         case "z":
         case "x":
             engine?.handleDraw();
+            break;
+        // A BBS line that drops a few bytes leaves the board looking wrong and
+        // the player with no way to ask for it again. QUIX has the same key.
+        case "ctrl-d":
+            redraw();
             break;
         case "p":
             gameData.state = "paused";
@@ -575,6 +702,16 @@ function handleGameInput(key) {
             showMenu();
             break;
     }
+}
+/**
+ * Repaint everything (Ctrl-D).
+ *
+ * The engine owns the board and blessed owns the frame around it, so both
+ * have to be asked - repainting only one leaves half a screen.
+ */
+function redraw() {
+    engine?.render();
+    screen?.render();
 }
 /**
  * Show pause screen
@@ -614,7 +751,9 @@ function handleGameOverInput(key) {
         const lowestScore = gameData.highscores[gameData.highscores.length - 1]?.score || 0;
         if (gameData.score > lowestScore || gameData.highscores.length < 10) {
             gameData.state = "enterName";
-            gameData.playerName = "";
+            // Pre-filled with the BBS handle rather than blanked: the board knows
+            // who this is, and typing three initials is a coin-op ritual.
+            gameData.playerName = bbsUsername.toUpperCase().substring(0, MAX_NAME_LENGTH);
             gameData.playerNameCursor = 0;
             showNameEntry();
         }
@@ -636,9 +775,9 @@ function showNameEntry() {
         `{white-fg}Score: {yellow-fg}${gameData.score}{/}`,
         `{white-fg}Level: {cyan-fg}${gameData.level}{/}`,
         "",
-        "{cyan-fg}Enter your initials:{/}",
+        "{cyan-fg}Name for the high score table:{/}",
         "",
-        `{white-fg}[ ${gameData.playerName.padEnd(3, "_")} ]{/}`,
+        `{white-fg}[ ${gameData.playerName.padEnd(MAX_NAME_LENGTH, "_")} ]{/}`,
         "",
         "{gray-fg}Press ENTER when done{/}",
     ];
@@ -694,7 +833,7 @@ async function handleNameEntryInput(key) {
     else if (typeof key === "string" &&
         key.length === 1 &&
         /[A-Za-z0-9]/.test(key)) {
-        if (gameData.playerName.length < 3) {
+        if (gameData.playerName.length < MAX_NAME_LENGTH) {
             gameData.playerName += key.toUpperCase();
             showNameEntry();
         }
@@ -728,6 +867,17 @@ function cleanup() {
 door.onStart(async (ctx) => {
     doorContext = ctx;
     gameData = createInitialGameData();
+    // Frogger's pattern: the board already knows who is playing, so nobody
+    // should have to type their own name in.
+    bbsUsername = ctx?.session?.user?.username || "";
+    gameData.playerName = bbsUsername.toUpperCase().substring(0, MAX_NAME_LENGTH);
+    try {
+        const settings = await rpcHandlers.getSettings({ user: bbsUsername });
+        gameData.keyMap = settings.keyMap;
+    }
+    catch {
+        // Keep the defaults - the arrow keys work regardless.
+    }
     // Prevent event loop from emptying
     keepAlive = setInterval(() => { }, 60000);
     try {
