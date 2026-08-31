@@ -9,11 +9,14 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
+const path_1 = require("path");
 const pengo_game_1 = require("./game/pengo-game");
 const initial_data_1 = require("./game/initial-data");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
 const constants_1 = require("./game/constants");
+const spriteSheet = (0, cell_art_1.loadSpriteSheet)((0, path_1.join)(__dirname, "sprites"));
 const door = new bbs_door_sdk_1.CoreDoor({
     name: "Pengo",
     version: "1.0.0",
@@ -211,7 +214,7 @@ function startGame() {
         // one place that sees them all.
         if (sfx && game)
             sfx.flush(game.cues);
-    });
+    }, spriteSheet);
     game.initLevel();
     if (gameLoop)
         clearInterval(gameLoop);

@@ -14,10 +14,13 @@
 import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { loadSpriteSheet } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { createInitialGameData } from '../game/initial-data';
 import { PengoGame } from '../game/pengo-game';
 import { PengoData } from '../game/types';
 import { GRID_WIDTH, GRID_HEIGHT } from '../game/constants';
+
+const sheet = loadSpriteSheet(join(__dirname, '..', 'sprites'));
 
 /**
  * A board the test controls completely.
@@ -28,7 +31,7 @@ import { GRID_WIDTH, GRID_HEIGHT } from '../game/constants';
  */
 function emptyBoard(): { game: PengoGame; data: PengoData } {
   const data = createInitialGameData();
-  const game = new PengoGame(data, () => { /* no display in tests */ });
+  const game = new PengoGame(data, () => { /* no display in tests */ }, sheet);
   game.initLevel();
 
   for (let y = 0; y < GRID_HEIGHT; y++) {

@@ -5,11 +5,12 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PengoGame = void 0;
-const sprites_1 = require("./sprites");
 const constants_1 = require("./constants");
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
+const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
+const render_1 = require("./render");
 class PengoGame {
-    constructor(data, onRender) {
+    constructor(data, onRender, sheet) {
         /**
          * What just happened, for whoever is listening.
          *
@@ -20,6 +21,7 @@ class PengoGame {
         this.cues = new arcade_1.SfxCues();
         this.data = data;
         this.renderCallback = onRender;
+        this.sheet = sheet;
     }
     initLevel() {
         const config = (0, constants_1.getLevelConfig)(this.data.level);
@@ -424,40 +426,8 @@ class PengoGame {
         }
     }
     render() {
-        const lines = [];
-        for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
-            let line = '';
-            for (let x = 0; x < constants_1.GRID_WIDTH; x++) {
-                const ground = (0, sprites_1.terrainSprite)(this.data.grid[y][x]);
-                // Pengo
-                if (this.data.pengo.x === x && this.data.pengo.y === y && !this.data.pengo.isDead) {
-                    line += (0, sprites_1.paint)((0, sprites_1.pengoSprite)(ground.bg));
-                    continue;
-                }
-                // Sno-Bee
-                const enemy = this.data.enemies.find(e => e.x === x && e.y === y && e.state !== 'dead');
-                if (enemy) {
-                    line += (0, sprites_1.paint)((0, sprites_1.enemySprite)(enemy.state === 'stunned', ground.bg));
-                    continue;
-                }
-                // Egg
-                const egg = this.data.eggs.find(e => e.x === x && e.y === y);
-                if (egg) {
-                    line += (0, sprites_1.paint)((0, sprites_1.eggSprite)(ground.bg));
-                    continue;
-                }
-                line += (0, sprites_1.paint)(ground);
-            }
-            // No space-padding: every cell is already CELL_WIDTH characters, so
-            // the row is the width it claims to be. The old render pushed a space
-            // between every character to fake a wider board, which also pushed one
-            // into the middle of anything two characters long.
-            lines.push(line);
-        }
-        lines.push('');
-        const timeColor = this.data.timeRemaining <= 30 ? 'red' : 'yellow';
-        lines.push(`{${timeColor}-fg}TIME: ${this.data.timeRemaining}{/}  {white-fg}ENEMIES: ${this.data.enemies.filter(e => e.state !== 'dead').length}{/}`);
-        this.renderCallback(lines.join('\n'));
+        const board = (0, render_1.buildBoard)(this.data, this.sheet, this.data.frameCount);
+        this.renderCallback((0, cell_art_1.bufferToTags)(board).join('\n'));
     }
 }
 exports.PengoGame = PengoGame;
