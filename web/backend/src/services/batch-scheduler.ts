@@ -832,6 +832,15 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
       ...envOverrides,
       TS_NODE_TRANSPILE_ONLY: 'true',
     };
+    if (useTsRunner) {
+      // cwd below is deliberately the door's own directory (doors expect to
+      // find/write their data files there), but tsx resolves its tsconfig
+      // from cwd - so it never found web/backend/tsconfig.json's
+      // experimentalDecorators:true, and any door pulling in a decorated
+      // class (ChatHandler's @injectable/@inject) crashed on transform.
+      // Point tsx at the right tsconfig directly, independent of cwd.
+      spawnEnv.TSX_TSCONFIG_PATH = path.join(appRootPath, 'web', 'backend', 'tsconfig.json');
+    }
     if (batchOverclock !== undefined && spawnEnv.DOOR_OVERCLOCK === undefined) {
       // DoorLifecycleManager checks DOOR_OVERCLOCK first and falls back to
       // config.overclockFactor — passing as env keeps the existing
