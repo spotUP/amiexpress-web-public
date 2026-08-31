@@ -2,7 +2,6 @@ BBSCMD=CARDLOBBY
 TYPE=TS
 LOCATION=Doors/card-lobby
 DESCRIPTION=Card game lobby (Hold'em tables, leaderboards, achievements)
-ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Card

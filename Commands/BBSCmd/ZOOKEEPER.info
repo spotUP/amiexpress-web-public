@@ -2,7 +2,6 @@ BBSCMD=ZOOKEEPER
 TYPE=TS
 LOCATION=Doors/zoo-keeper
 DESCRIPTION=Classic Zoo Keeper arcade game - keep animals in their cages
-ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
