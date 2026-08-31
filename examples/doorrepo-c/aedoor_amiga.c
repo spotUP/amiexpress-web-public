@@ -40,6 +40,7 @@
 #include <ctype.h>
 
 #include "aedoor.h"
+#include "flow.h"
 
 /* struct Process is only ever held here as an opaque pointer (JHMessage's
  * "task" field, BB_GETTASK result) -- never dereferenced -- so a forward
@@ -319,6 +320,22 @@ void ae_put(const char *text, int newline)
         chunk = remaining;
         if (chunk > budget) {
             chunk = budget;
+        }
+        /* Do not cut an ANSI escape sequence in half.
+         *
+         * The BBS writes each JH_SM message on its own, so the two halves
+         * of a torn sequence do not reliably meet: the terminal sees a
+         * partial sequence, and the character that followed it lands
+         * wherever the cursor happened to be. Measured on DoorRepo's "Not
+         * installed" dialog - 1127 bytes, six messages, the fourth ending
+         * "ESC [ 1" and the fifth starting "3;72H|" - which is a dialog
+         * with pieces of its frame missing (screenshot, 2026-08-31).
+         *
+         * flow_safe_chunk() moves the cut back to just before the ESC, and
+         * the sequence goes whole in the next message. */
+        chunk = flow_safe_chunk(text + offset, remaining, chunk);
+        if (chunk == 0) {
+            break;                  /* nothing sendable: do not spin */
         }
 
         if (prefixed) {

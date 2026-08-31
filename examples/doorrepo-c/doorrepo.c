@@ -5049,6 +5049,34 @@ static int board_load(const dr_config *cfg);
 static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                             const ui_geometry *g);
 
+/* Repaint the whole browser: clear, chrome, list.
+ *
+ * Extracted from the browse loop because a SECOND caller needed exactly it.
+ * The command bar paints a suggestion panel across the bottom of the
+ * screen, and the dialogs some commands open are drawn ON TOP of the
+ * browser rather than on a cleared screen - so a /command that ended in a
+ * notice showed that notice framed by the leftovers of the bar that
+ * launched it (screenshot, 2026-08-31). The loop only repainted afterwards,
+ * which is one dialog too late.
+ *
+ * The detail pane is deliberately NOT drawn here: it costs a network fetch,
+ * and every caller either follows this with the pane's own stale-check or
+ * is about to cover the screen anyway.
+ */
+static void ui_repaint_browser(ansi_buf *b, char *frame, long framecap,
+                               const dr_config *cfg, const ui_geometry *g,
+                               const dr_catalog *cat, const ui_view *v,
+                               const char *filter_desc, const dr_entry *sel_entry,
+                               unsigned long top_index, unsigned long selected)
+{
+    ansi_begin(b, frame, framecap);
+    ansi_clear(b);
+    ansi_cursor(b, 0);
+    ui_draw_chrome(b, cfg, g, cat, v, filter_desc, sel_entry);
+    ui_draw_list(b, cfg, g, cat, v, top_index, selected, -1, -1);
+    ansi_flush(b);
+}
+
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
     ui_geometry g;
@@ -5168,15 +5196,16 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
          * selection silently and paints once, where they stopped.
          *
          */
-        ansi_begin(&buf, frame, (long) sizeof(frame));
         if (need_full_redraw) {
-            ansi_clear(&buf);
-            ansi_cursor(&buf, 0);
-            ui_draw_chrome(&buf, cfg, &g, cat, &view, filter_desc, sel_entry);
-            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
+            ui_repaint_browser(&buf, frame, (long) sizeof(frame), cfg, &g, cat,
+                               &view, filter_desc, sel_entry, top_index, selected);
             /* ansi_clear() already blanked the pane, so the next pane draw
              * must not try to blank rows from before the clear. */
             info_rows_used = 0;
+        }
+        ansi_begin(&buf, frame, (long) sizeof(frame));
+        if (need_full_redraw) {
+            /* already painted above */
         } else if (top_index != prev_top) {
             /* The window scrolled: every row is different. */
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
@@ -5361,6 +5390,18 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
 
             cmd = flow_parse_command(cmdline, arg, sizeof(arg));
             need_full_redraw = 1;
+
+            /* Put the browser back BEFORE running the command.
+             *
+             * The bar leaves its suggestion panel across the bottom of the
+             * screen, and several of these commands answer with a dialog
+             * drawn on top of the browser rather than on a cleared screen -
+             * so the notice came up framed by the leftovers of the bar that
+             * launched it. The loop's own repaint happens after the command
+             * returns, which is one dialog too late. */
+            ui_repaint_browser(&buf, frame, (long) sizeof(frame), cfg, &g, cat,
+                               &view, filter_desc, sel_entry, top_index, selected);
+            info_rows_used = 0;
 
             switch (cmd) {
             case FLOW_CMD_HELP:

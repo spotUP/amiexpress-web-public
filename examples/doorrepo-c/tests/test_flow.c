@@ -3226,6 +3226,114 @@ TEST(strip_treats_an_unknown_ad_count_as_worth_a_look)
     ASSERT_EQ(flow_strip_verdict(1, -1), FLOW_STRIP_OK, "unknown is not zero");
 }
 
+
+/* --- Never split an escape sequence across two XIM messages ---------- */
+
+TEST(a_chunk_never_ends_inside_an_escape_sequence)
+{
+    /* ae_put() hands the BBS at most AE_MAX_LINE bytes per JH_SM message
+     * and used to cut wherever the count ran out. Measured on the "Not
+     * installed" dialog: 1127 bytes, six chunks, and the fourth ended
+     * "ESC [ 1" with the next one starting "3;72H|" - one cursor-position
+     * sequence torn in half. The BBS writes each message separately, so the
+     * halves do not necessarily meet, and the character lands wherever the
+     * cursor happened to be. That is the missing dialog frame reported with
+     * a screenshot on 2026-08-31.
+     *
+     * The dialog only got big enough to hit this when its interior started
+     * being painted; the tear was always possible.
+     */
+    const char *text = "AB\033[13;72HX";
+    unsigned long n;
+
+    /* A budget that would cut after "AB\033[13" must stop before the ESC. */
+    n = flow_safe_chunk(text, (unsigned long) strlen(text), 7);
+    ASSERT_EQ((int) n, 2, "stops before the escape rather than inside it");
+
+    /* Enough room for the whole sequence: take it all. */
+    n = flow_safe_chunk(text, (unsigned long) strlen(text), 11);
+    ASSERT_EQ((int) n, 11, "a complete sequence is not broken up");
+}
+
+TEST(a_chunk_that_splits_nothing_is_left_alone)
+{
+    const char *plain = "just some text with no escapes at all";
+    unsigned long len = (unsigned long) strlen(plain);
+
+    ASSERT_EQ((int) flow_safe_chunk(plain, len, 10), 10, "plain text cuts anywhere");
+    ASSERT_EQ((int) flow_safe_chunk(plain, len, len + 50), (int) len,
+              "a budget larger than the text takes the text");
+}
+
+TEST(a_chunk_ending_exactly_on_a_finished_sequence_is_kept)
+{
+    /* The boundary case: the sequence ends on the last byte of the budget.
+     * Backing off here would shrink every chunk for nothing. */
+    const char *text = "\033[2JHELLO";
+
+    ASSERT_EQ((int) flow_safe_chunk(text, (unsigned long) strlen(text), 4), 4,
+              "a sequence that finishes inside the budget stays");
+}
+
+TEST(a_sequence_too_long_for_the_budget_still_makes_progress)
+{
+    /* Pathological: a single escape sequence longer than one message. Backing
+     * off to zero would loop forever sending nothing, so the byte count wins
+     * over the tear. Cannot happen with the sequences this door writes -
+     * the longest is nine bytes - but a chunker that can hang is not one to
+     * leave in a door that runs unattended. */
+    const char *text = "\033[111111111111111111111m";
+    unsigned long n = flow_safe_chunk(text, (unsigned long) strlen(text), 6);
+
+    ASSERT_EQ((int) n, 6, "progress beats purity when they conflict");
+}
+
+TEST(the_whole_notice_stream_survives_being_chunked)
+{
+    /* End to end on the shape that broke: build a long run of gotos, chunk
+     * it the way ae_put does, and assert no piece ends mid-sequence. */
+    char stream[1400];
+    unsigned long len = 0;
+    unsigned long off;
+    int row;
+    int splits = 0;
+
+    for (row = 1; row <= 60 && len + 16 < sizeof(stream); row++) {
+        sprintf(stream + len, "\033[%d;72H|", row);
+        len += (unsigned long) strlen(stream + len);
+    }
+
+    off = 0;
+    while (off < len) {
+        unsigned long take = flow_safe_chunk(stream + off, len - off, 198);
+        unsigned long i;
+        long esc = -1;
+
+        ASSERT_TRUE(take > 0, "the chunker always makes progress");
+        for (i = 0; i < take; i++) {
+            if (stream[off + i] == '\033') {
+                esc = (long) i;
+            }
+        }
+        if (esc >= 0) {
+            int terminated = 0;
+            for (i = (unsigned long) esc + 2; i < take; i++) {
+                unsigned char c = (unsigned char) stream[off + i];
+                if (c >= 0x40 && c <= 0x7e) {
+                    terminated = 1;
+                    break;
+                }
+            }
+            if (!terminated) {
+                splits++;
+            }
+        }
+        off += take;
+    }
+
+    ASSERT_EQ(splits, 0, "no chunk ends part-way through a sequence");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -3522,6 +3630,11 @@ int main(void)
     RUN_TEST(the_ghost_stays_empty_when_it_would_be_a_guess);
     RUN_TEST(strip_says_why_it_did_nothing);
     RUN_TEST(strip_treats_an_unknown_ad_count_as_worth_a_look);
+    RUN_TEST(a_chunk_never_ends_inside_an_escape_sequence);
+    RUN_TEST(a_chunk_that_splits_nothing_is_left_alone);
+    RUN_TEST(a_chunk_ending_exactly_on_a_finished_sequence_is_kept);
+    RUN_TEST(a_sequence_too_long_for_the_budget_still_makes_progress);
+    RUN_TEST(the_whole_notice_stream_survives_being_chunked);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

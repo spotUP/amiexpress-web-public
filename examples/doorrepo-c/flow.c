@@ -1708,6 +1708,69 @@ int flow_build_extract_command(char *out, unsigned long outsize,
     return (int) need;
 }
 
+/* How many bytes may be sent in one message without tearing an escape
+ * sequence in half.
+ *
+ * ae_put() gives the BBS at most AE_MAX_LINE bytes per JH_SM message and
+ * used to cut wherever the count ran out. Measured on the "Not installed"
+ * dialog: 1127 bytes, six messages, and the fourth ended "ESC [ 1" while
+ * the fifth began "3;72H|" - one cursor-position sequence torn in half.
+ * The BBS writes each message on its own, so the halves do not reliably
+ * meet, and the character lands wherever the cursor happened to be. That
+ * is a dialog with pieces of its frame missing (screenshot, 2026-08-31).
+ *
+ * The tear was always possible; the dialog only grew big enough to hit a
+ * boundary once its interior started being painted.
+ *
+ * Returns the byte count to send: `budget`, unless that would end inside a
+ * sequence, in which case the cut moves back to just before the ESC. A
+ * sequence longer than the whole budget cannot be helped - taking the full
+ * budget at least makes progress, where backing off to zero would leave a
+ * door spinning forever sending nothing.
+ *
+ * @param text   bytes about to be sent
+ * @param len    how many there are
+ * @param budget most that fit in one message
+ */
+unsigned long flow_safe_chunk(const char *text, unsigned long len,
+                              unsigned long budget)
+{
+    unsigned long take;
+    unsigned long i;
+    long esc = -1;
+
+    if (text == (const char *) 0 || len == 0 || budget == 0) {
+        return 0;
+    }
+    take = (len < budget) ? len : budget;
+
+    /* The last ESC in what is about to be sent. Anything earlier has been
+     * terminated already, or this one would not be the last. */
+    for (i = 0; i < take; i++) {
+        if (text[i] == '\033') {
+            esc = (long) i;
+        }
+    }
+    if (esc < 0) {
+        return take;
+    }
+
+    /* Terminated inside the chunk? A CSI sequence ends on its final byte,
+     * anything in 0x40..0x7e after the '['. */
+    for (i = (unsigned long) esc + 2; i < take; i++) {
+        unsigned char c = (unsigned char) text[i];
+        if (c >= 0x40 && c <= 0x7e) {
+            return take;
+        }
+    }
+
+    /* Unterminated: cut before it and let the next message carry it whole. */
+    if (esc == 0) {
+        return take;                 /* longer than a whole message: send on */
+    }
+    return (unsigned long) esc;
+}
+
 int flow_strip_verdict(int installed, long junk)
 {
     if (!installed) {

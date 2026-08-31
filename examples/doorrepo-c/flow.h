@@ -224,6 +224,11 @@ int flow_build_local_path(char *out, unsigned long outsize,
  *                  exactly as the footer treats it */
 int flow_strip_verdict(int installed, long junk);
 
+/* How many bytes ae_put() may put in one JH_SM message without tearing an
+ * ANSI escape sequence across two of them. See flow.c. */
+unsigned long flow_safe_chunk(const char *text, unsigned long len,
+                              unsigned long budget);
+
 int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
                          int listed_checked, int listed_present);
 
