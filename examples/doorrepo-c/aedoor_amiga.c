@@ -138,6 +138,10 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
  * whether or not rawArrow is set. */
 #define RAWARROW  501
 
+/* RETURNCOMMAND: hand a command back for the BBS to run once this door has
+ * exited (express.e:3492-3493; xim/types.ts RETURNCOMMAND = 136). */
+#define RETURNCOMMAND 136
+
 /* AmiExpress doors sometimes deliberately send "bbs:" device/volume paths
  * via JH_SM to trigger file display instead of a printed line: our emulator
  * matches this by trimming the message text and testing a case-insensitive
@@ -434,6 +438,19 @@ void ae_raw_arrows(int on)
     msg->String[0] = '\0';
     xim_call();
     raw_arrows_on = on ? 1 : 0;
+}
+
+
+void ae_return_command(const char *command)
+{
+    if (msg == NULL || bbs_port == NULL || command == NULL || command[0] == '\0') {
+        return;
+    }
+    msg->Command = RETURNCOMMAND;
+    msg->Data = 0;
+    strncpy(msg->String, command, sizeof(msg->String) - 1);
+    msg->String[sizeof(msg->String) - 1] = '\0';
+    xim_call();
 }
 
 /* Shared tail of ae_shutdown()/ae_fatal(): notify the BBS (JH_SHUTDOWN is

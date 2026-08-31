@@ -5225,6 +5225,10 @@ typedef struct {
     char name[BOARD_NAME_MAX];
     unsigned long size;
     int has_archive;
+    /* From the snapshot's ENABLED field. A door the sysop has disabled must
+     * not be handed back to the BBS: the refusal would arrive after this
+     * door has exited, where it reads as DoorRepo having crashed. */
+    int enabled;
 } board_door;
 
 static board_door g_board[BOARD_MAX_DOORS];
@@ -5255,6 +5259,10 @@ static void board_add_line(const char *line)
     strcpy(g_board[g_board_count].name, name);
     g_board[g_board_count].size = size;
     g_board[g_board_count].has_archive = (archive[0] != '\0');
+    /* A row whose flag cannot be read counts as enabled: every door the BBS
+     * put in this list is one it was willing to run. */
+    g_board[g_board_count].enabled = 1;
+    (void) flow_doors_row_enabled(line, &g_board[g_board_count].enabled);
     g_board_count++;
 }
 
@@ -5428,7 +5436,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
             }
 
             ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols,
-                        "F=Files  Q=Quit");
+                        "ENTER=Run  F=Files  Q=Quit");
             ansi_flush(&buf);
             need_redraw = 0;
         }
@@ -5482,6 +5490,45 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                 files_loop_ansi(cfg, g_board[selected].cmd, frame, framecap, g);
             }
             break;
+        case '\r': case '\n': {
+            /* Run the selected door.
+             *
+             * Two doors cannot share a node, so the BBS is handed the
+             * command and runs it once THIS door has exited - AmiExpress's
+             * RETURNCOMMAND, and the same queue-then-exit order DOORMAN
+             * uses for the same reason. Nothing happens until the exit, so
+             * the shutdown below is part of the action, not cleanup after
+             * it. */
+            const char *cmd = (g_board_count > 0 && selected < (unsigned long) g_board_count)
+                ? g_board[selected].cmd : (const char *) 0;
+            int enabled = (cmd != (const char *) 0) ? g_board[selected].enabled : 0;
+            int decision = flow_run_decision(cmd, enabled);
+            char msg[160];
+
+            if (decision == FLOW_RUN_OK) {
+                ansi_begin(&buf, frame, framecap);
+                ansi_cursor(&buf, 1);
+                ansi_reset(&buf);
+                ansi_clear(&buf);
+                ansi_flush(&buf);
+                sprintf(msg, "Starting %.20s...", cmd);
+                ae_put(msg, 1);
+                ae_return_command(cmd);
+                ae_shutdown();
+                return;                  /* not reached: ae_shutdown exits */
+            }
+
+            sprintf(msg, "%s",
+                    (decision == FLOW_RUN_DISABLED)
+                        ? "That door is disabled - enable it before running it."
+                        : (decision == FLOW_RUN_NOCOMMAND)
+                            ? "That row has no command to run."
+                            : "Nothing selected.");
+            ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+            ansi_text(&buf, g->rows - 1, 3, msg, g->cols - 6);
+            ansi_flush(&buf);
+            break;
+        }
         case 'q': case 'Q':
             ansi_begin(&buf, frame, framecap);
             ansi_cursor(&buf, 1);

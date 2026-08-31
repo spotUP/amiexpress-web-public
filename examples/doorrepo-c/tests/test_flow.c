@@ -2942,6 +2942,50 @@ TEST(log_filter_reads_the_verb_whatever_its_case_or_indent)
 }
 
 
+
+TEST(run_decision_mirrors_doormans_rule)
+{
+    ASSERT_EQ(flow_run_decision("FS", 1), FLOW_RUN_OK, "an enabled door with a command");
+    ASSERT_EQ(flow_run_decision("FS", 0), FLOW_RUN_DISABLED,
+              "a disabled door is out of service, not startable");
+    ASSERT_EQ(flow_run_decision("", 1), FLOW_RUN_NOCOMMAND, "a phantom row with no command");
+    ASSERT_EQ(flow_run_decision("   ", 1), FLOW_RUN_NOCOMMAND, "whitespace is not a command");
+    ASSERT_EQ(flow_run_decision((const char *) 0, 1), FLOW_RUN_NONE, "nothing selected");
+}
+
+TEST(run_decision_checks_disabled_before_the_command)
+{
+    /* A disabled phantom is disabled: the sysop's own decision is the more
+     * useful thing to say back. */
+    ASSERT_EQ(flow_run_decision("", 0), FLOW_RUN_DISABLED, "disabled wins over empty");
+}
+
+
+
+TEST(doors_row_enabled_reads_the_flag_the_snapshot_writes)
+{
+    int enabled = -1;
+
+    ASSERT_EQ(flow_doors_row_enabled("FS|XIM|31744|1|0|X.LHA|File Scan|Utils|Scans", &enabled), 0,
+              "an enabled row");
+    ASSERT_EQ(enabled, 1, "1 means enabled");
+
+    ASSERT_EQ(flow_doors_row_enabled("FS|XIM|31744|0|255|X.LHA|File Scan|Utils|Scans", &enabled), 0,
+              "a disabled row");
+    ASSERT_EQ(enabled, 0, "0 means disabled");
+}
+
+TEST(doors_row_enabled_refuses_a_row_without_the_field)
+{
+    int enabled = 42;
+
+    ASSERT_EQ(flow_doors_row_enabled("DOORS|17", &enabled), 1, "the header is not a row");
+    ASSERT_EQ(flow_doors_row_enabled("FS|XIM", &enabled), 1, "a truncated row");
+    ASSERT_EQ(flow_doors_row_enabled((const char *) 0, &enabled), 1, "a NULL line");
+    ASSERT_EQ(enabled, 42, "the caller's value is untouched on every refusal");
+}
+
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -3217,6 +3261,10 @@ int main(void)
     RUN_TEST(log_filter_keeps_the_actions_a_sysop_asks_about);
     RUN_TEST(log_filter_drops_the_door_own_chatter);
     RUN_TEST(log_filter_reads_the_verb_whatever_its_case_or_indent);
+    RUN_TEST(run_decision_mirrors_doormans_rule);
+    RUN_TEST(run_decision_checks_disabled_before_the_command);
+    RUN_TEST(doors_row_enabled_reads_the_flag_the_snapshot_writes);
+    RUN_TEST(doors_row_enabled_refuses_a_row_without_the_field);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

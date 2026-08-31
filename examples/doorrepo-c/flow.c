@@ -1214,6 +1214,24 @@ int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
  * the header line, a malformed row, or an empty command - the same
  * tolerance flow_files_parse_row() applies, since a hand-edited or
  * truncated body must skip a line rather than abandon the screen. */
+int flow_doors_row_enabled(const char *line, int *enabled_out)
+{
+    char field[8];
+
+    if (line == (const char *) 0 || enabled_out == (int *) 0) {
+        return 1;
+    }
+    if (files_field(line, 3, field, sizeof(field)) != 0) {
+        return 1;
+    }
+    if (field[0] == '\0') {
+        return 1;
+    }
+
+    *enabled_out = (field[0] == '0') ? 0 : 1;
+    return 0;
+}
+
 int flow_doors_parse_row(const char *line,
                          char *cmd_out, unsigned long cmd_outsize,
                          char *name_out, unsigned long name_outsize,
@@ -2312,4 +2330,28 @@ int flow_log_line_is_action(const char *line)
         }
     }
     return 0;
+}
+
+int flow_run_decision(const char *command, int enabled)
+{
+    if (command == (const char *) 0) {
+        return FLOW_RUN_NONE;
+    }
+
+    /* A disabled door is one the sysop has deliberately taken out of
+     * service. Handing it back would end with the BBS refusing it after
+     * this door has already exited, where the refusal reads as DoorRepo
+     * having crashed. */
+    if (!enabled) {
+        return FLOW_RUN_DISABLED;
+    }
+
+    while (*command == ' ' || *command == '\t') {
+        command++;
+    }
+    if (*command == '\0') {
+        return FLOW_RUN_NOCOMMAND;
+    }
+
+    return FLOW_RUN_OK;
 }

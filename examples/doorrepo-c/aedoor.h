@@ -139,6 +139,23 @@ void ae_raw_arrows(int on);
  * (research doc: "JH_SHUTDOWN = 2 last and MANDATORY"; AEDoor.c:147-148).
  * The native backend is a no-op that DOES return, since there is no BBS to
  * notify and no reason to end the caller's process early. */
+/* Asks the BBS to run `command` once this door exits.
+ *
+ * AmiExpress's RETURNCOMMAND (express.e:3492-3493, 4064-4065; XIM command
+ * 136): the door hands a command name back and the BBS runs it from its own
+ * prompt after the door is gone. That is the only order that works - two
+ * doors cannot share a node, which is why DOORMAN queues rather than
+ * launching inline (Doors/door-manager/run-door.ts says the same thing about
+ * the TypeScript side).
+ *
+ * The BBS refuses a command that would re-enter THIS door, so a door
+ * registered under the name it returns cannot loop (door.handler.ts's
+ * recursion guard).
+ *
+ * Call it, then exit. Nothing runs until the door does.
+ */
+void ae_return_command(const char *command);
+
 void ae_shutdown(void);
 
 /* TakeOffEh equivalent (AEDoor.c TakeOffEh(), lines 231-239): fatal-error

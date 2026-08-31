@@ -219,6 +219,17 @@ void ae_raw_arrows(int on)
     (void) on;
 }
 
+void ae_return_command(const char *command)
+{
+    /* No BBS to hand it to on this backend. Printed rather than silently
+     * dropped, so the native build shows what a real board would have been
+     * asked to run - the probe harness and a developer at a terminal both
+     * read this. */
+    if (command != NULL && command[0] != '\0') {
+        printf("[ae_return_command] %s\n", command);
+    }
+}
+
 int ae_check(void)
 {
     return 0;

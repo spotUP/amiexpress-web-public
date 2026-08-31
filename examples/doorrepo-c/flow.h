@@ -784,6 +784,20 @@ int flow_doors_parse_row(const char *line,
                          char *archive_out, unsigned long archive_outsize,
                          unsigned long *size_out);
 
+/* Reads just the ENABLED flag out of a "DOORS|" row - field 3, "1" or "0"
+ * (door-list-snapshot.ts renders command, type, size, enabled, access,
+ * archive, name, category, description in that order).
+ *
+ * Its own accessor rather than another out-param on flow_doors_parse_row:
+ * only the run decision needs this, and every existing caller of that
+ * function would have had to grow an argument it ignores.
+ *
+ * Returns 0 and writes 1 or 0 to *enabled_out; non-zero when the row has no
+ * such field, leaving *enabled_out untouched. A row whose flag cannot be
+ * read is the caller's decision to make - board_load treats it as enabled,
+ * since every door the BBS listed is one it was willing to run. */
+int flow_doors_row_enabled(const char *line, int *enabled_out);
+
 /* Chooses which extracted file is the door's executable, from the /files
  * body. Preference order:
  *   1. a non-junk file whose name equals the archive's base name or the
@@ -1086,5 +1100,25 @@ int flow_resolve_location(const char *location, const char *doors_dir,
  * door's own diagnostics. Matched on the leading verb, case-insensitively,
  * so a line's own wording can change without the screen losing it. */
 int flow_log_line_is_action(const char *line);
+
+/* ---- Running a door from the installed list -------------------------------
+ *
+ * The installed screen can hand a command back to the BBS to run once this
+ * door exits (ae_return_command, RETURNCOMMAND). Two doors cannot share a
+ * node, so queue-then-exit is the only order that works - DOORMAN's
+ * run-door.ts says the same about the TypeScript side, and decideRun() there
+ * is the rule this mirrors.
+ */
+
+#define FLOW_RUN_OK        0   /* hand it back and exit */
+#define FLOW_RUN_NONE      1   /* nothing selected */
+#define FLOW_RUN_DISABLED  2   /* the sysop took this door out of service */
+#define FLOW_RUN_NOCOMMAND 3   /* the row carries no command to run */
+
+/* Whether the selected row can be started. `enabled` is 0 for a door the
+ * sysop has disabled, `command` may be NULL or empty for a phantom row -
+ * every list is built from <CMD>.info, so that should not happen, but a
+ * blank command would hand the BBS an empty command line. */
+int flow_run_decision(const char *command, int enabled);
 
 #endif /* DOORREPO_FLOW_H */
