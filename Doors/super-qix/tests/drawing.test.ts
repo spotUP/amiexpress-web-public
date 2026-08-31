@@ -245,7 +245,13 @@ export async function aFinishedLineStaysDrawnOverTheClaim(): Promise<void> {
   const engine = new QixEngine(data, c => { last = c; });
   engine.initLevel(1);
   data.state = 'playing';
-  data.qixList = [];
+  // Keep ONE Gremlin, parked far away and frozen. Without one the claim
+  // has no "outside" to leave alone, takes the whole board and finishes
+  // the level - and the hand-over deliberately clears the board.
+  data.qixList = [{
+    id: 1, x: 5, y: 5, vx: 0, vy: 0, speed: 0,
+    segments: [], frozen: true, frozenTimer: 100000,
+  }];
   data.sparxList = [];
 
   const step = (dir: Direction) => {
@@ -264,6 +270,11 @@ export async function aFinishedLineStaysDrawnOverTheClaim(): Promise<void> {
 
   // Paint the claim all the way in, then look at the board.
   for (let i = 0; i < FILL_ANIMATION_FRAMES + FIELD_WIDTH; i++) engine.update();
+
+  // Still playing: the hand-over deliberately clears the board, so a test
+  // that accidentally finished the level would prove the opposite.
+  assert.strictEqual(data.state, 'playing');
+
   engine.render();
 
   assert.ok(

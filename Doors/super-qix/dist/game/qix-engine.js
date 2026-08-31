@@ -642,6 +642,11 @@ export class QixEngine {
                 // has to be settled before the claim is scored.
                 this.applyRejoinMultiplier({ x: nextX, y: nextY });
                 // Complete stix - claim area
+                // The line's own cells, kept before the claim clears them. A small
+                // claim encloses NOTHING - the ground it takes is the line itself -
+                // so result.filled comes back empty and a bonus released from "the
+                // area just filled" had nowhere to come from.
+                const linePoints = (d.currentStix?.points ?? []).map(p => ({ ...p }));
                 const result = this.drawingSystem.completeStix({ x: nextX, y: nextY });
                 if (result.success) {
                     d.marker.x = nextX;
@@ -667,7 +672,7 @@ export class QixEngine {
                     d.scoreMultiplier = 1;
                     // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
                     // bonus, even one too small to have scored a single point.
-                    this.powerUpSystem.trySpawnPowerUp();
+                    this.powerUpSystem.trySpawnPowerUp([...(result.filled ?? []), ...linePoints]);
                     // Update border path for Sparx, then re-anchor existing Sparx to
                     // it - the rebuilt array reorders points, so a stale pathIndex
                     // would otherwise teleport a Sparx onto the marker's landing cell.
@@ -991,6 +996,13 @@ export class QixEngine {
                 }
             }
         }
+        // While the level is handing over, the picture has the board to itself.
+        //
+        // The player's lines, the marker, the Gremlin, the Skulls, the fuse and
+        // any uncollected bonus are all held back until the sequence is done:
+        // the whole point of the reveal is to show the finished picture, and
+        // the lines were being drawn straight back over it.
+        const handingOver = this.outro !== null;
         // The lines the player has already closed off stay drawn over the
         // picture they revealed.
         //
@@ -999,21 +1011,22 @@ export class QixEngine {
         // border or to part of a previously-finished line". Nothing drew them,
         // so the moment a claim filled in, the shape the player had just drawn
         // vanished into the artwork and the board lost its geometry.
-        for (const line of d.internalLines) {
-            for (const point of line) {
-                if (point.y < 0 || point.y >= FIELD_HEIGHT)
-                    continue;
-                if (point.x < 0 || point.x >= FIELD_WIDTH)
-                    continue;
-                // Only where the claim actually took the ground: a line's ends sit
-                // on the frame, which is drawn as the Time Meter.
-                if (d.field[point.y][point.x] !== 'claimed')
-                    continue;
-                buffer[point.y][point.x] = { ch: ' ', bg: BG_COLORS.stixSafe };
+        if (!handingOver)
+            for (const line of d.internalLines) {
+                for (const point of line) {
+                    if (point.y < 0 || point.y >= FIELD_HEIGHT)
+                        continue;
+                    if (point.x < 0 || point.x >= FIELD_WIDTH)
+                        continue;
+                    // Only where the claim actually took the ground: a line's ends sit
+                    // on the frame, which is drawn as the Time Meter.
+                    if (d.field[point.y][point.x] !== 'claimed')
+                        continue;
+                    buffer[point.y][point.x] = { ch: ' ', bg: BG_COLORS.stixSafe };
+                }
             }
-        }
         // Draw current stix
-        if (d.currentStix) {
+        if (d.currentStix && !handingOver) {
             const bg = BG_COLORS.stix;
             for (const point of d.currentStix.points) {
                 if (point.y >= 0 && point.y < FIELD_HEIGHT && point.x >= 0 && point.x < FIELD_WIDTH) {
@@ -1022,39 +1035,41 @@ export class QixEngine {
             }
         }
         // Draw Qix
-        for (const qix of d.qixList) {
-            const char = d.frameCount % 2 === 0 ? CHARS.qix : CHARS.qixAlt;
-            const qx = Math.floor(qix.x);
-            const qy = Math.floor(qix.y);
-            if (qy >= 0 && qy < FIELD_HEIGHT && qx >= 0 && qx < FIELD_WIDTH) {
-                buffer[qy][qx] = { ch: char, fg: 'white', bg: BG_COLORS.qix };
-            }
-            // Draw segments
-            for (const seg of qix.segments) {
-                const sx = Math.floor(seg.x);
-                const sy = Math.floor(seg.y);
-                if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-                    buffer[sy][sx] = { ch: CHARS.qix, fg: 'white', bg: BG_COLORS.qix };
+        if (!handingOver)
+            for (const qix of d.qixList) {
+                const char = d.frameCount % 2 === 0 ? CHARS.qix : CHARS.qixAlt;
+                const qx = Math.floor(qix.x);
+                const qy = Math.floor(qix.y);
+                if (qy >= 0 && qy < FIELD_HEIGHT && qx >= 0 && qx < FIELD_WIDTH) {
+                    buffer[qy][qx] = { ch: char, fg: 'white', bg: BG_COLORS.qix };
+                }
+                // Draw segments
+                for (const seg of qix.segments) {
+                    const sx = Math.floor(seg.x);
+                    const sy = Math.floor(seg.y);
+                    if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
+                        buffer[sy][sx] = { ch: CHARS.qix, fg: 'white', bg: BG_COLORS.qix };
+                    }
                 }
             }
-        }
         // Draw Sparx
-        for (const sparx of d.sparxList) {
-            const sx = Math.floor(sparx.x);
-            const sy = Math.floor(sparx.y);
-            if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
-                // Every Skull looks the same: there are no Super Skulls.
-                // Skulls chew, alternating an open and a closed mouth.
-                const chewing = Math.floor(d.frameCount / SKULL_CHEW_FRAMES) % 2 === 0;
-                buffer[sy][sx] = {
-                    ch: chewing ? CHARS.sparx : CHARS.sparxChew,
-                    fg: 'lightyellow',
-                    bg: BG_COLORS.sparx
-                };
+        if (!handingOver)
+            for (const sparx of d.sparxList) {
+                const sx = Math.floor(sparx.x);
+                const sy = Math.floor(sparx.y);
+                if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
+                    // Every Skull looks the same: there are no Super Skulls.
+                    // Skulls chew, alternating an open and a closed mouth.
+                    const chewing = Math.floor(d.frameCount / SKULL_CHEW_FRAMES) % 2 === 0;
+                    buffer[sy][sx] = {
+                        ch: chewing ? CHARS.sparx : CHARS.sparxChew,
+                        fg: 'lightyellow',
+                        bg: BG_COLORS.sparx
+                    };
+                }
             }
-        }
         // Draw Fuse
-        if (d.fuse && d.fuse.active) {
+        if (d.fuse && d.fuse.active && !handingOver) {
             const fx = Math.floor(d.fuse.x);
             const fy = Math.floor(d.fuse.y);
             if (fy >= 0 && fy < FIELD_HEIGHT && fx >= 0 && fx < FIELD_WIDTH) {
@@ -1063,19 +1078,20 @@ export class QixEngine {
             }
         }
         // Draw power-ups
-        for (const powerUp of d.powerUps) {
-            if (!powerUp.collected) {
-                const px = Math.floor(powerUp.x);
-                const py = Math.floor(powerUp.y);
-                if (py >= 0 && py < FIELD_HEIGHT && px >= 0 && px < FIELD_WIDTH) {
-                    buffer[py][px] = { ch: powerUp.letter || CHARS.powerUp, fg: 'white', bg: BG_COLORS.powerUp };
+        if (!handingOver)
+            for (const powerUp of d.powerUps) {
+                if (!powerUp.collected) {
+                    const px = Math.floor(powerUp.x);
+                    const py = Math.floor(powerUp.y);
+                    if (py >= 0 && py < FIELD_HEIGHT && px >= 0 && px < FIELD_WIDTH) {
+                        buffer[py][px] = { ch: powerUp.letter || CHARS.powerUp, fg: 'white', bg: BG_COLORS.powerUp };
+                    }
                 }
             }
-        }
         // Draw marker
         const mx = d.marker.x;
         const my = d.marker.y;
-        if (my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
+        if (!handingOver && my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
             // The arcade marker is an animated sprite. No glyph: the cycling
             // block IS the sprite, and a character on top only muddies it
             // against the picture behind.

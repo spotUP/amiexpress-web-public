@@ -799,6 +799,12 @@ export class QixEngine {
         this.applyRejoinMultiplier({ x: nextX, y: nextY });
 
         // Complete stix - claim area
+        // The line's own cells, kept before the claim clears them. A small
+        // claim encloses NOTHING - the ground it takes is the line itself -
+        // so result.filled comes back empty and a bonus released from "the
+        // area just filled" had nowhere to come from.
+        const linePoints = (d.currentStix?.points ?? []).map(p => ({ ...p }));
+
         const result = this.drawingSystem.completeStix({ x: nextX, y: nextY });
         if (result.success) {
           d.marker.x = nextX;
@@ -828,7 +834,7 @@ export class QixEngine {
 
           // FAQ 2.4.1: a fill "no matter how small" gets its chance at a
           // bonus, even one too small to have scored a single point.
-          this.powerUpSystem.trySpawnPowerUp();
+          this.powerUpSystem.trySpawnPowerUp([...(result.filled ?? []), ...linePoints]);
 
           // Update border path for Sparx, then re-anchor existing Sparx to
           // it - the rebuilt array reorders points, so a stale pathIndex
@@ -1199,6 +1205,14 @@ export class QixEngine {
       }
     }
 
+    // While the level is handing over, the picture has the board to itself.
+    //
+    // The player's lines, the marker, the Gremlin, the Skulls, the fuse and
+    // any uncollected bonus are all held back until the sequence is done:
+    // the whole point of the reveal is to show the finished picture, and
+    // the lines were being drawn straight back over it.
+    const handingOver = this.outro !== null;
+
     // The lines the player has already closed off stay drawn over the
     // picture they revealed.
     //
@@ -1207,7 +1221,7 @@ export class QixEngine {
     // border or to part of a previously-finished line". Nothing drew them,
     // so the moment a claim filled in, the shape the player had just drawn
     // vanished into the artwork and the board lost its geometry.
-    for (const line of d.internalLines) {
+    if (!handingOver) for (const line of d.internalLines) {
       for (const point of line) {
         if (point.y < 0 || point.y >= FIELD_HEIGHT) continue;
         if (point.x < 0 || point.x >= FIELD_WIDTH) continue;
@@ -1220,7 +1234,7 @@ export class QixEngine {
     }
 
     // Draw current stix
-    if (d.currentStix) {
+    if (d.currentStix && !handingOver) {
       const bg = BG_COLORS.stix;
       for (const point of d.currentStix.points) {
         if (point.y >= 0 && point.y < FIELD_HEIGHT && point.x >= 0 && point.x < FIELD_WIDTH) {
@@ -1230,7 +1244,7 @@ export class QixEngine {
     }
 
     // Draw Qix
-    for (const qix of d.qixList) {
+    if (!handingOver) for (const qix of d.qixList) {
       const char = d.frameCount % 2 === 0 ? CHARS.qix : CHARS.qixAlt;
       const qx = Math.floor(qix.x);
       const qy = Math.floor(qix.y);
@@ -1248,7 +1262,7 @@ export class QixEngine {
     }
 
     // Draw Sparx
-    for (const sparx of d.sparxList) {
+    if (!handingOver) for (const sparx of d.sparxList) {
       const sx = Math.floor(sparx.x);
       const sy = Math.floor(sparx.y);
       if (sy >= 0 && sy < FIELD_HEIGHT && sx >= 0 && sx < FIELD_WIDTH) {
@@ -1264,7 +1278,7 @@ export class QixEngine {
     }
 
     // Draw Fuse
-    if (d.fuse && d.fuse.active) {
+    if (d.fuse && d.fuse.active && !handingOver) {
       const fx = Math.floor(d.fuse.x);
       const fy = Math.floor(d.fuse.y);
       if (fy >= 0 && fy < FIELD_HEIGHT && fx >= 0 && fx < FIELD_WIDTH) {
@@ -1274,7 +1288,7 @@ export class QixEngine {
     }
 
     // Draw power-ups
-    for (const powerUp of d.powerUps) {
+    if (!handingOver) for (const powerUp of d.powerUps) {
       if (!powerUp.collected) {
         const px = Math.floor(powerUp.x);
         const py = Math.floor(powerUp.y);
@@ -1287,7 +1301,7 @@ export class QixEngine {
     // Draw marker
     const mx = d.marker.x;
     const my = d.marker.y;
-    if (my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
+    if (!handingOver && my >= 0 && my < FIELD_HEIGHT && mx >= 0 && mx < FIELD_WIDTH) {
       // The arcade marker is an animated sprite. No glyph: the cycling
       // block IS the sprite, and a character on top only muddies it
       // against the picture behind.
