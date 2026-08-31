@@ -16,6 +16,37 @@ import { loadBBSConfig } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
 
+/**
+ * Is this connection implicit TLS?
+ *
+ * Port 465 is SMTPS: the server expects TLS from the first byte and never
+ * sends a plaintext greeting. Connecting without `secure` there does not
+ * fail - it HANGS, waiting for a banner that will not come, until
+ * nodemailer's greeting timeout. That is the "SMTP test just spins" report:
+ * gmail on 465 with the SSL box unticked.
+ *
+ * express.e:31814 reads SMTP_SSL as a flag, so the sysop's setting is
+ * honoured; 465 simply cannot be anything else.
+ */
+export function usesImplicitTls(port: number, sslFlag: boolean): boolean {
+  return sslFlag || port === 465;
+}
+
+/**
+ * How long to wait before calling it a failure.
+ *
+ * nodemailer's defaults are a 2-minute connection timeout and a 10-minute
+ * socket timeout. On a misconfigured port that is indistinguishable from a
+ * hang, and the admin's spinner has nothing to tell the sysop. Ten seconds is
+ * long enough for a real relay and short enough to be an answer.
+ */
+const SMTP_TIMEOUTS = {
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
+} as const;
+
+
 export interface MailOptions {
   smtpHost: string;
   smtpPort: number;
@@ -178,7 +209,8 @@ async function sendMail(
     const transportConfig: nodemailer.TransportOptions = {
       host: options.smtpHost,
       port: options.smtpPort,
-      secure: options.ssl,
+      secure: usesImplicitTls(options.smtpPort, options.ssl),
+      ...SMTP_TIMEOUTS,
       auth: options.username ? {
         user: options.username,
         pass: options.password
@@ -360,11 +392,20 @@ export async function testSmtpConnection(): Promise<{ success: boolean; error?: 
     if (!options.sysopEmail) {
       return { success: false, error: 'Sysop email not configured' };
     }
+    // Said before the connection is attempted, because the failure it causes
+    // is a hang rather than a refusal.
+    if (options.smtpPort === 587 && options.ssl) {
+      return {
+        success: false,
+        error: 'Port 587 uses STARTTLS, not implicit SSL. Untick SMTP SSL, or use port 465.',
+      };
+    }
 
     const transportConfig: nodemailer.TransportOptions = {
       host: options.smtpHost,
       port: options.smtpPort,
-      secure: options.ssl,
+      secure: usesImplicitTls(options.smtpPort, options.ssl),
+      ...SMTP_TIMEOUTS,
       auth: options.username ? {
         user: options.username,
         pass: options.password
