@@ -53,3 +53,45 @@ export async function theBrowserIsDeafWhileTheEditorIsOpen(): Promise<void> {
   assert.ok(/if \(this\.editScreen\) return;/.test(applyBody.slice(0, 400)),
     'apply() must ignore navigation while the edit screen is open');
 }
+
+/**
+ * Review finding: typing an animation name fired every op key bound to a
+ * letter in the name (naming "spin" saved to disk and inserted a blank
+ * frame). Every op binding must route through one guarded wrapper so the
+ * `naming !== null` check exists exactly once, not copy-pasted per key.
+ */
+export async function opBindingsRouteThroughTheNamingGuard(): Promise<void> {
+  assert.ok(/private opKey\(/.test(code), 'op key bindings must share one guarded wrapper');
+  const opKeyBody = code.slice(code.indexOf('private opKey('), code.indexOf('private opKey(') + 300);
+  assert.ok(/if \(this\.naming !== null\) return;/.test(opKeyBody),
+    'the wrapper must no-op every bound op while a name is being typed');
+  for (const key of ["'g'", "'f'", "'S-f'", "'b'", "'S-b'", "','", "'.'", "'n'", "'c'", "'x'",
+                     "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'"]) {
+    assert.ok(code.includes(`this.opKey([${key}]`),
+      `[${key}] must be bound through opKey, not the raw naming-unaware key()`);
+  }
+}
+
+/**
+ * Review finding: space/delete called setPixel through apply() directly,
+ * so an exception (frame no longer pixel-editable) threw uncaught out of
+ * the key handler instead of landing in the status flash like every other
+ * op's refusal.
+ */
+export async function spaceAndDeleteRouteSetPixelThroughTryOp(): Promise<void> {
+  assert.ok(/this\.tryOp\(\(\) => this\.mode === 'pixel'\s*\n\s*\? setPixel/.test(code),
+    'space and delete must route setPixel/setCell through tryOp, not apply() directly');
+  const count = (code.match(/this\.tryOp\(\(\) => this\.mode === 'pixel'/g) || []).length;
+  assert.strictEqual(count, 2, 'both space and delete must use the guarded form');
+}
+
+/**
+ * Review finding: the exclusion string that keeps bound-key letters out of
+ * typed cell art omitted 'X' - S-x is bound (deleteAnimation) but its
+ * Shift+X keypress ('X') fell through to setCell.
+ */
+export async function theTypingExclusionListIncludesShiftedDeleteAnimation(): Promise<void> {
+  const m = code.match(/if \('([^']+)'\.includes\(ch\)\)/);
+  assert.ok(m, 'the bound-key exclusion string must exist');
+  assert.ok(m![1].includes('X'), `exclusion list is missing 'X' (S-x): ${m![1]}`);
+}

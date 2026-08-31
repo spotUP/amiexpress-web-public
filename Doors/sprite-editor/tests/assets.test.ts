@@ -106,6 +106,12 @@ export async function writesAreGuardedLikeReads(): Promise<void> {
 
 export async function artListingsAndWritesAreGuarded(): Promise<void> {
   assert.throws(() => writeArt('..', 'x.ans', Buffer.from('x')), /outside/);
-  const arts = listArt('pengo'); // no art/ directory yet - empty, not a throw
-  assert.deepStrictEqual(arts, []);
+  // Shape, not emptiness: this asserts what listArt PROMISES (an array of
+  // .ans filenames), not that the directory is empty. pengo/art/ starts
+  // absent, but the moment the studio's own feature populates it - saving
+  // an .ans through art mode - an emptiness assertion here goes red on the
+  // studio's own first real use, which is not a regression.
+  const arts = listArt('pengo');
+  assert.ok(Array.isArray(arts), 'listArt must return an array even with no art/ directory');
+  assert.ok(arts.every(f => f.endsWith('.ans')), `every entry must be a .ans file, got: ${arts.join(', ')}`);
 }

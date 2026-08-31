@@ -92,12 +92,30 @@ class EditScreen {
         this.screen.key(keys, handler);
         this.keyHandlers.push([keys, handler]);
     }
+    /**
+     * Bind a key that MUTATES THE DOCUMENT OR VIEW STATE and must do nothing
+     * while a name is being typed. blessed fires the registered key handler
+     * AND emits 'keypress' for the same physical key, so every one of these
+     * would otherwise double as a letter in the typed name - naming "spin"
+     * saved to disk (s) and inserted a blank frame (n) before this guard
+     * existed. space/delete/enter/escape/+ are NOT routed through here: they
+     * handle the naming state themselves (typing into the name, submitting,
+     * cancelling). Routed through one wrapper so the guard exists exactly
+     * once, per finding-1's review note.
+     */
+    opKey(keys, handler) {
+        this.key(keys, (...args) => {
+            if (this.naming !== null)
+                return;
+            handler(...args);
+        });
+    }
     bindKeys() {
-        this.key(['up'], () => this.moveCursor(-1, 0));
-        this.key(['down'], () => this.moveCursor(1, 0));
-        this.key(['left'], () => this.moveCursor(0, -1));
-        this.key(['right'], () => this.moveCursor(0, 1));
-        this.key(['tab'], () => {
+        this.opKey(['up'], () => this.moveCursor(-1, 0));
+        this.opKey(['down'], () => this.moveCursor(1, 0));
+        this.opKey(['left'], () => this.moveCursor(0, -1));
+        this.opKey(['right'], () => this.moveCursor(0, 1));
+        this.opKey(['tab'], () => {
             if (this.mode === 'cell' && (0, edit_doc_1.frameIsPixelEditable)(this.doc)) {
                 this.mode = 'pixel';
                 this.cursorRow = Math.min(this.cursorRow * 2, this.doc.sprite.cellH * 2 - 1);
@@ -114,7 +132,7 @@ class EditScreen {
                 this.typeName(' ');
                 return;
             }
-            this.apply(this.mode === 'pixel'
+            this.tryOp(() => this.mode === 'pixel'
                 ? (0, edit_doc_1.setPixel)(this.doc, this.cursorRow, this.cursorCol, this.fg)
                 : (0, edit_doc_1.setCell)(this.doc, this.cursorRow, this.cursorCol, { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg }));
         });
@@ -124,33 +142,33 @@ class EditScreen {
                 this.paint();
                 return;
             }
-            this.apply(this.mode === 'pixel'
+            this.tryOp(() => this.mode === 'pixel'
                 ? (0, edit_doc_1.setPixel)(this.doc, this.cursorRow, this.cursorCol, null)
                 : (0, edit_doc_1.setCell)(this.doc, this.cursorRow, this.cursorCol, null));
         });
-        this.key(['g'], () => { this.glyph = (this.glyph + 1) % GLYPHS.length; this.paint(); });
-        this.key(['f'], () => { this.fg = (this.fg + 1) % 16; this.paint(); });
-        this.key(['S-f'], () => { this.fg = (this.fg + 15) % 16; this.paint(); });
-        this.key(['b'], () => { this.bg = (this.bg + 1) % 16; this.paint(); });
-        this.key(['S-b'], () => { this.bg = (this.bg + 15) % 16; this.paint(); });
-        this.key([','], () => this.apply((0, edit_doc_1.selectFrame)(this.doc, this.doc.frame - 1)));
-        this.key(['.'], () => this.apply((0, edit_doc_1.selectFrame)(this.doc, this.doc.frame + 1)));
-        this.key(['n'], () => this.tryOp(() => (0, edit_doc_1.addFrame)(this.doc, 'blank')));
-        this.key(['c'], () => this.tryOp(() => (0, edit_doc_1.addFrame)(this.doc, 'duplicate')));
-        this.key(['x'], () => this.tryOp(() => (0, edit_doc_1.deleteFrame)(this.doc)));
-        this.key(['S-,'], () => this.apply((0, edit_doc_1.moveFrame)(this.doc, -1)));
-        this.key(['S-.'], () => this.apply((0, edit_doc_1.moveFrame)(this.doc, 1)));
-        this.key(['a'], () => {
+        this.opKey(['g'], () => { this.glyph = (this.glyph + 1) % GLYPHS.length; this.paint(); });
+        this.opKey(['f'], () => { this.fg = (this.fg + 1) % 16; this.paint(); });
+        this.opKey(['S-f'], () => { this.fg = (this.fg + 15) % 16; this.paint(); });
+        this.opKey(['b'], () => { this.bg = (this.bg + 1) % 16; this.paint(); });
+        this.opKey(['S-b'], () => { this.bg = (this.bg + 15) % 16; this.paint(); });
+        this.opKey([','], () => this.apply((0, edit_doc_1.selectFrame)(this.doc, this.doc.frame - 1)));
+        this.opKey(['.'], () => this.apply((0, edit_doc_1.selectFrame)(this.doc, this.doc.frame + 1)));
+        this.opKey(['n'], () => this.tryOp(() => (0, edit_doc_1.addFrame)(this.doc, 'blank')));
+        this.opKey(['c'], () => this.tryOp(() => (0, edit_doc_1.addFrame)(this.doc, 'duplicate')));
+        this.opKey(['x'], () => this.tryOp(() => (0, edit_doc_1.deleteFrame)(this.doc)));
+        this.opKey(['S-,'], () => this.apply((0, edit_doc_1.moveFrame)(this.doc, -1)));
+        this.opKey(['S-.'], () => this.apply((0, edit_doc_1.moveFrame)(this.doc, 1)));
+        this.opKey(['a'], () => {
             const names = Object.keys(this.doc.sprite.animations).sort();
             const next = names[(names.indexOf(this.doc.animation) + 1) % names.length];
             this.apply((0, edit_doc_1.selectAnimation)(this.doc, next));
         });
-        this.key(['+'], () => { this.naming = ''; this.paint(); });
-        this.key(['t'], () => this.apply((0, edit_doc_1.setTicksPerFrame)(this.doc, -1)));
-        this.key(['S-t'], () => this.apply((0, edit_doc_1.setTicksPerFrame)(this.doc, +1)));
-        this.key(['l'], () => this.apply((0, edit_doc_1.toggleLoop)(this.doc)));
-        this.key(['S-x'], () => this.tryOp(() => (0, edit_doc_1.deleteAnimation)(this.doc)));
-        this.key(['s'], () => this.save());
+        this.opKey(['+'], () => { this.naming = ''; this.paint(); });
+        this.opKey(['t'], () => this.apply((0, edit_doc_1.setTicksPerFrame)(this.doc, -1)));
+        this.opKey(['S-t'], () => this.apply((0, edit_doc_1.setTicksPerFrame)(this.doc, +1)));
+        this.opKey(['l'], () => this.apply((0, edit_doc_1.toggleLoop)(this.doc)));
+        this.opKey(['S-x'], () => this.tryOp(() => (0, edit_doc_1.deleteAnimation)(this.doc)));
+        this.opKey(['s'], () => this.save());
         this.key(['enter'], () => {
             if (this.naming !== null) {
                 const name = this.naming;
@@ -183,7 +201,7 @@ class EditScreen {
             }
             if (this.mode !== 'cell')
                 return;
-            if ('gfbFB,.ncx<>a+tTlsS '.includes(ch))
+            if ('gfbFB,.ncx<>a+tTlsSX '.includes(ch))
                 return; // bound keys keep their meaning
             if (ch === '{' || ch === '}')
                 return; // the two characters the format refuses
@@ -210,6 +228,16 @@ class EditScreen {
         if (next === this.doc)
             return;
         this.doc = next;
+        // Every state change funnels through here, so this is the one place
+        // that needs to know: pixel mode is only valid for a half-block frame,
+        // and frame/animation selection (or a frame add/delete that shifts
+        // which frame is current) can land on one that is not. Left unchecked,
+        // 'space' calls setPixel on a non-half-block frame and edit-doc.ts
+        // throws out of the key handler.
+        if (this.mode === 'pixel' && !(0, edit_doc_1.frameIsPixelEditable)(this.doc)) {
+            this.mode = 'cell';
+            this.cursorRow = Math.floor(this.cursorRow / 2);
+        }
         this.paint();
     }
     tryOp(op) {

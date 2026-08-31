@@ -15,6 +15,23 @@
 import blessed, { ANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { listArt, readArt, writeArt } from './assets';
 
+/**
+ * The content to open for a typed new-file name.
+ *
+ * A name that COLLIDES with a file already on disk must open THAT file's
+ * real content, never a blank canvas - the [new file] flow used to hand
+ * the editor `''` unconditionally, so naming an existing file opened it
+ * blank and the first save silently replaced the real .ans with nothing.
+ * Same latin1 path readArt/the normal open already use. Exported as a
+ * pure function of (door, existing files, typed name) so the collision
+ * decision is assertable without a blessed screen.
+ */
+export function newFileContent(door: string, files: string[], name: string): string {
+  const file = `${name}.ans`;
+  if (!files.includes(file)) return '';
+  try { return readArt(door, file).toString('latin1'); } catch { return ''; }
+}
+
 export class ArtSession {
   private screen: any;
   private door: string;
@@ -85,7 +102,7 @@ export class ArtSession {
         const name = this.naming;
         if (!name) return; // the pattern is [a-z0-9-]+; an empty name stays in naming
         this.naming = null;
-        this.openEditor(`${name}.ans`, '');
+        this.openEditor(`${name}.ans`, newFileContent(this.door, this.files, name));
         return;
       }
       const isNewFile = this.selected === this.items().length - 1;
