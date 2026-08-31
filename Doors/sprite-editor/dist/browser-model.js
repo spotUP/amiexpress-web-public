@@ -61,10 +61,10 @@ function moveSelection(state, delta) {
             return state;
         return refill({ ...state, spriteIndex, animationIndex: 0 });
     }
-    return {
-        ...state,
-        animationIndex: clamp(state.animationIndex + delta, state.animations.length),
-    };
+    const animationIndex = clamp(state.animationIndex + delta, state.animations.length);
+    if (animationIndex === state.animationIndex)
+        return state;
+    return { ...state, animationIndex };
 }
 /** Tab / Shift-Tab between panes, wrapping both ways. */
 function cyclePane(state, delta) {
