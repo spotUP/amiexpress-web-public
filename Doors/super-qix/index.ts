@@ -20,7 +20,7 @@ import {
   ATTRACT_IDLE_FRAMES,
   AttractPhase,
 } from "./game/attract";
-import { rpcHandlers } from "./server";
+import { rpcHandlers, setMusicState } from "./server";
 import { SuperQixData, GameState, InputKey, Direction, SkillLevel, KeyMap } from "./game/types";
 import {
   normalizeKey,
@@ -727,6 +727,7 @@ async function startGame(): Promise<void> {
         }
       }
       engine?.update();
+      syncMusicState();
     } else if (gameData.state === "gameover") {
       // Keep painting so the GAME OVER prompt blinks. Nothing drew this
       // state at all before, so losing the last life froze the board.
@@ -755,6 +756,19 @@ async function startGame(): Promise<void> {
 /**
  * Handle input
  */
+/**
+ * Keep the server's idea of the current screen in step.
+ *
+ * The client polls getMusicTrack to know what to play, and it can only be
+ * right if this is told every time the screen changes. Called from the input
+ * handler and the game loop rather than from each individual transition,
+ * because there are a dozen of those and one of them would eventually be
+ * missed.
+ */
+function syncMusicState(): void {
+  setMusicState(gameData.state);
+}
+
 function handleInput(key: string): void {
   const inputKey = normalizeKey(key);
 
@@ -762,6 +776,7 @@ function handleInput(key: string): void {
   // Any key at all wakes the cabinet up.
   if (gameData.state === "attract") {
     showMenu();
+    syncMusicState();
     return;
   }
   menuIdleFrames = 0;
@@ -815,6 +830,8 @@ function handleInput(key: string): void {
       // An unknown state should not throw the player out of their game.
       break;
   }
+
+  syncMusicState();
 }
 
 /**

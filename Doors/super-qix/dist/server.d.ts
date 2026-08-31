@@ -2,7 +2,7 @@
  * Super Qix - Server RPC Handlers
  * Handles persistence operations for hybrid door mode
  */
-import { HighScore, KeyMap } from './game/types';
+import { HighScore, KeyMap, GameState } from './game/types';
 /**
  * The door's own directory, wherever it is running from.
  *
@@ -34,6 +34,8 @@ export declare function getDoorRoot(startAt?: string): string;
 export declare function getHighscorePath(): string;
 /** Where per-player settings live, beside the high scores. */
 export declare function getSettingsPath(): string;
+/** Told by the door whenever the screen changes. */
+export declare function setMusicState(state: GameState): void;
 /**
  * RPC Handlers for client-server communication
  */
@@ -59,6 +61,21 @@ export declare const rpcHandlers: {
      */
     resetHighscores: () => Promise<{
         success: boolean;
+    }>;
+    /**
+     * Which tracker module should be playing right now.
+     *
+     * The door's client is a stub - the game runs here, server-side, so the
+     * browser has no way to know what is on screen. Arkanoid's client can
+     * drive its own music because Arkanoid's client IS the game; this one
+     * cannot, so it asks.
+     *
+     * Answered from the same pure trackForState the tests cover, so the music
+     * cannot drift from the screen. setMusicState is called by the door
+     * whenever the state changes.
+     */
+    getMusicTrack: () => Promise<{
+        track: string;
     }>;
     /**
      * This player's saved key bindings, or the defaults if they have none.
