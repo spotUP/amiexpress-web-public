@@ -104,11 +104,14 @@ describe('renaming a file checker', () => {
     await service.updateFileChecker(1, { stack_size: 8192 }, context);
 
     // No second directory, and the change landed in the real one.
-    expect(fs.existsSync(path.join(bbsRoot, 'Fcheck'))).toBe(
-      // On a case-insensitive filesystem these are the same directory; what
-      // matters is that only one exists.
-      fs.existsSync(path.join(bbsRoot, 'FCheck'))
-    );
+    //
+    // Counted by name rather than probed for both spellings: comparing
+    // existsSync('Fcheck') against existsSync('FCheck') says "same answer
+    // either way", which is only true on a case-INSENSITIVE filesystem. It
+    // passed on the sysop's Mac and failed on CI's Linux, where the two are
+    // genuinely different directories - which is exactly the situation this
+    // test exists to catch, so the assertion has to be the one that can see
+    // it.
     expect(fs.readdirSync(bbsRoot).filter(d => d.toLowerCase() === 'fcheck')).toHaveLength(1);
     const written = fs.readFileSync(path.join(bbsRoot, 'FCheck', 'ARC.info'));
     expect(isIcon(written)).toBe(true);
