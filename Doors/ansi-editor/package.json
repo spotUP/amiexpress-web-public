@@ -11,9 +11,15 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx --watch index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "tsx tests/run-tests.ts"
   },
-  "keywords": ["bbs", "ansi", "art", "editor"],
+  "keywords": [
+    "bbs",
+    "ansi",
+    "art",
+    "editor"
+  ],
   "author": "AmiExpress SDK",
   "license": "MIT",
   "dependencies": {

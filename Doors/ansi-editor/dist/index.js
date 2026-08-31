@@ -6,6 +6,7 @@
  * Files are stored in user's private storage (database-backed)
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ANSIEditorDoor = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
@@ -22,6 +23,8 @@ const BBS_SCREEN_DIRS = [
     { path: 'Conf02/Screens', label: 'Conf 2 Screens' },
     { path: 'Conf03/Screens', label: 'Conf 3 Screens' },
 ];
+// Exported for the regression tests; the door instance below stays the
+// default export the BBS loads.
 class ANSIEditorDoor {
     constructor() {
         this.currentFilename = null;
@@ -293,6 +296,10 @@ class ANSIEditorDoor {
             title: 'ANSI Art Editor',
             responsive: true,
         });
+        this.screen.program.write('\x1b[2J');
+        this.screen.program.write('\x1b[H');
+        this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+        this.screen.alloc();
         // CRITICAL: enableGrabKeys MUST be false for blessed widgets!
         this.inputManager = new blessed_helpers_1.DoorInputManager(this.ctx, this.screen, {
             enableGameMode: false,
@@ -408,8 +415,13 @@ class ANSIEditorDoor {
      * Show open dialog (from editor menu)
      */
     async showOpenDialog() {
-        // Hide editor temporarily
-        this.editor.hide();
+        // No hide here: showFileBrowser hides the editor itself, and only
+        // AFTER it knows there are files to show. Hiding first meant the
+        // no-files path - message dialog, early return - left the editor
+        // hidden with nothing to restore it: reported live 2026-08-31 as
+        // "a dialog said that and then i got a black screen". The widget
+        // that hides the editor owns showing it again; nobody hides it on
+        // that widget's behalf.
         await this.showFileBrowser();
     }
     // ============================================
@@ -730,6 +742,7 @@ class ANSIEditorDoor {
         this.ctx.close();
     }
 }
+exports.ANSIEditorDoor = ANSIEditorDoor;
 const door = new bbs_door_sdk_1.CoreDoor({
     name: 'ANSI Editor',
     version: '2.0.0',
