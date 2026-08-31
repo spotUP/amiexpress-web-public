@@ -44,6 +44,43 @@
               set -euo pipefail
               cd /app/amiexpress
 
+              # Snapshot the board's configuration BEFORE anything touches it.
+              #
+              # The admin writes .info files and the BBS reads them; a deploy
+              # that changes a writer changes what lands in them. The 2026-08-31
+              # remediation rewrote ten of those writers at once, which is
+              # exactly when a copy of the previous state is worth having.
+              #
+              # Only the .info files, not the whole volume: the file areas are
+              # gigabytes of uploads that no deploy can touch, while every
+              # config file this project writes ends in .info (bbsConfig.info,
+              # ConfConfig.info, Conf<N>.info, Node<N>.info, Drives.info,
+              # ScreenTypes.info, ComputerList.info, Protocols/XprTypes.info,
+              # Languages/*, Fcheck/*, Access/ACS.*, Commands/**) or in the
+              # .info.txt companion AmiExpress reads beside it
+              # (tooltypes.e:259-270).
+              #
+              # Taken through a throwaway container so it works whether or not
+              # the BBS is running, and never depends on tar existing inside
+              # the app image. `-T -` rather than `--null`: alpine's tar is
+              # busybox, which has the first and not the second, and no .info
+              # file has a newline in its name.
+              echo "== backup: the board's .info files =="
+              BACKUP_DIR=/root/bbs-backups
+              mkdir -p "$BACKUP_DIR"
+              STAMP=$(date +%Y%m%d-%H%M%S)
+              docker run --rm \
+                -v amiexpress-bbs-data:/data:ro \
+                -v "$BACKUP_DIR":/backup \
+                alpine:3 \
+                sh -c "cd /data && find bbs \( -name '*.info' -o -name '*.info.txt' \) -print | tar -czf /backup/bbs-config-$STAMP.tar.gz -T -" \
+                || echo "WARNING: backup failed (no volume yet?), continuing"
+              if [ -f "$BACKUP_DIR/bbs-config-$STAMP.tar.gz" ]; then
+                echo "Backup: $BACKUP_DIR/bbs-config-$STAMP.tar.gz ($(du -h "$BACKUP_DIR/bbs-config-$STAMP.tar.gz" | cut -f1), $(tar -tzf "$BACKUP_DIR/bbs-config-$STAMP.tar.gz" | wc -l) files)"
+              fi
+              # Keep the last twenty; they are small and the disk is not.
+              ls -1t "$BACKUP_DIR"/bbs-config-*.tar.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
+
               # Always sync to origin/main exactly. `git pull` can silently
               # leave the checkout behind when the working tree has local
               # edits (which the server should never have, but accumulates
