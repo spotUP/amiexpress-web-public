@@ -1,8 +1,9 @@
 /**
  * PUT /api/door-admin/installed/:cmd/info — replace a command's tooltypes.
  *
- * Real files, and one of them a real binary DiskObject copied from the board's
- * own Commands/BBSCmd. The assertion that matters is that the icon survives:
+ * Real files, and one of them a real binary DiskObject: tests/fixtures/wall.info,
+ * checked in. It has to be - reading the board's own Commands/BBSCmd copy is
+ * untracked runtime state, which passed locally and died with ENOENT in CI. The assertion that matters is that the icon survives:
  * an .info is an icon with a tooltype array inside it, and a writer that
  * rebuilt the file from a template would silently throw the imagery away. That
  * is the mistake caf489708 fixed in the C door for the same reason.
@@ -27,7 +28,7 @@ jest.mock('../../src/doors/door-launch-token', () => ({
 import { doorAdminRouter, doorAdminBodyError } from '../../src/server/door-admin.routes';
 import { parseInfoFile } from '../../src/utils/info-file.util';
 
-const REAL_INFO = path.join(__dirname, '..', '..', '..', '..', 'Commands', 'BBSCmd', 'WALL.info');
+const REAL_INFO = path.join(__dirname, '..', 'fixtures', 'wall.info');
 
 function app() {
   const a = express();

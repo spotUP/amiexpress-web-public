@@ -84,10 +84,11 @@ it('keeps a commented tooltype flagged rather than dropping it', async () => {
 
 it('reads a real binary DiskObject .info from the board', async () => {
   // The .info files on the board are binary Amiga DiskObjects (e3 10 ...),
-  // not the text variant the other cases here write. WALL.info is one, and
-  // parenthesised tooltypes are honoured on this path - see the next test
-  // for the text fallback, where they are not.
-  const source = path.join(__dirname, '..', '..', '..', '..', 'Commands', 'BBSCmd', 'WALL.info');
+  // not the text variant the other cases here write. The fixture is a real
+  // one copied out of Commands/BBSCmd, and it is CHECKED IN: the first
+  // version of this test read the board's own copy, which is untracked
+  // runtime state, so it passed here and died with ENOENT in CI.
+  const source = path.join(__dirname, '..', 'fixtures', 'wall.info');
   const dir = path.join(root, 'Commands', 'BBSCmd');
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(source, path.join(dir, 'WALL.info'));
