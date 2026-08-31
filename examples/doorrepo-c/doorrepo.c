@@ -4963,53 +4963,47 @@ static int board_sink(void *ctx, const unsigned char *buf, unsigned long len)
     return 0;
 }
 
-/* Fills g_board from the BBS. Returns the number of doors read, or 0 when
- * there is no API to ask - which is the normal case on a real board and
- * must never be reported as an error. */
+/* Fills g_board from the snapshot the BBS writes at launch. Returns the
+ * number of doors read, or 0 when there is nothing to read - which is the
+ * normal case on a real AmiExpress board and must never be an error.
+ *
+ * A FILE, not an HTTP request, and not by preference. The door is 68K code
+ * running inside the BBS's own process: asking that process for something
+ * synchronously blocks in WaitSelect, which starves the event loop that
+ * would answer, so the reply arrives only after the socket times out.
+ * Measured on the live board - 30 seconds of frozen screen on the L key,
+ * then the fallback. Requests to the REMOTE catalog are unaffected and stay
+ * on HTTP: another machine produces those replies.
+ *
+ * The BBS writes DoorRepo.doors beside DoorRepo.token, at the same moment,
+ * in the same encoding, in the DOORS| format this door already parses. */
 static int board_load(const dr_config *cfg)
 {
-    char token[128];
-    char tokenhdr[160];
-    const char *headers[1];
-    http_response resp;
-    board_sink_ctx sink;
-    dr_config local_cfg;
+    char path[256];
+    char line[320];
+    FILE *f;
 
     g_board_count = 0;
 
-    if (!config_read_token(cfg, token, sizeof(token))) {
+    /* Same join, same directory as the token this door already reads -
+     * <doors_dir>/DoorRepo/ - so one config value locates both. */
+    if (flow_build_local_path(path, sizeof(path), cfg->doors_dir,
+                              "DoorRepo/DoorRepo.doors") < 0) {
         return 0;
     }
 
-    /* http_request targets cfg->host, which is the REMOTE catalog server.
-     * This board's own API is bbs_host/bbs_port - posting to cfg->host
-     * would send this board's launch token to bbs.uprough.net in
-     * cleartext, the same trap report_install_to_bbs() documents. */
-    local_cfg = *cfg;
-    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
-    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
-    local_cfg.port = cfg->bbs_port;
-
-    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
-    headers[0] = tokenhdr;
-
-    memset(&resp, 0, sizeof(resp));
-    sink.len = 0;
-    sink.overflowed = 0;
-
-    if (http_request(&local_cfg, "GET", "/api/door-admin/installed",
-                     (const char *) 0, 0UL, headers, 1, &resp,
-                     board_sink, &sink) != HTTP_OK
-        || resp.status != 200) {
-        g_board_count = 0;
+    f = fopen(path, "rb");
+    if (f == (FILE *) 0) {
+        /* No snapshot: a real board, or a launch that could not write one.
+         * The caller falls back to this door's own install index. */
         return 0;
     }
 
-    /* A body with no trailing newline still has a last row in it. */
-    if (sink.len > 0 && !sink.overflowed) {
-        sink.line[sink.len] = '\0';
-        board_add_line(sink.line);
+    while (g_board_count < BOARD_MAX_DOORS
+           && fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        board_add_line(line);
     }
+    fclose(f);
 
     return g_board_count;
 }
