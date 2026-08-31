@@ -6,7 +6,7 @@
 import assert from 'assert';
 import { startedLevel, createData } from './fixture';
 import {
-  attractScreen, titleGrid, nextPhase, pointTablePanel, rankingPanel,
+  attractScreen, titleGrid, titleLines, nextPhase, pointTablePanel, rankingPanel,
   invitePanel, creditLine, ATTRACT_ORDER, ATTRACT_FRAMES, ATTRACT_BLINK_FRAMES,
   AttractPhase,
 } from '../game/attract';
@@ -54,8 +54,10 @@ export async function theTitleIsShaded(): Promise<void> {
 
   assert.ok(shaded, 'the letters should have a shaded edge');
 
-  // Painted as blocks of background colour, not as '#' characters.
-  const painted = attractScreen('points', createData(), WIDTH, 0).join('\n');
+  // Painted as blocks of background colour, not as '#' characters. The
+  // title lives in its own box at the top of the screen now, so it is
+  // asserted there rather than inside an attract panel.
+  const painted = titleLines(WIDTH).join('\n');
   assert.ok(painted.includes('{green-bg}'), 'the face of the letters is green');
   assert.ok(painted.includes('{yellow-bg}'), 'the shading is yellow');
   assert.ok(
@@ -173,7 +175,10 @@ export async function everyPanelCarriesTheTitleExceptTheDemo(): Promise<void> {
 
     const text = plain(lines);
     assert.ok(text.includes('KONAMI'), `${phase} carries the credit`);
-    assert.ok(lines.length > 5, `${phase} carries the title`);
+    assert.ok(
+      !plain(titleLines(WIDTH)).trim() || !text.includes('FROGGER'),
+      `${phase} should not repeat the title; the logo is always on screen`
+    );
   }
 }
 

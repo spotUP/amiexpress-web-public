@@ -74,7 +74,7 @@ let gameData;
 let screen;
 let gameArea;
 let hudBox;
-let footerBox;
+let logoBox;
 let menuBox = null;
 let gameLoop = null;
 /** How long the finished board stays up between levels, in ticks. */
@@ -104,10 +104,24 @@ function initScreen() {
         output: (data) => doorContext?.output.write(data),
         input: null,
     });
-    // HUD at top
-    hudBox = blessed_1.default.box({
+    // The title, at the top of the screen for the whole session. It used to
+    // be redrawn inside the menu and the attract panels; one permanent logo
+    // is both tidier and one less thing to keep in step.
+    logoBox = blessed_1.default.box({
         parent: screen,
         top: 0,
+        left: 0,
+        width: "100%",
+        height: attract_1.LOGO_HEIGHT,
+        tags: true,
+        wrap: false,
+        border: undefined,
+        content: (0, attract_1.titleLines)(constants_1.SCREEN_WIDTH).join("\n"),
+    });
+    // HUD under it
+    hudBox = blessed_1.default.box({
+        parent: screen,
+        top: attract_1.LOGO_HEIGHT,
         left: 0,
         width: "100%",
         height: 1,
@@ -121,7 +135,7 @@ function initScreen() {
     gameArea = blessed_1.default.box({
         fixed: true,
         parent: screen,
-        top: 1,
+        top: attract_1.LOGO_HEIGHT + 1,
         left: 0,
         width: "100%",
         height: constants_1.GAME_AREA_HEIGHT,
@@ -138,22 +152,7 @@ function initScreen() {
         border: undefined,
         style: { bg: "black" },
     });
-    // Footer with controls
-    footerBox = blessed_1.default.box({
-        parent: screen,
-        bottom: 0,
-        left: 0,
-        width: "100%",
-        height: 3,
-        tags: true,
-        border: { type: "line" },
-        style: { border: { fg: "gray" } },
-        content: "{gray-fg}Arrow Keys: Hop | P: Pause | Q: Quit{/}",
-    });
 }
-/**
- * Format HUD display
- */
 /**
  * The status line, laid out like the cabinet's (FAQ 6.2): the player's score
  * with the high score beside it, the level, and how many frogs are left.
@@ -168,11 +167,17 @@ function formatHUD() {
         ? `x${gameData.lives}`
         : "*".repeat(Math.max(0, gameData.lives));
     const homesStr = gameData.homesCompleted.toString();
+    // The clock is a number here rather than a bar on a row of its own under
+    // the board. It turns red at ten seconds, which is the only thing the bar
+    // was really telling anybody.
+    const seconds = Math.max(0, Math.ceil(gameData.timeRemaining));
+    const timeColour = seconds <= 10 ? "lightred" : "lightgreen";
     return (`{yellow-fg}1-UP ${scoreStr}{/}  ` +
         `{white-fg}HI-SCORE ${hiStr}{/}  ` +
         `{cyan-fg}LEVEL ${gameData.level}{/}  ` +
         `{green-fg}HOMES ${homesStr}/5{/}  ` +
-        `{red-fg}FROGS ${livesStr}{/}`);
+        `{red-fg}FROGS ${livesStr}{/}  ` +
+        `{${timeColour}-fg}TIME ${seconds.toString().padStart(2, "0")}{/}`);
 }
 /**
  * Show main menu
@@ -201,7 +206,6 @@ function startAttract() {
         menuBox.destroy();
         menuBox = null;
     }
-    footerBox.setContent("{gray-fg}Press any key to play{/}");
     renderAttract();
     attractLoop = setInterval(() => {
         attractFrames++;
@@ -274,7 +278,6 @@ function runDemoFrame() {
 }
 function showMenu() {
     stopAttract();
-    footerBox.setContent("{gray-fg}Arrow Keys: Hop | P: Pause | Q: Quit{/}");
     gameData.state = "menu";
     gameData.menuSelection = 0;
     renderMenu();
@@ -293,8 +296,8 @@ function renderMenu() {
     const width = Math.max(54, (0, attract_1.titleWidth)());
     // The same block title the attract screen uses, so the door has one look
     // rather than two - the menu used to carry a figlet in slashes.
-    const menuContent = [...(0, attract_1.titleLines)(width)];
-    menuContent.push("");
+    // No title: the logo is already at the top of the screen.
+    const menuContent = [];
     menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
     menuContent.push("");
     // A strip of the board itself: the traffic, the river and its footing,

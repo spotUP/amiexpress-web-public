@@ -877,7 +877,7 @@ class FroggerGame {
         this.paintHomes(put);
         this.paintObjects(put);
         this.paintSnakes(put);
-        this.paintFrog(put);
+        this.paintFrog(put, (y, x) => bgs[y]?.[x] ?? constants_1.BG_COLORS.road);
         const lines = [];
         for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
             let line = '';
@@ -905,10 +905,8 @@ class FroggerGame {
         // it: the state was set, and nothing ever drew it.
         if (d.state === 'gameover')
             this.overlayGameOver(lines);
-        lines.push('');
-        const timeBar = '='.repeat(Math.max(0, Math.floor(d.timeRemaining / 2)));
-        const timeColor = d.timeRemaining <= 10 ? 'red' : 'yellow';
-        lines.push(`{${timeColor}-fg}TIME: [${timeBar.padEnd(30, ' ')}]{/}`);
+        // No clock row under the board: the time is a number in the status
+        // line, and the board ends where the board ends.
         this.renderCallback(lines.join('\n'));
     }
     /**
@@ -1053,18 +1051,29 @@ class FroggerGame {
             put(snake.y, Math.round(snake.x) * constants_1.CELL_WIDTH, constants_1.SNAKE_GLYPH, constants_1.SPRITE_FG.snake, constants_1.BG_COLORS.bank);
         }
     }
-    /** The player. */
-    paintFrog(put) {
+    /**
+     * The player.
+     *
+     * Drawn as the opposite of the ground it is standing on, with itself the
+     * opposite of that again: the frog is never the same colour as what is
+     * under it, whatever that happens to be. A fixed colour always collides
+     * with something - green on the green banks is what was reported - and
+     * the frog is the one thing on the board that must never be hard to find.
+     */
+    paintFrog(put, groundAt) {
         const d = this.data;
         const x = Math.round(d.frog.x) * constants_1.CELL_WIDTH;
+        const ground = groundAt(d.frog.y, x);
+        const bg = (0, constants_1.complementOf)(ground);
+        const fg = (0, constants_1.complementOf)(bg);
         if (!d.frog.isDead) {
-            put(d.frog.y, x, constants_1.FROG_GLYPH, constants_1.SPRITE_FG.frog);
+            put(d.frog.y, x, constants_1.FROG_GLYPH, fg, bg);
             return;
         }
         // A death blinks: at one cell there is no room for an animation, but a
-        // flashing skull of a frog is unmistakable.
+        // flashing frog is unmistakable.
         if (Math.floor(d.frog.deathFrame / 3) % 2 === 0) {
-            put(d.frog.y, x, constants_1.FROG_GLYPH, constants_1.SPRITE_FG.frogDying);
+            put(d.frog.y, x, constants_1.FROG_GLYPH, constants_1.SPRITE_FG.frogDying, bg);
         }
     }
     /**

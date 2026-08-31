@@ -77,4 +77,17 @@ export declare function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void>
 export declare function theFrogStaysPutOnTheLogItRides(): Promise<void>;
 /** Hopping off a log ends the ride. */
 export declare function hoppingOffALogEndsTheRide(): Promise<void>;
+/**
+ * The frog is never the colour of what it is standing on.
+ *
+ * Reported live 2026-08-31: "add a bg color as well that always is the
+ * complement color of the ground tile color the frog currently is on and
+ * make the frog color the complement color of it's current bg color this
+ * way it will always be super clear where the frog is."
+ */
+export declare function theFrogContrastsWithEveryGroundItCanStandOn(): Promise<void>;
+/** Every colour the board uses has an opposite. */
+export declare function everyBoardColourHasAnOpposite(): Promise<void>;
+/** The frog on the bank comes out a different colour from the bank. */
+export declare function theFrogOnTheBankIsNotTheBank(): Promise<void>;
 //# sourceMappingURL=render.test.d.ts.map
