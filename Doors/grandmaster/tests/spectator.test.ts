@@ -14,6 +14,9 @@ import assert from 'assert';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { GrandmasterNetworkManager } from '../network/network-manager';
 import { SpectatorScreen } from '../ui/spectator-screen';
+import { SoloBroadcast } from '../network/solo-broadcast';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
 const settle = (ms = 200) => new Promise(r => setTimeout(r, ms));
@@ -140,4 +143,120 @@ export async function aSpectatorDoesNotBlockTheStart(): Promise<void> {
   const spectator = state?.players.find((p: any) => p.name === 'nosy');
   assert.ok(spectator, 'the spectator shows up in the lobby');
   assert.strictEqual(spectator.ready, true, 'already ready, so nobody waits for them');
+}
+
+/**
+ * A single-player game is watchable.
+ *
+ * Reported 2026-08-30 and reproduced with two browsers: "watch a game always
+ * reports no game running", even while somebody was playing. A lobby was only
+ * ever created by the versus lobby widget - startMatch and createLobby have
+ * no other callers in the door - so marathon, ultra, dig, zone, training, CPU
+ * battle and TetriNET published nothing at all and the watch list was
+ * correctly, uselessly empty.
+ */
+export async function aSoloGameIsListedForWatching(): Promise<void> {
+  const stamp = Date.now();
+  const player = manager(`soP-${stamp}`, 'alice', 1);
+  const browser = manager(`soB-${stamp}`, 'nosy', 2);
+
+  const board = { width: 10, height: 24, grid: Array.from({ length: 24 }, () => Array.from({ length: 10 }, () => ({ filled: false }))) };
+  const broadcast = new SoloBroadcast({
+    network: player,
+    mode: 'marathon',
+    getState: () => ({ board, level: 3, score: 1200, gameOver: false }) as any,
+    intervalMs: 50,
+  });
+
+  try {
+    const published = await broadcast.start();
+    assert.strictEqual(published, true, 'the solo game should have been published');
+    await settle(250);
+
+    const watchable = await browser.listLobbies({ includeInProgress: true });
+    assert.ok(
+      watchable.some((l: any) => l.id === broadcast.getLobbyId()),
+      'a solo game must appear in the list "Watch a game" reads'
+    );
+  } finally {
+    await broadcast.stop();
+  }
+}
+
+/** ...and once it ends it stops being listed. */
+export async function aFinishedSoloGameLeavesTheWatchList(): Promise<void> {
+  const stamp = Date.now();
+  const player = manager(`sfP-${stamp}`, 'alice', 1);
+  const browser = manager(`sfB-${stamp}`, 'nosy', 2);
+
+  const board = { width: 10, height: 24, grid: Array.from({ length: 24 }, () => Array.from({ length: 10 }, () => ({ filled: false }))) };
+  const broadcast = new SoloBroadcast({
+    network: player, mode: 'marathon',
+    getState: () => ({ board, level: 1, score: 0, gameOver: false }) as any,
+    intervalMs: 50,
+  });
+
+  await broadcast.start();
+  const lobbyId = broadcast.getLobbyId();
+  await settle(200);
+  await broadcast.stop();
+  await settle(250);
+
+  const watchable = await browser.listLobbies({ includeInProgress: true });
+  assert.ok(
+    !watchable.some((l: any) => l.id === lobbyId),
+    'a game nobody is playing any more must not still be offered'
+  );
+}
+
+/**
+ * A broker that refuses must never stop somebody playing a solo game.
+ */
+export async function aBrokenBrokerDoesNotStopASoloGame(): Promise<void> {
+  const refusing: any = {
+    createLobby: async () => { throw new Error('no broker'); },
+    startMatch: async () => { throw new Error('no broker'); },
+    sendUpdate: () => { throw new Error('no broker'); },
+    leaveLobby: async () => { throw new Error('no broker'); },
+  };
+
+  const broadcast = new SoloBroadcast({
+    network: refusing,
+    mode: 'marathon',
+    getState: () => ({ board: {}, level: 1, score: 0 }) as any,
+  });
+
+  const published = await broadcast.start();
+  assert.strictEqual(published, false, 'it should report that it could not publish');
+
+  // None of these may throw - the game is still being played.
+  broadcast.publish();
+  await broadcast.stop();
+}
+
+/**
+ * ...and the door actually uses it.
+ *
+ * SoloBroadcast being correct is worth nothing if startGame never calls it -
+ * which was the whole shape of this bug: the publishing machinery existed
+ * (sendUpdate, sendGameEvent) and no solo path ever reached it.
+ */
+export async function startingAGamePublishesItForWatching(): Promise<void> {
+  const app = readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
+
+  const startGame = app.slice(app.indexOf('private async startGame('));
+  const body = startGame.slice(0, startGame.indexOf('\n  private '));
+
+  assert.ok(
+    /new SoloBroadcast\(/.test(body),
+    'startGame should publish the game for watching'
+  );
+  assert.ok(
+    /await broadcast\.start\(\)/.test(body),
+    'and actually start the broadcast'
+  );
+  assert.ok(
+    /finally\s*\{[\s\S]*?await broadcast\.stop\(\)/.test(body),
+    'and stop it in a finally, so a crash does not leave a ghost in the watch list'
+  );
 }
