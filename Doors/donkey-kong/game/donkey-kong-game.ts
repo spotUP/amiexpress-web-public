@@ -3,6 +3,7 @@
  * 1981 Nintendo arcade classic
  */
 
+import { Cell, EMPTY, COLORS as SPRITE_COLORS, cell, paint } from './sprites';
 import {
   DonkeyKongData,
   Player,
@@ -644,13 +645,13 @@ export class DonkeyKongGame {
   }
 
   render(): void {
-    const buffer: string[][] = [];
+    const buffer: Cell[][] = [];
 
     // Initialize buffer
     for (let y = 0; y < GAME_HEIGHT; y++) {
       buffer[y] = [];
       for (let x = 0; x < GAME_WIDTH; x++) {
-        buffer[y][x] = ' ';
+        buffer[y][x] = EMPTY;
       }
     }
 
@@ -660,7 +661,7 @@ export class DonkeyKongGame {
         const relX = x - girder.x;
         const y = Math.floor(girder.y - relX * girder.slope);
         if (x >= 0 && y >= 0 && y < GAME_HEIGHT) {
-          buffer[y][x] = SPRITES.girder;
+          buffer[y][x] = cell(SPRITES.girder, SPRITE_COLORS.girder);
         }
       }
     }
@@ -669,7 +670,9 @@ export class DonkeyKongGame {
     for (const ladder of this.data.ladders) {
       for (let y = ladder.y - ladder.height; y <= ladder.y; y++) {
         if (ladder.x >= 0 && ladder.x < GAME_WIDTH && y >= 0 && y < GAME_HEIGHT) {
-          buffer[y][ladder.x] = ladder.isBroken ? SPRITES.ladderBroken : SPRITES.ladder;
+          buffer[y][ladder.x] = ladder.isBroken
+            ? cell(SPRITES.ladderBroken, SPRITE_COLORS.ladderBroken)
+            : cell(SPRITES.ladder, SPRITE_COLORS.ladder);
         }
       }
     }
@@ -677,14 +680,14 @@ export class DonkeyKongGame {
     // Draw rivets
     for (const rivet of this.data.rivets) {
       if (!rivet.isRemoved && rivet.x >= 0 && rivet.x < GAME_WIDTH && rivet.y >= 0 && rivet.y < GAME_HEIGHT) {
-        buffer[rivet.y][rivet.x] = SPRITES.rivet;
+        buffer[rivet.y][rivet.x] = cell(SPRITES.rivet, SPRITE_COLORS.rivet);
       }
     }
 
     // Draw hammers
     for (const hammer of this.data.hammers) {
       if (!hammer.isCollected && hammer.x >= 0 && hammer.x < GAME_WIDTH && hammer.y >= 0 && hammer.y < GAME_HEIGHT) {
-        buffer[hammer.y][hammer.x] = SPRITES.hammer;
+        buffer[hammer.y][hammer.x] = cell(SPRITES.hammer, SPRITE_COLORS.hammer);
       }
     }
 
@@ -692,8 +695,8 @@ export class DonkeyKongGame {
     for (const elevator of this.data.elevators) {
       const ey = Math.floor(elevator.y);
       if (elevator.x >= 0 && elevator.x < GAME_WIDTH && ey >= 0 && ey < GAME_HEIGHT) {
-        buffer[ey][elevator.x] = SPRITES.elevator;
-        if (elevator.x + 1 < GAME_WIDTH) buffer[ey][elevator.x + 1] = ']';
+        buffer[ey][elevator.x] = cell(SPRITES.elevator, SPRITE_COLORS.elevator);
+        if (elevator.x + 1 < GAME_WIDTH) buffer[ey][elevator.x + 1] = cell(']', SPRITE_COLORS.elevator);
       }
     }
 
@@ -701,7 +704,7 @@ export class DonkeyKongGame {
     for (const conveyor of this.data.conveyors) {
       for (let x = conveyor.x; x < conveyor.x + conveyor.width && x < GAME_WIDTH; x++) {
         if (x >= 0 && conveyor.y >= 0 && conveyor.y < GAME_HEIGHT) {
-          buffer[conveyor.y][x] = conveyor.direction === 'right' ? '>' : '<';
+          buffer[conveyor.y][x] = cell(conveyor.direction === 'right' ? '>' : '<', SPRITE_COLORS.conveyor);
         }
       }
     }
@@ -709,14 +712,14 @@ export class DonkeyKongGame {
     // Draw Pauline
     if (this.data.paulineY >= 0 && this.data.paulineY < GAME_HEIGHT &&
         this.data.paulineX >= 0 && this.data.paulineX < GAME_WIDTH) {
-      buffer[this.data.paulineY][this.data.paulineX] = SPRITES.pauline;
+      buffer[this.data.paulineY][this.data.paulineX] = cell(SPRITES.pauline, SPRITE_COLORS.pauline);
     }
 
     // Draw DK
     if (this.data.dkY >= 0 && this.data.dkY < GAME_HEIGHT &&
         this.data.dkX >= 0 && this.data.dkX < GAME_WIDTH) {
-      buffer[this.data.dkY][this.data.dkX] = SPRITES.dk;
-      if (this.data.dkX + 1 < GAME_WIDTH) buffer[this.data.dkY][this.data.dkX + 1] = SPRITES.dk;
+      buffer[this.data.dkY][this.data.dkX] = cell(SPRITES.dk, SPRITE_COLORS.dk);
+      if (this.data.dkX + 1 < GAME_WIDTH) buffer[this.data.dkY][this.data.dkX + 1] = cell(SPRITES.dk, SPRITE_COLORS.dk);
     }
 
     // Draw barrels
@@ -724,7 +727,9 @@ export class DonkeyKongGame {
       const bx = Math.floor(barrel.x);
       const by = Math.floor(barrel.y);
       if (bx >= 0 && bx < GAME_WIDTH && by >= 0 && by < GAME_HEIGHT) {
-        buffer[by][bx] = barrel.type === 'blue' ? SPRITES.blueBarrel : SPRITES.barrel;
+        buffer[by][bx] = barrel.type === 'blue'
+          ? cell(SPRITES.blueBarrel, SPRITE_COLORS.blueBarrel)
+          : cell(SPRITES.barrel, SPRITE_COLORS.barrel);
       }
     }
 
@@ -733,7 +738,7 @@ export class DonkeyKongGame {
       const fx = Math.floor(fireball.x);
       const fy = Math.floor(fireball.y);
       if (fx >= 0 && fx < GAME_WIDTH && fy >= 0 && fy < GAME_HEIGHT) {
-        buffer[fy][fx] = SPRITES.fireball;
+        buffer[fy][fx] = cell(SPRITES.fireball, SPRITE_COLORS.fireball);
       }
     }
 
@@ -743,15 +748,15 @@ export class DonkeyKongGame {
       const px = Math.floor(player.x);
       const py = Math.floor(player.y);
       if (px >= 0 && px < GAME_WIDTH && py >= 0 && py < GAME_HEIGHT) {
-        let sprite: string;
-        if (player.hasHammer) {
-          sprite = SPRITES.playerHammer;
-        } else if (player.isClimbing) {
-          sprite = SPRITES.playerClimb;
-        } else {
-          sprite = SPRITES.player;
-        }
-        buffer[py][px] = sprite;
+        // Mario carries his own colour. He used to be recovered from the
+        // glyph afterwards - and playerClimb and ladder are BOTH 'H', with
+        // the ladder tested first, so climbing Mario was painted in the
+        // ladder's colour and vanished into it for the whole climb.
+        buffer[py][px] = player.hasHammer
+          ? cell(SPRITES.playerHammer, SPRITE_COLORS.playerHammer)
+          : player.isClimbing
+            ? cell(SPRITES.playerClimb, SPRITE_COLORS.player)
+            : cell(SPRITES.player, SPRITE_COLORS.player);
       }
     }
 
@@ -759,39 +764,7 @@ export class DonkeyKongGame {
     let output = '';
     for (let y = 0; y < GAME_HEIGHT; y++) {
       for (let x = 0; x < GAME_WIDTH; x++) {
-        const char = buffer[y][x];
-        let colored: string;
-
-        if (char === SPRITES.girder || char === '>' || char === '<') {
-          colored = `{red-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.ladder) {
-          colored = `{cyan-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.ladderBroken) {
-          colored = `{gray-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.player || char === SPRITES.playerClimb) {
-          colored = `{cyan-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.playerHammer) {
-          colored = `{yellow-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.barrel) {
-          colored = `{yellow-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.blueBarrel) {
-          colored = `{blue-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.fireball) {
-          colored = `{red-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.dk) {
-          colored = `{yellow-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.pauline) {
-          colored = `{magenta-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.rivet) {
-          colored = `{yellow-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.hammer) {
-          colored = `{white-fg}${char}${char}{/}`;
-        } else if (char === SPRITES.elevator || char === ']') {
-          colored = `{green-fg}${char}${char}{/}`;
-        } else {
-          colored = '  ';
-        }
-        output += colored;
+        output += paint(buffer[y][x]);
       }
       if (y < GAME_HEIGHT - 1) output += '\n';
     }
