@@ -1,0 +1,16 @@
+{
+  "name": "egg",
+  "cellW": 5,
+  "cellH": 2,
+  "animations": {
+    "idle": {
+      "ticksPerFrame": 8, "loop": true,
+      "frames": [
+        [[null, ["▄",13,0], ["▄",13,0], null, null],
+         [null, ["▀",13,0], ["▀",13,0], null, null]],
+        [[null, ["▄",5,0], ["▄",5,0], null, null],
+         [null, ["▀",5,0], ["▀",5,0], null, null]]
+      ]
+    }
+  }
+}
