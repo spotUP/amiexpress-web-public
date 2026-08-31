@@ -194,6 +194,56 @@ function looksLikeTooltypeBytes(buf: Buffer, start: number, len: number): boolea
  * least one entry.
  */
 /**
+ * Read one entry of a tooltype array, in whichever of the three forms the
+ * boards' files use.
+ *
+ * The standard form is a 4-byte length then the string and its NUL. Entries
+ * written by whatever produced this board's Conf<N>.info, Node<N>.info and
+ * bbsConfig.info are bare NUL-terminated strings instead, and bbsConfig.info
+ * mixes the two - so a reader that assumes one form loses the file.
+ *
+ * The length field is also the trap. It leads with NUL bytes, so reading a
+ * bare string at a prefixed entry yields an empty one; and its low byte can
+ * print, so reading from one byte inside the field glues that byte to the key
+ * - which is where the `6FTPDATAPORT` and `SOPTIONS` this board has produced
+ * come from. Trying the prefixed form FIRST, and only accepting it when the
+ * declared length lands exactly on the string's own NUL, is what tells the
+ * three apart without guessing.
+ */
+function readToolTypeEntry(
+  buf: Buffer,
+  pos: number,
+  limit: number
+): { text: string; next: number } | null {
+  if (pos + 4 > limit) return null;
+
+  const entryLen = buf.readUInt32BE(pos);
+  if (
+    entryLen >= 2 &&
+    entryLen <= 512 &&
+    pos + 4 + entryLen <= limit &&
+    buf[pos + 4 + entryLen - 1] === 0 &&
+    buf.indexOf(0, pos + 4) === pos + 4 + entryLen - 1 &&
+    looksLikeTooltypeBytes(buf, pos + 4, entryLen)
+  ) {
+    return { text: buf.toString('latin1', pos + 4, pos + 4 + entryLen - 1), next: pos + 4 + entryLen };
+  }
+
+  // A length field that describes nothing - bbsConfig.info declares 0x19 for
+  // an entry of 14 bytes. Step over it rather than reading its NULs as an
+  // empty string and losing the whole array.
+  let entryAt = pos;
+  if (buf[entryAt] === 0 && entryAt + 4 < limit && buf[entryAt + 4] !== 0) {
+    entryAt += 4;
+  }
+
+  const end = buf.indexOf(0, entryAt);
+  if (end < 0 || end > limit || end - entryAt < 1 || end - entryAt > 512) return null;
+  if (!looksLikeTooltypeBytes(buf, entryAt, end - entryAt + 1)) return null;
+  return { text: buf.toString('latin1', entryAt, end), next: end + 1 };
+}
+
+/**
  * Walk the DiskObject to the tooltype array's real offset.
  *
  * The scanner below hunts for the array by looking for a plausible count
@@ -278,32 +328,41 @@ function locateTooltypeArrayStructural(
   pos += 4;
 
   for (let i = 0; i < numEntries; i++) {
-    if (pos + 4 > buf.length) return null;
-
-    // The standard form: a 4-byte length, then the string and its NUL.
-    const entryLen = buf.readUInt32BE(pos);
-    if (
-      entryLen >= 2 &&
-      entryLen <= 512 &&
-      pos + 4 + entryLen <= buf.length &&
-      buf[pos + 4 + entryLen - 1] === 0 &&
-      looksLikeTooltypeBytes(buf, pos + 4, entryLen)
-    ) {
-      strings.push(buf.toString('latin1', pos + 4, pos + 4 + entryLen - 1));
-      pos += 4 + entryLen;
-      continue;
-    }
-
-    // The form this board's files actually use for entries 2..n: no length,
-    // just the string and its NUL.
-    const end = buf.indexOf(0, pos);
-    if (end < 0 || end - pos < 1 || end - pos > 512) return null;
-    if (!looksLikeTooltypeBytes(buf, pos, end - pos + 1)) return null;
-    strings.push(buf.toString('latin1', pos, end));
-    pos = end + 1;
+    const entry = readToolTypeEntry(buf, pos, buf.length);
+    if (!entry) return null;
+    strings.push(entry.text);
+    pos = entry.next;
   }
 
   if (strings.length === 0) return null;
+
+  // The count can describe less than the file holds. bbsConfig.info says 20
+  // and carries 62: tooltypes were appended without the count being grown,
+  // and the 42 the count does not cover were read as icon data - which is why
+  // writeInfoFile refused the file and every system-configuration save landed
+  // in bbsConfig.info.txt instead, leaving the icon saying something else.
+  //
+  // Keep reading while the bytes are still tooltypes, and stop at the icon
+  // image: an IFF payload declares its own size, and "FORM" is printable
+  // enough to be read as a tooltype by anything that only asks whether the
+  // bytes look like text.
+  const imageAt = iffPayloadOffset(buf);
+  const limit = imageAt === -1 ? buf.length : imageAt;
+  while (pos < limit) {
+    const entry = readToolTypeEntry(buf, pos, limit);
+    if (!entry) break;
+    if (!parseTooltypeString(entry.text)) break;
+    // The icon trailer's own chunk ids. Conf1.info ends its array with a bare
+    // FORM and ICONFACE before eight bytes of image, and reading past the
+    // count would move those two into the tooltype array on the next save -
+    // where a real Amiga would find them as tooltypes and not as the marker
+    // they are. Inside the count they stay where the file put them; past it
+    // they are the boundary.
+    if (entry.text === 'FORM' || entry.text === 'ICONFACE') break;
+    strings.push(entry.text);
+    pos = entry.next;
+  }
+
   return { countOffset, entriesEnd: pos, strings };
 }
 
@@ -355,6 +414,22 @@ function locateTooltypeArray(buf: Buffer): { countOffset: number; entriesEnd: nu
  * account for everything after them. Requiring that is the difference
  * between finding an IFF payload and finding the word.
  */
+/**
+ * Where the trailing IFF payload begins, or -1. See locateIffPayload: a real
+ * FORM chunk accounts for everything after its own size field, and the word
+ * FORM on its own does not.
+ */
+function iffPayloadOffset(buffer: Buffer): number {
+  let at = buffer.indexOf('FORM');
+  while (at !== -1) {
+    if (at + 8 <= buffer.length && buffer.readUInt32BE(at + 4) === buffer.length - at - 8) {
+      return at;
+    }
+    at = buffer.indexOf('FORM', at + 1);
+  }
+  return -1;
+}
+
 function locateIffPayload(buffer: Buffer): Buffer {
   let at = buffer.indexOf('FORM');
   while (at !== -1) {

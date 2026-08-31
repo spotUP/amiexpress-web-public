@@ -666,6 +666,21 @@ console.warn('[BBSConfig] bbsConfig.info not found; wrote bbsConfig.info.txt onl
       return { textFileWritten: true, infoFileWritten: false, warning: 'bbsConfig.info does not exist; the change is in bbsConfig.info.txt.' };
     }
 
+    // Heal keys with a length byte baked into them before the icon is
+    // rewritten. The text companion has always done this; the icon could not
+    // be written at all until now, so it still carries what the old heuristic
+    // read - "6FTPDATAPORT" for the key this board spells FTPDATAPORT, the
+    // 0x36 being the entry's own length. Writing that back would make the two
+    // files disagree permanently, and a real Amiga's FindToolType would go on
+    // missing the key.
+    for (const tooltype of infoFile.tooltypes) {
+      const cleanKey = cleanTooltypeKey(tooltype.key);
+      if (cleanKey && cleanKey !== tooltype.key) {
+        tooltype.key = cleanKey;
+        tooltype.originalLine = '';
+      }
+    }
+
     try {
       writeInfoFile(infoFile);
 console.log('[BBSConfig] Saved configuration to bbsConfig.info');

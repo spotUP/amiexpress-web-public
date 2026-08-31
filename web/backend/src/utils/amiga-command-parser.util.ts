@@ -224,18 +224,25 @@ function absorbTooltype(tooltypes: Map<string, string>, raw: string): void {
   // Workbench comments a tooltype out by wrapping it in parentheses.
   if (trimmed.startsWith('(') && trimmed.endsWith(')')) return;
 
+  // FindToolType returns the FIRST entry that matches (tooltypes.e:215-218),
+  // so a key written twice resolves to the earlier one. This map used to keep
+  // the later, which is a different answer than the board gives: bbsConfig.info
+  // holds FTPDATAPORT twice, and last-wins turned its port list into a bare
+  // flag. info-file.util's tooltypeMap has always done it this way.
+  const remember = (key: string, value: string): void => {
+    if (key.length === 0 || tooltypes.has(key)) return;
+    tooltypes.set(key, value);
+  };
+
   const eqIdx = trimmed.indexOf('=');
   if (eqIdx !== -1) {
-    const key = trimmed.substring(0, eqIdx).toUpperCase().trim();
-    if (key.length > 0) {
-      tooltypes.set(key, trimmed.substring(eqIdx + 1));
-    }
+    remember(trimmed.substring(0, eqIdx).toUpperCase().trim(), trimmed.substring(eqIdx + 1));
     return;
   }
 
   const key = trimmed.toUpperCase();
-  if (key.length > 0 && /^[A-Z][A-Z0-9_.]*$/.test(key)) {
-    tooltypes.set(key, 'YES');
+  if (/^[A-Z][A-Z0-9_.]*$/.test(key)) {
+    remember(key, 'YES');
   }
 }
 
@@ -429,8 +436,10 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
         // Anything written past the end of the array was appended by a tool
         // that did not grow the array's own count - this BBS has done it. A
         // real Amiga would never see those, but this one has been reading them
-        // for as long as they have been there, and a tooltype added later is
-        // the more recent edit, so it wins.
+        // for as long as they have been there. They come last, so a key the
+        // array already carries keeps the array's value: FindToolType answers
+        // with the first match, and an appended entry is not a reason to give
+        // a different answer than the board would.
         //
         // Only when the tail is TEXT, though. Most icons end in a NewIcons IFF
         // chunk, and scraping printable runs out of a bitmap invents tooltypes
@@ -441,7 +450,7 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
             buffer.subarray(array.end), filePath, session, socket
           );
           for (const [key, value] of trailing) {
-            tooltypes.set(key, value);
+            if (!tooltypes.has(key)) tooltypes.set(key, value);
           }
         }
       }
@@ -512,8 +521,9 @@ function parseInfoFileFallback(buffer: Buffer, filePath: string, session?: any, 
       const keyMatch = rawKey.match(/[A-Z][A-Z0-9_.]*/);
       const key = keyMatch ? keyMatch[0] : '';
       const value = trimmed.substring(eqIdx + 1).trim();
-      // Accept any reasonable KEY=VALUE pair
-      if (key && key.length >= 2 && key.length <= 32) {
+      // Accept any reasonable KEY=VALUE pair, and keep the FIRST of a
+      // repeated key - the answer FindToolType would give.
+      if (key && key.length >= 2 && key.length <= 32 && !tooltypes.has(key)) {
         tooltypes.set(key, value);
       }
     }
