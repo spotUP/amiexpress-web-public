@@ -21,6 +21,8 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
+import * as amigafs from './amigafs';
 
 export interface Tooltype {
   /**
@@ -755,6 +757,60 @@ export function writeInfoFile(info: InfoFile): void {
   const ends = info.trailingNewline ?? true;
   const textBuf = Buffer.from(lines + (lines && ends ? eol : ''), 'latin1');
   atomicWrite(info.filePath, Buffer.concat([textBuf, info.iconData]));
+}
+
+/**
+ * Move an .info to a new name, keeping the icon.
+ *
+ * Renaming a file checker or a language used to DELETE the old icon and then
+ * write tooltypes to the new name - and `applyTooltypes` creates a file when
+ * it finds none, so what landed was a text stub. A 529-byte Amiga icon came
+ * back as 54 bytes with no DiskObject, which `GetDiskObject` reads as NIL: on
+ * a real Amiga the checker stopped existing.
+ *
+ * A rename is a rename. The bytes move, and the caller applies its tooltypes
+ * to the file that arrived.
+ *
+ * @returns true when a file was moved
+ */
+export function moveInfoFile(oldPath: string, newPath: string): boolean {
+  if (oldPath === newPath) return false;
+
+  const source = amigafs.resolvePath(oldPath) ?? oldPath;
+  if (!fs.existsSync(source)) return false;
+
+  fs.mkdirSync(path.dirname(newPath), { recursive: true });
+  fs.renameSync(source, newPath);
+  return true;
+}
+
+/**
+ * The directory as it is spelled ON DISK.
+ *
+ * express.e writes `Fcheck` and this board's volume holds `FCheck`; on the
+ * Amiga's case-insensitive filesystem both are the same directory, and on the
+ * Linux container they are not. The file-checker service hardcoded `Fcheck`,
+ * so on the live board it read ENOENT and would have written a second
+ * directory the BBS never looks in - invisible on the sysop's Mac, which is
+ * case-insensitive too.
+ */
+export function resolveDirectory(parent: string, name: string): string {
+  const wanted = path.join(parent, name);
+
+  // Read the parent rather than asking whether `wanted` exists: on a
+  // case-insensitive filesystem it does, and the answer comes back with the
+  // spelling that was ASKED for, which is the spelling that is wrong on
+  // Linux. Matching the entry itself gives the same answer on both.
+  try {
+    const lower = name.toLowerCase();
+    for (const entry of fs.readdirSync(parent)) {
+      if (entry.toLowerCase() === lower) return path.join(parent, entry);
+    }
+  } catch {
+    // No parent yet - the caller creates what it needs.
+  }
+
+  return wanted;
 }
 
 /**

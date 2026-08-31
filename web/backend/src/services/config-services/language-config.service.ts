@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { SystemLanguages, Language } from '../../database/types';
 import { SystemLanguagesSchema, LanguageSchema, type RequestContext } from '../config.schemas';
-import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
+import { applyTooltypes, moveInfoFile, readTooltypeMap, resolveDirectory } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -45,7 +45,7 @@ export class LanguageConfigService {
 
   async getLanguages(): Promise<Language[]> {
     const bbsRoot = appConfig.get('dataDir');
-    const languagesDir = path.join(bbsRoot, 'Languages');
+    const languagesDir = resolveDirectory(bbsRoot, 'Languages');
 
     if (!fs.existsSync(languagesDir)) {
 console.warn('[LanguageConfigService] Languages/ directory not found');
@@ -159,7 +159,9 @@ async getLanguage(id: number): Promise<Language | null> {
     }
 
     if (validated.title && validated.title !== oldLanguage.title) {
-      this.deleteLanguageInfoFile(oldLanguage.title);
+      // MOVE the icon rather than deleting it - see moveInfoFile. Deleting it
+      // and writing the new name left a text stub where an icon had been.
+      this.renameLanguageInfoFile(oldLanguage.title, validated.title);
     }
 
     const dbLanguage = this.configRepo.updateLanguage(id, validated);
@@ -199,7 +201,7 @@ async getLanguage(id: number): Promise<Language | null> {
     if (!language.title) return;
 
     const bbsRoot = appConfig.get('dataDir');
-    const languagesDir = path.join(bbsRoot, 'Languages');
+    const languagesDir = resolveDirectory(bbsRoot, 'Languages');
     const infoPath = path.join(languagesDir, `${language.title}.info`);
 
     try {
@@ -222,9 +224,18 @@ console.error(`[LanguageConfigService] Failed to write ${infoPath}:`, error);
     }
   }
 
+  private renameLanguageInfoFile(oldTitle: string, newTitle: string): void {
+    const languagesDir = resolveDirectory(appConfig.get('dataDir'), 'Languages');
+    try {
+      moveInfoFile(path.join(languagesDir, `${oldTitle}.info`), path.join(languagesDir, `${newTitle}.info`));
+    } catch (error) {
+console.error(`[LanguageConfigService] Failed to rename ${oldTitle}.info to ${newTitle}.info:`, error);
+    }
+  }
+
   private deleteLanguageInfoFile(title: string): void {
     const bbsRoot = appConfig.get('dataDir');
-    const infoPath = path.join(bbsRoot, 'Languages', `${title}.info`);
+    const infoPath = path.join(resolveDirectory(bbsRoot, 'Languages'), `${title}.info`);
 
     if (fs.existsSync(infoPath)) {
       try {

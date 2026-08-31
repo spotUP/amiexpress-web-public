@@ -8,7 +8,7 @@ import { getSystemTime } from '../../utils/date-time.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { FileChecker, FileCheckerError } from '../../database/types';
 import { FileCheckerSchema, FileCheckerErrorSchema, type RequestContext } from '../config.schemas';
-import { applyTooltypes, parseInfoBuffer, tooltypeMap } from '../../utils/info-file.util';
+import { applyTooltypes, moveInfoFile, parseInfoBuffer, resolveDirectory, tooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -23,7 +23,7 @@ export class FileCheckerConfigService {
 
   async getAllFileCheckers(): Promise<FileChecker[]> {
     const bbsRoot = appConfig.get('dataDir');
-    const fcheckDir = path.join(bbsRoot, 'Fcheck');
+    const fcheckDir = resolveDirectory(bbsRoot, 'Fcheck');
 
     if (!fs.existsSync(fcheckDir)) {
 console.warn('[FileCheckerConfigService] Fcheck/ directory not found');
@@ -156,7 +156,11 @@ async getFileChecker(id: number): Promise<FileChecker | null> {
     if (!oldChecker) throw new Error(`File checker ${id} not found`);
 
     if (validated.checker_name && validated.checker_name !== oldChecker.checker_name) {
-      this.deleteFileCheckerInfoFile(oldChecker.checker_name);
+      // MOVE the icon; deleting it and letting writeFileCheckerInfoFile
+      // create the new name produced a text stub with no DiskObject, which
+      // GetDiskObject reads as NIL - the checker stopped existing on the
+      // Amiga side. See moveInfoFile.
+      this.renameFileCheckerInfoFile(oldChecker.checker_name, validated.checker_name);
     }
 
     // The edit itself, not a value read back out of a store. getFileChecker
@@ -205,7 +209,7 @@ console.error(`[FileCheckerConfigService] Mirror update failed for checker ${id}
     if (!checker.checker_name) return;
 
     const bbsRoot = appConfig.get('dataDir');
-    const fcheckDir = path.join(bbsRoot, 'Fcheck');
+    const fcheckDir = resolveDirectory(bbsRoot, 'Fcheck');
     const infoPath = path.join(fcheckDir, `${checker.checker_name}.info`);
 
     try {
@@ -233,9 +237,18 @@ console.error(`[FileCheckerConfigService] Failed to write ${infoPath}:`, error);
     }
   }
 
+  private renameFileCheckerInfoFile(oldName: string, newName: string): void {
+    const fcheckDir = resolveDirectory(appConfig.get('dataDir'), 'Fcheck');
+    try {
+      moveInfoFile(path.join(fcheckDir, `${oldName}.info`), path.join(fcheckDir, `${newName}.info`));
+    } catch (error) {
+console.error(`[FileCheckerConfigService] Failed to rename ${oldName}.info to ${newName}.info:`, error);
+    }
+  }
+
   private deleteFileCheckerInfoFile(checkerName: string): void {
     const bbsRoot = appConfig.get('dataDir');
-    const infoPath = path.join(bbsRoot, 'Fcheck', `${checkerName}.info`);
+    const infoPath = path.join(resolveDirectory(bbsRoot, 'Fcheck'), `${checkerName}.info`);
 
     if (fs.existsSync(infoPath)) {
       try {
