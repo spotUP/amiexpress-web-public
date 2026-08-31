@@ -12,24 +12,22 @@ const audio = new AudioEngine({
     // The tracker music plays on its own context (see ensureTracker), so what
     // balances the mix against it is sfxVolume, not musicVolume.
     sfxVolume: 0.55,
-    // Two knobs, not one. `wet` is the SEND LEVEL - how much tail is audible
-    // - and it stays high, because the first pass was reported as too dry.
-    // `decay` and `feedback` are how LONG it rings, and they are short,
-    // because the second was reported as "way too long tails". Claims come in
-    // bursts here, so a tail that outlasts one covers the next.
-    //
-    // The send is parallel and the music is on a different AudioContext
-    // entirely, so none of this passes through the tracker.
+    // Two knobs, and this took three passes. `wet` is the SEND LEVEL - how
+    // much tail is audible - and it stays high, because the first pass was
+    // reported as too dry. `decay` and `feedback` are how LONG it rings, and
+    // they are now SHORT, because "too long tails" was reported twice.
+    // Claims come in bursts here, so anything that outlasts one covers the
+    // next.
     sfxReverb: {
-        wet: 0.78,
-        decay: 2.0,
-        preDelay: 0.02,
+        wet: 0.72,
+        decay: 0.6,
+        preDelay: 0.01,
     },
-    // The bounce: a couple of audible repeats, not a decaying cloud.
+    // One faint repeat behind the hit, and no more.
     sfxEcho: {
-        delayTime: 0.14,
-        feedback: 0.22,
-        wet: 0.78,
+        delayTime: 0.10,
+        feedback: 0.12,
+        wet: 0.72,
     },
 });
 /** Detach from the sound-effect channel. Set while the door is connected. */

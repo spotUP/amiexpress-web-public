@@ -144,10 +144,12 @@ export async function anUndrainedQueueStaysBounded(): Promise<void> {
  * max(reverb.wet, echo.wet), and no echo was declared at all, so the send
  * carried nothing but the reverb wash. Hence the floor on both wets.
  *
- * Second pass was reported as "way too long tails". That is a DIFFERENT
- * knob - decay and feedback, not wet - so the ceiling here is on those, and
- * the wetness floor stays where it is. Anyone tuning this again should move
- * decay and feedback, and leave wet alone.
+ * Then "too long tails" was reported TWICE - at 5-7s, and again at
+ * 1.8-2.4s. That is a DIFFERENT knob from wet: decay and feedback. So the
+ * ceiling here is on those two and the wetness floor stays where it is.
+ * Anyone tuning this again should move decay and feedback and leave wet
+ * alone; a send is parallel, so lowering wet costs audibility without
+ * shortening anything.
  */
 export async function theEffectsAreSentWetToBothReverbAndEcho(): Promise<void> {
   const client = readFileSync(join(__dirname, '..', 'client.ts'), 'utf8');
@@ -174,11 +176,11 @@ export async function theEffectsAreSentWetToBothReverbAndEcho(): Promise<void> {
 
   // Short enough not to ring into the next event.
   assert.ok(
-    Number(decay![1]) <= 2.5,
-    `a ${decay![1]}s tail was reported as way too long`
+    Number(decay![1]) <= 1.0,
+    `a ${decay![1]}s tail is too long - 2.4s was still reported as too long`
   );
   assert.ok(
-    Number(feedback![1]) > 0 && Number(feedback![1]) <= 0.3,
-    `echo feedback ${feedback![1]} should give a couple of repeats, not a cloud`
+    Number(feedback![1]) > 0 && Number(feedback![1]) <= 0.15,
+    `echo feedback ${feedback![1]} should give ONE faint repeat, not a cloud`
   );
 }

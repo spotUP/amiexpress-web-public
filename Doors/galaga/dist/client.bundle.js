@@ -36838,28 +36838,30 @@ var door = new ClientDoor({
 var audio = new AudioEngine({
   masterVolume: 0.7,
   sfxVolume: 0.6,
-  // Space, but a small ship in it. Shots come faster than anything else
-  // in the nine, so the tail has to clear before the next one lands.
+  // Shots come faster than anything else in the nine, so the tail has to
+  // be gone before the next one lands.
   //
-  // Two knobs, not one, and the difference is what the tuning got wrong in
-  // both directions. `wet` is the SEND LEVEL - how much tail is audible -
+  // Two knobs, and this took three passes to land because they were
+  // conflated twice. `wet` is the SEND LEVEL - how much tail is audible -
   // and it stays high, because the first pass was reported as too dry.
-  // `decay` and `feedback` are how LONG it rings, and they are short,
-  // because the second pass was reported as "way too long tails". A send
-  // is parallel: raising wet adds tail beside the dry hit rather than
-  // taking anything away from it.
+  // `decay` and `feedback` are how LONG it rings, and they are now SHORT,
+  // because "too long tails" was reported twice: 5-7s, then 1.8-2.4s, and
+  // both were still too much. This is a slapback, not a room.
+  //
+  // If it is ever still too long, these two are the levers. Do not reach
+  // for `wet` - a send is parallel, so lowering it takes away audibility
+  // without shortening anything.
   sfxReverb: {
-    wet: 0.8,
-    decay: 2.4,
-    preDelay: 0.03
+    wet: 0.75,
+    decay: 0.8,
+    preDelay: 0.01
   },
-  // The bounce. A couple of audible repeats, not a decaying cloud: the SDK
-  // builds ONE send at max(reverb.wet, echo.wet), so this wet matches the
-  // reverb's and the feedback alone decides how many repeats survive.
+  // One faint repeat behind the hit. At this feedback the second repeat is
+  // already inaudible, which is the point.
   sfxEcho: {
-    delayTime: 0.15,
-    feedback: 0.28,
-    wet: 0.8
+    delayTime: 0.1,
+    feedback: 0.14,
+    wet: 0.75
   }
 });
 var stopSfx = null;

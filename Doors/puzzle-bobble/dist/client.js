@@ -26,27 +26,29 @@ const door = new ClientDoor({
 const audio = new AudioEngine({
     masterVolume: 0.7,
     sfxVolume: 0.55,
-    // A tiled hall, short enough that a chain of pops stays countable.
+    // Short enough that a chain of pops stays countable.
     //
-    // Two knobs, not one, and the difference is what the tuning got wrong in
-    // both directions. `wet` is the SEND LEVEL - how much tail is audible -
+    // Two knobs, and this took three passes to land because they were
+    // conflated twice. `wet` is the SEND LEVEL - how much tail is audible -
     // and it stays high, because the first pass was reported as too dry.
-    // `decay` and `feedback` are how LONG it rings, and they are short,
-    // because the second pass was reported as "way too long tails". A send
-    // is parallel: raising wet adds tail beside the dry hit rather than
-    // taking anything away from it.
+    // `decay` and `feedback` are how LONG it rings, and they are now SHORT,
+    // because "too long tails" was reported twice: 5-7s, then 1.8-2.4s, and
+    // both were still too much. This is a slapback, not a room.
+    //
+    // If it is ever still too long, these two are the levers. Do not reach
+    // for `wet` - a send is parallel, so lowering it takes away audibility
+    // without shortening anything.
     sfxReverb: {
-        wet: 0.78,
-        decay: 1.8,
-        preDelay: 0.02,
+        wet: 0.72,
+        decay: 0.5,
+        preDelay: 0.01,
     },
-    // The bounce. A couple of audible repeats, not a decaying cloud: the SDK
-    // builds ONE send at max(reverb.wet, echo.wet), so this wet matches the
-    // reverb's and the feedback alone decides how many repeats survive.
+    // One faint repeat behind the hit. At this feedback the second repeat is
+    // already inaudible, which is the point.
     sfxEcho: {
-        delayTime: 0.13,
-        feedback: 0.25,
-        wet: 0.78,
+        delayTime: 0.09,
+        feedback: 0.12,
+        wet: 0.72,
     },
 });
 let stopSfx = null;
