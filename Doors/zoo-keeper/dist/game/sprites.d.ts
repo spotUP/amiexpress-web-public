@@ -34,7 +34,14 @@ export declare const EMPTY: Cell;
  * ANIMAL_STATS gives three of the six the same yellow (camel, moose, lion)
  * and two the same gray (elephant, rhino) - so the lion, worth 30,000 and
  * the fastest thing in the zoo, was drawn exactly like a camel worth 1,000.
- * Six animals, six colours, brightest for the ones that matter most.
+ * Six animals, six colours.
+ *
+ * The hues were checked against the sprite sheet of the PICO-8 Zoo Keeper
+ * cart on the Lexaloffle BBS (zookeeper-0), decoded and looked at rather than
+ * guessed: the elephants are light grey, the snakes bright green, the big
+ * cats orange and yellow, the rhinos grey-lavender. Colour choices only - no
+ * art or code is taken from it, and none could be: an 8x8 sprite does not
+ * fit in a one-character cell. Credit to its author.
  */
 export declare const ANIMAL_COLORS: Record<AnimalType, string>;
 export declare const COLORS: {
@@ -50,6 +57,21 @@ export declare const COLORS: {
     cage: string;
     bonus: string;
 };
+/**
+ * The bonus items, in the colours of the fruit they are.
+ *
+ * They were all one yellow. The cart draws a banana, cherries, a melon and a
+ * clover, each its own colour, and they are worth different amounts - so
+ * telling them apart at a glance is worth something.
+ */
+export declare const BONUS_COLORS: Record<string, string>;
+/**
+ * Every colour a terminal can actually paint.
+ *
+ * Named because it is easy to write a colour that reads well in source and
+ * means nothing on the wire - 'brown' was in here for exactly one commit.
+ */
+export declare const TERMINAL_COLORS: ReadonlySet<string>;
 export declare const cell: (ch: string, fg: string, bg?: string) => Cell;
 /**
  * Zeke, and whether he is holding the net.
@@ -67,8 +89,13 @@ export declare function monkeyCell(): Cell;
 export declare function coconutCell(): Cell;
 /** The burning fuse, and its lit head. */
 export declare function fuseCell(isEnd: boolean): Cell;
-/** A bonus letter or digit floating on the board. */
-export declare function bonusCell(ch: string): Cell;
+/**
+ * A bonus letter or digit floating on the board.
+ *
+ * `kind` names the fruit when the caller knows it, so a banana and a cherry
+ * are not the same yellow.
+ */
+export declare function bonusCell(ch: string, kind?: string): Cell;
 /**
  * Paint one cell.
  *

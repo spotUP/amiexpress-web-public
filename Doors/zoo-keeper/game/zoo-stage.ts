@@ -770,7 +770,7 @@ export class ZooKeeperGame {
       if (!item.collected) {
         const itemX = fuseStart + Math.floor(item.fusePosition * fuseLength);
         if (itemX > burnPos && itemX < fuseEnd) {
-          buffer[fuseY][itemX] = bonusCell(BONUS_ITEMS[item.type].char);
+          buffer[fuseY][itemX] = bonusCell(BONUS_ITEMS[item.type].char, item.type);
         }
       }
     }

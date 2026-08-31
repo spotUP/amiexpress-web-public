@@ -27,29 +27,65 @@ export const EMPTY = { ch: ' ', fg: 'white' };
  * ANIMAL_STATS gives three of the six the same yellow (camel, moose, lion)
  * and two the same gray (elephant, rhino) - so the lion, worth 30,000 and
  * the fastest thing in the zoo, was drawn exactly like a camel worth 1,000.
- * Six animals, six colours, brightest for the ones that matter most.
+ * Six animals, six colours.
+ *
+ * The hues were checked against the sprite sheet of the PICO-8 Zoo Keeper
+ * cart on the Lexaloffle BBS (zookeeper-0), decoded and looked at rather than
+ * guessed: the elephants are light grey, the snakes bright green, the big
+ * cats orange and yellow, the rhinos grey-lavender. Colour choices only - no
+ * art or code is taken from it, and none could be: an 8x8 sprite does not
+ * fit in a one-character cell. Credit to its author.
  */
 export const ANIMAL_COLORS = {
-    elephant: 'white',
-    snake: 'lightgreen',
+    elephant: 'white', // light grey in the cart
+    snake: 'lightgreen', // bright green
     camel: 'yellow',
-    rhino: 'lightblue',
+    rhino: 'lightmagenta', // grey-lavender in the cart; was an invented blue
     moose: 'lightred',
-    lion: 'lightyellow',
+    lion: 'lightyellow', // the orange-yellow cats
 };
 export const COLORS = {
-    zeke: 'lightcyan',
-    zekeWithNet: 'lightgreen',
-    zelda: 'lightmagenta',
-    monkey: 'yellow',
-    coconut: 'lightyellow',
+    // Zeke wears green in the cart's artwork, not the cyan first guessed here.
+    zeke: 'lightgreen',
+    // With the net raised he goes bright, so the state that decides whether he
+    // can catch anything is readable without looking twice.
+    zekeWithNet: 'lightyellow',
+    zelda: 'lightcyan',
+    monkey: 'lightmagenta', // the lavender monkeys
+    coconut: 'yellow', // no brown in a 16-colour terminal
     fuse: 'lightred',
     fuseEnd: 'lightyellow',
-    wall: 'gray',
+    // The cage is drawn in blue bars in the cart, not grey.
+    wall: 'lightblue',
     wallDamaged: 'lightred',
     cage: 'lightblue',
     bonus: 'lightyellow',
 };
+/**
+ * The bonus items, in the colours of the fruit they are.
+ *
+ * They were all one yellow. The cart draws a banana, cherries, a melon and a
+ * clover, each its own colour, and they are worth different amounts - so
+ * telling them apart at a glance is worth something.
+ */
+export const BONUS_COLORS = {
+    banana: 'lightyellow',
+    cherry: 'lightred',
+    melon: 'lightgreen',
+    clover: 'green',
+    key: 'lightyellow',
+};
+/**
+ * Every colour a terminal can actually paint.
+ *
+ * Named because it is easy to write a colour that reads well in source and
+ * means nothing on the wire - 'brown' was in here for exactly one commit.
+ */
+export const TERMINAL_COLORS = new Set([
+    'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'gray',
+    'lightblack', 'lightred', 'lightgreen', 'lightyellow',
+    'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
+]);
 export const cell = (ch, fg, bg) => ({ ch, fg, bg });
 /**
  * Zeke, and whether he is holding the net.
@@ -83,9 +119,14 @@ export function fuseCell(isEnd) {
         ? { ch: '*', fg: COLORS.fuseEnd }
         : { ch: '=', fg: COLORS.fuse };
 }
-/** A bonus letter or digit floating on the board. */
-export function bonusCell(ch) {
-    return { ch, fg: COLORS.bonus };
+/**
+ * A bonus letter or digit floating on the board.
+ *
+ * `kind` names the fruit when the caller knows it, so a banana and a cherry
+ * are not the same yellow.
+ */
+export function bonusCell(ch, kind) {
+    return { ch, fg: (kind && BONUS_COLORS[kind]) || COLORS.bonus };
 }
 /**
  * Paint one cell.

@@ -15,7 +15,7 @@ import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
-  Cell, EMPTY, COLORS, ANIMAL_COLORS, paint,
+  Cell, EMPTY, COLORS, ANIMAL_COLORS, BONUS_COLORS, TERMINAL_COLORS, paint,
   zekeCell, animalCell, wallCell, fuseCell, zeldaCell, monkeyCell, coconutCell, bonusCell,
 } from '../game/sprites';
 import { ANIMAL_STATS } from '../game/constants';
@@ -164,4 +164,39 @@ export async function everyStageDrawsZekeWithHisRealNetState(): Promise<void> {
       `${stage} must draw Zeke from his LIVE net state, not a constant`
     );
   }
+}
+
+/**
+ * Every colour named here must be one a terminal can paint.
+ *
+ * 'brown' sat in this file for exactly one commit: it reads perfectly well in
+ * source and means nothing on the wire, so the coconut would simply have come
+ * out in whatever colour was already set.
+ */
+export async function everyColourIsOneATerminalCanPaint(): Promise<void> {
+  const named: Array<[string, string]> = [
+    ...Object.entries(COLORS),
+    ...Object.entries(ANIMAL_COLORS),
+    ...Object.entries(BONUS_COLORS),
+  ];
+
+  for (const [name, colour] of named) {
+    assert.ok(
+      TERMINAL_COLORS.has(colour),
+      `${name} is ${JSON.stringify(colour)}, which no terminal will paint`
+    );
+  }
+}
+
+/** The fruit colours are actually reachable - the kind is passed through. */
+export async function theBonusFruitColoursAreActuallyUsed(): Promise<void> {
+  const banana = bonusCell('B', 'banana');
+  const cherry = bonusCell('C', 'cherry');
+  assert.notStrictEqual(banana.fg, cherry.fg, 'different fruit, different colour');
+
+  const zoo = readFileSync(join(__dirname, '..', 'game', 'zoo-stage.ts'), 'utf8');
+  assert.ok(
+    /bonusCell\(BONUS_ITEMS\[item\.type\]\.char, item\.type\)/.test(zoo),
+    'the fruit type must be passed through, or the colours never apply'
+  );
 }
