@@ -60,15 +60,25 @@ export async function theBrowserIsDeafWhileTheEditorIsOpen(): Promise<void> {
  * frame). Every op binding must route through one guarded wrapper so the
  * `naming !== null` check exists exactly once, not copy-pasted per key.
  */
+/**
+ * Studio 2c: the 19 opKey-bound keys below no longer appear as literal
+ * `this.opKey(['x'], ...)` call sites - they are StudioBinding entries in
+ * one table (bindings.ts), wired through opKey by a single loop. The
+ * meaning this test pins is unchanged: every one of these keys must still
+ * be declared AND still be wired through the naming guard, not the raw
+ * key().
+ */
 export async function opBindingsRouteThroughTheNamingGuard(): Promise<void> {
   assert.ok(/private opKey\(/.test(code), 'op key bindings must share one guarded wrapper');
   const opKeyBody = code.slice(code.indexOf('private opKey('), code.indexOf('private opKey(') + 300);
   assert.ok(/if \(this\.naming !== null\) return;/.test(opKeyBody),
     'the wrapper must no-op every bound op while a name is being typed');
+  assert.ok(/for \(const binding of opBindings\) this\.opKey\(binding\.keys, binding\.handler\);/.test(code),
+    'the op table must be wired through opKey by one loop, not per-key call sites');
   for (const key of ["'g'", "'f'", "'S-f'", "'b'", "'S-b'", "','", "'.'", "'n'", "'c'", "'x'",
                      "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'"]) {
-    assert.ok(code.includes(`this.opKey([${key}]`),
-      `[${key}] must be bound through opKey, not the raw naming-unaware key()`);
+    assert.ok(code.includes(`keys: [${key}]`),
+      `[${key}] must have a table entry, wired through the op loop into opKey`);
   }
 }
 
@@ -89,9 +99,16 @@ export async function spaceAndDeleteRouteSetPixelThroughTryOp(): Promise<void> {
  * Review finding: the exclusion string that keeps bound-key letters out of
  * typed cell art omitted 'X' - S-x is bound (deleteAnimation) but its
  * Shift+X keypress ('X') fell through to setCell.
+ *
+ * Studio 2c: the hand-written exclusion string is gone. The check must now
+ * read the binding table's own derived set (bindings.ts's buildBindingSet -
+ * unit-pinned in bindings.test.ts, including that S-x derives 'X'), so
+ * this test pins that the check reads THAT set and that the delete-
+ * animation binding is still declared with the key that derives it.
  */
 export async function theTypingExclusionListIncludesShiftedDeleteAnimation(): Promise<void> {
-  const m = code.match(/if \('([^']+)'\.includes\(ch\)\)/);
-  assert.ok(m, 'the bound-key exclusion string must exist');
-  assert.ok(m![1].includes('X'), `exclusion list is missing 'X' (S-x): ${m![1]}`);
+  assert.ok(/this\.bindingSet\.excludedGlyphKeys\.has\(ch\)/.test(code),
+    'the glyph-typing exclusion check must read the derived binding set, not a hand-written string');
+  assert.ok(code.includes("keys: ['S-x']"),
+    "the delete-animation binding must still bind S-x, whose derived glyph 'X' keeps it out of cell-typing");
 }

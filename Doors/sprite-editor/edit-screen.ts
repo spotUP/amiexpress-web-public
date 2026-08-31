@@ -19,6 +19,7 @@ import {
 } from './edit-doc';
 import { writeSprite } from './assets';
 import { previewLines } from './preview';
+import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
@@ -49,6 +50,7 @@ export class EditScreen {
   private paletteBox: any = null;
   private statusBar: any = null;
   private keyHandlers: Array<[string[], (...args: any[]) => void]> = [];
+  private bindingSet!: BindingSet;
 
   constructor(screen: any, door: string, file: string, sprite: Sprite, onExit: () => void) {
     this.screen = screen;
@@ -125,28 +127,109 @@ export class EditScreen {
     });
   }
 
+  /**
+   * The op table: every opKey-guarded binding, plus 'paint' (space), which
+   * is naming-aware itself and so is wired separately below (see opKey's
+   * own doc comment for why space/delete/enter/escape/+ don't share the
+   * outer guard). Handler bodies are unchanged from before the table -
+   * only where they are declared moved. This one table is also the single
+   * source for the glyph-typing exclusion set below, replacing a
+   * hand-written string that had already drifted once (missing 'X' for
+   * S-x, caught by shiftXDoesNotTypeIntoTheCell).
+   */
+  private buildOpBindings(): StudioBinding[] {
+    return [
+      { id: 'cursor.up', keys: ['up'], hotkeyHint: 'up', menu: 'View', label: 'Move Up',
+        handler: () => this.moveCursor(-1, 0) },
+      { id: 'cursor.down', keys: ['down'], hotkeyHint: 'down', menu: 'View', label: 'Move Down',
+        handler: () => this.moveCursor(1, 0) },
+      { id: 'cursor.left', keys: ['left'], hotkeyHint: 'left', menu: 'View', label: 'Move Left',
+        handler: () => this.moveCursor(0, -1) },
+      { id: 'cursor.right', keys: ['right'], hotkeyHint: 'right', menu: 'View', label: 'Move Right',
+        handler: () => this.moveCursor(0, 1) },
+      { id: 'view.toggleMode', keys: ['tab'], hotkeyHint: 'tab', menu: 'View', label: 'Toggle Cell/Pixel Mode',
+        handler: () => {
+          if (this.mode === 'cell' && frameIsPixelEditable(this.doc)) {
+            this.mode = 'pixel';
+            this.cursorRow = Math.min(this.cursorRow * 2, this.doc.sprite.cellH * 2 - 1);
+          } else {
+            if (this.mode === 'pixel') this.cursorRow = Math.floor(this.cursorRow / 2);
+            this.mode = 'cell';
+          }
+          this.paint();
+        } },
+
+      { id: 'paint.nextGlyph', keys: ['g'], hotkeyHint: 'g', menu: 'Paint', label: 'Next Glyph',
+        handler: () => { this.glyph = (this.glyph + 1) % GLYPHS.length; this.paint(); } },
+      { id: 'paint.nextFg', keys: ['f'], hotkeyHint: 'f', menu: 'Paint', label: 'Next Foreground',
+        handler: () => { this.fg = (this.fg + 1) % 16; this.paint(); } },
+      { id: 'paint.prevFg', keys: ['S-f'], hotkeyHint: 'S-f', menu: 'Paint', label: 'Previous Foreground',
+        handler: () => { this.fg = (this.fg + 15) % 16; this.paint(); } },
+      { id: 'paint.nextBg', keys: ['b'], hotkeyHint: 'b', menu: 'Paint', label: 'Next Background',
+        handler: () => { this.bg = (this.bg + 1) % 16; this.paint(); } },
+      { id: 'paint.prevBg', keys: ['S-b'], hotkeyHint: 'S-b', menu: 'Paint', label: 'Previous Background',
+        handler: () => { this.bg = (this.bg + 15) % 16; this.paint(); } },
+
+      { id: 'frame.prev', keys: [','], hotkeyHint: ',', menu: 'Frame', label: 'Previous Frame',
+        handler: () => this.apply(selectFrame(this.doc, this.doc.frame - 1)) },
+      { id: 'frame.next', keys: ['.'], hotkeyHint: '.', menu: 'Frame', label: 'Next Frame',
+        handler: () => this.apply(selectFrame(this.doc, this.doc.frame + 1)) },
+      { id: 'frame.new', keys: ['n'], hotkeyHint: 'n', menu: 'Frame', label: 'New Frame',
+        handler: () => this.tryOp(() => addFrame(this.doc, 'blank')) },
+      { id: 'frame.duplicate', keys: ['c'], hotkeyHint: 'c', menu: 'Frame', label: 'Duplicate Frame',
+        handler: () => this.tryOp(() => addFrame(this.doc, 'duplicate')) },
+      { id: 'frame.delete', keys: ['x'], hotkeyHint: 'x', menu: 'Frame', label: 'Delete Frame',
+        handler: () => this.tryOp(() => deleteFrame(this.doc)) },
+      { id: 'frame.moveEarlier', keys: ['S-,'], hotkeyHint: 'S-,', menu: 'Frame', label: 'Move Frame Earlier',
+        handler: () => this.apply(moveFrame(this.doc, -1)) },
+      { id: 'frame.moveLater', keys: ['S-.'], hotkeyHint: 'S-.', menu: 'Frame', label: 'Move Frame Later',
+        handler: () => this.apply(moveFrame(this.doc, 1)) },
+
+      { id: 'animation.next', keys: ['a'], hotkeyHint: 'a', menu: 'Animation', label: 'Next Animation',
+        handler: () => {
+          const names = Object.keys(this.doc.sprite.animations).sort();
+          const next = names[(names.indexOf(this.doc.animation) + 1) % names.length];
+          this.apply(selectAnimation(this.doc, next));
+        } },
+      { id: 'animation.new', keys: ['+'], hotkeyHint: '+', menu: 'Animation', label: 'New Animation',
+        handler: () => { this.naming = ''; this.paint(); } },
+      { id: 'animation.slower', keys: ['t'], hotkeyHint: 't', menu: 'Animation', label: 'Slower',
+        handler: () => this.apply(setTicksPerFrame(this.doc, -1)) },
+      { id: 'animation.faster', keys: ['S-t'], hotkeyHint: 'S-t', menu: 'Animation', label: 'Faster',
+        handler: () => this.apply(setTicksPerFrame(this.doc, +1)) },
+      { id: 'animation.toggleLoop', keys: ['l'], hotkeyHint: 'l', menu: 'Animation', label: 'Toggle Loop',
+        handler: () => this.apply(toggleLoop(this.doc)) },
+      { id: 'animation.delete', keys: ['S-x'], hotkeyHint: 'S-x', menu: 'Animation', label: 'Delete Animation',
+        handler: () => this.tryOp(() => deleteAnimation(this.doc)) },
+
+      { id: 'file.save', keys: ['s'], hotkeyHint: 's', menu: 'File', label: 'Save',
+        handler: () => this.save() },
+    ];
+  }
+
   private bindKeys(): void {
-    this.opKey(['up'], () => this.moveCursor(-1, 0));
-    this.opKey(['down'], () => this.moveCursor(1, 0));
-    this.opKey(['left'], () => this.moveCursor(0, -1));
-    this.opKey(['right'], () => this.moveCursor(0, 1));
-    this.opKey(['tab'], () => {
-      if (this.mode === 'cell' && frameIsPixelEditable(this.doc)) {
-        this.mode = 'pixel';
-        this.cursorRow = Math.min(this.cursorRow * 2, this.doc.sprite.cellH * 2 - 1);
-      } else {
-        if (this.mode === 'pixel') this.cursorRow = Math.floor(this.cursorRow / 2);
-        this.mode = 'cell';
-      }
-      this.paint();
-    });
-    this.key(['space'], () => {
-      if (this.naming !== null) { this.typeName(' '); return; }
-      this.tryOp(() => this.mode === 'pixel'
-        ? setPixel(this.doc, this.cursorRow, this.cursorCol, this.fg)
-        : setCell(this.doc, this.cursorRow, this.cursorCol,
-            { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg }));
-    });
+    const opBindings = this.buildOpBindings();
+    for (const binding of opBindings) this.opKey(binding.keys, binding.handler);
+
+    // Paint (space) is naming-aware itself (it types a space into the name
+    // while naming, rather than doing nothing like every opKey binding),
+    // so it is wired directly with this.key(), not opKey() - but it still
+    // needs a table entry so its key contributes to the exclusion set
+    // below, the same as every opKey binding does.
+    const paintBinding: StudioBinding = {
+      id: 'paint.paint', keys: ['space'], hotkeyHint: 'space', menu: 'Paint', label: 'Paint',
+      handler: () => {
+        if (this.naming !== null) { this.typeName(' '); return; }
+        this.tryOp(() => this.mode === 'pixel'
+          ? setPixel(this.doc, this.cursorRow, this.cursorCol, this.fg)
+          : setCell(this.doc, this.cursorRow, this.cursorCol,
+              { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg }));
+      },
+    };
+    this.key(paintBinding.keys, paintBinding.handler);
+
+    this.bindingSet = buildBindingSet([...opBindings, paintBinding]);
+
     this.key(['delete', 'backspace'], () => {
       if (this.naming !== null) { this.naming = this.naming.slice(0, -1); this.paint(); return; }
       this.tryOp(() => this.mode === 'pixel'
@@ -154,32 +237,6 @@ export class EditScreen {
         : setCell(this.doc, this.cursorRow, this.cursorCol, null));
     });
 
-    this.opKey(['g'], () => { this.glyph = (this.glyph + 1) % GLYPHS.length; this.paint(); });
-    this.opKey(['f'], () => { this.fg = (this.fg + 1) % 16; this.paint(); });
-    this.opKey(['S-f'], () => { this.fg = (this.fg + 15) % 16; this.paint(); });
-    this.opKey(['b'], () => { this.bg = (this.bg + 1) % 16; this.paint(); });
-    this.opKey(['S-b'], () => { this.bg = (this.bg + 15) % 16; this.paint(); });
-
-    this.opKey([','], () => this.apply(selectFrame(this.doc, this.doc.frame - 1)));
-    this.opKey(['.'], () => this.apply(selectFrame(this.doc, this.doc.frame + 1)));
-    this.opKey(['n'], () => this.tryOp(() => addFrame(this.doc, 'blank')));
-    this.opKey(['c'], () => this.tryOp(() => addFrame(this.doc, 'duplicate')));
-    this.opKey(['x'], () => this.tryOp(() => deleteFrame(this.doc)));
-    this.opKey(['S-,'], () => this.apply(moveFrame(this.doc, -1)));
-    this.opKey(['S-.'], () => this.apply(moveFrame(this.doc, 1)));
-
-    this.opKey(['a'], () => {
-      const names = Object.keys(this.doc.sprite.animations).sort();
-      const next = names[(names.indexOf(this.doc.animation) + 1) % names.length];
-      this.apply(selectAnimation(this.doc, next));
-    });
-    this.opKey(['+'], () => { this.naming = ''; this.paint(); });
-    this.opKey(['t'], () => this.apply(setTicksPerFrame(this.doc, -1)));
-    this.opKey(['S-t'], () => this.apply(setTicksPerFrame(this.doc, +1)));
-    this.opKey(['l'], () => this.apply(toggleLoop(this.doc)));
-    this.opKey(['S-x'], () => this.tryOp(() => deleteAnimation(this.doc)));
-
-    this.opKey(['s'], () => this.save());
     this.key(['enter'], () => {
       if (this.naming !== null) {
         const name = this.naming;
@@ -204,7 +261,7 @@ export class EditScreen {
       if (!ch || ch.length !== 1 || ch < ' ' || ch === '\x7f') return;
       if (this.naming !== null) { this.typeName(ch); return; }
       if (this.mode !== 'cell') return;
-      if ('gfbFB,.ncx<>a+tTlsSX '.includes(ch)) return; // bound keys keep their meaning
+      if (this.bindingSet.excludedGlyphKeys.has(ch)) return; // bound keys keep their meaning
       if (ch === '{' || ch === '}') return; // the two characters the format refuses
       this.apply(setCell(this.doc, this.cursorRow, this.cursorCol,
         { char: ch, fg: this.fg, bg: this.bg }));

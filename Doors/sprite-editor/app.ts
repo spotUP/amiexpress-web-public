@@ -28,6 +28,7 @@ import { readSprite } from './assets';
 import { EditScreen } from './edit-screen';
 import { ArtSession } from './art-screen';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
@@ -52,6 +53,7 @@ export class StudioApp {
   private loaded: { key: string; sprite: Sprite } | null = null;
   private editScreen: EditScreen | null = null;
   private artSession: ArtSession | null = null;
+  private bindingSet!: BindingSet;
 
   constructor(ctx: DoorContext) {
     this.ctx = ctx;
@@ -151,61 +153,83 @@ export class StudioApp {
     });
   }
 
+  /**
+   * The browser's key table. One StudioBinding array, wired verbatim (the
+   * screen drives everything; the widgets' own keys stay off, the way
+   * every arcade door learned to - a widget's keys:true never fires when
+   * input is routed by the door) and fed to buildBindingSet so a later
+   * task can build a menu from the same source, without a second
+   * hand-maintained list of what's bound.
+   */
+  private buildBindings(): StudioBinding[] {
+    return [
+      { id: 'nav.up', keys: ['up', 'k'], hotkeyHint: 'up/k', menu: 'Navigate', label: 'Move Up',
+        handler: () => this.apply(moveSelection(this.state, -1)) },
+      { id: 'nav.down', keys: ['down', 'j'], hotkeyHint: 'down/j', menu: 'Navigate', label: 'Move Down',
+        handler: () => this.apply(moveSelection(this.state, 1)) },
+      { id: 'nav.pageUp', keys: ['pageup'], hotkeyHint: 'pageup', menu: 'Navigate', label: 'Page Up',
+        handler: () => this.apply(moveSelection(this.state, -10)) },
+      { id: 'nav.pageDown', keys: ['pagedown'], hotkeyHint: 'pagedown', menu: 'Navigate', label: 'Page Down',
+        handler: () => this.apply(moveSelection(this.state, 10)) },
+      { id: 'nav.paneNext', keys: ['tab', 'right'], hotkeyHint: 'tab', menu: 'Navigate', label: 'Next Pane',
+        handler: () => this.apply(cyclePane(this.state, 1)) },
+      { id: 'nav.panePrev', keys: ['S-tab', 'left'], hotkeyHint: 'S-tab', menu: 'Navigate', label: 'Previous Pane',
+        handler: () => this.apply(cyclePane(this.state, -1)) },
+      { id: 'studio.quit', keys: ['q', 'escape', 'C-c'], hotkeyHint: 'q', menu: 'Studio', label: 'Quit',
+        handler: () => {
+          if (this.editScreen || this.artSession) return;
+          this.destroy();
+          void this.ctx.close();
+        } },
+      { id: 'studio.edit', keys: ['e'], hotkeyHint: 'e', menu: 'Studio', label: 'Edit Sprite',
+        handler: () => {
+          const sel = selection(this.state);
+          const sprite = this.currentSprite();
+          if (!sel.door || !sel.sprite || !sprite || this.editScreen || this.artSession) return;
+          // The browser sleeps while the editor owns the screen: its panes
+          // hide and its playback pauses, so two timers never fight over
+          // render() and apply() ignores keys while the editor is open, so
+          // the browser's own bindings cannot drift the selection underneath it.
+          if (this.playback) { clearInterval(this.playback); this.playback = null; }
+          for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                           this.previewBox, this.statusBar]) w.hide();
+          this.editScreen = new EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
+            this.editScreen = null;
+            for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                             this.previewBox, this.statusBar]) w.show();
+            this.loaded = null; // the sprite may have been saved - reload it
+            this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
+            this.refresh();
+          });
+        } },
+      { id: 'studio.artMode', keys: ['m'], hotkeyHint: 'm', menu: 'Studio', label: 'Art Mode',
+        handler: () => {
+          const sel = selection(this.state);
+          if (!sel.door || this.editScreen || this.artSession) return;
+          // Same sleep/wake contract as 'e': panes hide and playback pauses
+          // while the art session owns the screen, and apply() ignores keys
+          // while it is open (see below) so the browser cannot drift underneath
+          // it. listArt(door) plus the '[new file]' row is never empty, so
+          // there is no black-screen risk in hiding before the list paints -
+          // the same reasoning the ansi-editor door's showFileBrowser relies on.
+          if (this.playback) { clearInterval(this.playback); this.playback = null; }
+          for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                           this.previewBox, this.statusBar]) w.hide();
+          this.artSession = new ArtSession(this.screen, sel.door, () => {
+            this.artSession = null;
+            for (const w of [this.doorsList, this.spritesList, this.animationsList,
+                             this.previewBox, this.statusBar]) w.show();
+            this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
+            this.refresh();
+          });
+        } },
+    ];
+  }
+
   private bindKeys(): void {
-    // The screen drives everything; the widgets' own keys stay off, the
-    // way every arcade door learned to (a widget's keys:true never fires
-    // when input is routed by the door).
-    this.screen.key(['up', 'k'], () => this.apply(moveSelection(this.state, -1)));
-    this.screen.key(['down', 'j'], () => this.apply(moveSelection(this.state, 1)));
-    this.screen.key(['pageup'], () => this.apply(moveSelection(this.state, -10)));
-    this.screen.key(['pagedown'], () => this.apply(moveSelection(this.state, 10)));
-    this.screen.key(['tab', 'right'], () => this.apply(cyclePane(this.state, 1)));
-    this.screen.key(['S-tab', 'left'], () => this.apply(cyclePane(this.state, -1)));
-    this.screen.key(['q', 'escape', 'C-c'], () => {
-      if (this.editScreen || this.artSession) return;
-      this.destroy();
-      void this.ctx.close();
-    });
-    this.screen.key(['e'], () => {
-      const sel = selection(this.state);
-      const sprite = this.currentSprite();
-      if (!sel.door || !sel.sprite || !sprite || this.editScreen || this.artSession) return;
-      // The browser sleeps while the editor owns the screen: its panes
-      // hide and its playback pauses, so two timers never fight over
-      // render() and apply() ignores keys while the editor is open, so
-      // the browser's own bindings cannot drift the selection underneath it.
-      if (this.playback) { clearInterval(this.playback); this.playback = null; }
-      for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                       this.previewBox, this.statusBar]) w.hide();
-      this.editScreen = new EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
-        this.editScreen = null;
-        for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                         this.previewBox, this.statusBar]) w.show();
-        this.loaded = null; // the sprite may have been saved - reload it
-        this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
-        this.refresh();
-      });
-    });
-    this.screen.key(['m'], () => {
-      const sel = selection(this.state);
-      if (!sel.door || this.editScreen || this.artSession) return;
-      // Same sleep/wake contract as 'e': panes hide and playback pauses
-      // while the art session owns the screen, and apply() ignores keys
-      // while it is open (see below) so the browser cannot drift underneath
-      // it. listArt(door) plus the '[new file]' row is never empty, so
-      // there is no black-screen risk in hiding before the list paints -
-      // the same reasoning the ansi-editor door's showFileBrowser relies on.
-      if (this.playback) { clearInterval(this.playback); this.playback = null; }
-      for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                       this.previewBox, this.statusBar]) w.hide();
-      this.artSession = new ArtSession(this.screen, sel.door, () => {
-        this.artSession = null;
-        for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                         this.previewBox, this.statusBar]) w.show();
-        this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
-        this.refresh();
-      });
-    });
+    const bindings = this.buildBindings();
+    this.bindingSet = buildBindingSet(bindings);
+    for (const binding of bindings) this.screen.key(binding.keys, binding.handler);
   }
 
   private apply(next: BrowserState): void {

@@ -185,6 +185,48 @@ export async function selectingBackToANonPixelFrameDropsToCellModeAndSpaceNeverT
   }
 }
 
+/**
+ * Studio 2c: bindings.ts derives the exclusion set from the table instead
+ * of a hand string. S-, and S-. are the one case in this door where the
+ * shift-key's real typed symbol ('<' / '>') is not its letter-uppercase -
+ * a keyboard shift+comma types '<', not a capitalised comma. Locks in that
+ * the derivation still keeps those two out of painted cell art, the same
+ * as the old hand-written string did.
+ */
+export async function shiftCommaAndShiftPeriodDoNotTypeIntoTheCell(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture',
+    cellW: 2,
+    cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [
+          [[{ char: '#', fg: 7, bg: 0 }, null]],
+          [[{ char: '@', fg: 7, bg: 0 }, null]],
+        ],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const canvasBox = screen.children[0];
+
+    const beforeComma = canvasBox.getContent();
+    pressChar(screen, '<'); // Shift+comma: S-, binding (move frame earlier) + keypress '<'
+    assert.strictEqual(canvasBox.getContent(), beforeComma,
+      'Shift+comma must not write the character < into the current cell');
+
+    const beforePeriod = canvasBox.getContent();
+    pressChar(screen, '>'); // Shift+period: S-. binding (move frame later) + keypress '>'
+    assert.strictEqual(canvasBox.getContent(), beforePeriod,
+      'Shift+period must not write the character > into the current cell');
+  } finally {
+    edit.destroy();
+  }
+}
+
 export async function shiftXDoesNotTypeIntoTheCell(): Promise<void> {
   // Exactly ONE animation: S-x's own op (deleteAnimation) refuses ("cannot
   // delete the last animation") and leaves the doc untouched, isolating

@@ -30,9 +30,12 @@ export async function artModeUsesTheAssetHelpers(): Promise<void> {
 }
 
 export async function theBrowserPanesHideAndShowAroundArtMode(): Promise<void> {
-  const idx = code.indexOf("this.screen.key(['m']");
-  assert.ok(idx >= 0, "app.ts must bind the 'm' key for art mode");
+  // Studio 2c: 'm' is a StudioBinding entry (bindings.ts), not a literal
+  // this.screen.key(['m'], ...) call site - find its handler by id instead.
+  const idx = code.indexOf("id: 'studio.artMode'");
+  assert.ok(idx >= 0, "app.ts must declare the 'studio.artMode' binding for the 'm' key");
   const block = code.slice(idx, idx + 1200);
+  assert.ok(/keys: \['m'\]/.test(block), "the studio.artMode binding must bind the 'm' key");
   assert.ok(/\.hide\(\)/.test(block),
     'the m handler must hide the browser panes before opening art mode');
   assert.ok(/\.show\(\)/.test(block),
@@ -45,8 +48,8 @@ export async function theArtEditorWidgetIsDestroyedOnExit(): Promise<void> {
 }
 
 export async function theArtHandlerGuardsDoubleOpenAndEditScreen(): Promise<void> {
-  const idx = code.indexOf("this.screen.key(['m']");
-  assert.ok(idx >= 0, "app.ts must bind the 'm' key for art mode");
+  const idx = code.indexOf("id: 'studio.artMode'");
+  assert.ok(idx >= 0, "app.ts must declare the 'studio.artMode' binding for the 'm' key");
   const block = code.slice(idx, idx + 400);
   assert.ok(/this\.editScreen/.test(block),
     "the m handler must no-op while the edit screen is open");
