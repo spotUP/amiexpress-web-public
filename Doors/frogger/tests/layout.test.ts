@@ -26,6 +26,7 @@ import {
   GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH,
 } from '../game/constants';
 import { titleWidth, titleLines, LOGO_HEIGHT } from '../game/attract';
+import { menuBoxHeight, menuLines } from '../game/menu-content';
 
 function makeScreen(): any {
   return blessed.screen({
@@ -245,4 +246,77 @@ export async function theMenuHasNoColourBlockStrip(): Promise<void> {
   const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
 
   assert.ok(!/laneStrip/.test(index), 'the block strip and its helper should be gone');
+}
+
+/**
+ * The menu box fits inside the game area.
+ *
+ * Reported live with a screenshot: a stray "1" at the top-left of the menu
+ * and a "0" at the top-right.
+ *
+ * Neither is a character the menu draws. The menu content had thirteen rows
+ * plus two of border - one taller than the thirteen-row game area - because
+ * the door pushed its own hint line under the one arcadeMenu already draws.
+ * blessed resolves `top: "center"` on an oversized child to a NEGATIVE
+ * offset, so the box climbed one row and sat on top of the HUD.
+ *
+ * The box spans columns 7-72 and the HUD line is 68 columns centred in 80,
+ * occupying 6-73. The only HUD cells left uncovered were its first and last
+ * characters: the "1" of "1-UP 000000" and the "0" of "TIME 30".
+ *
+ * So the assertion is on the HEIGHT, which is the cause, and separately on
+ * there being one hint, which is what made the height wrong.
+ */
+export async function theMenuBoxFitsInsideTheGameArea(): Promise<void> {
+  const width = Math.max(54, titleWidth());
+
+  // menuBoxHeight is the DOOR'S own composition, not a copy of it. The first
+  // version of this test rebuilt the content here and therefore passed while
+  // the door was broken - the same way highScoresAreWrittenOutsideDist did.
+  const boxHeight = menuBoxHeight({ startingLives: 3, selection: 0, width });
+
+  assert.ok(
+    boxHeight <= GAME_AREA_HEIGHT,
+    `the menu box is ${boxHeight} rows in a ${GAME_AREA_HEIGHT}-row game ` +
+    `area; anything taller centres to a negative offset and covers the HUD`
+  );
+}
+
+/**
+ * The menu says how to drive it once, not twice.
+ *
+ * arcadeMenu draws the hint. The door carried its own from before the shared
+ * menu, so the line appeared twice - and the extra row is what pushed the
+ * box over the HUD (above).
+ */
+export async function theMenuDrawsOneHintLine(): Promise<void> {
+  const { readFileSync } = await import('fs');
+  const { join } = await import('path');
+  const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+
+  const renderMenu = index.slice(index.indexOf('function renderMenu'));
+  const body = renderMenu.slice(0, renderMenu.indexOf('\nfunction '));
+
+  assert.ok(
+    !/menuContent\.push\(centred\("UP\/DOWN/.test(body),
+    'the door should not push a hint line; arcadeMenu already draws one'
+  );
+}
+
+/**
+ * The menu draws the hint once, and it is the shared menu's.
+ *
+ * Checked against the real lines rather than the door's source text: a
+ * source grep proves nobody typed the string twice, not that the rendered
+ * menu carries it once.
+ */
+export async function theMenuDrawsOneHintLineInItsOutput(): Promise<void> {
+  const width = Math.max(54, titleWidth());
+  const lines = menuLines({ startingLives: 3, selection: 0, width });
+
+  const hints = lines.filter(l => l.includes('UP/DOWN'));
+  assert.strictEqual(
+    hints.length, 1,
+    `the menu draws ${hints.length} hint lines; arcadeMenu already draws one`
+  );
 }

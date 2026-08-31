@@ -69,4 +69,40 @@ export declare function theScoreLineIsCentredUnderTheLogo(): Promise<void>;
  * are a leftover from arkanoid."
  */
 export declare function theMenuHasNoColourBlockStrip(): Promise<void>;
+/**
+ * The menu box fits inside the game area.
+ *
+ * Reported live with a screenshot: a stray "1" at the top-left of the menu
+ * and a "0" at the top-right.
+ *
+ * Neither is a character the menu draws. The menu content had thirteen rows
+ * plus two of border - one taller than the thirteen-row game area - because
+ * the door pushed its own hint line under the one arcadeMenu already draws.
+ * blessed resolves `top: "center"` on an oversized child to a NEGATIVE
+ * offset, so the box climbed one row and sat on top of the HUD.
+ *
+ * The box spans columns 7-72 and the HUD line is 68 columns centred in 80,
+ * occupying 6-73. The only HUD cells left uncovered were its first and last
+ * characters: the "1" of "1-UP 000000" and the "0" of "TIME 30".
+ *
+ * So the assertion is on the HEIGHT, which is the cause, and separately on
+ * there being one hint, which is what made the height wrong.
+ */
+export declare function theMenuBoxFitsInsideTheGameArea(): Promise<void>;
+/**
+ * The menu says how to drive it once, not twice.
+ *
+ * arcadeMenu draws the hint. The door carried its own from before the shared
+ * menu, so the line appeared twice - and the extra row is what pushed the
+ * box over the HUD (above).
+ */
+export declare function theMenuDrawsOneHintLine(): Promise<void>;
+/**
+ * The menu draws the hint once, and it is the shared menu's.
+ *
+ * Checked against the real lines rather than the door's source text: a
+ * source grep proves nobody typed the string twice, not that the rendered
+ * menu carries it once.
+ */
+export declare function theMenuDrawsOneHintLineInItsOutput(): Promise<void>;
 //# sourceMappingURL=layout.test.d.ts.map

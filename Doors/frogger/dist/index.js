@@ -14,6 +14,7 @@ const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-input-manager");
 const frogger_game_1 = require("./game/frogger-game");
+const menu_content_1 = require("./game/menu-content");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
 const attract_1 = require("./game/attract");
@@ -320,22 +321,11 @@ function renderMenu() {
     // The same block title the attract screen uses, so the door has one look
     // rather than two - the menu used to carry a figlet in slashes.
     // No title: the logo is already at the top of the screen.
-    const menuContent = [];
-    menuContent.push(centred("Classic 1981 Konami Arcade Game", width, "white"));
-    menuContent.push("");
-    // The shared arcade menu. The lives row keeps its value - on the cabinet
-    // this was an operator switch (FAQ 6.3) - which is what MenuOption's
-    // `value` is for.
-    menuContent.push(...(0, arcade_1.arcadeMenu)({
-        title: [],
-        options: constants_1.MENU_OPTIONS.map(option => option === "Lives"
-            ? { label: option, value: String(gameData.startingLives) }
-            : option),
+    const menuContent = (0, menu_content_1.menuLines)({
+        startingLives: gameData.startingLives,
         selection: gameData.menuSelection,
         width,
-    }));
-    menuContent.push("");
-    menuContent.push(centred("UP/DOWN to choose, ENTER to confirm", width, "gray"));
+    });
     menuBox = blessed_1.default.box({
         fixed: true,
         parent: gameArea,
@@ -352,11 +342,6 @@ function renderMenu() {
         content: menuContent.join("\n"),
     });
     screen.render();
-}
-/** Centre a plain string and colour it. */
-function centred(text, width, colour) {
-    const pad = Math.max(0, Math.floor((width - text.length) / 2));
-    return `${" ".repeat(pad)}{${colour}-fg}${text}{/${colour}-fg}`;
 }
 /**
  * Show high scores
