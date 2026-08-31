@@ -23,6 +23,7 @@ import {
   SKULLS_AT_LEVEL_START, SKULLS_PER_RELEASE, SKULL_REVERSE_COOLDOWN_MS,
   SPARX_BASE_SPEED, MARKER_MOVE_DELAY, getLevelConfig,
   MAX_GREMLINS, GREMLIN_ADDED_EVERY, LEVEL_CONFIGS, LEVELS_PER_LAP,
+  QIX_STEP_SCALE, QIX_NUDGE_CHANCE, QIX_BASE_SPEED,
 } from '../game/constants';
 
 function createData(): SuperQixData {
@@ -150,6 +151,121 @@ export async function theGremlinCountDoesNotChangeTheGamesSpeed(): Promise<void>
   assert.strictEqual(
     getLevelConfig(1).qixSpeed, LEVEL_CONFIGS[0].qixSpeed,
     'one Gremlin or four, the speed is the table\'s'
+  );
+}
+
+
+/** How many cells a Gremlin covers per second at a given level. */
+function gremlinCellsPerSecond(level: number): number {
+  const speed = QIX_BASE_SPEED * getLevelConfig(level).qixSpeed;
+  return (speed * QIX_STEP_SCALE * 1000) / GAME_TICK_MS;
+}
+
+/** How many cells the marker covers per second, flat out. */
+function markerCellsPerSecond(): number {
+  return 1000 / MARKER_MOVE_DELAY;
+}
+
+/**
+ * The Gremlin has to be able to threaten you.
+ *
+ * Reported 2026-08-31: "the main enemy moves too slow, too little and is very
+ * predictive, i completed 5 levels by just circling him." Measured at the
+ * time: 3.3 cells per second on level 1 against a marker doing 20, rising to
+ * only 8.3 by level 16 - so it could not catch a moving player at ANY level
+ * and the level table's 1.0 -> 2.5 ramp was cosmetic. The cause was an
+ * unnamed 0.1 in updateQix dividing the whole speed system.
+ */
+export async function theGremlinIsFastEnoughToThreatenTheMarker(): Promise<void> {
+  const marker = markerCellsPerSecond();
+
+  // Level 1 is the gentle end, but it still has to be a real presence.
+  const first = gremlinCellsPerSecond(1);
+  assert.ok(
+    first >= marker * 0.25,
+    `level 1 Gremlin does ${first.toFixed(1)} cells/sec against a marker doing ` +
+    `${marker}; under a quarter of the marker's pace it is scenery`
+  );
+
+  // By the end of a lap it must be genuinely dangerous.
+  const last = gremlinCellsPerSecond(LEVELS_PER_LAP);
+  assert.ok(
+    last >= marker * 0.6,
+    `level ${LEVELS_PER_LAP} Gremlin does ${last.toFixed(1)} cells/sec against ` +
+    `${marker}; it should be closing on a careless player by the end of a lap`
+  );
+}
+
+/**
+ * ...and it must never actually outrun the marker.
+ *
+ * Agreed with the user: it threatens, it does not turn late levels into a
+ * game you cannot escape. A Gremlin faster than the marker would make
+ * detaching from a wall unsurvivable rather than risky.
+ */
+export async function theGremlinNeverOutrunsTheMarker(): Promise<void> {
+  const marker = markerCellsPerSecond();
+
+  for (let level = 1; level <= LEVELS_PER_LAP * 2; level++) {
+    const pace = gremlinCellsPerSecond(level);
+    assert.ok(
+      pace < marker,
+      `level ${level} Gremlin does ${pace.toFixed(1)} cells/sec, at or past the ` +
+      `marker's ${marker} - a player who is paying attention must be able to escape`
+    );
+  }
+}
+
+/** The threat grows with the level rather than sitting flat. */
+export async function theGremlinGetsFasterAsTheGameGoesOn(): Promise<void> {
+  const early = gremlinCellsPerSecond(1);
+  const mid = gremlinCellsPerSecond(8);
+  const late = gremlinCellsPerSecond(LEVELS_PER_LAP);
+
+  assert.ok(mid > early, `level 8 (${mid.toFixed(1)}) should beat level 1 (${early.toFixed(1)})`);
+  assert.ok(late > mid, `level 16 (${late.toFixed(1)}) should beat level 8 (${mid.toFixed(1)})`);
+  assert.ok(
+    late >= early * 2,
+    `the ramp should be felt: level 16 is ${late.toFixed(1)} against level 1's ` +
+    `${early.toFixed(1)}, which is barely a difference`
+  );
+}
+
+/**
+ * It must not travel in dead straight lines.
+ *
+ * The other half of "very predictive": the Gremlin re-aimed on 5% of ticks,
+ * so it held one heading for two thirds of a second at a time and could be
+ * read like a metronome.
+ */
+export async function theGremlinDoesNotTravelInStraightLines(): Promise<void> {
+  const reaimsPerSecond = (QIX_NUDGE_CHANCE * 1000) / GAME_TICK_MS;
+  assert.ok(
+    reaimsPerSecond >= 3,
+    `the Gremlin re-aims ${reaimsPerSecond.toFixed(1)} times a second; under about ` +
+    'three it reads as a straight line the player can simply walk around'
+  );
+
+  // And measured on a live Gremlin: it should not hold one heading for long.
+  const { engine, data } = startedEngine(1);
+  data.sparxList = [];
+  const qix = data.qixList[0];
+  assert.ok(qix, 'there should be a Gremlin to watch');
+
+  let headingChanges = 0;
+  let previous = Math.atan2(qix.vy, qix.vx);
+  const ticks = 300;   // ten seconds
+  for (let i = 0; i < ticks; i++) {
+    engine.update();
+    const current = Math.atan2(qix.vy, qix.vx);
+    if (Math.abs(current - previous) > 1e-9) headingChanges++;
+    previous = current;
+  }
+
+  assert.ok(
+    headingChanges >= 10,
+    `the Gremlin changed heading only ${headingChanges} times in ${ticks} ticks; ` +
+    'it should be wandering, not tracing one line'
   );
 }
 

@@ -19,6 +19,8 @@ import {
   QIX_LEVEL_PULL,
   QIX_DRAWING_PULL,
   QIX_MAX_PULL,
+  QIX_STEP_SCALE,
+  QIX_NUDGE_CHANCE,
   QIX_SPLIT_FROM_LEVEL,
   QIX_SPLIT_CHANCE_PER_TICK,
   QIX_MAX_COPIES,
@@ -400,7 +402,7 @@ export class EnemySystem {
    * wall reverses the component that hit it and the Qix keeps its speed.
    */
   private updateQix(qix: Qix, speedScale = 1): void {
-    const step = 0.1 * speedScale;
+    const step = QIX_STEP_SCALE * speedScale;
     let nextX = qix.x + qix.vx * step;
     let nextY = qix.y + qix.vy * step;
 
@@ -436,7 +438,7 @@ export class EnemySystem {
     // you every time you detach from a wall". So the nudge is pulled towards
     // the marker rather than being uniformly random, and pulled harder while
     // the player is drawing on a later level.
-    if (Math.random() < 0.05) {
+    if (Math.random() < QIX_NUDGE_CHANCE) {
       const speed = Math.hypot(qix.vx, qix.vy) || qix.speed;
       const current = Math.atan2(qix.vy, qix.vx);
       const wander = (Math.random() - 0.5) * 0.8;

@@ -236,7 +236,16 @@ export async function theFuseStillKillsWhenItReachesTheMarker(): Promise<void> {
  * one constant, so retuning any of them keeps the guarantee.
  */
 export async function anOrdinaryDrawAtBbsPaceUsuallySurvives(): Promise<void> {
-  const runs = 30;
+  // 150 rather than 30. This is a stochastic assertion against a threshold
+  // the real rate sits close to: measured over 200 runs it is 57%, and at
+  // THIRTY runs the sampling error is about nine points, so a true 57% dips
+  // under half roughly one run in five. It was doing so before the Gremlin
+  // pacing was touched as well - at the original speed the rate is 45%, so
+  // this test has been passing partly on luck since it was written.
+  //
+  // A bigger sample is a stopgap, not the cure: the cure is seeding the
+  // engine's RNG so the run is reproducible. Recorded as such.
+  const runs = 150;
   const pauseTicks = 20;   // ~660ms between keypresses: tapping, not holding
   let survived = 0;
   const causes: Record<string, number> = {};
@@ -281,6 +290,50 @@ export async function anOrdinaryDrawAtBbsPaceUsuallySurvives(): Promise<void> {
   assert.ok(
     (causes['fuse'] || 0) <= runs / 10,
     `the fuse killed ${causes['fuse']}/${runs} ordinary draws; it should only punish a real pause`
+  );
+}
+
+
+/**
+ * ...and the way people ACTUALLY play it is comfortably safe.
+ *
+ * The tapping model above dates from before held-key tracking existed, when
+ * the client's auto-repeat put ~660ms between steps. The door now moves the
+ * marker once per frame while a key is held, which is how a real player
+ * draws - and at that cadence an ordinary draw survives about nine times in
+ * ten. This is the case the Gremlin's pacing must not break.
+ */
+export async function anOrdinaryDrawWithHeldKeysIsComfortablySafe(): Promise<void> {
+  const runs = 100;
+  const pauseTicks = 2;        // held keys: a step every couple of frames
+  let survived = 0;
+
+  for (let run = 0; run < runs; run++) {
+    const data = createData();
+    const engine = new QixEngine(data, () => {});
+    engine.initLevel(1);
+    data.state = 'playing';
+
+    const lives = data.lives;
+    const moves: Direction[] = [
+      ...Array(4).fill('up'), ...Array(6).fill('right'), ...Array(4).fill('down'),
+    ] as Direction[];
+
+    let died = false;
+    outer: for (const m of moves) {
+      move(engine, m);
+      for (let tick = 0; tick < pauseTicks; tick++) {
+        engine.update();
+        if (data.lives < lives) { died = true; break outer; }
+      }
+    }
+    if (!died) survived++;
+  }
+
+  assert.ok(
+    survived >= runs * 0.7,
+    `only ${survived}/${runs} draws survived at held-key pace; the Gremlin may ` +
+    'threaten a careless player, not make ordinary drawing a lottery'
   );
 }
 
