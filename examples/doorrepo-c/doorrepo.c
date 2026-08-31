@@ -35,6 +35,7 @@
 #include "ansi.h"
 #include "infocache.h"
 #include "shell.h"
+#include "dirlist.h"
 #include "json_lite.h"
 #include "owner_auth.h"
 
@@ -4840,6 +4841,261 @@ static void ui_draw_installed_empty_message(ansi_buf *b, const ui_geometry *g)
     ansi_reset(b);
 }
 
+/* ---------------------------------------------------------------------
+ * File browser for an installed door (key F on the installed screen)
+ *
+ * Reads the door's own directory off the disk through dirlist.h - no
+ * catalog, no BBS, no network. That matters for the doors this repo cannot
+ * describe: an install with no catalog row has no listing to fetch, and
+ * until now there was no way to see what it put on disk at all.
+ *
+ * ONE SCREENFUL is held, not the whole listing. The walk is re-run on every
+ * redraw and the callback keeps only the rows inside the current window,
+ * counting the rest. A door directory is local and small, so a second walk
+ * costs nothing worth measuring, while a buffer big enough for the largest
+ * plausible directory would be permanent BSS - and this door has about
+ * 80 KB of headroom before the emulator refuses to load it (see
+ * web/backend/src/amiga-emulation/memory-map.ts).
+ * ------------------------------------------------------------------- */
+
+#define FB_PAGE_MAX   40
+#define FB_NAME_MAX   64
+#define FB_PATH_MAX   256
+
+typedef struct {
+    unsigned long skip;    /* how many entries to pass over first */
+    int want;              /* window size */
+    int got;               /* rows actually captured */
+    unsigned long total;   /* every entry seen, window or not */
+    char names[FB_PAGE_MAX][FB_NAME_MAX];
+    unsigned long sizes[FB_PAGE_MAX];
+    int dirs[FB_PAGE_MAX];
+} fb_page;
+
+static int fb_collect(void *ctx, const char *name, unsigned long size, int is_dir)
+{
+    fb_page *pg = (fb_page *) ctx;
+
+    if (pg->total >= pg->skip && pg->got < pg->want) {
+        strncpy(pg->names[pg->got], name, FB_NAME_MAX - 1);
+        pg->names[pg->got][FB_NAME_MAX - 1] = '\0';
+        pg->sizes[pg->got] = size;
+        pg->dirs[pg->got] = is_dir;
+        pg->got++;
+    }
+    pg->total++;
+    /* Never stops early: the total is what the footer and the clamping
+     * need, and it is only known once every entry has been seen. */
+    return 0;
+}
+
+/* "<base>/<rel>", or just "<base>" when rel is empty. Returns 0 on
+ * success, -1 if it would not fit - a path too long to build is reported
+ * rather than silently truncated into some other directory. */
+static int fb_join(char *out, unsigned long outsize, const char *base, const char *rel)
+{
+    unsigned long need = strlen(base) + 1;
+
+    if (rel[0] != '\0') {
+        need += strlen(rel) + 1;
+    }
+    if (need > outsize) {
+        return -1;
+    }
+    strcpy(out, base);
+    if (rel[0] != '\0') {
+        unsigned long n = strlen(out);
+        if (n > 0 && out[n - 1] != '/' && out[n - 1] != ':') {
+            strcat(out, "/");
+        }
+        strcat(out, rel);
+    }
+    return 0;
+}
+
+/* Drops the last "/name" from `rel`, leaving "" at the top. */
+static void fb_parent(char *rel)
+{
+    char *slash = strrchr(rel, '/');
+
+    if (slash != (char *) 0) {
+        *slash = '\0';
+    } else {
+        rel[0] = '\0';
+    }
+}
+
+static void fb_size_text(char *out, unsigned long outsize, const fb_page *pg, int row)
+{
+    if (pg->dirs[row]) {
+        strncpy(out, "<DIR>", outsize - 1);
+        out[outsize - 1] = '\0';
+        return;
+    }
+    if (pg->sizes[row] >= 1024UL) {
+        sprintf(out, "%luk", pg->sizes[row] / 1024UL);
+    } else {
+        sprintf(out, "%lu", pg->sizes[row]);
+    }
+}
+
+static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
+                            char *frame, long framecap, const ui_geometry *g)
+{
+    static fb_page page;
+    char install_dir[FB_PATH_MAX];
+    char rel[FB_PATH_MAX];
+    char full[FB_PATH_MAX];
+    char title[128];
+    ansi_buf buf;
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    int rows = g->visible_rows;
+    int need_redraw = 1;
+
+    if (rows > FB_PAGE_MAX) {
+        rows = FB_PAGE_MAX;
+    }
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    if (flow_build_install_dir(install_dir, sizeof(install_dir),
+                               cfg->doors_dir, cmdname) < 0) {
+        return;
+    }
+    rel[0] = '\0';
+
+    for (;;) {
+        int key;
+        int i;
+        long n;
+
+        if (fb_join(full, sizeof(full), install_dir, rel) < 0) {
+            return;
+        }
+
+        page.skip = top_index;
+        page.want = rows;
+        page.got = 0;
+        page.total = 0;
+        n = dirlist_scan(full, fb_collect, &page);
+
+        if (need_redraw) {
+            ansi_begin(&buf, frame, framecap);
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+
+            sprintf(title, "%.20s%s%.40s", cmdname, rel[0] ? "/" : "", rel);
+            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+
+            if (n < 0) {
+                ansi_text(&buf, 3, 3, "This door has no directory on disk.",
+                          g->cols - 6);
+            } else if (page.total == 0) {
+                ansi_text(&buf, 3, 3, "(empty)", g->cols - 6);
+            } else {
+                for (i = 0; i < page.got; i++) {
+                    char line[FB_NAME_MAX + 32];
+                    char sizetext[24];
+                    int is_sel = ((unsigned long) i + top_index) == selected;
+
+                    fb_size_text(sizetext, sizeof(sizetext), &page, i);
+                    sprintf(line, "%-40.40s %8.8s", page.names[i], sizetext);
+                    ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
+                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+                }
+                ansi_reset(&buf);
+            }
+
+            ansi_color(&buf, 3, 0, 0);
+            ansi_text(&buf, g->rows - 1, 3,
+                      rel[0] ? "ENTER=Open  B=Up  Q=Quit" : "ENTER=Open  Q=Quit",
+                      g->cols - 6);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            need_redraw = 0;
+        }
+
+        key = ui_read_key();
+        need_redraw = 1;
+
+        switch (key) {
+        case UI_KEY_UP:
+            if (selected > 0) {
+                selected--;
+                if (selected < top_index) top_index = selected;
+            }
+            break;
+        case UI_KEY_DOWN:
+            if (page.total > 0 && selected + 1 < page.total) {
+                selected++;
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_PGUP: case 'p': case 'P':
+            if (selected > (unsigned long) rows) selected -= (unsigned long) rows;
+            else selected = 0;
+            top_index = (selected < (unsigned long) rows) ? 0 : selected;
+            break;
+        case UI_KEY_PGDN: case 'n': case 'N':
+            if (page.total > 0) {
+                selected += (unsigned long) rows;
+                if (selected >= page.total) selected = page.total - 1;
+                if (selected >= top_index + (unsigned long) rows) {
+                    top_index = selected - (unsigned long) rows + 1;
+                }
+            }
+            break;
+        case UI_KEY_HOME:
+            selected = 0;
+            top_index = 0;
+            break;
+        case UI_KEY_END:
+            if (page.total > 0) {
+                selected = page.total - 1;
+                top_index = (page.total > (unsigned long) rows)
+                    ? page.total - (unsigned long) rows : 0;
+            }
+            break;
+        case UI_KEY_ENTER:
+            /* Only a directory opens. Viewing a file's contents is not
+             * wired here yet - the local text viewer is its own piece of
+             * work, and a browser that navigates is useful without it. */
+            if (page.total > 0 && selected >= top_index) {
+                int row = (int) (selected - top_index);
+                if (row >= 0 && row < page.got && page.dirs[row]) {
+                    char next[FB_PATH_MAX];
+                    if (fb_join(next, sizeof(next), rel, page.names[row]) == 0) {
+                        strcpy(rel, next);
+                        selected = 0;
+                        top_index = 0;
+                    }
+                }
+            }
+            break;
+        case 'b': case 'B':
+            if (rel[0] != '\0') {
+                fb_parent(rel);
+                selected = 0;
+                top_index = 0;
+            }
+            break;
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, framecap);
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
+        default:
+            break;
+        }
+    }
+}
+
 static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
 {
     ui_geometry g;
@@ -5080,6 +5336,23 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                 need_full_redraw = 1;
             }
             break;
+        case 'f': case 'F': {
+            /* The door's own files, read off the disk. Unlike A (the
+             * archive's contents) this needs no catalog row and no
+             * network, so it works for the installed doors this repo has
+             * never heard of. */
+            const char *cmdname = (view.count > 0)
+                ? index_lookup(cfg, cat->rows[view.index[selected]].archive)
+                : (const char *) 0;
+            if (cmdname != (const char *) 0 && cmdname[0] != '\0') {
+                files_loop_ansi(cfg, cmdname, frame, (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        }
         case 'v': case 'V':
             if (sel_entry != (const dr_entry *) 0 && sel_entry->has_doc == 0) {
                 break;
