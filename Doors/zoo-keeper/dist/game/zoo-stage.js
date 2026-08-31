@@ -2,7 +2,8 @@
  * Zoo Keeper - Zoo Stage Game Logic
  * The main gameplay where Zeke runs around the perimeter building walls
  */
-import { GAME_AREA, ZOO_PERIMETER, ANIMAL_STATS, BONUS_ITEMS, JUMP_SCORES, NET_DURATION_TICKS, WALL_CHARS, WALL_COLORS, COLORS, getLevelConfig, EXTRA_LIFE_SCORE } from './constants';
+import { EMPTY, paint, zekeCell, animalCell, wallCell, fuseCell, bonusCell, } from './sprites';
+import { GAME_AREA, ZOO_PERIMETER, ANIMAL_STATS, BONUS_ITEMS, JUMP_SCORES, NET_DURATION_TICKS, WALL_CHARS, getLevelConfig, EXTRA_LIFE_SCORE } from './constants';
 /**
  * Main game engine class
  */
@@ -604,7 +605,7 @@ export class ZooKeeperGame {
         for (let y = 0; y < GAME_AREA.height; y++) {
             buffer[y] = [];
             for (let x = 0; x < GAME_AREA.width; x++) {
-                buffer[y][x] = ' ';
+                buffer[y][x] = EMPTY;
             }
         }
         // Draw wall/perimeter
@@ -615,7 +616,8 @@ export class ZooKeeperGame {
                 const screenX = wx + p.outerLeft;
                 const screenY = wy + p.outerTop - GAME_AREA.top;
                 if (screenY >= 0 && screenY < buffer.length && screenX >= 0 && screenX < GAME_AREA.width) {
-                    buffer[screenY][screenX] = char;
+                    // A thinner wall section is nearer to breaking, so it reddens.
+                    buffer[screenY][screenX] = wallCell(char, thickness <= 1);
                 }
             }
         }
@@ -624,15 +626,15 @@ export class ZooKeeperGame {
             const topY = p.innerTop - GAME_AREA.top;
             const bottomY = p.innerBottom - GAME_AREA.top;
             if (topY >= 0 && topY < buffer.length)
-                buffer[topY][x] = '-';
+                buffer[topY][x] = wallCell('-');
             if (bottomY >= 0 && bottomY < buffer.length)
-                buffer[bottomY][x] = '-';
+                buffer[bottomY][x] = wallCell('-');
         }
         for (let y = p.innerTop; y <= p.innerBottom; y++) {
             const screenY = y - GAME_AREA.top;
             if (screenY >= 0 && screenY < buffer.length) {
-                buffer[screenY][p.innerLeft] = '|';
-                buffer[screenY][p.innerRight] = '|';
+                buffer[screenY][p.innerLeft] = wallCell('|');
+                buffer[screenY][p.innerRight] = wallCell('|');
             }
         }
         // Draw corners
@@ -645,7 +647,7 @@ export class ZooKeeperGame {
         for (const c of innerCorners) {
             const screenY = c.y - GAME_AREA.top;
             if (screenY >= 0 && screenY < buffer.length) {
-                buffer[screenY][c.x] = '+';
+                buffer[screenY][c.x] = wallCell('+');
             }
         }
         // Draw animals
@@ -653,13 +655,16 @@ export class ZooKeeperGame {
             const stats = ANIMAL_STATS[animal.type];
             const screenY = animal.y - GAME_AREA.top;
             if (screenY >= 0 && screenY < buffer.length && animal.x >= 0 && animal.x < GAME_AREA.width) {
-                buffer[screenY][animal.x] = stats.char;
+                buffer[screenY][animal.x] = animalCell(stats.char, animal.type);
             }
         }
         // Draw Zeke
         const zekeY = d.zeke.y - GAME_AREA.top;
         if (zekeY >= 0 && zekeY < buffer.length) {
-            buffer[zekeY][d.zeke.x] = d.zeke.hasNet ? '@' : '@';
+            // Was `d.zeke.hasNet ? '@' : '@'` - a ternary returning the same
+            // character either way, because the difference was meant to be a
+            // colour the renderer could not recover. It is a colour now.
+            buffer[zekeY][d.zeke.x] = zekeCell(Boolean(d.zeke.hasNet));
         }
         // Draw fuse at bottom
         const fuseY = buffer.length - 1;
@@ -669,13 +674,13 @@ export class ZooKeeperGame {
         const burnPos = fuseStart + Math.floor(d.zooStage.fusePosition * fuseLength);
         for (let x = fuseStart; x < fuseEnd; x++) {
             if (x < burnPos) {
-                buffer[fuseY][x] = ' '; // Burned
+                buffer[fuseY][x] = EMPTY; // Burned
             }
             else if (x === burnPos) {
-                buffer[fuseY][x] = '*'; // Burning end
+                buffer[fuseY][x] = fuseCell(true);
             }
             else {
-                buffer[fuseY][x] = '='; // Fuse
+                buffer[fuseY][x] = fuseCell(false);
             }
         }
         // Draw bonus items on fuse
@@ -683,7 +688,7 @@ export class ZooKeeperGame {
             if (!item.collected) {
                 const itemX = fuseStart + Math.floor(item.fusePosition * fuseLength);
                 if (itemX > burnPos && itemX < fuseEnd) {
-                    buffer[fuseY][itemX] = BONUS_ITEMS[item.type].char;
+                    buffer[fuseY][itemX] = bonusCell(BONUS_ITEMS[item.type].char);
                 }
             }
         }
@@ -691,46 +696,7 @@ export class ZooKeeperGame {
         for (let y = 0; y < buffer.length; y++) {
             let line = '';
             for (let x = 0; x < buffer[y].length; x++) {
-                const char = buffer[y][x];
-                // Apply colors based on character
-                if (char === '@') {
-                    const color = d.zeke.hasNet ? COLORS.zekeWithNet : COLORS.zeke;
-                    line += `{${color}-fg}${char}{/}`;
-                }
-                else if (char === '*') {
-                    line += `{${COLORS.fuseEnd}-fg}${char}{/}`;
-                }
-                else if (char === '=') {
-                    line += `{${COLORS.fuse}-fg}${char}{/}`;
-                }
-                else if (/[ESCRML]/.test(char)) {
-                    // Animal
-                    const animalType = Object.entries(ANIMAL_STATS).find(([, s]) => s.char === char);
-                    if (animalType) {
-                        line += `{${animalType[1].color}-fg}${char}{/}`;
-                    }
-                    else {
-                        line += char;
-                    }
-                }
-                else if (/[BCWSTY$N]/.test(char)) {
-                    // Bonus item
-                    const itemType = Object.entries(BONUS_ITEMS).find(([, b]) => b.char === char);
-                    if (itemType) {
-                        line += `{${itemType[1].color}-fg}${char}{/}`;
-                    }
-                    else {
-                        line += char;
-                    }
-                }
-                else if (/[.+#]/.test(char)) {
-                    // Wall
-                    const thickness = char === '.' ? 1 : char === '+' ? 2 : 3;
-                    line += `{${WALL_COLORS[thickness]}-fg}${char}{/}`;
-                }
-                else {
-                    line += char;
-                }
+                line += paint(buffer[y][x]);
             }
             lines.push(line);
         }

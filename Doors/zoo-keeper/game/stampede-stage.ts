@@ -4,6 +4,9 @@
  */
 
 import {
+  Cell, EMPTY, paint, zekeCell, animalCell, wallCell, bonusCell,
+} from './sprites';
+import {
   ZooKeeperData,
   Animal,
   AnimalType,
@@ -301,11 +304,11 @@ export class StampedeStageGame {
     const lines: string[] = [];
 
     // Create render buffer
-    const buffer: string[][] = [];
+    const buffer: Cell[][] = [];
     for (let y = 0; y < GAME_AREA.height; y++) {
       buffer[y] = [];
       for (let x = 0; x < GAME_AREA.width; x++) {
-        buffer[y][x] = ' ';
+        buffer[y][x] = EMPTY;
       }
     }
 
@@ -314,17 +317,17 @@ export class StampedeStageGame {
     const escRight = 65;
     for (let y = 0; y < GAME_AREA.height; y++) {
       // Left rail
-      buffer[y][escLeft] = '|';
+      buffer[y][escLeft] = wallCell('|');
       // Right rail
-      buffer[y][escRight] = '|';
+      buffer[y][escRight] = wallCell('|');
 
       // Steps (alternating pattern)
       const stepOffset = (y + Math.floor(d.frameCount / 5)) % 3;
       for (let x = escLeft + 1; x < escRight; x++) {
         if (stepOffset === 0) {
-          buffer[y][x] = '=';
+          buffer[y][x] = wallCell('=');
         } else if (stepOffset === 1) {
-          buffer[y][x] = '-';
+          buffer[y][x] = wallCell('-');
         }
       }
     }
@@ -334,7 +337,7 @@ export class StampedeStageGame {
     const banner = 'EXTRA LIFE!';
     const bannerStart = 40 - Math.floor(banner.length / 2);
     for (let i = 0; i < banner.length; i++) {
-      buffer[bannerY][bannerStart + i] = banner[i];
+      buffer[bannerY][bannerStart + i] = bonusCell(banner[i]);
     }
 
     // Draw charging animals
@@ -344,22 +347,24 @@ export class StampedeStageGame {
       const screenX = Math.floor(animal.x);
 
       if (screenY >= 0 && screenY < buffer.length && screenX >= 0 && screenX < GAME_AREA.width) {
-        buffer[screenY][screenX] = stats.char;
+        buffer[screenY][screenX] = animalCell(stats.char, animal.type);
       }
     }
 
     // Draw Zeke
     const zekeScreenY = d.zeke.y - GAME_AREA.top;
     if (zekeScreenY >= 0 && zekeScreenY < buffer.length) {
-      const zekeChar = d.zeke.isJumping ? '^' : CHARS.zeke;
-      buffer[zekeScreenY][Math.floor(d.zeke.x)] = zekeChar;
+      const zeke = zekeCell(Boolean(d.zeke.hasNet));
+      buffer[zekeScreenY][Math.floor(d.zeke.x)] = d.zeke.isJumping
+        ? { ...zeke, ch: '^' }
+        : zeke;
     }
 
     // Draw jump combo counter
     if (ss.jumpedAnimals > 0) {
       const comboText = `x${ss.jumpedAnimals}`;
       for (let i = 0; i < comboText.length; i++) {
-        buffer[2][70 + i] = comboText[i];
+        buffer[2][70 + i] = bonusCell(comboText[i]);
       }
     }
 
@@ -367,26 +372,7 @@ export class StampedeStageGame {
     for (let y = 0; y < buffer.length; y++) {
       let line = '';
       for (let x = 0; x < buffer[y].length; x++) {
-        const char = buffer[y][x];
-
-        if (char === CHARS.zeke || char === '^') {
-          line += `{${COLORS.zeke}-fg}${char}{/}`;
-        } else if (char === '|') {
-          line += `{gray-fg}${char}{/}`;
-        } else if (char === '=' || char === '-') {
-          line += `{white-fg}${char}{/}`;
-        } else if (/[ESCRML]/.test(char)) {
-          const animalType = Object.entries(ANIMAL_STATS).find(([, s]) => s.char === char);
-          if (animalType) {
-            line += `{${animalType[1].color}-fg}${char}{/}`;
-          } else {
-            line += char;
-          }
-        } else if (/[EXTRALIFE!x0-9]/.test(char)) {
-          line += `{yellow-fg}${char}{/}`;
-        } else {
-          line += char;
-        }
+        line += paint(buffer[y][x]);
       }
       lines.push(line);
     }
