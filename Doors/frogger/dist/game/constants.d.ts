@@ -136,7 +136,8 @@ export declare const TURTLE_DIVE_DURATION = 2000;
 /** How fast the GAME OVER prompt blinks, in ticks per state. */
 export declare const GAME_OVER_BLINK_FRAMES = 12;
 /** A turtle on its way down, drawn lower than one riding high. */
-export declare const TURTLE_SINKING_GLYPH = ".o.";
+/** The same turtle going under: the shell dips below its flippers. */
+export declare const TURTLE_SINKING_GLYPH = "(-)";
 /**
  * Widths in grid cells.
  *
@@ -253,7 +254,14 @@ export declare const LOG_GRAIN = "-.";
 export declare const LOG_END_LEFT = "(";
 export declare const LOG_END_RIGHT = ")";
 /** One turtle of a set. */
-export declare const TURTLE_GLYPH = ":O:";
+/**
+ * One turtle of a set, seen from above: a shell between two flippers.
+ *
+ * ':O:' was the reference art's, and at this size it reads as punctuation
+ * rather than as an animal - reported live as "the turtles dont look like
+ * turtles at all".
+ */
+export declare const TURTLE_GLYPH = "(o)";
 /** The jaws of a crocodile or an otter, and the bodies behind them. */
 export declare const MOUTH_GLYPH = "><";
 export declare const CROCODILE_BODY = "=";
