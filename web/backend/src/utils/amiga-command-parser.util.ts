@@ -289,6 +289,35 @@ function readToolTypeArray(buffer: Buffer, offset: number): { entries: string[];
 }
 
 /**
+ * Are the bytes from `offset` to the end text a tool appended, or an image?
+ *
+ * A tooltype written past the array's end arrives as plain `KEY=VALUE` bytes
+ * and a NUL. A NewIcons or ICONFACE payload is a binary IFF chunk that happens
+ * to contain printable runs, and scraping those invents tooltypes nobody wrote.
+ * Text, and nothing else, is the licence to read past the array.
+ */
+function isAppendedText(buffer: Buffer, offset: number): boolean {
+  const trailing = buffer.subarray(offset);
+  if (trailing.length === 0) return false;
+  // Terminated the way a tooltype is terminated. A run of letters that simply
+  // ends is a bitmap reading as text.
+  if (trailing[trailing.length - 1] !== 0) return false;
+
+  for (const byte of trailing) {
+    if (byte === 0) continue;
+    // Latin-1 and UTF-8 both live above 0x7e in these files; a control byte
+    // does not belong in a tooltype.
+    if (byte < 0x20 || byte === 0x7f) return false;
+  }
+
+  const records = trailing.toString('latin1').split('\0').filter(r => r.length > 0);
+  return records.length > 0 && records.every(record => {
+    const eqIdx = record.indexOf('=');
+    return eqIdx > 0 && /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/.test(record.slice(0, eqIdx).trim());
+  });
+}
+
+/**
  * Find the ToolTypes array when the computed offset does not land on it.
  *
  * The offset is computed by walking optional images whose sizes come from the
@@ -299,7 +328,9 @@ function readToolTypeArray(buffer: Buffer, offset: number): { entries: string[];
  * At least one entry must look like a KEY=VALUE, which image data will not.
  */
 function findToolTypeArray(buffer: Buffer, from: number): { entries: string[]; end: number } | null {
-  for (let offset = from; offset + 8 <= buffer.length; offset += 2) {
+  // Every offset, not every second one: an icon's array is not required to be
+  // word-aligned, and this board's FCheck/LHA.info keeps its array at 439.
+  for (let offset = from; offset + 8 <= buffer.length; offset += 1) {
     const array = readToolTypeArray(buffer, offset);
     if (array && array.entries.some(entry => isValidTooltypeString(entry) && entry.includes('='))) {
       return array;
@@ -400,7 +431,12 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
         // real Amiga would never see those, but this one has been reading them
         // for as long as they have been there, and a tooltype added later is
         // the more recent edit, so it wins.
-        if (array.end < buffer.length) {
+        //
+        // Only when the tail is TEXT, though. Most icons end in a NewIcons IFF
+        // chunk, and scraping printable runs out of a bitmap invents tooltypes
+        // that were never written: `FCheck/LHA.info` grew an `SOPTIONS` that
+        // exists nowhere in the file, out of the bytes of its ICONFACE image.
+        if (array.end < buffer.length && isAppendedText(buffer, array.end)) {
           const trailing = parseInfoFileFallback(
             buffer.subarray(array.end), filePath, session, socket
           );

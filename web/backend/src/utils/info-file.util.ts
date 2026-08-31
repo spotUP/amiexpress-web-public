@@ -76,6 +76,30 @@ const AMIGA_PREFIX_CHARS = new Set(['#', '+', '%', "'"]);
 // historical behavior callers expect for lookups.
 const VALID_KEY_RE = /^[!-<>-~]+$/; // printable ASCII except '='
 
+/**
+ * What a key must look like when it was GUESSED rather than read.
+ *
+ * A word, allowing the dot and underscore that AmiExpress uses
+ * (`BULL.MID_STRING`, `CONSOLE_INPUT_DEVICE`) and the angle brackets its
+ * templates use (`DLPATH.<NUM>`). Entries read out of a length-prefixed array
+ * keep the looser VALID_KEY_RE - they are real by construction, whatever they
+ * are named.
+ */
+const WORD_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/;
+
+/**
+ * The word inside a key, with the punctuation a key is allowed to wear.
+ *
+ * A TEXT .info can hold a key spelled `(INTERNAL)`, which is a literal key and
+ * not a commented-out one - only a fully wrapped entry is a comment - and this
+ * board's own files carry `;RESIDENT` and `!KEY` for entries a tool commented
+ * out. Those are keys. `W\``, `K@B` and `IHDR` bytes out of a bitmap are not.
+ */
+function keyIsWordShaped(key: string): boolean {
+  const core = key.replace(/^[!;(]+/, '').replace(/\)+$/, '');
+  return core.length >= 2 && WORD_KEY_RE.test(core);
+}
+
 function parseTooltypeString(raw: string): Tooltype | null {
   let content = raw;
   let commented = false;
@@ -348,6 +372,35 @@ function locateIffPayload(buffer: Buffer): Buffer {
  * like tooltypes. Used for non-binary .info files or as a last resort
  * when the structured parse fails.
  */
+/**
+ * Is what follows the tooltype array an appended tooltype, or image data?
+ *
+ * An appended tooltype was written the way tooltypes are written: printable
+ * `KEY=VALUE` bytes with a NUL after them. Everything else after the array is
+ * an image - an IFF payload carries control bytes, and a run of plain letters
+ * with no '=' and no terminator is a bitmap that happens to read as text.
+ * Absorbing one of those would move image bytes into the tooltype array on the
+ * next save, so the test is deliberately narrow: terminated, and shaped like a
+ * tooltype.
+ */
+function isAppendedTooltypeText(trailing: Buffer): boolean {
+  if (trailing.length === 0) return false;
+  if (trailing[trailing.length - 1] !== 0) return false;
+
+  for (const byte of trailing) {
+    if (byte === 0) continue;
+    if (byte < 0x20 || byte === 0x7f) return false;
+  }
+
+  const records = trailing.toString('latin1').split('\0').filter(r => r.length > 0);
+  if (records.length === 0) return false;
+
+  return records.every(record => {
+    const eqIdx = record.indexOf('=');
+    return eqIdx > 0 && WORD_KEY_RE.test(record.slice(0, eqIdx).trim());
+  });
+}
+
 function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
   const tooltypes: Tooltype[] = [];
   const extracted: string[] = [];
@@ -375,7 +428,13 @@ function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
     if (!trimmed) continue;
     const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!]+/, '');
     const tt = parseTooltypeString(cleaned);
-    if (tt) {
+    // A key here was GUESSED out of a printable run, so it has to look like a
+    // key. VALID_KEY_RE accepts any printable byte but '=', which is right for
+    // a string that came out of a length-prefixed array and wrong for one
+    // scraped from a bitmap: this board's drawer icons produced "W`", "D@" and
+    // "K@B" as tooltypes, and a PNG saved as Conf11Cmd.info produced 178 of
+    // them, "IHDR" and "GAMA" among them. A real tooltype key is a word.
+    if (tt && keyIsWordShaped(tt.key)) {
       tt.originalLine = raw;
       tooltypes.push(tt);
     }
@@ -471,12 +530,27 @@ export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
         tooltypes.push(tt);
       }
     }
+
+    // A tooltype can be sitting PAST the end of the array, written by a tool
+    // that appended the bytes without growing the array's count. This BBS has
+    // done it - Doors/What/WHAT.info carries OVERCLOCK=100 that way, and the
+    // door side has honoured it for as long as it has been there. Read as
+    // icon data, it was invisible in the admin and could not be edited, while
+    // remaining in force on the board.
+    //
+    // Absorbed into the array here, so the next save writes it where
+    // icon.library would look for it. Only text qualifies: everything else
+    // after the array is a NewIcons or ICONFACE image, and scraping printable
+    // runs out of a bitmap invents tooltypes nobody wrote.
+    const trailing = buffer.slice(located.entriesEnd);
+    const appended = isAppendedTooltypeText(trailing) ? extractTooltypesFallback(trailing) : [];
+
     return {
       filePath,
       isBinary: true,
       diskObject: buffer.slice(0, located.countOffset),
-      iconData: buffer.slice(located.entriesEnd),
-      tooltypes,
+      iconData: appended.length > 0 ? Buffer.alloc(0) : trailing,
+      tooltypes: appended.length > 0 ? [...tooltypes, ...appended] : tooltypes,
       rawBuffer: buffer,
     };
   }
