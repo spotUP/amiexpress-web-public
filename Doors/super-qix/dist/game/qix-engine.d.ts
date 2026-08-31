@@ -144,6 +144,14 @@ export declare class QixEngine {
      * each cell is already a run of colour tags. Every replacement row is
      * padded to the full width so the frame still measures SCREEN_WIDTH.
      */
+    /**
+     * Lay a panel's text over the board, one character at a time.
+     *
+     * Only the characters of the message are touched: whatever is behind
+     * them - usually the picture the level just revealed - keeps its own
+     * colours. This used to replace whole rows with a black band, which put
+     * a black stripe across the picture the sequence exists to show.
+     */
     private overlayPanel;
     /**
      * The panel the end-of-level sequence is showing: the BONUS tally over the
@@ -175,6 +183,14 @@ export declare class QixEngine {
      * while playing. Returns true while the sequence is still running.
      */
     advanceLevelOutro(): boolean;
+    /**
+     * Cut the end-of-level sequence short.
+     *
+     * The reveal, the tally and the announcement together run for several
+     * seconds, which is a long time to sit through once you have seen it.
+     * Enter skips straight to the next level.
+     */
+    skipOutro(): boolean;
     /** Is the end-of-level sequence still running? */
     isRevealing(): boolean;
     /**

@@ -455,10 +455,16 @@ function handleInput(key) {
             handleNameEntryInput(inputKey);
             break;
         case "levelTransition":
-            // The level is being handed over. Swallow input rather than
-            // falling through to the default below, which sent the player back
-            // to the MENU on any keypress - clearing a level looked like the
-            // game quitting on you.
+            // The level is being handed over. Enter cuts the sequence short -
+            // the reveal, the tally and the announcement run for several seconds
+            // and nobody wants to sit through them twice.
+            //
+            // Any OTHER key is swallowed rather than falling through to the
+            // default below, which sent the player back to the MENU on any
+            // keypress - clearing a level looked like the game quitting on you.
+            if (inputKey === "enter" || inputKey === "space") {
+                engine?.skipOutro();
+            }
             break;
         default:
             // An unknown state should not throw the player out of their game.

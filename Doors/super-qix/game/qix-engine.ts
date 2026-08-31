@@ -519,21 +519,37 @@ export class QixEngine {
    * each cell is already a run of colour tags. Every replacement row is
    * padded to the full width so the frame still measures SCREEN_WIDTH.
    */
-  private overlayPanel(lines: string[], panel: Array<{ text: string; colour: string }>): void {
+  /**
+   * Lay a panel's text over the board, one character at a time.
+   *
+   * Only the characters of the message are touched: whatever is behind
+   * them - usually the picture the level just revealed - keeps its own
+   * colours. This used to replace whole rows with a black band, which put
+   * a black stripe across the picture the sequence exists to show.
+   */
+  private overlayPanel(
+    grid: Array<Array<{ ch: string; fg?: string; bg?: string }>>,
+    panel: Array<{ text: string; colour: string }>
+  ): void {
     const width = FIELD_WIDTH * CELL_WIDTH;
-    const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+    const top = Math.max(0, Math.floor((grid.length - panel.length) / 2));
 
     panel.forEach((entry, i) => {
-      const row = top + i;
-      if (row < 0 || row >= lines.length) return;
+      const row = grid[top + i];
+      if (!row || !entry.text) return;
 
       const left = Math.max(0, Math.floor((width - entry.text.length) / 2));
-      const padded =
-        ' '.repeat(left) + entry.text + ' '.repeat(Math.max(0, width - left - entry.text.length));
 
-      lines[row] = `{black-bg}{${entry.colour}-fg}${padded}{/${entry.colour}-fg}{/black-bg}`;
+      for (let c = 0; c < entry.text.length; c++) {
+        const cell = row[left + c];
+        if (!cell) continue;
+
+        cell.ch = entry.text[c];
+        cell.fg = entry.colour;
+      }
     });
   }
+
 
   /**
    * The panel the end-of-level sequence is showing: the BONUS tally over the
@@ -688,6 +704,21 @@ export class QixEngine {
     }
 
     this.render();
+    return true;
+  }
+
+  /**
+   * Cut the end-of-level sequence short.
+   *
+   * The reveal, the tally and the announcement together run for several
+   * seconds, which is a long time to sit through once you have seen it.
+   * Enter skips straight to the next level.
+   */
+  skipOutro(): boolean {
+    if (!this.outro) return false;
+
+    this.outro = null;
+    this.data.transitionTimer = 0;
     return true;
   }
 
@@ -1311,46 +1342,75 @@ export class QixEngine {
       buffer[my][mx] = { ch: ' ', bg: cycle };
     }
 
-    // Convert buffer to tagged string.
+    // Convert the buffer to characters, one entry per screen column.
     //
-    // Each logical cell is painted CELL_WIDTH characters wide so that a cell
-    // is as wide as it is tall on screen (see CELL_WIDTH in constants.ts).
-    // A glyph occupies the first column of its cell and the remainder is
-    // padded with spaces carrying the same colours, so the block stays solid.
+    // Each logical cell is CELL_WIDTH characters wide so that a cell is as
+    // wide as it is tall on screen. Panels are laid over these characters
+    // rather than over whole rows, so the picture behind a message still
+    // shows - the tally used to be painted on a black band that wiped out
+    // the very picture the reveal exists to show.
+    type Painted = { ch: string; fg?: string; bg?: string };
+    const grid: Painted[][] = [];
+
     for (let y = 0; y < buffer.length; y++) {
-      let line = '';
+      const row: Painted[] = [];
+
       for (let x = 0; x < buffer[y].length; x++) {
         const { ch, fg, bg, art } = buffer[y][x];
 
-        // Revealed picture: each art character keeps its own colours, so the
-        // two columns of a cell can differ - which is what makes it read as
-        // artwork rather than a coloured block.
+        // Revealed picture: each art character keeps its own colours, so
+        // the two columns of a cell can differ - which is what makes it
+        // read as artwork rather than a coloured block.
         if (art) {
           for (const part of art) {
-            const artFg = ART_PALETTE[part.fg] || 'white';
-            const artBg = ART_PALETTE[part.bg] || 'black';
-            line += `{${artBg}-bg}{${artFg}-fg}${part.char}{/${artFg}-fg}{/${artBg}-bg}`;
+            row.push({
+              ch: part.char,
+              fg: ART_PALETTE[part.fg] || 'white',
+              bg: ART_PALETTE[part.bg] || 'black',
+            });
           }
           continue;
         }
 
-        let cellStr = ch + ' '.repeat(CELL_WIDTH - 1);
-        if (fg) cellStr = `{${fg}-fg}${cellStr}{/${fg}-fg}`;
-        if (bg) cellStr = `{${bg}-bg}${cellStr}{/${bg}-bg}`;
-        line += cellStr;
+        row.push({ ch, fg, bg });
+        for (let i = 1; i < CELL_WIDTH; i++) row.push({ ch: ' ', fg, bg });
       }
-      lines.push(line);
+
+      grid.push(row);
     }
 
     // The end-of-level sequence and the game-over screen speak for
     // themselves. Without any of this the field simply froze.
     const panel = this.gameOverPanel() ?? this.outroPanel();
     if (panel) {
-      this.overlayPanel(lines, panel);
+      this.overlayPanel(grid, panel);
     } else if (d.transitionMessage && d.state === 'levelTransition') {
-      this.overlayPanel(lines, [
+      this.overlayPanel(grid, [
         { text: d.transitionMessage, colour: 'lightyellow' },
       ]);
+    }
+
+    for (const row of grid) {
+      let line = '';
+      let run = '';
+      let fg: string | undefined;
+      let bg: string | undefined;
+
+      const flush = () => {
+        if (!run) return;
+        let piece = run;
+        if (fg) piece = `{${fg}-fg}${piece}{/${fg}-fg}`;
+        if (bg) piece = `{${bg}-bg}${piece}{/${bg}-bg}`;
+        line += piece;
+        run = '';
+      };
+
+      for (const cell of row) {
+        if (cell.fg !== fg || cell.bg !== bg) { flush(); fg = cell.fg; bg = cell.bg; }
+        run += cell.ch;
+      }
+      flush();
+      lines.push(line);
     }
 
     this.renderCallback(lines.join('\n'));
