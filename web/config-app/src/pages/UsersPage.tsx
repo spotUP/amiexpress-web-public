@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, Search } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -67,7 +68,7 @@ export function UsersPage() {
     expert: false,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['users'],
     queryFn: () => apiClient.getUsers(),
   });
@@ -124,6 +125,13 @@ export function UsersPage() {
       timeLimit: 60,
       expert: false,
     });
+  };
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingUser(null);
+    resetForm();
   };
 
   const handleAdd = () => {
@@ -306,6 +314,8 @@ export function UsersPage() {
         getRowId={(user) => user.id}
         initialSort={[{ id: 'username', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage={search ? 'No user matches that search.' : 'No users yet.'}
         rowActions={(user) => (
           <>
@@ -337,18 +347,19 @@ export function UsersPage() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={isModalOpen}
+          title={editingUser ? 'Edit User' : 'Add User'}
+          onClose={closeModal}
+          maxWidth="max-w-2xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingUser ? 'Edit User' : 'Add User'}
               </h2>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingUser(null);
-                  resetForm();
-                }}
+                onClick={closeModal}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -542,8 +553,7 @@ export function UsersPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

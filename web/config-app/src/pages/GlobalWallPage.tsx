@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, X, Save, MessageSquare, Settings as SettingsIcon } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -107,6 +108,12 @@ export function GlobalWallPage() {
       showError(`Failed to save configuration: ${error.message}`);
     },
   });
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeModal = () => {
+    setIsEditModalOpen(false);
+    setEditingComment(null);
+  };
 
   const handleEditComment = (comment: WallComment) => {
     setEditFormData({
@@ -357,15 +364,17 @@ export function GlobalWallPage() {
 
       {/* Edit Comment Modal */}
       {isEditModalOpen && editingComment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={isEditModalOpen}
+          title="Edit Wall Comment"
+          onClose={closeModal}
+          maxWidth="max-w-2xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">Edit Wall Comment</h2>
               <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditingComment(null);
-                }}
+                onClick={closeModal}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -451,8 +460,7 @@ export function GlobalWallPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

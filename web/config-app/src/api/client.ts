@@ -3,8 +3,45 @@ import type { ApiResponse, User } from '../types';
 const API_BASE = '/api';
 const AUTH_BASE = '/auth';
 
+/**
+ * An HTTP failure, carrying the status the pages need to tell them apart.
+ *
+ * Everything used to throw a bare Error, so a 401 and a 500 looked the same
+ * to a page - and since apiClient throws on a non-2xx, `data` came back
+ * undefined either way and eighteen pages rendered "No doors configured" as a
+ * POSITIVE claim about a request that had failed.
+ */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 class ApiClient {
   private token: string | null = null;
+  private unauthorizedHandler: (() => void) | null = null;
+
+  /**
+   * Called when any request comes back 401.
+   *
+   * AuthContext validates the token ONCE at mount, so an expired session used
+   * to present as a working admin with nothing in it. Returns an unsubscribe.
+   */
+  onUnauthorized(handler: () => void): () => void {
+    this.unauthorizedHandler = handler;
+    return () => {
+      if (this.unauthorizedHandler === handler) this.unauthorizedHandler = null;
+    };
+  }
+
+  private failed(status: number, body: { error?: string; message?: string }, fallback: string): ApiError {
+    if (status === 401) {
+      this.setToken(null);
+      this.unauthorizedHandler?.();
+    }
+    return new ApiError(body.error || body.message || fallback, status);
+  }
 
   constructor() {
     this.token = localStorage.getItem('authToken');
@@ -49,7 +86,7 @@ class ApiClient {
     const response = await fetch(url, { headers: this.authHeaders() });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(error.error || error.message || response.statusText);
+      throw this.failed(response.status, error, response.statusText);
     }
 
     const blob = await response.blob();
@@ -95,7 +132,7 @@ class ApiClient {
           const error = await response.json().catch(() => ({
             error: response.statusText,
           }));
-          throw new Error(error.error || error.message || response.statusText);
+          throw this.failed(response.status, error, response.statusText);
         }
 
         const data = await response.json();
@@ -138,7 +175,7 @@ class ApiClient {
       const error = await response.json().catch(() => ({
         error: response.statusText,
       }));
-      throw new Error(error.error || error.message || response.statusText);
+      throw this.failed(response.status, error, response.statusText);
     }
 
     return response.json();

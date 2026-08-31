@@ -26,8 +26,9 @@ export function AuditLogPage() {
       <div className="card mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="label">Filter by Table</label>
+            <label htmlFor="audit-filter-table" className="label">Filter by Table</label>
             <select
+              id="audit-filter-table"
               value={tableName}
               onChange={(e) => setTableName(e.target.value)}
               className="input-field w-full"
@@ -43,8 +44,9 @@ export function AuditLogPage() {
           </div>
 
           <div>
-            <label className="label">Limit Results</label>
+            <label htmlFor="audit-limit-results" className="label">Limit Results</label>
             <select
+              id="audit-limit-results"
               value={limit}
               onChange={(e) => setLimit(parseInt(e.target.value))}
               className="input-field w-full"

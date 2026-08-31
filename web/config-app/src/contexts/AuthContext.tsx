@@ -89,6 +89,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUserFromToken();
   }, [refreshUserFromToken]);
 
+  /**
+   * A 401 from ANY request ends the session.
+   *
+   * The token was validated once, at mount, and never again - so an expired
+   * session presented as a working admin with nothing in it: apiClient throws
+   * on a non-2xx, `data` came back undefined, and eighteen pages rendered
+   * their empty copy as a positive claim.
+   */
+  useEffect(() => {
+    return apiClient.onUnauthorized(() => {
+      setUser(null);
+      persistUser(null);
+    });
+  }, []);
+
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== 'authToken') {

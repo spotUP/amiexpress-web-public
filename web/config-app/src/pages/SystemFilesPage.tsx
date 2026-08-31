@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileCode, Edit2, Save, X, RefreshCw, FolderOpen } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -56,6 +57,12 @@ export function SystemFilesPage() {
     acc[file.category].push(file);
     return acc;
   }, {} as Record<string, InfoFileItem[]>);
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeModal = () => {
+    setIsInfoEditorOpen(false);
+    setEditingFile(null);
+  };
 
   const handleEditInfo = async (file: InfoFileItem) => {
     try {
@@ -221,8 +228,13 @@ export function SystemFilesPage() {
 
       {/* Info Editor Modal */}
       {isInfoEditorOpen && editingFile && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-bbs-background border-2 border-bbs-border rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+        <Modal
+          open={isInfoEditorOpen}
+          title={editingFile.name}
+          onClose={closeModal}
+          maxWidth="max-w-4xl"
+          showHeader={false}
+        >
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-bbs-border">
               <div>
@@ -230,10 +242,7 @@ export function SystemFilesPage() {
                 <p className="text-sm text-bbs-muted font-mono">{editingFile.path}</p>
               </div>
               <button
-                onClick={() => {
-                  setIsInfoEditorOpen(false);
-                  setEditingFile(null);
-                }}
+                onClick={closeModal}
                 className="text-bbs-muted hover:text-bbs-text"
               >
                 <X size={24} />
@@ -324,8 +333,7 @@ export function SystemFilesPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

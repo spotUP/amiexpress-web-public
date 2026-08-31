@@ -4,7 +4,7 @@ import { Check, Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XC
 import { apiClient } from '../api/client';
 import { TooltypeKey } from '../components/ui/TooltypeKey';
 import type { SystemConfig, Language, ScreenType } from '../types';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 
 // Standard AmiExpress security levels
@@ -160,11 +160,12 @@ export function SystemConfigPage() {
     },
   });
 
-  useEffect(() => {
-    if (data?.data) {
-      reset(data.data);
-    }
-  }, [data, reset]);
+  // No reset-on-refetch here. `useForm({ values })` above already syncs the
+  // form when the query answers, and this effect fired on the refetch that a
+  // per-field save triggers - which defeated the resetField below, whose
+  // whole job is to mark ONE field clean without touching what the sysop has
+  // half-typed in the others. So saving one field reverted every other edit
+  // on screen.
 
   // A field saves when it is left, not while it is being typed.
   //

@@ -245,8 +245,9 @@ export function LogsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {/* Log Type */}
           <div>
-            <label className="label">Log Type</label>
+            <label htmlFor="logs-log-type" className="label">Log Type</label>
             <select
+              id="logs-log-type"
               value={logType}
               onChange={(e) => setLogType(e.target.value as LogType)}
               className="input-field w-full"
@@ -261,8 +262,9 @@ export function LogsPage() {
 
           {logType === 'door68k' && (
             <div>
-              <label className="label">68K Door Log</label>
+              <label htmlFor="logs-door-log" className="label">68K Door Log</label>
               <select
+              id="logs-door-log"
                 value={doorLog}
                 onChange={(e) => setDoorLog(e.target.value)}
                 className="input-field w-full"
@@ -283,8 +285,9 @@ export function LogsPage() {
 
           {/* Line Count */}
           <div>
-            <label className="label">Lines to Display</label>
+            <label htmlFor="logs-line-count" className="label">Lines to Display</label>
             <select
+              id="logs-line-count"
               value={lineCount}
               onChange={(e) => setLineCount(parseInt(e.target.value))}
               className="input-field w-full"

@@ -332,8 +332,9 @@ export function NodeControlPage() {
                         onClick={handleReserveCancel}
                         className="flex items-center gap-1 px-2 py-1.5 text-sm bg-surface-3 hover:bg-surface-2 text-content-primary rounded transition-colors"
                         title="Cancel"
+                        aria-label="Cancel reserving this node"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   ) : (
@@ -399,8 +400,9 @@ export function NodeControlPage() {
                         onClick={handleReserveCancel}
                         className="flex items-center gap-1 px-2 py-1.5 text-sm bg-surface-3 hover:bg-surface-2 text-content-primary rounded transition-colors"
                         title="Cancel"
+                        aria-label="Cancel reserving this node"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   ) : (

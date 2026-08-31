@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -37,7 +38,7 @@ export function DrivesPage() {
     enabled: true,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['drives'],
     queryFn: () => apiClient.getDrives(),
   });
@@ -88,6 +89,13 @@ export function DrivesPage() {
       description: '',
       enabled: true,
     });
+  };
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingDrive(null);
+    resetForm();
   };
 
   const handleAdd = () => {
@@ -189,6 +197,8 @@ export function DrivesPage() {
         getRowId={(drive) => String(drive.id)}
         initialSort={[{ id: 'drive_number', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No drives configured. Add drive mappings to define BBS storage locations."
         rowActions={(drive) => (
           <>
@@ -214,18 +224,19 @@ export function DrivesPage() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-md w-full m-4">
+        <Modal
+          open={isModalOpen}
+          title={editingDrive ? 'Edit Drive' : 'Add Drive'}
+          onClose={closeModal}
+          maxWidth="max-w-md"
+          showHeader={false}
+        >
             <div className="border-b border-bbs-primary p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingDrive ? 'Edit Drive' : 'Add Drive'}
               </h2>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingDrive(null);
-                  resetForm();
-                }}
+                onClick={closeModal}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -305,8 +316,7 @@ export function DrivesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

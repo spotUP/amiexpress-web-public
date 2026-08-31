@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -59,7 +60,7 @@ export function DoorsPage() {
   const [tooltypes, setTooltypes] = useState<Tooltype[]>([]);
   const [infoDirty, setInfoDirty] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['doors'],
     queryFn: () => apiClient.getDoors(),
   });
@@ -112,6 +113,27 @@ export function DoorsPage() {
       min_security_level: 0,
       enabled: true,
     });
+  };
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeDoorModal = () => {
+    setIsModalOpen(false);
+    setEditingDoor(null);
+    resetForm();
+  };
+
+  /** The .info editor asks before throwing away unsaved tooltypes. */
+  const closeInfoEditor = () => {
+    if (infoDirty) {
+      if (window.confirm('You have unsaved changes. Discard them?')) {
+        setIsInfoEditorOpen(false);
+        setEditingInfoDoor(null);
+        setInfoDirty(false);
+      }
+    } else {
+      setIsInfoEditorOpen(false);
+      setEditingInfoDoor(null);
+    }
   };
 
   const handleAdd = () => {
@@ -344,6 +366,8 @@ export function DoorsPage() {
         getRowId={(door) => String(door.id)}
         initialSort={[{ id: 'door_name', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No doors configured. Doors are the external programs and games on the command menu."
         rowActions={(door) => (
           <>
@@ -377,18 +401,19 @@ export function DoorsPage() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={isModalOpen}
+          title={editingDoor ? 'Edit Door' : 'Add Door'}
+          onClose={closeDoorModal}
+          maxWidth="max-w-2xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingDoor ? 'Edit Door' : 'Add Door'}
               </h2>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingDoor(null);
-                  resetForm();
-                }}
+                onClick={closeDoorModal}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -525,14 +550,18 @@ export function DoorsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Info Editor Modal */}
       {isInfoEditorOpen && editingInfoDoor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={Boolean(isInfoEditorOpen && editingInfoDoor)}
+          title="Edit .info File"
+          onClose={closeInfoEditor}
+          maxWidth="max-w-4xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-bold text-accent">Edit .info File</h2>
@@ -541,18 +570,7 @@ export function DoorsPage() {
                 </p>
               </div>
               <button
-                onClick={() => {
-                  if (infoDirty) {
-                    if (window.confirm('You have unsaved changes. Discard them?')) {
-                      setIsInfoEditorOpen(false);
-                      setEditingInfoDoor(null);
-                      setInfoDirty(false);
-                    }
-                  } else {
-                    setIsInfoEditorOpen(false);
-                    setEditingInfoDoor(null);
-                  }
-                }}
+                onClick={closeInfoEditor}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -672,8 +690,7 @@ export function DoorsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
