@@ -10,12 +10,25 @@
  * Why this exists at all. Until now the door had no directory enumeration,
  * and flow.h said so - "C89 has no directory enumeration at all, and
  * AmigaDOS's Examine/ExNext is not available through the portable backend".
- * The second half of that was a statement about THIS door's structure, not
+ * The second half of that is a statement about THIS door's structure, not
  * about AmigaOS: Examine/ExNext are ordinary dos.library calls, and
- * AmiExpress itself uses them in 36 places (express.e). The consequence of
- * not having them was that the door could only know what an archive
- * contained by asking the BBS for a listing - which is fine on this board
- * and useless on a real one, where there is no BBS API to ask.
+ * AmiExpress itself uses them in 36 places (express.e).
+ *
+ * What that cost, stated carefully. The door's only census of what an
+ * archive unpacked came from the CATALOG server's listing
+ * (GET /api/door-repo/files/<archive>) - which every board can reach, this
+ * one and a real one alike. So this is NOT about working without the BBS
+ * admin API, and an earlier version of this comment said it was. What a
+ * local walk actually adds:
+ *
+ *   - a census when there is no listing to take one from: an archive with
+ *     no listing row, or a catalog that cannot be reached. flow.h's
+ *     `listed_checked == 0` case - "no census was taken" - is today's
+ *     answer to both, and it never refuses an install on its own;
+ *   - telling an install directory that unpacked NOTHING from one that was
+ *     never created, which no listing can answer;
+ *   - reading a door's own files with no round trip at all, including for
+ *     the doors that have no catalog entry to list.
  *
  * A CALLBACK, not a returned array, and deliberately. This door's static
  * data is already within ~80 KB of the ceiling the emulator enforces on a
