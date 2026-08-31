@@ -26,6 +26,9 @@ import {
   getLevelConfig,
   GAME_TICK_MS,
   INITIAL_TIME,
+  CELL_WIDTH,
+  BG_COLORS,
+  HOME_WIDTH,
   EXTRA_LIFE_SCORE,
   TURTLE_DIVE_DURATION,
   TURTLE_SURFACE_DURATION,
@@ -944,96 +947,48 @@ export class FroggerGame {
   }
 
   /**
-   * Render the game
+   * Render the game.
+   *
+   * Drawn as blocks of background colour rather than ASCII sprites, the way
+   * Grandmaster and Super Qix draw their boards: a solid red block reads as
+   * a car where a '#' reads as punctuation. Each logical cell is CELL_WIDTH
+   * characters wide so that a cell comes out roughly square on a terminal,
+   * and forty of them fill the screen exactly.
    */
   render(): void {
     const d = this.data;
-    const lines: string[] = [];
 
+    // One background colour per cell, plus an optional foreground glyph for
+    // the few things that need one.
     const buffer: string[][] = [];
     for (let y = 0; y < GRID_HEIGHT; y++) {
-      buffer[y] = [];
-      for (let x = 0; x < GRID_WIDTH; x++) buffer[y][x] = ' ';
+      buffer[y] = new Array(GRID_WIDTH).fill(BG_COLORS.road);
     }
 
-    // Lane backgrounds
-    for (const lane of d.lanes) {
-      const bg =
-        lane.type === 'road' ? '.' :
-        lane.type === 'water' ? '~' :
-        lane.type === 'safe' ? '_' : ' ';
+    this.paintLanes(buffer);
+    this.paintHomes(buffer);
+    this.paintObjects(buffer);
+    this.paintSnakes(buffer);
+    this.paintFrog(buffer);
 
-      for (let x = 0; x < GRID_WIDTH; x++) buffer[lane.y][x] = bg;
-    }
-
-    // Homes, with whatever is sitting in them
-    for (const home of d.homes) {
-      const glyph =
-        home.occupied ? ['[', '*', ']'] :
-        home.hasAlligator ? ['[', 'C', ']'] :
-        home.hasFly ? ['[', 'F', ']'] :
-        ['[', ' ', ']'];
-
-      for (let i = 0; i < glyph.length; i++) {
-        const x = home.x + i;
-        if (x >= 0 && x < GRID_WIDTH) buffer[0][x] = glyph[i];
-      }
-    }
-
-    // Everything in a lane
-    for (const lane of d.lanes) {
-      for (const raw of lane.objects) {
-        const obj = raw as RiverObject;
-        const width = obj.width ?? 2;
-
-        for (let dx = 0; dx < width; dx++) {
-          const x = Math.floor(obj.x + dx);
-          if (x < 0 || x >= GRID_WIDTH) continue;
-          buffer[obj.y][x] = this.glyphFor(obj, dx, width);
-        }
-
-        // A snake or the lady frog riding this one sits on top of it.
-        if (obj.snakeAt !== null && obj.snakeAt !== undefined) {
-          const x = Math.floor(obj.x + obj.snakeAt);
-          if (x >= 0 && x < GRID_WIDTH) buffer[obj.y][x] = 'S';
-        }
-        if (obj.ladyFrogAt !== null && obj.ladyFrogAt !== undefined) {
-          const x = Math.floor(obj.x + obj.ladyFrogAt);
-          if (x >= 0 && x < GRID_WIDTH) buffer[obj.y][x] = 'P';
-        }
-      }
-    }
-
-    // Median snakes
-    for (const snake of d.snakes) {
-      const x = Math.floor(snake.x);
-      if (x >= 0 && x < GRID_WIDTH && snake.y >= 0 && snake.y < GRID_HEIGHT) {
-        buffer[snake.y][x] = 'S';
-      }
-    }
-
-    // The frog
-    const fx = Math.floor(d.frog.x);
-    const fy = d.frog.y;
-    if (fx >= 0 && fx < GRID_WIDTH && fy >= 0 && fy < GRID_HEIGHT) {
-      if (!d.frog.isDead) {
-        buffer[fy][fx] = d.frog.isJumping
-          ? (d.frog.direction === 'up' ? '^' :
-             d.frog.direction === 'down' ? 'v' :
-             d.frog.direction === 'left' ? '<' : '>')
-          : '@';
-      } else {
-        const deathChars = ['X', 'x', '+', '.', ' '];
-        const frame = Math.min(Math.floor(d.frog.deathFrame / 4), deathChars.length - 1);
-        buffer[fy][fx] = deathChars[frame];
-      }
-    }
-
-    for (let y = 0; y < GRID_HEIGHT; y++) {
+    const lines = buffer.map(row => {
       let line = '';
-      for (let x = 0; x < GRID_WIDTH; x++) line += this.paint(buffer[y][x]);
-      lines.push(line);
-    }
+      let run = '';
+      let colour = '';
+
+      const flush = () => {
+        if (!run) return;
+        line += `{${colour}-bg}${run}{/${colour}-bg}`;
+        run = '';
+      };
+
+      for (const bg of row) {
+        if (bg !== colour) { flush(); colour = bg; }
+        run += ' '.repeat(CELL_WIDTH);
+      }
+      flush();
+      return line;
+    });
 
     lines.push('');
     const timeBar = '='.repeat(Math.max(0, Math.floor(d.timeRemaining / 2)));
@@ -1043,50 +998,119 @@ export class FroggerGame {
     this.renderCallback(lines.join('\n'));
   }
 
-  /** The character for one cell of an object. */
-  private glyphFor(obj: Vehicle | RiverObject, dx: number, width: number): string {
-    switch (obj.type) {
-      case 'car':
-      case 'racecar':
-        return '#';
-      case 'truck':
-        return 'T';
-      case 'log':
-        return '=';
-      case 'turtle':
-        return (obj as RiverObject).isDiving ? '~' : 'o';
-      case 'crocodile':
-      case 'otter': {
-        // Draw the mouth end differently, since landing on it is fatal.
-        const mouth = obj.speed >= 0 ? dx === width - 1 : dx === 0;
-        return mouth ? 'V' : (obj.type === 'otter' ? 'w' : 'c');
-      }
-      default:
-        return '#';
+  /** The ground: road, water, the banks and the median. */
+  private paintLanes(buffer: string[][]): void {
+    for (const lane of this.data.lanes) {
+      const bg =
+        lane.type === 'road' ? BG_COLORS.road :
+        lane.type === 'water' ? BG_COLORS.water :
+        lane.type === 'safe' ? BG_COLORS.bank :
+        BG_COLORS.hedge;
+
+      buffer[lane.y].fill(bg);
     }
   }
 
-  private paint(char: string): string {
-    switch (char) {
-      case '@': case '^': case 'v': case '<': case '>':
-        return `{green-fg}${char}{/}`;
-      case '#': return `{red-fg}${char}{/}`;
-      case 'T': return `{yellow-fg}${char}{/}`;
-      case '=': return `{yellow-fg}${char}{/}`;
-      case 'o': return `{green-fg}${char}{/}`;
-      case 'c': case 'w': return `{lightgreen-fg}${char}{/}`;
-      case 'V': return `{red-fg}${char}{/}`;
-      case 'S': return `{magenta-fg}${char}{/}`;
-      case 'P': return `{magenta-fg}${char}{/}`;
-      case '*': return `{cyan-fg}${char}{/}`;
-      case '[': case ']': return `{cyan-fg}${char}{/}`;
-      case 'C': return `{lightgreen-fg}${char}{/}`;
-      case 'F': return `{magenta-fg}${char}{/}`;
-      case '~': return `{blue-fg}${char}{/}`;
-      case '.': return `{gray-fg}${char}{/}`;
-      case '_': return `{green-fg}${char}{/}`;
-      case 'X': case 'x': case '+': return `{red-fg}${char}{/}`;
-      default: return char;
+  /** The five homes cut into the hedge along the top. */
+  private paintHomes(buffer: string[][]): void {
+    for (const home of this.data.homes) {
+      const bg =
+        home.occupied ? BG_COLORS.homeOccupied :
+        home.hasAlligator ? BG_COLORS.homeCrocodile :
+        home.hasFly ? BG_COLORS.homeFly :
+        BG_COLORS.homeEmpty;
+
+      for (let i = 0; i < HOME_WIDTH; i++) {
+        const x = home.x + i;
+        if (x >= 0 && x < GRID_WIDTH) buffer[0][x] = bg;
+      }
+    }
+  }
+
+  /** Everything travelling in a lane. */
+  private paintObjects(buffer: string[][]): void {
+    for (const lane of this.data.lanes) {
+      for (const raw of lane.objects) {
+        const obj = raw as RiverObject;
+        const width = obj.width ?? 2;
+
+        for (let dx = 0; dx < width; dx++) {
+          const x = Math.floor(obj.x + dx);
+          if (x < 0 || x >= GRID_WIDTH) continue;
+          buffer[obj.y][x] = this.colourFor(obj, dx, width);
+        }
+
+        // Riders sit on top of whatever is carrying them.
+        if (obj.snakeAt !== null && obj.snakeAt !== undefined) {
+          const x = Math.floor(obj.x + obj.snakeAt);
+          if (x >= 0 && x < GRID_WIDTH) buffer[obj.y][x] = BG_COLORS.snake;
+        }
+        if (obj.ladyFrogAt !== null && obj.ladyFrogAt !== undefined) {
+          const x = Math.floor(obj.x + obj.ladyFrogAt);
+          if (x >= 0 && x < GRID_WIDTH) buffer[obj.y][x] = BG_COLORS.ladyFrog;
+        }
+      }
+    }
+  }
+
+  /** The snakes patrolling the median. */
+  private paintSnakes(buffer: string[][]): void {
+    for (const snake of this.data.snakes) {
+      const x = Math.floor(snake.x);
+      if (x >= 0 && x < GRID_WIDTH && snake.y >= 0 && snake.y < GRID_HEIGHT) {
+        buffer[snake.y][x] = BG_COLORS.snake;
+      }
+    }
+  }
+
+  /** The player. */
+  private paintFrog(buffer: string[][]): void {
+    const d = this.data;
+    const x = Math.floor(d.frog.x);
+    const y = d.frog.y;
+    if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return;
+
+    if (!d.frog.isDead) {
+      buffer[y][x] = BG_COLORS.frog;
+      return;
+    }
+
+    // The death blinks rather than spelling out an X: at one cell there is
+    // no room for an animation, but a flashing block is unmistakable.
+    const on = Math.floor(d.frog.deathFrame / 3) % 2 === 0;
+    if (on) buffer[y][x] = BG_COLORS.frogDying;
+  }
+
+  /**
+   * The colour of one cell of a moving object.
+   *
+   * A crocodile and an otter are drawn with their mouth in a different
+   * colour, because landing on the mouth is fatal and landing on the back is
+   * not - the player has to be able to see which end is which.
+   */
+  private colourFor(obj: Vehicle | RiverObject, dx: number, width: number): string {
+    switch (obj.type) {
+      case 'car':     return BG_COLORS.car;
+      case 'racecar': return BG_COLORS.racecar;
+      case 'truck':   return BG_COLORS.truck;
+      case 'log':     return BG_COLORS.log;
+
+      case 'turtle':
+        return (obj as RiverObject).isDiving
+          ? BG_COLORS.turtleDiving
+          : BG_COLORS.turtle;
+
+      case 'crocodile':
+      case 'otter': {
+        const mouth = obj.speed >= 0 ? dx === width - 1 : dx === 0;
+        if (obj.type === 'otter') {
+          return mouth ? BG_COLORS.otterMouth : BG_COLORS.otter;
+        }
+        return mouth ? BG_COLORS.crocodileMouth : BG_COLORS.crocodile;
+      }
+
+      default:
+        return BG_COLORS.car;
     }
   }
 }
