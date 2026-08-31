@@ -16,6 +16,27 @@ import {
   OperatorChatConfig
 } from '../types/operator-chat.types';
 
+/**
+ * A list of security levels, whatever shape the caller sent.
+ *
+ * The Operator Chat form's "Allowed Security Levels" is a checkbox group, and
+ * a checkbox group posts its values as STRINGS. This column filled with
+ * ["10","20"] while operator-chat.handler.ts:255 tests
+ * `.includes(userSecLevel)` against a NUMBER - and ["10"].includes(10) is
+ * false, so the list matched nobody and no non-sysop could page the sysop.
+ *
+ * Applied on the way OUT as well as in, so a board whose column already holds
+ * strings starts working without a re-save. Level 0 is real; an empty string
+ * and a null are not, and are dropped rather than becoming 0.
+ */
+function toSecurityLevels(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(value => value !== null && value !== undefined && value !== '')
+    .map(Number)
+    .filter(Number.isFinite);
+}
+
 export class OperatorChatRepository {
   constructor(private db: any) {
     this.initTables();
@@ -433,7 +454,9 @@ export class OperatorChatRepository {
       vibrateEnabled: row.vibrate_enabled === 1,
       discordWebhook: row.discord_webhook,
       discordUserId: row.discord_user_id,
-      allowedSecLevels: JSON.parse(row.allowed_sec_levels || '[]'),
+      // Rows written before the coercion above hold strings; read them as
+      // numbers so an existing board starts working without a re-save.
+      allowedSecLevels: toSecurityLevels(JSON.parse(row.allowed_sec_levels || '[]')),
       notifyOnPage: row.notify_on_page !== 0, // Default true if null
       notifyDiscord: row.notify_discord !== 0  // Default true if null
     };
@@ -483,7 +506,12 @@ export class OperatorChatRepository {
       merged.vibrateEnabled ? 1 : 0,
       merged.discordWebhook ?? null,
       merged.discordUserId ?? null,
-      JSON.stringify(merged.allowedSecLevels),
+      // NUMBERS, whatever the caller sent. A checkbox group posts its values
+      // as strings, so this column filled with ["10","20"] while
+      // operator-chat.handler.ts:255 tests `.includes(userSecLevel)` against a
+      // number - and ["10"].includes(10) is false, so no non-sysop could page
+      // the sysop at all.
+      JSON.stringify(toSecurityLevels(merged.allowedSecLevels)),
       merged.notifyOnPage ? 1 : 0,
       merged.notifyDiscord ? 1 : 0
     );

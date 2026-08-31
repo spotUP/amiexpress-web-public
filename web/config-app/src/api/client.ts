@@ -23,6 +23,49 @@ class ApiClient {
     return this.token;
   }
 
+  /**
+   * The Authorization header, for the few callers that cannot use request().
+   *
+   * The Import and Export components each built this by hand from
+   * `localStorage.getItem('token')` - and the JWT is stored under
+   * `authToken`, so every one of those eight requests sent
+   * `Bearer null` and got a 401. The key belongs in one place.
+   */
+  authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return this.token
+      ? { ...extra, Authorization: `Bearer ${this.token}` }
+      : { ...extra };
+  }
+
+  /**
+   * Fetch a file with the session's credentials and save it.
+   *
+   * The export download used `window.open(url + '?token=' + token)`, and the
+   * auth middleware reads the Authorization header and nothing else - it has
+   * never looked at a query string, so the download could not have worked
+   * whatever the key was called.
+   */
+  async downloadFile(url: string, filename: string): Promise<void> {
+    const response = await fetch(url, { headers: this.authHeaders() });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(error.error || error.message || response.statusText);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   private async request<T>(
     url: string,
     options: RequestInit = {}

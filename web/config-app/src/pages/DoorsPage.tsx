@@ -9,15 +9,24 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 /** A stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_DOORS: Door[] = [];
 
+/**
+ * What the form can actually change.
+ *
+ * `description`, `runtime_env` and `time_limit` were on it and are not here.
+ * A door is defined by its .info tooltypes and none of the three has one -
+ * DOOR_FIELD_TOOLTYPES says so, and inventing keys would put values in a
+ * door's icon that AmiExpress never reads. The API DERIVES runtime_env from
+ * the door type and serves time_limit as a hardcoded 30, so both read back
+ * wrong whatever was typed, and description comes from a TypeScript door's
+ * package.json. All three are still shown in the list; none of them is a
+ * control any more.
+ */
 interface DoorFormData {
   door_name: string;
   door_command: string;
-  description: string;
   door_type: string;
   door_path: string;
-  runtime_env: string;
   min_security_level: number;
-  time_limit: number;
   enabled: boolean;
 }
 
@@ -38,12 +47,9 @@ export function DoorsPage() {
   const [formData, setFormData] = useState<DoorFormData>({
     door_name: '',
     door_command: '',
-    description: '',
     door_type: 'XIM',
     door_path: '',
-    runtime_env: 'vamos',
     min_security_level: 0,
-    time_limit: 30,
     enabled: true,
   });
 
@@ -101,12 +107,9 @@ export function DoorsPage() {
     setFormData({
       door_name: '',
       door_command: '',
-      description: '',
       door_type: 'XIM',
       door_path: '',
-      runtime_env: 'vamos',
       min_security_level: 0,
-      time_limit: 30,
       enabled: true,
     });
   };
@@ -121,12 +124,9 @@ export function DoorsPage() {
     setFormData({
       door_name: door.door_name,
       door_command: door.door_command,
-      description: door.description,
       door_type: door.door_type,
       door_path: door.door_path,
-      runtime_env: door.runtime_env,
       min_security_level: door.min_security_level,
-      time_limit: door.time_limit,
       enabled: door.enabled,
     });
     setEditingDoor(door);
@@ -310,15 +310,6 @@ export function DoorsPage() {
       mono: true,
       width: '7rem',
     },
-    {
-      id: 'time_limit',
-      header: 'Time limit',
-      value: (door) => door.time_limit,
-      align: 'right',
-      mono: true,
-      width: '7rem',
-      cell: (door) => `${door.time_limit} min`,
-    },
   ];
 
   return (
@@ -430,17 +421,6 @@ export function DoorsPage() {
                   />
                 </div>
 
-                <div className="md:col-span-2">
-                  <label htmlFor="description" className="label">Description</label>
-                  <textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="input-field w-full"
-                    rows={3}
-                  />
-                </div>
-
                 <div>
                   <label htmlFor="door_type" className="label">Door Type *</label>
                   <select
@@ -489,22 +469,6 @@ export function DoorsPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="runtime_env" className="label">Runtime *</label>
-                  <select
-                    id="runtime_env"
-                    value={formData.runtime_env}
-                    onChange={(e) => setFormData({ ...formData, runtime_env: e.target.value })}
-                    className="input-field w-full"
-                    required
-                  >
-                    <option value="vamos">vamos (68K emulator)</option>
-                    {/* "nodejs", not "node" - that is what the API serves. */}
-                    <option value="nodejs">Node.js</option>
-                    <option value="native">Native</option>
-                  </select>
-                </div>
-
-                <div>
                   <label htmlFor="min_security_level" className="label">Min Security Level *</label>
                   <input
                     id="min_security_level"
@@ -513,19 +477,6 @@ export function DoorsPage() {
                     max="255"
                     value={formData.min_security_level}
                     onChange={(e) => setFormData({ ...formData, min_security_level: parseInt(e.target.value) })}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="time_limit" className="label">Time Limit (min) *</label>
-                  <input
-                    id="time_limit"
-                    type="number"
-                    min="1"
-                    value={formData.time_limit}
-                    onChange={(e) => setFormData({ ...formData, time_limit: parseInt(e.target.value) })}
                     className="input-field w-full"
                     required
                   />

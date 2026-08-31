@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { apiClient } from '../../api/client';
 import { FileUploader } from './FileUploader';
 import { ValidationResults } from './ValidationResults';
 import { ConflictResolver } from './ConflictResolver';
@@ -49,9 +50,7 @@ export function ImportExport() {
       const interval = setInterval(async () => {
         try {
           const response = await fetch(`/api/import/session/${sessionId}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            },
+            headers: apiClient.authHeaders(),
           });
 
           if (response.ok) {
@@ -85,9 +84,7 @@ export function ImportExport() {
     try {
       const response = await fetch(`/api/import/validate/${uploadedSessionId}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: apiClient.authHeaders(),
       });
 
       if (response.ok) {
@@ -124,10 +121,7 @@ export function ImportExport() {
     try {
       const response = await fetch(`/api/import/execute/${sessionId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: apiClient.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           ...conflictStrategies,
           createBackup: true,

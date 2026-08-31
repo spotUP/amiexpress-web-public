@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef } from 'react';
+import { apiClient } from '../../api/client';
 import { Package } from 'lucide-react';
 
 interface FileUploaderProps {
@@ -70,9 +71,7 @@ export function FileUploader({ onFileUploaded }: FileUploaderProps) {
 
       const response = await fetch('/api/import/upload', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: apiClient.authHeaders(),
         body: formData,
       });
 

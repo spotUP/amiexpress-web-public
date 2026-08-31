@@ -70,7 +70,7 @@ export function FileUploader({ onFileUploaded }: FileUploaderProps) {
       const response = await fetch('/api/import/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
         body: formData,
       });
