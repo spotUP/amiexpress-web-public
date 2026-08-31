@@ -30,8 +30,11 @@ const VIEW = {
   secretsSet: ['password'],
 };
 
-const saveDoorSettings = vi.fn(async () => ({ success: true, data: VIEW }));
-const getDoorSettings = vi.fn(async () => ({ success: true, data: VIEW }));
+// Typed with the arguments the client passes: an untyped vi.fn() infers a
+// zero-argument signature, so `tsc` rejects the call while vitest runs it
+// happily - green under the test runner, red under build:check.
+const saveDoorSettings = vi.fn(async (_command: string, _values: Record<string, unknown>) => ({ success: true, data: VIEW }));
+const getDoorSettings = vi.fn(async (_command: string) => ({ success: true, data: VIEW }));
 
 vi.mock('../api/client', () => ({
   apiClient: {

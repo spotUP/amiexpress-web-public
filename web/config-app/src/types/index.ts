@@ -257,6 +257,13 @@ export interface Door {
   // Status
   enabled: boolean;
 
+  /**
+   * Whether the door ships a door.settings.json - whether it describes what a
+   * sysop can set on it. Served by GET /api/config/doors as has_settings; the
+   * door decides it by carrying the file or not.
+   */
+  has_settings?: boolean;
+
   // Metadata
   created_at: Date;
   updated_at: Date;

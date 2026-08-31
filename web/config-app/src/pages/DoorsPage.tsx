@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Modal } from '../components/ui/Modal';
 import { DoorSettingsForm } from '../components/DoorSettingsForm';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload, SlidersHorizontal } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -291,7 +291,25 @@ export function DoorsPage() {
       id: 'door_name',
       header: 'Name',
       value: (door) => door.door_name,
-      cell: (door) => <span className="text-content-primary">{door.door_name}</span>,
+      cell: (door) => (
+        <span className="inline-flex items-center gap-2">
+          <span className="text-content-primary">{door.door_name}</span>
+          {/*
+            This door describes what it can be configured with, so the .info
+            editor shows a form for it. Without the badge the list gives a
+            sysop no way to tell which doors those are short of opening each
+            one - the API has said so all along and nothing read it.
+          */}
+          {door.has_settings && (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-surface-3 px-2 py-0.5 text-xs text-content-secondary"
+              title="This door describes its own settings - open the .info editor to change them"
+            >
+              <SlidersHorizontal size={11} aria-hidden="true" /> Settings
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       id: 'door_command',
