@@ -144,6 +144,9 @@ function initScreen(): void {
     width: "100%",
     height: 1,
     tags: true,
+    // One row tall, so an injected Panel border WOULD BE the whole box and
+    // the score line would never appear at all.
+    border: undefined,
     content: formatHUD(),
   });
 
@@ -156,6 +159,16 @@ function initScreen(): void {
     width: "100%",
     height: GAME_AREA_HEIGHT,
     tags: true,
+    // The engine lays the board out itself: one line per lane, exactly
+    // GRID_WIDTH * CELL_WIDTH characters wide. Word wrapping a line that
+    // already fills the box pushes a blank row in after every real row, so
+    // the board rendered on every OTHER line.
+    wrap: false,
+    // blessed.box() here returns a Panel, which injects a border of its own
+    // unless told not to. That border stole two columns - which is what made
+    // the full-width lines wrap - and its bottom edge showed as a stray line
+    // across the top of the screen.
+    border: undefined,
     style: { bg: "black" },
   });
 
