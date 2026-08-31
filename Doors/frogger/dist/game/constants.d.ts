@@ -201,6 +201,45 @@ export declare const BG_COLORS: {
     homeFly: string;
     homeCrocodile: string;
 };
+/**
+ * The sprites the board is drawn with.
+ *
+ * Adapted from the style of Philippe Majerus's Frogger ANSI: coloured lane
+ * backgrounds with character sprites laid over them, rather than the solid
+ * blocks this door drew before. A log with rounded ends and a grain reads as
+ * a log; a brown rectangle reads as a brown rectangle.
+ *
+ * Every sprite is built to exactly `width * CELL_WIDTH` characters so it
+ * fills its cells and no more.
+ */
+export declare const SPRITE_FG: {
+    log: string;
+    logEnd: string;
+    turtle: string;
+    crocodile: string;
+    crocodileMouth: string;
+    otter: string;
+    otterMouth: string;
+    car: string;
+    truck: string;
+    racecar: string;
+    snake: string;
+    ladyFrog: string;
+    frog: string;
+    frogDying: string;
+    hedge: string;
+    homeFrame: string;
+    homeFrog: string;
+    homeFly: string;
+    homeCrocodile: string;
+    bank: string;
+};
+/** The frog, and the frog riding home on your back. */
+export declare const FROG_GLYPH = "\u03A9";
+/** The texture along the banks and the median. */
+export declare const BANK_TEXTURE = "\u00B7:";
+/** The texture of the hedge between the homes. */
+export declare const HEDGE_TEXTURE = "\u2591";
 export declare const COLORS: {
     frog: string;
     ladyFrog: string;
