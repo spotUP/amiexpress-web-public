@@ -119,6 +119,34 @@ function tokenizeShellArgs(line: string): string[] {
   return args;
 }
 
+
+/**
+ * A path whose existing prefix is spelled the way the disk spells it.
+ *
+ * amigafs.resolvePath only answers for a path that exists. A destination
+ * directory usually does not yet - "doors:OUT/" is about to be created - so
+ * the deepest part that DOES exist is resolved and the remainder appended to
+ * it. Without this, the extractor creates "doors/OUT" beside the real
+ * "Doors/", and on a case-sensitive filesystem those are two directories.
+ */
+export function resolveAgainstExistingParent(target: string): string {
+  const direct = amigafs.resolvePath(target);
+  if (direct) return direct;
+
+  const parts = target.split(path.sep);
+  const tail: string[] = [];
+
+  while (parts.length > 1) {
+    tail.unshift(parts.pop() as string);
+    const prefix = parts.join(path.sep);
+    if (!prefix) break;
+
+    const resolved = amigafs.resolvePath(prefix);
+    if (resolved) return path.join(resolved, ...tail);
+  }
+  return target;
+}
+
 export class DosLibrary {
   private emulator: MoiraEmulator;
   private openFiles: Map<number, FileHandle> = new Map();
@@ -3992,10 +4020,26 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
           return;
         }
 
+        // AmigaDOS is case-insensitive, so "Doors:" can reach here as
+        // "doors/". amigafs resolves that - which is why the existsSync guard
+        // above passes - but the extractor uses plain fs, which on a
+        // case-sensitive filesystem does not:
+        //
+        //   extraction failed: ENOENT, open '/tmp/.../doors/tiny-nested.lha'
+        //
+        // macOS hides it entirely; this failed only on Linux CI. The archive
+        // has to reach the extractor as the path it really has on disk.
+        const realArchivePath = amigafs.resolvePath(archivePath) ?? archivePath;
+
+        // The destination usually does not exist yet, so it cannot be
+        // resolved directly - its nearest existing parent can, and the rest
+        // is rebuilt onto that.
+        const realDestPath = resolveAgainstExistingParent(destPath);
+
         try {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { extractLhaArchiveSync } = require('../../utils/extractors/lha-extractor');
-          const result = extractLhaArchiveSync(archivePath, destPath);
+          const result = extractLhaArchiveSync(realArchivePath, realDestPath);
           console.log(
             `[dos.library] Execute ${program}: extracted ${result.extracted.length} file(s) ` +
               `from "${archivePath}" into "${destPath}"` +
