@@ -29,6 +29,7 @@ import {
   disableGameMode as disableGameModeForSession,
 } from '../services/game-mode.service';
 import { applyInstallMetadata, buildDoorList, DoorListEntry } from './door-list';
+import { deleteDoorAndRefresh } from './door-delete';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
 import { getBoardConfig } from '../services/bbs-config-file.service';
@@ -1325,48 +1326,19 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     isTypeScriptDoor?: boolean,
     onStep?: (step: { kind: 'ok' | 'skip' | 'fail'; text: string }) => void
   ): Promise<{ success: boolean; message: string; removed?: string[] }> {
-console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
-
     // Check if user has sysop access
     if (this.session.user && this.session.user.secLevel < 250) {
-console.log(`[BBSApi.deleteDoor] Access denied: user secLevel=${this.session.user?.secLevel}`);
       return {
         success: false,
         message: 'Access denied: SysOp access required to delete doors'
       };
     }
 
-    try {
-      const { getAmigaDoorManager, refreshDoorCache } = await import('./amigaDoorManager');
-      const manager = getAmigaDoorManager();
-console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${isTypeScriptDoor})`);
-      const result = await manager.deleteDoor(identifier, isTypeScriptDoor, onStep);
-console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
-
-      if (result.success) {
-        // Refresh amiga door cache
-        onStep?.({ kind: 'ok', text: 'rescanning the door definitions' });
-        await refreshDoorCache();
-        // Also reload the TypeScript door registry so the deleted door
-        // is removed from getDoors() immediately (without server restart)
-        try {
-          const { initializeDoors } = require('../handlers/door.handler');
-          onStep?.({ kind: 'ok', text: 'reloading the door registry' });
-          await initializeDoors();
-        } catch (e) {
-          onStep?.({ kind: 'fail', text: `door registry reload failed: ${(e as Error).message}` });
-          console.warn('[BBSApi.deleteDoor] Could not reload door registry:', e);
-        }
-      }
-
-      return result;
-    } catch (error) {
-console.error('[BBSApi.deleteDoor] Error:', error);
-      return {
-        success: false,
-        message: `Delete failed: ${(error as Error).message}`
-      };
-    }
+    // The removal and the cache reloads live in ./door-delete so the HTTP
+    // route DELETE /api/door-admin/installed/:cmd runs the identical path.
+    // Authorization stays here, because that route authorizes differently -
+    // a launch token's secLevel, not a session's.
+    return deleteDoorAndRefresh(identifier, isTypeScriptDoor, onStep);
   }
 
   /**
