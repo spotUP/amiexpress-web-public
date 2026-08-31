@@ -5,7 +5,19 @@ import { LevelConfig, HighScore } from './types';
 export declare const SCREEN_WIDTH = 80;
 export declare const SCREEN_HEIGHT = 24;
 export declare const GRID_WIDTH = 15;
-export declare const GRID_HEIGHT = 13;
+export declare const GRID_HEIGHT = 10;
+/**
+ * Cell geometry for the sprite renderer: every maze cell is a 5x2 block of
+ * characters, so the 15x10 maze is a 75x20 board - the full terminal, with
+ * the HUD above and the hint below.
+ *
+ * GRID_HEIGHT dropped from 13 to 10 to buy the second sprite row: 13 cells
+ * x 2 rows was 26 rows on a 24-row screen. Approved in the design doc.
+ */
+export declare const CELL_W = 5;
+export declare const CELL_H = 2;
+export declare const BOARD_COLS: number;
+export declare const BOARD_ROWS: number;
 export declare const GAME_TICK_MS = 100;
 export declare const STARTING_LIVES = 3;
 export declare const INITIAL_TIME = 180;

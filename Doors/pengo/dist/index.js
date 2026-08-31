@@ -51,8 +51,8 @@ function initScreen() {
         parent: screen,
         top: 1,
         left: 0,
-        width: constants_1.GRID_WIDTH * 2,
-        height: constants_1.GRID_HEIGHT + 2,
+        width: constants_1.BOARD_COLS,
+        height: constants_1.BOARD_ROWS,
         fixed: true,
         tags: true,
         style: { bg: "black" },
@@ -62,17 +62,19 @@ function initScreen() {
         bottom: 0,
         left: 0,
         width: "100%",
-        height: 3,
+        height: 1,
         tags: true,
-        border: { type: "line" },
-        style: { border: { fg: "gray" } },
         content: "{gray-fg}Arrow Keys: Move | Space: Push Block | P: Pause | Q: Quit{/}",
     });
 }
 function formatHUD() {
     const scoreStr = gameData.score.toString().padStart(8, "0");
     const livesStr = "*".repeat(Math.max(0, gameData.lives));
-    return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  {red-fg}LIVES: ${livesStr}{/}`;
+    const timeColor = gameData.timeRemaining <= 30 ? "red" : "yellow";
+    const enemies = gameData.enemies.filter(e => e.state !== "dead").length;
+    return (`{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  ` +
+        `{red-fg}LIVES: ${livesStr}{/}  {${timeColor}-fg}TIME: ${gameData.timeRemaining}{/}  ` +
+        `{white-fg}ENEMIES: ${enemies}{/}`);
 }
 /**
  * Enter the main menu: reset to the first option, then draw it.
