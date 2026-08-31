@@ -45,6 +45,11 @@ export interface RiverObject {
     diveTimer?: number;
     /** Turtle sets that dive; the FAQ's #D counts one diving set per lane. */
     canDive?: boolean;
+    /**
+     * Where a diving set is in its cycle: riding high, going down but still
+     * solid, or under the surface and deadly.
+     */
+    diveStage?: 'up' | 'sinking' | 'down';
     /** A snake riding this log (FAQ 7: "they sometimes like to ride on the logs"). */
     snakeAt?: number | null;
     /**

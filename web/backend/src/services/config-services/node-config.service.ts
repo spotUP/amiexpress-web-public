@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { NodeConfig } from '../../database/types';
 import { NodeConfigSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -33,15 +33,8 @@ export class NodeConfigService {
           continue;
         }
 
-        const buffer = fs.readFileSync(nodeInfoPath);
         const stats = fs.statSync(nodeInfoPath);
-        const parser = new InfoFileParser();
-        const parsed = parser.parse(buffer);
-
-        const toolTypes = new Map<string, string>();
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
+        const toolTypes = readTooltypeMap(nodeInfoPath);
 
         nodeConfigs.push({
           id: nodeNum + 1,
@@ -62,7 +55,7 @@ export class NodeConfigService {
           door_log: false,
           ud_log: toolTypes.has('UD_LOG'),
           log_host: false,
-          telnet: !toolTypes.has('NO_TELNET'),
+          telnet: toolTypes.has('TELNET'),  // ACP.e:2675 - presence enables it
           ftp: toolTypes.has('FTP'),
           disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
           view_password: toolTypes.has('VIEW_PASSWORD'),
@@ -97,15 +90,8 @@ console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
     }
 
     try {
-      const buffer = fs.readFileSync(nodeInfoPath);
       const stats = fs.statSync(nodeInfoPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(nodeInfoPath);
 
       return {
         id: nodeNumber,
@@ -126,7 +112,7 @@ console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
         door_log: false,
         ud_log: toolTypes.has('UD_LOG'),
         log_host: false,
-        telnet: !toolTypes.has('NO_TELNET'),
+        telnet: toolTypes.has('TELNET'),  // ACP.e:2675 - presence enables it
         ftp: toolTypes.has('FTP'),
         disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
         view_password: toolTypes.has('VIEW_PASSWORD'),
@@ -232,12 +218,27 @@ console.error(`[NodeConfigService] Failed to initialize node directory ${nodeDir
     if (!oldConfig) throw new Error(`Node config for node ${nodeIndex} not found`);
 
     const mergedConfig = { ...oldConfig, ...validated };
-    const newConfig = this.configRepo.updateNodeConfig(nodeIndex, validated);
 
+    // DISK FIRST. The mirror holds one row (node_number=1) against eight node
+    // icons, so updateNodeConfig() threw for every other node - BEFORE the
+    // .info was written, so nothing reached the file the BBS reads. And
+    // NodesPage is the only page in the admin with no onError on any
+    // mutation, so it failed in complete silence.
     this.writeNodeInfoFile(nodeIndex, mergedConfig);
-    
+
     // Ensure directory exists even on update (in case it was manually deleted)
     this.initializeNodeDirectory(nodeIndex);
+
+    // The mirror is best-effort: a node that only exists on disk has no row,
+    // and that must not turn a successful save into an error.
+    let mirrored: NodeConfig | null = null;
+    try {
+      mirrored = this.configRepo.updateNodeConfig(nodeIndex, validated);
+    } catch (mirrorError) {
+console.error(`[NodeConfigService] Mirror update failed for node ${nodeIndex} (disk write succeeded):`, mirrorError);
+    }
+
+    const newConfig: NodeConfig = mirrored ?? mergedConfig;
 
     this.configRepo.logConfigChange('node_config', newConfig.id, 'UPDATE',
       context.userId, context.username, oldConfig, newConfig,
@@ -284,25 +285,17 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
     const nodeInfoPath = path.join(bbsRoot, `Node${nodeNum}.info`);
 
     try {
-      // Start from what NodeN.info already holds. Building the map from
-      // nothing dropped every tooltype this form does not own on each save,
-      // and a node's icon carries more than the dozen fields edited here.
-      const toolTypes = new Map<string, string>();
-      if (fs.existsSync(nodeInfoPath)) {
-        const existing = new InfoFileParser().parse(fs.readFileSync(nodeInfoPath));
-        for (const [key, value] of existing.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
-      }
-
-      // Flags are written by presence, so an unset one has to be removed
-      // rather than left behind from the previous save.
-      for (const flag of [
+      // Flags are written by presence, so an unset one has to be dropped from
+      // the file rather than left behind from the previous save. Everything
+      // else a node's icon carries is left untouched.
+      const OWNED_FLAGS = [
         'CAPITOL_FILES', 'DEF_SCREENS', 'SENTBY_FILES', 'CALLERS_LOG', 'START_LOG',
-        'UD_LOG', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
-      ]) {
-        toolTypes.delete(flag);
-      }
+        // NO_TELNET is not a tooltype AmiExpress has ever read; it is dropped
+        // so a node written by the previous admin stops carrying it.
+        'UD_LOG', 'TELNET', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
+      ];
+
+      const toolTypes = new Map<string, string>();
 
       if (config.node_start) toolTypes.set('NODESTART', config.node_start);
       if (config.priority !== undefined) toolTypes.set('PRIORITY', config.priority.toString());
@@ -315,14 +308,18 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       if (config.callers_log) toolTypes.set('CALLERS_LOG', '1');
       if (config.start_log) toolTypes.set('START_LOG', '1');
       if (config.ud_log) toolTypes.set('UD_LOG', '1');
-      if (!config.telnet) toolTypes.set('NO_TELNET', '1');
+      // ACP.e:2675 - `IF FindToolType(oldtooltypes,'TELNET') THEN telnetNode[i]:=1`.
+      // Presence enables telnet on the node. This wrote NO_TELNET when it was
+      // off and NOTHING when it was on, so saving a node with telnet enabled
+      // REMOVED its TELNET tooltype. FTP on the next line was already right.
+      if (config.telnet) toolTypes.set('TELNET', '1');
       if (config.ftp) toolTypes.set('FTP', '1');
       if (config.disable_quick_logons) toolTypes.set('DISABLE_QUICK_LOGONS', '1');
       if (config.view_password) toolTypes.set('VIEW_PASSWORD', '1');
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(nodeInfoPath, infoData);
+      applyTooltypes(nodeInfoPath, toolTypes, {
+        removeKeys: key => OWNED_FLAGS.includes(key),
+      });
 
 console.log(`[NodeConfigService] Wrote ${nodeInfoPath} with ${toolTypes.size} tooltypes`);
     } catch (error) {

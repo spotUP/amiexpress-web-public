@@ -49,7 +49,7 @@ export function ImportExport() {
         try {
           const response = await fetch(`/api/import/session/${sessionId}`, {
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             },
           });
 
@@ -85,7 +85,7 @@ export function ImportExport() {
       const response = await fetch(`/api/import/validate/${uploadedSessionId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
       });
 
@@ -125,7 +125,7 @@ export function ImportExport() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
         body: JSON.stringify({
           ...conflictStrategies,

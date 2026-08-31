@@ -160,4 +160,42 @@ describe('Node Control Routes', () => {
       expect(res.status).toBeGreaterThanOrEqual(400);
     });
   });
+  describe('supervisor commands with nothing on the other end', () => {
+    // `supervisor:command` is emitted and NOTHING in this codebase subscribes
+    // to it. Nine of the eleven Node Control buttons ended in that emit and the
+    // route answered `{ success: true }` - so the sysop pressed Reinitialize
+    // Modem and was told it had worked.
+    const DEAD = [
+      ['/api/nodes/1/uniconify', 'SV_UNICONIFY'],
+      ['/api/nodes/1/sysop-login', 'SV_SYSOPLOG'],
+      ['/api/nodes/1/instant-login', 'SV_INSTANT'],
+      ['/api/nodes/1/exit', 'SV_EXITNODE'],
+      ['/api/nodes/1/offhook', 'SV_NODEOFFHOOK'],
+      ['/api/nodes/1/init-modem', 'SV_INITMODEM'],
+      ['/api/nodes/1/chat', 'SV_CHAT'],
+      ['/api/nodes/1/start', 'SV_STARTNODE'],
+      ['/api/nodes/toggle-chat', 'SV_CHATTOGGLE'],
+      ['/api/nodes/quiet-mode', 'SV_QUIETNODE'],
+    ];
+
+    it.each(DEAD)('%s answers 501 rather than claiming success', async (url, command) => {
+      const res = await request(app).post(url as string).send({ enabled: true });
+
+      expect(res.status).toBe(501);
+      expect(res.body.success).toBe(false);
+      expect(res.body.command).toBe(command);
+    });
+
+    it('kick still refuses a node that is not online', async () => {
+      // Kick is the one of the nine with an unambiguous meaning here - a
+      // browser node IS its socket - so it does the real thing instead.
+      const res = await request(app).post('/api/nodes/99/kick');
+
+      // 404 when the session-manager mock intercepts, 500 when it does not -
+      // the sibling test above documents the same. What matters is that this
+      // is NOT a 501: kick is implemented, and it disconnects the socket.
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).not.toBe(501);
+    });
+  });
 });

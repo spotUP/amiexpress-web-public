@@ -6,6 +6,8 @@
  */
 
 import { displayScreen } from '../screen.handler';
+import { getBoardConfig } from '../../services/bbs-config-file.service';
+import { config as appConfig } from '../../config';
 import { displayMainMenu } from '../command-handler/menu';
 import { getMailStatFile, loadMsgPointers, saveMsgPointers, validatePointers } from '../../utils/message-pointers.util';
 import { finalizeCommand } from '../../utils/command-response.util';
@@ -394,8 +396,7 @@ async function continueJoinAfterBull(
     // message, and the message-stats block are all skipped.
     let quietJoin = false;
     try {
-      const { db: dbRef } = require('../../database');
-      const cfg = dbRef?.getConfigRepository?.()?.getSystemConfig?.();
+      const cfg = getBoardConfig(appConfig.get('dataDir'));
       quietJoin = !!cfg?.quiet_join;
     } catch { /* config unreadable — fall through to noisy default */ }
 

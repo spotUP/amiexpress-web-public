@@ -29,7 +29,7 @@ import {
 } from '@tanstack/react-table';
 import type { ColumnSort, RowData } from '@tanstack/react-table';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
-import { EmptyState, SkeletonRows } from './states';
+import { EmptyState, SkeletonRows, ErrorPanel } from './states';
 
 /**
  * Registered once at module scope. Feature registration is what creates the
@@ -79,6 +79,18 @@ interface DataTableProps<T extends RowData> {
   initialSort?: ColumnSort[];
   isLoading?: boolean;
   emptyMessage?: string;
+  /**
+   * The error the query failed with, if it did.
+   *
+   * apiClient throws on a non-2xx, so `data` comes back undefined and the
+   * page rendered its empty copy as a POSITIVE claim: "No protocols
+   * configured. Add transfer protocols like ZMODEM..." for a request that
+   * 500'd, and an expired session presenting as an empty BBS. An empty table
+   * and a failed request are different things and must not look the same.
+   */
+  error?: Error | null;
+  /** Re-run the query behind this table. */
+  onRetry?: () => void;
   onRowClick?: (row: T) => void;
   selectedRowId?: string;
   /** Rendered at the end of each row, revealed on hover and on focus. */
@@ -98,10 +110,22 @@ export function DataTable<T extends RowData>({
   initialSort,
   isLoading = false,
   emptyMessage = 'Nothing to show yet.',
+  error = null,
+  onRetry,
   onRowClick,
   selectedRowId,
   rowActions,
 }: DataTableProps<T>) {
+  // NOT memoised on a cheaper key.
+  //
+  // Every caller builds its `columns` array inline, so a new array arrives on
+  // each render and this rebuilds the column model each time. Keying on the
+  // column IDS instead was tried and reverted: the accessors then keep
+  // whatever `value` function they were built with, so a column whose
+  // accessor changes meaning under a stable id stops re-sorting - trading a
+  // map over half a dozen columns for a staleness bug. The real fix is for a
+  // page to memoise its own columns AND the handlers they close over, which
+  // is a change to nine pages and not one this component can make for them.
   const tableColumns = useMemo(() => {
     const helper = createColumnHelper<typeof features, T>();
     return columns.map((column) => {
@@ -227,7 +251,11 @@ export function DataTable<T extends RowData>({
         </tbody>
       </table>
 
-      {modelRows.length === 0 && <EmptyState message={emptyMessage} />}
+      {error ? (
+        <ErrorPanel message={error.message} onRetry={onRetry} />
+      ) : (
+        modelRows.length === 0 && <EmptyState message={emptyMessage} />
+      )}
     </div>
   );
 }

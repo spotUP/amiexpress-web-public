@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -30,7 +31,7 @@ export function ScreenTypesPage() {
     enabled: true,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['screen-types'],
     queryFn: () => apiClient.getScreenTypes(),
   });
@@ -66,6 +67,12 @@ export function ScreenTypesPage() {
       showSuccess('Screen type deleted successfully');
     },
   });
+
+  /** Escape, the backdrop and Cancel all end the dialog the same way. */
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditing(null);
+  };
 
   const handleDelete = async (screenType: ScreenType) => {
     const confirmed = await confirm({
@@ -177,6 +184,8 @@ export function ScreenTypesPage() {
         getRowId={(screenType) => String(screenType.id)}
         initialSort={[{ id: 'screen_number', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No screen types configured. These are the terminal formats offered at login - ANSI, ASCII and the rest."
         rowActions={(screenType) => (
           <>
@@ -201,11 +210,12 @@ export function ScreenTypesPage() {
       />
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-surface border border-bbs-primary rounded-lg shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-semibold text-bbs-text mb-4">
-              {editing ? 'Edit Screen Type' : 'Add Screen Type'}
-            </h2>
+        <Modal
+          open={isModalOpen}
+          title={editing ? 'Edit Screen Type' : 'Add Screen Type'}
+          onClose={closeModal}
+          maxWidth="max-w-lg"
+        >
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="screen_title" className="label">Title</label>
@@ -256,10 +266,7 @@ export function ScreenTypesPage() {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditing(null);
-                  }}
+                  onClick={closeModal}
                 >
                   Cancel
                 </button>
@@ -268,8 +275,7 @@ export function ScreenTypesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

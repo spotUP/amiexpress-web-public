@@ -10,7 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel } from '../services/config-services/door-info-file.service';
-import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes } from '../services/config-services/acs-level-file.service';
+import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
@@ -900,7 +900,15 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       }
 
       const info = parseInfoFile(file);
-      sendResponse(res, { level, file, flags: tooltypesToFlags(info.tooltypes as any) });
+      sendResponse(res, {
+        level,
+        file,
+        flags: tooltypesToFlags(info.tooltypes as any),
+        // Flags this port denies and a real AmiExpress grants - see
+        // ambiguouslyDeniedFlags. Saving the level rewrites them into the
+        // parenthesised form, which denies on both.
+        ambiguous: ambiguouslyDeniedFlags(info.tooltypes as any),
+      });
     } catch (error) {
       handleError(res, error);
     }
@@ -949,8 +957,16 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   router.post('/security/levels/:level', async (req: any, res: Response) => {
     try {
       const level = parseInt(req.params.level, 10);
-      if (!Number.isFinite(level) || level < 1 || level > 255) {
-        return handleError(res, new Error('Security level must be between 1 and 255'));
+      if (!Number.isFinite(level) || level < 0 || level > 255) {
+        return handleError(res, new Error('Security level must be between 0 and 255'));
+      }
+      // express.e:3025-3034 - findAcsLevel computes `secStatus/5*5` and walks
+      // DOWN in fives. ACS.31.info is a file the BBS would never look for, so
+      // creating one produces a level that silently does nothing.
+      if (level % 5 !== 0) {
+        return handleError(res, new Error(
+          `Security level must be a multiple of 5: AmiExpress only ever looks for ACS.0, ACS.5, ACS.10 ... (express.e:3025)`
+        ));
       }
 
       const bbsRoot = config.get('dataDir');

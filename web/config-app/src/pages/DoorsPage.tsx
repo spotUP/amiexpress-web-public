@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -9,14 +10,24 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 /** A stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_DOORS: Door[] = [];
 
+/**
+ * What the form can actually change.
+ *
+ * `description`, `runtime_env` and `time_limit` were on it and are not here.
+ * A door is defined by its .info tooltypes and none of the three has one -
+ * DOOR_FIELD_TOOLTYPES says so, and inventing keys would put values in a
+ * door's icon that AmiExpress never reads. The API DERIVES runtime_env from
+ * the door type and serves time_limit as a hardcoded 30, so both read back
+ * wrong whatever was typed, and description comes from a TypeScript door's
+ * package.json. All three are still shown in the list; none of them is a
+ * control any more.
+ */
 interface DoorFormData {
   door_name: string;
   door_command: string;
-  description: string;
   door_type: string;
-  runtime_env: string;
+  door_path: string;
   min_security_level: number;
-  time_limit: number;
   enabled: boolean;
 }
 
@@ -37,11 +48,9 @@ export function DoorsPage() {
   const [formData, setFormData] = useState<DoorFormData>({
     door_name: '',
     door_command: '',
-    description: '',
     door_type: 'XIM',
-    runtime_env: 'vamos',
+    door_path: '',
     min_security_level: 0,
-    time_limit: 30,
     enabled: true,
   });
 
@@ -51,7 +60,7 @@ export function DoorsPage() {
   const [tooltypes, setTooltypes] = useState<Tooltype[]>([]);
   const [infoDirty, setInfoDirty] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['doors'],
     queryFn: () => apiClient.getDoors(),
   });
@@ -99,13 +108,32 @@ export function DoorsPage() {
     setFormData({
       door_name: '',
       door_command: '',
-      description: '',
       door_type: 'XIM',
-      runtime_env: 'vamos',
+      door_path: '',
       min_security_level: 0,
-      time_limit: 30,
       enabled: true,
     });
+  };
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeDoorModal = () => {
+    setIsModalOpen(false);
+    setEditingDoor(null);
+    resetForm();
+  };
+
+  /** The .info editor asks before throwing away unsaved tooltypes. */
+  const closeInfoEditor = () => {
+    if (infoDirty) {
+      if (window.confirm('You have unsaved changes. Discard them?')) {
+        setIsInfoEditorOpen(false);
+        setEditingInfoDoor(null);
+        setInfoDirty(false);
+      }
+    } else {
+      setIsInfoEditorOpen(false);
+      setEditingInfoDoor(null);
+    }
   };
 
   const handleAdd = () => {
@@ -118,11 +146,9 @@ export function DoorsPage() {
     setFormData({
       door_name: door.door_name,
       door_command: door.door_command,
-      description: door.description,
       door_type: door.door_type,
-      runtime_env: door.runtime_env,
+      door_path: door.door_path,
       min_security_level: door.min_security_level,
-      time_limit: door.time_limit,
       enabled: door.enabled,
     });
     setEditingDoor(door);
@@ -306,15 +332,6 @@ export function DoorsPage() {
       mono: true,
       width: '7rem',
     },
-    {
-      id: 'time_limit',
-      header: 'Time limit',
-      value: (door) => door.time_limit,
-      align: 'right',
-      mono: true,
-      width: '7rem',
-      cell: (door) => `${door.time_limit} min`,
-    },
   ];
 
   return (
@@ -349,6 +366,8 @@ export function DoorsPage() {
         getRowId={(door) => String(door.id)}
         initialSort={[{ id: 'door_name', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No doors configured. Doors are the external programs and games on the command menu."
         rowActions={(door) => (
           <>
@@ -382,18 +401,19 @@ export function DoorsPage() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={isModalOpen}
+          title={editingDoor ? 'Edit Door' : 'Add Door'}
+          onClose={closeDoorModal}
+          maxWidth="max-w-2xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingDoor ? 'Edit Door' : 'Add Door'}
               </h2>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingDoor(null);
-                  resetForm();
-                }}
+                onClick={closeDoorModal}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -426,17 +446,6 @@ export function DoorsPage() {
                   />
                 </div>
 
-                <div className="md:col-span-2">
-                  <label htmlFor="description" className="label">Description</label>
-                  <textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="input-field w-full"
-                    rows={3}
-                  />
-                </div>
-
                 <div>
                   <label htmlFor="door_type" className="label">Door Type *</label>
                   <select
@@ -465,20 +474,23 @@ export function DoorsPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label htmlFor="runtime_env" className="label">Runtime *</label>
-                  <select
-                    id="runtime_env"
-                    value={formData.runtime_env}
-                    onChange={(e) => setFormData({ ...formData, runtime_env: e.target.value })}
+                <div className="md:col-span-2">
+                  <label htmlFor="door_path" className="label">Path *</label>
+                  <input
+                    id="door_path"
+                    type="text"
+                    value={formData.door_path}
+                    onChange={(e) => setFormData({ ...formData, door_path: e.target.value })}
                     className="input-field w-full"
+                    placeholder="BBS:Doors/MyDoor/MyDoor"
                     required
-                  >
-                    <option value="vamos">vamos (68K emulator)</option>
-                    {/* "nodejs", not "node" - that is what the API serves. */}
-                    <option value="nodejs">Node.js</option>
-                    <option value="native">Native</option>
-                  </select>
+                  />
+                  <p className="text-sm text-bbs-muted mt-2">
+                    Written to the door's LOCATION tooltype, which is how
+                    AmiExpress finds the program to run. The form had no field
+                    for it and DoorSchema requires it, so Create Door could
+                    never succeed.
+                  </p>
                 </div>
 
                 <div>
@@ -490,19 +502,6 @@ export function DoorsPage() {
                     max="255"
                     value={formData.min_security_level}
                     onChange={(e) => setFormData({ ...formData, min_security_level: parseInt(e.target.value) })}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="time_limit" className="label">Time Limit (min) *</label>
-                  <input
-                    id="time_limit"
-                    type="number"
-                    min="1"
-                    value={formData.time_limit}
-                    onChange={(e) => setFormData({ ...formData, time_limit: parseInt(e.target.value) })}
                     className="input-field w-full"
                     required
                   />
@@ -520,8 +519,11 @@ export function DoorsPage() {
                   </label>
                   <p className="text-sm text-bbs-muted mt-2">
                     AmiExpress has no on/off switch for a command, so turning a
-                    door off parks its access level at 255 and remembers the
-                    level above, restoring it when you switch the door back on.
+                    door off parks its access level out of reach and remembers
+                    the level above, restoring it when you switch the door back
+                    on. The parking level is 32767, not 255: express.e:4704
+                    tests access &gt; acsLevel, so a level-255 sysop could still
+                    run a door parked at 255.
                     This is what DOORREPO does, and it reads the same door.
                   </p>
                 </div>
@@ -548,14 +550,18 @@ export function DoorsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Info Editor Modal */}
       {isInfoEditorOpen && editingInfoDoor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={Boolean(isInfoEditorOpen && editingInfoDoor)}
+          title="Edit .info File"
+          onClose={closeInfoEditor}
+          maxWidth="max-w-4xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-bold text-accent">Edit .info File</h2>
@@ -564,18 +570,7 @@ export function DoorsPage() {
                 </p>
               </div>
               <button
-                onClick={() => {
-                  if (infoDirty) {
-                    if (window.confirm('You have unsaved changes. Discard them?')) {
-                      setIsInfoEditorOpen(false);
-                      setEditingInfoDoor(null);
-                      setInfoDirty(false);
-                    }
-                  } else {
-                    setIsInfoEditorOpen(false);
-                    setEditingInfoDoor(null);
-                  }
-                }}
+                onClick={closeInfoEditor}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -695,8 +690,7 @@ export function DoorsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

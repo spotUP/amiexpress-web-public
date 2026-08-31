@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { Protocol } from '../../database/types';
 import { ProtocolSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import { mergeForWrite } from './config-merge.util';
 import * as fs from 'fs';
@@ -31,15 +31,8 @@ console.warn('[ProtocolConfigService] Protocols/XprTypes.info not found');
     }
 
     try {
-      const buffer = fs.readFileSync(xprTypesPath);
       const stats = fs.statSync(xprTypesPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(xprTypesPath);
 
       const protocols: Protocol[] = [];
       let protocolNum = 1;
@@ -203,9 +196,12 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
       // XprTypes.info is ordered (LIBRARY.1, LIBRARY.2, ...) and the BBS reads
       // it by index, so entries keep their position and additions go on the end.
       const onDisk = await this.getProtocols();
-      const fromDb = this.configRepo.getProtocols();
-      // The caller's entry goes last so it wins over a stale mirror row.
-      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
+      // ONLY the caller's entry. Handing mergeForWrite the whole mirror let it
+      // overwrite and append as well as protect: a stale row rewrote an entry
+      // the sysop never touched, and a row disk had never heard of was added
+      // to the file. mergeForWrite exists to stop the mirror TRUNCATING disk,
+      // not to make it a second source.
+      const changed = change.entry ? [change.entry] : [];
       const protocols = mergeForWrite(
         onDisk,
         changed,
@@ -227,9 +223,9 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
         }
       }
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(xprTypesPath, infoData);
+      applyTooltypes(xprTypesPath, toolTypes, {
+        removeKeys: key => /^(LIBRARY|TITLE)\.\d+$/.test(key),
+      });
 
 console.log(`[ProtocolConfigService] Wrote ${xprTypesPath} with ${protocolNum - 1} protocols`);
     } catch (error) {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -22,7 +23,7 @@ export function LanguagesPage() {
     enabled: true,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['languages'],
     queryFn: () => apiClient.getLanguages(),
   });
@@ -56,6 +57,12 @@ export function LanguagesPage() {
       showSuccess('Language removed');
     },
   });
+
+  /** Escape, the backdrop and Cancel all end the dialog the same way. */
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditing(null);
+  };
 
   const handleAdd = () => {
     const nextNumber = (data?.data?.reduce((max: number, lang: Language) => Math.max(max, lang.language_number), 0) || 0) + 1;
@@ -178,6 +185,8 @@ export function LanguagesPage() {
         getRowId={(lang) => String(lang.id)}
         initialSort={[{ id: 'language_number', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No languages configured. Language files are what let callers pick a language at login."
         rowActions={(lang) => (
           <>
@@ -202,11 +211,12 @@ export function LanguagesPage() {
       />
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-surface border border-bbs-primary rounded-lg shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-semibold text-bbs-text mb-4">
-              {editing ? 'Edit Language' : 'Add Language'}
-            </h2>
+        <Modal
+          open={isModalOpen}
+          title={editing ? 'Edit Language' : 'Add Language'}
+          onClose={closeModal}
+          maxWidth="max-w-lg"
+        >
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -273,10 +283,7 @@ export function LanguagesPage() {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditing(null);
-                  }}
+                  onClick={closeModal}
                 >
                   Cancel
                 </button>
@@ -285,8 +292,7 @@ export function LanguagesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

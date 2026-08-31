@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys } from '../../src/services/bbs-config-file.service';
+import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys, normalizeConfigValueCase } from '../../src/services/bbs-config-file.service';
 import type { BBSConfigData } from '../../src/services/bbs-config-file.service';
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
@@ -105,11 +105,11 @@ describe('bbsConfig.info round trip', () => {
   it('round-trips both states of a boolean', () => {
     // A boolean tooltype is present for true and absent for false, so the
     // two directions fail differently and both need covering.
-    saveBBSConfig(root, { capitalize_filenames: true });
-    expect(loadBBSConfig(root).capitalize_filenames).toBe(true);
+    saveBBSConfig(root, { credit_by_kb: true });
+    expect(loadBBSConfig(root).credit_by_kb).toBe(true);
 
-    saveBBSConfig(root, { capitalize_filenames: false });
-    expect(loadBBSConfig(root).capitalize_filenames).toBe(false);
+    saveBBSConfig(root, { credit_by_kb: false });
+    expect(loadBBSConfig(root).credit_by_kb).toBe(false);
   });
 
   it('can switch off a flag whose default is on', () => {
@@ -123,13 +123,14 @@ describe('bbsConfig.info round trip', () => {
     expect(loadBBSConfig(root).confirm_deletions).toBe(false);
   });
 
-  it('reads back the one tooltype AmiExpress does not spell in upper case', () => {
-    // LVL_CAPITOLS_in_FILE (axcommon.e:53). Keys were upper-cased on the way
-    // in, so this one never matched its field: switching it on saved nothing
-    // the form could read back.
-    saveBBSConfig(root, { capitalize_filenames: true });
+  it('writes CREDIT_BY_KBYTES, which is the key ACP.e:3030 reads', () => {
+    // It wrote CREDITBYKB, which is an array index (axcommon.e:385), not a
+    // tooltype - the same mistake LVL_CAPITOLS_in_FILE was.
+    saveBBSConfig(root, { credit_by_kb: true });
 
-    expect(loadBBSConfig(root).capitalize_filenames).toBe(true);
+    const written = fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8');
+    expect(written).toContain('CREDIT_BY_KBYTES');
+    expect(written).not.toContain('CREDITBYKB');
   });
 
   it('uses the defaults only when there is no configuration file at all', () => {
@@ -172,8 +173,13 @@ describe('bbsConfig.info round trip', () => {
       try {
         saveBBSConfig(fresh, { [field]: written } as Partial<BBSConfigData>);
         const reloaded = loadBBSConfig(fresh) as Record<string, unknown>;
-        if (reloaded[field] !== written) {
-          lost.push(`${field} (${keys[field]}): wrote ${JSON.stringify(written)}, read ${JSON.stringify(reloaded[field])}`);
+        // Two fields are normalised to a fixed case on read, so the form's
+        // <select> can match them. The sweep asks the service what case it
+        // will use rather than keeping a second copy of the rule.
+        const expected =
+          typeof written === 'string' ? normalizeConfigValueCase(field, written) : written;
+        if (reloaded[field] !== expected) {
+          lost.push(`${field} (${keys[field]}): wrote ${JSON.stringify(expected)}, read ${JSON.stringify(reloaded[field])}`);
         }
       } finally {
         fs.rmSync(fresh, { recursive: true, force: true });

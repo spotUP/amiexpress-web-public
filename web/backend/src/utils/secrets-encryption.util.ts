@@ -71,6 +71,12 @@ const DISK_ONLY_FIELDS = new Set<string>([
   'password_security',
   'strict_password_policy',
 
+  // ACP.e:2630 reads SYSTEM_PASSWORD out of bbsConfig.info - it is the
+  // password the sysop types at the local console, and the gate that checks it
+  // reads the disk. Encrypting it into the database left the disk value empty,
+  // so the field could not be set at all.
+  'system_password',
+
   // express.e:31991 reads REGKEY out of bbsConfig.info and prints it to every
   // caller at login (express.e:25696, :28786, :29516). A value read from a
   // plaintext tooltype and shown to everyone who connects is not a

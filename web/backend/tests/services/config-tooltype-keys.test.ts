@@ -1,4 +1,6 @@
-import { getConfigTooltypeKeys } from '../../src/services/bbs-config-file.service';
+import * as os from 'os';
+import * as path from 'path';
+import { getConfigTooltypeKeys, loadBBSConfig } from '../../src/services/bbs-config-file.service';
 
 /**
  * The admin form shows the tooltype each field writes to, so a sysop can
@@ -39,13 +41,41 @@ describe('config tooltype keys', () => {
     }
   });
 
-  it('keeps the one tooltype AmiExpress does not spell in upper case', () => {
-    // LVL_CAPITOLS_in_FILE, exactly as declared in axcommon.e:53. It looks
-    // like a typo and is not: "correcting" it here would stop the tooltype
-    // matching the key in bbsConfig.info.
-    expect(keys.capitalize_filenames).toBe('LVL_CAPITOLS_in_FILE');
+  it('maps nothing to LVL_CAPITOLS_in_FILE, which is not a tooltype', () => {
+    // This was mapped, and asserted here as correct, on the strength of its
+    // odd spelling looking deliberate. axcommon.e:53 declares it as an ARRAY
+    // INDEX - `EXPORT CONST LVL_CAPITOLS_in_FILE=23` - and the tooltype it
+    // indexes is CAPITOL_FILES, read from the NODE icon (ACP.e:2651), which
+    // the Nodes page already edits. So the setting has no place in
+    // bbsConfig.info at all, and the key was never one AmiExpress read.
+    expect(keys.capitalize_filenames).toBeUndefined();
 
+    // Every tooltype AmiExpress reads is spelled in capitals.
     const oddballs = Object.values(keys).filter((tooltype) => tooltype !== tooltype.toUpperCase());
-    expect(oddballs).toEqual(['LVL_CAPITOLS_in_FILE']);
+    expect(oddballs).toEqual([]);
+  });
+
+  it('names the keys express.e actually reads, not ones that look plausible', () => {
+    // Each of these was wrong, and each is settled by a line in the sources.
+    expect(keys.http_port).toBe('HTTPPORT');            // express.e:15707
+    expect(keys.credit_by_kb).toBe('CREDIT_BY_KBYTES'); // ACP.e:3030
+    // HTTPHOST is read from the PROTOCOL icon, per protocol (express.e:15002),
+    // so there is no board-wide field for it.
+    expect(keys.http_host).toBeUndefined();
+  });
+});
+
+describe('every mapped field has a default', () => {
+  it('so loadBBSConfig can tell a number from a boolean from a string', () => {
+    // loadBBSConfig infers a field's TYPE from `typeof` its default. Without
+    // one, a number comes back as a string (login-post.service.ts:351 tests
+    // for a number and never matched) and a boolean comes back as '' or '1'.
+    const defaults = loadBBSConfig(path.join(os.tmpdir(), 'no-such-bbs-root-for-defaults'));
+    const missing = Object.keys(getConfigTooltypeKeys()).filter(
+      (field) => (defaults as Record<string, unknown>)[field] === undefined
+    );
+
+    // Jest's expect takes no message, so the report goes in the value.
+    expect(missing.join(', ')).toBe('');
   });
 });

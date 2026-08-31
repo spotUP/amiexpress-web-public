@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -40,7 +41,7 @@ export function ConferencesPage() {
     read_only: false,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['conferences'],
     queryFn: () => apiClient.getConferenceConfigs(),
   });
@@ -97,6 +98,13 @@ export function ConferencesPage() {
       private_conf: false,
       read_only: false,
     });
+  };
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingConference(null);
+    resetForm();
   };
 
   const handleAdd = () => {
@@ -233,6 +241,8 @@ export function ConferencesPage() {
         getRowId={(conf) => String(conf.id)}
         initialSort={[{ id: 'conference_id', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No conferences configured. Add conferences to organize messages and files."
         rowActions={(conf) => (
           <>
@@ -258,18 +268,19 @@ export function ConferencesPage() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <Modal
+          open={isModalOpen}
+          title={editingConference ? 'Edit Conference' : 'Add Conference'}
+          onClose={closeModal}
+          maxWidth="max-w-2xl"
+          showHeader={false}
+        >
             <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingConference ? 'Edit Conference' : 'Add Conference'}
               </h2>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingConference(null);
-                  resetForm();
-                }}
+                onClick={closeModal}
                 className="text-bbs-muted hover:text-bbs-text transition-colors"
               >
                 <X size={24} />
@@ -425,8 +436,7 @@ export function ConferencesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

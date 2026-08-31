@@ -576,6 +576,11 @@ function startGame(): void {
     if (gameData.state === "playing") {
       pollHeldDirections();
       game?.update();
+    } else if (gameData.state === "gameover") {
+      // Keep painting so the GAME OVER prompt blinks. Nothing drew this
+      // state at all, so losing the last frog froze the board.
+      gameData.frameCount++;
+      game?.render();
     } else if (gameData.state === "levelComplete") {
       // Hold the finished board for a couple of seconds, then move on. The
       // engine used to schedule this with a setTimeout of its own, which

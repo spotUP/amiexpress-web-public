@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ProtocolConfigService } from '../../src/services/config-services/protocol-config.service';
-import { InfoFileParser } from '../../src/services/info-file-parser';
+import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { config as appConfig } from '../../src/config';
 import type { Database } from '../../src/database';
 import type { Protocol } from '../../src/database/types';
@@ -71,6 +71,11 @@ class FakeProtocolTable {
   }
 }
 
+/** A plain-text .info, which parseInfoFile reads and writeInfoFile round-trips. */
+function textInfo(toolTypes: Map<string, string>): string {
+  return [...toolTypes].map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
+}
+
 function writeXprTypes(bbsRoot: string, entries: Array<[string, string]>): void {
   const toolTypes = new Map<string, string>();
   entries.forEach(([library, title], i) => {
@@ -80,16 +85,12 @@ function writeXprTypes(bbsRoot: string, entries: Array<[string, string]>): void 
   fs.mkdirSync(path.join(bbsRoot, 'Protocols'), { recursive: true });
   fs.writeFileSync(
     path.join(bbsRoot, 'Protocols', 'XprTypes.info'),
-    new InfoFileParser().write(toolTypes),
+    textInfo(toolTypes),
   );
 }
 
 function readXprTypes(bbsRoot: string): Array<[string, string]> {
-  const parsed = new InfoFileParser().parse(
-    fs.readFileSync(path.join(bbsRoot, 'Protocols', 'XprTypes.info')),
-  );
-  const toolTypes = new Map<string, string>();
-  for (const [k, v] of parsed.toolTypes.entries()) toolTypes.set(k.toUpperCase(), v);
+  const toolTypes = readTooltypeMap(path.join(bbsRoot, 'Protocols', 'XprTypes.info'));
 
   const out: Array<[string, string]> = [];
   for (let i = 1; i <= 50; i++) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Save, RefreshCw, Download, Filter, ShieldAlert } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -42,20 +42,29 @@ export function BatchEditorPage() {
     }
   }, [batchesQuery.data, selectedBatch]);
 
-  useEffect(() => {
-    const load = async () => {
-      if (!selectedBatch) return;
-      try {
-        const res = await apiClient.getBatch(selectedBatch);
-        setContent(res.content || '');
-        setDirty(false);
-        setValidation(null);
-      } catch (err: any) {
-        showError(`Failed to load batch ${selectedBatch}: ${err.message}`);
-      }
-    };
-    load();
+  /**
+   * Load the selected batch.
+   *
+   * Reload used to be `setSelectedBatch(selectedBatch)` - setting state to the
+   * value it already held, which React discards, so the effect below never
+   * re-ran and the button did nothing at all. Loading is a function now, and
+   * Reload calls it.
+   */
+  const loadBatch = useCallback(async () => {
+    if (!selectedBatch) return;
+    try {
+      const res = await apiClient.getBatch(selectedBatch);
+      setContent(res.content || '');
+      setDirty(false);
+      setValidation(null);
+    } catch (err: any) {
+      showError(`Failed to load batch ${selectedBatch}: ${err.message}`);
+    }
   }, [selectedBatch, showError]);
+
+  useEffect(() => {
+    loadBatch();
+  }, [loadBatch]);
 
   const handleSave = async () => {
     if (!selectedBatch) return;
@@ -173,8 +182,9 @@ export function BatchEditorPage() {
             <span>Export</span>
           </button>
           <button
-            onClick={() => setSelectedBatch(selectedBatch)}
+            onClick={() => loadBatch()}
             className="btn-secondary flex items-center space-x-2"
+            title="Discard unsaved changes and read the batch from disk again"
           >
             <RefreshCw size={16} />
             <span>Reload</span>

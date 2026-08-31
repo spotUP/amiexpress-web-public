@@ -4,13 +4,13 @@
  */
 
 import type { Database } from '../../database';
+import { readTooltypeMap } from '../../utils/info-file.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import { readConferenceFields } from './conference-info-file.service';
 import type { ConferenceConfig } from '../../database/types';
 import { ConferenceConfigSchema, type RequestContext } from '../config.schemas';
 import { ConferenceSetupService } from '../conference-setup.service';
 import { loadConfConfig } from '../conf-config.service';
-import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -25,7 +25,21 @@ export class ConferenceConfigService {
     this.conferenceSetup = new ConferenceSetupService(bbsRoot);
   }
 
+  /**
+   * Resolve the conference the admin is pointing at.
+   *
+   * The list comes from ConfConfig.info and Conf<N>.info, where the id is the
+   * conference NUMBER. Looking that up as a conference_config rowid is a
+   * different namespace: this board has Conf1..14.info against three rows, so
+   * conferences 4-14 could not be edited at all. Disk first, mirror as the
+   * fallback - the same resolution the computer, language, file checker,
+   * screen type and drive services use.
+   */
   async getConferenceConfig(conferenceId: number): Promise<ConferenceConfig | null> {
+    const onDisk = await this.getConferenceConfigs();
+    const fromDisk = onDisk.find(c => c.conference_id === conferenceId || c.id === conferenceId);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getConferenceConfig(conferenceId);
   }
 
@@ -39,7 +53,6 @@ console.warn('[ConferenceConfigService] ConfConfig.info not found or empty');
     }
 
     const configs: ConferenceConfig[] = [];
-    const parser = new InfoFileParser();
 
     for (let i = 1; i <= confConfig.confCount; i++) {
       const confInfoPath = path.join(bbsRoot, `Conf${i}.info`);
@@ -50,14 +63,8 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
       }
 
       try {
-        const buffer = fs.readFileSync(confInfoPath);
         const stats = fs.statSync(confInfoPath);
-        const parsed = parser.parse(buffer);
-
-        const toolTypes = new Map<string, string>();
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          toolTypes.set(key.toUpperCase(), value);
-        }
+        const toolTypes = readTooltypeMap(confInfoPath);
 
         // Reader and writer share one map of field -> tooltype, so the two
         // cannot drift apart again. They had: six settings were written under
@@ -105,16 +112,19 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
           no_newscan: fromDisk.no_newscan,
           show_new_files: fromDisk.show_new_files,
           no_new_files: fromDisk.no_new_files,
-          // No tooltype exists for these; they live in the database only.
-          free_downloads: false,
+          // All four DO have a tooltype, and all four are read from the
+          // conference's own icon: FREEDOWNLOADS (express.e:5010), USERNAME
+          // (:4081), REALNAME (:4083), INTERNETNAME (:5022). Serving fixed
+          // values here meant the form could not show what the board does.
+          free_downloads: fromDisk.free_downloads,
           exclude_ftp: fromDisk.exclude_ftp,
           private_conf: fromDisk.private_conf,
           read_only: fromDisk.read_only,
           menu_prompt: fromDisk.menu_prompt,
           confdb_shared: fromDisk.confdb_shared,
-          use_username: true,
-          use_realname: false,
-          use_internetname: false,
+          use_username: fromDisk.use_username,
+          use_realname: fromDisk.use_realname,
+          use_internetname: fromDisk.use_internetname,
           min_access_level: fromDisk.min_access_level,
           max_access_level: fromDisk.max_access_level,
           created_at: stats.birthtime,
@@ -186,6 +196,10 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
     if (validated.exclude_ftp !== undefined) confInfoUpdates.excludeFTP = validated.exclude_ftp;
     if (validated.private_conf !== undefined) confInfoUpdates.privateConf = validated.private_conf;
     if (validated.read_only !== undefined) confInfoUpdates.readOnly = validated.read_only;
+    const conf = validated as Record<string, unknown>;
+    for (const field of ['free_downloads', 'use_username', 'use_realname', 'use_internetname']) {
+      if (conf[field] !== undefined) confInfoUpdates[field] = conf[field];
+    }
 
     const dlpaths: { [key: number]: string } = {};
     const ulpaths: { [key: number]: string } = {};
@@ -210,7 +224,30 @@ console.error(`[ConferenceConfigService] Failed to create disk structure:`, erro
       await this.conferenceSetup.updateConferenceInfoFile(conferenceId, confInfoUpdates);
     }
 
-    const newConfig = this.configRepo.updateConferenceConfig(conferenceId, validated);
+    // The NAME is not in Conf<N>.info: express.e:31852 reads it as NAME.n out
+    // of ConfConfig.info. It was not declared by the schema, so it was
+    // stripped before reaching any writer and renaming a conference in the
+    // admin did nothing. The LOCATION is carried through unchanged - the same
+    // call writes both, and passing an empty one would erase the conference's
+    // directory (express.e:31861).
+    const renamed = (validated as { name?: string }).name;
+    if (renamed !== undefined && renamed !== oldConfig.name) {
+      const bbsRoot = appConfig.get('dataDir');
+      const location = loadConfConfig(bbsRoot)?.entries[conferenceId - 1]?.location ?? '';
+      await this.conferenceSetup.updateConfConfig(conferenceId, renamed, location);
+    }
+
+    // The mirror is best-effort and comes AFTER the disk write: a conference
+    // that only exists on disk has no row, and that must not turn a
+    // successful save into an error.
+    let mirrored: ConferenceConfig | null = null;
+    try {
+      mirrored = this.configRepo.updateConferenceConfig(conferenceId, validated);
+    } catch (mirrorError) {
+console.error(`[ConferenceConfigService] Mirror update failed for conference ${conferenceId} (disk write succeeded):`, mirrorError);
+    }
+
+    const newConfig: ConferenceConfig = mirrored ?? { ...oldConfig, ...validated };
 
     this.configRepo.logConfigChange('conference_config', newConfig.id, 'UPDATE',
       context.userId, context.username, oldConfig, newConfig,

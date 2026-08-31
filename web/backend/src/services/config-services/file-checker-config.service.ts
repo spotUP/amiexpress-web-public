@@ -4,10 +4,11 @@
  */
 
 import type { Database } from '../../database';
+import { getSystemTime } from '../../utils/date-time.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { FileChecker, FileCheckerError } from '../../database/types';
 import { FileCheckerSchema, FileCheckerErrorSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, parseInfoBuffer, tooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -38,15 +39,12 @@ console.warn('[FileCheckerConfigService] Fcheck/ directory not found');
       for (const infoFile of infoFiles) {
         const infoPath = path.join(fcheckDir, infoFile);
         // Use file cache for better performance (70-90% reduction in disk I/O)
-        const buffer = fileCache.readBuffer(infoPath);
         const stats = fs.statSync(infoPath);
-        const parser = new InfoFileParser();
-        const parsed = parser.parse(buffer);
-
-        const toolTypes = new Map<string, string>();
-        for (const [key, value] of parsed.toolTypes.entries()) {
-          const cleanKey = key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase();
-          toolTypes.set(cleanKey, value);
+        const toolTypes = tooltypeMap(parseInfoBuffer(fileCache.readBuffer(infoPath), infoPath));
+        // AmiExpress writes some checker keys with a '&' prefix; the reader has
+        // always accepted both spellings.
+        for (const [key, value] of [...toolTypes]) {
+          if (key.startsWith('&')) toolTypes.set(key.substring(1), value);
         }
 
         let checkerPath = toolTypes.get('CHECKER') || '';
@@ -99,7 +97,21 @@ console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', err
     }
   }
 
-  async getFileChecker(id: number): Promise<FileChecker | null> {
+  /**
+   * Resolve the file checker the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position. Looking that number up as a database rowid is a different
+   * namespace: with the table empty every edit throws "not found", and with
+   * the table partly filled it edits a DIFFERENT record. Disk first, mirror as
+   * the fallback - the same resolution ComputerConfigService.getComputerType
+   * uses, and the same fault the doors page had.
+   */
+async getFileChecker(id: number): Promise<FileChecker | null> {
+    const onDisk = await this.getAllFileCheckers();
+    const fromDisk = onDisk.find(c => c.id === id);
+    if (fromDisk) return fromDisk;
+
     return this.configRepo.getFileCheckerById(id);
   }
 
@@ -147,13 +159,24 @@ console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', err
       this.deleteFileCheckerInfoFile(oldChecker.checker_name);
     }
 
-    const success = this.configRepo.updateFileChecker(id, validated);
-    if (!success) throw new Error(`Failed to update file checker ${id}`);
+    // The edit itself, not a value read back out of a store. getFileChecker
+    // resolves against DISK, which still holds the old value at this point.
+    const newChecker: FileChecker = {
+      ...oldChecker,
+      ...validated,
+      updated_at: getSystemTime()
+    };
 
-    const newChecker = await this.getFileChecker(id);
-    if (!newChecker) throw new Error('Failed to retrieve updated file checker');
-
+    // DISK FIRST: the checker's own icon is what the BBS reads
+    // (express.e:18556). The mirror holds two rows against fifteen files, so
+    // `if (!success) throw` failed thirteen of them before writing anything.
     this.writeFileCheckerInfoFile(newChecker);
+
+    try {
+      this.configRepo.updateFileChecker(id, validated);
+    } catch (mirrorError) {
+console.error(`[FileCheckerConfigService] Mirror update failed for checker ${id} (disk write succeeded):`, mirrorError);
+    }
 
     this.configRepo.logConfigChange('file_checkers', id, 'UPDATE',
       context.userId, context.username, oldChecker, newChecker,
@@ -190,27 +213,19 @@ console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', err
         fs.mkdirSync(fcheckDir, { recursive: true });
       }
 
-      // Start from what the file already holds. Building the map from
-      // nothing dropped every tooltype this form does not own - the reader
-      // itself knows about SOPTIONS and the '&' prefix AmiExpress writes, and
-      // a checker's icon can carry more besides.
+      // Only the five fields this form owns. Everything else in the icon -
+      // SOPTIONS, and any '&'-prefixed entry - is left exactly as it is:
+      // express.e:18556 reads 'CHECKER' through FindToolType, which matches
+      // the key literally, so rewriting '&CHECKER' as 'CHECKER' would be a
+      // guess about a key AmiExpress does not read either way.
       const toolTypes = new Map<string, string>();
-      if (fs.existsSync(infoPath)) {
-        const existing = new InfoFileParser().parse(fs.readFileSync(infoPath));
-        for (const [key, value] of existing.toolTypes.entries()) {
-          toolTypes.set(key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase(), value);
-        }
-      }
-
       if (checker.checker_path) toolTypes.set('CHECKER', checker.checker_path);
       if (checker.options) toolTypes.set('OPTIONS', checker.options);
       if (checker.stack_size !== undefined) toolTypes.set('STACK', checker.stack_size.toString());
       if (checker.priority !== undefined) toolTypes.set('PRIORITY', checker.priority.toString());
       if (checker.script_path) toolTypes.set('SCRIPT', checker.script_path);
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(infoPath, infoData);
+      applyTooltypes(infoPath, toolTypes);
 
 console.log(`[FileCheckerConfigService] Wrote ${infoPath}`);
     } catch (error) {

@@ -7,7 +7,7 @@ import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
 import type { ComputerType } from '../../database/types';
 import { ComputerTypeSchema, type RequestContext } from '../config.schemas';
-import { InfoFileParser } from '../info-file-parser';
+import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { config as appConfig } from '../../config';
 import { getSystemTime } from '../../utils/date-time.util';
 import { mergeForWrite } from './config-merge.util';
@@ -31,15 +31,8 @@ console.warn('[ComputerConfigService] ComputerList.info not found');
     }
 
     try {
-      const buffer = fs.readFileSync(computerListPath);
       const stats = fs.statSync(computerListPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(computerListPath);
 
       const computers: ComputerType[] = [];
       const computerCount = parseInt(toolTypes.get('COMPUTER.NUM') || '0', 10);
@@ -192,9 +185,12 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
       // The database is a mirror; a mirror that has fallen behind must not
       // truncate what it mirrors.
       const onDisk = await this.getAllComputerTypes();
-      const fromDb = this.configRepo.getAllComputerTypes();
-      // The caller's entry goes last so it wins over a stale mirror row.
-      const changed = change.entry ? [...fromDb, change.entry] : fromDb;
+      // ONLY the caller's entry. Handing mergeForWrite the whole mirror let it
+      // overwrite and append as well as protect: a stale row rewrote an entry
+      // the sysop never touched, and a row disk had never heard of was added
+      // to the file. mergeForWrite exists to stop the mirror TRUNCATING disk,
+      // not to make it a second source.
+      const changed = change.entry ? [change.entry] : [];
       const computers = mergeForWrite(
         onDisk,
         changed,
@@ -217,9 +213,13 @@ console.error('[ComputerConfigService] Error reading ComputerList.info:', error)
 
       toolTypes.set('COMPUTER.NUM', computerNum.toString());
 
-      const parser = new InfoFileParser();
-      const infoData = parser.write(toolTypes);
-      fs.writeFileSync(computerListPath, infoData);
+      // The icon, and every tooltype this writer does not own, survive the
+      // save. The private writer this replaced emitted 256 zero bytes and raw
+      // KEY=VALUE strings - no DiskObject - so GetDiskObject returned NIL and
+      // the computer list went silent (tooltypes.e:215-218).
+      applyTooltypes(computerListPath, toolTypes, {
+        removeKeys: key => /^COMPUTER\.(\d+|NUM)$/.test(key),
+      });
 
 console.log(`[ComputerConfigService] Wrote ${computerListPath} with ${computerNum} types`);
     } catch (error) {

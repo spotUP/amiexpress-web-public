@@ -22,10 +22,27 @@ export const SystemConfigSchema = z.object({
   min_password_length: z.number().int().min(0).max(32).optional(),
   min_password_strength: z.number().int().min(0).max(4).optional(),
   max_password_fails: z.number().int().min(-1).optional(),
-  password_security: z.string().transform(v => v?.toLowerCase()).pipe(
-    z.enum(['bcrypt', 'sha256', 'md5', 'legacy'])
+  // The six values express.e:938-952 actually tests for. It compares the
+  // tooltype against these literals and falls through to PWD_LEGACY for
+  // anything else - so bcrypt, sha256 and md5 all quietly degraded the board
+  // to legacy hashing while the admin reported bcrypt.
+  //
+  // Upper-cased rather than lower: these are express.e's own spellings, so
+  // they are right whether icon.library's MatchToolValue folds case or not.
+  password_security: z.string().transform(v => v?.toUpperCase()).pipe(
+    z.enum(['LEGACY', 'PBKDF2_5', 'PBKDF2_50', 'PBKDF2_100', 'PBKDF2_1000', 'PBKDF2_10000'])
   ).optional(),
   strict_password_policy: z.boolean().optional(),
+  // express.e:29785 - 0 disables expiry. Mapped in TOOLTYPE_MAP and served by
+  // the API, but absent here, so `.partial().parse()` STRIPPED it: zod drops
+  // an unknown key and reports success, so the save looked fine and the value
+  // never reached the writer.
+  password_expiry_days: z.number().int().min(0).max(3650).optional(),
+  // ACP.e:2630 - cmds.sysPass, the password the sysop types at the local
+  // console. It also goes in DISK_ONLY_FIELDS: "password" in the name would
+  // otherwise route it to the encrypted database while the login gate reads
+  // the disk.
+  system_password: z.string().max(200).optional(),
   auto_validate: z.boolean().optional(),
   confirm_deletions: z.boolean().optional(),
 
@@ -59,12 +76,25 @@ export const SystemConfigSchema = z.object({
   default_language: z.string().max(50).optional(),
 
   // Limits
+  // Left at 256 deliberately. axobjects.e:38 declares conferenceAccess as
+  // ARRAY OF CHAR [10], which would cap a board at nine - but this board runs
+  // fourteen conferences today, and AmiExpress has a second path for exactly
+  // that case (isConfAccessAreaName / TOOLTYPE_AREA, express.e:8505-8512).
+  // Clamping to nine would break a working board on a reading of one struct.
   max_conferences: z.number().int().min(1).max(256).optional(),
   max_message_bases: z.number().int().min(1).max(1024).optional(),
   max_file_areas: z.number().int().min(1).max(1024).optional(),
-  max_nodes: z.number().int().min(1).max(255).optional(),
+  // axcommon.e:28 - EXPORT CONST MAX_NODES=32. A board cannot have more, so
+  // offering 255 offered a number AmiExpress cannot honour.
+  max_nodes: z.number().int().min(1).max(32).optional(),
 
   // File Management
+  // express.e:346 - the level required to reach the HOLD directory. The form
+  // has a field for it AND a <TooltypeKey> badge naming the key it claims to
+  // write; zod stripped it on the way through.
+  hold_access_level: z.number().int().min(0).max(255).optional(),
+  // Ratios counted in kilobytes rather than in files.
+  credit_by_kb: z.boolean().optional(),
   file_check_enabled: z.boolean().optional(),
   upload_check_virus: z.boolean().optional(),
   upload_check_dupe: z.boolean().optional(),
@@ -90,7 +120,6 @@ export const SystemConfigSchema = z.object({
 
   // HTTP Server (TOOLTYPE_XFERLIB, express.e:15002-15006)
   http_enabled: z.boolean().optional(),
-  http_host: z.string().max(200).optional(),
   http_port: z.number().int().min(1).max(65535).optional(),
 
   // BBS Server Ports
@@ -104,6 +133,11 @@ export const SystemConfigSchema = z.object({
 
   // Logging
   debug_mode: z.boolean().optional(),
+  // Which AREXX interpreter runs a .rexx door. engine-selector.ts:41 accepts
+  // these three and falls back to 'auto' for anything else.
+  arexx_engine: z.string().transform(v => v?.toLowerCase()).pipe(
+    z.enum(['auto', 'native', 'ts'])
+  ).optional(),
   log_level: z.enum(['debug', 'info', 'warning', 'error']).optional(),
   log_retention_days: z.number().int().min(1).max(365).optional(),
   sysop_debug_enabled: z.boolean().optional(),
@@ -144,7 +178,9 @@ export const NodeConfigSchema = z.object({
   // Node0 is a real node - it exists on this board and on the live one, and
   // AmiExpress numbers from zero. Requiring 1 meant the admin refused to save
   // the first node it listed.
-  node_number: z.number().int().min(0).max(255),
+  // Node numbers are 0-based and there are at most MAX_NODES of them
+  // (axcommon.e:28). Node 0 is real - Node0.info is the first node.
+  node_number: z.number().int().min(0).max(31),
   // NODESTART is a multi-line block - the command, then a tooltype per line
   // (QUIETNODE, PRIORITY, CONSOLE_OUTPUT_DEVICE and the rest). A real one is
   // well past 200 characters, so the cap rejected every node that had one.
@@ -174,6 +210,11 @@ export const NodeConfigSchema = z.object({
 
 export const ConferenceConfigSchema = z.object({
   conference_id: z.number().int().min(1),
+  // The name the API serves for every conference, and the admin's own list
+  // shows. It was not declared, so zod stripped it and renaming a conference
+  // did nothing at all. express.e:31852 reads it as NAME.n out of
+  // ConfConfig.info - not out of Conf<N>.info.
+  name: z.string().min(1).max(54).optional(),
   ndirs: z.number().int().min(0).max(16).optional(),
   dlpath_1: z.string().max(200).optional(),
   dlpath_2: z.string().max(200).optional(),
@@ -240,7 +281,11 @@ export const DoorSchema = z.object({
   priority: z.enum(['P0', 'P1', 'P2', 'P3', 'P4']).optional(),
   door_options: z.array(z.string()).optional(),
   runtime_env: z.enum(DOOR_RUNTIME_ENVS).optional(),
-  min_security_level: z.number().int().min(1).max(255).optional(),
+  // 0 is a real value here, not an absence: the API's own
+  // doorNormalAccessLevel() serves 0 for a door with no ACCESS tooltype, so
+  // min(1) meant the schema rejected its own output and Add Door - which
+  // posts 0 - could never succeed.
+  min_security_level: z.number().int().min(0).max(255).optional(),
   max_security_level: z.number().int().min(1).max(255).optional(),
   required_flags: z.string().max(100).optional(),
   time_limit: z.number().int().min(0).optional(),
@@ -280,7 +325,11 @@ export const ProtocolSchema = z.object({
 
 // Security Level Access (TOOLTYPE_ACCESS from express.e)
 export const SecurityLevelAccessSchema = z.object({
-  security_level: z.number().int().min(1).max(255),
+  // express.e:3025-3034 - findAcsLevel computes `secStatus/5*5` and walks
+  // DOWN in fives until a file exists, falling back to 0. So a level that is
+  // not a multiple of five names a file the BBS can never look for, and 0 is
+  // a real level rather than an absence.
+  security_level: z.number().int().min(0).max(255).multipleOf(5),
   acs_flag: z.string().min(1).max(100),
   enabled: z.boolean().optional(),
   description: z.string().max(500).optional()

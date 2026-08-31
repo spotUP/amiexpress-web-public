@@ -94,61 +94,52 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
     return { success: true };
   }
 
+
+  /**
+   * A supervisor command with nothing on the other end.
+   *
+   * `supervisor:command` is emitted and NOTHING in this codebase subscribes to
+   * it - not the BBS session layer, not the terminal, not the SDK. Nine of the
+   * eleven Node Control buttons ended in that emit and the route answered
+   * `{ success: true }`, so the sysop pressed Reinitialize Modem and was told
+   * it had worked.
+   *
+   * These are Amiga MCP concepts - open the node's Workbench window, take the
+   * line off hook, reinitialise a modem - and a browser BBS has no counterpart
+   * for most of them. Saying so is the fix; inventing behaviour for them is a
+   * feature, not a repair.
+   */
+  function notImplemented(res: Response, command: string, what: string) {
+    return res.status(501).json({
+      success: false,
+      command,
+      message: `${command} is not implemented: ${what}`,
+      timestamp: getSystemTime().toISOString(),
+    });
+  }
+
   /**
    * POST /api/nodes/:nodeId/uniconify
    * Open/show node window (SV_UNICONIFY: 153)
    */
-  router.post('/:nodeId/uniconify', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_UNICONIFY');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Node ${nodeId} window opened`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/uniconify', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_UNICONIFY', "it opens a node's Workbench window, and a browser node has no window to open");
   });
 
   /**
    * POST /api/nodes/:nodeId/sysop-login
    * Login as sysop on node (SV_SYSOPLOG: 154)
    */
-  router.post('/:nodeId/sysop-login', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_SYSOPLOG');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Sysop login initiated on node ${nodeId}`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/sysop-login', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_SYSOPLOG', "it drives the node's local console, which this port does not have");
   });
 
   /**
    * POST /api/nodes/:nodeId/instant-login
    * Instant sysop access (SV_INSTANT: 170)
    */
-  router.post('/:nodeId/instant-login', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_INSTANT');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Instant sysop access granted on node ${nodeId}`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/instant-login', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_INSTANT', "it drives the node's local console, which this port does not have");
   });
 
   /**
@@ -224,76 +215,32 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
    * POST /api/nodes/:nodeId/exit
    * Force node to exit (SV_EXITNODE: 159)
    */
-  router.post('/:nodeId/exit', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_EXITNODE');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Node ${nodeId} exit initiated`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/exit', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_EXITNODE', 'nothing subscribes to the supervisor channel, so the node never hears it');
   });
 
   /**
    * POST /api/nodes/:nodeId/offhook
    * Take node off hook (SV_NODEOFFHOOK: 158)
    */
-  router.post('/:nodeId/offhook', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_NODEOFFHOOK');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Node ${nodeId} taken off hook`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/offhook', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_NODEOFFHOOK', 'there is no modem to take off hook');
   });
 
   /**
    * POST /api/nodes/:nodeId/init-modem
    * Reinitialize modem (SV_INITMODEM: 160)
    */
-  router.post('/:nodeId/init-modem', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_INITMODEM');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Modem initialized on node ${nodeId}`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/init-modem', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_INITMODEM', 'there is no modem to reinitialise');
   });
 
   /**
    * POST /api/nodes/:nodeId/chat
    * Initiate sysop chat (SV_CHAT: 157)
    */
-  router.post('/:nodeId/chat', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_CHAT');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Chat initiated with node ${nodeId}`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/chat', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_CHAT', 'nothing subscribes to the supervisor channel, so the node never hears it');
   });
 
   /**
@@ -303,11 +250,32 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
   router.post('/:nodeId/kick', (req: Request, res: Response) => {
     const nodeId = parseInt(req.params.nodeId);
     const { reason } = req.body;
-    const result = sendSupervisorCommand(nodeId, 'SV_KICKUSER', { reason });
+    const validation = validateNode(nodeId);
 
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
+    if (!validation.success) {
+      return res.status(404).json({ success: false, message: validation.error });
     }
+
+    // Actually disconnect. This used to emit SV_KICKUSER on a channel nothing
+    // subscribes to and report success, so the caller stayed online and the
+    // sysop was told they had been removed. A browser node IS its socket, so
+    // closing the socket is what kicking one means here.
+    const socket = io.sockets.sockets.get(validation.socketId!);
+    if (!socket) {
+      return res.status(404).json({
+        success: false,
+        message: `Node ${nodeId} has no active socket connection`,
+      });
+    }
+
+    socket.emit('system-message', {
+      text: reason
+        ? `\r\nDisconnected by the sysop: ${reason}\r\n`
+        : '\r\nDisconnected by the sysop.\r\n',
+    });
+    socket.disconnect(true);
+
+    console.log(`[Node Control] Kicked node ${nodeId} (socket: ${validation.socketId})`);
 
     res.json({
       success: true,
@@ -320,19 +288,8 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
    * POST /api/nodes/:nodeId/start
    * Start node (SV_STARTNODE: 185)
    */
-  router.post('/:nodeId/start', (req: Request, res: Response) => {
-    const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_STARTNODE');
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: `Node ${nodeId} start initiated`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/:nodeId/start', (_req: Request, res: Response) => {
+    return notImplemented(res, 'SV_STARTNODE', 'nodes are started by the server, not by a supervisor message');
   });
 
   /**
@@ -383,46 +340,31 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
    * POST /api/nodes/toggle-chat
    * Enable/disable chat globally (SV_CHATTOGGLE: 172)
    */
-  router.post('/toggle-chat', (req: Request, res: Response) => {
-    const { enabled } = req.body;
-
-    // Broadcast to all nodes
-    io.emit('supervisor:command', {
-      command: 'SV_CHATTOGGLE',
-      enabled,
-      timestamp: getSystemTime().toISOString(),
-    });
-
-    console.log(`[Node Control] Chat ${enabled ? 'enabled' : 'disabled'} globally`);
-
-    res.json({
-      success: true,
-      message: `Chat ${enabled ? 'enabled' : 'disabled'} on all nodes`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/toggle-chat', (_req: Request, res: Response) => {
+    // The page kept its own boolean and this endpoint answered success, so
+    // the toggle showed a state the server had never been told and no node
+    // ever heard. Sysop availability is configured on the Operator Chat page,
+    // which writes something the BBS reads.
+    return notImplemented(
+      res,
+      'SV_CHATTOGGLE',
+      'nothing subscribes to the supervisor channel; set sysop availability on the Operator Chat page'
+    );
   });
 
   /**
    * POST /api/nodes/quiet-mode
    * Toggle MCP quiet mode (SV_QUIETNODE: 178)
    */
-  router.post('/quiet-mode', (req: Request, res: Response) => {
-    const { enabled } = req.body;
-
-    // Broadcast to all nodes
-    io.emit('supervisor:command', {
-      command: 'SV_QUIETNODE',
-      enabled,
-      timestamp: getSystemTime().toISOString(),
-    });
-
-    console.log(`[Node Control] Quiet mode ${enabled ? 'enabled' : 'disabled'} globally`);
-
-    res.json({
-      success: true,
-      message: `Quiet mode ${enabled ? 'enabled' : 'disabled'} on all nodes`,
-      timestamp: getSystemTime().toISOString(),
-    });
+  router.post('/quiet-mode', (_req: Request, res: Response) => {
+    // Same shape as toggle-chat: local state, a broadcast nothing hears, and
+    // a success reply. A node's quiet setting is a per-node tooltype and
+    // belongs on the Nodes page.
+    return notImplemented(
+      res,
+      'SV_QUIETNODE',
+      'nothing subscribes to the supervisor channel; quiet mode is a per-node setting'
+    );
   });
 
   return router;

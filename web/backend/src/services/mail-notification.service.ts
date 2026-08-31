@@ -62,7 +62,7 @@ export async function isSmtpConfigured(): Promise<boolean> {
  * and "Test SMTP Connection" answered "SMTP server not configured". Mail had
  * never worked, and the MAIL_ON_* flags were read from the same wrong place.
  *
- * Disk first, with the database consulted only for the encrypted secret it
+ * Disk first, with the database consulted only for the encrypted secrets it
  * genuinely holds.
  */
 function readConfig(): Record<string, unknown> {
@@ -70,19 +70,31 @@ function readConfig(): Record<string, unknown> {
 
   let secrets: Record<string, unknown> = {};
   try {
-    // config-source-ok: only for the encrypted SMTP password, which is the
-    // one value bbsConfig.info does not hold in usable form.
+    // config-source-ok: only for the encrypted SMTP credentials, which are
+    // the values bbsConfig.info does not hold in usable form.
     secrets = (db.getConfigRepository().getSystemConfig() ?? {}) as Record<string, unknown>;
   } catch {
     // A board with no database row still has its configuration on disk.
   }
 
-  // The password is the one value the disk does not hold in usable form.
-  const password = secrets.smtp_password;
-  return password ? { ...disk, smtp_password: password } : disk;
+  // The credentials are what the disk does not hold in usable form. Both are
+  // in SENSITIVE_FIELDS, so both go to the encrypted database and both are
+  // stripped from bbsConfig.info - merging only the password left SMTP
+  // authenticating with an empty username.
+  const merged = { ...disk } as Record<string, unknown>;
+  if (secrets.smtp_password) merged.smtp_password = secrets.smtp_password;
+  if (secrets.smtp_username) merged.smtp_username = secrets.smtp_username;
+  return merged;
 }
 
-async function getMailOptions(): Promise<MailOptions | null> {
+/**
+ * The SMTP settings, disk first and secrets from the encrypted store.
+ *
+ * Exported so the credential merge can be tested directly: whether the
+ * username reaches nodemailer is not visible through isSmtpConfigured(), and
+ * that is exactly the value that was being lost.
+ */
+export async function getMailOptions(): Promise<MailOptions | null> {
   const now = Date.now();
   if (cachedMailOptions && (now - cacheTime) < CACHE_TTL) {
     return cachedMailOptions;

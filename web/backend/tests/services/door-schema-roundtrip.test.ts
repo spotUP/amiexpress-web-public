@@ -81,3 +81,45 @@ describe('DoorSchema accepts what the API serves', () => {
     expect(DoorSchema.safeParse(door).success).toBe(false);
   });
 });
+
+describe('the Add Door form posts something the schema accepts', () => {
+  // The form built a payload with no door_path and min_security_level: 0.
+  // DoorSchema requires door_path and used min(1), so Create Door could never
+  // succeed - and 0 is not an absence here: the API's own
+  // doorNormalAccessLevel() serves 0 for a door with no ACCESS tooltype, so
+  // the schema was rejecting its own output.
+  it('accepts a new door open to everyone', () => {
+    const payload = {
+      door_name: 'Wall',
+      door_command: 'WALL',
+      door_type: 'XIM',
+      door_path: 'BBS:Doors/Wall/Wall',
+      runtime_env: 'vamos',
+      min_security_level: 0,
+      description: '',
+      time_limit: 30,
+      enabled: true,
+    };
+
+    const parsed = DoorSchema.safeParse(payload);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('still rejects a door with no path to run', () => {
+    const parsed = DoorSchema.safeParse({
+      door_name: 'Wall',
+      door_command: 'WALL',
+      door_type: 'XIM',
+      min_security_level: 0,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it('accepts every access level doorNormalAccessLevel can serve', () => {
+    for (const level of [0, 1, 100, 255]) {
+      const parsed = DoorSchema.partial().safeParse({ min_security_level: level });
+      expect(parsed.success).toBe(true);
+    }
+  });
+});

@@ -127,33 +127,12 @@ console.error('[InfoFileParser] Icon extraction error:', error.message);
     }
   }
 
-  /**
-   * Create a .info file with tool types
-   * @param toolTypes - Map of key-value pairs
-   * @param icon - Optional icon data
-   * @returns Buffer containing .info file data
-   */
-  write(toolTypes: Map<string, string>, icon?: AmigaIcon): Buffer {
-    // For now, create a minimal .info file with just tool types
-    // Full IFF ICON generation would require more complex code
-
-    const toolTypeStrings: string[] = [];
-
-    // Convert tool types to null-terminated strings
-    for (const [key, value] of toolTypes.entries()) {
-      toolTypeStrings.push(`${key}=${value}\x00`);
-    }
-
-    // Join all tool types
-    const toolTypesBuffer = Buffer.from(toolTypeStrings.join(''), 'latin1');
-
-    // Create a minimal .info file structure
-    // This is a simplified version - real .info files have IFF structure
-    const header = Buffer.alloc(256); // Placeholder header
-    header.writeUInt32BE(0xe3100001, 0); // Magic number (simplified)
-
-    return Buffer.concat([header, toolTypesBuffer]);
-  }
+  // write() lived here. It produced 256 zero bytes with a magic number and
+  // raw KEY=VALUE strings - no DiskObject, no gadget, no length-prefixed
+  // tooltype array - so GetDiskObject returned NIL and FindToolType found
+  // nothing (tooltypes.e:215-218), while the icon it overwrote was destroyed.
+  // Writing a .info goes through utils/info-file.util.ts, which edits the
+  // real structure in place.
 
   /**
    * Parse bbsConfig.info specifically

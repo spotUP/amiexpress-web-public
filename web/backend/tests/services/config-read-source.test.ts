@@ -85,7 +85,12 @@ describe('where the board reads its configuration', () => {
       const lines = fs.readFileSync(file, 'utf8').split('\n');
 
       lines.forEach((line, index) => {
-        if (!/getConfigRepository\(\)\s*\.\s*getSystemConfig\(/.test(line)) return;
+        // Optional-call syntax slipped straight past the old pattern:
+        //   db.getConfigRepository?.()?.getSystemConfig?.()
+        // Four live consumers were written that way, and one value had
+        // already diverged - disk MIN_PASSWORD_STRENGTH=0 against DB 1, so
+        // the admin showed "no check" while the BBS enforced 1.
+        if (!/getConfigRepository\s*\??\.?\s*\(\)\s*\??\.?\s*getSystemConfig\s*\??\.?\s*\(/.test(line)) return;
 
         // The line itself, or the short comment immediately above it, carries
         // the reason. Three lines is enough for a sentence explaining why.

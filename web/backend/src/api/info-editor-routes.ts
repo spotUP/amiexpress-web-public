@@ -19,6 +19,10 @@ interface Tooltype {
   value: string;
   commented: boolean;
   originalLine: string;
+  /** Amiga parentheses or a bang - which syntax disabled this entry. */
+  commentStyle?: '()' | '!';
+  /** The #, +, % or ' AmiExpress writes in front of some keys. */
+  prefix?: string;
 }
 
 interface InfoFileMetadata {
@@ -30,101 +34,60 @@ interface InfoFileMetadata {
 }
 
 /**
- * Check if file is plain text (not binary)
+ * Read a file's tooltypes with the SAME parser the write uses.
+ *
+ * This route had a private parser that skipped valueless tooltypes,
+ * parenthesised ones and empty values, while the PUT replaced the whole array
+ * with what the editor sent - so every tooltype the editor could not display
+ * was deleted on save. On this board that is 795 of 1,190 .info files losing
+ * tooltypes on any save, 526 displaying none while holding some, and 82
+ * rendering rows built out of binary noise that were then written back as
+ * real tooltypes.
+ *
+ * parseInfoFile locates the real length-prefixed array, so nothing is
+ * invented and nothing is hidden.
  */
-function isTextFile(filePath: string): boolean {
+function parseTooltypes(filePath: string): Tooltype[] {
   try {
-    const buffer = fs.readFileSync(filePath);
-    // Check first 1KB for binary characters
-    const checkLength = Math.min(buffer.length, 1024);
-    for (let i = 0; i < checkLength; i++) {
-      const byte = buffer[i];
-      // Allow common text characters: printable ASCII, tab, newline, carriage return
-      if (byte !== 0x09 && byte !== 0x0a && byte !== 0x0d && (byte < 0x20 || byte > 0x7e)) {
-        // Found a non-text byte
-        return false;
-      }
-    }
-    return true;
-  } catch {
-    return false;
+    return parseInfoFile(filePath).tooltypes.map(tt => ({
+      key: tt.key,
+      value: tt.value,
+      commented: tt.commented,
+      originalLine: tt.originalLine,
+      ...(tt.commentStyle ? { commentStyle: tt.commentStyle } : {}),
+      ...(tt.prefix ? { prefix: tt.prefix } : {}),
+    }));
+  } catch (error) {
+console.error(`[InfoEditor] Error parsing ${filePath}:`, error);
+    return [];
   }
 }
 
 /**
- * Parse tooltypes from .info file
- * Handles both plain text .info files (our format) and binary Amiga .info files
+ * Resolve a path under the BBS root, the way the rest of this codebase does.
+ *
+ * A command's file is named whatever the sysop's Amiga wrote - `wall.info`,
+ * `SWall.info`, `ACCV103.info` - and 63 of the 155 files in Commands/BBSCmd
+ * are lower or mixed case. macOS cannot see the difference; the Linux
+ * container can, which is where the archiver bug of 7006ce568 lived too.
+ *
+ * Every route here now resolves ONCE and uses the resolved path for the read,
+ * the backup and the write - the mismatch was that the GET tested existence
+ * case-insensitively and then read case-sensitively.
  */
-function parseTooltypes(filePath: string): Tooltype[] {
-  const tooltypes: Tooltype[] = [];
+function resolveUnderRoot(relativePath: string): string | null {
+  const bbsRoot = config.get('dataDir');
+  const fullPath = path.join(bbsRoot, relativePath);
 
-  try {
-    let lines: string[];
+  // Confinement is checked on the requested path AND on what it resolved to.
+  const resolvedRoot = path.resolve(bbsRoot);
+  if (!path.resolve(fullPath).startsWith(resolvedRoot)) return null;
 
-    // Check if file is plain text or binary
-    if (isTextFile(filePath)) {
-      // Plain text file - read directly
-      const content = fs.readFileSync(filePath, 'utf8');
-      lines = content.split(/\r?\n/);
-    } else {
-      // Binary file - use native extraction
-      const buffer = fs.readFileSync(filePath);
-      let currentString = '';
-      const extracted: string[] = [];
+  const real = amigafs.resolvePath(fullPath);
+  if (!real) return null;
+  if (!path.resolve(real).startsWith(resolvedRoot)) return null;
 
-      for (let i = 0; i < buffer.length; i++) {
-        const charCode = buffer[i];
-        if (charCode >= 32 && charCode <= 126) {
-          currentString += String.fromCharCode(charCode);
-        } else {
-          if (currentString.length >= 2) extracted.push(currentString);
-          currentString = '';
-        }
-      }
-      lines = extracted;
-    }
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.includes('=')) {
-        continue;
-      }
-
-      // Skip parenthesized lines
-      if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
-        continue;
-      }
-
-      let cleaned = trimmed;
-      let commented = false;
-
-      // Check for comment prefix
-      if (cleaned.startsWith('!')) {
-        commented = true;
-        cleaned = cleaned.substring(1);
-      } else if (cleaned.startsWith('#') || cleaned.startsWith('+') || cleaned.startsWith('%') || cleaned.startsWith("'")) {
-        // Amiga-style prefixes, not comments
-        cleaned = cleaned.substring(1);
-      }
-
-      const [key, ...valueParts] = cleaned.split('=');
-      const value = valueParts.join('=').trim();
-
-      if (key && value) {
-        const cleanKey = key.toUpperCase().trim();
-        tooltypes.push({
-          key: cleanKey,
-          value,
-          commented,
-          originalLine: trimmed
-        });
-      }
-    }
-  } catch (error) {
-console.error(`[InfoEditor] Error parsing ${filePath}:`, error);
-  }
-
-  return tooltypes;
+  return real;
 }
 
 /**
@@ -225,17 +188,8 @@ infoEditorRouter.get('/file', async (req: Request, res: Response) => {
       return sendFail(res, 400, 'Missing path parameter');
     }
 
-    const bbsRoot = config.get('dataDir');
-    const fullPath = path.join(bbsRoot, relativePath);
-
-    // Security check - ensure path is within BBS root
-    const resolvedPath = path.resolve(fullPath);
-    const resolvedRoot = path.resolve(bbsRoot);
-    if (!resolvedPath.startsWith(resolvedRoot)) {
-      return sendFail(res, 403, 'Access denied');
-    }
-
-    if (!amigafs.existsSync(fullPath)) {
+    const fullPath = resolveUnderRoot(relativePath);
+    if (!fullPath) {
       return sendFail(res, 404, 'File not found');
     }
 
@@ -270,17 +224,8 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
       return sendFail(res, 400, 'Missing path or tooltypes');
     }
 
-    const bbsRoot = config.get('dataDir');
-    const fullPath = path.join(bbsRoot, relativePath);
-
-    // Security check
-    const resolvedPath = path.resolve(fullPath);
-    const resolvedRoot = path.resolve(bbsRoot);
-    if (!resolvedPath.startsWith(resolvedRoot)) {
-      return sendFail(res, 403, 'Access denied');
-    }
-
-    if (!fs.existsSync(fullPath)) {
+    const fullPath = resolveUnderRoot(relativePath);
+    if (!fullPath) {
       return sendFail(res, 404, 'File not found');
     }
 
@@ -292,13 +237,40 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
       // Parse .info file
       const info = parseInfoFile(fullPath);
 
-      // Update tooltypes
-      info.tooltypes = tooltypes.map((tt: Tooltype) => ({
-        key: tt.key.toUpperCase(),
-        value: tt.value,
-        commented: tt.commented,
-        originalLine: `${tt.commented ? '!' : ''}${tt.key}=${tt.value}`
-      }));
+      // A blank "Add Tooltype" row has no key. Writing it produced the entry
+      // "=", after which the file no longer parsed and every later save took
+      // the fallback path below.
+      const rows = (tooltypes as Tooltype[]).filter(tt => tt.key && tt.key.trim());
+
+      // An entry the sysop did not touch keeps its exact on-disk bytes. That
+      // is not an optimisation: rebuilding every line as `!KEY=VALUE` rewrote
+      // the ACS files' parentheses into bangs (express.e reads the
+      // parenthesised form), dropped the #, + and % prefixes AmiExpress
+      // writes, and turned `BANNER=` into `BANNER`.
+      const existingByKey = new Map(info.tooltypes.map(tt => [tt.key, tt]));
+
+      info.tooltypes = rows.map((tt: Tooltype) => {
+        const key = tt.key.toUpperCase().trim();
+        const existing = existingByKey.get(key);
+        if (existing && existing.value === tt.value && existing.commented === tt.commented) {
+          return existing;
+        }
+
+        const prefix = tt.prefix ?? existing?.prefix ?? '';
+        const commentStyle = tt.commentStyle ?? existing?.commentStyle;
+        const body = tt.value ? `${prefix}${key}=${tt.value}` : `${prefix}${key}`;
+        const originalLine = !tt.commented
+          ? body
+          : commentStyle === '()' ? `(${body})` : `!${body}`;
+        return {
+          key,
+          value: tt.value,
+          commented: tt.commented,
+          prefix,
+          ...(commentStyle ? { commentStyle } : {}),
+          originalLine,
+        };
+      });
 
       // Write back to file
       writeInfoFile(info);
@@ -307,28 +279,21 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
     } catch (parseError) {
 console.error('[InfoEditor] Error modifying binary .info file:', parseError);
 
-      // Fallback: create .tooltypes.txt file
-      const tooltypesPath = fullPath + '.tooltypes.txt';
-      let content = `# Tooltypes for ${path.basename(fullPath)}\n`;
-      content += `# Generated: ${getSystemTime().toISOString()}\n`;
-      content += `# Warning: Binary modification failed, manual update required\n\n`;
-
-      for (const tt of tooltypes) {
-        const prefix = tt.commented ? '!' : '';
-        content += `${prefix}${tt.key}=${tt.value}\n`;
+      // The file is unchanged, so put it back exactly as it was and SAY SO.
+      // This used to write a `<file>.tooltypes.txt` sidecar and reply success:
+      // nothing reads that file - AmiExpress's companion fallback is
+      // `<name>.txt`, not `<name>.info.tooltypes.txt` (tooltypes.e:259-270) -
+      // so the sysop was told the save worked when nothing had been saved.
+      try {
+        fs.copyFileSync(backupPath, fullPath);
+      } catch (restoreError) {
+console.error('[InfoEditor] Failed to restore backup:', restoreError);
       }
 
-      fs.writeFileSync(tooltypesPath, content);
-
-      sendOk(
+      return sendFail(
         res,
-        {
-          backupPath,
-          tooltypesPath,
-          warning: 'Binary .info modification failed. Text file created for reference.',
-          reason: (parseError as Error).message,
-        },
-        'Tooltypes saved to text file (binary modification failed)'
+        500,
+        `Could not write ${path.basename(fullPath)}: ${(parseError as Error).message}`
       );
     }
 
@@ -352,17 +317,8 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
       return sendFail(res, 400, 'Missing path or key');
     }
 
-    const bbsRoot = config.get('dataDir');
-    const fullPath = path.join(bbsRoot, relativePath);
-
-    // Security check
-    const resolvedPath = path.resolve(fullPath);
-    const resolvedRoot = path.resolve(bbsRoot);
-    if (!resolvedPath.startsWith(resolvedRoot)) {
-      return sendFail(res, 403, 'Access denied');
-    }
-
-    if (!fs.existsSync(fullPath)) {
+    const fullPath = resolveUnderRoot(relativePath);
+    if (!fullPath) {
       return sendFail(res, 404, 'File not found');
     }
 

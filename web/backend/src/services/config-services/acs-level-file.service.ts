@@ -64,6 +64,27 @@ export function tooltypesToFlags(tooltypes: Tooltype[]): Record<string, boolean>
 }
 
 /**
+ * Flags written `=NO`, which THIS PORT denies and AmiExpress grants.
+ *
+ * `checkToolTypeExists` (tooltypes.e:204-218) looks only at whether the key
+ * is present - it never inspects the value - so on a real AmiExpress
+ * `ACS.DOWNLOAD=NO` GRANTS download. The parenthesised form is the one that
+ * genuinely denies, and it is what this admin writes.
+ *
+ * The divergence is deliberate and it is not going to be closed by matching
+ * express.e: doing that would silently GRANT every permission a sysop has
+ * written `=NO` on a live board. Fail closed, and say so - a value that means
+ * the opposite thing on the two systems is worth a sysop's attention, and it
+ * can only get into a file by hand.
+ */
+export function ambiguouslyDeniedFlags(tooltypes: Tooltype[]): string[] {
+  return tooltypes
+    .filter(tt => tt.key.toUpperCase().startsWith('ACS.'))
+    .filter(tt => !tt.commented && tt.value.toUpperCase() === 'NO')
+    .map(tt => tt.key.toUpperCase());
+}
+
+/**
  * Apply granted/denied changes to a level's tooltypes.
  *
  * Denied entries are written in the Amiga parenthesised form, which is what

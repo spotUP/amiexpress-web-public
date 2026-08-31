@@ -16,7 +16,7 @@ interface NodeRow {
 
 export function NodesPage() {
   const queryClient = useQueryClient();
-  const { showSuccess, confirm } = useNotification();
+  const { showSuccess, showError, confirm } = useNotification();
   const [editingNode, setEditingNode] = useState<number | null>(null);
   const [formData, setFormData] = useState<Partial<NodeConfig>>({});
 
@@ -37,6 +37,11 @@ export function NodesPage() {
       setEditingNode(null);
       showSuccess('Node configuration updated successfully');
     },
+    // This page was the only one in the admin with no onError on any
+    // mutation, so a save that failed said nothing at all.
+    onError: (error: Error) => {
+      showError(`Failed to update node: ${error.message}`);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -45,6 +50,9 @@ export function NodesPage() {
       queryClient.invalidateQueries({ queryKey: ['nodes'] });
       showSuccess('Node configuration deleted successfully');
     },
+    onError: (error: Error) => {
+      showError(`Failed to delete node: ${error.message}`);
+    },
   });
 
   const createMutation = useMutation({
@@ -52,6 +60,9 @@ export function NodesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] });
       showSuccess('Node created');
+    },
+    onError: (error: Error) => {
+      showError(`Failed to create node: ${error.message}`);
     },
   });
 

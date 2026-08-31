@@ -4,7 +4,7 @@ import { Check, Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XC
 import { apiClient } from '../api/client';
 import { TooltypeKey } from '../components/ui/TooltypeKey';
 import type { SystemConfig, Language, ScreenType } from '../types';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 
 // Standard AmiExpress security levels
@@ -160,11 +160,12 @@ export function SystemConfigPage() {
     },
   });
 
-  useEffect(() => {
-    if (data?.data) {
-      reset(data.data);
-    }
-  }, [data, reset]);
+  // No reset-on-refetch here. `useForm({ values })` above already syncs the
+  // form when the query answers, and this effect fired on the refetch that a
+  // per-field save triggers - which defeated the resetField below, whose
+  // whole job is to mark ONE field clean without touching what the sysop has
+  // half-typed in the others. So saving one field reverted every other edit
+  // on screen.
 
   // A field saves when it is left, not while it is being typed.
   //
@@ -510,10 +511,16 @@ export function SystemConfigPage() {
                 {...register('password_security')}
                 className="input-field w-full"
               >
-                <option value="bcrypt">bcrypt</option>
-                <option value="sha256">SHA256</option>
-                <option value="md5">MD5</option>
-                <option value="legacy">Legacy (imported)</option>
+                {/* express.e:938-952 tests the tooltype against exactly
+                    these six and falls through to PWD_LEGACY for anything
+                    else, so bcrypt / SHA256 / MD5 all degraded the board to
+                    legacy hashing while this said otherwise. */}
+                <option value="LEGACY">Legacy (weakest, and the default)</option>
+                <option value="PBKDF2_5">PBKDF2, 5 rounds</option>
+                <option value="PBKDF2_50">PBKDF2, 50 rounds</option>
+                <option value="PBKDF2_100">PBKDF2, 100 rounds</option>
+                <option value="PBKDF2_1000">PBKDF2, 1000 rounds</option>
+                <option value="PBKDF2_10000">PBKDF2, 10000 rounds (strongest)</option>
               </select>
             </div>
 
@@ -1516,19 +1523,10 @@ export function SystemConfigPage() {
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">HTTP Server Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="http_host" className="label">
-                HTTP Host
-              </label>
-              <TooltypeKey field="http_host" />
-              <input
-                id="http_host"
-                type="text"
-                {...register('http_host')}
-                className="input-field w-full"
-              />
-              <p className="text-xs text-bbs-muted mt-1">Bind address for HTTP (blank = all interfaces).</p>
-            </div>
+            {/* HTTP Host was removed. express.e:15002 reads HTTPHOST out of
+                the PROTOCOL icon (TOOLTYPE_XFERLIB), per protocol - there has
+                never been a bbsConfig tooltype for it, so this field wrote a
+                key nothing read. It belongs on the Protocols page. */}
 
             <div>
               <label htmlFor="http_port" className="label">

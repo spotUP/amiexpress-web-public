@@ -9,17 +9,9 @@ import { apiClient } from '../api/client';
 import {
   Activity,
   Monitor,
-  MessageSquare,
-  LogOut,
-  Phone,
   RefreshCw,
   UserX,
   Play,
-  Maximize2,
-  KeyRound,
-  Zap,
-  MessageCircle,
-  VolumeX,
   Lock,
   X,
   Check,
@@ -57,8 +49,6 @@ interface NodeStatusResponse extends ApiResponse<NodeStatus[]> {
 
 export function NodeControlPage() {
   const queryClient = useQueryClient();
-  const [chatEnabled, setChatEnabled] = useState(true);
-  const [quietMode, setQuietMode] = useState(false);
 
   // Audit A-3: reservation control state.
   // - editingReserveNodeId: which node card has its inline input open
@@ -80,21 +70,6 @@ export function NodeControlPage() {
   const sendNodeCommand = useMutation({
     mutationFn: async ({ nodeId, command, data }: { nodeId: number; command: string; data?: any }) => {
       const response = await apiClient.post(`/api/nodes/${nodeId}/${command}`, data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['nodes', 'status'] });
-    },
-  });
-
-  // System command mutations
-  const sendSystemCommand = useMutation({
-    mutationFn: async ({ command, data }: { command: string; data?: any }) => {
-      // /api/nodes, not /api/system. These handlers are declared on
-      // nodeControlRouter, which is mounted at /api/nodes - their own doc
-      // comments said /api/system, which is mounted nowhere, so every
-      // system-wide command 404'd silently.
-      const response = await apiClient.post(`/api/nodes/${command}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -144,34 +119,6 @@ export function NodeControlPage() {
   const handleReserveCancel = () => {
     setEditingReserveNodeId(null);
     setReserveInput('');
-  };
-
-  const handleToggleChat = async () => {
-    const newState = !chatEnabled;
-    setChatEnabled(newState);
-    try {
-      await sendSystemCommand.mutateAsync({
-        command: 'toggle-chat',
-        data: { enabled: newState },
-      });
-    } catch (error) {
-      console.error('Failed to toggle chat:', error);
-      setChatEnabled(!newState); // Revert on error
-    }
-  };
-
-  const handleToggleQuietMode = async () => {
-    const newState = !quietMode;
-    setQuietMode(newState);
-    try {
-      await sendSystemCommand.mutateAsync({
-        command: 'quiet-mode',
-        data: { enabled: newState },
-      });
-    } catch (error) {
-      console.error('Failed to toggle quiet mode:', error);
-      setQuietMode(!newState); // Revert on error
-    }
   };
 
   if (isLoading) {
@@ -237,35 +184,15 @@ export function NodeControlPage() {
         </div>
       </div>
 
-      {/* System Controls */}
-      <div className="p-4 bg-surface-1 rounded-lg border border-border">
-        <h2 className="text-xl font-semibold text-content-primary mb-4">System Controls</h2>
-        <div className="flex gap-3">
-          <button
-            onClick={handleToggleChat}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-              chatEnabled
-                ? 'bg-status-ok hover:bg-status-ok/90 text-content-inverse'
-                : 'bg-status-danger hover:bg-status-danger/90 text-content-inverse'
-            }`}
-          >
-            <MessageCircle className="w-4 h-4" />
-            {chatEnabled ? 'Disable Chat' : 'Enable Chat'}
-          </button>
+      {/* System Controls used to be two buttons here: Enable/Disable Chat
+          and Quiet Mode. Both kept their state in this component, posted to an
+          endpoint that broadcast `supervisor:command`, and NOTHING in this
+          codebase subscribes to that channel - so the button showed a state
+          the server had never been told and no node ever heard.
 
-          <button
-            onClick={handleToggleQuietMode}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-              quietMode
-                ? 'bg-status-warn hover:bg-status-warn/90 text-content-inverse'
-                : 'bg-surface-3 hover:bg-surface-2 text-content-primary'
-            }`}
-          >
-            <VolumeX className="w-4 h-4" />
-            {quietMode ? 'Disable Quiet Mode' : 'Enable Quiet Mode'}
-          </button>
-        </div>
-      </div>
+          Sysop availability is set on the Operator Chat page, which writes
+          something the BBS reads; a node's quiet setting is a per-node
+          tooltype on the Nodes page. */}
 
       {/* Node List */}
       <div className="space-y-3">
@@ -352,42 +279,13 @@ export function NodeControlPage() {
               {/* Node Controls */}
               {node.online && (
                 <div className="flex flex-wrap gap-2 pt-3 border-t border-border">
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'uniconify')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-content-inverse rounded transition-colors"
-                    title="Open node window (SV_UNICONIFY)"
-                  >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                    Open Window
-                  </button>
-
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'chat')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-status-ok hover:bg-status-ok/90 text-content-inverse rounded transition-colors"
-                    title="Initiate sysop chat (SV_CHAT)"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    Chat
-                  </button>
-
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'sysop-login')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-content-inverse rounded transition-colors"
-                    title="Login as sysop (SV_SYSOPLOG)"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    Sysop Login
-                  </button>
-
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'instant-login')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-status-warn hover:bg-status-warn/90 text-content-inverse rounded transition-colors"
-                    title="Instant sysop access (SV_INSTANT)"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    Instant
-                  </button>
-
+                  {/* Open Window, Chat, Sysop Login, Instant, Off Hook, Init
+                      Modem and Exit used to sit here. Each posted a supervisor
+                      command that nothing subscribes to, and the route replied
+                      success - so the sysop pressed Reinitialize Modem and was
+                      told it had worked. They are Amiga MCP concepts with no
+                      counterpart in a browser node; the endpoints now answer
+                      501 rather than pretending. */}
                   <button
                     onClick={() => handleNodeCommand(node.nodeId, 'kick')}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm bg-status-warn hover:bg-status-warn/90 text-content-inverse rounded transition-colors"
@@ -395,33 +293,6 @@ export function NodeControlPage() {
                   >
                     <UserX className="w-3.5 h-3.5" />
                     Kick
-                  </button>
-
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'offhook')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-surface-3 hover:bg-surface-2 text-content-primary rounded transition-colors"
-                    title="Take node off hook (SV_NODEOFFHOOK)"
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    Off Hook
-                  </button>
-
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'init-modem')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-content-inverse rounded transition-colors"
-                    title="Reinitialize modem (SV_INITMODEM)"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Init Modem
-                  </button>
-
-                  <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'exit')}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-status-danger hover:bg-status-danger/90 text-content-inverse rounded transition-colors"
-                    title="Force node to exit (SV_EXITNODE)"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Exit
                   </button>
 
                   {/* Audit A-3: Reserve / Clear control. Mirrors express.e
@@ -461,8 +332,9 @@ export function NodeControlPage() {
                         onClick={handleReserveCancel}
                         className="flex items-center gap-1 px-2 py-1.5 text-sm bg-surface-3 hover:bg-surface-2 text-content-primary rounded transition-colors"
                         title="Cancel"
+                        aria-label="Cancel reserving this node"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   ) : (
@@ -528,8 +400,9 @@ export function NodeControlPage() {
                         onClick={handleReserveCancel}
                         className="flex items-center gap-1 px-2 py-1.5 text-sm bg-surface-3 hover:bg-surface-2 text-content-primary rounded transition-colors"
                         title="Cancel"
+                        aria-label="Cancel reserving this node"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   ) : (

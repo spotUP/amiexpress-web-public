@@ -202,14 +202,14 @@ describe('System Configuration field coverage', () => {
       saveBBSConfig(root, {
         min_password_length: 6,
         max_password_fails: 3,
-        password_security: 'sha256',
+        password_security: 'PBKDF2_10000',
         strict_password_policy: true,
       });
 
       const reloaded = loadBBSConfig(root);
       expect(reloaded.min_password_length).toBe(6);
       expect(reloaded.max_password_fails).toBe(3);
-      expect(reloaded.password_security).toBe('sha256');
+      expect(reloaded.password_security).toBe('PBKDF2_10000');
       expect(reloaded.strict_password_policy).toBe(true);
     });
 
@@ -275,9 +275,11 @@ describe('System Configuration field coverage', () => {
     });
 
     it('reads the password hash setting back in the case the form offers', () => {
-      // Same shape: the options are bcrypt/sha256/md5/legacy, all lowercase.
-      saveBBSConfig(root, { password_security: 'BCRYPT' });
-      expect(loadBBSConfig(root).password_security).toBe('bcrypt');
+      // Same shape, the other way up: express.e:938-952 spells these in
+      // CAPITALS, so that is the case the form offers and the case a value
+      // comes back in.
+      saveBBSConfig(root, { password_security: 'pbkdf2_1000' });
+      expect(loadBBSConfig(root).password_security).toBe('PBKDF2_1000');
     });
 
     it('leaves a value alone when it is not one of those lists', () => {
@@ -462,5 +464,62 @@ describe('System Configuration field coverage', () => {
 
       expect(lost.join('\n')).toBe('');
     });
+  });
+});
+
+/**
+ * The MIRROR of the coverage test above.
+ *
+ * That one walks the SCHEMA and checks each field is mapped, so a field the
+ * FORM offers and the schema lacks is invisible to it - which is exactly how
+ * hold_access_level and password_expiry_days survived. This walks the form.
+ *
+ * Same shape as users-acs-write-contract.test.ts, which asks the question for
+ * the two domains that have no schema at all.
+ */
+describe('every field the System Configuration form offers is in the schema', () => {
+  const REPO_ROOT_FOR_PAGE = path.join(__dirname, '..', '..', '..', '..');
+  const SYSTEM_CONFIG_PAGE = path.join(
+    REPO_ROOT_FOR_PAGE, 'web', 'config-app', 'src', 'pages', 'SystemConfigPage.tsx'
+  );
+
+  /**
+   * Names the form registers that are not configuration fields.
+   *
+   * Each has to earn its place: anything else here would be a control the
+   * sysop can change and cannot save.
+   */
+  const NOT_A_CONFIG_FIELD = new Set<string>([]);
+
+  it('registers nothing the schema will strip', () => {
+    const page = fs.readFileSync(SYSTEM_CONFIG_PAGE, 'utf8');
+    const registered = new Set(
+      [...page.matchAll(/register\('([a-z_0-9]+)'/g)].map(m => m[1])
+    );
+    expect(registered.size).toBeGreaterThan(50);
+
+    const declared = new Set(Object.keys(SystemConfigSchema.shape));
+    const stripped = [...registered].filter(
+      field => !declared.has(field) && !NOT_A_CONFIG_FIELD.has(field)
+    );
+
+    // Jest's expect takes no message, so the report goes in the value.
+    expect(stripped.join(', ')).toBe('');
+  });
+
+  it('names a tooltype for every field it registers', () => {
+    const page = fs.readFileSync(SYSTEM_CONFIG_PAGE, 'utf8');
+    const registered = [...page.matchAll(/register\('([a-z_0-9]+)'/g)].map(m => m[1]);
+
+    const mapped = getConfigTooltypeKeys();
+    const unwritable = registered.filter(
+      field =>
+        !(field in mapped) &&
+        !isSensitiveField(field) &&
+        !isDatabaseOnlyField(field) &&
+        !NOT_A_CONFIG_FIELD.has(field)
+    );
+
+    expect(unwritable.join(', ')).toBe('');
   });
 });

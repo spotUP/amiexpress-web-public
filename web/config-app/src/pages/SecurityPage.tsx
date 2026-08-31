@@ -18,7 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
-import { acsLabel, groupPermissions } from './acs-permission-groups';
+import { acsLabel, groupPermissions, ACS_NOT_FROM_THIS_FILE } from './acs-permission-groups';
 
 export function SecurityPage() {
   const queryClient = useQueryClient();
@@ -201,6 +201,22 @@ export function SecurityPage() {
             className="w-full max-w-xs px-2 py-1 bg-transparent border border-bbs-muted/40 rounded text-sm"
           />
 
+          {(flagsQuery.data?.data?.ambiguous?.length ?? 0) > 0 && (
+            <div className="px-3 py-2 rounded border border-status-warn/50 text-sm text-content-primary">
+              <p className="font-semibold">
+                {flagsQuery.data!.data!.ambiguous!.length} permission(s) written =NO in this
+                file mean opposite things on the two systems.
+              </p>
+              <p className="text-content-muted">
+                AmiExpress reads a tooltype's PRESENCE and never its value
+                (tooltypes.e:204-218), so ACS.DOWNLOAD=NO grants download on a real
+                board. This BBS denies it. Saving the level rewrites them into the
+                parenthesised form, which denies on both:{' '}
+                {flagsQuery.data!.data!.ambiguous!.join(', ')}
+              </p>
+            </div>
+          )}
+
           {flagsQuery.isLoading ? (
             <p className="text-bbs-muted">Loading flags...</p>
           ) : visibleCount === 0 ? (
@@ -240,6 +256,15 @@ export function SecurityPage() {
                                 file and what the AmiExpress documentation
                                 calls it, so it stays on screen. */}
                             <span className="block font-mono text-xs text-content-muted">{name}</span>
+                            {/* express.e:8466-8485 resolves eighteen of these
+                                before it ever opens this file. A switch that
+                                cannot do anything must not read as a live
+                                control. */}
+                            {ACS_NOT_FROM_THIS_FILE[name] && (
+                              <span className="block text-xs text-status-warn">
+                                {ACS_NOT_FROM_THIS_FILE[name]}
+                              </span>
+                            )}
                           </span>
                         </button>
                       );

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Star } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -27,7 +28,7 @@ export function ProtocolsPage() {
     is_default: false,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['protocols'],
     queryFn: () => apiClient.getProtocols(),
   });
@@ -61,6 +62,12 @@ export function ProtocolsPage() {
       showSuccess('Protocol deleted');
     },
   });
+
+  /** Escape, the backdrop and Cancel all end the dialog the same way. */
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditing(null);
+  };
 
   const handleAdd = () => {
     setFormData({
@@ -226,6 +233,8 @@ export function ProtocolsPage() {
         getRowId={(protocol) => String(protocol.id)}
         initialSort={[{ id: 'protocol_name', desc: false }]}
         isLoading={isLoading}
+        error={error as Error | null}
+        onRetry={() => refetch()}
         emptyMessage="No protocols configured. Add transfer protocols like ZMODEM, YMODEM, XMODEM, or Punter."
         rowActions={(protocol) => (
           <>
@@ -258,11 +267,12 @@ export function ProtocolsPage() {
       />
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bbs-surface border border-bbs-primary rounded-lg shadow-xl w-full max-w-2xl p-6">
-            <h2 className="text-xl font-semibold text-bbs-text mb-4">
-              {editing ? 'Edit Protocol' : 'Add Protocol'}
-            </h2>
+        <Modal
+          open={isModalOpen}
+          title={editing ? 'Edit Protocol' : 'Add Protocol'}
+          onClose={closeModal}
+          maxWidth="max-w-2xl"
+        >
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -386,10 +396,7 @@ export function ProtocolsPage() {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditing(null);
-                  }}
+                  onClick={closeModal}
                 >
                   Cancel
                 </button>
@@ -401,8 +408,7 @@ export function ProtocolsPage() {
             <p className="text-xs text-bbs-muted mt-3">
               Supported protocols: ZMODEM (batch), YMODEM (batch), XMODEM (checksum/CRC/1K), Punter (C64/C128), WebSocket (browser).
             </p>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -112,7 +112,7 @@ export class ConfigRepository extends BaseRepository<any> {
       config.min_password_length || 8,
       config.min_password_strength || 0,
       config.max_password_fails || -1,
-      config.password_security || 'bcrypt',
+      config.password_security || 'LEGACY',
       config.strict_password_policy ? 1 : 0,
       config.auto_validate ? 1 : 0,
       config.confirm_deletions !== false ? 1 : 0,

@@ -82,9 +82,22 @@ export const HOME_WIDTH = 3;
  */
 export const HOME_CENTRE_OFFSET = 1;
 
-// Turtle dive timing
-export const TURTLE_DIVE_DURATION = 2000;    // ms underwater
-export const TURTLE_SURFACE_DURATION = 4000; // ms above water
+/**
+ * Turtle dive timing.
+ *
+ * A set does not vanish from under the frog without warning: it spends
+ * TURTLE_WARNING_MS half-submerged first, still solid, which is the
+ * player's cue to hop off. The arcade animates the same tell.
+ */
+export const TURTLE_SURFACE_DURATION = 4000; // ms fully up
+export const TURTLE_WARNING_MS = 1200;       // ms going down, still footing
+export const TURTLE_DIVE_DURATION = 2000;    // ms under, and deadly
+
+/** How fast the GAME OVER prompt blinks, in ticks per state. */
+export const GAME_OVER_BLINK_FRAMES = 12;
+
+/** A turtle on its way down, drawn lower than one riding high. */
+export const TURTLE_SINKING_GLYPH = '.o.';
 
 /**
  * Widths in grid cells.
@@ -188,6 +201,7 @@ export const BG_COLORS = {
 export const SPRITE_FG = {
   log: 'gray',
   turtle: 'lightgreen',
+  turtleSinking: 'green',   // dimmer: the set is on its way under
   crocodile: 'lightgreen',
   crocodileMouth: 'lightred',
   otter: 'lightcyan',

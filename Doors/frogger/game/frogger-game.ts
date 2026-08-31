@@ -35,6 +35,9 @@ import {
   LOG_END_LEFT,
   LOG_END_RIGHT,
   TURTLE_GLYPH,
+  TURTLE_SINKING_GLYPH,
+  TURTLE_WARNING_MS,
+  GAME_OVER_BLINK_FRAMES,
   MOUTH_GLYPH,
   CROCODILE_BODY,
   OTTER_BODY,
@@ -519,15 +522,27 @@ export class FroggerGame {
   private updateTurtle(obj: RiverObject): void {
     if (obj.type !== 'turtle' || !obj.canDive) return;
 
+    obj.diveStage = obj.diveStage ?? 'up';
     obj.diveTimer = (obj.diveTimer || 0) + GAME_TICK_MS;
 
-    if (obj.isDiving && obj.diveTimer >= TURTLE_DIVE_DURATION) {
-      obj.isDiving = false;
-      obj.diveTimer = 0;
-    } else if (!obj.isDiving && obj.diveTimer >= TURTLE_SURFACE_DURATION) {
-      obj.isDiving = true;
+    // Up, then going down, then under, then up again. The middle stage is
+    // the warning: the set is drawn lower but is still solid ground, so a
+    // player watching the water has time to hop off. Without it a set
+    // vanished from under the frog with no tell at all.
+    const stages: Array<{ stage: 'up' | 'sinking' | 'down'; ms: number }> = [
+      { stage: 'up', ms: TURTLE_SURFACE_DURATION },
+      { stage: 'sinking', ms: TURTLE_WARNING_MS },
+      { stage: 'down', ms: TURTLE_DIVE_DURATION },
+    ];
+
+    const here = stages.findIndex(s => s.stage === obj.diveStage);
+    if (obj.diveTimer >= stages[here].ms) {
+      obj.diveStage = stages[(here + 1) % stages.length].stage;
       obj.diveTimer = 0;
     }
+
+    // Only a set that is fully under drowns the frog on it.
+    obj.isDiving = obj.diveStage === 'down';
   }
 
   /** Walk the median snakes back and forth. */
@@ -1025,12 +1040,51 @@ export class FroggerGame {
       lines.push(line);
     }
 
+    // Losing the last frog used to leave the board frozen with nothing on
+    // it: the state was set, and nothing ever drew it.
+    if (d.state === 'gameover') this.overlayGameOver(lines);
+
     lines.push('');
     const timeBar = '='.repeat(Math.max(0, Math.floor(d.timeRemaining / 2)));
     const timeColor = d.timeRemaining <= 10 ? 'red' : 'yellow';
     lines.push(`{${timeColor}-fg}TIME: [${timeBar.padEnd(30, ' ')}]{/}`);
 
     this.renderCallback(lines.join('\n'));
+  }
+
+  /**
+   * The GAME OVER panel, laid over the middle of the board.
+   *
+   * The cabinet blinks GAME OVER and asks for a coin; a BBS door has no
+   * coin slot, so it asks for a key.
+   */
+  private overlayGameOver(lines: string[]): void {
+    const d = this.data;
+    const width = GRID_WIDTH * CELL_WIDTH;
+    const showPrompt = Math.floor(d.frameCount / GAME_OVER_BLINK_FRAMES) % 2 === 0;
+
+    const panel: Array<{ text: string; colour: string }> = [
+      { text: 'GAME OVER', colour: 'lightred' },
+      { text: '', colour: 'white' },
+      { text: `SCORE ${d.score}`, colour: 'lightgreen' },
+      { text: `LEVEL ${d.level}`, colour: 'lightgreen' },
+      { text: `HOMES ${d.homesCompleted} OF 5`, colour: 'lightgreen' },
+      { text: '', colour: 'white' },
+      { text: showPrompt ? 'PRESS ENTER' : '', colour: 'lightyellow' },
+    ];
+
+    const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+
+    panel.forEach((row, i) => {
+      const y = top + i;
+      if (y >= lines.length) return;
+
+      const pad = Math.max(0, Math.floor((width - row.text.length) / 2));
+      lines[y] =
+        `{black-bg}${' '.repeat(pad)}` +
+        `{${row.colour}-fg}${row.text}{/${row.colour}-fg}` +
+        `${' '.repeat(Math.max(0, width - pad - row.text.length))}{/black-bg}`;
+    });
   }
 
   /** The ground: road, water, the banks and the median, and the hedge. */
@@ -1175,8 +1229,16 @@ export class FroggerGame {
           // Under the surface: nothing to stand on, and nothing to see.
           return { text: ' '.repeat(span), fg: 'white', bg: BG_COLORS.water };
         }
-        const turtles = TURTLE_GLYPH.repeat(Math.ceil(span / TURTLE_GLYPH.length));
-        return { text: turtles.slice(0, span), fg: SPRITE_FG.turtle };
+        // A sinking set is drawn low, and dimmer, so the tell is visible
+        // at a glance rather than only to someone counting seconds.
+        const sinking = (obj as RiverObject).diveStage === 'sinking';
+        const glyph = sinking ? TURTLE_SINKING_GLYPH : TURTLE_GLYPH;
+        const turtles = glyph.repeat(Math.ceil(span / glyph.length));
+
+        return {
+          text: turtles.slice(0, span),
+          fg: sinking ? SPRITE_FG.turtleSinking : SPRITE_FG.turtle,
+        };
       }
 
       case 'crocodile': {

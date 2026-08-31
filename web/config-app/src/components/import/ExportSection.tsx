@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { apiClient } from '../../api/client';
 import { useNotification } from '../../contexts/NotificationContext';
 
 interface ExportOptions {
@@ -45,9 +46,7 @@ export function ExportSection() {
   const loadExports = async () => {
     try {
       const response = await fetch('/api/import/export/list', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: apiClient.authHeaders(),
       });
 
       if (response.ok) {
@@ -65,10 +64,7 @@ export function ExportSection() {
     try {
       const response = await fetch('/api/import/export/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: apiClient.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(options),
       });
 
@@ -88,9 +84,15 @@ export function ExportSection() {
     }
   };
 
-  const handleDownload = (filename: string) => {
-    const token = localStorage.getItem('token');
-    window.open(`/api/import/export/download/${filename}?token=${token}`, '_blank');
+  const handleDownload = async (filename: string) => {
+    // The token went in a query string, and the auth middleware reads the
+    // Authorization header and nothing else - so this download 401'd whatever
+    // the key was called.
+    try {
+      await apiClient.downloadFile(`/api/import/export/download/${filename}`, filename);
+    } catch (err) {
+      showError(`Download failed: ${(err as Error).message}`);
+    }
   };
 
   const handleDelete = async (filename: string) => {
@@ -109,9 +111,7 @@ export function ExportSection() {
     try {
       const response = await fetch(`/api/import/export/${filename}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: apiClient.authHeaders(),
       });
 
       if (response.ok) {

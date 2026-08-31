@@ -123,8 +123,20 @@ export declare const HOME_WIDTH = 3;
  * forgiving in a way the arcade is famous for not being.
  */
 export declare const HOME_CENTRE_OFFSET = 1;
-export declare const TURTLE_DIVE_DURATION = 2000;
+/**
+ * Turtle dive timing.
+ *
+ * A set does not vanish from under the frog without warning: it spends
+ * TURTLE_WARNING_MS half-submerged first, still solid, which is the
+ * player's cue to hop off. The arcade animates the same tell.
+ */
 export declare const TURTLE_SURFACE_DURATION = 4000;
+export declare const TURTLE_WARNING_MS = 1200;
+export declare const TURTLE_DIVE_DURATION = 2000;
+/** How fast the GAME OVER prompt blinks, in ticks per state. */
+export declare const GAME_OVER_BLINK_FRAMES = 12;
+/** A turtle on its way down, drawn lower than one riding high. */
+export declare const TURTLE_SINKING_GLYPH = ".o.";
 /**
  * Widths in grid cells.
  *
@@ -215,6 +227,7 @@ export declare const BG_COLORS: {
 export declare const SPRITE_FG: {
     log: string;
     turtle: string;
+    turtleSinking: string;
     crocodile: string;
     crocodileMouth: string;
     otter: string;

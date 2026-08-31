@@ -9,8 +9,8 @@
  */
 
 import * as fs from 'fs';
+import { applyTooltypes, readTooltypeMap } from '../utils/info-file.util';
 import * as path from 'path';
-import { InfoFileParser } from './info-file-parser';
 import { applyConferenceFields } from './config-services/conference-info-file.service';
 
 export interface ConferenceHealthCheck {
@@ -128,14 +128,7 @@ export class ConferenceSetupService {
       if (result.exists) {
         // Read NDIRS from Conf{N}.info
         try {
-          const buffer = fs.readFileSync(confInfoPath);
-          const parser = new InfoFileParser();
-          const parsed = parser.parse(buffer);
-
-          const toolTypes = new Map<string, string>();
-          for (const [key, value] of parsed.toolTypes.entries()) {
-            toolTypes.set(key.toUpperCase(), value);
-          }
+          const toolTypes = readTooltypeMap(confInfoPath);
 
           const ndirsStr = toolTypes.get('NDIRS');
           const ndirs = ndirsStr ? parseInt(ndirsStr, 10) || 1 : 1;
@@ -175,14 +168,7 @@ export class ConferenceSetupService {
     }
 
     try {
-      const buffer = fs.readFileSync(confConfigPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
-
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
-        toolTypes.set(key.toUpperCase(), value);
-      }
+      const toolTypes = readTooltypeMap(confConfigPath);
 
       const nconfsStr = toolTypes.get('NCONFS');
       const nconfs = nconfsStr ? parseInt(nconfsStr, 10) || 1 : 1;
@@ -308,8 +294,6 @@ console.log(`[ConferenceSetup] Conf${conferenceId}.info already exists, skipping
     if (privateConf) tooltypes.push('PRIVATE=1');
     if (readOnly) tooltypes.push('READ_ONLY=1');
 
-    // Create .info file using InfoFileParser (writes in Amiga format)
-    const parser = new InfoFileParser();
     const toolTypeMap = new Map<string, string>();
     for (const tt of tooltypes) {
       const [key, value] = tt.split('=');
@@ -318,9 +302,7 @@ console.log(`[ConferenceSetup] Conf${conferenceId}.info already exists, skipping
       }
     }
 
-    const infoData = parser.write(toolTypeMap);
-
-    fs.writeFileSync(confInfoPath, infoData);
+    applyTooltypes(confInfoPath, toolTypeMap);
 console.log(`[ConferenceSetup] Created Conf${conferenceId}.info with ${tooltypes.length} tooltypes`);
   }
 
@@ -376,14 +358,7 @@ console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
     }
 
     // Read existing ConfConfig.info
-    const buffer = fs.readFileSync(confConfigPath);
-    const parser = new InfoFileParser();
-    const parsed = parser.parse(buffer);
-
-    const toolTypes = new Map<string, string>();
-    for (const [key, value] of parsed.toolTypes.entries()) {
-      toolTypes.set(key.toUpperCase(), value);
-    }
+    const toolTypes = readTooltypeMap(confConfigPath);
 
     // Get current NCONFS
     const nconfsStr = toolTypes.get('NCONFS');
@@ -394,19 +369,17 @@ console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
       throw new Error(`Conference ID ${conferenceId} is too high - current NCONFS is ${currentNconfs}`);
     }
 
-    // Update NCONFS if needed
+    // Only the three keys this call owns are written. ConfConfig.info holds
+    // NAME.n / LOCATION.n for every conference on the board plus the icon
+    // itself, and re-emitting the whole map is what used to destroy them.
+    const changes = new Map<string, string>();
     if (conferenceId > currentNconfs) {
-      toolTypes.set('NCONFS', conferenceId.toString());
+      changes.set('NCONFS', conferenceId.toString());
     }
+    changes.set(`NAME.${conferenceId}`, conferenceName);
+    changes.set(`LOCATION.${conferenceId}`, location);
 
-    // Add/update NAME.n and LOCATION.n
-    toolTypes.set(`NAME.${conferenceId}`, conferenceName);
-    toolTypes.set(`LOCATION.${conferenceId}`, location);
-
-    // Write updated ConfConfig.info
-    const infoData = parser.write(toolTypes);
-
-    fs.writeFileSync(confConfigPath, infoData);
+    applyTooltypes(confConfigPath, changes);
 console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(currentNconfs, conferenceId)}, NAME.${conferenceId}=${conferenceName}`);
   }
 
@@ -424,6 +397,12 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
     excludeFTP: boolean;
     privateConf: boolean;
     readOnly: boolean;
+    // express.e:5010, :4081, :4083, :5022 - all four ARE tooltypes on the
+    // conference's own icon, and were classed database-only.
+    free_downloads: boolean;
+    use_username: boolean;
+    use_realname: boolean;
+    use_internetname: boolean;
     dlpaths: { [key: number]: string };
     ulpaths: { [key: number]: string };
   }>): Promise<void> {
@@ -434,19 +413,17 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
     }
 
     // Read existing Conf{N}.info
-    const buffer = fs.readFileSync(confInfoPath);
-    const parser = new InfoFileParser();
-    const parsed = parser.parse(buffer);
-
-    const toolTypes = new Map<string, string>();
-    for (const [key, value] of parsed.toolTypes.entries()) {
-      toolTypes.set(key.toUpperCase(), value);
-    }
+    const toolTypes = readTooltypeMap(confInfoPath);
 
     // One shared map of field -> tooltype, used by the reader too, so the
     // two cannot disagree about what a setting is called. They did: this
     // wrote MIN_ACCESS and FORCE_NEWSCAN while the admin read MINACCESSLEVEL
     // and FORCENEWSCAN, so six settings never came back.
+    // What applyConferenceFields CHANGES is what gets written - a set or a
+    // delete. Re-asserting every key it left alone would rewrite tooltypes
+    // this form does not own, which is the fault being fixed here.
+    const before = new Map(toolTypes);
+
     applyConferenceFields(toolTypes, {
       name: updates.name,
       location: updates.location,
@@ -457,13 +434,18 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
       exclude_ftp: updates.excludeFTP,
       private_conf: updates.privateConf,
       read_only: updates.readOnly,
+      free_downloads: updates.free_downloads,
+      use_username: updates.use_username,
+      use_realname: updates.use_realname,
+      use_internetname: updates.use_internetname,
       dlpaths: updates.dlpaths,
       ulpaths: updates.ulpaths,
     });
 
-    // Write updated Conf{N}.info
-    const infoData = parser.write(toolTypes);
-    fs.writeFileSync(confInfoPath, infoData);
+    const assignments = [...toolTypes].filter(([key, value]) => before.get(key) !== value);
+    const removed = new Set([...before.keys()].filter(key => !toolTypes.has(key)));
+
+    applyTooltypes(confInfoPath, assignments, { removeKeys: key => removed.has(key) });
 console.log(`[ConferenceSetup] Updated Conf${conferenceId}.info`);
   }
 }
