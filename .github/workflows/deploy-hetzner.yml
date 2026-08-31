@@ -243,4 +243,24 @@
               fi
               echo "OK: doors on the volume match the image"
 
+              # Reclaim what building on the host leaves behind.
+              #
+              # Every push builds the image here, and buildkit keeps every
+              # layer it has ever built. On 2026-08-31 that was 11.8 GB of
+              # build cache and 16.3 GB of images against a 75 GB disk - 60%
+              # full, climbing with each deploy, and nothing ever removing
+              # any of it. A full board volume is a dead BBS, so this runs on
+              # every deploy rather than waiting for someone to notice.
+              #
+              # Deliberately conservative: cache older than a week goes (a
+              # deploy an hour from now still has yesterday's layers to build
+              # on), and only DANGLING images - `docker image prune` without
+              # -a, so nothing that is tagged or that a stopped container
+              # still needs can be taken. Volumes are never touched: the
+              # board's data is one of them.
+              echo "== reclaim: build cache older than a week, dangling images =="
+              docker builder prune -f --filter until=168h 2>&1 | tail -2 || true
+              docker image prune -f 2>&1 | tail -2 || true
+              df -h / | tail -1
+
               echo "Deploy complete: HEAD=$ACTUAL_SHA at $(date)"
