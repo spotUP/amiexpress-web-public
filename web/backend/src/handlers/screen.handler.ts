@@ -1482,8 +1482,11 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
 
     // Add prioritized location based on screen type
     if (screenDirType === ScreenDirType.NODE) {
+      // express.e:6546 - nodeScreenDir is the node's SCREENS tooltype and
+      // defaults to <bbsLoc>/Node<N>/. It is ONE directory; there is no
+      // Node<N>/Screens/ in express.e and no node on this board declares a
+      // SCREENS tooltype.
       searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
-      searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
     } else if (screenDirType === ScreenDirType.CONF) {
       // Use provided ID or fallback to session relative conference number
       const actualConfId = conferenceId || session?.relConfNum;
@@ -1512,21 +1515,14 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       // bulletin as the global BULL index screen on every login for sec-10 users.
     }
 
-    // Add standard fallbacks based on screen type to ensure compatibility
-    // with systems that share screens or use simplified directory structures.
-    if (!searchLocations.some(l => l.dir === nodeDir)) {
-      searchLocations.push({ dir: nodeDir, desc: `Node${nodeId} (Fallback)` });
-      searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens (Fallback)` });
-    }
-    // Add global Screens/ fallback EXCEPT for NODE_BULL
-    // NODE_BULL must NOT fallback to Screens/ because BULL already displays Screens/BULL.TXT
-    // This prevents the same bulletin from being shown twice during login flow.
-    // Per express.e:6551-6553, NODE_BULL specifically uses nodeScreenDir for BULL.TXT
-    const isNodeBull = screenName.toUpperCase() === 'NODE_BULL';
-    if (!isNodeBull && !searchLocations.some(l => l.dir === globalScreensDir)) {
-      searchLocations.push({ dir: globalScreensDir, desc: 'Screens (Fallback)' });
-    }
-    
+    // express.e has NO cross-directory fallback: displayScreen() builds one
+    // path from the screen's own directory and returns FALSE when the file is
+    // not there. The Node<N>, Node<N>/Screens and global Screens/ fallbacks
+    // that used to live here were this port's invention, and they hid four
+    // screens that a real Amiga would never have displayed (AWAITSCREEN,
+    // BBSTITLE, SCREEN_BULL and the LOGON security variants) until each was
+    // moved to the directory express.e reads.
+    //
     screenDebug(`[loadScreenFile] Search locations for ${screenName}:`, searchLocations.map(l => l.desc));
   }
 
