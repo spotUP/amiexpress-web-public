@@ -19,7 +19,9 @@ import {
   promptCommandNames,
   promptGhost,
   promptComplete,
+  promptCompleteNth,
   resetPromptCompleter,
+  __setCompleterForTests,
   COMPLETER_TOOLTYPE,
 } from '../../src/handlers/command-handler/prompt-completion';
 import { INTERNAL_COMMAND_NAMES } from '../../src/handlers/command-handler/internal-command-names';
@@ -172,5 +174,65 @@ describe('the internal command list cannot drift', () => {
 
     expect(cases.length).toBeGreaterThan(20);
     expect([...INTERNAL_COMMAND_NAMES].sort()).toEqual([...cases].sort());
+  });
+});
+
+describe('pressing TAB again when the first guess was wrong', () => {
+  // The door's own suite covers the completion RULES against the same cases
+  // as the C implementation. What is covered here is the BBS half: that the
+  // press index reaches the completer and that wrapping is honoured.
+  const fake = {
+    ghost: () => '',
+    complete: (buffer: string, names: readonly string[]) =>
+      names.find(n => n.toLowerCase().startsWith(buffer.toLowerCase())) ?? buffer,
+    candidates: (buffer: string, names: readonly string[]) =>
+      names.filter(n => n.toLowerCase().startsWith(buffer.toLowerCase())),
+    completeNth: (buffer: string, names: readonly string[], index: number) => {
+      const c = names.filter(n => n.toLowerCase().startsWith(buffer.toLowerCase()));
+      if (c.length === 0) return buffer;
+      return c[((index % c.length) + c.length) % c.length];
+    },
+  };
+
+  beforeEach(() => {
+    commandCache.bbscmd.clear();
+    commandCache.bbscmd.set('DOORREPO', { name: 'DOORREPO' } as any);
+    commandCache.bbscmd.set('DOORS', { name: 'DOORS' } as any);
+    __setCompleterForTests(fake);
+  });
+
+  afterEach(() => resetPromptCompleter());
+
+  it('advances through the candidates instead of repeating one', async () => {
+    // "the autocomplete door doesnt autocomplete DOORS, it autocompletes to
+    // DOOR". Both are real commands and "do" is genuinely ambiguous, so the
+    // first answer cannot always be right - what matters is that there is a
+    // way onwards that is not deleting and retyping.
+    const seen: string[] = [];
+    for (let press = 0; press < 3; press++) {
+      seen.push((await promptCompleteNth('/unused', 'do', press)).line);
+    }
+
+    expect(new Set(seen).size).toBeGreaterThan(1);
+    expect(seen).toContain('DOORS');
+  });
+
+  it('wraps rather than running out', async () => {
+    const { line, count } = await promptCompleteNth('/unused', 'do', 0);
+    expect(count).toBeGreaterThan(1);
+    expect((await promptCompleteNth('/unused', 'do', count)).line).toBe(line);
+  });
+
+  it('does nothing when no completer door is installed', async () => {
+    __setCompleterForTests(null);
+    expect((await promptCompleteNth('/unused', 'do', 3)).line).toBe('do');
+  });
+
+  it('still works with a completer door that predates cycling', async () => {
+    // completeNth and candidates are optional on the interface; an older
+    // door just always answers the first candidate rather than failing.
+    __setCompleterForTests({ ghost: fake.ghost, complete: fake.complete } as any);
+    const { line } = await promptCompleteNth('/unused', 'do', 2);
+    expect(line).toBe('DOOR');
   });
 });

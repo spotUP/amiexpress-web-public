@@ -6,7 +6,7 @@
  * behaviour: if these two suites ever disagree, one of them is wrong.
  */
 import assert from 'assert';
-import { suggestCommands, ghostFor, completeBuffer } from '../completion';
+import { suggestCommands, ghostFor, completeBuffer, completionCandidates, completeNth } from '../completion';
 
 /** The DoorRepo command set, so the C cases transfer unchanged. */
 const NAMES = [
@@ -96,4 +96,34 @@ export async function anEmptyCommandListIsHarmless(): Promise<void> {
   assert.deepStrictEqual(suggestCommands('in', []), []);
   assert.strictEqual(ghostFor('in', []), '');
   assert.strictEqual(completeBuffer('in', []), 'in');
+}
+
+export async function tabCyclesWhenTheFirstGuessIsWrong(): Promise<void> {
+  // "the autocomplete door doesnt autocomplete DOORS, it autocompletes to
+  // DOOR". Both are real commands and "do" is genuinely ambiguous, so the
+  // first answer cannot always be right - what matters is that there is a
+  // way forward that is not deleting and typing more.
+  const names = ['DOOR', 'DOORREPO', 'DOORS'];
+
+  assert.strictEqual(completeNth('do', names, 0), 'DOOR');
+  assert.strictEqual(completeNth('do', names, 1), 'DOORREPO');
+  assert.strictEqual(completeNth('do', names, 2), 'DOORS');
+}
+
+export async function cyclingWrapsRatherThanRunningOut(): Promise<void> {
+  const names = ['DOOR', 'DOORS'];
+  assert.strictEqual(completeNth('do', names, 2), 'DOOR', 'back to the first');
+  assert.strictEqual(completeNth('do', names, 3), 'DOORS');
+  assert.strictEqual(completeNth('do', names, -1), 'DOORS', 'and backwards');
+}
+
+export async function cyclingOnlyOffersPrefixMatches(): Promise<void> {
+  // A name the letters merely appear INSIDE must never be typed for you.
+  const names = ['UNINSTALL', 'INSTALL'];
+  assert.deepStrictEqual(completionCandidates('install', names), ['INSTALL']);
+}
+
+export async function cyclingLeavesAnArgumentAlone(): Promise<void> {
+  assert.deepStrictEqual(completionCandidates('find dung', ['FIND']), []);
+  assert.strictEqual(completeNth('find dung', ['FIND'], 0), 'find dung');
 }

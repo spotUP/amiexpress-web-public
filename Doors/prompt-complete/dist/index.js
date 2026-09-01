@@ -35,7 +35,7 @@
 // Explicit .js: this is emitted as ES2020 and imported by the BBS with a
 // file:// URL, and Node's ESM resolver does not guess extensions. It only
 // worked without this because the dev backend runs under tsx, which does.
-import { suggestCommands, ghostFor, completeBuffer } from './completion.js';
+import { suggestCommands, ghostFor, completeBuffer, completionCandidates, completeNth } from './completion.js';
 /**
  * The interface the BBS calls. Kept deliberately small and pure - names in,
  * text out - so this door never needs the socket, the session, or an
@@ -50,8 +50,19 @@ export const promptCompleter = {
     complete(buffer, names) {
         return completeBuffer(buffer, names);
     },
+    /**
+     * The line after the (index+1)th TAB. Pressing TAB again on the same word
+     * advances through the candidates rather than repeating the first one.
+     */
+    completeNth(buffer, names, index) {
+        return completeNth(buffer, names, index);
+    },
+    /** How many commands the typed word could still become. */
+    candidates(buffer, names) {
+        return completionCandidates(buffer, names);
+    },
 };
-export { suggestCommands, ghostFor, completeBuffer };
+export { suggestCommands, ghostFor, completeBuffer, completionCandidates, completeNth };
 /**
  * The door's own screen. Deliberately a report rather than a UI: the
  * feature lives at the prompt, so there is nothing to drive in here.

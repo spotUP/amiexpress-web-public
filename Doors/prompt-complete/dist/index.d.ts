@@ -32,7 +32,7 @@
  * active. There is nothing to configure yet; the completion happens at the
  * prompt, not in here.
  */
-import { suggestCommands, ghostFor, completeBuffer } from './completion';
+import { suggestCommands, ghostFor, completeBuffer, completionCandidates, completeNth } from './completion.js';
 /**
  * The interface the BBS calls. Kept deliberately small and pure - names in,
  * text out - so this door never needs the socket, the session, or an
@@ -43,8 +43,15 @@ export declare const promptCompleter: {
     ghost(buffer: string, names: readonly string[]): string;
     /** The line after TAB is pressed. */
     complete(buffer: string, names: readonly string[]): string;
+    /**
+     * The line after the (index+1)th TAB. Pressing TAB again on the same word
+     * advances through the candidates rather than repeating the first one.
+     */
+    completeNth(buffer: string, names: readonly string[], index: number): string;
+    /** How many commands the typed word could still become. */
+    candidates(buffer: string, names: readonly string[]): string[];
 };
-export { suggestCommands, ghostFor, completeBuffer };
+export { suggestCommands, ghostFor, completeBuffer, completionCandidates, completeNth };
 interface DoorSession {
     user?: {
         username?: string;

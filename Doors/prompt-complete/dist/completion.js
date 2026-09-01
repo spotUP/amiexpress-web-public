@@ -100,4 +100,36 @@ export function completeBuffer(buffer, names) {
     }
     return buffer;
 }
+/**
+ * Every command the typed word could still become, best first.
+ *
+ * Prefix matches ONLY - these are the candidates TAB will cycle through,
+ * and completing to a name the letters merely appear inside would put a
+ * word on the line nobody asked for. `suggestCommands` is the wider list
+ * (it also offers contains-matches, for a menu that wanted to show them);
+ * this is the narrower one that may be typed FOR you.
+ */
+export function completionCandidates(buffer, names) {
+    const verb = verbOf(buffer);
+    if (verb === null || verb === '')
+        return [];
+    return names.filter(name => name.toLowerCase().startsWith(verb));
+}
+/**
+ * The nth candidate, wrapping round.
+ *
+ * TAB on "do" answers DOOR, which is the first of DOOR, DOORREPO, DOORS -
+ * and if DOOR is not what was wanted there has to be a way forward other
+ * than deleting and typing more. Pressing TAB again advances, the way
+ * readline's menu-complete does. `index` wraps, so the fourth press on a
+ * three-candidate word is the first candidate again.
+ */
+export function completeNth(buffer, names, index) {
+    const candidates = completionCandidates(buffer, names);
+    if (candidates.length === 0)
+        return buffer;
+    const wrapped = ((index % candidates.length) + candidates.length) % candidates.length;
+    const indent = buffer.slice(0, buffer.length - buffer.trimStart().length);
+    return indent + candidates[wrapped];
+}
 //# sourceMappingURL=completion.js.map

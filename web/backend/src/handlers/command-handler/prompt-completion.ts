@@ -39,6 +39,9 @@ import { INTERNAL_COMMAND_NAMES } from './internal-command-names';
 export interface PromptCompleter {
   ghost(buffer: string, names: readonly string[]): string;
   complete(buffer: string, names: readonly string[]): string;
+  /** Optional: older completer doors may not have these. */
+  completeNth?(buffer: string, names: readonly string[], index: number): string;
+  candidates?(buffer: string, names: readonly string[]): string[];
 }
 
 /** The tooltype a door sets to declare itself the prompt's completer. */
@@ -54,6 +57,19 @@ let cached: PromptCompleter | null | undefined;
 /** Drop the cache. Called when the command cache is rebuilt, and by tests. */
 export function resetPromptCompleter(): void {
   cached = undefined;
+}
+
+/**
+ * Install a completer directly, for tests.
+ *
+ * The real one is loaded with `await import()` from a door's dist, which
+ * jest cannot do - the door is ESM and the suite is not, so the import
+ * fails and the completer resolves to null. The door's OWN suite covers
+ * the completion rules; what this lets the backend suite cover is its own
+ * half: that the press index is threaded through and the state resets.
+ */
+export function __setCompleterForTests(completer: PromptCompleter | null): void {
+  cached = completer;
 }
 
 /**
@@ -146,6 +162,37 @@ export async function promptComplete(bbsRoot: string, buffer: string): Promise<s
     return completer.complete(buffer, promptCommandNames()) || buffer;
   } catch {
     return buffer;
+  }
+}
+
+/**
+ * What TAB should put on the line, given how many times it has been pressed
+ * on this same word.
+ *
+ * "do" is genuinely ambiguous - DOOR, DOORREPO and DOORS are all real - so
+ * the first answer cannot always be the wanted one. Pressing TAB again
+ * advances instead of repeating it, the way readline's menu-complete does.
+ * Reported as "it doesn't autocomplete DOORS, it autocompletes to DOOR".
+ *
+ * `press` counts from 0. A completer door that predates cycling still works;
+ * it just always answers the first candidate.
+ */
+export async function promptCompleteNth(
+  bbsRoot: string,
+  buffer: string,
+  press: number
+): Promise<{ line: string; count: number }> {
+  const completer = await loadCompleter(bbsRoot);
+  if (!completer) return { line: buffer, count: 0 };
+  try {
+    const names = promptCommandNames();
+    const count = completer.candidates ? completer.candidates(buffer, names).length : 0;
+    const line = completer.completeNth
+      ? completer.completeNth(buffer, names, press)
+      : completer.complete(buffer, names);
+    return { line: line || buffer, count };
+  } catch {
+    return { line: buffer, count: 0 };
   }
 }
 

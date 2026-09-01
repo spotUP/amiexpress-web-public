@@ -45,4 +45,24 @@ export declare function ghostFor(buffer: string, names: readonly string[]): stri
  * Leading whitespace is preserved: it is the user's, not ours.
  */
 export declare function completeBuffer(buffer: string, names: readonly string[]): string;
+/**
+ * Every command the typed word could still become, best first.
+ *
+ * Prefix matches ONLY - these are the candidates TAB will cycle through,
+ * and completing to a name the letters merely appear inside would put a
+ * word on the line nobody asked for. `suggestCommands` is the wider list
+ * (it also offers contains-matches, for a menu that wanted to show them);
+ * this is the narrower one that may be typed FOR you.
+ */
+export declare function completionCandidates(buffer: string, names: readonly string[]): string[];
+/**
+ * The nth candidate, wrapping round.
+ *
+ * TAB on "do" answers DOOR, which is the first of DOOR, DOORREPO, DOORS -
+ * and if DOOR is not what was wanted there has to be a way forward other
+ * than deleting and typing more. Pressing TAB again advances, the way
+ * readline's menu-complete does. `index` wraps, so the fourth press on a
+ * three-candidate word is the first candidate again.
+ */
+export declare function completeNth(buffer: string, names: readonly string[], index: number): string;
 //# sourceMappingURL=completion.d.ts.map

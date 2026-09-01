@@ -3852,8 +3852,20 @@ console.log(' Empty command, redisplaying menu');
     // on a real Amiga alike (express.e's lineInput has no TAB case), so
     // this adds a meaning rather than changing one.
     if (data === '\t') {
-      const { promptComplete, promptGhost, renderGhost } = require('./command-handler/prompt-completion');
-      const completed = await promptComplete(config.get('dataDir'), session.inputBuffer || '');
+      const { promptCompleteNth, promptGhost, renderGhost } = require('./command-handler/prompt-completion');
+
+      // Pressing TAB again on the SAME word advances to the next candidate
+      // rather than repeating the first. "do" is ambiguous between DOOR,
+      // DOORREPO and DOORS, so the first answer cannot always be the wanted
+      // one; the state resets the moment the line is edited.
+      const cycle = (session as any)._promptCycle;
+      const sameWord = cycle && cycle.result === session.inputBuffer;
+      const press = sameWord ? cycle.press + 1 : 0;
+      const from = sameWord ? cycle.from : (session.inputBuffer || '');
+
+      const { line: completed } = await promptCompleteNth(config.get('dataDir'), from, press);
+      (session as any)._promptCycle = { from, press, result: completed };
+
       if (completed !== session.inputBuffer) {
         // Redraw the WHOLE word rather than appending the tail: the
         // completion uses the command's own spelling, so accepting "do"
@@ -3897,6 +3909,10 @@ console.log(' Empty command, redisplaying menu');
     if (session.inputBuffer.length === 0) {
       (session as any)._readCommandCurpos = 0;
     }
+
+    // Any edit that is not TAB ends the cycle: the candidate list is about
+    // the word that was typed, and the word just changed.
+    (session as any)._promptCycle = undefined;
 
     // The grey tail, redrawn after every change to the line. Only when the
     // cursor is at the END: mid-line editing has text to the right of the
