@@ -42,16 +42,36 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatabaseConnection = void 0;
+exports.defaultDatabasePath = defaultDatabasePath;
 exports.getDatabase = getDatabase;
 exports.closeDatabase = closeDatabase;
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
+// The narrow subpath, not the package root: this needs one path helper, not
+// the SDK's audio engine.
+const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
+/**
+ * Where the chess games live: `Doors/grandmaster/data/grandmaster.db`.
+ *
+ * It was `process.cwd() + data/grandmaster.db`, and the backend's cwd on the
+ * board is /app/web/backend - which is the container's own filesystem, not the
+ * /app/data volume. Every deploy replaces that container, so every saved game,
+ * rating and match history would have gone with it, several times a day. A
+ * door's own directory is on the volume and the deploy syncs it without
+ * deleting, which is why Doors/dopewars/data/dopewars.db has survived since
+ * August.
+ *
+ * `startDir` is a module's `__dirname`: the source tree in development and
+ * dist/ in production, so the door root is resolved rather than assumed.
+ */
+function defaultDatabasePath(startDir = __dirname) {
+    return path.join((0, settings_1.resolveDoorRoot)(startDir), 'data', 'grandmaster.db');
+}
 class DatabaseConnection {
     constructor(dbPath) {
         this.db = null;
-        // Default to project data directory
-        this.dbPath = dbPath || path.join(process.cwd(), 'data', 'grandmaster.db');
+        this.dbPath = dbPath || defaultDatabasePath();
     }
     /**
      * Open database connection

@@ -6,6 +6,9 @@
  * - RPC calls from client for save/load operations
  */
 import * as fs from 'fs';
+// The narrow subpath, not the package root: one path helper, not the SDK's
+// audio engine.
+import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import * as path from 'path';
 const MAX_HIGHSCORES = 10;
 /**
@@ -24,16 +27,8 @@ const MAX_HIGHSCORES = 10;
  * wiped the board.
  */
 function getDoorRoot() {
-    let dir = __dirname;
-    for (let i = 0; i < 5; i++) {
-        if (fs.existsSync(path.join(dir, 'package.json')))
-            return dir;
-        const parent = path.dirname(dir);
-        if (parent === dir)
-            break;
-        dir = parent;
-    }
-    return __dirname;
+    // The walk lives in the SDK now - resolveDoorRoot.
+    return resolveDoorRoot(__dirname);
 }
 /**
  * Get the highscores file path
