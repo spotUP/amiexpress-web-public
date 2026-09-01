@@ -3397,13 +3397,58 @@ BBS Door SDK v2.0{/gray-fg}
   private buildCanvasContent(cellAt: (x: number, y: number) => Cell): string {
     const rows: string[] = [];
     for (let y = 0; y < this.canvasH; y++) {
-      let row = '';
-      for (let x = 0; x < this.canvasW; x++) {
-        row += this.cellToDisplayTag(cellAt(x, y), this.scaleX);
+      // Built per sub-row, not once and repeated: a half-block cell shows
+      // DIFFERENT content in the top half of its magnified box than in the
+      // bottom, because its two halves are pixels.
+      for (let sub = 0; sub < this.scaleY; sub++) {
+        let row = '';
+        for (let x = 0; x < this.canvasW; x++) {
+          row += this.magnifiedCellTag(cellAt(x, y), sub);
+        }
+        rows.push(row);
       }
-      for (let n = 0; n < this.scaleY; n++) rows.push(row);
     }
     return rows.join('\n');
+  }
+
+  /**
+   * One cell's appearance in sub-row `sub` of its magnified box.
+   *
+   * At scale 1 this is just the cell. Magnified, a half-block glyph must be
+   * RESOLVED rather than repeated: '▀' drawn four times down is four rows of
+   * "upper half filled" - stripes - when what magnification means is two
+   * solid rows of the top colour over two of the bottom. Reported from the
+   * sprite studio, where a crocodile came out as horizontal bars.
+   *
+   * An ordinary character is not a pixel pair, so it is repeated as before.
+   * An odd scale gives the extra row to the TOP half, matching how the
+   * half-block cursor already treats the upper row as the default.
+   */
+  private magnifiedCellTag(cell: Cell, sub: number): string {
+    if (this.scaleY === 1 || cell.transparent) {
+      return this.cellToDisplayTag(cell, this.scaleX);
+    }
+
+    const isUpper = cell.char === HALF_BLOCK.UPPER;
+    const isLower = cell.char === HALF_BLOCK.LOWER;
+    const isFull = cell.char === HALF_BLOCK.FULL;
+    if (!isUpper && !isLower && !isFull) {
+      return this.cellToDisplayTag(cell, this.scaleX);
+    }
+
+    // Which colour this sub-row is showing. '▀' paints fg on top and bg
+    // below; '▄' is the same glyph pair with the roles swapped; '█' is one
+    // colour throughout.
+    const topHalf = Math.ceil(this.scaleY / 2);
+    const inTop = sub < topHalf;
+    let colour: number;
+    if (isFull) colour = cell.fg;
+    else if (isUpper) colour = inTop ? cell.fg : cell.bg;
+    else colour = inTop ? cell.bg : cell.fg;
+
+    // Solid, as a full block in that colour on that colour - so the row
+    // reads as one flat area however the terminal renders block glyphs.
+    return this.cellToDisplayTag({ char: HALF_BLOCK.FULL, fg: colour, bg: colour }, this.scaleX);
   }
 
   private cellToDisplayTag(cell: Cell, repeat: number = 1): string {

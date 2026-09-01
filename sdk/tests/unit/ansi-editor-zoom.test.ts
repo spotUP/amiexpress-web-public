@@ -136,3 +136,70 @@ describe('ANSIEditor canvas zoom', () => {
     expect(editor.drawCursor.height).toBe(4);
   });
 });
+
+/**
+ * Magnifying half-block art.
+ *
+ * Reported from a screenshot of the sprite studio: a crocodile drawn in
+ * half blocks came out as horizontal stripes. Repeating a '▀' four times
+ * down gives four rows each showing "upper half filled" - a stripe pattern.
+ * What magnification means for that cell is two solid rows of the TOP
+ * colour then two of the BOTTOM one, because the glyph's two halves are
+ * pixels, not decoration.
+ */
+describe('ANSIEditor zoom of half-block cells', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const rowsOf = (cell: any, scale: number): string[] => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      cellScaleX: scale, cellScaleY: scale, initialMode: 'draw',
+    } as any);
+    return (editor.buildCanvasContent(() => cell) as string).split('\n');
+  };
+
+  it('splits an upper-half block into top colour over bottom colour', () => {
+    const rows = rowsOf({ char: '▀', fg: 2, bg: 4 }, 4);
+    expect(rows.length).toBe(4);
+    // The two halves must differ, and each half must be internally uniform.
+    expect(rows[0]).toBe(rows[1]);
+    expect(rows[2]).toBe(rows[3]);
+    expect(rows[0]).not.toBe(rows[2]);
+    // Solid, not striped: no half-block glyph survives magnification.
+    for (const row of rows) {
+      expect(row.includes('▀')).toBe(false);
+      expect(row.includes('▄')).toBe(false);
+    }
+  });
+
+  it('splits a lower-half block the other way up', () => {
+    const upper = rowsOf({ char: '▀', fg: 2, bg: 4 }, 4);
+    const lower = rowsOf({ char: '▄', fg: 2, bg: 4 }, 4);
+    // '▄' is '▀' with the colours swapped, so its halves are the mirror.
+    expect(lower[0]).toBe(upper[2]);
+    expect(lower[3]).toBe(upper[1]);
+  });
+
+  it('magnifies a full block as one solid colour', () => {
+    const rows = rowsOf({ char: '█', fg: 5, bg: 5 }, 4);
+    expect(new Set(rows).size).toBe(1);
+    expect(rows[0].includes('▀')).toBe(false);
+  });
+
+  it('still repeats an ordinary character, which is not a pixel pair', () => {
+    const rows = rowsOf({ char: 'A', fg: 7, bg: 0 }, 3);
+    expect(rows.length).toBe(3);
+    expect(new Set(rows).size).toBe(1);
+    expect(rows[0].includes('AAA')).toBe(true);
+  });
+
+  it('gives an odd scale the extra row to the top half', () => {
+    const rows = rowsOf({ char: '▀', fg: 2, bg: 4 }, 5);
+    expect(rows.length).toBe(5);
+    expect(rows[0]).toBe(rows[2]);          // three rows of top colour
+    expect(rows[3]).toBe(rows[4]);          // two of bottom
+    expect(rows[2]).not.toBe(rows[3]);
+  });
+});
