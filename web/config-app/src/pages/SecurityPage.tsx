@@ -43,6 +43,18 @@ export function SecurityPage() {
     () => levelsQuery.data?.data?.inUse ?? [],
     [levelsQuery.data]
   );
+
+  /**
+   * The levels this file answers for besides its own.
+   *
+   * A board whose users are level 30 with no ACS.30.info has them served by
+   * ACS.20.info, so opening "level 30" shows level 20 - correct, and baffling
+   * without this line.
+   */
+  const servedLevels = useMemo(
+    () => inUse.filter(row => row.servedBy === selectedLevel && row.level !== selectedLevel),
+    [inUse, selectedLevel]
+  );
   // Memoised for the same reason as `levels`: a fresh [] each render would
   // re-run the filter below on every render.
   const permissions: string[] = useMemo(
@@ -226,11 +238,28 @@ export function SecurityPage() {
       {selectedLevel !== null && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">
-              Level {selectedLevel} - {visibleCount === permissions.length
-                ? `${permissions.length} permissions`
-                : `${visibleCount} of ${permissions.length} permissions`}
-            </h2>
+            <div>
+              <h2 className="font-semibold">
+                Level {selectedLevel} - {visibleCount === permissions.length
+                  ? `${permissions.length} permissions`
+                  : `${visibleCount} of ${permissions.length} permissions`}
+              </h2>
+              {/*
+                Clicking a level that has no file of its own opens the file
+                that SERVES it - ACS.20.info for a board full of level-30
+                users - and the heading then says 20 with nothing to say where
+                you came from. Reported as "level 30 is labeled as level 20".
+                express.e:3025 rounds a level down to a multiple of five and
+                walks down, so the mapping is right; only the silence was
+                wrong.
+              */}
+              {servedLevels.length > 0 && (
+                <p className="text-sm text-content-muted">
+                  Also serves {servedLevels.map(l => `level ${l.level} (${l.users} user${l.users === 1 ? '' : 's'})`).join(', ')}
+                  {' '}- {servedLevels.length === 1 ? 'that level has' : 'those levels have'} no ACS file of their own
+                </p>
+              )}
+            </div>
             <button
               onClick={() => saveMutation.mutate()}
               disabled={!dirty || saveMutation.isPending}
