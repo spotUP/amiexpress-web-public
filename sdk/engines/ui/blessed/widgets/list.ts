@@ -30,8 +30,6 @@ export class List extends Element {
   private itemLineStart: number[] = [];
   private itemLineCount: number[] = [];
 
-  // Hover tracking for per-item hover effects
-  private _hoveredItem: number = -1;
   private _lastKeyTime: number = 0;
   private _lastWheelTime: number = 0;
 
@@ -71,19 +69,6 @@ export class List extends Element {
     this.interactive = options.interactive !== false;
     this.wrapItemsEnabled = options.wrapItems !== false;
 
-    // No hover highlight unless the caller asks for one.
-    //
-    // This used to default to blue-on-white for every interactive list,
-    // which is a colour no theme chose and which appeared the moment a
-    // mouse crossed the widget - reported as "if i hover with mouse i get
-    // dark blue non themed color". It also lit a SECOND row while the
-    // selection stayed lit, so two rows looked current at once.
-    //
-    // A door that wants hover feedback can say so, in its own colours. A
-    // door that does not now gets what it drew.
-    if (this.interactive && (this.style.item?.hover || this.style.hover)) {
-      this.style.item = this.style.item || {};
-    }
 
     // Update content
     this._updateContent();
@@ -226,8 +211,6 @@ export class List extends Element {
 
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
-      // Show hover highlight on non-selected items (even when focused)
-      const isHovered = index === this._hoveredItem && !isSelected;
 
       // Clearer selection markers: >> for focused, > for unfocused selection (ASCII-safe)
       const marker = isSelected ? (this.focused ? '>>' : '> ') : '  ';
@@ -235,7 +218,6 @@ export class List extends Element {
 
       // Get item styles
       const itemSelectedStyle = (this.options.style as any)?.item?.selected || (this.options.style as any)?.selected;
-      const itemHoverStyle = (this.options.style as any)?.item?.hover || (this.options.style as any)?.hover;
 
       // Apply selected or hover style via blessed tags
       let itemText = item;
@@ -276,16 +258,6 @@ export class List extends Element {
         // Highlight active selection with BOLD when focused
         if (this.focused) openTags += '{bold}';
         if (itemSelectedStyle.underline) openTags += '{underline}';
-      } else if (isHovered && itemHoverStyle) {
-        // Apply hover style to hovered item (but not selected)
-        if (itemHoverStyle.fg) {
-          openTags += `{${itemHoverStyle.fg}-fg}`;
-          closeTags = `{/${itemHoverStyle.fg}-fg}` + closeTags;
-        }
-        if (itemHoverStyle.bg) {
-          openTags += `{${itemHoverStyle.bg}-bg}`;
-          closeTags = `{/${itemHoverStyle.bg}-bg}` + closeTags;
-        }
       }
 
       if (openTags) {
@@ -965,11 +937,6 @@ export class List extends Element {
     const hasDrawnBorder = this.hasBorder();
     const border = hasDrawnBorder ? 1 : 0;
     if (this.hasScrollbar() && event.x === coords.xl - border - 1) {
-      if (this._hoveredItem !== -1) {
-        this._hoveredItem = -1;
-        this._updateContent();
-        this.screen?.render();
-      }
       return handled;
     }
 
@@ -977,11 +944,6 @@ export class List extends Element {
     const relY = event.y - coords.yi - border;
 
     if (relY < 0 || relY >= this.iheight) {
-      if (this._hoveredItem !== -1) {
-        this._hoveredItem = -1;
-        this._updateContent();
-        this.screen?.render();
-      }
       return handled;
     }
 
@@ -992,37 +954,24 @@ export class List extends Element {
     // Map line index to item index
     const itemIndex = this.lineToItem[lineIndex];
 
-    if (itemIndex !== undefined && itemIndex !== this._hoveredItem) {
-      this._hoveredItem = itemIndex;
-      this._updateContent();  // Redraw with new hover state
-      this.screen?.render();
-    } else if (itemIndex === undefined && this._hoveredItem !== -1) {
-      this._hoveredItem = -1;
-      this._updateContent();
+    // The mouse moves the SELECTION, through the same select() the arrow
+    // keys call. It used to light a separate "hovered" row instead, which
+    // meant a list had two cursors at once - the keyboard's and the
+    // mouse's, both lit, disagreeing about which row was current. There is
+    // one cursor now and the mouse takes it over, which is what pointing
+    // at a row means.
+    //
+    // select() emits 'select item', so a door that tracks the cursor (to
+    // move a marker, to update a preview pane) stays right without knowing
+    // the mouse exists.
+    if (itemIndex !== undefined && itemIndex !== this.selected) {
+      this.select(itemIndex);
       this.screen?.render();
     }
 
     return handled;
   }
 
-  // Override onMouseLeave to clear hovered item
-  onMouseLeave(): void {
-    super.onMouseLeave();
-    if (this._hoveredItem !== -1) {
-      this._hoveredItem = -1;
-      this._updateContent();  // Redraw without hover
-      this.screen?.render();
-    }
-  }
-
-  // Override hide to clear hover state
-  hide(): void {
-    if (this._hoveredItem !== -1) {
-      this._hoveredItem = -1;
-      // No need to update content or render since element is hiding
-    }
-    super.hide();
-  }
 
   // Override destroy
   destroy(): void {

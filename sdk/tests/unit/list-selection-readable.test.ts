@@ -66,8 +66,8 @@ describe('a row that colours itself', () => {
   });
 });
 
-describe('hovering does not invent a colour', () => {
-  function listWith(style: any) {
+describe('the mouse and the arrow keys share one cursor', () => {
+  function listWith(style: any, items = ['one', 'two', 'three']) {
     const screen: any = new Screen({
       output: () => {},
       input: {
@@ -76,24 +76,55 @@ describe('hovering does not invent a colour', () => {
       },
       terminal: 'xterm-256color',
     } as any);
-    return new List({
+    const list: any = new List({
       parent: screen, top: 0, left: 0, width: 30, height: 5, tags: true,
-      items: ['one', 'two'], style,
-    } as any) as any;
+      items, style,
+    } as any);
+    screen.render();
+    return list;
   }
 
   it('adds no hover style of its own', () => {
-    // It used to default to blue-on-white on every interactive list, which
-    // is a colour no theme chose and which turned up the moment a mouse
-    // crossed the widget.
+    // The widget used to default to blue-on-white, and createList injected
+    // the same blue before the widget saw the options - a colour no theme
+    // chose, appearing the moment a mouse crossed a list.
     const list = listWith({ selected: { fg: 'black', bg: 'green' } });
     const hover = list.style?.item?.hover ?? list.style?.hover;
     expect(hover).toBeUndefined();
   });
 
-  it('keeps a hover style the door actually asked for', () => {
-    const list = listWith({ item: { hover: { bg: 'magenta' } } });
-    expect(list.style.item.hover).toEqual({ bg: 'magenta' });
+  it('moves the selection when the mouse moves over a row', () => {
+    const list = listWith({ selected: { fg: 'black', bg: 'green' } });
+    list.select(0);
+
+    const coords = list._getCoords();
+    list.onMouse({ action: 'mousemove', x: coords.xi + 1, y: coords.yi + 2 } as any);
+
+    // The row under the pointer IS the selection now - not a second
+    // highlight sitting beside the keyboard's.
+    expect(list.getSelected()).toBe(2);
+  });
+
+  it('tells the door the cursor moved, so markers follow the mouse', () => {
+    const list = listWith({ selected: { fg: 'black', bg: 'green' } });
+    list.select(0);
+
+    const seen: number[] = [];
+    list.on('select item', (_item: any, index: number) => seen.push(index));
+
+    const coords = list._getCoords();
+    list.onMouse({ action: 'mousemove', x: coords.xi + 1, y: coords.yi + 1 } as any);
+
+    expect(seen).toContain(1);
+  });
+
+  it('leaves the cursor where the mouse put it after the pointer leaves', () => {
+    const list = listWith({ selected: { fg: 'black', bg: 'green' } });
+    const coords = list._getCoords();
+    list.onMouse({ action: 'mousemove', x: coords.xi + 1, y: coords.yi + 1 } as any);
+    list.onMouseLeave();
+
+    expect(list.getSelected()).toBe(1);
   });
 });
 
