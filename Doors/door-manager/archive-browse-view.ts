@@ -9,6 +9,7 @@
  */
 
 import { BaseView, sanitizeForTags } from './ViewManager';
+import { T } from './door-theme';
 
 /**
  * Only the parts of DOORMAN's layout this view touches. Typed structurally
@@ -64,12 +65,12 @@ export class ArchiveBrowseView extends BaseView {
     this.layout.setListItems(items);
     this.layout.setListSelect(0);
     this.layout.setInfo(
-      `{yellow-fg}${this.archiveName}{/yellow-fg}\n\n` +
-      `{white-fg}${visible.length} files{/white-fg}` +
-      (junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}') +
-      '\n\n{grey-fg}! = flagged as ad file{/grey-fg}'
+      `{${T.warn}-fg}${this.archiveName}{/${T.warn}-fg}\n\n` +
+      `{${T.ink}-fg}${visible.length} files{/${T.ink}-fg}` +
+      (junk > 0 ? `  {${T.alert}-fg}${junk} ad files{/${T.alert}-fg}` : `  {${T.ok}-fg}clean{/${T.ok}-fg}`) +
+      `\n\n{${T.dim}-fg}! = flagged as ad file{/${T.dim}-fg}`
     );
-    this.layout.setFooter('{center}{yellow-fg}↑/↓{/yellow-fg} Navigate  {yellow-fg}ESC/Q{/yellow-fg} Back{/center}');
+    this.layout.setFooter(`{center}{${T.warn}-fg}↑/↓{/${T.warn}-fg} Navigate  {${T.warn}-fg}ESC/Q{/${T.warn}-fg} Back{/center}`);
     this.layout.focusList();
     this.layout.render();
 

@@ -5,6 +5,8 @@
  */
 
 import * as path from 'path';
+import { runSelectedDoor } from './run-door';
+import { installedFooter } from './installed-footer';
 import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
 import { ActionLog, installLogPanel } from './action-log';
 import { ArchiveBrowseView } from './archive-browse-view';
@@ -88,83 +90,6 @@ function typeBadge(type: string): string {
             AMI:'68', amiga:'68', RX:'RX', AREXX:'RX', ARexx:'RX', RXD:'RX' } as any)[type] ?? '??';
 }
 
-function getCatalogSvc(): any {
-  for (const k of Object.keys(require.cache))
-    if (k.includes('door-catalog.service')) return require.cache[k]?.exports ?? null;
-  return null;
-}
-function getInstallsRepo(): any {
-  // Same require.cache discovery as getCatalogSvc -- door_installs is the
-  // single source of truth for what THIS node has installed.
-  for (const k of Object.keys(require.cache))
-    if (k.includes('door-installs.repository')) return require.cache[k]?.exports ?? null;
-  return null;
-}
-
-/** The backend's install recorder, if this process has it loaded. Same
- *  require.cache discovery as getInstallsRepo(): DOORMAN cannot import
- *  web/backend source paths. recordDoorInstall writes BOTH halves of an
- *  install -- the door_installs link (what getInstallsRepo().recordInstall
- *  used to write alone) and door_installed_files (the on-disk file list a
- *  delete needs) -- so both install call sites route through this instead
- *  of getInstallsRepo() directly. */
-function getInstallRecorder(): any {
-  for (const k of Object.keys(require.cache))
-    if (k.includes('door-install-record')) return require.cache[k]?.exports ?? null;
-  return null;
-}
-
-// Shared by both install call sites below: builds the recordDoorInstall
-// input from a fully-populated DoorInstallEntry (consumer mode already has
-// one; owner mode's inline callback builds an equivalent shape inline).
-// No-op + warning, not a throw, when the recorder is unavailable in this
-// process.
-// Same require.cache discovery, for the counterpart of recordInstallViaRecorder
-// below: uninstall must clear door_installed_files alongside door_installs, or
-// a stale row survives naming the OLD door's files under a command a later
-// install reuses -- a delete could then act on the wrong door's file list.
-function clearInstalledFilesViaRecorder(command: string | null | undefined): void {
-  if (!command) return;
-  const recorder = getInstallRecorder();
-  if (!recorder) {
-    console.log('[DOORMAN] warning: install recorder unavailable -- installed-file rows not cleared');
-    return;
-  }
-  recorder.clearInstalledFiles(command);
-}
-
-function recordInstallViaRecorder(entry: DoorInstallEntry): void {
-  const recorder = getInstallRecorder();
-  if (!recorder) {
-    console.log('[DOORMAN] warning: install recorder unavailable -- install not recorded locally');
-    return;
-  }
-  recorder.recordDoorInstall({
-    bbsRoot: PROJECT_ROOT,
-    command: entry.command,
-    archiveName: entry.archive_name,
-    installDir: path.join(PROJECT_ROOT, entry.install_dir),
-    infoPath: path.join(PROJECT_ROOT, 'Commands', 'BBSCmd', `${entry.command}.info`),
-    metadata: {
-      catalogId: entry.catalog_id,
-      name: entry.name,
-      description: entry.description,
-      category: entry.category,
-      version: entry.version,
-      releaseGroup: entry.release_group,
-      md5: entry.md5,
-      doorType: entry.door_type,
-      sourceUrl: entry.source_url,
-      sourceRevision: entry.source_revision,
-    },
-  });
-}
-
-function getStripLib(): any {
-  for (const k of Object.keys(require.cache))
-    if (k.includes('ami-stripper.lib')) return require.cache[k]?.exports ?? null;
-  return null;
-}
 
 /** Adapts the local catalog service's getCatalogEntryByArchive into the
  * LocalCatalogLookup shape repoDataSource's mapManifestDoorToEntry expects
@@ -260,13 +185,13 @@ class DoormanLayout {
     this.width = Math.floor((screen as any).width * 0.35) - 8;
 
     this.header = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3,
-      tags: true, style: { fg:'white', bg:'blue', border:{ fg:'blue' } }, focusable: false } as any);
+      tags: true, style: { fg: T.ink, bg: T.bar, border:{ fg: T.accentAlt } }, focusable: false } as any);
 
     this.footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-      tags: true, style: { fg:'white', bg:'blue', border:{ fg:'blue' } }, focusable: false } as any);
+      tags: true, style: { fg: T.ink, bg: T.bar, border:{ fg: T.accentAlt } }, focusable: false } as any);
 
     this.filterPanel = new Panel({ parent: screen, top: 3, left: 0, width: '35%', height: 3,
-      tags: true, style: { border:{ fg:'grey' } }, focusable: false } as any);
+      tags: true, style: { border:{ fg: T.dim } }, focusable: false } as any);
     // keys:false + inputOnFocus:false make this a DISPLAY-ONLY widget — see
     // sdk/engines/ui/blessed/widgets/textbox.ts:58-60 (keys:false skips
     // `this.on('keypress', this._onKeypress)` entirely, so Textbox's own
@@ -283,24 +208,24 @@ class DoormanLayout {
     // keys:false removes the capability structurally instead.
     this.filterBox = new Textbox({ parent: this.filterPanel, top: 0, left: 1, width: '100%-2',
       height: 1, mouse: true, keys: false, inputOnFocus: false,
-      style: { fg:'white', focus:{ fg:'yellow' } } } as any);
+      style: { fg: T.ink, focus:{ fg: T.warn } } } as any);
     (this.filterPanel as any).hide();
 
     this.listPanel = new Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6',
-      tags: true, style: { border:{ fg:'cyan' } }, focusable: false } as any);
+      tags: true, style: { border:{ fg: T.accent } }, focusable: false } as any);
 
     this.doorList = new List({ parent: this.listPanel, top: 1, left: 1, width: '100%-2',
       height: '100%-2', keys: true, vi: false, mouse: true, scrollable: true,
       alwaysScroll: true, tags: true, wrapItems: false,
-      scrollbar: { ch:' ', style:{ bg:'blue' } },
-      style: { selected:{ bg:'blue', fg:'white' }, item:{ fg:'white' } } } as any);
+      scrollbar: { ch:' ', style:{ bg: T.bar } },
+      style: { selected:{ bg: T.bar, fg: T.ink }, item:{ fg: T.ink } } } as any);
 
     this.infoPanel = new Panel({ parent: screen, top: 3, left: '35%', width: '65%',
-      height: '100%-6', tags: true, style: { border:{ fg:'blue' } }, focusable: false } as any);
+      height: '100%-6', tags: true, style: { border:{ fg: T.accentAlt } }, focusable: false } as any);
 
     this.infoBox = new ScrollableBox({ parent: this.infoPanel, top: 1, left: 1,
       width: '100%-2', height: '100%-2', tags: true, scrollable: true, keys: true,
-      style: { fg:'white' } } as any);
+      style: { fg: T.ink } } as any);
 
     // Disable type-ahead on doorList (re-add keypress without the type-ahead block)
     const _nav = (this.doorList as any)._onKeypress?.bind(this.doorList);
@@ -313,7 +238,7 @@ class DoormanLayout {
       });
     }
 
-    this.setHeader(`{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Node ${nodeId}{/white-fg}{/center}`);
+    this.setHeader(`{center}{${T.accent}-fg}DOORMAN v2{/${T.accent}-fg}  {${T.ink}-fg}Node ${nodeId}{/${T.ink}-fg}{/center}`);
   }
 
   setHeader(content: string): void { (this.header as any).setContent(content); }
@@ -361,14 +286,14 @@ class InstalledView extends BaseView {
 
   private setStatus(msg: string, col: 'green'|'red'|'yellow' = 'yellow', ms = 3000): void {
     clearTimeout(this.statusTimer);
-    this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
+    this.layout.setHeader(`{center}{${T.accent}-fg}DOORMAN v2{/${T.accent}-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
     this.layout.render();
     this.statusTimer = setTimeout(() => this.refreshHeader(), ms);
   }
 
   private refreshHeader(): void {
     const ec = this.doors.filter(d => d.enabled).length;
-    this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}${this.doors.length} doors, ${ec} enabled{/white-fg}{/center}`);
+    this.layout.setHeader(`{center}{${T.accent}-fg}DOORMAN v2{/${T.accent}-fg}  {${T.ink}-fg}${this.doors.length} doors, ${ec} enabled{/${T.ink}-fg}{/center}`);
   }
 
   private refresh(selectIdx = 0): void {
@@ -378,7 +303,7 @@ class InstalledView extends BaseView {
       const sz = formatSize(d.size).padStart(6);
       const nameW = Math.max(6, w - 14);
       const name = d.name.length > nameW ? d.name.slice(0, nameW-1)+'…' : d.name.padEnd(nameW);
-      const st = d.enabled ? '{green-fg}*{/green-fg}' : '{red-fg}-{/red-fg}';
+      const st = d.enabled ? `{${T.ok}-fg}*{/${T.ok}-fg}` : `{${T.alert}-fg}-{/${T.alert}-fg}`;
       return `${badge} ${name} ${st} ${sz}`;
     });
     this.layout.setListLabel(' INSTALLED DOORS ');
@@ -394,7 +319,7 @@ class InstalledView extends BaseView {
   private updateInfo(): void {
     const d = this.door();
     if (!d) { this.layout.setInfo('No door selected.'); return; }
-    const st = d.enabled ? '{green-fg}ENABLED{/green-fg}' : '{red-fg}DISABLED{/red-fg}';
+    const st = d.enabled ? `{${T.ok}-fg}ENABLED{/${T.ok}-fg}` : `{${T.alert}-fg}DISABLED{/${T.alert}-fg}`;
     // FILE_ID.DIZ from the catalog when this door was installed from the
     // repo (matched by installed_as == command); falls back to description.
     // Both are raw archive text — sanitize or blessed parses the art as tags.
@@ -403,25 +328,20 @@ class InstalledView extends BaseView {
       const cat = getCatalogSvc()?.getCatalogEntryByCmd?.(d.command);
       if (cat?.file_id_diz) body = '\n' + sanitizeForTags(cat.file_id_diz);
     } catch { /* catalog optional */ }
-    if (!body && d.description) body = `\n{white-fg}${sanitizeForTags(d.description)}{/white-fg}`;
+    if (!body && d.description) body = `\n{${T.ink}-fg}${sanitizeForTags(d.description)}{/${T.ink}-fg}`;
     this.layout.setInfo([
-      `{yellow-fg}Name:{/yellow-fg}    ${d.name}`,
-      `{yellow-fg}Command:{/yellow-fg} ${d.command}`,
-      `{yellow-fg}Type:{/yellow-fg}    ${d.type}`,
-      `{yellow-fg}Size:{/yellow-fg}    ${formatSize(d.size)}`,
-      `{yellow-fg}Status:{/yellow-fg}  ${st}`,
+      `{${T.warn}-fg}Name:{/${T.warn}-fg}    ${d.name}`,
+      `{${T.warn}-fg}Command:{/${T.warn}-fg} ${d.command}`,
+      `{${T.warn}-fg}Type:{/${T.warn}-fg}    ${d.type}`,
+      `{${T.warn}-fg}Size:{/${T.warn}-fg}    ${formatSize(d.size)}`,
+      `{${T.warn}-fg}Status:{/${T.warn}-fg}  ${st}`,
       body,
     ].join('\n'));
   }
 
   private updateFooter(): void {
     const d = this.door();
-    const en = (!d || d.enabled) ? 'Dis' : 'En';
-    this.layout.setFooter(
-      `{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles ` +
-      `{yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} ` +
-      `{yellow-fg}S{/yellow-fg}trip {yellow-fg}Tab{/yellow-fg}=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`
-    );
+    this.layout.setFooter(installedFooter(!d || d.enabled !== false));
   }
 
   enter(): void {
@@ -434,14 +354,15 @@ class InstalledView extends BaseView {
       this.updateInfo(); this.updateFooter(); this.layout.render();
     });
 
+    // ENTER runs the door. Bound to blessed's own 'select' event rather than
+    // keys.key(['enter']): List emits 'select' for Enter itself, and a
+    // separate key binding would fire alongside it.
+    (this.layout.doorList as any).on('select', this._onRun = () => this.doRun());
+
     this.keys.key(['tab'], () => {
       this.vm.push(new RepoView(this.layout, this.bbs));
     });
-    this.keys.key(['q', 'Q'], () => {
-      clearTimeout(this.statusTimer);
-      this.vm.destroy();
-      (this.layout.screen as any).destroy();
-    });
+    this.keys.key(['q', 'Q'], () => this.shutdown());
     this.keys.key(['u', 'U'], () => this.doUpload());
     this.keys.key(['i', 'I'], () => this.doInfoEditor());
     this.keys.key(['f', 'F'], () => this.doFileExplorer());
@@ -452,9 +373,11 @@ class InstalledView extends BaseView {
   }
 
   private _onSelectItem: any;
+  private _onRun: any;
 
   exit(): void {
     (this.layout.doorList as any).off('select item', this._onSelectItem);
+    (this.layout.doorList as any).off('select', this._onRun);
     this.keys.release();
   }
 
@@ -492,11 +415,28 @@ class InstalledView extends BaseView {
     this.vm.push(new FileExplorerOverlayView(this.layout, doorPath));
   }
 
+  /** Close the view. Q and a queued ENTER both end here. */
+  private shutdown(): void {
+    clearTimeout(this.statusTimer);
+    this.vm.destroy();
+    (this.layout.screen as any).destroy();
+  }
+
+  /** ENTER on the list. Everything but the wiring is in run-door.ts. */
+  private doRun(): void {
+    runSelectedDoor({
+      door: this.door(),
+      executeCommand: (c) => (this.bbs as any).executeCommand(c),
+      setStatus: (m, col) => this.setStatus(m, col),
+      teardown: () => this.shutdown(),
+    });
+  }
+
   private doDelete(): void {
     const d = this.door(); if (!d) return;
     const idx = this.layout.listSelected;
     this.vm.push(new ConfirmView(this.layout,
-      `Delete {yellow-fg}${d.name}{/yellow-fg}?\n\n{red-fg}This cannot be undone.{/red-fg}`,
+      `Delete {${T.warn}-fg}${d.name}{/${T.warn}-fg}?\n\n{${T.alert}-fg}This cannot be undone.{/${T.alert}-fg}`,
       'Delete', 'Cancel',
       async () => {
         const isTS = ['TS','typescript','SDK'].includes(d.type);
@@ -514,7 +454,7 @@ class InstalledView extends BaseView {
         };
         this.setStatus(`Deleting ${d.name}...`, 'yellow', 30000);
         log.ok(`${d.command}: ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
-        paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+        paint(`\n\n{${T.warn}-fg}Working...{/${T.warn}-fg}\n`);
 
         try {
           // Each step is painted AS it happens. DOORMAN runs in the backend's
@@ -524,7 +464,7 @@ class InstalledView extends BaseView {
           // one finished log after the pause.
           const onStep = (step: { kind: 'ok' | 'skip' | 'fail'; text: string }) => {
             log.add(step.kind, step.text);
-            paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+            paint(`\n\n{${T.warn}-fg}Working...{/${T.warn}-fg}\n`);
           };
           const r = await (this.bbs as any).deleteDoor(id, isTS, onStep);
           if (r.success) {
@@ -533,7 +473,7 @@ class InstalledView extends BaseView {
             // feedback (2026-08-15). Refresh again from our side, re-fetch,
             // and confirm persistently in the info panel.
             log.ok('reloading the door registry');
-            paint('\n\n{yellow-fg}Reloading...{/yellow-fg}\n');
+            paint(`\n\n{${T.warn}-fg}Reloading...{/${T.warn}-fg}\n`);
             await refreshDoorRegistry();
             this.doors = await fetchDoors(this.bbs);
             this.refresh(Math.max(0, idx - 1));
@@ -545,7 +485,7 @@ class InstalledView extends BaseView {
             if (stillListed) {
               log.fail(`${d.command} is still registered - the BBS still lists it`);
               this.setStatus(`${d.name} still listed`, 'red', 8000);
-              paint(`\n\n{red-fg}Still registered{/red-fg}\n\n` +
+              paint(`\n\n{${T.alert}-fg}Still registered{/${T.alert}-fg}\n\n` +
                 `The files were removed but ${sanitizeForTags(d.command)} is still in the door list.\n`);
               console.log(`[DOORMAN] delete incomplete: ${d.command} still in the registry after delete`);
               return;
@@ -553,17 +493,17 @@ class InstalledView extends BaseView {
 
             log.ok(`${d.command} is gone from the door list`);
             this.setStatus(`${d.name} deleted`, 'green', 8000);
-            paint(`\n\n{green-fg}Deleted{/green-fg}\n`);
+            paint(`\n\n{${T.ok}-fg}Deleted{/${T.ok}-fg}\n`);
           } else {
             log.fail(String(r.message ?? 'unknown error'));
             this.setStatus(`Failed: ${r.message}`, 'red', 8000);
-            paint(`\n\n{red-fg}Delete failed{/red-fg}\n`);
+            paint(`\n\n{${T.alert}-fg}Delete failed{/${T.alert}-fg}\n`);
             console.log(`[DOORMAN] delete failed: ${d.name}: ${r.message}`);
           }
         } catch (e: any) {
           log.fail(e?.message ?? String(e));
           this.setStatus(`Error: ${e.message}`, 'red', 8000);
-          paint(`\n\n{red-fg}Delete failed{/red-fg}\n`);
+          paint(`\n\n{${T.alert}-fg}Delete failed{/${T.alert}-fg}\n`);
           console.log(`[DOORMAN] delete error: ${d.name}: ${e?.message ?? e}`);
         }
       }
@@ -678,6 +618,15 @@ import {
   type RepoViewHotkeyHandlers,
   type ArchiveFileRow,
 } from './repo-view-helpers';
+import { T, applyTheme } from './door-theme';
+import {
+  getCatalogSvc,
+  getInstallsRepo,
+  getInstallRecorder,
+  clearInstalledFilesViaRecorder,
+  recordInstallViaRecorder,
+  getStripLib,
+} from './backend-services';
 
 class RepoView extends BaseView {
   private layout: DoormanLayout;
@@ -729,7 +678,7 @@ class RepoView extends BaseView {
 
   private setStatus(msg: string, col: 'green'|'red'|'yellow' = 'yellow', ms = 3000): void {
     clearTimeout(this.statusTimer);
-    this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
+    this.layout.setHeader(`{center}{${T.accent}-fg}DOORMAN v2  REPO{/${T.accent}-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
     this.layout.render();
     this.statusTimer = setTimeout(() => this.refreshHeader(), ms);
   }
@@ -760,8 +709,8 @@ class RepoView extends BaseView {
     // visibleEntries: rows surviving BOTH the text search (this.filter,
     // via searchCatalog) AND the system-type filter, so it always matches
     // what's actually on screen.
-    const sysTag = `  {cyan-fg}${formatSystemTag(this.systemFilter, this.visibleEntries.length)}{/cyan-fg}`;
-    this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}${sysTag}{/center}`);
+    const sysTag = `  {${T.accent}-fg}${formatSystemTag(this.systemFilter, this.visibleEntries.length)}{/${T.accent}-fg}`;
+    this.layout.setHeader(`{center}{${T.accent}-fg}DOORMAN v2  REPO{/${T.accent}-fg}  {${T.ink}-fg}${stats}${this.filter ? ' (filtered)' : ''}{/${T.ink}-fg}${sysTag}{/center}`);
   }
 
   private cycleFilter(): void {
@@ -859,17 +808,17 @@ class RepoView extends BaseView {
 
   private noEntryMessage(): string {
     if (this.repoMode.kind === 'consumer') {
-      if (this.consumerLoading) return '{yellow-fg}Loading central door-repo catalog...{/yellow-fg}';
+      if (this.consumerLoading) return `{${T.warn}-fg}Loading central door-repo catalog...{/${T.warn}-fg}`;
       if (this.consumerError) {
-        return `{red-fg}Central door-repo unavailable.{/red-fg}\n\n` +
-          `{yellow-fg}Detail:{/yellow-fg} ${sanitizeForTags(this.consumerError)}\n\n` +
+        return `{${T.alert}-fg}Central door-repo unavailable.{/${T.alert}-fg}\n\n` +
+          `{${T.warn}-fg}Detail:{/${T.warn}-fg} ${sanitizeForTags(this.consumerError)}\n\n` +
           'No offline cache is available either. Check network connectivity\n' +
           'or the DOOR_REPO_URL setting.';
       }
       return 'No entry selected.';
     }
     return this.repoUnavailable
-      ? '{yellow-fg}Repo catalog unavailable on this system.{/yellow-fg}\n\n' +
+      ? `{${T.warn}-fg}Repo catalog unavailable on this system.{/${T.warn}-fg}\n\n` +
         'Repo browsing/install runs from a dev checkout, where the door\n' +
         'catalog database and the archive files live. Installed doors on\n' +
         'this system are unaffected.'
@@ -904,15 +853,15 @@ class RepoView extends BaseView {
 
     const fileLines = renderFileLines(this.archiveFilesFor(e));
 
-    let content = `{yellow-fg}${e.archive_name}{/yellow-fg}  ${e.door_type ?? 'XIM'}` +
-      (e.version ? `  {white-fg}${sanitizeForTags(e.version)}{/white-fg}` : '') +
+    let content = `{${T.warn}-fg}${e.archive_name}{/${T.warn}-fg}  ${e.door_type ?? 'XIM'}` +
+      (e.version ? `  {${T.ink}-fg}${sanitizeForTags(e.version)}{/${T.ink}-fg}` : '') +
       (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
-      (e.installed ? `  {green-fg}[${e.installed_as}]{/green-fg}` : '');
+      (e.installed ? `  {${T.ok}-fg}[${e.installed_as}]{/${T.ok}-fg}` : '');
 
     if (e.file_id_diz) {
       content += '\n\n' + sanitizeForTags(e.file_id_diz);
     } else if (e.description) {
-      content += `\n\n{white-fg}${sanitizeForTags(e.description)}{/white-fg}`;
+      content += `\n\n{${T.ink}-fg}${sanitizeForTags(e.description)}{/${T.ink}-fg}`;
     }
     content += fileLines;
 
@@ -922,8 +871,8 @@ class RepoView extends BaseView {
     // guesses from a doc file.
     const tooltypes = formatSuggestedTooltypes(e.suggested_tooltypes);
     if (tooltypes.length > 0) {
-      content += `\n{grey-fg}─── suggested tooltypes{/grey-fg}  {grey-fg}──────────────────{/grey-fg}\n` +
-        tooltypes.map(line => `{grey-fg}${sanitizeForTags(line)}{/grey-fg}`).join('\n') + '\n';
+      content += `\n{${T.dim}-fg}─── suggested tooltypes{/${T.dim}-fg}  {${T.dim}-fg}──────────────────{/${T.dim}-fg}\n` +
+        tooltypes.map(line => `{${T.dim}-fg}${sanitizeForTags(line)}{/${T.dim}-fg}`).join('\n') + '\n';
     }
 
     this.layout.setInfo(content);
@@ -1165,9 +1114,9 @@ class RepoView extends BaseView {
   private confirmArchiveInstall(archiveName: string, onConfirm: (finalCmd: string) => void): void {
     const chosen = commandForArchive(archiveName, null);
     this.vm.push(new ConfirmView(this.layout,
-      `Install {yellow-fg}${sanitizeForTags(archiveName)}{/yellow-fg}?` +
+      `Install {${T.warn}-fg}${sanitizeForTags(archiveName)}{/${T.warn}-fg}?` +
       `\n\nThe archive names no command yet; using ` +
-      `{yellow-fg}${chosen.command}{/yellow-fg} from the archive filename.` +
+      `{${T.warn}-fg}${chosen.command}{/${T.warn}-fg} from the archive filename.` +
       `\nIf the archive names its own command, the install uses that` +
       `\ninstead and says so.`,
       'Install', 'Cancel',
@@ -1179,7 +1128,7 @@ class RepoView extends BaseView {
     const e = this.entry(); if (!e) return;
     if (e.installed) {
       this.vm.push(new ConfirmView(this.layout,
-        `Uninstall {yellow-fg}${e.installed_as}{/yellow-fg}?\n\nRemoves .info + Doors/${e.installed_as}/`,
+        `Uninstall {${T.warn}-fg}${e.installed_as}{/${T.warn}-fg}?\n\nRemoves .info + Doors/${e.installed_as}/`,
         'Uninstall', 'Cancel',
         () => {
           // Every path this removes is checked first and named as it goes.
@@ -1277,14 +1226,14 @@ class RepoView extends BaseView {
               this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
               this.layout.setInfo(
                 installLogPanel(`Installed ${finalCmd}`, outcome.steps) + '\n\n' +
-                `{green-fg}Installed{/green-fg}\n\n` +
-                `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
-                `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
-                `{yellow-fg}Files:{/yellow-fg} ${outcome.fileCount}\n` +
-                `{yellow-fg}Binary:{/yellow-fg} ${sanitizeForTags(outcome.binaryRel)}\n` +
+                `{${T.ok}-fg}Installed{/${T.ok}-fg}\n\n` +
+                `{${T.warn}-fg}Command:{/${T.warn}-fg} ${finalCmd}\n` +
+                `{${T.warn}-fg}Type:{/${T.warn}-fg} ${outcome.doorType}\n` +
+                `{${T.warn}-fg}Files:{/${T.warn}-fg} ${outcome.fileCount}\n` +
+                `{${T.warn}-fg}Binary:{/${T.warn}-fg} ${sanitizeForTags(outcome.binaryRel)}\n` +
                 (outcome.registeredLocally
                   ? ''
-                  : `\n{yellow-fg}Note:{/yellow-fg} registry-only — a local catalog id collision\n` +
+                  : `\n{${T.warn}-fg}Note:{/${T.warn}-fg} registry-only — a local catalog id collision\n` +
                     `blocked registration, so it won't show as installed in this browse list.\n` +
                     `See the server log for detail.\n`)
               );
@@ -1303,9 +1252,9 @@ class RepoView extends BaseView {
         console.log(`[DOORMAN] install failed: resolve-archive: ${detail}`);
         this.setStatus(`Archive not on server`, 'yellow', 8000);
         this.layout.setInfo(
-          `{yellow-fg}Archive not on server{/yellow-fg}\n\n` +
-          `{yellow-fg}Catalog path:{/yellow-fg} ${sanitizeForTags(e.archive_path ?? '(none)')}\n` +
-          `{yellow-fg}Resolved to:{/yellow-fg} ${sanitizeForTags(resolvedArchive ?? '(unresolvable)')}\n`
+          `{${T.warn}-fg}Archive not on server{/${T.warn}-fg}\n\n` +
+          `{${T.warn}-fg}Catalog path:{/${T.warn}-fg} ${sanitizeForTags(e.archive_path ?? '(none)')}\n` +
+          `{${T.warn}-fg}Resolved to:{/${T.warn}-fg} ${sanitizeForTags(resolvedArchive ?? '(unresolvable)')}\n`
         );
         this.layout.render();
         return;
@@ -1360,11 +1309,11 @@ class RepoView extends BaseView {
               this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
               this.layout.setInfo(
                 installLogPanel(`Installed ${finalCmd}`, outcome.steps) + '\n\n' +
-                `{green-fg}Installed{/green-fg}\n\n` +
-                `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
-                `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
-                `{yellow-fg}Files:{/yellow-fg} ${outcome.fileCount}\n` +
-                `{yellow-fg}Binary:{/yellow-fg} ${sanitizeForTags(outcome.binaryRel)}\n`
+                `{${T.ok}-fg}Installed{/${T.ok}-fg}\n\n` +
+                `{${T.warn}-fg}Command:{/${T.warn}-fg} ${finalCmd}\n` +
+                `{${T.warn}-fg}Type:{/${T.warn}-fg} ${outcome.doorType}\n` +
+                `{${T.warn}-fg}Files:{/${T.warn}-fg} ${outcome.fileCount}\n` +
+                `{${T.warn}-fg}Binary:{/${T.warn}-fg} ${sanitizeForTags(outcome.binaryRel)}\n`
               );
               this.refresh(this.layout.listSelected);
             } catch (err: any) {
@@ -1389,11 +1338,11 @@ class RepoView extends BaseView {
     console.log(`[DOORMAN] install failed: ${step}: ${detail} (archive=${archiveName}, path=${archivePath})`);
     this.setStatus(`Install failed: ${step}`, 'red', 9000);
     this.layout.setInfo(
-      `{red-fg}Install failed{/red-fg}\n\n` +
-      `{yellow-fg}Step:{/yellow-fg} ${sanitizeForTags(step)}\n` +
-      `{yellow-fg}Detail:{/yellow-fg} ${sanitizeForTags(detail)}\n` +
-      `{yellow-fg}Archive:{/yellow-fg} ${sanitizeForTags(archiveName)}\n` +
-      `{yellow-fg}Path:{/yellow-fg} ${sanitizeForTags(archivePath)}\n`
+      `{${T.alert}-fg}Install failed{/${T.alert}-fg}\n\n` +
+      `{${T.warn}-fg}Step:{/${T.warn}-fg} ${sanitizeForTags(step)}\n` +
+      `{${T.warn}-fg}Detail:{/${T.warn}-fg} ${sanitizeForTags(detail)}\n` +
+      `{${T.warn}-fg}Archive:{/${T.warn}-fg} ${sanitizeForTags(archiveName)}\n` +
+      `{${T.warn}-fg}Path:{/${T.warn}-fg} ${sanitizeForTags(archivePath)}\n`
     );
     this.layout.render();
   }
@@ -1439,10 +1388,10 @@ class RepoView extends BaseView {
     }
 
     this.vm.push(new ConfirmView(this.layout,
-      `Delete {yellow-fg}${e.archive_name}{/yellow-fg} from the repository?\n\n` +
+      `Delete {${T.warn}-fg}${e.archive_name}{/${T.warn}-fg} from the repository?\n\n` +
       `This removes the catalog entry AND the archive file.\n` +
       `It cannot be undone.` +
-      (e.installed ? `\n\n{green-fg}${e.installed_as}{/green-fg} stays installed and keeps working.` : ''),
+      (e.installed ? `\n\n{${T.ok}-fg}${e.installed_as}{/${T.ok}-fg} stays installed and keeps working.` : ''),
       'Delete', 'Cancel',
       () => {
         let result: { ok: boolean; archiveName?: string; fileRemoved?: boolean; reason?: string };
@@ -1592,12 +1541,12 @@ class DocView extends BaseView {
     // characters do not.
     const text = this.content.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').replace(/[{}]/g, c => `\\${c}`);
     this.panel = new Panel({ parent: this.layout.screen, top: 0, left: 0, width: '100%',
-      height: '100%-3', label: ` ${this.title} `, tags: true, style: { border:{ fg:'cyan' } } } as any);
+      height: '100%-3', label: ` ${this.title} `, tags: true, style: { border:{ fg: T.accent } } } as any);
     const box = new ScrollableBox({ parent: this.panel, top: 1, left: 1, width: '100%-2',
       height: '100%-2', tags: false, scrollable: true, alwaysScroll: true, content: text } as any);
     this.hint = new Panel({ parent: this.layout.screen, bottom: 0, left: 0, width: '100%', height: 3,
       tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
-      style: { fg:'white', bg:'blue', border:{ fg:'blue' } } } as any);
+      style: { fg: T.ink, bg: T.bar, border:{ fg: T.accentAlt } } } as any);
     this.layout.screen.render();
     this.keys.key(['up','down','pageup','pagedown'], (_: any, key: any) => {
       const n = key?.name ?? '';
@@ -1657,10 +1606,10 @@ class StripView extends BaseView {
   private reportFailure(step: string, detail: string): void {
     console.log(`[DOORMAN] strip failed: ${step}: ${detail} (archive=${this.entry.archive_name})`);
     this.layout.setInfo(
-      `{red-fg}Strip failed{/red-fg}\n\n` +
-      `{yellow-fg}Step:{/yellow-fg} ${sanitizeForTags(step)}\n` +
-      `{yellow-fg}Detail:{/yellow-fg} ${sanitizeForTags(detail)}\n` +
-      `{yellow-fg}Archive:{/yellow-fg} ${sanitizeForTags(this.entry.archive_name)}\n`
+      `{${T.alert}-fg}Strip failed{/${T.alert}-fg}\n\n` +
+      `{${T.warn}-fg}Step:{/${T.warn}-fg} ${sanitizeForTags(step)}\n` +
+      `{${T.warn}-fg}Detail:{/${T.warn}-fg} ${sanitizeForTags(detail)}\n` +
+      `{${T.warn}-fg}Archive:{/${T.warn}-fg} ${sanitizeForTags(this.entry.archive_name)}\n`
     );
     this.layout.render();
   }
@@ -1669,7 +1618,7 @@ class StripView extends BaseView {
     const lib = getStripLib();
     if (!lib) {
       console.log(`[DOORMAN] strip failed: lib-unavailable (archive=${this.entry.archive_name})`);
-      this.layout.setFooter('{center}{red-fg}Stripper library not available{/red-fg}{/center}');
+      this.layout.setFooter(`{center}{${T.alert}-fg}Stripper library not available{/${T.alert}-fg}{/center}`);
       this.vm.pop();
       return;
     }
@@ -1692,11 +1641,11 @@ class StripView extends BaseView {
       }
     }
 
-    this.layout.setFooter('{center}{cyan-fg}Analyzing...{/cyan-fg}{/center}'); this.layout.render();
+    this.layout.setFooter(`{center}{${T.accent}-fg}Analyzing...{/${T.accent}-fg}{/center}`); this.layout.render();
     (installDir ? lib.analyzeDirectory(installDir) : lib.analyzeArchive(this.archivePath))
       .then((result: any) => {
         if (result.stripped.length === 0) {
-          this.layout.setInfo('{green-fg}No ad files found — archive is clean.{/green-fg}');
+          this.layout.setInfo(`{${T.ok}-fg}No ad files found — archive is clean.{/${T.ok}-fg}`);
           this.layout.render();
           setTimeout(() => this.vm.pop(), 1200);
           return;
@@ -1726,7 +1675,7 @@ class StripView extends BaseView {
             const why = this.archiveStrip?.reason
               ?? "This archive cannot be edited in place on this server.";
             this.layout.setInfo(
-              `{yellow-fg}Cannot strip this archive.{/yellow-fg}\n\n` +
+              `{${T.warn}-fg}Cannot strip this archive.{/${T.warn}-fg}\n\n` +
               wrapToInfoPane(why, this.layout) + '\n\n' +
               wrapToInfoPane(
                 `Install ${sanitizeForTags(this.entry.archive_name)} first and strip the ` +
@@ -1759,16 +1708,16 @@ class StripView extends BaseView {
     this.layout.setListItems(items);
     const sel = this.files[this.layout.listSelected];
     const hint = this.canStrip
-      ? '\n{grey-fg}[Space] Toggle  [A] All  [N] None  [S] Strip  [ESC/Q] Cancel{/grey-fg}'
-      : '\n{grey-fg}[Space] Toggle  [A] All  [N] None  Not installed — [S] shows how  [ESC/Q] Cancel{/grey-fg}';
+      ? `\n{${T.dim}-fg}[Space] Toggle  [A] All  [N] None  [S] Strip  [ESC/Q] Cancel{/${T.dim}-fg}`
+      : `\n{${T.dim}-fg}[Space] Toggle  [A] All  [N] None  Not installed — [S] shows how  [ESC/Q] Cancel{/${T.dim}-fg}`;
     this.layout.setInfo(
-      `{yellow-fg}${selCount}/${this.files.length} selected{/yellow-fg}\n\n` +
-      (sel ? `{cyan-fg}${(sel.path as string)}{/cyan-fg}\nReason: ${this.reasons[sel.path] ?? '?'}\n` : '') +
+      `{${T.warn}-fg}${selCount}/${this.files.length} selected{/${T.warn}-fg}\n\n` +
+      (sel ? `{${T.accent}-fg}${(sel.path as string)}{/${T.accent}-fg}\nReason: ${this.reasons[sel.path] ?? '?'}\n` : '') +
       hint
     );
     this.layout.setFooter(this.canStrip
-      ? '{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {yellow-fg}S{/yellow-fg}=Strip  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}'
-      : '{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {grey-fg}Preview only{/grey-fg}  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}'
+      ? `{center}{${T.warn}-fg}Space{/${T.warn}-fg}=Toggle  {${T.warn}-fg}A{/${T.warn}-fg}=All  {${T.warn}-fg}N{/${T.warn}-fg}=None  {${T.warn}-fg}S{/${T.warn}-fg}=Strip  {${T.warn}-fg}ESC/Q{/${T.warn}-fg}=Cancel{/center}`
+      : `{center}{${T.warn}-fg}Space{/${T.warn}-fg}=Toggle  {${T.warn}-fg}A{/${T.warn}-fg}=All  {${T.warn}-fg}N{/${T.warn}-fg}=None  {${T.dim}-fg}Preview only{/${T.dim}-fg}  {${T.warn}-fg}ESC/Q{/${T.warn}-fg}=Cancel{/center}`
     );
     this.layout.render();
   }
@@ -1788,28 +1737,28 @@ class StripView extends BaseView {
     const { resolveDoorRepoMode, consumerCacheFilePath } = require('./repoDataSource') as typeof import('./repoDataSource');
     const mode = resolveDoorRepoMode();
     if (mode.kind !== 'consumer') {
-      this.layout.setInfo('{yellow-fg}No door-repo config — cannot learn patterns.{/yellow-fg}');
+      this.layout.setInfo(`{${T.warn}-fg}No door-repo config — cannot learn patterns.{/${T.warn}-fg}`);
       this.layout.render();
       return;
     }
     const cfg: RepoClientConfig = { url: mode.url, cacheFile: consumerCacheFilePath(PROJECT_ROOT) };
 
-    this.layout.setFooter('{center}{cyan-fg}Learning pattern...{/cyan-fg}{/center}');
+    this.layout.setFooter(`{center}{${T.accent}-fg}Learning pattern...{/${T.accent}-fg}{/center}`);
     this.layout.render();
 
     learnPattern(cfg, filePath, mode.learnKey, this.entry.archive_name, filePath)
       .then((result: { ok: boolean; duplicate?: boolean }) => {
         if (result.ok) {
           const msg = result.duplicate ? 'Pattern already known' : `Learned: ${filePath}`;
-          this.layout.setInfo(`{green-fg}${msg}{/green-fg}`);
+          this.layout.setInfo(`{${T.ok}-fg}${msg}{/${T.ok}-fg}`);
         } else {
-          this.layout.setInfo('{yellow-fg}Learn failed — server may not have DOORREPO_LEARN_KEY set.{/yellow-fg}');
+          this.layout.setInfo(`{${T.warn}-fg}Learn failed — server may not have DOORREPO_LEARN_KEY set.{/${T.warn}-fg}`);
         }
         this.layout.render();
         setTimeout(() => { this.layout.setInfo(''); this.layout.render(); }, 1500);
       })
       .catch(() => {
-        this.layout.setInfo('{yellow-fg}Learn failed.{/yellow-fg}');
+        this.layout.setInfo(`{${T.warn}-fg}Learn failed.{/${T.warn}-fg}`);
         this.layout.render();
       });
   }
@@ -1831,7 +1780,7 @@ class StripView extends BaseView {
       return;
     }
 
-    this.layout.setFooter('{center}{cyan-fg}Stripping archive...{/cyan-fg}{/center}');
+    this.layout.setFooter(`{center}{${T.accent}-fg}Stripping archive...{/${T.accent}-fg}{/center}`);
     this.layout.render();
 
     let result: { ok: boolean; removed?: number; reason?: string };
@@ -1856,7 +1805,7 @@ class StripView extends BaseView {
   private doStrip(lib: any, installDir: string): void {
     const toStrip = this.files.filter((_: any, i: number) => this.checked[i]);
     if (toStrip.length === 0) { this.vm.pop(); this.onDone(null); return; }
-    this.layout.setFooter('{center}{cyan-fg}Stripping...{/cyan-fg}{/center}'); this.layout.render();
+    this.layout.setFooter(`{center}{${T.accent}-fg}Stripping...{/${T.accent}-fg}{/center}`); this.layout.render();
     (async () => {
       try {
         lib.stripFilesFromDirectory(installDir, toStrip.map((f: any) => f.path));
@@ -1899,7 +1848,7 @@ class ConfirmView extends BaseView {
     new ConfirmModal({
       parent: this.layout.screen, title: ` ${this.confirmText} `,
       content: this.content, confirmText: this.confirmText, cancelText: this.cancelText,
-      confirmColor: 'red', cancelColor: 'green', style: { border:{ fg:'yellow' } },
+      confirmColor: 'red', cancelColor: 'green', style: { border:{ fg: T.warn } },
       onConfirm: () => { this.onConfirm(); this.vm.pop(); },
       onCancel: () => this.vm.pop(),
     } as any).display();
@@ -1951,6 +1900,9 @@ class FileExplorerOverlayView extends BaseView {
 
 export async function createApp(session: DoorSession): Promise<void> {
   const { bbs, user } = session;
+
+  applyTheme(bbs);   // colours all ten modules; see door-theme.ts
+
   if (!user || (user.secLevel ?? 0) < 250) {
     bbs.write('\r\n\x1b[31mAccess Denied: SysOp only\x1b[0m\r\n'); return;
   }

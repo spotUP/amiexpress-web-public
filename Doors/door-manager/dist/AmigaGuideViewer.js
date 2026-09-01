@@ -49,6 +49,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.showAmigaGuideViewer = showAmigaGuideViewer;
 const path = __importStar(require("path"));
+const door_theme_1 = require("./door-theme");
 function getParser() {
     const candidates = [
         path.resolve(__dirname, '../../../web/backend/src/amigaguide/AmigaGuideParser'),
@@ -79,10 +80,10 @@ function showAmigaGuideViewer(screen, raw, title, onDone) {
     const history = [];
     let currentNode = doc.mainNode || doc.nodes.keys().next().value;
     let selectedLink = 0; // 0 = none selected, 1+ = link index
-    const header = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } });
-    const contentPanel = new Panel({ parent: screen, top: 3, left: 0, width: '100%', height: '100%-6', tags: true, style: { border: { fg: 'cyan' } } });
-    const contentBox = new ScrollableBox({ parent: contentPanel, top: 1, left: 1, width: '100%-2', height: '100%-2', tags: true, scrollable: true, alwaysScroll: true, style: { fg: 'white' } });
-    const footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } });
+    const header = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } } });
+    const contentPanel = new Panel({ parent: screen, top: 3, left: 0, width: '100%', height: '100%-6', tags: true, style: { border: { fg: door_theme_1.T.accent } } });
+    const contentBox = new ScrollableBox({ parent: contentPanel, top: 1, left: 1, width: '100%-2', height: '100%-2', tags: true, scrollable: true, alwaysScroll: true, style: { fg: door_theme_1.T.ink } });
+    const footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } } });
     function navigate(target) {
         const key = target.toLowerCase();
         if (doc.nodes.has(key)) {
@@ -98,7 +99,7 @@ function showAmigaGuideViewer(screen, raw, title, onDone) {
             return;
         const nav = parser.getNavigationInfo(currentNode);
         const { lines, links } = parser.renderNode(currentNode, 80, 99999, 0);
-        header.setContent(`{center}{cyan-fg}${(doc.database || title).replace(/[{}]/g, '')}{/cyan-fg}  {white-fg}${node.title.replace(/[{}]/g, '')}{/white-fg}{/center}`);
+        header.setContent(`{center}{${door_theme_1.T.accent}-fg}${(doc.database || title).replace(/[{}]/g, '')}{/${door_theme_1.T.accent}-fg}  {${door_theme_1.T.ink}-fg}${node.title.replace(/[{}]/g, '')}{/${door_theme_1.T.ink}-fg}{/center}`);
         let content = lines.join('\n');
         if (links.length > 0) {
             content += '\n\n\x1b[90m' + '─'.repeat(40) + '\x1b[0m\n';
@@ -123,21 +124,21 @@ function showAmigaGuideViewer(screen, raw, title, onDone) {
         }
         const parts = [];
         if (history.length > 0)
-            parts.push('{yellow-fg}B{/yellow-fg}ack');
+            parts.push(`{${door_theme_1.T.warn}-fg}B{/${door_theme_1.T.warn}-fg}ack`);
         if (nav.help)
-            parts.push('{yellow-fg}H{/yellow-fg}elp');
+            parts.push(`{${door_theme_1.T.warn}-fg}H{/${door_theme_1.T.warn}-fg}elp`);
         if (nav.toc)
-            parts.push('{yellow-fg}C{/yellow-fg}ontents');
+            parts.push(`{${door_theme_1.T.warn}-fg}C{/${door_theme_1.T.warn}-fg}ontents`);
         if (nav.prev)
-            parts.push('{yellow-fg}P{/yellow-fg}rev');
+            parts.push(`{${door_theme_1.T.warn}-fg}P{/${door_theme_1.T.warn}-fg}rev`);
         if (nav.next)
-            parts.push('{yellow-fg}N{/yellow-fg}ext');
+            parts.push(`{${door_theme_1.T.warn}-fg}N{/${door_theme_1.T.warn}-fg}ext`);
         if (links.length > 0) {
-            parts.push(`{yellow-fg}Tab{/yellow-fg}=Cycle links`);
-            parts.push(`{yellow-fg}Enter{/yellow-fg}=Follow`);
+            parts.push(`{${door_theme_1.T.warn}-fg}Tab{/${door_theme_1.T.warn}-fg}=Cycle links`);
+            parts.push(`{${door_theme_1.T.warn}-fg}Enter{/${door_theme_1.T.warn}-fg}=Follow`);
         }
-        parts.push('{yellow-fg}↑↓PgUp/Dn{/yellow-fg}');
-        parts.push('{yellow-fg}Q{/yellow-fg}');
+        parts.push(`{${door_theme_1.T.warn}-fg}↑↓PgUp/Dn{/${door_theme_1.T.warn}-fg}`);
+        parts.push(`{${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}`);
         footer.setContent(`{center}${parts.join('  ')}{/center}`);
         screen.render();
     }
@@ -256,9 +257,9 @@ function showAmigaGuideViewer(screen, raw, title, onDone) {
 function showPlainViewer(screen, raw, title, onDone) {
     const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
     const content = raw.replace(/[^\x09\x0a\x20-\x7e]/g, '').replace(/[{}]/g, (c) => `\\${c}`);
-    const panel = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: '100%-3', label: ` ${title} `, tags: true, style: { border: { fg: 'cyan' } } });
+    const panel = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: '100%-3', label: ` ${title} `, tags: true, style: { border: { fg: door_theme_1.T.accent } } });
     const box = new ScrollableBox({ parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2', tags: false, scrollable: true, alwaysScroll: true, content });
-    const hint = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}', style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } });
+    const hint = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}', style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } } });
     function close() {
         screen.unkey(['q', 'Q', 'escape'], close);
         screen.unkey(['up', 'down', 'pageup', 'pagedown'], scroll);

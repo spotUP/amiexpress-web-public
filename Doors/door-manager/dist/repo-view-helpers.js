@@ -9,6 +9,7 @@ exports.entryHasDoc = entryHasDoc;
 exports.renderFileLines = renderFileLines;
 exports.formatSuggestedTooltypes = formatSuggestedTooltypes;
 exports.registerRepoViewActionKeys = registerRepoViewActionKeys;
+const door_theme_1 = require("./door-theme");
 /**
  * Wraps text to the info pane's real width, breaking on spaces.
  *
@@ -65,15 +66,15 @@ function repoViewFooterParts(mode, opts) {
     // "Quit") - which is invisible on plenty of real terminals, and led to
     // "it doesn't say anywhere that S is used to strip".
     const parts = [
-        `{yellow-fg}R{/yellow-fg}=${inst}`,
-        (opts.hasJunk && curationAllowed) ? `{yellow-fg}S{/yellow-fg}=Strip` : null,
-        opts.hasDoc ? `{yellow-fg}V{/yellow-fg}=Doc` : null,
-        `{yellow-fg}A{/yellow-fg}=Archive`,
-        curationAllowed ? `{yellow-fg}D{/yellow-fg}=Delete` : null,
-        `{yellow-fg}F{/yellow-fg}=Filter`,
-        `{yellow-fg}C{/yellow-fg}=System`,
-        `{yellow-fg}ESC{/yellow-fg}=Back`,
-        `{yellow-fg}Q{/yellow-fg}=Quit`,
+        `{${door_theme_1.T.warn}-fg}R{/${door_theme_1.T.warn}-fg}=${inst}`,
+        (opts.hasJunk && curationAllowed) ? `{${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}=Strip` : null,
+        opts.hasDoc ? `{${door_theme_1.T.warn}-fg}V{/${door_theme_1.T.warn}-fg}=Doc` : null,
+        `{${door_theme_1.T.warn}-fg}A{/${door_theme_1.T.warn}-fg}=Archive`,
+        curationAllowed ? `{${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}=Delete` : null,
+        `{${door_theme_1.T.warn}-fg}F{/${door_theme_1.T.warn}-fg}=Filter`,
+        `{${door_theme_1.T.warn}-fg}C{/${door_theme_1.T.warn}-fg}=System`,
+        `{${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Back`,
+        `{${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}=Quit`,
     ].filter(Boolean).join('  ');
     return `{center}${parts}{/center}`;
 }
@@ -106,16 +107,16 @@ function renderFileLines(files, limit = 25) {
     if (files.length === 0)
         return '';
     const junk = files.filter(isJunkRow).length;
-    const junkTag = junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}';
-    let out = `\n\n{grey-fg}─── ${files.length} files${junkTag}{/grey-fg}  {grey-fg}──────────────────────{/grey-fg}\n`;
+    const junkTag = junk > 0 ? `  {${door_theme_1.T.alert}-fg}${junk} ad files{/${door_theme_1.T.alert}-fg}` : `  {${door_theme_1.T.ok}-fg}clean{/${door_theme_1.T.ok}-fg}`;
+    let out = `\n\n{${door_theme_1.T.dim}-fg}─── ${files.length} files${junkTag}{/${door_theme_1.T.dim}-fg}  {${door_theme_1.T.dim}-fg}──────────────────────{/${door_theme_1.T.dim}-fg}\n`;
     for (const f of files.slice(0, limit)) {
         const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
-        const junkMark = isJunkRow(f) ? '{red-fg}!{/red-fg}' : ' ';
+        const junkMark = isJunkRow(f) ? `{${door_theme_1.T.alert}-fg}!{/${door_theme_1.T.alert}-fg}` : ' ';
         const name = f.path.length > 34 ? '<' + f.path.slice(f.path.length - 33) : f.path;
         out += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
     }
     if (files.length > limit)
-        out += `{grey-fg}  ... and ${files.length - limit} more{/grey-fg}\n`;
+        out += `{${door_theme_1.T.dim}-fg}  ... and ${files.length - limit} more{/${door_theme_1.T.dim}-fg}\n`;
     return out;
 }
 /**

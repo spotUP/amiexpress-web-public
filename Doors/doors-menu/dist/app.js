@@ -473,16 +473,21 @@ async function createApp(session) {
      * Update filter display
      */
     function updateFilterDisplay() {
-        const typeColors = {
-            'ALL': 'white',
-            'XIM': 'green',
-            'TS': 'cyan',
-            'SIM': 'yellow',
-            'PY': 'magenta',
-            'RX': 'blue'
+        // Door types were six literal hues - white/green/cyan/yellow/magenta/blue -
+        // which is six colours on screen at once and reads as noise under a theme
+        // built on one or two. Each type keeps a DISTINCT role instead, so the
+        // types still tell apart and a single-hue theme collapses them the way it
+        // means to.
+        const typeInk = {
+            'ALL': s.ink,
+            'XIM': s.ok,
+            'TS': s.accent,
+            'SIM': s.warn,
+            'PY': s.accentAlt,
+            'RX': s.dim,
         };
-        const color = typeColors[currentTypeFilter] || 'white';
-        filterDisplay.setContent(`${s.accent('Filter:')} {${color}-fg}${currentTypeFilter}{/${color}-fg}`);
+        const paint = typeInk[currentTypeFilter] || s.ink;
+        filterDisplay.setContent(`${s.accent('Filter:')} ${paint(currentTypeFilter)}`);
     }
     /**
      * Filter doors by current type filter

@@ -11,6 +11,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import * as path from 'path';
 import * as fs from 'fs';
+import { T } from './door-theme';
 
 interface FileExplorerOptions {
   screen: any;
@@ -130,7 +131,7 @@ export class FileExplorerOverlay {
       left: 0,
       width: '100%',
       height: '100%',
-      style: { bg: 'black' },
+      style: { bg: T.ground },
       tags: true,
       keys: true,
       focusable: true,
@@ -144,7 +145,7 @@ export class FileExplorerOverlay {
       height: 3,
       tags: true,
       content: '',
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+      style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } },
       focusable: false,
     } as any);
 
@@ -155,8 +156,8 @@ export class FileExplorerOverlay {
       width: '100%',
       height: 3,
       tags: true,
-      content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp/B{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+      content: `{center}{${T.warn}-fg}Enter{/${T.warn}-fg}=Open  {${T.warn}-fg}D{/${T.warn}-fg}el  {${T.warn}-fg}R{/${T.warn}-fg}ename  {${T.warn}-fg}Bksp/B{/${T.warn}-fg}=Up  {${T.warn}-fg}ESC{/${T.warn}-fg}=Close{/center}`,
+      style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } },
       focusable: false,
     } as any);
 
@@ -171,8 +172,8 @@ export class FileExplorerOverlay {
       mouse: true,
       tags: true,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
-        item: { fg: 'white' },
+        selected: { bg: T.bar, fg: T.ink },
+        item: { fg: T.ink },
       },
     } as any);
 
@@ -243,9 +244,9 @@ export class FileExplorerOverlay {
       const code = e?.code ?? 'ERR';
       const msg = e?.message ?? String(err);
       this.listWidget.setItems([
-        `{red-fg}Cannot read directory: ${code}{/red-fg}`,
-        `{gray-fg}${absDir}{/gray-fg}`,
-        `{gray-fg}${msg}{/gray-fg}`,
+        `{${T.alert}-fg}Cannot read directory: ${code}{/${T.alert}-fg}`,
+        `{${T.dim}-fg}${absDir}{/${T.dim}-fg}`,
+        `{${T.dim}-fg}${msg}{/${T.dim}-fg}`,
       ]);
       this.screen.render();
       return;
@@ -264,24 +265,24 @@ export class FileExplorerOverlay {
     const items: string[] = [];
 
     if (absDir !== this.doorRoot) {
-      items.push('{blue-fg}.. (parent){/blue-fg}');
+      items.push(`{${T.accentAlt}-fg}.. (parent){/${T.accentAlt}-fg}`);
     }
 
     for (const d of dirs) {
-      items.push(`{cyan-fg}[${d}/]{/cyan-fg}`);
+      items.push(`{${T.accent}-fg}[${d}/]{/${T.accent}-fg}`);
     }
 
     for (const f of files) {
       const size = formatFileSize(getFileSize(path.join(absDir, f.name)));
       if (isReadable(f.name)) {
-        items.push(`${f.name.padEnd(36)} {white-fg}${size}{/white-fg}`);
+        items.push(`${f.name.padEnd(36)} {${T.ink}-fg}${size}{/${T.ink}-fg}`);
       } else {
-        items.push(`{gray-fg}${f.name.padEnd(36)} ${size}{/gray-fg}`);
+        items.push(`{${T.dim}-fg}${f.name.padEnd(36)} ${size}{/${T.dim}-fg}`);
       }
     }
 
     if (items.length === 0) {
-      items.push('{gray-fg}(empty directory){/gray-fg}');
+      items.push(`{${T.dim}-fg}(empty directory){/${T.dim}-fg}`);
     }
 
     this.listWidget.setItems(items);
@@ -388,7 +389,7 @@ export class FileExplorerOverlay {
         width: '100%',
         height: '100%-6',
         tags: false,
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: T.ink, bg: T.ground },
         keys: true,
         focusable: true,
       } as any);
@@ -441,18 +442,18 @@ export class FileExplorerOverlay {
           ? `${this.viewerFilename} > ${this.guideCurrentNode}`
           : this.viewerFilename;
       this.header.setContent(
-        `  {cyan-fg}${breadcrumb}{/cyan-fg}  |  {yellow-fg}B{/yellow-fg}=back  {yellow-fg}ESC{/yellow-fg}=close  `
+        `  {${T.accent}-fg}${breadcrumb}{/${T.accent}-fg}  |  {${T.warn}-fg}B{/${T.warn}-fg}=back  {${T.warn}-fg}ESC{/${T.warn}-fg}=close  `
       );
     } else {
       this.header.setContent(
-        `  {cyan-fg}FILES: ${relDir}/{/cyan-fg}  |  {yellow-fg}ESC{/yellow-fg}=close  `
+        `  {${T.accent}-fg}FILES: ${relDir}/{/${T.accent}-fg}  |  {${T.warn}-fg}ESC{/${T.warn}-fg}=close  `
       );
     }
   }
 
   private updateFooterBrowser(): void {
     this.footer.setContent(
-      `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`
+      `{center}{${T.warn}-fg}Enter{/${T.warn}-fg}=Open  {${T.warn}-fg}Bksp{/${T.warn}-fg}=Up  {${T.warn}-fg}ESC{/${T.warn}-fg}=Close{/center}`
     );
   }
 
@@ -463,10 +464,10 @@ export class FileExplorerOverlay {
       this.viewerTotalLines
     );
     const guideHint = this.isGuide
-      ? `  {yellow-fg}1-9{/yellow-fg}=link  {yellow-fg}P{/yellow-fg}/{yellow-fg}N{/yellow-fg}=prev/next`
+      ? `  {${T.warn}-fg}1-9{/${T.warn}-fg}=link  {${T.warn}-fg}P{/${T.warn}-fg}/{${T.warn}-fg}N{/${T.warn}-fg}=prev/next`
       : '';
     this.footer.setContent(
-      `{center}Lines ${line1}-${lineN}/${this.viewerTotalLines}  {yellow-fg}up/dn{/yellow-fg}=scroll${guideHint}  {yellow-fg}B{/yellow-fg}=back{/center}`
+      `{center}Lines ${line1}-${lineN}/${this.viewerTotalLines}  {${T.warn}-fg}up/dn{/${T.warn}-fg}=scroll${guideHint}  {${T.warn}-fg}B{/${T.warn}-fg}=back{/center}`
     );
   }
 
@@ -516,7 +517,7 @@ export class FileExplorerOverlay {
 
   private promptInFooter(prompt: string, onSubmit: (value: string) => void): void {
     let buf = '';
-    this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+    this.footer.setContent(`{center}{${T.warn}-fg}${prompt}{/${T.warn}-fg}${buf}_`);
     this.screen.render();
     const handler = (ch: string, key: any) => {
       const kn = key?.name ?? '';
@@ -528,11 +529,11 @@ export class FileExplorerOverlay {
         this.restoreFooter();
       } else if (kn === 'backspace' || ch === '\x7f' || ch === '\b') {
         buf = buf.slice(0, -1);
-        this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+        this.footer.setContent(`{center}{${T.warn}-fg}${prompt}{/${T.warn}-fg}${buf}_`);
         this.screen.render();
       } else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
         buf += ch;
-        this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+        this.footer.setContent(`{center}{${T.warn}-fg}${prompt}{/${T.warn}-fg}${buf}_`);
         this.screen.render();
       }
     };
@@ -542,13 +543,13 @@ export class FileExplorerOverlay {
 
   private restoreFooter(): void {
     this.footer.setContent(
-      `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`
+      `{center}{${T.warn}-fg}Enter{/${T.warn}-fg}=Open  {${T.warn}-fg}D{/${T.warn}-fg}el  {${T.warn}-fg}R{/${T.warn}-fg}ename  {${T.warn}-fg}Bksp{/${T.warn}-fg}=Up  {${T.warn}-fg}ESC{/${T.warn}-fg}=Close{/center}`
     );
     this.screen.render();
   }
 
   private showFooterMsg(msg: string, ms = 2000): void {
-    this.footer.setContent(`{center}{red-fg}${msg}{/red-fg}{/center}`);
+    this.footer.setContent(`{center}{${T.alert}-fg}${msg}{/${T.alert}-fg}{/center}`);
     this.screen.render();
     setTimeout(() => this.restoreFooter(), ms);
   }

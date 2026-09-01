@@ -14,6 +14,7 @@
  */
 
 import * as path from 'path';
+import { T } from './door-theme';
 
 function getParser() {
   const candidates = [
@@ -43,10 +44,10 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
   let currentNode: string = doc.mainNode || doc.nodes.keys().next().value;
   let selectedLink = 0; // 0 = none selected, 1+ = link index
 
-  const header = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } } as any);
-  const contentPanel = new Panel({ parent: screen, top: 3, left: 0, width: '100%', height: '100%-6', tags: true, style: { border: { fg: 'cyan' } } } as any);
-  const contentBox = new ScrollableBox({ parent: contentPanel, top: 1, left: 1, width: '100%-2', height: '100%-2', tags: true, scrollable: true, alwaysScroll: true, style: { fg: 'white' } } as any);
-  const footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } } as any);
+  const header = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } } } as any);
+  const contentPanel = new Panel({ parent: screen, top: 3, left: 0, width: '100%', height: '100%-6', tags: true, style: { border: { fg: T.accent } } } as any);
+  const contentBox = new ScrollableBox({ parent: contentPanel, top: 1, left: 1, width: '100%-2', height: '100%-2', tags: true, scrollable: true, alwaysScroll: true, style: { fg: T.ink } } as any);
+  const footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } } } as any);
 
   function navigate(target: string): void {
     const key = target.toLowerCase();
@@ -60,7 +61,7 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
     const { lines, links } = parser.renderNode(currentNode, 80, 99999, 0);
 
     (header as any).setContent(
-      `{center}{cyan-fg}${(doc.database || title).replace(/[{}]/g, '')}{/cyan-fg}  {white-fg}${node.title.replace(/[{}]/g, '')}{/white-fg}{/center}`
+      `{center}{${T.accent}-fg}${(doc.database || title).replace(/[{}]/g, '')}{/${T.accent}-fg}  {${T.ink}-fg}${node.title.replace(/[{}]/g, '')}{/${T.ink}-fg}{/center}`
     );
 
     let content = lines.join('\n');
@@ -88,17 +89,17 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
     }
 
     const parts: string[] = [];
-    if (history.length > 0) parts.push('{yellow-fg}B{/yellow-fg}ack');
-    if (nav.help) parts.push('{yellow-fg}H{/yellow-fg}elp');
-    if (nav.toc)  parts.push('{yellow-fg}C{/yellow-fg}ontents');
-    if (nav.prev) parts.push('{yellow-fg}P{/yellow-fg}rev');
-    if (nav.next) parts.push('{yellow-fg}N{/yellow-fg}ext');
+    if (history.length > 0) parts.push(`{${T.warn}-fg}B{/${T.warn}-fg}ack`);
+    if (nav.help) parts.push(`{${T.warn}-fg}H{/${T.warn}-fg}elp`);
+    if (nav.toc)  parts.push(`{${T.warn}-fg}C{/${T.warn}-fg}ontents`);
+    if (nav.prev) parts.push(`{${T.warn}-fg}P{/${T.warn}-fg}rev`);
+    if (nav.next) parts.push(`{${T.warn}-fg}N{/${T.warn}-fg}ext`);
     if (links.length > 0) {
-      parts.push(`{yellow-fg}Tab{/yellow-fg}=Cycle links`);
-      parts.push(`{yellow-fg}Enter{/yellow-fg}=Follow`);
+      parts.push(`{${T.warn}-fg}Tab{/${T.warn}-fg}=Cycle links`);
+      parts.push(`{${T.warn}-fg}Enter{/${T.warn}-fg}=Follow`);
     }
-    parts.push('{yellow-fg}↑↓PgUp/Dn{/yellow-fg}');
-    parts.push('{yellow-fg}Q{/yellow-fg}');
+    parts.push(`{${T.warn}-fg}↑↓PgUp/Dn{/${T.warn}-fg}`);
+    parts.push(`{${T.warn}-fg}Q{/${T.warn}-fg}`);
     (footer as any).setContent(`{center}${parts.join('  ')}{/center}`);
     screen.render();
   }
@@ -181,9 +182,9 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
 function showPlainViewer(screen: any, raw: string, title: string, onDone: () => void): void {
   const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
   const content = raw.replace(/[^\x09\x0a\x20-\x7e]/g, '').replace(/[{}]/g, (c) => `\\${c}`);
-  const panel = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: '100%-3', label: ` ${title} `, tags: true, style: { border: { fg: 'cyan' } } } as any);
+  const panel = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: '100%-3', label: ` ${title} `, tags: true, style: { border: { fg: T.accent } } } as any);
   const box = new ScrollableBox({ parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2', tags: false, scrollable: true, alwaysScroll: true, content } as any);
-  const hint = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}', style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } } as any);
+  const hint = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}', style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } } } as any);
   function close() {
     (screen as any).unkey(['q','Q','escape'], close);
     (screen as any).unkey(['up','down','pageup','pagedown'], scroll);

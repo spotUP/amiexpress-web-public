@@ -34,9 +34,33 @@ function getExtractorFactory(): any {
 
 /** Content of the .info-style command config written on install. Pure and
  * exported for testing: door_type must flow through as TYPE= (a FIM door
- * force-typed XIM at install time simply won't run under the FIM engine). */
-export function buildDoorInfoContent(doorType: string, cmd: string, binaryRel: string): string {
-  return `TYPE=${doorType}\nLOCATION=Doors:${cmd}/${binaryRel}\nSTACK=65536\nACCESS=0\n`;
+ * force-typed XIM at install time simply won't run under the FIM engine).
+ *
+ * `access` is NEGATIVE by default, and that is not the same as 0: a negative
+ * value writes NO ACCESS tooltype at all, which is the only correct way to
+ * install a door everyone may run. express.e:4703 reads
+ *
+ *     IF access=0 THEN RETURN TRUE
+ *
+ * and that TRUE is RESULT_NOT_ALLOWED (axenums.e:23) - so `ACCESS=0` DENIES
+ * a door to everybody on a real AmiExpress. This function wrote it on every
+ * install. It is benign on amiexpress-web, whose runCommand treats 0 as "no
+ * restriction" (command-execution.handler.ts), which is why it went
+ * unnoticed here - but every .info DOORMAN has ever written is wrong on the
+ * board it was modelled on. The C door was fixed the same way on
+ * 2026-08-31 (flow_build_info_content); this is the other half.
+ *
+ * 255 is unaffected and still means sysop-only: express.e:4704 is
+ * `IF (access>acsLevel)`, which is what the disable path relies on.
+ */
+export function buildDoorInfoContent(
+  doorType: string,
+  cmd: string,
+  binaryRel: string,
+  access = -1,
+): string {
+  const accessLine = access >= 0 ? `ACCESS=${access}\n` : '';
+  return `TYPE=${doorType}\nLOCATION=Doors:${cmd}/${binaryRel}\nSTACK=65536\n${accessLine}`;
 }
 
 /**

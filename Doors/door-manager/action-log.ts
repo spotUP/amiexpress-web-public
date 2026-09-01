@@ -1,3 +1,4 @@
+import { T } from './door-theme';
 /**
  * What an install or an uninstall actually did, for the right-hand panel.
  *
@@ -19,9 +20,9 @@ export interface ActionLogEntry {
 }
 
 const MARKER: Record<ActionLogKind, string> = {
-  ok: '{green-fg}[OK]{/green-fg}',
-  skip: '{yellow-fg}[SKIP]{/yellow-fg}',
-  fail: '{red-fg}[FAIL]{/red-fg}',
+  ok: `{${T.ok}-fg}[OK]{/${T.ok}-fg}`,
+  skip: `{${T.warn}-fg}[SKIP]{/${T.warn}-fg}`,
+  fail: `{${T.alert}-fg}[FAIL]{/${T.alert}-fg}`,
 };
 
 export class ActionLog {
@@ -48,10 +49,10 @@ export class ActionLog {
   /** The panel body. */
   render(): string {
     if (this.entries.length === 0) {
-      return `{yellow-fg}${this.title}{/yellow-fg}\n\nNothing was changed.`;
+      return `{${T.warn}-fg}${this.title}{/${T.warn}-fg}\n\nNothing was changed.`;
     }
     const lines = this.entries.map(e => `${MARKER[e.kind]} ${e.text}`);
-    return `{yellow-fg}${this.title}{/yellow-fg}\n\n${lines.join('\n')}`;
+    return `{${T.warn}-fg}${this.title}{/${T.warn}-fg}\n\n${lines.join('\n')}`;
   }
 }
 
