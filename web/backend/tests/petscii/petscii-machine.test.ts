@@ -104,8 +104,14 @@ describe('PetsciiMachine', () => {
     const m = new PetsciiMachine();
     m.feed(new Array(41).fill(0x41)); // fills row 0, wraps 1 char onto row 1
     expect(m.state.cursorY).toBe(1);
+    m.feed([0x91]); // cursor-up: back to row 0, the FIRST physical row of the logical line
+    expect(m.state.cursorY).toBe(0);
     m.feed([0x0D]);
-    expect(m.state.cursorY).toBe(2); // below row 1 (the logical line's last row), not row 0's next row
+    // Correct: walks the link chain from row 0 forward to its end (row 1),
+    // then lands one below that -> row 2. A naive "cursorY+1 from wherever
+    // the cursor happens to be" implementation would land on row 1 instead,
+    // since the cursor was moved back to row 0 before RETURN fired.
+    expect(m.state.cursorY).toBe(2);
   });
 
   it('DELETE at column 0 of a linked continuation row joins the previous row, pulling content left across the boundary', () => {

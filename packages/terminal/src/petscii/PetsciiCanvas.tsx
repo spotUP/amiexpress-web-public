@@ -127,6 +127,12 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
   }, [cursorOn, atlasReady, draw]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    // Let Ctrl/Cmd/Alt chords (copy, select-all, browser reload, etc.) pass
+    // through untouched - keyEventToPetscii only knows about `key` + shift,
+    // so without this guard a Ctrl+C or Cmd+R would still resolve to a
+    // mapped letter byte and get preventDefault'd, eating the OS/browser
+    // shortcut.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const bytes = keyEventToPetscii(e.key, e.shiftKey);
     if (bytes) {
       e.preventDefault();
