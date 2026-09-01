@@ -30,6 +30,9 @@ class BBSDashboard {
          * screen, and none of them move when the user picks a theme.
          */
         this.s = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
+        this.stopMasthead = null;
+        this.stopGlitches = null;
+        this.theme = (0, theme_1.themeById)('classic');
         this.updateInterval = null;
         this.exitResolve = null;
         this.resizeHandler = null;
@@ -68,6 +71,7 @@ class BBSDashboard {
         const bbsTheme = this.ctx.bbs?.getTheme;
         const resolved = bbsTheme ? this.ctx.bbs.getTheme() : (0, theme_1.themeById)('classic');
         this.s = (0, theme_1.themeStyles)(resolved);
+        this.theme = resolved;
         T = resolved.tokens;
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             smartCSR: false, // Prevent layout corruption in BBS environment
@@ -79,14 +83,34 @@ class BBSDashboard {
         this.screen.program.write('\x1b[H');
         this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
         this.screen.alloc();
+        // The masthead: branding slashes, then the title.
+        //
+        // The colour pass alone left this door looking like a plain green
+        // terminal next to DOORS, which has the rail, the leaders and the
+        // glitches. Colour was never what made that screen read as designed.
+        // A theme with no rail (classic) gets exactly the bar it always had.
+        this.header = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: 1,
+            fixed: true,
+            focusable: false,
+            clickable: false,
+            mouse: false,
+            border: undefined,
+            content: '',
+            style: this.s.bar.style,
+        });
         // System Resources Panel (top-left)
         this.systemPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             label: ' SYSTEM RESOURCES ',
             left: 0,
-            top: 0,
+            top: 1, // below the masthead
             width: '50%',
-            height: '50%',
+            height: '50%-1',
             fixed: true, // Static panel for BBS environment
             focusable: false, // Display-only panel
             clickable: false, // Don't capture mouse events
@@ -107,9 +131,9 @@ class BBSDashboard {
             parent: this.screen,
             label: ' BBS STATISTICS ',
             left: '50%',
-            top: 0,
+            top: 1, // below the masthead
             width: '50%',
-            height: '50%',
+            height: '50%-1',
             fixed: true, // Static panel for BBS environment
             focusable: false, // Display-only panel
             clickable: false, // Don't capture mouse events
@@ -159,6 +183,23 @@ class BBSDashboard {
             ...this.s.bar,
             tags: true,
         });
+        // The animated masthead, from the SDK rather than hand-rolled here:
+        // six doors were about to grow six copies of the same timer.
+        this.stopMasthead = (0, theme_1.attachMasthead)(this.header, this.theme, {
+            title: 'SYSOP DASHBOARD',
+            // One column short: writing a row's final cell leaves the terminal
+            // in a pending-wrap state and clips the last character.
+            width: Math.max(1, (this.screen.width || 80) - 1),
+            rail: this.s.accent,
+            ink: this.s.ink,
+            render: () => this.screen.render(),
+            seed: (this.ctx?.nodeId ?? 1) * 7 + 3,
+        });
+        // Glitches go on the NODE list, the only thing here with rows to spare.
+        // Damaging the masthead or the status line would read as the door being
+        // broken rather than as atmosphere. Does nothing at all on a theme that
+        // did not ask for them - no timer is started.
+        this.stopGlitches = (0, theme_1.attachGlitches)(this.nodesText, this.theme, () => this.screen.render(), { tickMs: 400 });
         // Responsive breakpoint handling
         this.resizeHandler = (width, height) => {
             const breakpoint = this.screen.responsiveLayout.getBreakpoint();
@@ -414,6 +455,23 @@ class BBSDashboard {
             if (this.updateInterval) {
                 clearInterval(this.updateInterval);
                 this.updateInterval = null;
+            }
+            // Stop the masthead, and stop the glitches - the latter also puts the
+            // true rows back, so a door that exits mid-glitch never leaves the
+            // damage as the last thing on screen.
+            if (this.stopMasthead) {
+                try {
+                    this.stopMasthead();
+                }
+                catch { /* leaving anyway */ }
+                this.stopMasthead = null;
+            }
+            if (this.stopGlitches) {
+                try {
+                    this.stopGlitches();
+                }
+                catch { /* leaving anyway */ }
+                this.stopGlitches = null;
             }
             // Remove resize handler
             if (this.resizeHandler && this.screen?.responsiveLayout) {

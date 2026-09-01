@@ -1168,3 +1168,87 @@ describe('dialogs under a borderless theme', () => {
     expect(modal.style.bg).toBe('black');
   });
 });
+
+/**
+ * The masthead every door shares.
+ *
+ * Extracted from DOORS after the sysop compared a colour-only migration
+ * against it: "it doesnt look even close to how cool DOORS looks". The
+ * moving rail is what made that screen read as designed, so it had to stop
+ * being one door's private code.
+ */
+describe('attachMasthead', () => {
+  const { attachMasthead, themeById } = require('../../engines/ui/theme');
+
+  function target() {
+    const drawn: string[] = [];
+    return { drawn, setContent: (t: string) => drawn.push(t) };
+  }
+
+  afterEach(() => { jest.useRealTimers(); });
+
+  it('draws the plain title and starts no timer when the theme has no rail', () => {
+    const t = target();
+    let renders = 0;
+    const stop = attachMasthead(t, themeById('classic'), {
+      title: 'DASHBOARD', width: 80,
+      rail: (s: string) => s, ink: (s: string) => s,
+      render: () => { renders++; },
+    });
+
+    // classic pays nothing for this existing.
+    expect(t.drawn).toEqual([' DASHBOARD ']);
+    expect(renders).toBe(1);
+    stop();
+  });
+
+  it('draws the rail and the title for a theme that has one', () => {
+    const t = target();
+    const stop = attachMasthead(t, themeById('uprough-neon'), {
+      title: 'DASHBOARD', width: 80,
+      rail: (s: string) => s, ink: (s: string) => s,
+      render: () => {}, entryFrames: 0,
+    });
+
+    expect(t.drawn.length).toBeGreaterThan(0);
+    expect(t.drawn[0]).toContain('DASHBOARD');
+    expect(t.drawn[0]).toContain('/');
+    stop();
+  });
+
+  it('never writes the row\'s final column', () => {
+    // Writing a row's last cell leaves the terminal in a pending-wrap
+    // state, and the last character is clipped or pushed onto the next row.
+    const t = target();
+    const stop = attachMasthead(t, themeById('quiet-phosphor'), {
+      title: 'DASHBOARD', width: 80,
+      rail: (s: string) => s, ink: (s: string) => s,
+      render: () => {}, entryFrames: 0,
+    });
+
+    expect(t.drawn[0].length).toBeLessThanOrEqual(80);
+    stop();
+  });
+
+  it('stops both timers and leaves the bar at rest', () => {
+    jest.useFakeTimers();
+    const t = target();
+    const stop = attachMasthead(t, themeById('slate-slash'), {
+      title: 'DASHBOARD', width: 80,
+      rail: (s: string) => s, ink: (s: string) => s,
+      render: () => {},
+    });
+
+    jest.advanceTimersByTime(1000);
+    const afterRunning = t.drawn.length;
+    expect(afterRunning).toBeGreaterThan(1);
+
+    stop();
+    const afterStop = t.drawn.length;
+    jest.advanceTimersByTime(5000);
+
+    // Nothing further is drawn once stopped - a door that exits must not
+    // leave a timer writing to a destroyed screen.
+    expect(t.drawn.length).toBe(afterStop);
+  });
+});

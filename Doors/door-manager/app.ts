@@ -34,7 +34,7 @@ export type {
 } from './install-core';
 import * as fs from 'fs';
 import {
-  Screen, Panel, List, ScrollableBox, ConfirmModal, Textbox,
+  Screen, Panel, Box, List, ScrollableBox, ConfirmModal, Textbox,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { FileExplorerOverlay } from './FileExplorerOverlay';
@@ -178,6 +178,8 @@ class DoormanLayout {
   listPanel: any; doorList: any;
   infoPanel: any; infoBox: any;
   filterPanel: any; filterBox: any;
+  /** Stops the masthead animation; called when the door tears down. */
+  stopMasthead: (() => void) | null = null;
   readonly width: number;
 
   constructor(screen: any, nodeId: string | number) {
@@ -186,6 +188,22 @@ class DoormanLayout {
 
     this.header = new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3,
       tags: true, style: { fg: T.ink, bg: T.bar, border:{ fg: T.accentAlt } }, focusable: false } as any);
+
+    // The animated slash rail, on the header's first row. A child keeps it
+    // out of the outer geometry - nothing below moves, and a theme with no
+    // rail (classic) gets the plain title it always had.
+    const mastheadRow = new Box({ parent: this.header, top: 0, left: 0, width: '100%-2',
+      height: 1, tags: true, content: '', focusable: false,
+      style: S.bar.style } as any);
+    this.stopMasthead = attachMasthead(mastheadRow as any, CURRENT, {
+      title: 'DOORMAN',
+      // One column short: writing a row's last cell leaves the terminal in
+      // a pending-wrap state and clips the final character.
+      width: Math.max(1, ((screen as any).width || 80) - 3),
+      rail: S.accent,
+      ink: S.ink,
+      render: () => screen.render(),
+    });
 
     this.footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
       tags: true, style: { fg: T.ink, bg: T.bar, border:{ fg: T.accentAlt } }, focusable: false } as any);
@@ -618,7 +636,8 @@ import {
   type RepoViewHotkeyHandlers,
   type ArchiveFileRow,
 } from './repo-view-helpers';
-import { T, applyTheme } from './door-theme';
+import { T, S, CURRENT, applyTheme } from './door-theme';
+import { attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
   getCatalogSvc,
   getInstallsRepo,
@@ -1926,7 +1945,16 @@ export async function createApp(session: DoorSession): Promise<void> {
   // This is the only reliable way since blessed ignores external cursor state.
   screen.on('render', () => { bbs.write('\x1b[?25l'); });
   screen.on('resize', () => { screen.render(); });
-  screen.on('destroy', () => { inputManager.disable(); bbs.write('\x1b[?25h'); });
+  screen.on('destroy', () => {
+    // Stop the masthead before anything else: a timer writing to a
+    // destroyed screen is how a door takes the session with it.
+    if (layout.stopMasthead) {
+      try { layout.stopMasthead(); } catch { /* leaving anyway */ }
+      layout.stopMasthead = null;
+    }
+    inputManager.disable();
+    bbs.write('\x1b[?25h');
+  });
 
   vm.push(new InstalledView(layout, bbs, doors));
 

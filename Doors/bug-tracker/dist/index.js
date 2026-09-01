@@ -19,6 +19,7 @@ import {
 } from "@amiexpress/bbs-door-sdk/engines/ui/theme";
 var T = themeById("classic").tokens;
 var S = themeStyles(themeById("classic"));
+var THEME = themeById("classic");
 function applyTheme(bbs) {
   const getTheme = bbs?.getTheme;
   if (typeof getTheme !== "function") return;
@@ -27,6 +28,7 @@ function applyTheme(bbs) {
     if (!theme?.tokens) return;
     T = theme.tokens;
     S = themeStyles(theme);
+    THEME = theme;
   } catch {
   }
 }
@@ -307,6 +309,9 @@ ${message}
   });
 }
 
+// app.ts
+import { attachMasthead } from "@amiexpress/bbs-door-sdk/engines/ui/theme";
+
 // storage.ts
 import * as fs from "fs";
 import * as path from "path";
@@ -551,6 +556,7 @@ var BugTrackerApp = class {
   isSysop;
   // UI elements
   headerBox;
+  stopMasthead = null;
   mainContainer;
   footerBox;
   // Public for the same reason, and it must stay a live reference: the
@@ -640,11 +646,33 @@ var BugTrackerApp = class {
         fg: T.ink,
         bg: T.bar
       },
-      content: "{center}{bold}BUG TRACKER{/bold} - AmiExpress BBS Issue Management{/center}",
+      content: "\n{center}AmiExpress BBS Issue Management{/center}",
       tags: true,
       focusable: false,
       mouse: false,
       clickable: false
+    });
+    const mastheadRow = createBox2({
+      parent: this.headerBox,
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: 1,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+      tags: true,
+      content: "",
+      style: S.bar.style
+    });
+    this.stopMasthead = attachMasthead(mastheadRow, THEME, {
+      title: "BUG TRACKER",
+      // One column short: writing a row's last cell leaves the terminal in
+      // a pending-wrap state and clips the final character.
+      width: Math.max(1, (this.screen.width || 80) - 1),
+      rail: S.accent,
+      ink: S.ink,
+      render: () => this.screen.render()
     });
     this.mainContainer = createBox2({
       parent: this.screen,
@@ -2092,6 +2120,13 @@ var BugTrackerApp = class {
   // Cleanup
   // ============================================================================
   quit() {
+    if (this.stopMasthead) {
+      try {
+        this.stopMasthead();
+      } catch {
+      }
+      this.stopMasthead = null;
+    }
     this.inputManager.disable();
     this.screen.destroy();
   }

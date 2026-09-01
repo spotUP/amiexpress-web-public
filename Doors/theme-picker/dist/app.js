@@ -35,7 +35,10 @@ async function createApp(session) {
         enableMouse: true,
     });
     input.enable();
-    (0, blessed_helpers_1.createBox)({
+    // The masthead was a STATIC rail here - one `////` printed once - while
+    // DOORS had the animated one. Since this is the screen people judge the
+    // themes from, it should show what a theme actually looks like in motion.
+    const mastheadRow = (0, blessed_helpers_1.createBox)({
         parent: screen,
         top: 0,
         left: 0,
@@ -43,10 +46,17 @@ async function createApp(session) {
         height: 1,
         border: undefined,
         focusable: false,
-        content: s.rail
-            ? `${s.accent(s.rail)} ${s.ink('DOOR THEME')} `
-            : ' DOOR THEME ',
+        content: '',
         style: s.bar.style,
+    });
+    const stopMasthead = (0, theme_1.attachMasthead)(mastheadRow, theme, {
+        title: 'DOOR THEME',
+        // One column short: writing a row's last cell leaves the terminal in a
+        // pending-wrap state and clips the final character.
+        width: Math.max(1, (screen.width || 80) - 1),
+        rail: s.accent,
+        ink: s.ink,
+        render: () => screen.render(),
     });
     const active = theme.id;
     const list = (0, blessed_helpers_1.createList)({
@@ -94,6 +104,12 @@ async function createApp(session) {
     screen.render();
     await new Promise((resolve) => {
         const done = () => {
+            // Stop the masthead before the screen goes - a timer writing to a
+            // destroyed screen is how a door takes the session with it.
+            try {
+                stopMasthead();
+            }
+            catch { /* leaving anyway */ }
             try {
                 input.disable();
             }

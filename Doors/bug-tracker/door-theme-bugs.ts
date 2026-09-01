@@ -16,6 +16,9 @@ import {
 export let T: ThemeTokens = themeById('classic').tokens;
 export let S: ThemeStyles = themeStyles(themeById('classic'));
 
+/** The theme itself, for chrome that needs its rail or border. */
+export let THEME: Theme = themeById('classic');
+
 /** Resolve the caller's theme. A host without getTheme keeps classic. */
 export function applyTheme(bbs: unknown): void {
   const getTheme = (bbs as { getTheme?: () => Theme } | undefined)?.getTheme;
@@ -25,6 +28,7 @@ export function applyTheme(bbs: unknown): void {
     if (!theme?.tokens) return;
     T = theme.tokens;
     S = themeStyles(theme);
+    THEME = theme;
   } catch {
     // A theme that will not resolve is not worth failing a door over.
   }

@@ -16,8 +16,9 @@ import {
   DoorInputManager,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Screen, Box, List, Textbox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { T, S, applyTheme } from './door-theme-bugs';
+import { T, S, applyTheme, THEME } from './door-theme-bugs';
 import * as dialogs from './dialogs';
+import { attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
   BugStorage,
   sendWebhook,
@@ -53,6 +54,7 @@ export class BugTrackerApp {
 
   // UI elements
   private headerBox!: Box;
+  private stopMasthead: (() => void) | null = null;
   private mainContainer!: Box;
   private footerBox!: Box;
   // Public for the same reason, and it must stay a live reference: the
@@ -168,11 +170,37 @@ export class BugTrackerApp {
         fg: T.ink,
         bg: T.bar,
       },
-      content: '{center}{bold}BUG TRACKER{/bold} - AmiExpress BBS Issue Management{/center}',
+      content: '\n{center}AmiExpress BBS Issue Management{/center}',
       tags: true,
       focusable: false,
       mouse: false,
       clickable: false,
+    });
+
+    // The animated slash rail, on the header's first row. A child box keeps
+    // it out of the outer geometry entirely - nothing below moves, and a
+    // theme with no rail (classic) just gets the plain title it always had.
+    const mastheadRow = createBox({
+      parent: this.headerBox,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: 1,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+      tags: true,
+      content: '',
+      style: S.bar.style,
+    });
+    this.stopMasthead = attachMasthead(mastheadRow as any, THEME, {
+      title: 'BUG TRACKER',
+      // One column short: writing a row's last cell leaves the terminal in
+      // a pending-wrap state and clips the final character.
+      width: Math.max(1, ((this.screen as any).width || 80) - 1),
+      rail: S.accent,
+      ink: S.ink,
+      render: () => this.screen.render(),
     });
 
     // Main container - not focusable (children are)
@@ -1860,6 +1888,12 @@ export class BugTrackerApp {
   // ============================================================================
 
   private quit(): void {
+    // Stop the masthead before the screen goes: a timer still writing to a
+    // destroyed screen is how a door takes the session with it.
+    if (this.stopMasthead) {
+      try { this.stopMasthead(); } catch { /* leaving anyway */ }
+      this.stopMasthead = null;
+    }
     this.inputManager.disable();
     this.screen.destroy();
   }
