@@ -58,6 +58,34 @@ export class DoorConfigService {
       throw new Error(`Door command '${validated.door_command}' already exists`);
     }
 
+    // And the door has to BE there.
+    //
+    // Nothing checked, so a path with a typo - or one typed before the files
+    // were copied - produced a registration pointing at nothing. The command
+    // scan drops such a registration (commandLocationIsLive), so the command
+    // exists on disk, is invisible in the door list, and answers "Door not
+    // found: /app/data/bbs/Doors/<whatever>" when a user types it. That is
+    // the state AE was found in on the live board: ae.info on the volume,
+    // Doors/mail-composer nowhere.
+    // The DOOR'S DIRECTORY, which is the first segment under Doors/.
+    //
+    // A 68K LOCATION names a binary inside it (Doors/auditdoor/auditdoor) and
+    // that binary may legitimately not be built yet - commandLocationIsLive
+    // keeps such a command. What cannot be allowed is a door directory that
+    // does not exist at all, which is what AE had: Doors/mail-composer,
+    // nowhere on the board.
+    const relative = validated.door_path.replace(/^Doors:/i, 'Doors/');
+    const doorDirectory = path.isAbsolute(relative)
+      ? relative
+      : path.join(bbsRootForCheck, ...relative.split('/').slice(0, 2));
+    if (!fs.existsSync(doorDirectory)) {
+      throw new Error(
+        `There is no door at '${validated.door_path}' - ${doorDirectory} does not exist. ` +
+        `Put the door's files on the board first: a registration pointing at nothing is a ` +
+        `command that answers "Door not found" and never appears in this list.`
+      );
+    }
+
     // DISK FIRST, then the mirror - the same order the rest of this config
     // layer uses, and for the same reason: Commands/BBSCmd/<CMD>.info is what
     // the BBS reads and the `doors` table is a copy.

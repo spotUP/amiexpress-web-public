@@ -64,6 +64,10 @@ describe('creating a door', () => {
   beforeEach(() => {
     bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'door-create-'));
     fs.mkdirSync(path.join(bbsRoot, 'Commands', 'BBSCmd'), { recursive: true });
+    // The door has to be on the board before it can be registered: a
+    // registration pointing at nothing is a command that answers "Door not
+    // found" (door-config.service.ts), which is the state AE was found in.
+    fs.mkdirSync(path.join(bbsRoot, 'Doors', 'auditdoor'), { recursive: true });
     previousDataDir = appConfig.get('dataDir');
     appConfig.set('dataDir', bbsRoot);
     mirrorCalls = 0;
