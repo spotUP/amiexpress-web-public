@@ -24,6 +24,8 @@ export const VS_INFO_COLS = 21;
 export interface VersusLayout {
   /** How many opponents to draw as full boards. Zero means the minimap grid. */
   fullBoards: number;
+  /** How many go to the minimap grid instead. */
+  minimaps: number;
   /** Whether the 1v1 VS/attack panel fits beside them. */
   showInfo: boolean;
   /** Where the opponent boards start, in columns. */
@@ -33,42 +35,63 @@ export interface VersusLayout {
 }
 
 /**
- * All-or-nothing, deliberately.
+ * Humans get the boards; bots get miniatures if that is what it takes.
  *
- * Showing two of five opponents full-size and the other three as miniatures
- * would say something false about the match: the player would read the two
- * as the threats. Either every opponent gets a board or none does, which
- * also means an 80-column caller sees exactly what they see today - one
- * opponent full with the VS panel, more than one as the minimap grid.
+ * "the normal case is probably that we have enough room for all human
+ * players" - which is the observation the whole rule turns on. A match can
+ * carry many CPU opponents, and forcing everyone to miniatures because eight
+ * bots will not fit wastes a wide terminal on the two people actually
+ * playing. So: fit everyone if everyone fits, otherwise fit the humans, and
+ * only fall back to an all-miniature grid when even they do not.
+ *
+ * Within a group it stays all-or-nothing. Showing two humans full and a
+ * third as a miniature would say something false about the match - the
+ * player would read the two as the threats.
  */
-export function versusLayout(screenWidth: number, opponentCount: number): VersusLayout {
+export function versusLayout(
+  screenWidth: number,
+  humanCount: number,
+  botCount: number = 0,
+): VersusLayout {
+  const total = Math.max(0, humanCount) + Math.max(0, botCount);
   const base: VersusLayout = {
     fullBoards: 0,
+    minimaps: total,
     showInfo: false,
     left: LEFT_PANEL_COLS,
     boardWidth: OPPONENT_BOARD_COLS,
   };
 
-  if (opponentCount <= 0) return base;
+  if (total <= 0) return { ...base, minimaps: 0 };
 
   const available = Math.max(0, screenWidth - LEFT_PANEL_COLS);
+  const fits = (n: number): boolean => {
+    if (n <= 0) return false;
+    // A lone opponent is the classic 1v1 and wants the VS panel beside it,
+    // but the board matters more than the numbers: below that, board only.
+    if (n === 1) return available >= OPPONENT_BOARD_COLS;
+    return Math.floor(available / OPPONENT_BOARD_COLS) >= n;
+  };
 
-  // One opponent: the classic 1v1, with the VS panel if there is room for it.
-  if (opponentCount === 1) {
-    if (available >= OPPONENT_BOARD_COLS + VS_INFO_COLS) {
-      return { ...base, fullBoards: 1, showInfo: true };
-    }
-    if (available >= OPPONENT_BOARD_COLS) {
-      return { ...base, fullBoards: 1, showInfo: false };
-    }
-    return base;
+  if (fits(total)) {
+    return {
+      ...base,
+      fullBoards: total,
+      minimaps: 0,
+      showInfo: total === 1 && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS,
+    };
   }
 
-  // Several: only if they ALL fit.
-  const fit = Math.floor(available / OPPONENT_BOARD_COLS);
-  if (fit >= opponentCount) {
-    return { ...base, fullBoards: opponentCount, showInfo: false };
+  if (humanCount > 0 && fits(humanCount)) {
+    return {
+      ...base,
+      fullBoards: humanCount,
+      minimaps: total - humanCount,
+      showInfo: humanCount === 1 && total === 1
+        && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS,
+    };
   }
+
   return base;
 }
 

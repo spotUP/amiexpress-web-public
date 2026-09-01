@@ -20,6 +20,8 @@ export declare const VS_INFO_COLS = 21;
 export interface VersusLayout {
     /** How many opponents to draw as full boards. Zero means the minimap grid. */
     fullBoards: number;
+    /** How many go to the minimap grid instead. */
+    minimaps: number;
     /** Whether the 1v1 VS/attack panel fits beside them. */
     showInfo: boolean;
     /** Where the opponent boards start, in columns. */
@@ -28,15 +30,20 @@ export interface VersusLayout {
     boardWidth: number;
 }
 /**
- * All-or-nothing, deliberately.
+ * Humans get the boards; bots get miniatures if that is what it takes.
  *
- * Showing two of five opponents full-size and the other three as miniatures
- * would say something false about the match: the player would read the two
- * as the threats. Either every opponent gets a board or none does, which
- * also means an 80-column caller sees exactly what they see today - one
- * opponent full with the VS panel, more than one as the minimap grid.
+ * "the normal case is probably that we have enough room for all human
+ * players" - which is the observation the whole rule turns on. A match can
+ * carry many CPU opponents, and forcing everyone to miniatures because eight
+ * bots will not fit wastes a wide terminal on the two people actually
+ * playing. So: fit everyone if everyone fits, otherwise fit the humans, and
+ * only fall back to an all-miniature grid when even they do not.
+ *
+ * Within a group it stays all-or-nothing. Showing two humans full and a
+ * third as a miniature would say something false about the match - the
+ * player would read the two as the threats.
  */
-export declare function versusLayout(screenWidth: number, opponentCount: number): VersusLayout;
+export declare function versusLayout(screenWidth: number, humanCount: number, botCount?: number): VersusLayout;
 /** Where the Nth full opponent board starts. */
 export declare function boardLeft(index: number): number;
 /** The narrowest terminal that shows `count` opponents as full boards. */

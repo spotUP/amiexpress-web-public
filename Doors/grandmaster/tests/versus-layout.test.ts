@@ -26,7 +26,7 @@ export async function eightyColumnsBehavesExactlyAsItDoesToday(): Promise<void> 
 
   // More than one: the minimap grid, as before.
   for (const count of [2, 3, 4, 5, 8]) {
-    assert.strictEqual(versusLayout(80, count).fullBoards, 0,
+    assert.strictEqual(versusLayout(80, count, 0).fullBoards, 0,
       `${count} opponents do not fit in 80 columns and must stay miniatures`);
   }
 }
@@ -34,6 +34,31 @@ export async function eightyColumnsBehavesExactlyAsItDoesToday(): Promise<void> 
 export async function aWideTerminalShowsEveryOpponentInFull(): Promise<void> {
   assert.strictEqual(versusLayout(103, 3).fullBoards, 3); // 37 + 3*22
   assert.strictEqual(versusLayout(160, 5).fullBoards, 5);
+}
+
+export async function humansGetTheBoardsAndBotsTakeTheMiniatures(): Promise<void> {
+  // "the normal case is probably that we have enough room for all human
+  // players." A match with two people and six bots should not force the
+  // people into miniatures because the bots do not fit.
+  const wide = versusLayout(120, 2, 6);
+  assert.strictEqual(wide.fullBoards, 2, 'both humans get boards');
+  assert.strictEqual(wide.minimaps, 6, 'the bots go to the grid');
+
+  // If everyone fits, everyone gets a board - bots included.
+  const veryWide = versusLayout(220, 2, 6);
+  assert.strictEqual(veryWide.fullBoards, 8);
+  assert.strictEqual(veryWide.minimaps, 0);
+
+  // And when even the humans do not fit, nobody does.
+  const narrow = versusLayout(80, 2, 6);
+  assert.strictEqual(narrow.fullBoards, 0);
+  assert.strictEqual(narrow.minimaps, 8);
+}
+
+export async function anAllBotMatchStillBehavesAsItDidAtEighty(): Promise<void> {
+  // CPU Battle: no humans among the opponents at all.
+  assert.strictEqual(versusLayout(80, 0, 3).fullBoards, 0);
+  assert.strictEqual(versusLayout(103, 0, 3).fullBoards, 3, 'room means boards, human or not');
 }
 
 export async function itIsAllOrNothing(): Promise<void> {
