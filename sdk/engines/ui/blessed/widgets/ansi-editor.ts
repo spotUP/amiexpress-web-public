@@ -2886,10 +2886,22 @@ BBS Door SDK v2.0{/gray-fg}
     // covers the whole magnified cell, so it marks the cell an artist sees
     // rather than its top-left corner. At the default 1/1 this is the
     // 1x1 box at (line, col) it has always been.
-    this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY;
+    // In half-block mode the stroke lands on HALF a cell, so the cursor
+    // says which half - asked while drawing a Pengo egg, "the red marker
+    // dont align with the blocks, or is that becasue its halfblocks?". It
+    // was: a cell-sized marker over art whose pixels are half-cells cannot
+    // point at the pixel you are about to paint.
+    //
+    // Only from 2:1 up. At actual size a cell IS one character row and half
+    // of it is not a thing a terminal can draw, so the cursor stays whole.
+    const halfBlockCursor = this.brushMode === 'half-block' && this.scaleY >= 2;
+    const height = halfBlockCursor ? Math.floor(this.scaleY / 2) : this.scaleY;
+    const subOffset = halfBlockCursor && this.halfBlockSubY === 1 ? height : 0;
+
+    this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY + subOffset;
     this.drawCursor.left = canvasLeft + this.cursor.col * this.scaleX;
     this.drawCursor.width = this.scaleX;
-    this.drawCursor.height = this.scaleY;
+    this.drawCursor.height = height;
 
     // Show the current drawing character in the cursor
     this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
