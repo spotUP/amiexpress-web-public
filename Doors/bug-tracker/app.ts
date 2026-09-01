@@ -18,7 +18,7 @@ import {
 import type { Screen, Box, List, Textbox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { T, S, applyTheme, THEME } from './door-theme-bugs';
 import * as dialogs from './dialogs';
-import { attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
   BugStorage,
   sendWebhook,
@@ -209,7 +209,7 @@ export class BugTrackerApp {
       top: 3,
       left: 0,
       width: '100%',
-      bottom: 3,
+      bottom: 1,   // the footer is one row now, not three
       style: {
         fg: T.ink,
         bg: T.ground,
@@ -225,12 +225,18 @@ export class BugTrackerApp {
       bottom: 0,
       left: 0,
       width: '100%',
-      height: 3,
-      style: {
-        fg: T.ink,
-        bg: T.bar,
-      },
-      content: '{center}Q=Quit | ESC=Back | Arrow Keys=Navigate | Enter=Select{/center}',
+      height: 1,
+      style: footerStyle(THEME),
+      content: ' ' + footerHints(
+        [
+          { key: 'Arrows', does: 'Navigate' },
+          { key: 'Enter', does: 'Select' },
+          { key: 'ESC', does: 'Back' },
+          { key: 'Q', does: 'Quit' },
+        ],
+        { key: S.key, dim: S.dim },
+        S.rail
+      ),
       tags: true,
       focusable: false,
       mouse: false,

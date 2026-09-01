@@ -17,7 +17,7 @@ import {
   createBox,
   createList,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { themeStyles, themeById, attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeStyles, themeById, attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 
 interface DoorSession {
@@ -100,20 +100,42 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   const listRows = Math.max(1, Math.min(themes.length, ((screen as any).height || 24) - 6));
 
+  // The note sits under the list; the HINTS go to the bottom of the screen
+  // as a real footer. They used to float together mid-screen just below the
+  // list, which read as stray text rather than as the screen's footer -
+  // reported as "theme looks cool but it has no footer".
   createBox({
     parent: screen,
     top: listRows + 3,
     left: 0,
     width: '100%',
-    height: 3,
+    height: 1,
     border: undefined,
     focusable: false,
-    content: [
-      '',
-      `  ${s.dim('A theme applies the next time a door draws.')}`,
-      `  ${s.key('Up/Down:')} choose   ${s.key('Enter:')} use it   ${s.key('Q:')} leave`,
-    ].join('\n'),
+    content: `  ${s.dim('A theme applies the next time a door draws.')}`,
     style: s.plain.style,
+  });
+
+  createBox({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: 1,
+    border: undefined,
+    focusable: false,
+    clickable: false,
+    mouse: false,
+    style: footerStyle(theme),
+    content: ' ' + footerHints(
+      [
+        { key: 'Up/Down', does: 'Choose' },
+        { key: 'Enter', does: 'Use it' },
+        { key: 'Q', does: 'Leave' },
+      ],
+      { key: s.key, dim: s.dim },
+      s.rail
+    ),
   });
 
   list.focus();

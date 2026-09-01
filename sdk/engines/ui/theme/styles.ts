@@ -17,7 +17,7 @@
  * migration is verifiable: the output should be identical until somebody
  * chooses a different theme.
  */
-import type { Theme } from './tokens';
+import type { Theme } from './tokens.js';
 
 /** The border types blessed's own character table offers. */
 export type BlessedBorderType = 'line' | 'double' | 'bg';

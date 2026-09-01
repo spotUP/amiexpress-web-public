@@ -173,6 +173,9 @@ class BBSDashboard {
             tags: true,
         });
         // Status bar at the bottom
+        // A one-row footer in the bar's colours, not a bare line of text. The
+        // key CAP carries the accent and the description sits dim, so the hints
+        // do not compete with the panels above them.
         this.statusText = new blessed_1.Text({
             parent: this.screen,
             bottom: 0,
@@ -180,7 +183,7 @@ class BBSDashboard {
             right: 0,
             height: 1,
             content: '',
-            ...this.s.bar,
+            style: (0, theme_1.footerStyle)(this.theme),
             tags: true,
         });
         // The animated masthead, from the SDK rather than hand-rolled here:
@@ -310,7 +313,10 @@ class BBSDashboard {
         this.nodesText.setContent(nodesLines.join('\n'));
         // Update status line
         const now = new Date().toLocaleTimeString();
-        this.statusText.setContent(` {${T.ok}-fg}Last Update: ${now}{/${T.ok}-fg}  {${T.warn}-fg}Q: Quit  R/Space: Refresh{/${T.warn}-fg} `);
+        this.statusText.setContent(' ' + (0, theme_1.footerHints)([
+            { key: 'Q', does: 'Quit' },
+            { key: 'R/Space', does: 'Refresh' },
+        ], { key: this.s.key, dim: this.s.dim }, this.s.rail) + `  ${this.s.dim('Last Update: ' + now)}`);
         this.screen.render();
     }
     /**
