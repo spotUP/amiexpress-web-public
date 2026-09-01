@@ -816,11 +816,14 @@ typedef enum {
  * the list is 35% of the width, the detail pane takes the remaining 65%,
  * and both sit between the bars (blessed's "100%-6").
  *
- * Deliberately NOT copied from DOORMAN: bare-ESC as "back". A lone ESC is
- * indistinguishable from the start of an arrow sequence without a timer,
- * and that exact ambiguity cost DOORMAN six debugging rounds (see
- * handoff.md, 2026-08-17). Here ESC is only ever read as the lead byte of a
- * CSI sequence, and Q is the single documented way out.
+ * Copied from DOORMAN, with the clock DOORMAN lacked: bare ESC is "back"
+ * on every sub-screen and "quit" on the top one, and it is told apart from
+ * the start of an arrow sequence by asking the BBS whether more bytes are
+ * queued (flow_decode_escape(), see flow.h). That ambiguity cost DOORMAN six
+ * debugging rounds (handoff.md, 2026-08-17), and this door's first answer -
+ * no ESC binding at all - had the sysop pressing ESC, having it swallow
+ * the next key, and falling out of the door. Q still works everywhere ESC
+ * does; the footers name ESC.
  * ------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------
@@ -2460,18 +2463,47 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
 #define AE_ARROW_UP    4
 #define AE_ARROW_DOWN  5
 
-#define UI_KEY_UP    1000
-#define UI_KEY_DOWN  1001
-#define UI_KEY_PGUP  1002
-#define UI_KEY_PGDN  1003
-#define UI_KEY_HOME  1004
-#define UI_KEY_END   1005
-#define UI_KEY_ENTER 1006
+/* The values live in flow.h now, where flow_decode_escape() produces them;
+ * these names are what every screen loop in this file has always used. */
+#define UI_KEY_UP    FLOW_KEY_UP
+#define UI_KEY_DOWN  FLOW_KEY_DOWN
+#define UI_KEY_PGUP  FLOW_KEY_PGUP
+#define UI_KEY_PGDN  FLOW_KEY_PGDN
+#define UI_KEY_HOME  FLOW_KEY_HOME
+#define UI_KEY_END   FLOW_KEY_END
+#define UI_KEY_ENTER FLOW_KEY_ENTER
+#define UI_KEY_ESC   FLOW_KEY_ESC
+
+/* The door layer, in the shape flow_decode_escape() wants it. The ctx is
+ * unused here; it is counted rather than cast to void for the reason the
+ * /health sink gives (vbcc flags "(void) x;", clang flags the bare name). */
+static unsigned long g_key_ctx_seen;
+static int ui_key_next(void *ctx)
+{
+    g_key_ctx_seen += (ctx != (void *) 0);
+    return ae_key();
+}
+static int ui_key_pending(void *ctx)
+{
+    g_key_ctx_seen += (ctx != (void *) 0);
+    return ae_input_pending();
+}
+static void ui_key_settle(void *ctx)
+{
+    g_key_ctx_seen += (ctx != (void *) 0);
+    ae_delay_ticks(2);
+}
+
+/* A byte flow_decode_escape() read past a lone ESC - the user's NEXT key,
+ * typed before the door had decided about the ESC. Delivered by the next
+ * ui_read_key() instead of being lost. -1 when empty. */
+static int ui_pushback = -1;
 
 /* Turns a first byte into a UI_KEY_*. Continuation bytes of a CSI sequence
- * are read with the BLOCKING ae_key(), so this must only ever be called from
- * a path that is allowed to wait. Everything except the ESC branch decides
- * from the single byte it was given. */
+ * are read with the BLOCKING ae_key() once the BBS has confirmed they are
+ * queued, so this must only ever be called from a path that is allowed to
+ * wait. Everything except the ESC branch decides from the single byte it
+ * was given. */
 static int ui_decode_key(int c)
 {
     /* EOF on the input stream means the user is gone - a dropped carrier
@@ -2500,33 +2532,34 @@ static int ui_decode_key(int c)
         return c;
     }
 
-    /* ESC is only ever read as the lead byte of a CSI sequence. Bare-ESC is
-     * deliberately not a binding: it is indistinguishable from the start of
-     * an arrow sequence without a timer, and that exact ambiguity cost
-     * DOORMAN six debugging rounds (handoff.md, 2026-08-17). Q is the one
-     * documented way out. */
-    c = ae_key();
-    if (c != '[' && c != 'O') {
+    /* A lone ESC is "back", and ESC is also how every cursor sequence
+     * starts. flow_decode_escape() tells them apart by waiting two ticks
+     * and asking the BBS - without consuming - whether more bytes are
+     * queued. The old reader had no ESC binding and blocked on the byte
+     * after an ESC, so a user's ESC swallowed their next key and delivered
+     * that instead: ESC then Q in a sub-screen quit the whole door. See
+     * flow.h for the DOORMAN history behind the clock. */
+    {
+        flow_key_source src;
+        src.next = ui_key_next;
+        src.pending = ui_key_pending;
+        src.settle = ui_key_settle;
+        src.ctx = (void *) 0;
+        c = flow_decode_escape(&src, &ui_pushback);
+        if (flow_key_ends_session(c)) {
+            stop_for_carrier_loss();
+        }
         return c;
-    }
-    c = ae_key();
-    switch (c) {
-    case 'A': return UI_KEY_UP;
-    case 'B': return UI_KEY_DOWN;
-    case 'C': return UI_KEY_PGDN;
-    case 'D': return UI_KEY_PGUP;
-    case 'H': return UI_KEY_HOME;
-    case 'F': return UI_KEY_END;
-    case '5': (void) ae_key(); return UI_KEY_PGUP;
-    case '6': (void) ae_key(); return UI_KEY_PGDN;
-    case '1': (void) ae_key(); return UI_KEY_HOME;
-    case '4': (void) ae_key(); return UI_KEY_END;
-    default:  return 0;
     }
 }
 
 static int ui_read_key(void)
 {
+    if (ui_pushback >= 0) {
+        int c = ui_pushback;
+        ui_pushback = -1;
+        return ui_decode_key(c);
+    }
     return ui_decode_key(ae_key());
 }
 
@@ -2549,8 +2582,8 @@ static int ui_nav_action(int key)
  * keystroke rather than the user being dropped to a line prompt.
  *
  * Returns 1 when the filter was accepted (ENTER) and 0 when abandoned. The
- * caller redraws either way. Backspace edits; CTRL-U clears. As everywhere
- * else in this browser, a bare ESC is not a binding - see ui_read_key(). */
+ * caller redraws either way. Backspace edits; CTRL-U clears; ESC abandons,
+ * as everywhere else in this browser. */
 static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
                             const ui_geometry *g, ui_view *v,
                             const dr_catalog *cat)
@@ -2580,6 +2613,12 @@ static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
             ansi_cursor(b, 0);
             ansi_flush(b);
             return 1;
+        }
+        if (key == UI_KEY_ESC) {
+            ansi_begin(b, frame, framecap);
+            ansi_cursor(b, 0);
+            ansi_flush(b);
+            return 0;
         }
         if (key == 8 || key == 127) {          /* backspace / delete */
             if (len > 0) {
@@ -4725,7 +4764,7 @@ static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
                 int len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                                 "Up/Down  PgUp/PgDn",
                                                 (const char *const *) 0, 0,
-                                                "Q=Back");
+                                                "ESC=Back");
                 if (len < 0) {
                     bar[0] = '\0';
                 }
@@ -4737,7 +4776,7 @@ static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
         }
 
         key = ui_read_key();
-        if (key == 'q' || key == 'Q') {
+        if (key == UI_KEY_ESC || key == 'q' || key == 'Q') {
             return;
         }
         {
@@ -5643,6 +5682,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 }
             }
             break;
+        case UI_KEY_ESC:
         case 'q': case 'Q':
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);
@@ -5702,7 +5742,7 @@ static void ui_draw_installed_header(ansi_buf *b, const ui_geometry *g,
 }
 
 /* Step 5's footer legend: `ENTER/R=Get  U=Uninstall  V=Doc  S=Strip
- * A=Archive  Q=Back`, F=Find/C=System/I=Install dropped along with the keys
+ * A=Archive  ESC=Back`, F=Find/C=System/I=Install dropped along with the keys
  * they name. Every row here is already installed, so unlike
  * ui_draw_footer()'s browse-screen version there is no install/uninstall
  * ternary - U=Uninstall is unconditional, exactly like ENTER/R=Get, so it
@@ -5716,13 +5756,13 @@ static void ui_draw_installed_header(ansi_buf *b, const ui_geometry *g,
  * validate_screen_cols() accepts ScreenCols as low as 40 ("below 40 the
  * two-pane layout cannot be drawn at all" - a real, sysop-settable,
  * SUPPORTED floor, not a pathological edge case), and
- * "ENTER/R=Get  A=Archive  U=Uninstall" + "  Q=Back" alone is 43 bytes -
+ * "ENTER/R=Get  A=Archive  U=Uninstall" + "  ESC=Back" alone is 45 bytes -
  * already past 40 before any optional part is even considered. At that
  * point flow_build_footer_bar()'s "never drop the suffix" guarantee
  * cannot help: it only covers ITS OWN return value (the full suffix really
  * is always appended), but ui_draw_bar()'s render-layer truncation
  * (ansi_center(), first `cols` bytes) still cuts the tail off whatever
- * this function returns, turning "Q=Back" into "Q=" on any ScreenCols=40
+ * this function returns, turning "ESC=Back" into "Q=" on any ScreenCols=40
  * config. A=Archive is a secondary lookup a sysop can still reach after
  * ENTER/R, so it is what gives way; U=Uninstall, the screen's core action,
  * stays mandatory. V=Doc and S=Strip keep the same gates ui_draw_footer()
@@ -5741,7 +5781,7 @@ static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
 
     if (e == (const dr_entry *) 0) {
         len = flow_build_footer_bar(bar, sizeof(bar), g->cols, "",
-                                    (const char *const *) 0, 0, "Q=Back");
+                                    (const char *const *) 0, 0, "ESC=Back");
     } else {
         const char *optional[3];
         int n = 0;
@@ -5755,7 +5795,7 @@ static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
         optional[n++] = "A=Archive";
         len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                     "ENTER/D=Get  U=Uninstall",
-                                    optional, n, "Q=Back");
+                                    optional, n, "ESC=Back");
     }
     if (len < 0) {
         bar[0] = '\0'; /* unreachable with this door's fixed short strings and bar[160] */
@@ -6071,7 +6111,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                 parts[2] = "H=History";
                 len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                             "ENTER=Run  F=Files", parts, 3,
-                                            "Q=Quit");
+                                            "ESC=Back");
                 if (len < 0) {
                     bar[0] = '\0';
                 }
@@ -6193,6 +6233,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
             ansi_flush(&buf);
             break;
         }
+        case UI_KEY_ESC:
         case 'q': case 'Q':
             ansi_begin(&buf, frame, framecap);
             ansi_cursor(&buf, 1);
@@ -6459,7 +6500,7 @@ static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                  * drops parts at the same widths and never loses Q. */
                 len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                             "Up/Down  PgUp/PgDn",
-                                            parts, 1, "Q=Back");
+                                            parts, 1, "ESC=Back");
                 if (len < 0) {
                     bar[0] = '\0';
                 }
@@ -6472,6 +6513,7 @@ static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
 
         key = ae_key();
         switch (key) {
+        case UI_KEY_ESC:
         case 'q': case 'Q':
             ansi_begin(&buf, frame, framecap);
             ansi_cursor(&buf, 1);
@@ -6599,7 +6641,7 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
                 parts[0] = rel[0] ? "B=Up" : (const char *) 0;
                 len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
                                             "ENTER=Open", parts,
-                                            rel[0] ? 1 : 0, "Q=Quit");
+                                            rel[0] ? 1 : 0, "ESC=Back");
                 if (len < 0) {
                     bar[0] = '\0';
                 }
@@ -6676,6 +6718,7 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
                 top_index = 0;
             }
             break;
+        case UI_KEY_ESC:
         case 'q': case 'Q':
             ansi_begin(&buf, frame, framecap);
             ansi_cursor(&buf, 1);
@@ -6953,6 +6996,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             info_mode = (info_mode == UI_INFO_DOC) ? UI_INFO_DIZ : UI_INFO_DOC;
             info_scroll = 0;
             break;
+        case UI_KEY_ESC:
         case 'q': case 'Q':
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);

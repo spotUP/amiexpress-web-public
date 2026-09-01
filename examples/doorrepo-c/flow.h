@@ -933,6 +933,46 @@ const char *flow_effective_door_type(const char *catalog_type,
  * killed. */
 int flow_key_ends_session(int key);
 
+/* ---- Key decoding: the ESC problem -------------------------------------
+ *
+ * Cursor keys arrive as ESC [ A and friends, one byte per read, and a lone
+ * ESC is the natural "back" key. Without a clock the two share a first byte
+ * and nothing else: DOORMAN spent six debugging rounds on that ambiguity
+ * (handoff.md, 2026-08-17), and this door's answer was to have NO ESC
+ * binding and read the byte after an ESC blocking - so a user's ESC swallowed
+ * whatever they pressed next and delivered THAT instead. ESC then Q from a
+ * sub-screen went straight out of the door ("q quits doorrepo and it's a
+ * stupid button to use for back out - use ESC!", the sysop, 2026-09-01).
+ *
+ * The clock is the door layer's non-consuming probe (ae_input_pending):
+ * settle for a moment, and if nothing is queued the ESC was alone. A byte
+ * that turns out not to belong to a sequence is handed BACK, never eaten.
+ *
+ * The values are what doorrepo.c's UI_KEY_* aliases have always been. */
+#define FLOW_KEY_UP    1000
+#define FLOW_KEY_DOWN  1001
+#define FLOW_KEY_PGUP  1002
+#define FLOW_KEY_PGDN  1003
+#define FLOW_KEY_HOME  1004
+#define FLOW_KEY_END   1005
+#define FLOW_KEY_ENTER 1006
+#define FLOW_KEY_ESC   1007
+
+typedef struct flow_key_source {
+    int  (*next)(void *ctx);     /* blocking read of one byte; < 0 = user gone */
+    int  (*pending)(void *ctx);  /* non-zero if a byte is queued; must NOT consume */
+    void (*settle)(void *ctx);   /* wait long enough for a sequence's tail to land; may be NULL */
+    void *ctx;
+} flow_key_source;
+
+/* Decodes what follows an ESC that the caller has already read. Returns
+ * FLOW_KEY_ESC for a lone ESC, a FLOW_KEY_* for a recognised CSI/SS3
+ * sequence, 0 for one it does not know, or the negative value next()
+ * reported for a lost user. *pushback receives a byte that was read but
+ * belongs to the NEXT key (ESC then Q, typed fast), else -1; the caller
+ * must deliver it before reading again. */
+int flow_decode_escape(const flow_key_source *src, int *pushback);
+
 /* ---- Install index -----------------------------------------------------
  *
  * DOORMAN knows which catalog rows it has installed because it has a local
