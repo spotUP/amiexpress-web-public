@@ -33,7 +33,7 @@ import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art'
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
-import { makePanel, resetPanelLayout } from './panels';
+import { makePanel, panelContentRect, resetPanelLayout } from './panels';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
@@ -127,16 +127,17 @@ export class StudioApp {
    * makePanel), built from the SAME LAYOUT rect the bare box used to take
    * directly - the panel supplies the border/title bar the box used to
    * draw itself, and the actual widget (list/box) becomes its content
-   * child, sized in integers to the panel's inner area (rect minus the
-   * panel's own 1-cell border each side - see panels.ts's doc comment for
-   * why this is not a percent string).
+   * child, positioned by panels.ts's panelContentRect (fix round 1:
+   * top:1, not top:0 - see its doc comment for why row 0 belongs to the
+   * title bar, not the content).
    */
   private buildLayout(): void {
     const { doors, sprites, animations, preview, status } = LAYOUT.browser;
     this.doorsPanel = makePanel(this.screen, { key: 'doors', title: ' Doors ', rect: doors });
+    const doorsContent = panelContentRect(doors);
     this.doorsList = blessed.list({
       parent: this.doorsPanel,
-      top: 0, left: 0, width: doors.width - 2, height: doors.height - 2,
+      top: doorsContent.top, left: doorsContent.left, width: doorsContent.width, height: doorsContent.height,
       border: { type: 'none' },
       // keys stay off: the door drives every key through the screen (see
       // the class comment on buildBindings), so a widget's own keys never
@@ -149,9 +150,10 @@ export class StudioApp {
       },
     });
     this.spritesPanel = makePanel(this.screen, { key: 'sprites', title: ' Sprites ', rect: sprites });
+    const spritesContent = panelContentRect(sprites);
     this.spritesList = blessed.list({
       parent: this.spritesPanel,
-      top: 0, left: 0, width: sprites.width - 2, height: sprites.height - 2,
+      top: spritesContent.top, left: spritesContent.left, width: spritesContent.width, height: spritesContent.height,
       border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
@@ -160,9 +162,11 @@ export class StudioApp {
       },
     });
     this.animationsPanel = makePanel(this.screen, { key: 'animations', title: ' Animations ', rect: animations });
+    const animationsContent = panelContentRect(animations);
     this.animationsList = blessed.list({
       parent: this.animationsPanel,
-      top: 0, left: 0, width: animations.width - 2, height: animations.height - 2,
+      top: animationsContent.top, left: animationsContent.left,
+      width: animationsContent.width, height: animationsContent.height,
       border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
@@ -171,9 +175,10 @@ export class StudioApp {
       },
     });
     this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
+    const previewContent = panelContentRect(preview);
     this.previewBox = blessed.box({
       parent: this.previewPanel,
-      top: 0, left: 0, width: preview.width - 2, height: preview.height - 2,
+      top: previewContent.top, left: previewContent.left, width: previewContent.width, height: previewContent.height,
       border: { type: 'none' },
       tags: true, mouse: true,
     });
@@ -451,8 +456,12 @@ export class StudioApp {
       `{gray-fg}${sprite.name} - ${sel.animation} - ` +
       `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
       `${anim.loop ? 'loop' : 'hold'}{/}`;
+    // Fix round 1, Important 2: no leading '\n' - see panels.ts's
+    // panelContentRect doc comment. This pane's content child already
+    // starts one row below the panel's title bar; a literal leading
+    // newline here would double-blank that row.
     this.previewBox.setContent(
-      '\n' + lines.map(l => pad + l).join('\n') + '\n\n ' + meta
+      lines.map(l => pad + l).join('\n') + '\n\n ' + meta
     );
     this.screen.render();
   }

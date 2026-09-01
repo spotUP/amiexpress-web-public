@@ -164,6 +164,29 @@ export async function theBrowserPanesAreDockablePanels(): Promise<void> {
 }
 
 /**
+ * Fix round 1, Important 2: a content child at relative top:0 has its
+ * row 0 permanently hidden behind the panel's title bar (DockablePanel's
+ * bringUIToFront() always renders the title bar last, i.e. on top - see
+ * panels.ts's panelContentRect doc comment). Every one of the browser's
+ * four content widgets must be positioned through panelContentRect, not
+ * a raw `top: 0` literal that would put its first row right back under
+ * the title bar.
+ */
+export async function theBrowserContentChildrenSitAtTop1ViaPanelContentRect(): Promise<void> {
+  assert.ok(app.includes("panelContentRect") && app.includes("from './panels'"),
+    'the browser must position its panes\' content through panels.ts\'s panelContentRect');
+  for (const list of ['doorsList', 'spritesList', 'animationsList', 'previewBox']) {
+    const idx = app.indexOf(`this.${list} = blessed.`);
+    assert.ok(idx >= 0, `${list} must exist`);
+    const block = app.slice(idx, app.indexOf('});', idx));
+    assert.ok(!/top:\s*0,/.test(block),
+      `${list} must not sit at a literal top:0 - that row belongs to the panel's title bar`);
+    assert.ok(/top:\s*\w+Content\.top,/.test(block),
+      `${list} must take its top from a panelContentRect(...) result, not a hand-picked number`);
+  }
+}
+
+/**
  * Studio 2c fix round: livechat's screen options (the worked DockablePanel
  * reference) disable fastCSR for stable dockable-panel rendering; this
  * door's screen must mirror that or dragging/resizing a panel here can

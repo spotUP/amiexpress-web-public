@@ -22,7 +22,7 @@ import { previewLines } from './preview';
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
-import { makePanel, resetPanelLayout } from './panels';
+import { makePanel, panelContentRect, resetPanelLayout } from './panels';
 
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
@@ -85,34 +85,38 @@ export class EditScreen {
   /**
    * Studio 2c: each content pane is now a DockablePanel (panels.ts's
    * makePanel) at the SAME LAYOUT rect the bare box used to occupy; the
-   * actual content box becomes its child, sized in integers to the
-   * panel's inner area (rect minus the panel's own 1-cell border each
-   * side - see panels.ts's doc comment).
+   * actual content box becomes its child, positioned by panels.ts's
+   * panelContentRect (fix round 1: top:1, not top:0 - see its doc
+   * comment for why row 0 belongs to the title bar, not the content).
    */
   private buildLayout(): void {
     const { canvas, preview, frames, toolbar, status } = LAYOUT.edit;
     this.canvasPanel = makePanel(this.screen, { key: 'canvas', title: ' Canvas ', rect: canvas });
+    const canvasContent = panelContentRect(canvas);
     this.canvasBox = blessed.box({
       parent: this.canvasPanel,
-      top: 0, left: 0, width: canvas.width - 2, height: canvas.height - 2,
+      top: canvasContent.top, left: canvasContent.left, width: canvasContent.width, height: canvasContent.height,
       border: { type: 'none' }, tags: true,
     });
     this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
+    const previewContent = panelContentRect(preview);
     this.previewBox = blessed.box({
       parent: this.previewPanel,
-      top: 0, left: 0, width: preview.width - 2, height: preview.height - 2,
+      top: previewContent.top, left: previewContent.left, width: previewContent.width, height: previewContent.height,
       border: { type: 'none' }, tags: true,
     });
     this.framesPanel = makePanel(this.screen, { key: 'frames', title: ' Frames ', rect: frames });
+    const framesContent = panelContentRect(frames);
     this.framesBox = blessed.box({
       parent: this.framesPanel,
-      top: 0, left: 0, width: frames.width - 2, height: frames.height - 2,
+      top: framesContent.top, left: framesContent.left, width: framesContent.width, height: framesContent.height,
       border: { type: 'none' }, tags: true,
     });
     this.toolbarPanel = makePanel(this.screen, { key: 'toolbar', title: ' Paint ', rect: toolbar });
+    const toolbarContent = panelContentRect(toolbar);
     this.paletteBox = blessed.box({
       parent: this.toolbarPanel,
-      top: 0, left: 0, width: toolbar.width - 2, height: toolbar.height - 2,
+      top: toolbarContent.top, left: toolbarContent.left, width: toolbarContent.width, height: toolbarContent.height,
       border: { type: 'none' }, tags: true,
     });
     this.statusBar = blessed.box({
@@ -393,14 +397,20 @@ export class EditScreen {
     const modeLine = this.mode === 'pixel'
       ? `{lightgreen-fg}PIXEL{/} row ${this.cursorRow} col ${this.cursorCol}`
       : `{lightyellow-fg}CELL{/} row ${this.cursorRow} col ${this.cursorCol}`;
-    this.canvasBox.setContent('\n ' + rows.join('\n ') + '\n\n ' + modeLine);
+    // Fix round 1, Important 2: no leading '\n ' any more - that blank
+    // line used to push content below the box's own label/border; now
+    // the CONTENT CHILD's position (panels.ts's panelContentRect, top:1)
+    // already skips the panel's title-bar row, so a literal leading
+    // newline here would double-blank it (one row lost to the panel's
+    // geometry, a second lost to this string).
+    this.canvasBox.setContent(rows.join('\n ') + '\n\n ' + modeLine);
   }
 
   private paintPreview(): void {
     const anim = this.doc.sprite.animations[this.doc.animation];
     const lines = previewLines(this.doc.sprite, this.doc.animation, this.tick, 2);
     this.previewBox.setContent(
-      '\n ' + lines.join('\n ') +
+      lines.join('\n ') +
       `\n\n {gray-fg}${this.doc.animation} - ${anim.frames.length}f ` +
       `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}`
     );
@@ -415,7 +425,7 @@ export class EditScreen {
     const naming = this.naming !== null
       ? `\n new animation: {lightyellow-fg}${this.naming}{/}_ (enter/escape)`
       : '';
-    this.framesBox.setContent(`\n ${strip}${naming}`);
+    this.framesBox.setContent(`${strip}${naming}`);
   }
 
   private paintPalette(): void {
@@ -426,7 +436,7 @@ export class EditScreen {
       })
       .join('');
     this.paletteBox.setContent(
-      `\n ${swatches}\n glyph: ${GLYPHS[this.glyph]}  ` +
+      `${swatches}\n glyph: ${GLYPHS[this.glyph]}  ` +
       `fg {${PALETTE[this.fg]}-fg}${this.fg}{/}  bg {${PALETTE[this.bg]}-fg}${this.bg}{/}`
     );
   }

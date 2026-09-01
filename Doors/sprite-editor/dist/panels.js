@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.makePanel = makePanel;
+exports.panelContentRect = panelContentRect;
 exports.resetPanelLayout = resetPanelLayout;
 /**
  * makePanel - the one place every sprite-studio content pane becomes a
@@ -52,16 +53,69 @@ function makePanel(screen, opts) {
     });
 }
 /**
+ * The geometry a pane's CONTENT CHILD must use inside its panel - an
+ * integer rect (never a percent string - see the module doc comment)
+ * RELATIVE to the panel, spanning its inner area (border excluded, which
+ * `calcPos` already does for a '100%'-style child - see element.ts's
+ * `_getCoords`) MINUS the title bar's own row.
+ *
+ * Fix round 1, Important 2: every panel here sets `useTitleBar: true`,
+ * and DockablePanel's title bar is a Box at relative top:0 INSIDE that
+ * border-excluded area, reordered to render LAST by bringUIToFront() -
+ * so it draws OVER whatever content sits at that same row
+ * (dockable-panel.ts's constructor/append()). A content child placed at
+ * top:0 (this task's original approach) had its own row 0 permanently
+ * hidden - on the browser's lists, that is the first (often selected)
+ * item, gone from the very first frame. top:1 skips exactly that one row:
+ * traced against element.ts's `_getCoords` (parentContentYi offset, then
+ * the child's own relative top/height), a panel of rect.height H has
+ * H-2 inner rows (border), of which the title bar claims row 0 and this
+ * function's H-3 remaining rows exactly fill rows 1..H-3 - no covered
+ * row, no wasted blank row either.
+ */
+function panelContentRect(rect) {
+    return {
+        top: 1,
+        left: 0,
+        width: rect.width - 2,
+        height: rect.height - 3,
+    };
+}
+/**
  * View -> Reset Layout: restores one panel to its LAYOUT rect and to the
- * floating (undocked) state every panel starts in - the exact shape
- * DockablePanel.setState() already knows how to apply atomically (dock
- * position, un-minimize, then position/size, each clamped to the current
- * screen - see dockable-panel.ts:2503).
+ * floating (undocked), un-minimized state every panel starts in.
+ *
+ * Fix round 1, Important 1: this must NOT be a single setState() call.
+ * setState() (dockable-panel.ts:2503-2567) applies position/size FIRST,
+ * and only THEN - if `minimized` is present - calls minimize()/maximize()
+ * (:2559-2565). maximize() (:2381-2405) restores position.left/top/width/
+ * height from panelState.savedX/savedY/savedWidth/savedHeight - the
+ * geometry captured when minimize() ran (:2344-2348) - unconditionally
+ * overwriting whatever geometry setState just applied. So
+ * `setState({...rect, minimized:false})` in one call would, for a
+ * MINIMIZED panel, apply the LAYOUT rect and then immediately clobber it
+ * with the pre-minimize geometry.
+ *
+ * Fixed by splitting into two sequential calls. setState() has no
+ * internal `await` (verified by reading its full body), so despite being
+ * declared `async` its whole call runs synchronously to completion before
+ * returning - two un-awaited calls in a row are not a race, the first
+ * finishes before the second's body starts:
+ *   1. `{ minimized: false }` alone - un-minimizes if needed (maximize()
+ *      early-returns as a no-op at :2382 if the panel was not minimized,
+ *      so this is always safe to call) and unhides the panel's children
+ *      (maximize()'s `child.show()` loop, :2385-2387) - necessary on its
+ *      own regardless of the geometry bug, or Reset Layout would leave a
+ *      visually-empty minimized panel in the right position.
+ *   2. `{ position: 'float', x, y, width, height }` - no `minimized` key,
+ *      so setState's minimize/maximize branch is skipped entirely
+ *      (:2559's `if (state.minimized !== undefined)` is false) and the
+ *      LAYOUT rect from step 1's now-clean (non-minimized) state stands.
  */
 function resetPanelLayout(panel, rect) {
+    void panel.setState({ minimized: false });
     void panel.setState({
         position: 'float',
-        minimized: false,
         x: rect.left,
         y: rect.top,
         width: rect.width,

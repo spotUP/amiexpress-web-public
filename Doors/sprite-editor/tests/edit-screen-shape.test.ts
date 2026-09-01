@@ -176,6 +176,46 @@ export async function theEditScreenPanesAreDockablePanels(): Promise<void> {
   }
 }
 
+/**
+ * Studio 2c task-3 fix round 1, Important 2: a content child at relative
+ * top:0 has its row 0 permanently hidden behind the panel's title bar
+ * (DockablePanel's bringUIToFront() always renders the title bar last -
+ * see panels.ts's panelContentRect doc comment). Every one of the edit
+ * screen's four content boxes must be positioned through
+ * panelContentRect, not a raw `top: 0` literal.
+ */
+export async function theEditScreenContentChildrenSitAtTop1ViaPanelContentRect(): Promise<void> {
+  assert.ok(code.includes('panelContentRect') && code.includes("from './panels'"),
+    'the edit screen must position its panes\' content through panels.ts\'s panelContentRect');
+  for (const box of ['canvasBox', 'previewBox', 'framesBox', 'paletteBox']) {
+    const idx = code.indexOf(`this.${box} = blessed.box({`);
+    assert.ok(idx >= 0, `${box} must exist`);
+    const block = code.slice(idx, code.indexOf('});', idx));
+    assert.ok(!/top:\s*0,/.test(block),
+      `${box} must not sit at a literal top:0 - that row belongs to the panel's title bar`);
+    assert.ok(/top:\s*\w+Content\.top,/.test(block),
+      `${box} must take its top from a panelContentRect(...) result, not a hand-picked number`);
+  }
+}
+
+/**
+ * Studio 2c task-3 fix round 1, Important 2: the leading '\n' that used
+ * to push a box's content below its own label/border is now redundant -
+ * the content CHILD's position (panelContentRect, top:1) already skips
+ * the panel's title-bar row, so keeping the old literal newline would
+ * double-blank it (one row lost to position, a second to the string).
+ */
+export async function paintMethodsDoNotDoubleBlankWithALeadingNewline(): Promise<void> {
+  assert.ok(!/canvasBox\.setContent\('\\n /.test(code),
+    'canvasBox.setContent must not start with a leading \\n - see panelContentRect');
+  assert.ok(!/previewBox\.setContent\(\s*\n?\s*'\\n /.test(code),
+    'previewBox.setContent must not start with a leading \\n - see panelContentRect');
+  assert.ok(!/framesBox\.setContent\(`\\n /.test(code),
+    'framesBox.setContent must not start with a leading \\n - see panelContentRect');
+  assert.ok(!/paletteBox\.setContent\(\s*\n?\s*`\\n /.test(code),
+    'paletteBox.setContent must not start with a leading \\n - see panelContentRect');
+}
+
 /** Studio 2c: View -> Reset Layout, wired through the same binding table as every hotkey. */
 export async function theEditScreenHasAResetLayoutMenuItem(): Promise<void> {
   const idx = code.indexOf("id: 'view.resetLayout'");
