@@ -226,3 +226,39 @@ export async function theGridFitsTheColumnsItIsGiven(): Promise<void> {
   }
   assert.ok(captured[1].includes('BOT'), 'and it still says who is out there');
 }
+
+/**
+ * Widening the terminal mid-match rebuilds the right side.
+ *
+ * The door only got an Alt+Enter switch on 2026-09-01, so until then the
+ * width never changed while a match was running and this path had never
+ * been exercised. The layout key includes the width for exactly this.
+ */
+export async function goingFullScreenMidMatchGivesEveryoneABoard(): Promise<void> {
+  const h = harness(80, [human(1), human(2), human(3)]);
+  try {
+    assert.strictEqual(h.boards().length, 0, 'three opponents are miniatures at 80 columns');
+    assert.strictEqual(h.minimap.hidden, false);
+
+    h.screen.resize(120, 30);     // what Alt+Enter leads to
+    h.vs.render();
+
+    assert.strictEqual(h.boards().length, 3, 'and full boards once there is room');
+    assert.deepStrictEqual(h.boards().map((b: any) => b.left), [37, 59, 81]);
+    assert.strictEqual(h.minimap.hidden, true, 'with the grid gone');
+  } finally { h.destroy(); }
+}
+
+export async function goingBackToEightyPutsTheGridBack(): Promise<void> {
+  const h = harness(120, [human(1), human(2), human(3)]);
+  try {
+    assert.strictEqual(h.boards().length, 3);
+
+    h.screen.resize(80, 25);
+    h.vs.render();
+
+    assert.strictEqual(h.boards().length, 0, 'the boards do not fit any more');
+    assert.strictEqual(h.minimap.hidden, false);
+    assert.strictEqual(h.minimap.width, 80 - LEFT_PANEL_COLS, 'and the grid takes the room back');
+  } finally { h.destroy(); }
+}

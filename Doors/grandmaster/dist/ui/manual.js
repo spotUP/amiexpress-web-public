@@ -98,6 +98,15 @@ These are the default bindings. Rebind anything in Settings.
 {bold}Other:{/bold}
   {cyan-fg}C / Shift{/cyan-fg}             Hold piece (swap with held piece)
   {cyan-fg}P{/cyan-fg}                    Pause / unpause game
+  {cyan-fg}Alt+Enter{/cyan-fg}            80x25 or your whole terminal
+
+{bold}Screen Size:{/bold}
+  The board serves 80x25 and that is what GRANDMASTER opens at. Alt+Enter
+  asks your terminal for the room it really has, and asks for it back on
+  the way out. It is worth it in VERSUS: at 80 columns one opponent gets a
+  full board and everyone else a miniature, while a wider window draws
+  three opponents in full at 120 columns and five at 160. Human players
+  get the full boards first when not everyone fits.
 
 {bold}Advanced:{/bold}
   {white-fg}IRS (Initial Rotation System){/white-fg}
