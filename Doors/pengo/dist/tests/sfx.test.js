@@ -64,7 +64,7 @@ function emptyBoard() {
 function enemyAt(x, y) {
     return {
         id: 1, x, y, direction: 'left', state: 'walking',
-        stunTimer: 0, hatchTimer: 0, moveTimer: 0,
+        stunTimer: 0, crushTimer: 0, hatchTimer: 0, moveTimer: 0,
     };
 }
 /** Pushing a block is what Pengo does; it should be what Pengo sounds like. */

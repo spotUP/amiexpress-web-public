@@ -19,7 +19,7 @@ import { createInitialGameData } from '../game/initial-data';
 import { PengoGame } from '../game/pengo-game';
 import { PengoData } from '../game/types';
 import {
-  GRID_WIDTH, GRID_HEIGHT, CELL_W, CELL_H, BOARD_COLS, BOARD_ROWS,
+  GRID_WIDTH, GRID_HEIGHT, CELL_W, CELL_H, BOARD_COLS, BOARD_ROWS, CRUSH_FRAMES,
 } from '../game/constants';
 
 const sheet = loadSpriteSheet(join(__dirname, '..', 'sprites'));
@@ -91,7 +91,7 @@ export async function aStunnedSnoBeeLooksStunned(): Promise<void> {
   const { data } = emptyBoard();
   data.enemies = [{
     id: 1, x: 6, y: 6, direction: 'left', state: 'walking',
-    stunTimer: 0, hatchTimer: 0, moveTimer: 0,
+    stunTimer: 0, crushTimer: 0, hatchTimer: 0, moveTimer: 0,
   }];
   const walking = buildBoard(data, sheet, 0);
   data.enemies[0].state = 'stunned';
@@ -141,4 +141,46 @@ export async function renderEmitsTagsNotGlyphPairs(): Promise<void> {
   const rows = content.split('\n');
   assert.strictEqual(rows.length, BOARD_ROWS, 'render emits exactly the board');
   assert.ok(rows[0].includes('-fg}'), 'rows are tagged');
+}
+
+/**
+ * A crushed Sno-Bee is visible while it is being crushed.
+ *
+ * Reported live: "when i push a block against an enemy it doesn't animate
+ * it's buggy". The crush set the enemy straight to 'dead', which the
+ * renderer skips and the tick filters out, so the enemy vanished on the
+ * same frame the block reached it - the one moment the whole game is about.
+ */
+export async function aCrushedSnoBeeIsDrawnWhileItIsCrushed(): Promise<void> {
+  const { data } = emptyBoard();
+  data.enemies.push({
+    id: 1, x: 3, y: 3, direction: 'left', state: 'crushed',
+    stunTimer: 0, crushTimer: CRUSH_FRAMES, hatchTimer: 0, moveTimer: 0,
+  });
+  const enemy = data.enemies[data.enemies.length - 1];
+
+  // Both rows of the cell: a squash is flattened into the BOTTOM row, so
+  // looking only at the top one would find nothing and prove nothing.
+  const board = buildBoard(data, sheet, 0);
+  const drawn: Array<Cell | null> = [];
+  for (let r = enemy.y * CELL_H; r < enemy.y * CELL_H + CELL_H; r++) {
+    drawn.push(...(board[r]?.slice(enemy.x * CELL_W, enemy.x * CELL_W + CELL_W) ?? []));
+  }
+  assert.ok(drawn.some(c => c && c.char !== ' '),
+    'a Sno-Bee being crushed still draws something');
+}
+
+/** And it is gone once the squash has played out. */
+export async function aCrushedSnoBeeIsRemovedAfterItsAnimation(): Promise<void> {
+  const { game, data } = emptyBoard();
+  data.enemies.push({
+    id: 1, x: 3, y: 3, direction: 'left', state: 'crushed',
+    stunTimer: 0, crushTimer: 2, hatchTimer: 0, moveTimer: 0,
+  });
+  const enemy = data.enemies[data.enemies.length - 1];
+
+  for (let i = 0; i < 4; i++) game.update();
+
+  assert.ok(!data.enemies.includes(enemy),
+    'the Sno-Bee is removed once its squash has finished');
 }

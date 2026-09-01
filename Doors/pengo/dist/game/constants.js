@@ -3,7 +3,7 @@
  * Pengo - Game Constants
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.CRUSH_FRAMES = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
 exports.getLevelConfig = getLevelConfig;
 exports.SCREEN_WIDTH = 80;
 /**
@@ -42,6 +42,13 @@ exports.SCORES = {
     timeBonus: 10,
     eggDestroy: 500,
 };
+/**
+ * How long a squashed Sno-Bee stays on the board, in ticks.
+ *
+ * Long enough to read as a squash rather than a disappearance - the crush
+ * is the point of the whole game, and it used to happen invisibly.
+ */
+exports.CRUSH_FRAMES = 12;
 exports.STUN_DURATION = 50;
 exports.HATCH_TIME = 100;
 exports.ENEMY_MOVE_DELAY = 8;

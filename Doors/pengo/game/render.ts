@@ -13,7 +13,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { PengoData } from './types';
 import {
-  GRID_WIDTH, GRID_HEIGHT, BOARD_COLS, BOARD_ROWS,
+  GRID_WIDTH, GRID_HEIGHT, BOARD_COLS, BOARD_ROWS, CRUSH_FRAMES,
 } from './constants';
 
 /** How long a pushed block keeps its slide flash, in ticks. */
@@ -64,6 +64,14 @@ export function buildBoard(
   // Sno-Bees
   for (const enemy of data.enemies) {
     if (enemy.state === 'dead') continue;
+    // A crushed Sno-Bee plays its squash from its OWN timer, not the board
+    // tick, so the animation runs once at its own pace rather than being
+    // sampled wherever the shared clock happens to be.
+    if (enemy.state === 'crushed') {
+      blitSprite(board, sheet['sno-bee'], 'crushed',
+        CRUSH_FRAMES - enemy.crushTimer, enemy.x, enemy.y);
+      continue;
+    }
     blitSprite(board, sheet['sno-bee'],
       enemy.state === 'stunned' ? 'stunned' : 'crawl', tick, enemy.x, enemy.y);
   }

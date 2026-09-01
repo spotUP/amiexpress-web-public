@@ -46,6 +46,14 @@ export const SCORES = {
   eggDestroy: 500,
 };
 
+/**
+ * How long a squashed Sno-Bee stays on the board, in ticks.
+ *
+ * Long enough to read as a squash rather than a disappearance - the crush
+ * is the point of the whole game, and it used to happen invisibly.
+ */
+export const CRUSH_FRAMES = 12;
+
 export const STUN_DURATION = 50;
 export const HATCH_TIME = 100;
 export const ENEMY_MOVE_DELAY = 8;

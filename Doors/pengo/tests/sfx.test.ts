@@ -54,7 +54,7 @@ function emptyBoard(): { game: PengoGame; data: PengoData } {
 function enemyAt(x: number, y: number) {
   return {
     id: 1, x, y, direction: 'left' as const, state: 'walking' as const,
-    stunTimer: 0, hatchTimer: 0, moveTimer: 0,
+    stunTimer: 0, crushTimer: 0, hatchTimer: 0, moveTimer: 0,
   };
 }
 

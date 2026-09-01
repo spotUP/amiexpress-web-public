@@ -113,6 +113,7 @@ class PengoGame {
                     direction: ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)],
                     state: 'walking',
                     stunTimer: 0,
+                    crushTimer: 0,
                     hatchTimer: 0,
                     moveTimer: 0,
                 });
@@ -171,14 +172,23 @@ class PengoGame {
             // Check for enemy at next position
             const enemyHit = this.data.enemies.find(e => e.x === nextX && e.y === nextY && e.state !== 'dead');
             if (enemyHit) {
-                // Crush enemy!
-                enemyHit.state = 'dead';
+                // Squashed, but not gone yet: 'crushed' holds the Sno-Bee in place
+                // for CRUSH_FRAMES so it can play its squash animation. It used to
+                // be set straight to 'dead', which the renderer skips and the tick
+                // filters out, so the enemy blinked out of existence on the same
+                // frame the block reached it.
+                enemyHit.state = 'crushed';
+                enemyHit.crushTimer = constants_1.CRUSH_FRAMES;
                 this.data.score += constants_1.SCORES.crushEnemy;
                 crushedEnemy = true;
                 this.cues.push('explosion');
-                // Block stops at enemy position
+                // The block comes to REST on the square it did the squashing on -
+                // it does not evaporate. Both cells used to be cleared here, which
+                // deleted the block the player had just pushed.
                 this.data.grid[y][x] = 'empty';
-                this.data.grid[slideY][slideX] = 'empty';
+                this.data.grid[nextY][nextX] = cellType;
+                slideX = nextX;
+                slideY = nextY;
                 break;
             }
             if (nextCell === 'empty') {
@@ -314,6 +324,16 @@ class PengoGame {
         for (const enemy of this.data.enemies) {
             if (enemy.state === 'dead')
                 continue;
+            // Squashed: hold still, play the animation out, then be gone. The
+            // enemy has to survive a few ticks in a visible state or the crush -
+            // the whole point of the game - happens invisibly.
+            if (enemy.state === 'crushed') {
+                enemy.crushTimer--;
+                if (enemy.crushTimer <= 0) {
+                    enemy.state = 'dead';
+                }
+                continue;
+            }
             if (enemy.state === 'stunned') {
                 enemy.stunTimer--;
                 if (enemy.stunTimer <= 0) {
@@ -377,6 +397,7 @@ class PengoGame {
                     direction: 'up',
                     state: 'walking',
                     stunTimer: 0,
+                    crushTimer: 0,
                     hatchTimer: 0,
                     moveTimer: 0,
                 });

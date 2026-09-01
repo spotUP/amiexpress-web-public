@@ -50,6 +50,13 @@ function buildBoard(data, sheet, tick) {
     for (const enemy of data.enemies) {
         if (enemy.state === 'dead')
             continue;
+        // A crushed Sno-Bee plays its squash from its OWN timer, not the board
+        // tick, so the animation runs once at its own pace rather than being
+        // sampled wherever the shared clock happens to be.
+        if (enemy.state === 'crushed') {
+            (0, cell_art_1.blitSprite)(board, sheet['sno-bee'], 'crushed', constants_1.CRUSH_FRAMES - enemy.crushTimer, enemy.x, enemy.y);
+            continue;
+        }
         (0, cell_art_1.blitSprite)(board, sheet['sno-bee'], enemy.state === 'stunned' ? 'stunned' : 'crawl', tick, enemy.x, enemy.y);
     }
     // The penguin, last and on top.

@@ -21,6 +21,8 @@ exports.aStunnedSnoBeeLooksStunned = aStunnedSnoBeeLooksStunned;
 exports.deathAnimatesAndThenHolds = deathAnimatesAndThenHolds;
 exports.aFreshSlidePlaysTheSlideFlash = aFreshSlidePlaysTheSlideFlash;
 exports.renderEmitsTagsNotGlyphPairs = renderEmitsTagsNotGlyphPairs;
+exports.aCrushedSnoBeeIsDrawnWhileItIsCrushed = aCrushedSnoBeeIsDrawnWhileItIsCrushed;
+exports.aCrushedSnoBeeIsRemovedAfterItsAnimation = aCrushedSnoBeeIsRemovedAfterItsAnimation;
 const assert_1 = __importDefault(require("assert"));
 const path_1 = require("path");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
@@ -90,7 +92,7 @@ async function aStunnedSnoBeeLooksStunned() {
     const { data } = emptyBoard();
     data.enemies = [{
             id: 1, x: 6, y: 6, direction: 'left', state: 'walking',
-            stunTimer: 0, hatchTimer: 0, moveTimer: 0,
+            stunTimer: 0, crushTimer: 0, hatchTimer: 0, moveTimer: 0,
         }];
     const walking = (0, render_1.buildBoard)(data, sheet, 0);
     data.enemies[0].state = 'stunned';
@@ -131,5 +133,41 @@ async function renderEmitsTagsNotGlyphPairs() {
     const rows = content.split('\n');
     assert_1.default.strictEqual(rows.length, constants_1.BOARD_ROWS, 'render emits exactly the board');
     assert_1.default.ok(rows[0].includes('-fg}'), 'rows are tagged');
+}
+/**
+ * A crushed Sno-Bee is visible while it is being crushed.
+ *
+ * Reported live: "when i push a block against an enemy it doesn't animate
+ * it's buggy". The crush set the enemy straight to 'dead', which the
+ * renderer skips and the tick filters out, so the enemy vanished on the
+ * same frame the block reached it - the one moment the whole game is about.
+ */
+async function aCrushedSnoBeeIsDrawnWhileItIsCrushed() {
+    const { data } = emptyBoard();
+    data.enemies.push({
+        id: 1, x: 3, y: 3, direction: 'left', state: 'crushed',
+        stunTimer: 0, crushTimer: constants_1.CRUSH_FRAMES, hatchTimer: 0, moveTimer: 0,
+    });
+    const enemy = data.enemies[data.enemies.length - 1];
+    // Both rows of the cell: a squash is flattened into the BOTTOM row, so
+    // looking only at the top one would find nothing and prove nothing.
+    const board = (0, render_1.buildBoard)(data, sheet, 0);
+    const drawn = [];
+    for (let r = enemy.y * constants_1.CELL_H; r < enemy.y * constants_1.CELL_H + constants_1.CELL_H; r++) {
+        drawn.push(...(board[r]?.slice(enemy.x * constants_1.CELL_W, enemy.x * constants_1.CELL_W + constants_1.CELL_W) ?? []));
+    }
+    assert_1.default.ok(drawn.some(c => c && c.char !== ' '), 'a Sno-Bee being crushed still draws something');
+}
+/** And it is gone once the squash has played out. */
+async function aCrushedSnoBeeIsRemovedAfterItsAnimation() {
+    const { game, data } = emptyBoard();
+    data.enemies.push({
+        id: 1, x: 3, y: 3, direction: 'left', state: 'crushed',
+        stunTimer: 0, crushTimer: 2, hatchTimer: 0, moveTimer: 0,
+    });
+    const enemy = data.enemies[data.enemies.length - 1];
+    for (let i = 0; i < 4; i++)
+        game.update();
+    assert_1.default.ok(!data.enemies.includes(enemy), 'the Sno-Bee is removed once its squash has finished');
 }
 //# sourceMappingURL=render.test.js.map

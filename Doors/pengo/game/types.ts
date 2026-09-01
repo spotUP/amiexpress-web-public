@@ -22,7 +22,13 @@ export type CellType =
   | "diamond" // Diamond block (for bonus)
   | "wall"; // Outer wall
 
-export type EnemyState = "walking" | "hatching" | "stunned" | "dead";
+/**
+ * `crushed` is the moment between the block landing and the Sno-Bee being
+ * gone: it plays its squash animation, and only then is it removed. Without
+ * it a crushed enemy simply stopped being drawn on the same tick the block
+ * arrived - "when i push a block against an enemy it doesn't animate".
+ */
+export type EnemyState = "walking" | "hatching" | "stunned" | "crushed" | "dead";
 
 export interface Position {
   x: number;
@@ -46,6 +52,8 @@ export interface Enemy {
   direction: Direction;
   state: EnemyState;
   stunTimer: number;
+  /** Ticks left of the squash animation, while `state` is 'crushed'. */
+  crushTimer: number;
   hatchTimer: number;
   moveTimer: number;
 }
