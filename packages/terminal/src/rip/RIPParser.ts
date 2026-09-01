@@ -263,20 +263,22 @@ function parseCommand(
 
     // Level 0 - Set palette (color, r, g, b)
     case RIPCommandType.SET_PALETTE:
-      // 16 colors * 3 values each = 48 digits
-      for (let j = 0; j < 48; j += 2) {
+      // !|Q c1 c2 ... c16 - sixteen 2-digit values, each an index into
+      // EGA's 64-colour hardware palette. NOT r,g,b triplets: that read
+      // 48 digits, swallowed the start of the next command, and was why
+      // every file that sets a palette painted in the wrong colours.
+      for (let j = 0; j < 32; j += 2) {
         params.push(decodeMegaNum(input.substring(i + j, i + j + 2)));
       }
-      i += 48;
+      i += 32;
       break;
 
     // Level 0 - One palette entry (color, r, g, b)
     case RIPCommandType.ONE_PALETTE:
+      // !|a color value - which slot, and which of the 64 EGA colours.
       params.push(decodeMegaNum(input.substring(i, i + 2)));
       params.push(decodeMegaNum(input.substring(i + 2, i + 4)));
-      params.push(decodeMegaNum(input.substring(i + 4, i + 6)));
-      params.push(decodeMegaNum(input.substring(i + 6, i + 8)));
-      i += 8;
+      i += 4;
       break;
 
     // Level 0 - Text at current position (terminated by |)
