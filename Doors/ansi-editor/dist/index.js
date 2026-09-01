@@ -10,9 +10,23 @@ exports.ANSIEditorDoor = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 // File prefix for storage keys
 const FILE_PREFIX = 'ansi:';
+/**
+ * Magnification steps, in characters per cell.
+ *
+ * EVEN above 1, the same rule the sprite studio uses and for the same
+ * reason: half-block art puts two pixels in a cell vertically, so an odd
+ * scale gives one of them more rows than the other.
+ */
+const ANSI_ZOOM_STEPS = [1, 2, 4, 6, 8];
+function stepAnsiZoom(current, delta) {
+    const i = ANSI_ZOOM_STEPS.indexOf(current);
+    const from = i === -1 ? 0 : i;
+    return ANSI_ZOOM_STEPS[Math.max(0, Math.min(ANSI_ZOOM_STEPS.length - 1, from + delta))];
+}
 // Sysop access level threshold
 const SYSOP_ACCESS_LEVEL = 255;
 // BBS screen directories that sysops can browse
@@ -40,6 +54,16 @@ class ANSIEditorDoor {
         this.isBBSFile = false; // True if editing a BBS file
         this.exitResolve = null;
         this.hasExited = false;
+        /**
+         * Backported from the sprite studio, which is this door's own fork.
+         *
+         * Everything the studio gained inside the WIDGET arrived here for free -
+         * half-block magnification, canvas centring, the undo chunk fixed to
+         * flush on release, the half-cell cursor. These two are door-side and had
+         * to be carried across by hand.
+         */
+        this.terminalMode = null;
+        this.zoom = 1;
     }
     setContext(ctx) {
         this.ctx = ctx;
@@ -217,7 +241,26 @@ class ANSIEditorDoor {
             }
         });
         dirList.focus();
+        this.terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
+            bbs: this.ctx.bbs,
+            screen: this.screen,
+            onRelayout: () => { void this.reopenEditorPreservingContent(); },
+        });
         this.screen.render();
+    }
+    /**
+     * Rebuild the editor at the current size and zoom, keeping the artwork.
+     *
+     * The widget takes its geometry and its scale at construction, so both a
+     * resize and a zoom mean building it again. getContent() round-trips the
+     * document through ANSI text, which is lossless for a .ans - this door has
+     * no transparency to lose, unlike the sprite studio.
+     */
+    async reopenEditorPreservingContent() {
+        if (!this.editor)
+            return;
+        const content = this.editor.getContent();
+        await this.openEditor(content);
     }
     /**
      * Show files in a specific BBS directory
@@ -468,6 +511,20 @@ class ANSIEditorDoor {
             showToolbar: true,
             showSidebar: true,
             showStatusBar: true,
+            cellScaleX: this.zoom,
+            cellScaleY: this.zoom,
+            extraMenus: [
+                {
+                    label: 'Zoom',
+                    items: ANSI_ZOOM_STEPS.map(z => ({
+                        label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
+                        action: () => { void this.setZoom(z); },
+                    })).concat([
+                        { label: '────────────────', separator: true },
+                        this.terminalMode.menuItem(),
+                    ]),
+                },
+            ],
             // Save callback (quick save to current file)
             onSave: async (content) => {
                 // Handle BBS file saving (sysop mode)
@@ -514,8 +571,19 @@ class ANSIEditorDoor {
                 this.cleanup();
             },
         });
+        // The wheel steps the zoom ladder, as it does in the sprite studio: the
+        // widget reports the turn, the door owns the ladder.
+        this.editor.on('canvas-wheel', (d) => {
+            void this.setZoom(stepAnsiZoom(this.zoom, d.direction === 'up' ? 1 : -1));
+        });
         this.editor.focus();
         this.screen.render();
+    }
+    async setZoom(zoom) {
+        if (zoom === this.zoom)
+            return;
+        this.zoom = zoom;
+        await this.reopenEditorPreservingContent();
     }
     // ============================================
     // DIALOGS
@@ -744,6 +812,9 @@ class ANSIEditorDoor {
         if (this.hasExited)
             return;
         this.hasExited = true;
+        // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
+        this.terminalMode?.dispose();
+        this.terminalMode = null;
         if (this.inputManager) {
             this.inputManager.disable();
         }
