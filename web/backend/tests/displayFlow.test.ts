@@ -131,6 +131,10 @@ jest.mock('../src/utils/conference-tooltypes.util', () => ({
 
 describe('Display flow parity', () => {
   const socket = {
+    // The buffered writer (emitText) registers a disconnect handler and keys
+    // its buffer by socket id, so both have to exist.
+    id: 'display-flow-test',
+    on(_event: string, _handler: () => void) { /* nothing to clean up here */ },
     emitted: [] as Array<{ event: string; data: any }>,
     emit(event: string, data?: any) {
       this.emitted.push({ event, data });
@@ -243,4 +247,36 @@ describe('Display flow parity', () => {
   // suppression tooltypes would be a WEB_-tagged extension, which we
   // explicitly avoid for this codebase. Test removed; if the extension is
   // ever introduced, gate it behind a WEB_* tag and add a parity test there.
+
+  /**
+   * Leaving the A command must land back on the menu, not on a blank screen
+   * waiting for a keypress.
+   *
+   * Reported as "it doesnt exit when i press enter, i have to press enter
+   * twice". The Enter DID exit - alterFlags set DISPLAY_MENU (express.e:
+   * 12664) - but DISPLAY_MENU only repaints when the next key arrives, so
+   * nothing happened until the second press.
+   */
+  test('pressing Enter at the flag prompt returns to the menu without a second key', async () => {
+    const session = baseSession();
+    session.subState = LoggedOnSubState.FLAG_INPUT;
+    session.inputBuffer = '';
+    session.tempData = { waitingForFlag: true };
+    // Nothing flagged: Enter on an empty line ends the command.
+    session.flagManager = {
+      getCount: () => 0,
+      getDisplayString: () => '',
+      addFlags: () => 0,
+      addFlag: () => true,
+      removeFlag: () => false,
+      clearAll: () => {},
+      save: async () => {},
+    };
+
+    displayMainMenuMock.mockClear();
+
+    await handleCommand(socket, session, '\r');
+
+    expect(displayMainMenuMock).toHaveBeenCalled();
+  });
 });

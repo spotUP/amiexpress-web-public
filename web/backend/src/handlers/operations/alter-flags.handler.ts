@@ -248,6 +248,14 @@ console.log('[ENV] Files');
   }
 
   /**
+   * Leave the command - express.e:12664's closing newline, then the menu.
+   */
+  private static finish(socket: Socket, session: BBSSession): void {
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+
+  /**
    * Handle flag input continuation
    */
   static async handleFlagInput(
@@ -267,8 +275,7 @@ console.log('[ENV] Files');
 
       if (result === 0) {
         // Enter pressed - express.e:12603, then alterFlags:12664
-        socket.emit('ansi-output', '\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        this.finish(socket, session);
       } else {
         // A file was added: express.e JUMPs to backloop, which prints the
         // prompt WITHOUT calling showFlags again. Anything else is a fresh
@@ -277,6 +284,11 @@ console.log('[ENV] Files');
       }
     } else if (session.tempData?.waitingForClear) {
       session.tempData.waitingForClear = false;
+
+      // express.e:12618 - an empty answer ends the command.
+      if (input.trim().length === 0) {
+        return this.finish(socket, session);
+      }
 
       // Process clear
       const manager = session.flagManager;
@@ -294,14 +306,24 @@ console.log('[ENV] Files');
     } else if (session.tempData?.waitingForFlagFrom) {
       session.tempData.waitingForFlagFrom = false;
 
-      // Process flag from
       const manager = session.flagManager;
-      if (manager && input.trim().length > 0) {
-        manager.addFlag(input.trim(), session.currentConf || -1);
-        await manager.save();
+      const from = input.trim();
+
+      // express.e:12631 - IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS,
+      // which ends the command rather than asking again.
+      if (from.length === 0) {
+        return this.finish(socket, session);
       }
 
-      // Continue prompting
+      // express.e:12634 flagFrom(tempStr): flag this file and every file
+      // AFTER it in the directory. Adding the name on its own - which is
+      // what this did - is the (Enter) case, not the (F)rom case, so "F"
+      // behaved identically to typing the filename.
+      if (manager) {
+        await this.flagFrom(socket, session, from, manager);
+      }
+
+      // express.e:12635 RETURN 1, so alterFlags loops and prompts again.
       await this.flagFiles(socket, session, null);
     }
   }
