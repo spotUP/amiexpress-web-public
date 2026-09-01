@@ -54,4 +54,33 @@ describe('node_modules and git', () => {
     expect(ignored).toContain('web/backend/node_modules');
     expect(ignored).toContain('Doors/grandmaster/node_modules');
   });
+
+  // The general form of the same bug: node_modules was the path that broke,
+  // an absolute symlink target is what made it unbuildable anywhere but the
+  // machine it was made on. The tracked symlinks this repo does want -
+  // amitools' bin wrappers, Doors/Request/REQ.info - are all relative.
+  it('tracks no symlink pointing outside the repository', () => {
+    const listing = execFileSync('git', ['ls-files', '-s'], {
+      cwd: REPO,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+
+    const absolute = listing
+      .split('\n')
+      .filter(line => line.startsWith('120000 '))
+      .map(line => line.split('\t')[1])
+      .filter(file => {
+        // `:path` is the INDEX, not HEAD: a symlink staged and not yet
+        // committed is exactly the one worth catching, and `HEAD:path`
+        // throws for it rather than reporting it.
+        const target = execFileSync('git', ['show', `:${file}`], {
+          cwd: REPO,
+          encoding: 'utf8',
+        }).trim();
+        return target.startsWith('/');
+      });
+
+    expect(absolute).toEqual([]);
+  });
 });
