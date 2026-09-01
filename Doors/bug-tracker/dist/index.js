@@ -7,11 +7,307 @@ import { ServerDoor } from "@amiexpress/bbs-door-sdk";
 // app.ts
 import {
   createScreen,
-  createBox,
-  createList,
-  createTextbox,
+  createBox as createBox2,
+  createList as createList2,
   DoorInputManager
 } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
+
+// door-theme-bugs.ts
+import {
+  themeStyles,
+  themeById
+} from "@amiexpress/bbs-door-sdk/engines/ui/theme";
+var T = themeById("classic").tokens;
+var S = themeStyles(themeById("classic"));
+function applyTheme(bbs) {
+  const getTheme = bbs?.getTheme;
+  if (typeof getTheme !== "function") return;
+  try {
+    const theme = getTheme.call(bbs);
+    if (!theme?.tokens) return;
+    T = theme.tokens;
+    S = themeStyles(theme);
+  } catch {
+  }
+}
+
+// dialogs.ts
+import {
+  createBox,
+  createList,
+  createTextbox
+} from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
+function showSelector(ctx, title, items, callback) {
+  const previousFocus = ctx.screen.focused;
+  setImmediate(() => {
+    const previousView = ctx.currentView;
+    ctx.currentView = "dialog";
+    const backdrop = createBox({
+      parent: ctx.screen,
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      style: { bg: T.ground, transparent: true },
+      focusable: false,
+      clickable: true
+    });
+    const list = createList({
+      parent: ctx.screen,
+      top: "center",
+      left: "center",
+      width: 40,
+      height: Math.min(items.length + 4, 15),
+      border: { type: "line" },
+      label: ` ${title} `,
+      style: {
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.warn },
+        selected: { fg: T.selectionInk, bg: T.warn }
+      },
+      items,
+      keys: true,
+      vi: true,
+      mouse: true,
+      grabKeys: true
+      // Capture all key input
+    });
+    list.focus();
+    const cleanup = () => {
+      backdrop.detach();
+      list.detach();
+      ctx.currentView = previousView;
+      if (previousFocus && typeof previousFocus.focus === "function") {
+        previousFocus.focus();
+      }
+      ctx.screen.render();
+    };
+    list.once("select", (_item, idx) => {
+      cleanup();
+      callback(idx);
+    });
+    list.key(["escape"], () => {
+      cleanup();
+      callback(-1);
+    });
+    backdrop.on("click", () => {
+      cleanup();
+      callback(-1);
+    });
+    ctx.screen.render();
+  });
+}
+function showTextInput(ctx, title, defaultValue, multiline, callback) {
+  const previousFocus = ctx.screen.focused;
+  setImmediate(() => {
+    const previousView = ctx.currentView;
+    ctx.currentView = "dialog";
+    const height = multiline ? 10 : 5;
+    const backdrop = createBox({
+      parent: ctx.screen,
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      style: { bg: T.ground, transparent: true },
+      focusable: false,
+      clickable: true
+    });
+    const inputBox = createBox({
+      parent: ctx.screen,
+      top: "center",
+      left: "center",
+      width: 60,
+      height: height + 4,
+      border: { type: "line" },
+      label: ` ${title} `,
+      style: {
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.warn }
+      },
+      tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false
+    });
+    const textbox = createTextbox({
+      parent: inputBox,
+      top: 1,
+      left: 1,
+      width: 56,
+      height,
+      style: {
+        fg: T.ink,
+        bg: T.bar
+      },
+      inputOnFocus: true,
+      keys: true,
+      mouse: true,
+      grabKeys: true
+      // Capture all key input while editing
+    });
+    textbox.setValue(defaultValue);
+    textbox.focus();
+    createBox({
+      parent: inputBox,
+      bottom: 0,
+      left: 1,
+      width: 56,
+      height: 1,
+      content: `{${T.dim}-fg}Enter=Submit | ESC=Cancel{/}`,
+      tags: true,
+      style: { fg: T.dim, bg: T.ground },
+      focusable: false,
+      mouse: false,
+      clickable: false
+    });
+    const cleanup = () => {
+      backdrop.detach();
+      inputBox.detach();
+      ctx.currentView = previousView;
+      if (previousFocus && typeof previousFocus.focus === "function") {
+        previousFocus.focus();
+      }
+      ctx.screen.render();
+    };
+    textbox.on("submit", () => {
+      const value = textbox.getValue();
+      cleanup();
+      callback(value);
+    });
+    textbox.key(["escape"], () => {
+      cleanup();
+      callback(null);
+    });
+    backdrop.on("click", () => {
+      cleanup();
+      callback(null);
+    });
+    ctx.screen.render();
+  });
+}
+function showMessage(ctx, title, message, callback) {
+  const previousFocus = ctx.screen.focused;
+  setImmediate(() => {
+    const previousView = ctx.currentView;
+    ctx.currentView = "dialog";
+    const backdrop = createBox({
+      parent: ctx.screen,
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      style: { bg: T.ground, transparent: true },
+      focusable: false,
+      clickable: true
+    });
+    const msgBox = createBox({
+      parent: ctx.screen,
+      top: "center",
+      left: "center",
+      width: 50,
+      height: 7,
+      border: { type: "line" },
+      label: ` ${title} `,
+      style: {
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: title === "Error" ? "red" : "green" }
+      },
+      content: `
+${message}
+
+{center}Press any key to continue{/center}`,
+      tags: true,
+      grabKeys: true
+      // Capture all key input
+    });
+    msgBox.focus();
+    const cleanup = () => {
+      backdrop.detach();
+      msgBox.detach();
+      ctx.currentView = previousView;
+      if (previousFocus && typeof previousFocus.focus === "function") {
+        previousFocus.focus();
+      }
+      ctx.screen.render();
+    };
+    msgBox.once("keypress", () => {
+      cleanup();
+      if (callback) callback();
+    });
+    backdrop.on("click", () => {
+      cleanup();
+      if (callback) callback();
+    });
+    msgBox.on("click", () => {
+      cleanup();
+      if (callback) callback();
+    });
+    ctx.screen.render();
+  });
+}
+function showConfirm(ctx, title, message, callback) {
+  setImmediate(() => {
+    const previousView = ctx.currentView;
+    ctx.currentView = "dialog";
+    const backdrop = createBox({
+      parent: ctx.screen,
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      style: { bg: T.ground, transparent: true },
+      focusable: false,
+      clickable: true
+    });
+    const confirmBox = createBox({
+      parent: ctx.screen,
+      top: "center",
+      left: "center",
+      width: 50,
+      height: 8,
+      border: { type: "line" },
+      label: ` ${title} `,
+      style: {
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.warn }
+      },
+      content: `
+${message}
+
+{center}Y=Yes | N=No{/center}`,
+      tags: true,
+      grabKeys: true
+      // Capture all key input
+    });
+    confirmBox.focus();
+    const cleanup = () => {
+      backdrop.detach();
+      confirmBox.detach();
+      ctx.currentView = previousView;
+      ctx.screen.render();
+    };
+    confirmBox.key(["y", "Y"], () => {
+      cleanup();
+      callback(true);
+    });
+    confirmBox.key(["n", "N", "escape"], () => {
+      cleanup();
+      callback(false);
+    });
+    backdrop.on("click", () => {
+      cleanup();
+      callback(false);
+    });
+    ctx.screen.render();
+  });
+}
+
+// storage.ts
 import * as fs from "fs";
 import * as path from "path";
 var CATEGORIES = [
@@ -241,8 +537,13 @@ async function sendWebhook(storage, event, bug) {
     }
   }
 }
+
+// app.ts
+import * as path2 from "path";
 var BugTrackerApp = class {
   session;
+  // Public because dialogs.ts draws on it. A private member cannot satisfy
+  // a public interface, so `this` would not be a DialogHost.
   screen;
   inputManager;
   storage;
@@ -252,6 +553,8 @@ var BugTrackerApp = class {
   headerBox;
   mainContainer;
   footerBox;
+  // Public for the same reason, and it must stay a live reference: the
+  // dialogs set it while they are open so key routing knows a modal is up.
   currentView = "menu";
   currentFilter = "all";
   keyHandlers = [];
@@ -259,7 +562,7 @@ var BugTrackerApp = class {
     this.session = session;
     this.username = session.user?.username || "Anonymous";
     this.isSysop = (session.user?.securityLevel || 0) >= 255;
-    const doorPath = path.dirname(new URL(import.meta.url).pathname);
+    const doorPath = path2.dirname(new URL(import.meta.url).pathname);
     this.storage = new BugStorage(doorPath);
     this.screen = this.createAppScreen();
     this.inputManager = new DoorInputManager(session, this.screen, {
@@ -272,6 +575,7 @@ var BugTrackerApp = class {
     });
   }
   createAppScreen() {
+    applyTheme(this.session.bbs);
     const screen = createScreen(this.session.bbs, {
       title: "Bug Tracker v1.0.0",
       fullUnicode: false,
@@ -326,15 +630,15 @@ var BugTrackerApp = class {
     });
   }
   createLayout() {
-    this.headerBox = createBox({
+    this.headerBox = createBox2({
       parent: this.screen,
       top: 0,
       left: 0,
       width: "100%",
       height: 3,
       style: {
-        fg: "white",
-        bg: "blue"
+        fg: T.ink,
+        bg: T.bar
       },
       content: "{center}{bold}BUG TRACKER{/bold} - AmiExpress BBS Issue Management{/center}",
       tags: true,
@@ -342,29 +646,29 @@ var BugTrackerApp = class {
       mouse: false,
       clickable: false
     });
-    this.mainContainer = createBox({
+    this.mainContainer = createBox2({
       parent: this.screen,
       top: 3,
       left: 0,
       width: "100%",
       bottom: 3,
       style: {
-        fg: "white",
-        bg: "black"
+        fg: T.ink,
+        bg: T.ground
       },
       focusable: false,
       mouse: false,
       clickable: false
     });
-    this.footerBox = createBox({
+    this.footerBox = createBox2({
       parent: this.screen,
       bottom: 0,
       left: 0,
       width: "100%",
       height: 3,
       style: {
-        fg: "white",
-        bg: "blue"
+        fg: T.ink,
+        bg: T.bar
       },
       content: "{center}Q=Quit | ESC=Back | Arrow Keys=Navigate | Enter=Select{/center}",
       tags: true,
@@ -388,7 +692,7 @@ var BugTrackerApp = class {
     this.clearMain();
     const stats = this.storage.getStats();
     const openBugs = stats.byStatus.new + stats.byStatus.acknowledged + stats.byStatus["in-progress"];
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -397,9 +701,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Bug Tracker ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent }
       },
       content: ` Welcome, ${this.username}! | ${stats.total} total bugs | ${openBugs} open`,
       tags: true,
@@ -429,7 +733,7 @@ var BugTrackerApp = class {
     }
     menuLabels.push("[Q] Quit");
     menuActions.push(() => this.quit());
-    const menuList = createList({
+    const menuList = createList2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -442,16 +746,16 @@ var BugTrackerApp = class {
       keys: true,
       vi: false,
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
         selected: {
-          fg: "black",
-          bg: "cyan"
+          fg: T.selectionInk,
+          bg: T.accent
         },
         item: {
-          fg: "white",
-          bg: "black"
+          fg: T.ink,
+          bg: T.ground
         }
       },
       padding: { left: 1 }
@@ -498,12 +802,12 @@ var BugTrackerApp = class {
       `Resolved: ${stats.recentlyClosed}`,
       "",
       "{bold}By Priority:{/bold}",
-      `{magenta-fg}Critical: ${stats.byPriority.critical}{/}`,
-      `{red-fg}High: ${stats.byPriority.high}{/}`,
-      `{yellow-fg}Medium: ${stats.byPriority.medium}{/}`,
-      `{gray-fg}Low: ${stats.byPriority.low}{/}`
+      `{${T.accentAlt}-fg}Critical: ${stats.byPriority.critical}{/}`,
+      `{${T.alert}-fg}High: ${stats.byPriority.high}{/}`,
+      `{${T.warn}-fg}Medium: ${stats.byPriority.medium}{/}`,
+      `{${T.dim}-fg}Low: ${stats.byPriority.low}{/}`
     ];
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 3,
       right: 1,
@@ -512,9 +816,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Statistics ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "green" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.ok }
       },
       content: statsContent.join("\n"),
       tags: true,
@@ -525,7 +829,7 @@ var BugTrackerApp = class {
       mouse: false,
       clickable: false
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -533,11 +837,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Enter]{/} Select   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[Q]{/} Quit",
+      content: ` {${T.accent}-fg}[Enter]{/} Select   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[Q]{/} Quit`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -583,7 +887,7 @@ var BugTrackerApp = class {
       "open": "Open Bugs",
       "critical": "Critical/High"
     };
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -592,9 +896,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: ` ${filterLabels[this.currentFilter]} `,
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent }
       },
       content: ` Showing ${bugs.length} bug(s) | Filter: ${filterLabels[this.currentFilter]} | Press F to cycle filters`,
       tags: true,
@@ -609,9 +913,9 @@ var BugTrackerApp = class {
       return `{${priorityColor}-fg}#${bug.id.toString().padStart(4, "0")}{/} {${statusColor}-fg}[${bug.status.toUpperCase().substring(0, 3)}]{/} ${bug.title.substring(0, 50)}${voteCount}`;
     });
     if (listItems.length === 0) {
-      listItems.push("{gray-fg}No bugs found - press N to create one{/}");
+      listItems.push(`{${T.dim}-fg}No bugs found - press N to create one{/}`);
     }
-    const bugList = createList({
+    const bugList = createList2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -620,16 +924,16 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Bugs ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
         selected: {
-          fg: "black",
-          bg: "cyan"
+          fg: T.selectionInk,
+          bg: T.accent
         },
         item: {
-          fg: "white",
-          bg: "black"
+          fg: T.ink,
+          bg: T.ground
         }
       },
       items: listItems,
@@ -639,11 +943,11 @@ var BugTrackerApp = class {
       mouse: true,
       scrollbar: {
         ch: " ",
-        style: { bg: "cyan" }
+        style: { bg: T.accent }
       },
       padding: { left: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -651,11 +955,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Enter]{/} View Bug   {cyan-fg}[N]{/} New Bug   {cyan-fg}[F]{/} Filter   {red-fg}[ESC]{/} Back",
+      content: ` {${T.accent}-fg}[Enter]{/} View Bug   {${T.accent}-fg}[N]{/} New Bug   {${T.accent}-fg}[F]{/} Filter   {${T.alert}-fg}[ESC]{/} Back`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -701,7 +1005,7 @@ var BugTrackerApp = class {
     const categoryInfo = CATEGORIES.find((c) => c.value === bug.category);
     const createdDate = new Date(bug.createdAt).toLocaleDateString();
     const updatedDate = new Date(bug.updatedAt).toLocaleDateString();
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -710,8 +1014,8 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: ` Bug #${bug.id} `,
       style: {
-        fg: "white",
-        bg: "black",
+        fg: T.ink,
+        bg: T.ground,
         border: { fg: priorityInfo?.color || "cyan" }
       },
       content: ` {bold}${bug.title}{/} | {${statusInfo?.color}-fg}${statusInfo?.label}{/} | {${priorityInfo?.color}-fg}${priorityInfo?.label}{/}`,
@@ -721,11 +1025,11 @@ var BugTrackerApp = class {
       clickable: false
     });
     const detailContent = [
-      `{cyan-fg}Category:{/} ${categoryInfo?.label || bug.category}`,
-      `{cyan-fg}Reporter:{/} ${bug.reporter}`,
-      `{cyan-fg}Assignee:{/} ${bug.assignee || "Unassigned"}`,
-      `{cyan-fg}Votes:{/} ${bug.votes.length}`,
-      `{cyan-fg}Created:{/} ${createdDate} | {cyan-fg}Updated:{/} ${updatedDate}`,
+      `{${T.accent}-fg}Category:{/} ${categoryInfo?.label || bug.category}`,
+      `{${T.accent}-fg}Reporter:{/} ${bug.reporter}`,
+      `{${T.accent}-fg}Assignee:{/} ${bug.assignee || "Unassigned"}`,
+      `{${T.accent}-fg}Votes:{/} ${bug.votes.length}`,
+      `{${T.accent}-fg}Created:{/} ${createdDate} | {${T.accent}-fg}Updated:{/} ${updatedDate}`,
       "",
       "{bold}Description:{/bold}",
       bug.description || "N/A",
@@ -740,9 +1044,9 @@ var BugTrackerApp = class {
       bug.actualBehavior || "N/A"
     ];
     if (bug.tags.length > 0) {
-      detailContent.push("", `{cyan-fg}Tags:{/} ${bug.tags.join(", ")}`);
+      detailContent.push("", `{${T.accent}-fg}Tags:{/} ${bug.tags.join(", ")}`);
     }
-    const detailBox = createBox({
+    const detailBox = createBox2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -751,9 +1055,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Details ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent }
       },
       content: detailContent.join("\n"),
       tags: true,
@@ -784,7 +1088,7 @@ var BugTrackerApp = class {
     }
     actionLabels.push("[ESC] Back");
     actionHandlers.push(() => this.showBugList());
-    const actionList = createList({
+    const actionList = createList2({
       parent: this.mainContainer,
       top: 3,
       right: 1,
@@ -797,11 +1101,11 @@ var BugTrackerApp = class {
       keys: true,
       vi: false,
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "yellow" },
-        selected: { fg: "black", bg: "yellow" },
-        item: { fg: "white", bg: "black" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.warn },
+        selected: { fg: T.selectionInk, bg: T.warn },
+        item: { fg: T.ink, bg: T.ground }
       },
       padding: { left: 1 }
     });
@@ -812,14 +1116,14 @@ var BugTrackerApp = class {
     });
     const commentItems = bug.comments.filter((c) => !c.isInternal || this.isSysop).map((c) => {
       const date = new Date(c.timestamp).toLocaleDateString();
-      const prefix = c.isInternal ? "{magenta-fg}[INTERNAL]{/} " : "";
-      return `${prefix}{cyan-fg}${c.author}{/} (${date}):
+      const prefix = c.isInternal ? `{${T.accentAlt}-fg}[INTERNAL]{/} ` : "";
+      return `${prefix}{${T.accent}-fg}${c.author}{/} (${date}):
   ${c.content}`;
     });
     if (commentItems.length === 0) {
-      commentItems.push("{gray-fg}No comments yet - press C to add one{/}");
+      commentItems.push(`{${T.dim}-fg}No comments yet - press C to add one{/}`);
     }
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 15,
       left: 1,
@@ -828,9 +1132,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: ` Comments (${bug.comments.length}) `,
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "green" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.ok }
       },
       content: commentItems.join("\n\n"),
       tags: true,
@@ -841,7 +1145,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1, right: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -849,11 +1153,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Enter]{/} Select Action   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[ESC]{/} Back",
+      content: ` {${T.accent}-fg}[Enter]{/} Select Action   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[ESC]{/} Back`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -916,7 +1220,7 @@ var BugTrackerApp = class {
       { name: "Expected Behavior", value: "" },
       { name: "Actual Behavior", value: "" }
     ];
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -925,9 +1229,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " New Bug Report ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "yellow" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.warn }
       },
       content: " Use arrows/mouse to select field. Enter to edit. F10 to submit. ESC to cancel.",
       tags: true,
@@ -937,7 +1241,7 @@ var BugTrackerApp = class {
     });
     const generateItems = () => {
       return fields.map((field) => {
-        let displayValue = field.value || "{gray-fg}(empty){/}";
+        let displayValue = field.value || `{${T.dim}-fg}(empty){/}`;
         if (field.name === "Category") {
           const cat = CATEGORIES.find((c) => c.value === field.value);
           displayValue = cat?.label || field.value;
@@ -950,7 +1254,7 @@ var BugTrackerApp = class {
         return `{bold}${field.name.padEnd(20)}{/} ${displayValue}`;
       });
     };
-    const fieldList = createList({
+    const fieldList = createList2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -958,11 +1262,11 @@ var BugTrackerApp = class {
       height: "100%-6",
       border: { type: "line" },
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" },
-        selected: { fg: "black", bg: "cyan" },
-        item: { fg: "white", bg: "black" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
+        selected: { fg: T.selectionInk, bg: T.accent },
+        item: { fg: T.ink, bg: T.ground }
       },
       items: generateItems(),
       keys: true,
@@ -973,7 +1277,7 @@ var BugTrackerApp = class {
       alwaysScroll: true,
       padding: { left: 1, right: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -981,11 +1285,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Enter]{/} Edit Field   {cyan-fg}[F10]{/} Submit   {red-fg}[ESC]{/} Cancel",
+      content: ` {${T.accent}-fg}[Enter]{/} Edit Field   {${T.accent}-fg}[F10]{/} Submit   {${T.alert}-fg}[ESC]{/} Cancel`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -1074,7 +1378,7 @@ var BugTrackerApp = class {
     const openBugs = stats.byStatus.new + stats.byStatus.acknowledged + stats.byStatus["in-progress"];
     const closedBugs = stats.byStatus.fixed + stats.byStatus.closed + stats.byStatus["wont-fix"];
     const openPct = stats.total > 0 ? Math.round(openBugs / stats.total * 100) : 0;
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -1083,9 +1387,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Analytics Dashboard ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "green" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.ok }
       },
       content: ` Total: ${stats.total} bugs | Open: ${openBugs} (${openPct}%) | Closed: ${closedBugs}`,
       tags: true,
@@ -1128,7 +1432,7 @@ var BugTrackerApp = class {
       "{bold}Status Breakdown:{/bold}",
       ...statusLines
     ];
-    const analyticsBox = createBox({
+    const analyticsBox = createBox2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -1136,9 +1440,9 @@ var BugTrackerApp = class {
       height: "100%-6",
       border: { type: "line" },
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent }
       },
       content: content.join("\n"),
       tags: true,
@@ -1149,7 +1453,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1, right: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -1157,11 +1461,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Up/Down]{/} Scroll   {red-fg}[ESC]{/} Back to Menu",
+      content: ` {${T.accent}-fg}[Up/Down]{/} Scroll   {${T.alert}-fg}[ESC]{/} Back to Menu`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -1183,7 +1487,7 @@ var BugTrackerApp = class {
     this.currentView = "settings";
     this.clearMain();
     const webhooks = this.storage.getWebhooks();
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -1192,9 +1496,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Webhook Settings ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "yellow" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.warn }
       },
       content: ` ${webhooks.length} webhook(s) configured | Notifications for bug events`,
       tags: true,
@@ -1203,13 +1507,13 @@ var BugTrackerApp = class {
       clickable: false
     });
     const listItems = webhooks.map((w, idx) => {
-      const status = w.enabled ? "{green-fg}[ON]{/}" : "{red-fg}[OFF]{/}";
+      const status = w.enabled ? `{${T.ok}-fg}[ON]{/}` : `{${T.alert}-fg}[OFF]{/}`;
       return `${status} ${w.type.toUpperCase().padEnd(8)} ${w.url.substring(0, 50)}${w.url.length > 50 ? "..." : ""}`;
     });
     if (listItems.length === 0) {
-      listItems.push("{gray-fg}No webhooks configured - press A to add one{/}");
+      listItems.push(`{${T.dim}-fg}No webhooks configured - press A to add one{/}`);
     }
-    const webhookList = createList({
+    const webhookList = createList2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -1218,11 +1522,11 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Webhooks ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" },
-        selected: { fg: "black", bg: "cyan" },
-        item: { fg: "white", bg: "black" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
+        selected: { fg: T.selectionInk, bg: T.accent },
+        item: { fg: T.ink, bg: T.ground }
       },
       items: listItems,
       tags: true,
@@ -1231,7 +1535,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -1239,11 +1543,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[A]{/} Add   {cyan-fg}[D]{/} Delete   {cyan-fg}[T]{/} Toggle   {red-fg}[ESC]{/} Back",
+      content: ` {${T.accent}-fg}[A]{/} Add   {${T.accent}-fg}[D]{/} Delete   {${T.accent}-fg}[T]{/} Toggle   {${T.alert}-fg}[ESC]{/} Back`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -1308,7 +1612,7 @@ var BugTrackerApp = class {
     const openBugs = stats.byStatus.new + stats.byStatus.acknowledged + stats.byStatus["in-progress"];
     const fixedBugs = stats.byStatus.fixed;
     const closedBugs = stats.byStatus.closed + stats.byStatus["wont-fix"];
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -1317,9 +1621,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Sysop Tools ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "red" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.alert }
       },
       content: ` Open: ${openBugs} | Fixed (pending close): ${fixedBugs} | Closed: ${closedBugs}`,
       tags: true,
@@ -1343,7 +1647,7 @@ var BugTrackerApp = class {
       () => this.showUserReport(),
       () => this.showMainMenu()
     ];
-    const toolList = createList({
+    const toolList = createList2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -1352,11 +1656,11 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " Available Tools ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" },
-        selected: { fg: "black", bg: "red" },
-        item: { fg: "white", bg: "black" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
+        selected: { fg: T.selectionInk, bg: T.alert },
+        item: { fg: T.ink, bg: T.ground }
       },
       items: toolLabels,
       tags: true,
@@ -1365,7 +1669,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -1373,11 +1677,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Enter]{/} Select Tool   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[ESC]{/} Back",
+      content: ` {${T.accent}-fg}[Enter]{/} Select Tool   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[ESC]{/} Back`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -1568,7 +1872,7 @@ var BugTrackerApp = class {
     this.currentView = "stats";
     this.clearMain();
     const userCount = Object.keys(userStats).length;
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       top: 0,
       left: 1,
@@ -1577,9 +1881,9 @@ var BugTrackerApp = class {
       border: { type: "line" },
       label: " User Activity Report ",
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "magenta" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accentAlt }
       },
       content: ` Tracking ${userCount} user(s) across ${bugs.length} bug(s)`,
       tags: true,
@@ -1589,16 +1893,16 @@ var BugTrackerApp = class {
     });
     const lines = [
       "{bold}User                 Reported  Assigned  Comments{/}",
-      "{gray-fg}" + "-".repeat(55) + "{/}"
+      `{${T.dim}-fg}` + "-".repeat(55) + "{/}"
     ];
     Object.entries(userStats).sort((a, b) => b[1].reported + b[1].assigned - (a[1].reported + a[1].assigned)).forEach(([user, stats]) => {
       const row = `${user.padEnd(20)} ${stats.reported.toString().padStart(8)}  ${stats.assigned.toString().padStart(8)}  ${stats.commented.toString().padStart(8)}`;
       lines.push(row);
     });
     if (userCount === 0) {
-      lines.push("{gray-fg}No user activity yet{/}");
+      lines.push(`{${T.dim}-fg}No user activity yet{/}`);
     }
-    const reportBox = createBox({
+    const reportBox = createBox2({
       parent: this.mainContainer,
       top: 3,
       left: 1,
@@ -1606,9 +1910,9 @@ var BugTrackerApp = class {
       height: "100%-6",
       border: { type: "line" },
       style: {
-        fg: "white",
-        bg: "black",
-        border: { fg: "cyan" }
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent }
       },
       content: lines.join("\n"),
       tags: true,
@@ -1619,7 +1923,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1, right: 1 }
     });
-    createBox({
+    createBox2({
       parent: this.mainContainer,
       bottom: 0,
       left: 1,
@@ -1627,11 +1931,11 @@ var BugTrackerApp = class {
       height: 3,
       border: { type: "line" },
       style: {
-        fg: "gray",
-        bg: "black",
-        border: { fg: "gray" }
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim }
       },
-      content: " {cyan-fg}[Up/Down]{/} Scroll   {red-fg}[ESC]{/} Back to Sysop Tools",
+      content: ` {${T.accent}-fg}[Up/Down]{/} Scroll   {${T.alert}-fg}[ESC]{/} Back to Sysop Tools`,
       tags: true,
       focusable: false,
       mouse: false,
@@ -1768,274 +2072,21 @@ var BugTrackerApp = class {
   // ============================================================================
   // UI Helpers
   // ============================================================================
+  // The dialogs themselves live in dialogs.ts - they know nothing about
+  // bugs, and app.ts was over the line-count ceiling. These keep the call
+  // sites unchanged, and keep their types: a `...args: any[]` bridge made
+  // every callback parameter implicitly any at the caller.
   showSelector(title, items, callback) {
-    const previousFocus = this.screen.focused;
-    setImmediate(() => {
-      const previousView = this.currentView;
-      this.currentView = "dialog";
-      const backdrop = createBox({
-        parent: this.screen,
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        style: { bg: "black", transparent: true },
-        focusable: false,
-        clickable: true
-      });
-      const list = createList({
-        parent: this.screen,
-        top: "center",
-        left: "center",
-        width: 40,
-        height: Math.min(items.length + 4, 15),
-        border: { type: "line" },
-        label: ` ${title} `,
-        style: {
-          fg: "white",
-          bg: "black",
-          border: { fg: "yellow" },
-          selected: { fg: "black", bg: "yellow" }
-        },
-        items,
-        keys: true,
-        vi: true,
-        mouse: true,
-        grabKeys: true
-        // Capture all key input
-      });
-      list.focus();
-      const cleanup = () => {
-        backdrop.detach();
-        list.detach();
-        this.currentView = previousView;
-        if (previousFocus && typeof previousFocus.focus === "function") {
-          previousFocus.focus();
-        }
-        this.screen.render();
-      };
-      list.once("select", (_item, idx) => {
-        cleanup();
-        callback(idx);
-      });
-      list.key(["escape"], () => {
-        cleanup();
-        callback(-1);
-      });
-      backdrop.on("click", () => {
-        cleanup();
-        callback(-1);
-      });
-      this.screen.render();
-    });
+    showSelector(this, title, items, callback);
   }
   showTextInput(title, defaultValue, multiline, callback) {
-    const previousFocus = this.screen.focused;
-    setImmediate(() => {
-      const previousView = this.currentView;
-      this.currentView = "dialog";
-      const height = multiline ? 10 : 5;
-      const backdrop = createBox({
-        parent: this.screen,
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        style: { bg: "black", transparent: true },
-        focusable: false,
-        clickable: true
-      });
-      const inputBox = createBox({
-        parent: this.screen,
-        top: "center",
-        left: "center",
-        width: 60,
-        height: height + 4,
-        border: { type: "line" },
-        label: ` ${title} `,
-        style: {
-          fg: "white",
-          bg: "black",
-          border: { fg: "yellow" }
-        },
-        tags: true,
-        focusable: false,
-        mouse: false,
-        clickable: false
-      });
-      const textbox = createTextbox({
-        parent: inputBox,
-        top: 1,
-        left: 1,
-        width: 56,
-        height,
-        style: {
-          fg: "white",
-          bg: "blue"
-        },
-        inputOnFocus: true,
-        keys: true,
-        mouse: true,
-        grabKeys: true
-        // Capture all key input while editing
-      });
-      textbox.setValue(defaultValue);
-      textbox.focus();
-      createBox({
-        parent: inputBox,
-        bottom: 0,
-        left: 1,
-        width: 56,
-        height: 1,
-        content: "{gray-fg}Enter=Submit | ESC=Cancel{/}",
-        tags: true,
-        style: { fg: "gray", bg: "black" },
-        focusable: false,
-        mouse: false,
-        clickable: false
-      });
-      const cleanup = () => {
-        backdrop.detach();
-        inputBox.detach();
-        this.currentView = previousView;
-        if (previousFocus && typeof previousFocus.focus === "function") {
-          previousFocus.focus();
-        }
-        this.screen.render();
-      };
-      textbox.on("submit", () => {
-        const value = textbox.getValue();
-        cleanup();
-        callback(value);
-      });
-      textbox.key(["escape"], () => {
-        cleanup();
-        callback(null);
-      });
-      backdrop.on("click", () => {
-        cleanup();
-        callback(null);
-      });
-      this.screen.render();
-    });
+    showTextInput(this, title, defaultValue, multiline, callback);
   }
   showMessage(title, message, callback) {
-    const previousFocus = this.screen.focused;
-    setImmediate(() => {
-      const previousView = this.currentView;
-      this.currentView = "dialog";
-      const backdrop = createBox({
-        parent: this.screen,
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        style: { bg: "black", transparent: true },
-        focusable: false,
-        clickable: true
-      });
-      const msgBox = createBox({
-        parent: this.screen,
-        top: "center",
-        left: "center",
-        width: 50,
-        height: 7,
-        border: { type: "line" },
-        label: ` ${title} `,
-        style: {
-          fg: "white",
-          bg: "black",
-          border: { fg: title === "Error" ? "red" : "green" }
-        },
-        content: `
-${message}
-
-{center}Press any key to continue{/center}`,
-        tags: true,
-        grabKeys: true
-        // Capture all key input
-      });
-      msgBox.focus();
-      const cleanup = () => {
-        backdrop.detach();
-        msgBox.detach();
-        this.currentView = previousView;
-        if (previousFocus && typeof previousFocus.focus === "function") {
-          previousFocus.focus();
-        }
-        this.screen.render();
-      };
-      msgBox.once("keypress", () => {
-        cleanup();
-        if (callback) callback();
-      });
-      backdrop.on("click", () => {
-        cleanup();
-        if (callback) callback();
-      });
-      msgBox.on("click", () => {
-        cleanup();
-        if (callback) callback();
-      });
-      this.screen.render();
-    });
+    showMessage(this, title, message, callback);
   }
   showConfirm(title, message, callback) {
-    setImmediate(() => {
-      const previousView = this.currentView;
-      this.currentView = "dialog";
-      const backdrop = createBox({
-        parent: this.screen,
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        style: { bg: "black", transparent: true },
-        focusable: false,
-        clickable: true
-      });
-      const confirmBox = createBox({
-        parent: this.screen,
-        top: "center",
-        left: "center",
-        width: 50,
-        height: 8,
-        border: { type: "line" },
-        label: ` ${title} `,
-        style: {
-          fg: "white",
-          bg: "black",
-          border: { fg: "yellow" }
-        },
-        content: `
-${message}
-
-{center}Y=Yes | N=No{/center}`,
-        tags: true,
-        grabKeys: true
-        // Capture all key input
-      });
-      confirmBox.focus();
-      const cleanup = () => {
-        backdrop.detach();
-        confirmBox.detach();
-        this.currentView = previousView;
-        this.screen.render();
-      };
-      confirmBox.key(["y", "Y"], () => {
-        cleanup();
-        callback(true);
-      });
-      confirmBox.key(["n", "N", "escape"], () => {
-        cleanup();
-        callback(false);
-      });
-      backdrop.on("click", () => {
-        cleanup();
-        callback(false);
-      });
-      this.screen.render();
-    });
+    showConfirm(this, title, message, callback);
   }
   // ============================================================================
   // Cleanup
