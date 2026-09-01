@@ -289,12 +289,6 @@ export class ANSIEditorDoor {
     });
 
     dirList.focus();
-    this.terminalMode = createTerminalModeSwitch({
-      bbs: (this.ctx as any).bbs,
-      screen: this.screen,
-      onRelayout: () => { void this.reopenEditorPreservingContent(); },
-    });
-
     this.screen.render();
   }
 
@@ -428,6 +422,18 @@ export class ANSIEditorDoor {
       enableMouse: true,
       debug: false,
       debugName: 'ANSI-EDITOR'
+    });
+
+    // The 80x25 / responsive switch, created HERE because the editor's own
+    // menu asks for it the moment the door opens. It used to be created
+    // inside the sysop's BBS-files browser, so a door that never opened
+    // that dialog reached `this.terminalMode!.menuItem()` with null and
+    // threw on start - the door did not open at all. A source-pinning test
+    // ("the file mentions createTerminalModeSwitch") passed throughout.
+    this.terminalMode = createTerminalModeSwitch({
+      bbs: (this.ctx as any).bbs,
+      screen: this.screen,
+      onRelayout: () => { void this.reopenEditorPreservingContent(); },
     });
 
     this.screen.render();
