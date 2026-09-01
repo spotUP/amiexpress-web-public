@@ -25,6 +25,8 @@ export interface OnlineNodeLike {
   currentActivity?: string;
   connectionType?: string;
   timeRemaining?: number;
+  /** ISO string from /api/nodes/status. */
+  lastActivity?: string;
 }
 
 export interface RecentEventLike {
@@ -41,6 +43,14 @@ export interface CallerActivity {
   doing: string;
   connectionType?: string;
   timeRemaining?: number;
+  /**
+   * When the session last did anything, as epoch ms.
+   *
+   * "At the menu" says nothing about whether someone is reading it or went
+   * to make tea twenty minutes ago, and that is most of what a sysop wants
+   * to know from a who's-online list.
+   */
+  lastActivityAt?: number;
   /** The last thing they did, if the feed has seen one. */
   lastDetail?: string;
   lastAt?: number;
@@ -52,6 +62,13 @@ export interface CallerActivity {
  * A node with no user is a connection that has not logged in; it takes no
  * row, the same rule listOnlineNodes uses on the server.
  */
+/** An ISO string, or nothing when the field is absent or unparseable. */
+function parseTimestamp(iso: string | undefined): number | undefined {
+  if (!iso) return undefined;
+  const at = Date.parse(iso);
+  return Number.isFinite(at) ? at : undefined;
+}
+
 export function whoIsDoingWhat(
   nodes: OnlineNodeLike[] | undefined,
   events: RecentEventLike[] | undefined,
@@ -77,6 +94,7 @@ export function whoIsDoingWhat(
       doing: describeNodeActivity(node.currentActivity) || 'Online',
       connectionType: node.connectionType,
       timeRemaining: node.timeRemaining,
+      lastActivityAt: parseTimestamp(node.lastActivity),
       lastDetail: last?.detail || undefined,
       lastAt: last?.timestamp,
     });

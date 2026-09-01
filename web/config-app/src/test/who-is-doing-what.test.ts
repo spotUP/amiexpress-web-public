@@ -122,4 +122,35 @@ describe('who is doing what', () => {
     expect(page).toContain('whoIsDoingWhat(');
     expect(page).toContain('On the board now');
   });
+
+  // "At the menu" says nothing about whether someone is reading it or went to
+  // make tea twenty minutes ago, and that is most of what a sysop wants from a
+  // who's-online list. The node status carries it and the panel showed
+  // neither this nor the time remaining.
+  it('carries when the caller last did anything', () => {
+    const [caller] = whoIsDoingWhat(
+      [{ ...NODE, lastActivity: '2026-09-01T18:30:00.000Z', timeRemaining: 45 }],
+      [],
+    );
+
+    expect(caller.lastActivityAt).toBe(Date.parse('2026-09-01T18:30:00.000Z'));
+    expect(caller.timeRemaining).toBe(45);
+  });
+
+  it('survives a missing or unparseable timestamp rather than showing NaN', () => {
+    expect(whoIsDoingWhat([NODE], [])[0].lastActivityAt).toBeUndefined();
+    expect(
+      whoIsDoingWhat([{ ...NODE, lastActivity: 'not a date' }], [])[0].lastActivityAt,
+    ).toBeUndefined();
+  });
+
+  it('is rendered by the page', () => {
+    const page = readFileSync(
+      resolve(__dirname, '..', 'pages', 'ActivityPage.tsx'),
+      'utf8',
+    );
+
+    expect(page).toContain('caller.lastActivityAt');
+    expect(page).toContain('caller.timeRemaining');
+  });
 });

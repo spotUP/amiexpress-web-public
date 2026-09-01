@@ -263,6 +263,16 @@ export function ActivityPage() {
                     {caller.lastAt ? ` (${formatRelativeTime(caller.lastAt)})` : ''}
                   </span>
                 )}
+                {caller.lastActivityAt && (
+                  <span className="text-xs text-content-muted">
+                    &middot; idle {formatRelativeTime(caller.lastActivityAt).replace(' ago', '')}
+                  </span>
+                )}
+                {typeof caller.timeRemaining === 'number' && caller.timeRemaining >= 0 && (
+                  <span className="text-xs text-content-muted">
+                    &middot; {caller.timeRemaining}m left
+                  </span>
+                )}
                 {caller.location && (
                   <span className="ml-auto text-xs text-content-secondary">{caller.location}</span>
                 )}
