@@ -3207,24 +3207,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       })}
       {/* RIP Graphics Canvas Overlay */}
       {ripMode && (
+        // Flush over the terminal, no frame, no badge: the picture should
+        // read as the BBS drawing it inside the terminal, not as a dialog
+        // parked on top. The sysop asked for exactly this.
         <div
           style={{
             position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
+            inset: 0,
             zIndex: 10,
             backgroundColor: '#000',
-            border: '2px solid #555',
-            boxShadow: '0 0 20px rgba(0,0,0,0.8)',
           }}
         >
-          {/*
-            * The renderer owns its own canvas and every draw command. What
-            * used to be here was a bare <canvas> that nothing ever painted
-            * to - the buffer filled, the box appeared, and the picture never
-            * arrived.
-            */}
           <RIPRenderer
             ref={ripRendererRef}
             width={RIP_WIDTH}
@@ -3239,21 +3232,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               setRipMode(false);
             }}
           />
-          <div
-            style={{
-              position: 'absolute',
-              top: '5px',
-              right: '5px',
-              backgroundColor: '#333',
-              color: '#0f0',
-              padding: '2px 6px',
-              fontSize: '10px',
-              fontFamily: 'monospace',
-              borderRadius: '3px',
-            }}
-          >
-            RIP Graphics
-          </div>
         </div>
       )}
       <input

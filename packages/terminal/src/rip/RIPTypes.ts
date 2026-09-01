@@ -25,6 +25,20 @@ export const EGA_PALETTE: string[] = [
   '#FFFFFF', // 15 - White
 ];
 
+/**
+ * A colour from EGA's 64-entry hardware palette, as RIP's palette commands
+ * name them. Bits are rgbRGB: the low three are the intensity bits and the
+ * high three the primaries, each channel 0x00 / 0x55 / 0xAA / 0xFF.
+ */
+export function egaHardwareColor(index: number): string {
+  const v = index & 0x3f;
+  const ch = (hi: number, lo: number) => 0x55 * lo + 0xaa * hi;
+  const r = ch((v >> 2) & 1, (v >> 5) & 1);
+  const g = ch((v >> 1) & 1, (v >> 4) & 1);
+  const b = ch(v & 1, (v >> 3) & 1);
+  return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
 // RIP screen dimensions (EGA mode)
 export const RIP_WIDTH = 640;
 export const RIP_HEIGHT = 350;

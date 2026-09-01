@@ -21,6 +21,7 @@ import {
   ClickType,
 } from './RIPTypes';
 import { parseRIPCommands } from './RIPParser';
+import { egaHardwareColor } from './RIPTypes';
 
 export interface RIPRendererProps {
   /** Called when user clicks a mouse region or button */
@@ -67,6 +68,22 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
     }, []);
 
     // Get color from palette
+    /**
+     * Update drawing state NOW, not on React's schedule.
+     *
+     * render() executes thousands of commands in one synchronous loop, and
+     * the draws read stateRef.current. Every colour and fill change used to
+     * go through setState, which lands in the ref in an effect after the
+     * loop has finished - so an entire file was painted in whatever colours
+     * were current BEFORE it started. That was "most of them render wrong".
+     *
+     * The ref is the source of truth; React state mirrors it for the UI.
+     */
+    const patch = useCallback((update: (prev: RIPState) => RIPState) => {
+      stateRef.current = update(stateRef.current);
+      setState(stateRef.current);
+    }, []);
+
     const getColor = useCallback((colorIndex: number): string => {
       const s = stateRef.current;
       if (colorIndex >= 0 && colorIndex < s.palette.length) {
@@ -85,7 +102,8 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
 
     // Reset state
     const reset = useCallback(() => {
-      setState(createInitialState());
+      stateRef.current = createInitialState();
+      setState(stateRef.current);
       clear();
     }, [clear]);
 
@@ -281,7 +299,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
 
       // Update cursor position
       const newX = posX + text.length * fontSize * 0.6;
-      setState(prev => ({ ...prev, cursorX: newX, cursorY: posY }));
+      patch(prev => ({ ...prev, cursorX: newX, cursorY: posY }));
     }, [getContext, getColor]);
 
     // Flood fill
@@ -375,11 +393,11 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.COLOR:
-          setState(prev => ({ ...prev, drawColor: params[0] % 16 }));
+          patch(prev => ({ ...prev, drawColor: params[0] % 16 }));
           break;
 
         case RIPCommandType.FILL_STYLE:
-          setState(prev => ({
+          patch(prev => ({
             ...prev,
             fillPattern: params[0] as FillPattern,
             fillColor: params[1] % 16,
@@ -387,7 +405,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.LINE_STYLE:
-          setState(prev => ({
+          patch(prev => ({
             ...prev,
             lineStyle: params[0] as LineStyle,
             linePattern: params[1],
@@ -396,7 +414,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.MOVE:
-          setState(prev => ({ ...prev, cursorX: params[0], cursorY: params[1] }));
+          patch(prev => ({ ...prev, cursorX: params[0], cursorY: params[1] }));
           break;
 
         case RIPCommandType.PIXEL:
@@ -456,7 +474,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.FONT_STYLE:
-          setState(prev => ({
+          patch(prev => ({
             ...prev,
             fontType: params[0],
             fontDirection: params[1],
@@ -465,7 +483,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.TEXT_WINDOW:
-          setState(prev => ({
+          patch(prev => ({
             ...prev,
             textWindow: {
               x0: params[0],
@@ -479,7 +497,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.VIEWPORT:
-          setState(prev => ({
+          patch(prev => ({
             ...prev,
             viewport: {
               x0: params[0],
@@ -491,15 +509,18 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.ONE_PALETTE:
-          setState(prev => {
-            const newPalette = [...prev.palette];
-            const colorIdx = params[0];
-            const r = Math.round(params[1] * 4.0625); // Scale 0-63 to 0-255
-            const g = Math.round(params[2] * 4.0625);
-            const b = Math.round(params[3] * 4.0625);
-            newPalette[colorIdx] = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-            return { ...prev, palette: newPalette };
+          patch(prev => {
+            const palette = [...prev.palette];
+            palette[params[0] % 16] = egaHardwareColor(params[1]);
+            return { ...prev, palette };
           });
+          break;
+
+        case RIPCommandType.SET_PALETTE:
+          patch(prev => ({
+            ...prev,
+            palette: params.slice(0, 16).map(v => egaHardwareColor(v)),
+          }));
           break;
 
         case RIPCommandType.MOUSE:
@@ -515,7 +536,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
               reset: params[7] !== 0,
               command: text || '',
             };
-            setState(prev => ({
+            patch(prev => ({
               ...prev,
               mouseRegions: [...prev.mouseRegions, region],
             }));
@@ -523,7 +544,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.KILL_MOUSE:
-          setState(prev => ({ ...prev, mouseRegions: [], buttons: [] }));
+          patch(prev => ({ ...prev, mouseRegions: [], buttons: [] }));
           break;
 
         case RIPCommandType.BUTTON:
@@ -562,7 +583,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
               }
             }
 
-            setState(prev => ({
+            patch(prev => ({
               ...prev,
               buttons: [...prev.buttons, button],
             }));
@@ -570,7 +591,7 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           break;
 
         case RIPCommandType.HOME:
-          setState(prev => ({ ...prev, cursorX: 0, cursorY: 0 }));
+          patch(prev => ({ ...prev, cursorX: 0, cursorY: 0 }));
           break;
 
         default:
@@ -668,8 +689,11 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
         height={RIP_HEIGHT}
         onClick={handleClick}
         style={{
-          width: displayWidth,
-          height: displayHeight,
+          // Fill the host. The terminal lays this flush over itself so the
+          // picture reads as the BBS drawing it, not as a dialog on top.
+          width: '100%',
+          height: '100%',
+          display: 'block',
           imageRendering: 'pixelated',
           backgroundColor: '#000',
           cursor: 'pointer',
