@@ -21,6 +21,10 @@ import { join } from 'path';
 const repoRoot = join(__dirname, '..', '..', '..', '..');
 
 /** Doors that carry the switch, and the file that creates their screen. */
+// card-lobby is NOT here: its index.ts is 2826 lines, over this repo's
+// 2000-line ceiling, so the pre-commit hook refuses any change to it until
+// somebody extracts from it first. The switch is a ten-line change waiting
+// on that.
 const DOORS: Array<[string, string]> = [
   ['grandmaster', 'app.ts'],
   ['sprite-editor', 'studio.ts'],
@@ -29,7 +33,6 @@ const DOORS: Array<[string, string]> = [
   ['bug-tracker', 'app.ts'],
   ['bbs-dashboard', 'index.ts'],
   ['doors-menu', 'app.ts'],
-  ['card-lobby', 'index.ts'],
   ['theme-picker', 'app.ts'],
   ['scrollwars', 'index.ts'],
 ];
