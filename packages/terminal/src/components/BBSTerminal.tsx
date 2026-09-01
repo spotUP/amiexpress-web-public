@@ -273,7 +273,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       { family: 'TopazPlus_a500', url: '/fonts/TopazPlus_a500_v1.0.ttf' },
       { family: 'Topaz_a1200', url: '/fonts/Topaz_a1200_v1.0.ttf' },
       { family: 'Topaz_a500', url: '/fonts/Topaz_a500_v1.0.ttf' },
-      { family: 'mosoul', url: '/fonts/mOsOul_v1.0.ttf' }
+      { family: 'mosoul', url: '/fonts/mOsOul_v1.0.ttf' },
+      { family: 'PetMe64', url: '/fonts/PetMe64.ttf' }
     ];
 
     const loadFonts = async () => {
@@ -2024,19 +2025,34 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.refresh(0, term.rows - 1);
     });
 
-    // PETSCII output handler
-    socket.on('petscii-output', (data: string) => {
-      console.log('[PETSCII] Received petscii-output, length:', data.length);
+    // PETSCII output handler. The font MUST be loaded before xterm rasterizes
+    // PUA glyphs - a canvas renderer never triggers CSS @font-face loading, and
+    // xterm caches rasterized tofu in its texture atlas (audit A1/A2).
+    let petsciiFontReady: Promise<unknown> | null = null;
+    const ensurePetsciiTerminal = async () => {
+      petsciiFontReady = petsciiFontReady ?? document.fonts.load('16px PetMe64');
+      await petsciiFontReady;
       const currentFont = term.options.fontFamily;
       if (!currentFont?.includes('PetMe64')) {
         normalFont.current = currentFont || 'TopazPlus_a1200, "Courier New", monospace';
-        console.log('[PETSCII] Saved normal font:', normalFont.current);
+        term.options.fontFamily = 'PetMe64, "Courier New", monospace';
+        (term as any).clearTextureAtlas?.(); // drop any cached fallback glyphs
       }
-      console.log('[PETSCII] Switching font from', currentFont, 'to PetMe64');
-      term.options.fontFamily = 'PetMe64, "Courier New", monospace';
-      term.write(data);
-      term.refresh(0, term.rows - 1);
-      console.log('[PETSCII] PETSCII content written to terminal');
+      if (term.cols !== 40 || term.rows !== 25) {
+        term.resize(40, 25); // PETSCII art is authored for 40x25 (audit A3)
+      }
+    };
+    socket.on('petscii-output', (data: string) => {
+      void ensurePetsciiTerminal().then(() => {
+        // Same pacing queue as ANSI output - keeps ordering and lets art
+        // draw at modem speed instead of jumping the ANSI queue (audit B3).
+        if (modemEmulatorRef.current) {
+          modemEmulatorRef.current.write(data);
+        } else {
+          term.write(data);
+        }
+        term.refresh(0, term.rows - 1);
+      });
     });
 
     // Modem speed emulation handler.
@@ -2059,12 +2075,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.resize(size.cols, size.rows);
       // For PETSCII mode (40x25), also switch to PetMe64 font
       if (size.cols === 40 && size.rows === 25) {
-        const currentFont = term.options.fontFamily;
-        if (!currentFont?.includes('PetMe64')) {
-          normalFont.current = currentFont || 'TopazPlus_a1200, "Courier New", monospace';
-        }
-        term.options.fontFamily = 'PetMe64, "Courier New", monospace';
-        console.log('[PETSCII] Terminal resized to 40x25, switched to PetMe64 font');
+        void ensurePetsciiTerminal();
       }
     });
 
