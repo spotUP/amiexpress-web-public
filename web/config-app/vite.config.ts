@@ -16,6 +16,19 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // The SDK's ANSI editor core, from SOURCE rather than sdk/dist.
+      //
+      // Two reasons. The build is gitignored, so a fresh checkout has no dist
+      // and the admin would fail to bundle; and a stale dist is a trap this
+      // repo has been caught by before - a source edit stays invisible until
+      // someone remembers to rebuild. Vite compiles the TypeScript directly,
+      // so the browser and the door run the same file.
+      //
+      // core/, tools/ and input/ carry no Node imports; only api/ and ui/
+      // bind to blessed, and nothing here reaches those.
+      '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor': path.resolve(
+        __dirname, '../../sdk/engines/ui/ansi-editor',
+      ),
     },
   },
   server: {
