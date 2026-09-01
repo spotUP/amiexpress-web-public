@@ -4,7 +4,7 @@
  */
 
 import {
-  decodeCP437, encodeCP437, cp437ByteToChar, charToCP437Byte, decoderForFont,
+  decodeCP437, encodeCP437, decoderForFont,
 } from './cp437';
 import type { Cell } from '../types';
 import * as Canvas from './canvas';
@@ -72,7 +72,6 @@ function parseSAUCE(data: Uint8Array): SAUCERecord | null {
  */
 function createSAUCE(sauce: Partial<SAUCERecord>): Uint8Array {
   const buffer = new Uint8Array(128);
-  const encoder = new TextEncoder();
 
   // Write fields
   writeString(buffer, 0, 'SAUCE', 5);
@@ -521,6 +520,13 @@ export async function loadXBFile(data: Uint8Array): Promise<{ canvas: Cell[][], 
   const hasCompression = (flags & 0x04) !== 0;
   const hasNonBlink = (flags & 0x08) !== 0;
   const has512Chars = (flags & 0x10) !== 0;
+
+  // Read for the record and deliberately unused: this loader renders with the
+  // host's own font, so the XBin font height and the 512-character flag change
+  // nothing about the canvas it produces. Named rather than skipped, because
+  // the next person reading this wants the header's shape.
+  void fontHeight;
+  void has512Chars;
 
   let offset = 11;
 
