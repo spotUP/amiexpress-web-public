@@ -76,6 +76,29 @@ export interface Block {
   slideDirection: Direction | null;
 }
 
+/**
+ * A block in flight, between the cell it left and the cell it will stop on.
+ *
+ * A push used to resolve inside a single keypress: the whole slide ran in
+ * one synchronous loop, so a block travelled its entire length in one
+ * frame. Reported in play as blocks disappearing, and diagnosed exactly -
+ * "they move too fast making it a 1 frame animation". Both reference
+ * clones model a pushed block as a moving thing, and so does the arcade;
+ * this is that model.
+ */
+export interface SlidingBlock {
+  x: number;
+  y: number;
+  type: CellType;
+  /** Direction of travel, one cell per SLIDE_TICKS_PER_CELL. */
+  dx: number;
+  dy: number;
+  /** Ticks until the next cell step. */
+  timer: number;
+  /** How many Sno-Bees this one push has caught, for the combo score. */
+  crushed: number;
+}
+
 export interface Egg {
   x: number;
   y: number;
@@ -100,6 +123,8 @@ export interface PengoData {
   enemies: Enemy[];
   grid: CellType[][];
   eggs: Egg[];
+  /** Blocks currently in flight from a push. */
+  slidingBlocks: SlidingBlock[];
 
   diamondsAligned: boolean;
   enemyIdCounter: number;

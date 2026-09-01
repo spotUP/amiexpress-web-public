@@ -34,6 +34,7 @@ export function createInitialGameData(): PengoData {
     enemies: [],
     grid: [],
     eggs: [],
+    slidingBlocks: [],
 
     diamondsAligned: false,
     enemyIdCounter: 0,

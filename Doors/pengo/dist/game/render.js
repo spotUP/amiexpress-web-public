@@ -47,6 +47,15 @@ function buildWorld(data, sheet, tick) {
             }
         }
     }
+    // Blocks in flight. They are NOT in the grid while they travel - they
+    // were taken out of it when the push started and go back when they stop -
+    // so if they were not drawn here they would vanish for the whole slide,
+    // which is the very fault this animation exists to fix.
+    for (const block of data.slidingBlocks) {
+        const sprite = block.type === 'diamond' ? sheet['diamond'] : sheet['ice'];
+        const anim = block.type === 'diamond' ? 'sparkle' : 'sliding';
+        (0, cell_art_1.blitSprite)(board, sprite, anim, tick, block.x, block.y);
+    }
     // Eggs
     for (const egg of data.eggs) {
         const anim = egg.hatchTimer <= HATCH_WARNING ? 'hatching' : 'idle';

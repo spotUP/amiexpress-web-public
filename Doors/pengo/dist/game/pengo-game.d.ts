@@ -40,7 +40,28 @@ export declare class PengoGame {
     handleDirection(direction: Direction): void;
     handlePush(): void;
     private tryMove;
+    /**
+     * Start a block sliding. The push RESOLVES over the next few ticks.
+     *
+     * This used to run the whole slide in one synchronous loop, so a block
+     * left its cell and arrived at the far wall inside a single frame - the
+     * player never saw it travel, which read as the block disappearing.
+     * Diagnosed exactly in play: "they move too fast making it a 1 frame
+     * animation". The block is now an entity in flight; `advanceSlidingBlocks`
+     * moves it a cell at a time and decides where it stops.
+     */
     private pushBlock;
+    /**
+     * Move every block in flight, and settle the ones that have arrived.
+     *
+     * A block travels one cell per SLIDE_TICKS_PER_CELL. It squashes any
+     * Sno-Bee it reaches and carries on only while the next cell holds
+     * another one, so a push resolves where it did its damage rather than
+     * running on to the far wall.
+     */
+    private advanceSlidingBlocks;
+    /** A block stops: back into the grid, and pay out what it caught. */
+    private settleBlock;
     private shakeWall;
     /**
      * The alignment bonus, scored exactly once. It used to re-check (and

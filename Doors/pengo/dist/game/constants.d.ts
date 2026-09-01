@@ -91,6 +91,16 @@ export declare const MAX_SCORE = 99999;
  * is the point of the whole game, and it used to happen invisibly.
  */
 export declare const CRUSH_FRAMES = 12;
+/**
+ * Ticks a pushed block takes to travel one cell.
+ *
+ * The push used to resolve entirely inside one keypress - the block went
+ * from its old cell to wherever it stopped in a single frame, which read
+ * as it vanishing. At 100ms a tick this is a visible slide the player can
+ * watch, and short enough that it still feels like a shove rather than a
+ * drift.
+ */
+export declare const SLIDE_TICKS_PER_CELL = 2;
 export declare const STUN_DURATION = 50;
 export declare const HATCH_TIME = 100;
 export declare const ENEMY_MOVE_DELAY = 8;

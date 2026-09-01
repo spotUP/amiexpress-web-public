@@ -5,6 +5,7 @@
 
 import {
   PengoData,
+  SlidingBlock,
   Direction,
   CellType,
   Enemy,
@@ -19,6 +20,7 @@ import {
   ENEMY_MOVE_DELAY,
   getLevelConfig,
   CRUSH_FRAMES,
+  SLIDE_TICKS_PER_CELL,
   MAX_SCORE,
   crushComboScore,
   MAX_LIVING_ENEMIES,
@@ -251,6 +253,16 @@ export class PengoGame {
     }
   }
 
+  /**
+   * Start a block sliding. The push RESOLVES over the next few ticks.
+   *
+   * This used to run the whole slide in one synchronous loop, so a block
+   * left its cell and arrived at the far wall inside a single frame - the
+   * player never saw it travel, which read as the block disappearing.
+   * Diagnosed exactly in play: "they move too fast making it a 1 frame
+   * animation". The block is now an entity in flight; `advanceSlidingBlocks`
+   * moves it a cell at a time and decides where it stops.
+   */
   private pushBlock(x: number, y: number, dx: number, dy: number): void {
     // The block leaves Pengo's flippers whatever it goes on to hit.
     this.cues.push('dash');
@@ -259,20 +271,55 @@ export class PengoGame {
     this.addScore(SCORES.pushBlock);
 
     const cellType = this.data.grid[y][x];
+    const nextX = x + dx;
+    const nextY = y + dy;
+    const nextCell = this.data.grid[nextY]?.[nextX];
+    const enemyThere = this.data.enemies.some(e =>
+      e.x === nextX && e.y === nextY && e.state !== 'dead' && e.state !== 'crushed'
+    );
 
-    // Slide the block cell by cell. Both reference clones agree a
-    // sliding block chain-kills down the WHOLE line of enemies it meets,
-    // not just the first one - ours used to `break` on the first hit, so
-    // a second Sno-Bee further down the same corridor survived. The
-    // block passes straight through each one it catches and keeps going,
-    // stopping only at a wall, another block, or the grid edge.
-    let slideX = x;
-    let slideY = y;
-    const chain: Enemy[] = [];
+    // Nowhere to go: the block breaks where it stands. Ref2's rule, and the
+    // "destroy a boxed-in block" move the player had no way to make before.
+    if (nextCell !== 'empty' && !enemyThere) {
+      this.data.grid[y][x] = 'empty';
+      this.cues.push('switch');
+      this.data.lastSlide = { x, y, tick: this.data.frameCount };
+      this.checkDiamondAlignment();
+      return;
+    }
 
-    while (true) {
-      const nextX = slideX + dx;
-      const nextY = slideY + dy;
+    // Off the grid and into the air: it belongs to the slide list now, and
+    // comes back to the grid when it stops.
+    this.data.grid[y][x] = 'empty';
+    this.data.slidingBlocks.push({
+      x, y, type: cellType, dx, dy,
+      timer: SLIDE_TICKS_PER_CELL, crushed: 0,
+    });
+  }
+
+  /**
+   * Move every block in flight, and settle the ones that have arrived.
+   *
+   * A block travels one cell per SLIDE_TICKS_PER_CELL. It squashes any
+   * Sno-Bee it reaches and carries on only while the next cell holds
+   * another one, so a push resolves where it did its damage rather than
+   * running on to the far wall.
+   */
+  private advanceSlidingBlocks(): void {
+    if (this.data.slidingBlocks.length === 0) return;
+
+    const stillMoving: SlidingBlock[] = [];
+
+    for (const block of this.data.slidingBlocks) {
+      block.timer--;
+      if (block.timer > 0) {
+        stillMoving.push(block);
+        continue;
+      }
+      block.timer = SLIDE_TICKS_PER_CELL;
+
+      const nextX = block.x + block.dx;
+      const nextY = block.y + block.dy;
       const nextCell = this.data.grid[nextY]?.[nextX];
 
       const enemyHit = this.data.enemies.find(e =>
@@ -280,74 +327,50 @@ export class PengoGame {
       );
 
       if (enemyHit) {
-        // Squashed, but not gone yet: 'crushed' holds the Sno-Bee in place
-        // for CRUSH_FRAMES so it can play its squash animation. It used to
-        // be set straight to 'dead', which the renderer skips and the tick
-        // filters out, so the enemy blinked out of existence on the same
-        // frame the block reached it.
         enemyHit.state = 'crushed';
         enemyHit.crushTimer = CRUSH_FRAMES;
-        chain.push(enemyHit);
-        slideX = nextX;
-        slideY = nextY;
+        block.crushed++;
+        block.x = nextX;
+        block.y = nextY;
 
-        // The block STOPS on the Sno-Bee it squashed, unless the very next
-        // cell holds another one - then it carries on through the line and
-        // stops on the last of them.
-        //
-        // It used to keep sliding through empty floor after a crush and
-        // travel to the far wall, which read as the block vanishing: the
-        // player pushed it at an enemy a cell away and it ended up across
-        // the maze. A crush is the moment the push resolves, so that is
-        // where the block comes to rest.
-        const beyond = this.data.enemies.find(e =>
-          e.x === slideX + dx && e.y === slideY + dy &&
+        // Carry on only into another Sno-Bee; otherwise this is where the
+        // push resolves and the block rests on what it squashed.
+        const beyond = this.data.enemies.some(e =>
+          e.x === nextX + block.dx && e.y === nextY + block.dy &&
           e.state !== 'dead' && e.state !== 'crushed'
         );
-        if (beyond) continue;
-        break;
-      }
-
-      if (nextCell === 'empty') {
-        slideX = nextX;
-        slideY = nextY;
+        if (beyond) { stillMoving.push(block); continue; }
+        this.settleBlock(block);
         continue;
       }
 
-      // Hit a wall, another block, or the grid edge.
-      break;
+      if (nextCell === 'empty') {
+        block.x = nextX;
+        block.y = nextY;
+        stillMoving.push(block);
+        continue;
+      }
+
+      // A wall, another block, or the edge of the grid.
+      this.settleBlock(block);
     }
 
-    if (chain.length > 0) {
-      // One combo per push, keyed to how many the block caught along the
-      // whole line (ref1's table: 1->400, 2->1600, 3->3200, 4+->6400) -
-      // not per-enemy, or a four-kill push would be worth the same as
-      // four separate one-kill pushes and the combo would mean nothing.
-      this.addScore(crushComboScore(chain.length));
+    this.data.slidingBlocks = stillMoving;
+  }
+
+  /** A block stops: back into the grid, and pay out what it caught. */
+  private settleBlock(block: SlidingBlock): void {
+    this.data.grid[block.y][block.x] = block.type;
+
+    if (block.crushed > 0) {
+      // One combo per push, keyed to how many that push caught - not per
+      // enemy, or four one-kill pushes would be worth as much as a
+      // four-kill one and the combo would mean nothing.
+      this.addScore(crushComboScore(block.crushed));
       this.cues.push('explosion');
-      // The block comes to REST on the last square it did the squashing
-      // on - it does not evaporate.
-      this.data.grid[y][x] = 'empty';
-      this.data.grid[slideY][slideX] = cellType;
-    } else if (slideX !== x || slideY !== y) {
-      // Moved at least one cell before stopping: normal slide.
-      this.data.grid[y][x] = 'empty';
-      this.data.grid[slideY][slideX] = cellType;
-    } else {
-      // Never moved at all - the very next cell was already blocked.
-      // Ref2: a block with nowhere to go is destroyed rather than just
-      // staying put, which is also the "destroy a boxed-in block" move
-      // the player was missing entirely (there was no way to break a
-      // block at all before this).
-      this.data.grid[y][x] = 'empty';
-      this.cues.push('switch');
     }
 
-    // Where the block came to rest (or was destroyed), for the
-    // renderer's slide flash.
-    this.data.lastSlide = { x: slideX, y: slideY, tick: this.data.frameCount };
-
-    // Check for diamond alignment
+    this.data.lastSlide = { x: block.x, y: block.y, tick: this.data.frameCount };
     this.checkDiamondAlignment();
   }
 
@@ -431,6 +454,8 @@ export class PengoGame {
         return;
       }
     }
+
+    this.advanceSlidingBlocks();
 
     // Push animation
     if (this.data.pengo.isPushing) {

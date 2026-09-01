@@ -29,6 +29,7 @@ function createInitialGameData() {
         enemies: [],
         grid: [],
         eggs: [],
+        slidingBlocks: [],
         diamondsAligned: false,
         enemyIdCounter: 0,
         highscores: [...constants_1.DEFAULT_HIGHSCORES],

@@ -11,11 +11,13 @@ import assert from 'assert';
 import { join } from 'path';
 import { loadSpriteSheet } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { createInitialGameData } from '../game/initial-data';
+import { buildBoard } from '../game/render';
 import { PengoGame } from '../game/pengo-game';
 import { PengoData, Enemy } from '../game/types';
 import {
   GRID_WIDTH, GRID_HEIGHT, SCORES, MAX_SCORE, crushComboScore, MAX_LIVING_ENEMIES,
-} from '../game/constants';
+  CELL_W,
+  CELL_H,} from '../game/constants';
 
 const sheet = loadSpriteSheet(join(__dirname, '..', 'sprites'));
 
@@ -42,6 +44,28 @@ function emptyBoard(): { game: PengoGame; data: PengoData } {
   return { game, data };
 }
 
+/**
+ * Push, then let the block finish travelling.
+ *
+ * A push no longer resolves inside the keypress - the block is an entity in
+ * flight and moves a cell per SLIDE_TICKS_PER_CELL, which is what makes the
+ * slide visible instead of a one-frame teleport. Tests that assert where a
+ * block ENDED UP have to let it get there.
+ */
+function settlePush(game: PengoGame, data: PengoData, maxTicks = 200): void {
+  game.handlePush();
+  let ticks = 0;
+  // Only the slide, not a whole game tick: update() also moves enemies and
+  // runs the clock, and these tests are about what a PUSH does. Driving the
+  // full loop let unrelated scoring leak into the assertions.
+  while (data.slidingBlocks.length > 0 && ticks++ < maxTicks) {
+    (game as unknown as { advanceSlidingBlocks(): void }).advanceSlidingBlocks();
+  }
+  if (data.slidingBlocks.length > 0) {
+    throw new Error(`a pushed block never came to rest within ${maxTicks} ticks`);
+  }
+}
+
 function enemyAt(x: number, y: number, state: Enemy['state'] = 'walking'): Enemy {
   return {
     id: Math.floor(Math.random() * 1e9), x, y, direction: 'left', state,
@@ -60,7 +84,7 @@ export async function theDiamondBonusIsAwardedExactlyOnce(): Promise<void> {
   data.grid[3][6] = 'diamond';
   data.grid[4][5] = 'ice';
 
-  game.handlePush();
+  settlePush(game, data);
   const afterFirstAlignment = data.score;
   assert.ok(afterFirstAlignment >= SCORES.diamondAlign2, 'the bonus must have fired at all');
 
@@ -70,7 +94,7 @@ export async function theDiamondBonusIsAwardedExactlyOnce(): Promise<void> {
   // or handlePush()'s own re-entrancy guard silently no-ops the second call.
   data.pengo.isPushing = false;
   data.grid[4][5] = 'ice';
-  game.handlePush();
+  settlePush(game, data);
 
   assert.strictEqual(
     data.score, afterFirstAlignment + SCORES.pushBlock,
@@ -84,7 +108,7 @@ export async function alignedDiamondsAreLockedInPlace(): Promise<void> {
   data.grid[3][4] = 'diamond';
   data.grid[3][6] = 'diamond';
   data.grid[4][5] = 'ice';
-  game.handlePush();
+  settlePush(game, data);
   assert.strictEqual(data.grid[3][4], 'diamond', 'sanity: still there before the locked push');
   game.cues.clear();
   data.pengo.isPushing = false;
@@ -93,7 +117,7 @@ export async function alignedDiamondsAreLockedInPlace(): Promise<void> {
   data.pengo.x = 3;
   data.pengo.y = 3;
   data.pengo.direction = 'right';
-  game.handlePush();
+  settlePush(game, data);
 
   assert.strictEqual(data.grid[3][4], 'diamond', 'a locked diamond must not move');
   assert.deepStrictEqual(game.cues.drain(), ['boop'], 'a locked diamond gives no push feedback, just a thud');
@@ -124,7 +148,7 @@ export async function aPushChainKillsEveryEnemyInItsPath(): Promise<void> {
   data.enemies = [enemyAt(6, 4), enemyAt(7, 4)];
 
   const before = data.score;
-  game.handlePush();
+  settlePush(game, data);
 
   assert.strictEqual(data.enemies[0].state, 'crushed', 'the first enemy in the path is caught');
   assert.strictEqual(data.enemies[1].state, 'crushed', 'the second, further down the SAME push, must be too');
@@ -147,7 +171,7 @@ export async function pushingABlockWithNoRoomDestroysIt(): Promise<void> {
   data.pengo.y = 4;
   data.pengo.direction = 'left';
 
-  game.handlePush();
+  settlePush(game, data);
 
   assert.strictEqual(data.grid[4][1], 'empty', 'a block with nowhere to go must be destroyed, not left in place');
   assert.deepStrictEqual(game.cues.drain(), ['dash', 'switch']);
@@ -157,7 +181,7 @@ export async function pushingABlockWithNoRoomDestroysIt(): Promise<void> {
 export async function aBlockThatCanMoveIsNotDestroyed(): Promise<void> {
   const { game, data } = emptyBoard();
   data.grid[4][5] = 'ice';
-  game.handlePush();
+  settlePush(game, data);
 
   let found = false;
   for (const row of data.grid) for (const cell of row) if (cell === 'ice') found = true;
@@ -270,4 +294,63 @@ export async function anEnemyBlockedByIceSometimesDoesNotBreakIt(): Promise<void
   });
 
   assert.strictEqual(data.grid[4][5], 'ice', 'the coinflip landing above the break chance must leave the block standing');
+}
+
+// ---------------------------------------------------------------------------
+// A push is a journey, not a teleport.
+// ---------------------------------------------------------------------------
+
+/**
+ * A pushed block travels over several frames, and is visible the whole way.
+ *
+ * Reported in play as blocks disappearing when pushed, and diagnosed
+ * exactly: "they move too fast making it a 1 frame animation". The whole
+ * slide used to run inside the keypress, so the block left one cell and
+ * arrived at the far wall in the same frame the player pressed the key.
+ */
+export async function aPushedBlockTravelsOverSeveralFrames(): Promise<void> {
+  const { game, data } = emptyBoard();
+  data.grid[4][5] = 'ice';               // a clear corridor to the right
+
+  game.handlePush();
+
+  assert.ok(data.slidingBlocks.length === 1,
+    'the push puts a block in flight rather than resolving on the spot');
+  const block = data.slidingBlocks[0];
+  const startX = block.x;
+
+  const advance = () =>
+    (game as unknown as { advanceSlidingBlocks(): void }).advanceSlidingBlocks();
+
+  // Somewhere in the middle of the journey it is neither where it started
+  // nor yet at rest - which is the frame the player needs to see.
+  let sawItMoving = false;
+  for (let i = 0; i < 40 && data.slidingBlocks.length > 0; i++) {
+    advance();
+    if (data.slidingBlocks.length > 0 && data.slidingBlocks[0].x !== startX) {
+      sawItMoving = true;
+    }
+  }
+
+  assert.ok(sawItMoving, 'the block was drawn somewhere between its ends');
+  assert.strictEqual(data.slidingBlocks.length, 0, 'and it came to rest');
+}
+
+/** While it is in flight the block is nowhere in the grid - so it must be drawn. */
+export async function aBlockInFlightIsNotLostFromTheBoard(): Promise<void> {
+  const { game, data } = emptyBoard();
+  data.grid[4][5] = 'ice';
+
+  game.handlePush();
+  const inFlight = data.slidingBlocks.length;
+  const inGrid = data.grid.flat().filter((c) => c === 'ice').length;
+
+  assert.strictEqual(inFlight, 1, 'the block is in the air');
+  assert.strictEqual(inGrid, 0, 'and out of the grid while it travels');
+
+  const board = buildBoard(data, sheet, 0);
+  const cell = board[data.slidingBlocks[0].y * CELL_H]
+    ?.[data.slidingBlocks[0].x * CELL_W];
+  assert.ok(cell && cell.char !== ' ',
+    'the renderer draws a block in flight, or it vanishes for the whole slide');
 }

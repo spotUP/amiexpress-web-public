@@ -109,6 +109,17 @@ export const MAX_SCORE = 99999;
  */
 export const CRUSH_FRAMES = 12;
 
+/**
+ * Ticks a pushed block takes to travel one cell.
+ *
+ * The push used to resolve entirely inside one keypress - the block went
+ * from its old cell to wherever it stopped in a single frame, which read
+ * as it vanishing. At 100ms a tick this is a visible slide the player can
+ * watch, and short enough that it still feels like a shove rather than a
+ * drift.
+ */
+export const SLIDE_TICKS_PER_CELL = 2;
+
 export const STUN_DURATION = 50;
 export const HATCH_TIME = 100;
 export const ENEMY_MOVE_DELAY = 8;

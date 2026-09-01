@@ -3,7 +3,7 @@
  * Pengo - Game Constants
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_RETARGET_MOVES = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_RETARGET_MOVES = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SLIDE_TICKS_PER_CELL = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
 exports.crushComboScore = crushComboScore;
 exports.getLevelConfig = getLevelConfig;
 exports.SCREEN_WIDTH = 80;
@@ -98,6 +98,16 @@ exports.MAX_SCORE = 99999;
  * is the point of the whole game, and it used to happen invisibly.
  */
 exports.CRUSH_FRAMES = 12;
+/**
+ * Ticks a pushed block takes to travel one cell.
+ *
+ * The push used to resolve entirely inside one keypress - the block went
+ * from its old cell to wherever it stopped in a single frame, which read
+ * as it vanishing. At 100ms a tick this is a visible slide the player can
+ * watch, and short enough that it still feels like a shove rather than a
+ * drift.
+ */
+exports.SLIDE_TICKS_PER_CELL = 2;
 exports.STUN_DURATION = 50;
 exports.HATCH_TIME = 100;
 exports.ENEMY_MOVE_DELAY = 8;

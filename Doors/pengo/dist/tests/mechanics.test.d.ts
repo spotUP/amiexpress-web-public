@@ -24,4 +24,15 @@ export declare function readyEggsHoldWhileTheEnemyPopulationIsAtCap(): Promise<v
 export declare function aHeldEggHatchesOnceRoomOpensUp(): Promise<void>;
 export declare function anEnemyBlockedByIceSometimesBreaksIt(): Promise<void>;
 export declare function anEnemyBlockedByIceSometimesDoesNotBreakIt(): Promise<void>;
+/**
+ * A pushed block travels over several frames, and is visible the whole way.
+ *
+ * Reported in play as blocks disappearing when pushed, and diagnosed
+ * exactly: "they move too fast making it a 1 frame animation". The whole
+ * slide used to run inside the keypress, so the block left one cell and
+ * arrived at the far wall in the same frame the player pressed the key.
+ */
+export declare function aPushedBlockTravelsOverSeveralFrames(): Promise<void>;
+/** While it is in flight the block is nowhere in the grid - so it must be drawn. */
+export declare function aBlockInFlightIsNotLostFromTheBoard(): Promise<void>;
 //# sourceMappingURL=mechanics.test.d.ts.map
