@@ -137,6 +137,99 @@ describe('ANSIEditor draw-mode undo/redo (via real key/mouse dispatch)', () => {
     expect(stillBlank[2][2].char).toBe(' ');
   });
 
+  /**
+   * Final-fix-wave IMPORTANT 1 (reviewer's exact probe, empirically
+   * reproduced against the real widget before this fix). The colinear-drag
+   * test above can't catch this: every mousemove and the final commit all
+   * fall on the same row, so a stale preview repaint is visually
+   * indistinguishable from the committed shape. This drag is deliberately
+   * NON-colinear - the last reported mousemove (5,2) lands on a different
+   * cell than the eventual commit direction (2,6) - which is exactly the
+   * shape a terminal's coalesced motion reporting under load produces
+   * (this widget repaints all 80x25 cells per move). Before the fix,
+   * onEnd drew the final shape onto the CURRENT (preview-mutated) canvas
+   * instead of the pre-drag snapshot, so both the horizontal preview trail
+   * from the mousemove AND the committed vertical line landed together -
+   * two shapes from one gesture.
+   */
+  it('a NON-COLINEAR drag commits the shape ONCE - the last preview repaint does not survive alongside it', () => {
+    switchToTool(editor, 'line');
+    editor.currentChar = 'L';
+
+    clickCanvasLocal(editor, 2, 2); // first click: start at (col=2, row=2)
+    mouseAction(editor, 'mousemove', 5, 2); // preview paints a HORIZONTAL trail across row 2: cols 3,4,5
+    clickCanvasLocal(editor, 2, 6); // second click: commit a VERTICAL line down col 2, rows 2..6
+
+    const canvas = editor.getCoreCanvas();
+
+    // The committed vertical line landed in full.
+    expect(canvas[2][2].char).toBe('L');
+    expect(canvas[3][2].char).toBe('L');
+    expect(canvas[4][2].char).toBe('L');
+    expect(canvas[5][2].char).toBe('L');
+    expect(canvas[6][2].char).toBe('L');
+
+    // The stale horizontal preview trail from the mousemove must NOT
+    // survive the commit.
+    expect(canvas[2][3].char).toBe(' ');
+    expect(canvas[2][4].char).toBe(' ');
+    expect(canvas[2][5].char).toBe(' ');
+
+    // Still exactly one undo entry for the whole gesture.
+    pressCtrl(editor, 'z');
+    const reverted = editor.getCoreCanvas();
+    expect(reverted[2][2].char).toBe(' ');
+    expect(reverted[6][2].char).toBe(' ');
+  });
+
+  /**
+   * Final-fix-wave IMPORTANT 3. A chunk opened by drawTool.onStart (a
+   * freehand drag) is normally flushed on mouseup, but a mouseup can be
+   * missed - the pointer leaves the canvas mid-drag. Ctrl+Z must still
+   * undo exactly the in-progress drag, not the unrelated stroke before it,
+   * and the pending chunk must not resurrect later when a late mouseup
+   * finally does fire.
+   */
+  it('undoing mid-drag with no mouseup reverts the drag, not the stroke before it, and the pending chunk cannot resurrect on a late mouseup', () => {
+    switchToTool(editor, 'draw');
+    editor.currentChar = 'A';
+    editor.cursor = { line: 1, col: 1 };
+    editor.drawAtCursor(false); // an unrelated prior stroke, its own undo entry
+
+    editor.currentChar = 'X';
+    mouseAction(editor, 'mousedown', 3, 3); // drag starts - opens a pending chunk, paints (3,3)
+    mouseAction(editor, 'mousemove', 4, 3); // drag continues - no mouseup fires
+
+    expect(editor.getCoreCanvas()[3][3].char).toBe('X');
+    expect(editor.getCoreCanvas()[3][4].char).toBe('X');
+
+    // Undo WITHOUT a mouseup ever having fired.
+    pressCtrl(editor, 'z');
+
+    const afterMidDragUndo = editor.getCoreCanvas();
+    // The in-progress drag reverts fully - flushDrawChunk() at the top of
+    // undo() flushes the pending chunk first, so the popped entry IS the
+    // drag's own pre-drag snapshot.
+    expect(afterMidDragUndo[3][3].char).toBe(' ');
+    expect(afterMidDragUndo[3][4].char).toBe(' ');
+    // The unrelated prior stroke is untouched by this same keypress.
+    expect(afterMidDragUndo[1][1].char).toBe('A');
+
+    // A late mouseup fires now (pointer re-enters and releases). Before the
+    // fix, this would push the now-stale pre-drag snapshot back onto the
+    // undo stack, and a later Ctrl+Z would resurrect the already-undone
+    // drag content instead of undoing the unrelated prior stroke.
+    mouseAction(editor, 'mouseup', 4, 3);
+
+    const afterLateMouseup = editor.getCoreCanvas();
+    expect(afterLateMouseup[3][3].char).toBe(' ');
+    expect(afterLateMouseup[3][4].char).toBe(' ');
+
+    pressCtrl(editor, 'z'); // must undo the unrelated prior stroke - nothing to resurrect
+    expect(editor.getCoreCanvas()[1][1].char).toBe(' ');
+    expect(editor.getCoreCanvas()[3][3].char).toBe(' '); // still blank - no resurrection
+  });
+
   it('flood fill then Ctrl+Z reverts the whole filled region', () => {
     switchToTool(editor, 'fill');
     editor.currentChar = 'F';
@@ -404,6 +497,120 @@ describe('ANSIEditor draw-mode undo/redo (via real key/mouse dispatch)', () => {
     const canvas = editor.getCoreCanvas();
     expect(canvas[3][3].char).toBe('S');   // the swapped-in frame's own content survives
     expect(canvas[1][1].char).toBe(' ');   // the OLD canvas's 'A' must not reappear here
+  });
+
+  /**
+   * Final-fix-wave IMPORTANT 2. Before this fix, pasteClipboard()/
+   * insertRow()/deleteRow()/flipHorizontal()/flipVertical() all mutated
+   * this.cellCanvas directly and pushed no undo entry. A Ctrl+Z right
+   * after any of them popped the snapshot from BEFORE the unrelated stroke
+   * that preceded it, silently discarding both the mutator's own effect
+   * and that prior stroke in a single keypress. Each mutator now routes
+   * through the library's undo recording (pasteSelection() for paste, an
+   * explicit snapshotUndoState() for the other four), so one Ctrl+Z undoes
+   * exactly that mutator's own effect and leaves the prior stroke intact.
+   */
+  describe('canvas mutators are undoable (IMPORTANT 2)', () => {
+    it('pasteClipboard is undoable - one Ctrl+Z undoes exactly the paste, not the stroke before it', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 1 };
+      editor.drawAtCursor(false); // unrelated prior stroke, its own undo entry
+
+      editor.clipboard = [[{ char: 'P', fg: 7, bg: 0, blink: false }]];
+      editor.cursor = { line: 10, col: 10 };
+      editor.pasteClipboard();
+
+      expect(editor.getCoreCanvas()[10][10].char).toBe('P');
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[10][10].char).toBe(' '); // the paste is undone
+      expect(canvas[1][1].char).toBe('A');   // the prior stroke survives this same keypress
+    });
+
+    it('insertRow is undoable - one Ctrl+Z undoes exactly the insert, not the stroke before it', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 1 };
+      editor.drawAtCursor(false); // unrelated prior stroke, above the insertion point
+
+      editor.currentChar = 'M';
+      editor.cursor = { line: 5, col: 5 };
+      editor.drawAtCursor(false); // marker that insertRow will shift down by one row
+
+      editor.cursor = { line: 2, col: 0 };
+      editor.insertRow(); // inserts a blank row at line 2 - row 5's content moves to row 6
+
+      expect(editor.getCoreCanvas()[6][5].char).toBe('M');
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[5][5].char).toBe('M'); // shift reverted - marker back at its original row
+      expect(canvas[1][1].char).toBe('A'); // prior stroke (above the insert point) untouched
+    });
+
+    it('deleteRow is undoable - one Ctrl+Z undoes exactly the delete, not the stroke before it', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 1 };
+      editor.drawAtCursor(false); // unrelated prior stroke, above the deletion point
+
+      editor.currentChar = 'M';
+      editor.cursor = { line: 5, col: 5 };
+      editor.drawAtCursor(false); // marker that deleteRow will shift up by one row
+
+      editor.cursor = { line: 3, col: 0 };
+      editor.deleteRow(); // deletes row 3 - row 5's content moves up to row 4
+
+      expect(editor.getCoreCanvas()[4][5].char).toBe('M');
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[5][5].char).toBe('M'); // shift reverted - marker back at its original row
+      expect(canvas[1][1].char).toBe('A'); // prior stroke (above the delete point) untouched
+    });
+
+    it('flipHorizontal is undoable - one Ctrl+Z undoes exactly the flip, not the stroke before it', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 1 };
+      editor.drawAtCursor(false); // marker, mirrors to (1, canvasW-2) under a full-canvas flip
+
+      editor.flipHorizontal(); // no selection -> flips the whole 80-wide canvas
+
+      const flipped = editor.getCoreCanvas();
+      expect(flipped[1][78].char).toBe('A'); // mirrored: col 1 <-> col 78 (width 80)
+      expect(flipped[1][1].char).toBe(' ');
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[1][1].char).toBe('A');  // the whole flip reverted - back at the original spot
+      expect(canvas[1][78].char).toBe(' '); // and not left behind at the mirrored spot too
+    });
+
+    it('flipVertical is undoable - one Ctrl+Z undoes exactly the flip, not the stroke before it', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 5 };
+      editor.drawAtCursor(false); // marker, mirrors to (canvasH-2, 5) under a full-canvas flip
+
+      editor.flipVertical(); // no selection -> flips the whole 25-tall canvas
+
+      const flipped = editor.getCoreCanvas();
+      expect(flipped[23][5].char).toBe('A'); // mirrored: row 1 <-> row 23 (height 25)
+      expect(flipped[1][5].char).toBe(' ');
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[1][5].char).toBe('A');  // the whole flip reverted - back at the original spot
+      expect(canvas[23][5].char).toBe(' '); // and not left behind at the mirrored spot too
+    });
   });
 });
 

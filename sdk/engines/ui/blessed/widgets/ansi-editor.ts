@@ -38,6 +38,8 @@ import {
   redoDrawing,
   clearUndoStack,
   paintCell,
+  pasteSelection,
+  snapshotUndoState,
   getSelectionBounds,
 } from '../../ansi-editor/tools/drawing-tools';
 import { EditorState as CoreEditorState } from '../../ansi-editor/core/editor-state';
@@ -1484,26 +1486,19 @@ export class ANSIEditor extends Box {
   }
 
   /**
-   * Paste clipboard at cursor position
+   * Paste clipboard at cursor position. Routed through the library's
+   * pasteSelection() - which does saveUndoState() for you - instead of
+   * mutating this.cellCanvas by hand, so a paste is undoable (see
+   * IMPORTANT 2, final-fix-wave-report.md): before this, Ctrl+Z after a
+   * paste would pop the snapshot from before whatever stroke preceded it,
+   * silently discarding both the paste and that stroke in one keypress.
    */
   private pasteClipboard(): void {
-    if (!this.cellCanvas || !this.clipboard) return;
+    if (!this.cellCanvas || !this.clipboard || !this.coreState) return;
 
-    const startX = this.cursor.col;
-    const startY = this.cursor.line;
-
-    for (let y = 0; y < this.clipboard.length; y++) {
-      for (let x = 0; x < this.clipboard[y].length; x++) {
-        const destX = startX + x;
-        const destY = startY + y;
-        if (destY < this.canvasH && destX < this.canvasW && this.cellCanvas[destY]) {
-          this.cellCanvas[destY][destX] = { ...this.clipboard[y][x] };
-        }
-      }
-    }
-
-    this.syncCoreCanvasToDisplay();
-    this.modified = true;
+    this.syncToCoreState();
+    pasteSelection(this.coreState, this.cursor.col, this.cursor.line, this.clipboard);
+    this.syncFromCoreState();
     this.updateDisplay();
   }
 
@@ -1512,10 +1507,15 @@ export class ANSIEditor extends Box {
   // ============================================
 
   /**
-   * Insert a blank row at cursor position
+   * Insert a blank row at cursor position. Undoable (IMPORTANT 2): an
+   * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+   * since there is no dedicated ToolHandler for a row insert.
    */
   private insertRow(): void {
-    if (!this.cellCanvas) return;
+    if (!this.cellCanvas || !this.coreState) return;
+
+    this.syncToCoreState();
+    snapshotUndoState(this.coreState);
 
     const y = this.cursor.line;
 
@@ -1536,10 +1536,15 @@ export class ANSIEditor extends Box {
   }
 
   /**
-   * Delete row at cursor position
+   * Delete row at cursor position. Undoable (IMPORTANT 2): an explicit
+   * snapshotUndoState() before mutating this.cellCanvas in place, since
+   * there is no dedicated ToolHandler for a row delete.
    */
   private deleteRow(): void {
-    if (!this.cellCanvas) return;
+    if (!this.cellCanvas || !this.coreState) return;
+
+    this.syncToCoreState();
+    snapshotUndoState(this.coreState);
 
     const y = this.cursor.line;
 
@@ -1635,10 +1640,15 @@ export class ANSIEditor extends Box {
   // ============================================
 
   /**
-   * Flip selection or canvas horizontally
+   * Flip selection or canvas horizontally. Undoable (IMPORTANT 2): an
+   * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+   * since there is no dedicated ToolHandler for a flip.
    */
   private flipHorizontal(): void {
-    if (!this.cellCanvas) return;
+    if (!this.cellCanvas || !this.coreState) return;
+
+    this.syncToCoreState();
+    snapshotUndoState(this.coreState);
 
     const sel = this.selection || this.fullCanvasSelection();
     const width = sel.x2 - sel.x1 + 1;
@@ -1663,10 +1673,15 @@ export class ANSIEditor extends Box {
   }
 
   /**
-   * Flip selection or canvas vertically
+   * Flip selection or canvas vertically. Undoable (IMPORTANT 2): an
+   * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+   * since there is no dedicated ToolHandler for a flip.
    */
   private flipVertical(): void {
-    if (!this.cellCanvas) return;
+    if (!this.cellCanvas || !this.coreState) return;
+
+    this.syncToCoreState();
+    snapshotUndoState(this.coreState);
 
     const sel = this.selection || this.fullCanvasSelection();
     const height = sel.y2 - sel.y1 + 1;
@@ -4067,9 +4082,20 @@ BBS Door SDK v2.0{/gray-fg}
    * Ctrl+Z / U. In draw mode, routes to the library's per-instance
    * undoDrawing() (see task-4-report.md) instead of the text-mode
    * this.undoStack, which draw-mode operations never populate.
+   *
+   * flushDrawChunk() runs FIRST (IMPORTANT 3): a chunk opened by
+   * drawTool.onStart/paintCell(..., true) is normally flushed on mouseup,
+   * but a mouseup can be missed (pointer leaves the canvas mid-drag). If
+   * Ctrl+Z were pressed in that window, undoDrawing() would pop the
+   * PREVIOUS entry while the stroke's own snapshot still sits pending, and
+   * that stale snapshot would land later whenever mouseup does fire -
+   * silently reappearing after the user thought they'd undone past it.
+   * Flushing here first is a no-op when nothing is chunked, so it's safe
+   * unconditionally.
    */
   private undo(): void {
     if (this.mode === 'draw') {
+      this.flushDrawChunk();
       if (this.coreState && undoDrawing(this.coreState)) {
         this.syncFromCoreState();
         if (this.screen) {

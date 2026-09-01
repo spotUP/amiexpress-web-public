@@ -163,6 +163,42 @@ describe('drawing-tools undo pinned behavior (must survive the per-instance refa
     expect(undoDrawing(state)).toBe(false);
   });
 
+  /**
+   * Final-fix-wave IMPORTANT 1, at the library level (drawing-tools.ts).
+   * onMove used to write its preview directly into the real canvas, and
+   * onEnd then drew the final shape on top of that already-mutated canvas
+   * instead of the pre-drag snapshot it holds - so a non-colinear drag (the
+   * last onMove cell differs from the commit direction) left BOTH the
+   * stale preview AND the committed shape painted. Mirrors the same
+   * mechanism the widget-level probe in ansi-editor-draw-undo.test.ts
+   * verifies through real mouse/keyboard events; this drives boxTool
+   * directly to confirm the fix at its source, not just through the
+   * widget's dispatch.
+   */
+  it('a non-colinear box drag commits ONCE - the last onMove preview does not survive alongside the committed shape', () => {
+    const state = freshDrawState();
+    state.setCurrentChar('B');
+
+    boxTool.onStart(state, 2, 2);
+    boxTool.onMove(state, 5, 2); // preview: a degenerate 1-row-tall box outline across row 2, cols 2-5
+    boxTool.onEnd(state, 2, 6); // commit: a taller box (2,2)-(2,6) - degenerates to a solid column since width is 1
+
+    // The committed shape (a solid vertical line at col 2, rows 2-6, since
+    // a 1-wide box's left/right edges coincide) landed in full.
+    expect(cellAt(state, 2, 2)?.char).toBe('B');
+    expect(cellAt(state, 2, 6)?.char).toBe('B');
+
+    // The stale preview row from onMove must not survive the commit.
+    expect(cellAt(state, 3, 2)?.char).toBe(' ');
+    expect(cellAt(state, 4, 2)?.char).toBe(' ');
+    expect(cellAt(state, 5, 2)?.char).toBe(' ');
+
+    // Still exactly one undo entry for the whole gesture.
+    expect(undoDrawing(state)).toBe(true);
+    expect(cellAt(state, 2, 2)?.char).toBe(' ');
+    expect(undoDrawing(state)).toBe(false);
+  });
+
   it('undo past the beginning is a safe no-op', () => {
     const state = freshDrawState();
 
