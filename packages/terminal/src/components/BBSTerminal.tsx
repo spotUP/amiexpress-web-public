@@ -10,7 +10,8 @@ import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
-import { keyOverride } from '../utils/key-overrides';
+import { classifyKey } from '../utils/key-overrides';
+import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 
@@ -811,56 +812,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
     });
 
-    // Custom keyboard handler for Shift+Arrow keys (for text selection in doors)
-    // xterm.js doesn't send proper escape sequences for Shift+Arrow by default
-    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      // Block Ctrl/Cmd+Shift+M from reaching xterm (handled by window listener)
-      const modKey = event.ctrlKey || event.metaKey;
-      if (modKey && event.shiftKey && (event.key === 'M' || event.key === 'm')) {
-        return false;
-      }
-
-      // When mouse tracking is disabled, handle Cmd/Ctrl+C (copy) and Cmd/Ctrl+A (select all)
-      // via xterm's own API since browser native selection doesn't work in xterm canvas
-      if (mouseTrackingDisabledRef.current && modKey && event.type === 'keydown') {
-        if (event.key === 'a' || event.key === 'A') {
-          term.selectAll();
-          return false;
-        }
-        if (event.key === 'c' || event.key === 'C') {
-          const selection = term.getSelection();
-          if (selection) {
-            navigator.clipboard.writeText(selection).then(() => {
-              console.log('[BBSTerminal] Copied to clipboard:', selection.length, 'chars');
-            });
-          }
-          return false;
-        }
-      }
-
-      // Only handle Shift+Arrow keys
-      if (!event.shiftKey) return true; // Let xterm handle it
-
-      const keyMap: Record<string, string> = {
-        'ArrowUp': '\x1B[1;2A',      // Shift+Up
-        'ArrowDown': '\x1B[1;2B',    // Shift+Down
-        'ArrowRight': '\x1B[1;2C',   // Shift+Right
-        'ArrowLeft': '\x1B[1;2D',    // Shift+Left
-      };
-
-      const sequence = keyMap[event.key];
-      if (sequence) {
-        console.log('[BBSTerminal] Sending Shift+Arrow:', event.key, '→', JSON.stringify(sequence)); // DEBUG
-        // Send the proper escape sequence with Shift modifier
-        socketRef.current?.emit('command', sequence);
-        // Prevent xterm from processing this key
-        return false;
-      }
-
-      // Let xterm handle all other keys
-      return true;
-    });
-
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
 
@@ -1027,27 +978,51 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const blockedKeys = new Set<string>(); // keys blocked until real keyup
     const MAX_NORMAL_REPEAT_MS = 5000; // max ms before we assume key is stuck (normal mode only)
 
-    // Custom key event handler - intercepts keys before xterm processes them
-    // This is critical for game mode because xterm normally intercepts all keys
-    // NOTE: We only BLOCK xterm here - actual key handling is done by window event listeners
-    // (handleGameKeyDown/handleGameKeyUp) which also handle key repeat
+    // THE custom key event handler - intercepts keys before xterm processes
+    // them. xterm keeps only ONE (a second attachCustomKeyEventHandler
+    // replaces the first), so every rule this terminal has lives here: the
+    // game-mode block, Alt+Enter, the mouse toggle, copy/select-all,
+    // Shift+Arrow and the stuck-key guard. The decision itself is
+    // classifyKey(), which is pure and tested; this executes the answer.
+    // NOTE: in game mode we only BLOCK - actual key handling is done by window
+    // event listeners (handleGameKeyDown/handleGameKeyUp) with key repeat.
     term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
-      // In game mode, block xterm from processing keys - window handlers will emit events
-      if (gameMode.current && socketRef.current?.connected) {
-        // Block xterm from processing any keys in game mode
-        return false;
+      const action = classifyKey(ev, {
+        gameMode: Boolean(gameMode.current),
+        connected: Boolean(socketRef.current?.connected),
+        mouseTrackingDisabled: mouseTrackingDisabledRef.current,
+      });
+
+      // Alt+Enter widens the door AND the window. Only on the press: the
+      // release classifies as 'pass', so one keystroke is one toggle.
+      if ((action.kind === 'send' || action.kind === 'block') && action.fullscreen) {
+        toggleFullscreen(document);
       }
 
-      // Keys this terminal translates itself, before xterm has an opinion.
-      // Alt+Enter is the doors' size toggle and xterm does not ESC-prefix an
-      // Option combination on macOS, so the door was seeing a bare Enter.
-      const override = keyOverride(ev);
-      if (override !== null) {
-        ev.preventDefault();
-        if (socketRef.current?.connected) {
-          socketRef.current.emit('command', override);
+      switch (action.kind) {
+        case 'block':
+          return false;
+
+        case 'send':
+          ev.preventDefault();
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('command', action.bytes);
+          }
+          return false;
+
+        case 'select-all':
+          term.selectAll();
+          return false;
+
+        case 'copy': {
+          const selection = term.getSelection();
+          if (selection) {
+            navigator.clipboard.writeText(selection).then(() => {
+              console.log('[BBSTerminal] Copied to clipboard:', selection.length, 'chars');
+            });
+          }
+          return false;
         }
-        return false;
       }
 
       // Normal mode: detect stuck keys using repeat duration

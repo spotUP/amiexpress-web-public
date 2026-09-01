@@ -19,7 +19,19 @@ export {
   buildTerminalBuffer,
   XTERM_CONFIG,
 } from './utils/terminal-utils';
-export { keyOverride, type KeyLike } from './utils/key-overrides';
+export {
+  keyOverride,
+  classifyKey,
+  type KeyLike,
+  type TerminalKeyState,
+  type TerminalKeyAction,
+} from './utils/key-overrides';
+export {
+  toggleFullscreen,
+  isFullscreen,
+  type FullscreenDocument,
+  type FullscreenTarget,
+} from './utils/fullscreen';
 
 // Re-export xterm types for convenience
 export type { Terminal, ITerminalOptions, ITheme } from '@xterm/xterm';
