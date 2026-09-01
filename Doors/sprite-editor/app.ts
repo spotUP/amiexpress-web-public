@@ -26,6 +26,7 @@ import {
 import { previewLines } from './preview';
 import { readSprite } from './assets';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { T, applyTheme } from './door-theme';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
@@ -54,6 +55,7 @@ export class StudioApp {
   }
 
   async start(): Promise<void> {
+    applyTheme((this.ctx as any).bbs);   // chrome only; see door-theme.ts
     this.screen = createScreen((this.ctx as any).bbs, {
       title: 'Sprite Studio',
       responsive: true,
@@ -103,9 +105,9 @@ export class StudioApp {
       border: { type: 'line' },
       tags: true, keys: false, mouse: false,
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        border: { fg: T.accent },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
+        item: { fg: T.ink },
       },
     });
     this.spritesList = blessed.list({
@@ -115,9 +117,9 @@ export class StudioApp {
       border: { type: 'line' },
       tags: true, keys: false, mouse: false,
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        border: { fg: T.accent },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
+        item: { fg: T.ink },
       },
     });
     this.animationsList = blessed.list({
@@ -127,9 +129,9 @@ export class StudioApp {
       border: { type: 'line' },
       tags: true, keys: false, mouse: false,
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        border: { fg: T.accent },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
+        item: { fg: T.ink },
       },
     });
     this.previewBox = blessed.box({
@@ -138,7 +140,7 @@ export class StudioApp {
       label: ' Preview ',
       border: { type: 'line' },
       tags: true,
-      style: { border: { fg: 'green' } },
+      style: { border: { fg: T.ok } },
     });
     this.statusBar = blessed.box({
       parent: this.screen,
@@ -213,10 +215,10 @@ export class StudioApp {
 
     const sel = selection(this.state);
     const left =
-      `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
-      `{white-fg}${sel.sprite ?? '-'}{/} / ` +
-      `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
-    const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
+      `{${T.accent}-fg}${sel.door ?? '-'}{/} / ` +
+      `{${T.ink}-fg}${sel.sprite ?? '-'}{/} / ` +
+      `{${T.accentAlt}-fg}${sel.animation ?? '-'}{/}`;
+    const right = `{${T.dim}-fg}TAB panes  ARROWS move  Q quit{/}`;
     const visible = (tagged: string) => tagged.replace(/\{[^}]*\}/g, '').length;
     // Clamp to the real width: if the two segments cannot fit on one row,
     // drop the hint rather than let the row wrap into the panes above.
@@ -234,7 +236,7 @@ export class StudioApp {
     const sel = selection(this.state);
     const sprite = this.currentSprite();
     if (!sprite || !sel.animation) {
-      this.previewBox.setContent('{gray-fg}nothing to preview{/}');
+      this.previewBox.setContent(`{${T.dim}-fg}nothing to preview{/}`);
       this.screen.render();
       return;
     }
@@ -245,7 +247,7 @@ export class StudioApp {
     // ASCII separators, short words: the middle dot rendered as a quote
     // on the live terminal, and the long form wrapped inside the pane.
     const meta =
-      `{gray-fg}${sprite.name} - ${sel.animation} - ` +
+      `{${T.dim}-fg}${sprite.name} - ${sel.animation} - ` +
       `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
       `${anim.loop ? 'loop' : 'hold'}{/}`;
     this.previewBox.setContent(

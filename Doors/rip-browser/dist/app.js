@@ -37,9 +37,19 @@ exports.execute = execute;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const paths_1 = require("./paths");
+/** The caller's colours; every literal here was one of these tokens. */
+let T = (0, theme_1.themeById)('classic').tokens;
+let S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
 const RIP_DIR = (0, paths_1.ripGraphicsDir)();
 async function execute(session) {
+    const host = session?.bbs;
+    if (typeof host?.getTheme === 'function') {
+        const theme = host.getTheme();
+        T = theme.tokens;
+        S = (0, theme_1.themeStyles)(theme);
+    }
     const { socket, bbsSession, user, params } = session;
     console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);
     console.log(`[RIP Browser] Working directory: ${process.cwd()}`);
@@ -80,8 +90,8 @@ async function execute(session) {
         width: '100%',
         height: '100%',
         style: {
-            bg: 'black',
-            fg: 'white'
+            bg: T.ground,
+            fg: T.ink
         }
     });
     const header = bbs_door_sdk_1.blessed.box({
@@ -90,11 +100,11 @@ async function execute(session) {
         left: 0,
         width: '100%',
         height: 3,
-        content: '{center}{yellow-fg}RIP Graphics Browser{/yellow-fg}{/center}\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}',
+        content: `{center}{${T.warn}-fg}RIP Graphics Browser{/${T.warn}-fg}{/center}\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}`,
         tags: true,
         border: { type: 'ascii' }, // Use ASCII borders to avoid Unicode issues
         style: {
-            border: { fg: 'cyan' }
+            border: { fg: T.accent }
         }
     });
     const list = bbs_door_sdk_1.blessed.list({
@@ -109,16 +119,16 @@ async function execute(session) {
         scrollbar: {
             ch: '█',
             track: { ch: '│' },
-            style: { fg: 'cyan' }
+            style: { fg: T.accent }
         },
         style: {
             selected: {
-                bg: 'blue',
-                fg: 'white',
+                bg: T.bar,
+                fg: T.ink,
                 bold: true
             },
             item: {
-                fg: 'white'
+                fg: T.ink
             }
         }
     });
@@ -128,11 +138,11 @@ async function execute(session) {
         left: 0,
         width: '100%',
         height: 3,
-        content: '{yellow-fg}Arrows:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} View  {yellow-fg}F5:{/yellow-fg} Force View  {yellow-fg}Q:{/yellow-fg} Quit',
+        content: `{${T.warn}-fg}Arrows:{/${T.warn}-fg} Navigate  {${T.warn}-fg}Enter:{/${T.warn}-fg} View  {${T.warn}-fg}F5:{/${T.warn}-fg} Force View  {${T.warn}-fg}Q:{/${T.warn}-fg} Quit`,
         tags: true,
         border: { type: 'ascii' }, // Use ASCII borders to avoid Unicode issues
         style: {
-            border: { fg: 'cyan' }
+            border: { fg: T.accent }
         }
     });
     // ========== FILE LOADING ========== 
@@ -188,7 +198,7 @@ async function execute(session) {
             screen.render();
         }
         catch (err) {
-            footer.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
+            footer.setContent(`{${T.alert}-fg}Error: ${err.message}{/${T.alert}-fg}`);
             screen.render();
         }
     };
@@ -196,7 +206,7 @@ async function execute(session) {
     list.on('select item', (item) => {
         // Handle both string items and objects with content
         const filename = (typeof item === 'string' ? item : item.content || '').trim();
-        footer.setContent(` Selected: {yellow-fg}${filename}{/yellow-fg} `);
+        footer.setContent(` Selected: {${T.warn}-fg}${filename}{/${T.warn}-fg} `);
         screen.render();
     });
     list.on('select', (item) => {

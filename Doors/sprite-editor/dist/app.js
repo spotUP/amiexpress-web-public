@@ -27,6 +27,7 @@ const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/b
 const browser_model_1 = require("./browser-model");
 const preview_1 = require("./preview");
 const assets_1 = require("./assets");
+const door_theme_1 = require("./door-theme");
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
 class StudioApp {
@@ -48,6 +49,7 @@ class StudioApp {
         this.ctx = ctx;
     }
     async start() {
+        (0, door_theme_1.applyTheme)(this.ctx.bbs); // chrome only; see door-theme.ts
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             title: 'Sprite Studio',
             responsive: true,
@@ -93,9 +95,9 @@ class StudioApp {
             border: { type: 'line' },
             tags: true, keys: false, mouse: false,
             style: {
-                border: { fg: 'cyan' },
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                border: { fg: door_theme_1.T.accent },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.spritesList = blessed_1.default.list({
@@ -105,9 +107,9 @@ class StudioApp {
             border: { type: 'line' },
             tags: true, keys: false, mouse: false,
             style: {
-                border: { fg: 'cyan' },
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                border: { fg: door_theme_1.T.accent },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.animationsList = blessed_1.default.list({
@@ -117,9 +119,9 @@ class StudioApp {
             border: { type: 'line' },
             tags: true, keys: false, mouse: false,
             style: {
-                border: { fg: 'cyan' },
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                border: { fg: door_theme_1.T.accent },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.previewBox = blessed_1.default.box({
@@ -128,7 +130,7 @@ class StudioApp {
             label: ' Preview ',
             border: { type: 'line' },
             tags: true,
-            style: { border: { fg: 'green' } },
+            style: { border: { fg: door_theme_1.T.ok } },
         });
         this.statusBar = blessed_1.default.box({
             parent: this.screen,
@@ -198,10 +200,10 @@ class StudioApp {
         focus(this.spritesList, this.state.pane === 'sprites');
         focus(this.animationsList, this.state.pane === 'animations');
         const sel = (0, browser_model_1.selection)(this.state);
-        const left = `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
-            `{white-fg}${sel.sprite ?? '-'}{/} / ` +
-            `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
-        const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
+        const left = `{${door_theme_1.T.accent}-fg}${sel.door ?? '-'}{/} / ` +
+            `{${door_theme_1.T.ink}-fg}${sel.sprite ?? '-'}{/} / ` +
+            `{${door_theme_1.T.accentAlt}-fg}${sel.animation ?? '-'}{/}`;
+        const right = `{${door_theme_1.T.dim}-fg}TAB panes  ARROWS move  Q quit{/}`;
         const visible = (tagged) => tagged.replace(/\{[^}]*\}/g, '').length;
         // Clamp to the real width: if the two segments cannot fit on one row,
         // drop the hint rather than let the row wrap into the panes above.
@@ -219,7 +221,7 @@ class StudioApp {
         const sel = (0, browser_model_1.selection)(this.state);
         const sprite = this.currentSprite();
         if (!sprite || !sel.animation) {
-            this.previewBox.setContent('{gray-fg}nothing to preview{/}');
+            this.previewBox.setContent(`{${door_theme_1.T.dim}-fg}nothing to preview{/}`);
             this.screen.render();
             return;
         }
@@ -229,7 +231,7 @@ class StudioApp {
         const pad = ' '.repeat(Math.max(0, Math.floor((inner - sprite.cellW * 2) / 2)));
         // ASCII separators, short words: the middle dot rendered as a quote
         // on the live terminal, and the long form wrapped inside the pane.
-        const meta = `{gray-fg}${sprite.name} - ${sel.animation} - ` +
+        const meta = `{${door_theme_1.T.dim}-fg}${sprite.name} - ${sel.animation} - ` +
             `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
             `${anim.loop ? 'loop' : 'hold'}{/}`;
         this.previewBox.setContent('\n' + lines.map(l => pad + l).join('\n') + '\n\n ' + meta);
