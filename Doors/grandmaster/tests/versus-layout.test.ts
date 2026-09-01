@@ -108,10 +108,20 @@ export async function theWidthItAsksForIsTheWidthThatWorks(): Promise<void> {
   assert.strictEqual(single.fullBoards, 1, 'the board survives');
   assert.strictEqual(single.showInfo, false, 'the panel is what goes');
 
-  for (const count of [2, 3, 5, 8]) {
+  // Below the cascade's threshold this is still all-or-nothing: one column
+  // short and nobody gets a board.
+  for (const count of [2, 3, 5] ) {
     assert.strictEqual(versusLayout(widthForFullBoards(count) - 1, count).fullBoards, 0,
       `${count} opponents must NOT fit in one column less`);
   }
+
+  // At and above it, a field one column short is exactly the case the
+  // cascade exists for: the closest few get boards and the rest get bars
+  // and a list, rather than everyone losing their board over one column.
+  const cascaded = versusLayout(widthForFullBoards(8) - 1, 0, 8);
+  assert.ok(cascaded.fullBoards > 0 && cascaded.fullBoards < 8,
+    `eight opponents one column short cascade instead, saw ${cascaded.fullBoards}`);
+  assert.strictEqual(cascaded.fullBoards + cascaded.minimaps + cascaded.listed, 8);
 }
 
 export async function oneOpponentClaimsRoomForTheInfoPanelToo(): Promise<void> {

@@ -141,6 +141,16 @@ export declare class VersusScreen {
     /** Render immediately (input feedback / network receipt), floored at 8 ms. */
     private renderNow;
     /**
+     * Put every opponent in the tracker with an empty board.
+     *
+     * The versus layout is a function of HOW MANY opponents there are, so it
+     * can only be stable from the first frame if the field is known from the
+     * first frame. The CPU opponents exist the moment VersusAI built them and
+     * a networked lobby knows its players before the match starts; both are
+     * asked here, and the real boards replace these as the samples arrive.
+     */
+    private seedOpponents;
+    /**
      * Show countdown (3, 2, 1, GO!)
      */
     private showCountdown;

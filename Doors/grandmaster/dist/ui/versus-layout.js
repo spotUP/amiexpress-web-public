@@ -154,10 +154,19 @@ function cascade(screenWidth, total, screenHeight) {
     // saying anything; whatever remains is the leaderboard's.
     const barsFor = Math.min(exports.MAX_BUCKETS, total - boards, Math.floor((afterBoards - exports.MIN_LIST_COLS - 2) / exports.BUCKET_SLOT_COLS));
     const buckets = Math.max(0, barsFor);
-    const bucketWidth = buckets > 0 ? buckets * exports.BUCKET_SLOT_COLS + 2 : 0;
-    const listWidth = afterBoards - bucketWidth;
+    if (buckets <= 0)
+        return null;
     const listed = total - boards - buckets;
-    if (buckets <= 0 || listed <= 0 || listWidth < exports.MIN_LIST_COLS)
+    // A list only when there is somebody left for it. A field that boards and
+    // bars between them cover completely is still a cascade - it is simply
+    // one that ran out of opponents before it ran out of room, and the bars
+    // take what the list would have had. (Twelve opponents at 160 columns hit
+    // this, and the layout fell all the way back to a single grid panel.)
+    const bucketWidth = listed > 0
+        ? buckets * exports.BUCKET_SLOT_COLS + 2
+        : afterBoards;
+    const listWidth = listed > 0 ? afterBoards - bucketWidth : 0;
+    if (listed > 0 && listWidth < exports.MIN_LIST_COLS)
         return null;
     const boardsEnd = exports.LEFT_PANEL_COLS + usedColumns * exports.OPPONENT_BOARD_COLS;
     return {
@@ -170,7 +179,7 @@ function cascade(screenWidth, total, screenHeight) {
         boardWidth: exports.OPPONENT_BOARD_COLS,
         minimapLeft: boardsEnd,
         minimapWidth: bucketWidth,
-        listLeft: boardsEnd + bucketWidth,
+        listLeft: listed > 0 ? boardsEnd + bucketWidth : 0,
         listWidth,
         panelHeight: rows * exports.OPPONENT_BOARD_ROWS,
     };

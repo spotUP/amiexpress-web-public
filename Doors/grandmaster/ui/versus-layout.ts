@@ -199,11 +199,19 @@ function cascade(screenWidth: number, total: number, screenHeight: number): Vers
     Math.floor((afterBoards - MIN_LIST_COLS - 2) / BUCKET_SLOT_COLS),
   );
   const buckets = Math.max(0, barsFor);
-  const bucketWidth = buckets > 0 ? buckets * BUCKET_SLOT_COLS + 2 : 0;
-  const listWidth = afterBoards - bucketWidth;
-  const listed = total - boards - buckets;
+  if (buckets <= 0) return null;
 
-  if (buckets <= 0 || listed <= 0 || listWidth < MIN_LIST_COLS) return null;
+  const listed = total - boards - buckets;
+  // A list only when there is somebody left for it. A field that boards and
+  // bars between them cover completely is still a cascade - it is simply
+  // one that ran out of opponents before it ran out of room, and the bars
+  // take what the list would have had. (Twelve opponents at 160 columns hit
+  // this, and the layout fell all the way back to a single grid panel.)
+  const bucketWidth = listed > 0
+    ? buckets * BUCKET_SLOT_COLS + 2
+    : afterBoards;
+  const listWidth = listed > 0 ? afterBoards - bucketWidth : 0;
+  if (listed > 0 && listWidth < MIN_LIST_COLS) return null;
 
   const boardsEnd = LEFT_PANEL_COLS + usedColumns * OPPONENT_BOARD_COLS;
   return {
@@ -216,7 +224,7 @@ function cascade(screenWidth: number, total: number, screenHeight: number): Vers
     boardWidth: OPPONENT_BOARD_COLS,
     minimapLeft: boardsEnd,
     minimapWidth: bucketWidth,
-    listLeft: boardsEnd + bucketWidth,
+    listLeft: listed > 0 ? boardsEnd + bucketWidth : 0,
     listWidth,
     panelHeight: rows * OPPONENT_BOARD_ROWS,
   };

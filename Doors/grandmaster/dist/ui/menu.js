@@ -30,6 +30,17 @@ class MenuScreen {
         // Wait for screen clear to propagate (critical for modem speeds)
         await new Promise(resolve => setTimeout(resolve, 200));
         return new Promise((resolve) => {
+            // Dropped when the menu goes away, so a screen that outlives it does
+            // not keep re-centring widgets that no longer exist.
+            let cleanupResize = null;
+            // The menu is an 80x24 composition. In a wide terminal it used to sit
+            // in the top-left corner with the rest of the window black - "the
+            // menus in gmaster isnt responise" (2026-09-02) - so the whole block
+            // is centred in whatever room there is, and follows a resize.
+            const MENU_COLS = 80;
+            const MENU_ROWS = 24;
+            const offsetX = () => Math.max(0, Math.floor((this.screen.width - MENU_COLS) / 2));
+            const offsetY = () => Math.max(0, Math.floor((this.screen.height - MENU_ROWS) / 2));
             // Play menu music
             this.sounds.playMusic('menu', true);
             // Clear screen completely
@@ -53,8 +64,8 @@ class MenuScreen {
             // hands the two rows it occupied to the panels below.
             const title = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
-                top: 1,
-                left: 2,
+                top: 1 + offsetY(),
+                left: 2 + offsetX(),
                 width: 76,
                 height: 4,
                 border: { type: 'none' },
@@ -68,8 +79,8 @@ class MenuScreen {
             // menuPanel: 26, descBox: 30, info: 20 = 76 total
             // Title art is rows 1-4; panels run row 5 to row 22 (row 23 is the
             // background frame's bottom edge) = 18 rows.
-            const leftMargin = 2;
-            const panelTop = 5;
+            const leftMargin = 2 + offsetX();
+            const panelTop = 5 + offsetY();
             const panelHeight = 18;
             // Mode selection list - left panel
             const menuPanel = (0, blessed_helpers_1.createBox)({
@@ -158,14 +169,33 @@ class MenuScreen {
             // Instructions
             const instructions = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
-                bottom: 0,
-                left: 0,
-                width: '100%',
+                top: panelTop + panelHeight,
+                left: offsetX(),
+                width: MENU_COLS,
                 height: 1,
                 align: 'center',
                 style: { fg: 'gray', bg: 'black' },
                 content: 'Arrows: Navigate | Enter: Select | Alt+Enter: Full Screen | ESC/Q: Quit',
             });
+            // Follow the terminal. Alt+Enter changes the room while the menu is
+            // up, and a composition centred once is centred for one size only.
+            const recentre = () => {
+                const x = offsetX();
+                const y = offsetY();
+                title.left = 2 + x;
+                title.top = 1 + y;
+                menuPanel.left = 2 + x;
+                menuPanel.top = 5 + y;
+                descBox.left = 2 + x + 26;
+                descBox.top = 5 + y;
+                info.left = 2 + x + 26 + 30;
+                info.top = 5 + y;
+                instructions.left = x;
+                instructions.top = 5 + y + panelHeight;
+                this.screen.render();
+            };
+            this.screen.on('resize', recentre);
+            cleanupResize = () => this.screen.removeListener('resize', recentre);
             // Ensure title is rendered on top (z-index fix)
             title.setFront();
             this.screen.render();
@@ -193,6 +223,8 @@ class MenuScreen {
                 const selection = selections[index];
                 this.sounds.playSfx('menu_ok');
                 // Clean up
+                cleanupResize?.();
+                cleanupResize = null;
                 background.destroy();
                 title.destroy();
                 menuPanel.destroy(); // Also destroys menu as a child

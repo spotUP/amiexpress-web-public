@@ -325,3 +325,67 @@ export async function eightyColumnsKeepsTheSingleGrid(): Promise<void> {
     assert.strictEqual(h.minimap.width, 80 - LEFT_PANEL_COLS);
   } finally { h.destroy(); }
 }
+
+/**
+ * The field is complete before the countdown, so the layout never shuffles.
+ *
+ * "when starting battle royale... the playfields behind the counter shuffle
+ * around a bit; all playfields should be there from the moment the
+ * countdown starts with correct layout" (2026-09-02). The tracker filled up
+ * as the first AI samples arrived, so the layout key changed on almost
+ * every frame of the countdown and boards were created, moved and
+ * destroyed underneath it.
+ */
+export async function everyOpponentExistsBeforeTheCountdown(): Promise<void> {
+  const screen: any = new Screen({ title: 'seed', responsive: true, width: 160, height: 50 } as any);
+  const attacks = new AttackManager();
+  const engine: any = new GameEngine('versus', settings, sounds, attacks);
+  engine.start();
+
+  // A CPU battle's opponents exist the moment VersusAI built them.
+  // setupAttackRouting() wires every opponent's own manager, so the stand-in
+  // has to carry one - the door does.
+  const ai: any = {
+    getOpponents: () => Array.from({ length: 12 }, (_, i) => ({
+      id: `ai-${i + 1}`, name: `CPU ${i + 1}`, alive: true,
+      attackManager: new AttackManager(),
+    })),
+    update() {}, allDead: () => false,
+  };
+  const vs: any = new VersusScreen(screen, engine, inputStub, sounds, appState, null, attacks, ai, null);
+  try {
+    vs.seedOpponents();
+    assert.strictEqual(vs.opponentTracker.getAliveOpponents().length, 12,
+      'every CPU is in the tracker before a single frame is drawn');
+
+    vs.render();
+    const first = {
+      boards: vs.opponentBoards.filter((b: any) => !b.hidden && !b.destroyed).length,
+      grid: vs.minimapPanel.hidden,
+      list: vs.listPanel.hidden,
+    };
+
+    // A frame later, with the real boards arriving, the layout must be the
+    // same one - that is what "no shuffle" means.
+    vs.render();
+    const second = {
+      boards: vs.opponentBoards.filter((b: any) => !b.hidden && !b.destroyed).length,
+      grid: vs.minimapPanel.hidden,
+      list: vs.listPanel.hidden,
+    };
+    assert.deepStrictEqual(second, first, 'the layout is settled from the first frame');
+    assert.ok(first.boards > 0, 'and it has real playfields in it');
+  } finally { screen.destroy(); }
+}
+
+export async function seedingIsHarmlessWithNoOpponents(): Promise<void> {
+  const screen: any = new Screen({ title: 'seed0', responsive: true, width: 120, height: 30 } as any);
+  const attacks = new AttackManager();
+  const engine: any = new GameEngine('versus', settings, sounds, attacks);
+  engine.start();
+  const vs: any = new VersusScreen(screen, engine, inputStub, sounds, appState, null, attacks, undefined, null);
+  try {
+    vs.seedOpponents();
+    assert.strictEqual(vs.opponentTracker.getAliveOpponents().length, 0);
+  } finally { screen.destroy(); }
+}

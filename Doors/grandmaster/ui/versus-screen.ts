@@ -580,6 +580,17 @@ export class VersusScreen {
     this.running = true;
 
     this.setupInput();
+    // The whole field, before the countdown starts.
+    //
+    // The tracker used to fill up as the first AI samples arrived, so the
+    // layout was recomputed on almost every frame of the countdown and the
+    // boards were created, moved and destroyed under it - "when starting
+    // battle royale... the playfields behind the counter shuffle around a
+    // bit; all playfields should be there from the moment the countdown
+    // starts with correct layout" (2026-09-02). The opponents are KNOWN
+    // before the countdown; only their boards are not.
+    this.seedOpponents();
+    this.renderNow();
     await this.showCountdown();
     this.engine.start();
 
@@ -858,6 +869,45 @@ export class VersusScreen {
     if (now - this.lastRender >= 8) {
       this.render();
       this.lastRender = now;
+    }
+  }
+
+  /**
+   * Put every opponent in the tracker with an empty board.
+   *
+   * The versus layout is a function of HOW MANY opponents there are, so it
+   * can only be stable from the first frame if the field is known from the
+   * first frame. The CPU opponents exist the moment VersusAI built them and
+   * a networked lobby knows its players before the match starts; both are
+   * asked here, and the real boards replace these as the samples arrive.
+   */
+  private seedOpponents(): void {
+    const blank = () => {
+      const state = this.engine.getState();
+      const height = state.board?.height ?? 22;
+      const width = state.board?.width ?? 10;
+      return {
+        width, height,
+        grid: Array.from({ length: height }, () =>
+          Array.from({ length: width }, () => ({ filled: false, color: null }))),
+      } as any;
+    };
+
+    for (const opp of (this.versusAI?.getOpponents?.() ?? [])) {
+      this.opponentTracker.updateOpponent(opp.id, {
+        id: opp.id, name: opp.name, board: blank(),
+        level: 0, grade: '9', alive: true, isBot: true,
+      });
+    }
+
+    const players = this.network?.getMatchState()?.players ?? [];
+    const localId = String((this.network as any)?.getLocalPlayerId?.() ?? '');
+    for (const player of players) {
+      if (String(player.id) === localId) continue;
+      this.opponentTracker.updateOpponent(String(player.id), {
+        id: String(player.id), name: player.name, board: blank(),
+        level: 0, grade: '9', alive: true, isBot: player.isBot === true,
+      });
     }
   }
 
