@@ -61,15 +61,12 @@ const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/bles
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const edit_doc_1 = require("./edit-doc");
 const assets_1 = require("./assets");
-const preview_1 = require("./preview");
 const dialogs_1 = require("./dialogs");
 const bindings_1 = require("./bindings");
 const layout_1 = require("./layout");
 const menu_1 = require("./menu");
 const panels_1 = require("./panels");
-const token_strip_1 = require("./token-strip");
 const door_theme_1 = require("./door-theme");
-const PLAYBACK_MS = 100;
 /**
  * The ANSIEditor's own left sidebar width (its `sidebarWidth` when
  * showSidebar is on). The magnification below is sized against the columns
@@ -91,15 +88,9 @@ function canvasScale(sprite, width, height) {
 }
 class EditScreen {
     constructor(screen, door, file, sprite, onExit) {
-        this.tick = 0;
-        this.playback = null;
         this.statusFlash = '';
         this.canvasPanel = null;
-        this.previewPanel = null;
-        this.framesPanel = null;
         this.editor = null;
-        this.previewBox = null;
-        this.framesBox = null;
         this.statusBar = null;
         this.menuBar = null;
         this.keyHandlers = [];
@@ -113,15 +104,10 @@ class EditScreen {
         // call time (handlers are closures, evaluated only once invoked).
         this.bindKeys();
         this.buildLayout();
-        this.wireMouse();
-        this.playback = setInterval(() => {
-            this.tick++;
-            this.paintPreview();
-        }, PLAYBACK_MS);
         this.paint();
     }
     buildLayout() {
-        const { canvas, preview, frames, status } = layout_1.LAYOUT.edit;
+        const { canvas, status } = layout_1.LAYOUT.edit;
         this.canvasPanel = (0, panels_1.makePanel)(this.screen, { key: 'canvas', title: ' Canvas ', rect: canvas });
         const canvasContent = (0, panels_1.panelContentRect)(canvas);
         const scale = canvasScale(this.doc.sprite, canvasContent.width, canvasContent.height);
@@ -150,20 +136,6 @@ class EditScreen {
             onExit: () => { void this.closeEditor(); },
         });
         this.loadFrameIntoEditor();
-        this.previewPanel = (0, panels_1.makePanel)(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
-        const previewContent = (0, panels_1.panelContentRect)(preview);
-        this.previewBox = blessed_1.default.box({
-            parent: this.previewPanel,
-            top: previewContent.top, left: previewContent.left, width: previewContent.width, height: previewContent.height,
-            border: { type: 'none' }, tags: true,
-        });
-        this.framesPanel = (0, panels_1.makePanel)(this.screen, { key: 'frames', title: ' Frames ', rect: frames });
-        const framesContent = (0, panels_1.panelContentRect)(frames);
-        this.framesBox = blessed_1.default.box({
-            parent: this.framesPanel,
-            top: framesContent.top, left: framesContent.left, width: framesContent.width, height: framesContent.height,
-            border: { type: 'none' }, tags: true, mouse: true,
-        });
         this.statusBar = blessed_1.default.box({
             parent: this.screen,
             top: status.top, left: status.left, width: status.width, height: status.height, tags: true,
@@ -299,8 +271,6 @@ class EditScreen {
             { id: 'view.resetLayout', keys: [], hotkeyHint: '', menu: 'View', label: 'Reset Layout',
                 handler: () => {
                     (0, panels_1.resetPanelLayout)(this.canvasPanel, layout_1.LAYOUT.edit.canvas);
-                    (0, panels_1.resetPanelLayout)(this.previewPanel, layout_1.LAYOUT.edit.preview);
-                    (0, panels_1.resetPanelLayout)(this.framesPanel, layout_1.LAYOUT.edit.frames);
                 } },
         ];
     }
@@ -368,83 +338,48 @@ class EditScreen {
         if (discard)
             this.exit();
     }
-    handleFramesClick(data) {
-        if (this.screen.dialogOpen)
-            return; // don't reinterpret a click while a dialog is open
-        const coords = this.framesBox._getCoords();
-        if (!coords)
-            return;
-        const localX = data.x - coords.xi;
-        const localY = data.y - coords.yi;
-        if (localY !== 0)
-            return; // the frames strip is a single row
-        const index = (0, token_strip_1.tokenAtColumn)(this.frameTokens(), localX);
-        if (index === -1)
-            return;
-        // The same op C-p/C-f call, through the same commit-first path - a
-        // click that skipped the commit would drop the strokes on the frame
-        // being left.
-        this.applyAfterCommit(d => (0, edit_doc_1.selectFrame)(d, index));
-    }
-    wireMouse() {
-        this.framesBox.on('click', (data) => this.handleFramesClick(data));
-    }
-    paintPreview() {
-        const anim = this.doc.sprite.animations[this.doc.animation];
-        const lines = (0, preview_1.previewLines)(this.doc.sprite, this.doc.animation, this.tick, 2);
-        this.previewBox.setContent(lines.join('\n') +
-            `\n\n {${door_theme_1.T.dim}-fg}${this.doc.animation} - ${anim.frames.length}f ` +
-            `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}`);
-        this.screen.render();
-    }
     /**
-     * The frames strip's plain (untagged) per-frame tokens, in display
-     * order - one source both paintFrames() and handleFramesClick() read, so
-     * a click can never disagree with what is on screen.
+     * The frames strip, in display order, with the current frame bracketed.
+     *
+     * It had a pane of its own until the editor took the screen; it is one
+     * short run of text, so it lives on the status row now rather than
+     * costing the canvas eleven rows.
      */
     frameTokens() {
         const anim = this.doc.sprite.animations[this.doc.animation];
         return anim.frames.map((_, i) => (i === this.doc.frame ? `[${i + 1}]` : ` ${i + 1} `));
     }
-    paintFrames() {
-        const strip = this.frameTokens()
-            .map((text, i) => (i === this.doc.frame ? `{${door_theme_1.T.bar}-bg}{${door_theme_1.T.accent}-fg}${text}{/}` : text))
-            .join(' ');
-        this.framesBox.setContent(strip);
-    }
     paint() {
-        this.paintFrames();
         const dirty = this.isDirty() ? `{${door_theme_1.T.alert}-fg}*{/} ` : '';
         const flash = this.statusFlash ? `  {${door_theme_1.T.accent}-fg}${this.statusFlash}{/}` : '';
         this.statusFlash = '';
+        const anim = this.doc.sprite.animations[this.doc.animation];
+        const frames = this.frameTokens()
+            .map((text, i) => (i === this.doc.frame ? `{${door_theme_1.T.accent}-fg}${text}{/}` : text))
+            .join('');
         this.statusBar.setContent(`${dirty}{${door_theme_1.T.ink}-fg}${this.doc.sprite.name}{/} ${this.doc.animation} ` +
-            `f${this.doc.frame + 1}${flash}` +
-            `  {${door_theme_1.T.dim}-fg}C-p/C-f frame  C-e animation  C-s save  ESC back{/}`);
-        this.paintPreview();
+            `${frames} {${door_theme_1.T.dim}-fg}${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}${flash}` +
+            `  {${door_theme_1.T.dim}-fg}C-p/C-f frame  C-e anim  C-s save  ESC back{/}`);
+        this.screen.render();
     }
     exit() {
         this.destroy();
         this.onExit();
     }
     destroy() {
-        if (this.playback) {
-            clearInterval(this.playback);
-            this.playback = null;
-        }
         for (const [keys, handler] of this.keyHandlers) {
             this.screen.unkey(keys, handler);
         }
         this.keyHandlers = [];
-        // Destroy the PANELS, not just their nested content: a panel's
-        // destroy() cascades to its children, so this tears down the editor,
-        // previewBox and framesBox too. Destroying only the content would
-        // orphan an empty, still-draggable panel shell on screen.
-        for (const widget of [this.canvasPanel, this.previewPanel, this.framesPanel,
-            this.statusBar, this.menuBar]) {
+        // Destroy the PANEL, not just the editor inside it: a panel's destroy()
+        // cascades to its children, so this tears the editor down too.
+        // Destroying only the content would orphan an empty, still-draggable
+        // panel shell on screen.
+        for (const widget of [this.canvasPanel, this.statusBar, this.menuBar]) {
             widget?.destroy();
         }
-        this.canvasPanel = this.previewPanel = this.framesPanel = null;
-        this.editor = this.previewBox = this.framesBox = this.statusBar = this.menuBar = null;
+        this.canvasPanel = this.statusBar = this.menuBar = null;
+        this.editor = null;
     }
 }
 exports.EditScreen = EditScreen;

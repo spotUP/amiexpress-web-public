@@ -86,24 +86,27 @@ export async function panesTileWithoutOverlap(): Promise<void> {
   }
 }
 
-export async function editScreenColumnsSumToEightyColumns(): Promise<void> {
-  const { canvas, preview, frames } = LAYOUT.edit;
-  assert.strictEqual(canvas.width + preview.width, 80,
-    'canvas + right column must span the full 80 columns');
-  assert.strictEqual(preview.width, frames.width, 'the right column is one width, not two');
+export async function theEditScreenIsAllEditor(): Promise<void> {
+  const { canvas, status } = LAYOUT.edit;
+  assert.strictEqual(canvas.left, 0, 'the editor starts at the left edge');
+  assert.strictEqual(canvas.width, 80, 'the editor spans the full 80-column terminal');
+  assert.strictEqual(canvas.top, 1, 'row 0 is the studio menu bar');
+  assert.strictEqual(canvas.top + canvas.height, STATUS_ROW,
+    'the editor fills every row between the menu bar and the status row');
+  assert.strictEqual(status.top, STATUS_ROW);
 }
 
-export async function editScreenRightColumnSumsToTheCanvasHeight(): Promise<void> {
-  const { canvas, preview, frames } = LAYOUT.edit;
-  assert.strictEqual(preview.height + frames.height, canvas.height,
-    'preview+frames must exactly fill the canvas height - the split the ' +
-    'old percent layout could not guarantee at every terminal height. The ' +
-    'third pane (the Paint toolbar) is gone: the hosted ANSIEditor ships ' +
-    'its own colour/tool sidebar, and its rows went to Frames.');
-  assert.strictEqual(preview.top, canvas.top, 'the right column starts where the canvas does');
-  assert.strictEqual(frames.top, preview.top + preview.height, 'frames must start exactly where preview ends');
-  assert.strictEqual(frames.top + frames.height, canvas.top + canvas.height,
-    'frames must end exactly where the canvas does - no blank rows left by the removed toolbar');
+/**
+ * The widget needs the room, and this is the number that says so: its
+ * colour/tool sidebar is about twenty rows tall and does not shrink or
+ * clip. At nineteen rows (the old Canvas pane) Fill/Pick/Select painted
+ * outside the panel, onto the bare screen - seen in a screenshot, not
+ * inferred.
+ */
+export async function theEditorPaneClearsTheWidgetsMinimumHeight(): Promise<void> {
+  const { canvas } = LAYOUT.edit;
+  assert.ok(canvas.height >= 22,
+    `the hosted ANSIEditor needs ~20 rows for its sidebar plus its toolbar; pane is ${canvas.height}`);
 }
 
 export async function browserColumnsSumToEightyColumns(): Promise<void> {

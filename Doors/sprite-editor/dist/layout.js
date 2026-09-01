@@ -32,20 +32,27 @@ function rect(top, left, width, height) {
 }
 exports.LAYOUT = Object.freeze({
     /**
-     * Edit screen. Canvas rows 1-19 (44 cols) alongside a right column that
-     * splits the same 19 rows two ways: Preview / Frames. Every right-column
-     * top is the previous pane's top + height, not a re-derived percent, so
-     * the column always sums to exactly 19 - the same 19 the canvas occupies.
+     * Edit screen: the hosted ANSIEditor owns everything between the menu
+     * bar and the status row.
      *
-     * There was a third pane here, a Paint toolbar, until the edit screen
-     * started hosting the ANSIEditor: the widget ships its own colour and
-     * tool sidebar inside the canvas pane, and toolbar.ts was a second copy
-     * of it. Its five rows went to Frames rather than being left blank.
+     * It was a 44x19 Canvas pane beside a Preview/Frames column until
+     * 2026-09-01, when a screenshot showed why that could not work. The
+     * widget was built to own an 80x25 screen and sizes its chrome
+     * absolutely: its colour/tool sidebar needs about twenty rows and its
+     * F-key strip about seventy columns. Given nineteen rows and
+     * thirty-eight columns it did not shrink - blessed does not clip
+     * children to a parent - so the F-key strip was cut off mid-way and the
+     * Fill/Pick/Select tools painted OUTSIDE the panel, onto the bare
+     * screen below every border.
+     *
+     * Making the widget clip and reflow is the real fix and belongs in the
+     * SDK; giving it the room it was designed for is what this door can do,
+     * and it is what the user asked for anyway ("everything should live in
+     * the ansi editor"). The frames strip folds into the status row, and the
+     * animation preview stays in the browser one keystroke away.
      */
     edit: {
-        canvas: rect(1, 0, 44, 19),
-        preview: rect(1, 44, 36, 8),
-        frames: rect(9, 44, 36, 11),
+        canvas: rect(1, 0, 80, 23),
         status: rect(exports.STATUS_ROW, 0, 80, 1),
     },
     /**

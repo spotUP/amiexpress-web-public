@@ -32,9 +32,12 @@ export async function savesGoThroughTheGuardedWriter(): Promise<void> {
   assert.ok(code.includes('writeSprite('), 'saving must use the guarded writer');
 }
 
-export async function teardownClearsItsTimerAndKeys(): Promise<void> {
-  assert.ok(/clearInterval\(this\.playback/.test(code),
-    'the playback interval must die with the screen');
+export async function teardownClearsItsKeys(): Promise<void> {
+  // The playback interval went with the preview pane: the editor owns the
+  // screen now and the animation preview lives in the browser, so there is
+  // no timer here to clear.
+  assert.ok(!/setInterval/.test(code),
+    'the edit screen must own no timer - the preview it drove is gone');
   assert.ok(/unkey\(|removeKey|offKey|\.removeListener\(/.test(code) ||
             /keyHandlers/.test(code),
     'screen-level key bindings must be removed on destroy - the browser\'s ' +
@@ -159,7 +162,7 @@ export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
   const destroyBody = code.slice(destroyIdx, code.indexOf('\n}', destroyIdx));
   assert.ok(/this\.menuBar[\],]/.test(destroyBody),
     'destroy() must include this.menuBar in the widgets it destroys');
-  for (const panel of ['canvasPanel', 'previewPanel', 'framesPanel']) {
+  for (const panel of ['canvasPanel']) {
     assert.ok(new RegExp(`this\\.${panel}[\\],]`).test(destroyBody),
       `destroy() must include this.${panel} (the panel, not just its nested content) in the widgets it destroys`);
   }
@@ -174,7 +177,7 @@ export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
 export async function theEditScreenPanesAreDockablePanels(): Promise<void> {
   assert.ok(code.includes("from './panels'") && code.includes('makePanel('),
     'the edit screen must build its panes through panels.ts\'s makePanel');
-  for (const key of ['canvas', 'preview', 'frames']) {
+  for (const key of ['canvas']) {
     assert.ok(code.includes(`key: '${key}'`),
       `the ${key} pane must be built via makePanel({ key: '${key}', ... })`);
   }
@@ -195,9 +198,7 @@ export async function theEditScreenContentChildrenSitAtTop1ViaPanelContentRect()
   // `new ANSIEditor({...})` rather than blessed.box - it takes the same
   // panelContentRect geometry, so it is checked by the same rule with its
   // own constructor name.
-  for (const [box, ctor] of [['editor', 'new ANSIEditor({'],
-                             ['previewBox', 'blessed.box({'],
-                             ['framesBox', 'blessed.box({']] as Array<[string, string]>) {
+  for (const [box, ctor] of [['editor', 'new ANSIEditor({']] as Array<[string, string]>) {
     const idx = code.indexOf(`this.${box} = ${ctor}`);
     assert.ok(idx >= 0, `${box} must exist`);
     const block = code.slice(idx, code.indexOf('});', idx));

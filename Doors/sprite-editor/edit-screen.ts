@@ -31,16 +31,12 @@ import {
   deleteAnimation, toSprite,
 } from './edit-doc';
 import { writeSprite } from './assets';
-import { previewLines } from './preview';
 import { promptText, confirm } from './dialogs';
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
 import { makePanel, panelContentRect, resetPanelLayout } from './panels';
-import { tokenAtColumn } from './token-strip';
 import { T } from './door-theme';
-
-const PLAYBACK_MS = 100;
 
 /**
  * The ANSIEditor's own left sidebar width (its `sidebarWidth` when
@@ -73,16 +69,10 @@ export class EditScreen {
   private onExit: () => void;
 
   private doc: EditDoc;
-  private tick = 0;
-  private playback: ReturnType<typeof setInterval> | null = null;
   private statusFlash = '';
 
   private canvasPanel: any = null;
-  private previewPanel: any = null;
-  private framesPanel: any = null;
   private editor: any = null;
-  private previewBox: any = null;
-  private framesBox: any = null;
   private statusBar: any = null;
   private menuBar: any = null;
   private keyHandlers: Array<[string[], (...args: any[]) => void]> = [];
@@ -100,16 +90,11 @@ export class EditScreen {
     // call time (handlers are closures, evaluated only once invoked).
     this.bindKeys();
     this.buildLayout();
-    this.wireMouse();
-    this.playback = setInterval(() => {
-      this.tick++;
-      this.paintPreview();
-    }, PLAYBACK_MS);
     this.paint();
   }
 
   private buildLayout(): void {
-    const { canvas, preview, frames, status } = LAYOUT.edit;
+    const { canvas, status } = LAYOUT.edit;
 
     this.canvasPanel = makePanel(this.screen, { key: 'canvas', title: ' Canvas ', rect: canvas });
     const canvasContent = panelContentRect(canvas);
@@ -140,20 +125,6 @@ export class EditScreen {
     } as any);
     this.loadFrameIntoEditor();
 
-    this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
-    const previewContent = panelContentRect(preview);
-    this.previewBox = blessed.box({
-      parent: this.previewPanel,
-      top: previewContent.top, left: previewContent.left, width: previewContent.width, height: previewContent.height,
-      border: { type: 'none' }, tags: true,
-    });
-    this.framesPanel = makePanel(this.screen, { key: 'frames', title: ' Frames ', rect: frames });
-    const framesContent = panelContentRect(frames);
-    this.framesBox = blessed.box({
-      parent: this.framesPanel,
-      top: framesContent.top, left: framesContent.left, width: framesContent.width, height: framesContent.height,
-      border: { type: 'none' }, tags: true, mouse: true,
-    });
     this.statusBar = blessed.box({
       parent: this.screen,
       top: status.top, left: status.left, width: status.width, height: status.height, tags: true,
@@ -292,8 +263,6 @@ export class EditScreen {
       { id: 'view.resetLayout', keys: [], hotkeyHint: '', menu: 'View', label: 'Reset Layout',
         handler: () => {
           resetPanelLayout(this.canvasPanel, LAYOUT.edit.canvas);
-          resetPanelLayout(this.previewPanel, LAYOUT.edit.preview);
-          resetPanelLayout(this.framesPanel, LAYOUT.edit.frames);
         } },
     ];
   }
@@ -359,64 +328,32 @@ export class EditScreen {
     if (discard) this.exit();
   }
 
-  private handleFramesClick(data: { x: number; y: number }): void {
-    if (this.screen.dialogOpen) return; // don't reinterpret a click while a dialog is open
-    const coords = (this.framesBox as any)._getCoords();
-    if (!coords) return;
-    const localX = data.x - coords.xi;
-    const localY = data.y - coords.yi;
-    if (localY !== 0) return; // the frames strip is a single row
-    const index = tokenAtColumn(this.frameTokens(), localX);
-    if (index === -1) return;
-    // The same op C-p/C-f call, through the same commit-first path - a
-    // click that skipped the commit would drop the strokes on the frame
-    // being left.
-    this.applyAfterCommit(d => selectFrame(d, index));
-  }
-
-  private wireMouse(): void {
-    this.framesBox.on('click', (data: any) => this.handleFramesClick(data));
-  }
-
-  private paintPreview(): void {
-    const anim = this.doc.sprite.animations[this.doc.animation];
-    const lines = previewLines(this.doc.sprite, this.doc.animation, this.tick, 2);
-    this.previewBox.setContent(
-      lines.join('\n') +
-      `\n\n {${T.dim}-fg}${this.doc.animation} - ${anim.frames.length}f ` +
-      `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}`
-    );
-    this.screen.render();
-  }
-
   /**
-   * The frames strip's plain (untagged) per-frame tokens, in display
-   * order - one source both paintFrames() and handleFramesClick() read, so
-   * a click can never disagree with what is on screen.
+   * The frames strip, in display order, with the current frame bracketed.
+   *
+   * It had a pane of its own until the editor took the screen; it is one
+   * short run of text, so it lives on the status row now rather than
+   * costing the canvas eleven rows.
    */
   private frameTokens(): string[] {
     const anim = this.doc.sprite.animations[this.doc.animation];
     return anim.frames.map((_, i) => (i === this.doc.frame ? `[${i + 1}]` : ` ${i + 1} `));
   }
 
-  private paintFrames(): void {
-    const strip = this.frameTokens()
-      .map((text, i) => (i === this.doc.frame ? `{${T.bar}-bg}{${T.accent}-fg}${text}{/}` : text))
-      .join(' ');
-    this.framesBox.setContent(strip);
-  }
-
   private paint(): void {
-    this.paintFrames();
     const dirty = this.isDirty() ? `{${T.alert}-fg}*{/} ` : '';
     const flash = this.statusFlash ? `  {${T.accent}-fg}${this.statusFlash}{/}` : '';
     this.statusFlash = '';
+    const anim = this.doc.sprite.animations[this.doc.animation];
+    const frames = this.frameTokens()
+      .map((text, i) => (i === this.doc.frame ? `{${T.accent}-fg}${text}{/}` : text))
+      .join('');
     this.statusBar.setContent(
       `${dirty}{${T.ink}-fg}${this.doc.sprite.name}{/} ${this.doc.animation} ` +
-      `f${this.doc.frame + 1}${flash}` +
-      `  {${T.dim}-fg}C-p/C-f frame  C-e animation  C-s save  ESC back{/}`
+      `${frames} {${T.dim}-fg}${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}${flash}` +
+      `  {${T.dim}-fg}C-p/C-f frame  C-e anim  C-s save  ESC back{/}`
     );
-    this.paintPreview();
+    this.screen.render();
   }
 
   private exit(): void {
@@ -425,23 +362,18 @@ export class EditScreen {
   }
 
   destroy(): void {
-    if (this.playback) {
-      clearInterval(this.playback);
-      this.playback = null;
-    }
     for (const [keys, handler] of this.keyHandlers) {
       this.screen.unkey(keys, handler);
     }
     this.keyHandlers = [];
-    // Destroy the PANELS, not just their nested content: a panel's
-    // destroy() cascades to its children, so this tears down the editor,
-    // previewBox and framesBox too. Destroying only the content would
-    // orphan an empty, still-draggable panel shell on screen.
-    for (const widget of [this.canvasPanel, this.previewPanel, this.framesPanel,
-                          this.statusBar, this.menuBar]) {
+    // Destroy the PANEL, not just the editor inside it: a panel's destroy()
+    // cascades to its children, so this tears the editor down too.
+    // Destroying only the content would orphan an empty, still-draggable
+    // panel shell on screen.
+    for (const widget of [this.canvasPanel, this.statusBar, this.menuBar]) {
       widget?.destroy();
     }
-    this.canvasPanel = this.previewPanel = this.framesPanel = null;
-    this.editor = this.previewBox = this.framesBox = this.statusBar = this.menuBar = null;
+    this.canvasPanel = this.statusBar = this.menuBar = null;
+    this.editor = null;
   }
 }

@@ -248,7 +248,7 @@ export async function openingTheNewAnimationDialogSuppressesOpBindingsUntilItClo
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const statusBar = screen.children[3]; // canvas, preview, frames, STATUS, menu
+    const statusBar = screen.children[1]; // canvas panel, STATUS, menu
     const framesBox = paneContent(screen, 2);
 
     // keyHandler(), not pressKey(): '+'s handler is async (it awaits
@@ -387,7 +387,7 @@ export async function typingIntoTheNewAnimationDialogAndSubmittingCreatesIt(): P
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const statusBar = screen.children[3]; // canvas, preview, frames, STATUS, menu
+    const statusBar = screen.children[1]; // canvas panel, STATUS, menu
     const pending = opHandler(edit, 'animation.new')();
     const input = lastDialog(screen).children[0];
     for (const ch of 'spin') input.insertChar(ch);
@@ -540,7 +540,7 @@ export async function f1InvokesHelpWithoutTouchingTheDocumentAndLeavesNoStuckSta
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const statusBar = screen.children[3]; // canvas, preview, frames, STATUS, menu
+    const statusBar = screen.children[1]; // canvas panel, STATUS, menu
     const framesBox = paneContent(screen, 2);
     const beforeStrip = frameStrip(framesBox.getContent());
     const beforeDirty = (edit as any).doc.dirty;
@@ -636,42 +636,6 @@ export async function fillDoesNotHappenOnDragOnlyOnClick(): Promise<void> {
 
     assert.strictEqual((edit as any).doc, docBefore,
       'drag painting is restricted to paint/erase - fill must not fire on mousemove');
-  } finally {
-    edit.destroy();
-  }
-}
-
-export async function clickingAFrameNumberSelectsThatFrameThroughSelectFrame(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 1, cellH: 1,
-    animations: {
-      only: {
-        ticksPerFrame: 4, loop: true,
-        frames: [
-          [[{ char: '1', fg: 7, bg: 0 }]],
-          [[{ char: '2', fg: 7, bg: 0 }]],
-          [[{ char: '3', fg: 7, bg: 0 }]],
-        ],
-      },
-    },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    assert.strictEqual((edit as any).doc.frame, 0, 'frame 0 starts selected');
-
-    // The column for frame index 2, computed via the SAME plain tokens
-    // paintFrames()/handleFramesClick() both read from frameTokens() -
-    // not a hand-guessed offset.
-    const tokens: string[] = (edit as any).frameTokens();
-    const targetColumn = tokens.slice(0, 2).reduce((sum, t) => sum + t.length + 1, 0);
-    assert.strictEqual(tokenAtColumn(tokens, targetColumn), 2,
-      'precondition: this column must land on frame token index 2');
-
-    const framesBox = paneContent(screen, 2);
-    clickBox(framesBox, targetColumn, 0);
-
-    assert.strictEqual((edit as any).doc.frame, 2, 'clicking frame 3\'s token must select it');
   } finally {
     edit.destroy();
   }
