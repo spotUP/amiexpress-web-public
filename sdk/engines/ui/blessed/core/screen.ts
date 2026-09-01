@@ -4,7 +4,7 @@
 
 import { Element } from './element';
 import { Program } from './program';
-import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi } from './colors';
+import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi, convert } from './colors';
 import { KeyBindings } from './keybindings';
 import { ResponsiveLayoutManager, type ResponsiveConfig } from './responsive-layout';
 import type { ScreenOptions, KeyEvent, MouseEvent } from './types';
@@ -2646,7 +2646,26 @@ export class Screen extends Element {
     };
 
     const lowerColor = String(color).toLowerCase();
-    return colors[lowerColor] !== undefined ? colors[lowerColor] : 7;
+    if (colors[lowerColor] !== undefined) {
+      return colors[lowerColor];
+    }
+
+    // Not a name this table knows. Before falling back, ask the colour
+    // table - it resolves '#RRGGBB' and indexed colours, and Element's
+    // _colorToNumber has always done exactly this for the other renderer.
+    //
+    // Without it, `style: { fg: '#FF3D9A' }` became 7 - plain white - with
+    // no warning, which is how a themed door asked for a magenta header and
+    // got a white one. The comments in both colour maps warn about a name
+    // resolving differently in the two renderers; this was that fault with
+    // a hex value rather than a spelling.
+    const resolved = convert(lowerColor);
+    if (typeof resolved === 'number' && resolved >= 0 && resolved <= 255) {
+      return resolved;
+    }
+
+    // A typo or something that is not a colour at all: white, as before.
+    return 7;
   }
 
   private _stripAnsi(str: string): string {

@@ -8,6 +8,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+// Colours come from the user's theme, never from this file. `classic` is
+// the default and reproduces exactly what this door drew before, so the
+// migration is verifiable: identical output until somebody picks a theme.
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 /**
  * Format file size for display
  */
@@ -113,6 +117,9 @@ function getAllDoorsInCategory(node) {
 }
 async function createApp(session) {
     const { bbs, user } = session;
+    // One resolve per run. `s` carries every colour this door draws.
+    const theme = bbs?.getTheme ? bbs.getTheme() : (0, theme_1.themeById)('classic');
+    const s = (0, theme_1.themeStyles)(theme);
     const username = user?.username || 'Guest';
     const userLevel = user?.secLevel || 0;
     // Fetch available doors from BBS API
@@ -169,6 +176,50 @@ async function createApp(session) {
     });
     // Enable input
     inputManager.enable();
+    const TITLE = 'DOOR GAMES & UTILITIES';
+    /**
+     * The masthead: a run of slashes with the headline right-aligned at the
+     * end, and one short segment of the run lit in the accent colour.
+     *
+     * The bar itself never moves - a run of identical slashes shifted by a
+     * column is the same run. What travels is the BRIGHTNESS, which is the
+     * effect the mockups wanted and the reason the run is drawn in two
+     * colours rather than one.
+     *
+     * `barWidth` is how much of the run has been drawn; the entry animation
+     * grows it from nothing. `scanTick` is null before the animation ends,
+     * when nothing is lit yet.
+     */
+    let barWidth = null;
+    let tick = null;
+    /**
+     * The bar is an irregular stream - `///////////// //// /////////// /` -
+     * scrolled rather than regenerated, so it travels instead of flickering.
+     * The seed only has to be stable for a session; the node number keeps two
+     * people's boards from marching in step.
+     */
+    const BAR_SEED = (session?.bbsSession?.nodeId ?? 1) * 7 + 3;
+    function buildMasthead() {
+        if (!s.rail)
+            return ` ${TITLE} `;
+        // One column short of the width, always. Writing the final cell of a
+        // row is the oldest trap in terminal drawing: it leaves the cursor in a
+        // pending-wrap state and the last character ends up clipped or pushed
+        // onto the next line, which is exactly what the headline was doing.
+        // Leaving the column empty costs nothing and cannot go wrong.
+        const width = Math.max(1, (screen.width || 80) - 1);
+        const runWidth = Math.max(0, width - TITLE.length - 1);
+        const shown = barWidth === null ? runWidth : Math.min(barWidth, runWidth);
+        // Two things move at once, and they have to: the spaced pattern slides
+        // (which a solid run could not do at all), and a short segment lights
+        // up as it passes. Either alone reads as a static bar with a quirk.
+        const run = (0, theme_1.railStream)(s.rail, shown, tick ?? 0, BAR_SEED).padEnd(runWidth);
+        // One colour, all the way along. A bright segment travelling through it
+        // was tried and read as glare rather than as motion - the irregular
+        // stream already moves visibly on its own, and a second thing moving
+        // through it was one idea too many.
+        return `${s.accent(run)} ${s.ink(TITLE)}`;
+    }
     // Create header
     const header = (0, blessed_helpers_1.createBox)({
         parent: screen,
@@ -181,16 +232,16 @@ async function createApp(session) {
         clickable: false,
         mouse: false,
         border: undefined,
-        content: ' DOOR GAMES & UTILITIES ',
-        style: {
-            fg: 'white',
-            bg: 'blue'
-        }
+        // The masthead: branding slashes, then the title. The mockup for
+        // Uprough Neon leads with `/////` and this is where it belongs - a
+        // theme with no rail (classic) gets exactly the title it always had.
+        content: buildMasthead(),
+        style: s.bar.style
     });
     // Create breadcrumb bar
     const breadcrumb = (0, blessed_helpers_1.createBox)({
         parent: screen,
-        top: 1,
+        top: 2, // row 1 is left blank under the masthead
         left: 0,
         width: '70%',
         height: 1,
@@ -199,16 +250,16 @@ async function createApp(session) {
         clickable: false,
         mouse: false,
         border: undefined,
-        content: '{cyan-fg}Location:{/cyan-fg} All Doors',
+        content: `${s.accentAlt('Location:')} All Doors`,
         style: {
-            fg: 'cyan',
-            bg: 'black'
+            fg: theme.tokens.accentAlt,
+            bg: theme.tokens.ground
         }
     });
     // Create type filter display
     const filterDisplay = (0, blessed_helpers_1.createBox)({
         parent: screen,
-        top: 1,
+        top: 2, // row 1 is left blank under the masthead
         right: 0,
         width: '30%',
         height: 1,
@@ -217,19 +268,19 @@ async function createApp(session) {
         clickable: false,
         mouse: false,
         border: undefined,
-        content: '{yellow-fg}Filter:{/yellow-fg} ALL',
+        content: `${s.accent('Filter:')} ALL`,
         style: {
-            fg: 'yellow',
-            bg: 'black'
+            fg: theme.tokens.accent,
+            bg: theme.tokens.ground
         }
     });
     // Create main list
     const mainList = (0, blessed_helpers_1.createList)({
         parent: screen,
-        top: 2,
+        top: 3, // masthead, blank row, breadcrumb, then the list
         left: 0,
         width: '100%',
-        height: '100%-5',
+        height: '100%-4',
         keys: true,
         vi: true,
         mouse: true,
@@ -238,17 +289,12 @@ async function createApp(session) {
         scrollbar: {
             ch: ' ',
             style: {
-                bg: 'blue'
+                bg: theme.tokens.selectionBg
             }
         },
         style: {
-            selected: {
-                bg: 'blue',
-                fg: 'white'
-            },
-            item: {
-                fg: 'white'
-            }
+            selected: s.list.style.selected,
+            item: { fg: theme.tokens.ink }
         },
         tags: true,
     });
@@ -262,8 +308,119 @@ async function createApp(session) {
         screen.render();
     });
     // Ensure smooth scrolling with held keys
+    /**
+     * The cursor marker, for a theme that has nothing else to show it with.
+     *
+     * Quiet Phosphor draws no borders and no highlight block - it carries
+     * hierarchy in brightness alone - so without this there is genuinely
+     * nothing on screen saying which row is selected. Themes that highlight
+     * the whole row get an empty string and lose nothing.
+     *
+     * Every row is prefixed, selected or not, so the columns stay in line:
+     * a marker that only appeared on one row would shunt it sideways.
+     */
+    const MARK = (0, theme_1.selectionMark)(theme);
+    /**
+     * A dotted leader in the footer showing how far down the list you are.
+     *
+     * The mockups used a leader as decoration; this makes it carry something.
+     * It is redrawn only when the selection moves, which is a row that was
+     * being repainted anyway.
+     */
+    let lastLeader = '';
+    function updateScrollLeader() {
+        if (!s.rail)
+            return; // classic keeps its plain footer
+        if (currentRows.length === 0)
+            return;
+        const items = currentRows;
+        const at = (mainList.selected ?? 0) + 1;
+        const width = Math.max(4, Math.min(24, (screen.width || 80) - 56));
+        const drawn = s.dim((0, theme_1.leaderProgress)(width, at, items.length));
+        if (drawn === lastLeader)
+            return; // nothing to repaint
+        lastLeader = drawn;
+        scrollLeader.setContent(drawn);
+    }
+    /**
+     * The marker column only. The unreadable-selection problem this door
+     * briefly worked around lives in the List widget and is fixed there, so
+     * rows keep their own colours and the widget decides what happens to
+     * them when one is selected.
+     */
+    function markRow(text, selected) {
+        if (!MARK)
+            return text;
+        return (selected ? s.accent(MARK) : ' '.repeat(MARK.length)) + text;
+    }
+    /**
+     * The rows as WE built them, without any marker.
+     *
+     * Read back off the widget instead, this crashed: blessed's `items` are
+     * element objects, not the strings that were handed in, and their content
+     * is not reliably a string either - "Cannot read properties of undefined
+     * (reading 'slice')", which took the whole door down every time a
+     * borderless theme was active. Keeping our own copy also removes the need
+     * to guess whether a row already carries a marker.
+     */
+    let currentRows = [];
+    /** Set the list's rows, remembering them, and draw the marker column. */
+    function setRows(rows, selectAt = 0) {
+        currentRows = rows;
+        mainList.setItems(rows.map((row, i) => markRow(row, i === selectAt)));
+        mainList.select(selectAt);
+        markedRow = selectAt;
+    }
+    /** Which row currently carries the marker, so only two rows are redrawn. */
+    let markedRow = -1;
+    /**
+     * Move the marker, touching only the row that lost it and the row that
+     * gained it.
+     *
+     * Rebuilding every row on each keypress is what made the masthead
+     * animation stutter while navigating - with a hundred and fifty doors in
+     * the list, a full setItems on every arrow key starves a 20fps timer.
+     * Two setItem calls cost nothing by comparison.
+     */
+    function refreshMarkers() {
+        if (!MARK || currentRows.length === 0)
+            return;
+        const at = mainList.selected ?? 0;
+        if (at === markedRow)
+            return;
+        if (markedRow >= 0 && markedRow < currentRows.length) {
+            mainList.setItem(markedRow, markRow(currentRows[markedRow], false));
+        }
+        if (at >= 0 && at < currentRows.length) {
+            mainList.setItem(at, markRow(currentRows[at], true));
+        }
+        markedRow = at;
+    }
     mainList.on('select item', () => {
+        refreshMarkers();
+        updateScrollLeader();
         screen.render();
+    });
+    /**
+     * The leader itself: a strip at the right of the footer row.
+     *
+     * Its own box so moving the selection repaints twenty characters rather
+     * than the whole footer, which is the difference between a row that is
+     * free to redraw and one that is not.
+     */
+    const scrollLeader = (0, blessed_helpers_1.createBox)({
+        parent: screen,
+        bottom: 0,
+        right: 1,
+        width: 26,
+        height: 1,
+        border: undefined,
+        focusable: false,
+        clickable: false,
+        mouse: false,
+        tags: true,
+        content: '',
+        style: s.plain.style,
     });
     // Create footer
     const footer = (0, blessed_helpers_1.createBox)({
@@ -271,31 +428,44 @@ async function createApp(session) {
         bottom: 0,
         left: 0,
         width: '100%',
-        height: 3,
+        // One row, no frame.
+        //
+        // The footer used to be a bordered box, which read as a separate panel
+        // parked at the bottom rather than as part of the screen. A hint line
+        // is not a panel: it is the same surface as everything else with some
+        // text on it, so it takes the bar's colours and draws no rule at all.
+        height: 1,
         fixed: true, // Static footer
         focusable: false,
         clickable: false, // Don't capture mouse events
         mouse: false, // Don't listen for mouse events
-        border: {
-            type: 'line',
-            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
-        },
+        border: undefined,
         style: {
-            fg: 'white',
-            border: { fg: 'gray' }
+            fg: theme.tokens.dim,
+            bg: theme.tokens.bar,
         },
-        content: '{yellow-fg}Up/Down:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} Select  {yellow-fg}T:{/yellow-fg} Filter Type  {yellow-fg}Backspace:{/yellow-fg} Back  {yellow-fg}Q:{/yellow-fg} Quit'
+        // The key CAP is the part worth reading - which letter to press. The
+        // word after it is a reminder, so it sits dim and the caps carry the
+        // accent. Bright text throughout made the hint line compete with the
+        // content above it.
+        content: [
+            `${s.key('Up/Down:')} ${s.dim('Navigate')}`,
+            `${s.key('Enter:')} ${s.dim('Select')}`,
+            `${s.key('T:')} ${s.dim('Filter Type')}`,
+            `${s.key('Backspace:')} ${s.dim('Back')}`,
+            `${s.key('Q:')} ${s.dim('Quit')}`,
+        ].join('  ') + (s.rail ? `  ${s.dim(s.rail)}` : '')
     });
     /**
      * Update breadcrumb display
      */
     function updateBreadcrumb() {
-        const parts = ['{cyan-fg}Location:{/cyan-fg} All Doors'];
+        const parts = [`${s.accentAlt('Location:')} All Doors`];
         for (const part of currentPath) {
-            parts.push(` {gray-fg}/{/gray-fg} ${part}`);
+            parts.push(` ${s.dim('/')} ${part}`);
         }
         if (viewMode === 'doors') {
-            parts.push(' {yellow-fg}(viewing doors){/yellow-fg}');
+            parts.push(` ${s.accent('(viewing doors)')}`);
         }
         breadcrumb.setContent(parts.join(''));
     }
@@ -312,7 +482,7 @@ async function createApp(session) {
             'RX': 'blue'
         };
         const color = typeColors[currentTypeFilter] || 'white';
-        filterDisplay.setContent(`{yellow-fg}Filter:{/yellow-fg} {${color}-fg}${currentTypeFilter}{/${color}-fg}`);
+        filterDisplay.setContent(`${s.accent('Filter:')} {${color}-fg}${currentTypeFilter}{/${color}-fg}`);
     }
     /**
      * Filter doors by current type filter
@@ -351,7 +521,7 @@ async function createApp(session) {
         const items = [];
         // Add ".. Back" if not at root
         if (currentPath.length > 0) {
-            items.push('{gray-fg}[..]{/gray-fg} Back to parent');
+            items.push(`${s.dim('[..]')} Back to parent`);
         }
         // Add subcategories
         const sortedCategories = Array.from(currentCategory.children.keys()).sort();
@@ -359,22 +529,28 @@ async function createApp(session) {
             const child = currentCategory.children.get(catName);
             const doorCount = countDoorsInCategory(child);
             const hasSubcats = child.children.size > 0;
-            const icon = hasSubcats ? '{magenta-fg}[+]{/magenta-fg}' : '{green-fg}[>]{/green-fg}';
-            items.push(`${icon} {white-fg}${catName.padEnd(25)}{/white-fg} {cyan-fg}(${doorCount} door${doorCount !== 1 ? 's' : ''}){/cyan-fg}`);
+            // "has children" vs "is a leaf" is structure, not severity, so both
+            // take accents rather than the semantic ok/warn colours.
+            //
+            // The leaf marker is `-` rather than `>`: in Topaz a `[` immediately
+            // followed by `>` merges into something that reads as a capital D,
+            // which is why these rows looked like `D]` and not `[>]`. The bytes
+            // were always correct - it is the glyph pair that is not.
+            const icon = hasSubcats ? s.accent('[+]') : s.accentAlt('[-]');
+            items.push(`${icon} ${s.ink(catName.padEnd(25))} ${s.accentAlt(`(${doorCount} door${doorCount !== 1 ? 's' : ''})`)}`);
         }
         // Add "View All Doors" option if there are doors at this level or children
         const directDoors = currentCategory.doors.length;
         const totalDoors = countDoorsInCategory(currentCategory);
         if (totalDoors > 0) {
-            items.push(`{yellow-fg}[*]{/yellow-fg} {white-fg}View All Doors{/white-fg} {cyan-fg}(${totalDoors} total){/cyan-fg}`);
+            items.push(`${s.accent('[*]')} ${s.ink('View All Doors')} ${s.accentAlt(`(${totalDoors} total)`)}`);
         }
         // If no subcategories, just show doors directly
         if (sortedCategories.length === 0 && directDoors > 0) {
             renderDoorView();
             return;
         }
-        mainList.setItems(items);
-        mainList.select(0);
+        setRows(items);
         updateBreadcrumb();
         screen.render();
     }
@@ -388,22 +564,24 @@ async function createApp(session) {
         const filteredDoors = filterDoorsByType(allDoors);
         const items = [];
         // Add back option
-        items.push('{gray-fg}[..]{/gray-fg} Back to categories');
+        items.push(`${s.dim('[..]')} Back to categories`);
         // Add doors sorted by name
         const sortedDoors = filteredDoors.sort((a, b) => a.name.localeCompare(b.name));
         for (const door of sortedDoors) {
             const typeLabel = formatType(door.type);
             const sizeLabel = formatSize(door.size);
-            items.push(`{yellow-fg}[${typeLabel.padEnd(3)}]{/yellow-fg} {green-fg}${door.command.padEnd(12)}{/green-fg} {white-fg}${door.name.padEnd(25)}{/white-fg} {cyan-fg}${sizeLabel.padStart(8)}{/cyan-fg}`);
+            items.push(`${s.accent(`[${typeLabel.padEnd(3)}]`)} ` +
+                `${s.ok(door.command.padEnd(12))} ` +
+                `${s.ink(door.name.padEnd(25))} ` +
+                `${s.accentAlt(sizeLabel.padStart(8))}`);
         }
         // Show count with filter info
         if (currentTypeFilter !== 'ALL') {
-            const filterInfo = `{gray-fg}Showing ${filteredDoors.length} of ${allDoors.length} doors (${currentTypeFilter} only){/gray-fg}`;
+            const filterInfo = s.dim(`Showing ${filteredDoors.length} of ${allDoors.length} doors (${currentTypeFilter} only)`);
             items.push('');
             items.push(filterInfo);
         }
-        mainList.setItems(items);
-        mainList.select(0);
+        setRows(items);
         updateBreadcrumb();
         screen.render();
     }
@@ -520,12 +698,80 @@ async function createApp(session) {
     mainList.focus();
     updateFilterDisplay();
     renderCategoryView();
+    refreshMarkers();
+    updateScrollLeader();
+    // The masthead arrives, then keeps moving.
+    //
+    // The entry draws the bar in from nothing over a few frames; after that a
+    // slow timer slides the pattern and walks the lit segment along it. One
+    // row redrawn per tick, which is the budget a moving row is allowed - see
+    // the cost table in the SDK's chrome.ts.
+    let mastheadTimer = null;
+    if (s.rail) {
+        const width = Math.max(1, (screen.width || 80) - 1);
+        const runWidth = Math.max(0, width - TITLE.length - 1);
+        const frames = (0, theme_1.barGrowFrames)(s.rail, runWidth, 6);
+        let frame = 0;
+        const entry = setInterval(() => {
+            barWidth = frames[frame] ? frames[frame].trimEnd().length : runWidth;
+            header.setContent(buildMasthead());
+            screen.render();
+            if (++frame >= frames.length) {
+                clearInterval(entry);
+                barWidth = null; // full run from here on
+                tick = 0;
+                mastheadTimer = setInterval(() => {
+                    tick = (tick ?? 0) + 1;
+                    header.setContent(buildMasthead());
+                    screen.render();
+                    // 20 frames a second. A terminal cannot move anything less than
+                    // a whole cell, so smoothness is entirely a matter of frame RATE
+                    // and of keeping the interval even.
+                    //
+                    // Affordable because this is a TypeScript door on the web: the
+                    // cost is a socket write and an xterm parse, not the ~45ms of
+                    // 68K emulation a real door would pay per message. One row is
+                    // roughly 200 bytes, so this is about 4KB a second - fine here,
+                    // and NOT something to copy into a 68K door.
+                }, 50);
+            }
+        }, 25);
+    }
+    // The theme's glitches, if it asked for any. Does nothing at all on a
+    // theme that did not - no timer is even started - so a board on classic
+    // pays nothing for this line existing.
+    //
+    // Attached to the LIST because it is the only thing on screen with rows
+    // to spare: damaging the header or the key hints would read as the door
+    // being broken rather than as atmosphere.
+    const stopGlitches = (0, theme_1.attachGlitches)(mainList, theme, () => screen.render(), 
+    // The list owns the keyboard here, so "busy" is about the filter
+    // prompt: a scrambled row while somebody is typing a filter reads as
+    // the door having eaten the input.
+    {
+        // Considered several times a second. The dice and the minimum gap in
+        // glitch.ts decide how often one actually fires; this only sets how
+        // finely that decision is sampled, and too coarse a tick puts a floor
+        // under the gap no matter what the constants say.
+        tickMs: 400,
+        isBusy: () => Boolean(screen._filterPromptOpen),
+    });
     // Return promise that resolves when screen is destroyed
     return new Promise((resolve) => {
         let resolved = false;
         const cleanup = () => {
             if (!resolved) {
                 resolved = true;
+                // Stops the timer AND puts the true row back, so a door that exits
+                // mid-glitch never leaves the damage as the last thing on screen.
+                try {
+                    stopGlitches();
+                }
+                catch { /* leaving anyway */ }
+                if (mastheadTimer) {
+                    clearInterval(mastheadTimer);
+                    mastheadTimer = null;
+                }
                 try {
                     if (mainList)
                         mainList.removeAllListeners('select');

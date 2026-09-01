@@ -1,0 +1,7 @@
+BBSCMD=THEME
+TYPE=TS
+LOCATION=Doors/theme-picker
+DESCRIPTION=Pick the colour theme the doors are drawn with
+MULTINODE=YES
+PRIORITY=SAME
+ACCESS=1

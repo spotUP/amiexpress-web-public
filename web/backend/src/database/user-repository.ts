@@ -234,6 +234,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       byteLimit: safeNumber(user.bytelimit, 0),
       userFlags: safeNumber(user.userflags, 0),
       fontPreference: user.fontpreference || 'TopazPlus_a1200',  // Web font preference
+      themePreference: user.themepreference || 'classic',        // Door theme; classic is today's look
       gdprConsentAt: user.gdpr_consent_at || undefined,
       gdprNoticeVersion: user.gdpr_notice_version || undefined,
       gdprConsentSource: user.gdpr_consent_source || undefined,

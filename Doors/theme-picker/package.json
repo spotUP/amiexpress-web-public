@@ -1,0 +1,26 @@
+{
+  "name": "theme-picker",
+  "version": "1.0.0",
+  "description": "Pick the colour theme the doors are drawn with",
+  "main": "dist/index.js",
+  "bbsCommand": "THEME",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
+  "author": "AmiExpress Team",
+  "keywords": [
+    "bbs",
+    "door",
+    "theme"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

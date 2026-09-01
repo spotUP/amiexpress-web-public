@@ -673,7 +673,30 @@ export function buildStyle(flags: StyleFlags): string {
 }
 
 // Tag parsing for blessed-style tags
-const tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
+/**
+ * Is this the name of a colour the tag parser should resolve itself?
+ *
+ * Deliberately stricter than parseColor(), which is lenient: convert('#')
+ * answers 0 (black) rather than "not a colour", so a stray `{#-fg}` in a
+ * message would silently paint the rest of the line black. A tag only
+ * counts as a colour when it is unmistakably one - three or six hex digits,
+ * or an indexed colour in range.
+ */
+function isExplicitColour(name: string): boolean {
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(name)) return true;
+  if (/^\d{1,3}$/.test(name)) {
+    const n = Number(name);
+    return n >= 0 && n <= 255;
+  }
+  return false;
+}
+
+// `#` is in the class so a hex colour can be written in a tag:
+// `{#FF3D9A-fg}`. Without it the tag never matched and printed as literal
+// text across the screen - which is exactly what a themed door did the
+// first time one was run. Everything underneath already understood hex;
+// only the scanner did not.
+const tagRegex = /\{(\/?)([\w#-]*)(?::([\w-]+))?\}/g;
 
 // Default color codes (reset to terminal default)
 const defaultFg = `${CSI}39m`;
@@ -782,6 +805,15 @@ export function parseTags(text: string): string {
           return defaultBg;
 
         default:
+          // A hex or indexed colour closing: put back the default for that
+          // channel only. Resetting everything would also drop bold and any
+          // background the caller set around it.
+          if (name.endsWith('-fg') && isExplicitColour(name.slice(0, -3))) {
+            return defaultFg;
+          }
+          if (name.endsWith('-bg') && isExplicitColour(name.slice(0, -3))) {
+            return defaultBg;
+          }
           // Unknown closing tag - use reset as fallback
           return attrs.reset;
       }
@@ -920,8 +952,23 @@ export function parseTags(text: string): string {
       case 'close':
         return '}';
 
-      default:
+      default: {
+        // A colour this switch does not name, but that the colour table
+        // understands anyway - a hex value, or an indexed colour. Named
+        // colours are all handled above, so reaching here with a name that
+        // resolves means somebody wrote a palette of their own.
+        //
+        // Anything that does NOT resolve is returned untouched, because
+        // text like "{not-a-tag}" has always come through as characters and
+        // things depend on that.
+        if (name.endsWith('-fg') || name.endsWith('-bg')) {
+          const colour = name.slice(0, -3);
+          if (isExplicitColour(colour)) {
+            return name.endsWith('-fg') ? fg(colour) : bg(colour);
+          }
+        }
         return match;
+      }
     }
   });
 
