@@ -274,23 +274,32 @@ describe('petscii.util', () => {
   });
 
   describe('convertAnsiToPetscii', () => {
-    it('should convert ASCII text to PETSCII', () => {
+    // convertAnsiToPetscii now delegates to convertAsciiToPetsciiOutput with
+    // { charsetPrelude: true } (task 4 / audit E4): it prepends 0x0E (switch
+    // to shifted/text charset) so a power-on C64 - which boots in
+    // unshifted/graphics mode - displays a .seq file's mixed case correctly,
+    // and it case-swaps letters the same way convertAsciiToPetsciiOutput
+    // always has (ASCII uppercase -> PETSCII shifted-uppercase 0xC1-0xDA,
+    // ASCII lowercase -> PETSCII shifted-lowercase 0x41-0x5A).
+    it('should convert ASCII text to PETSCII with a charset prelude and case-swap', () => {
       const text = 'HELLO';
       const result = convertAnsiToPetscii(text);
 
-      expect(result[0]).toBe(0x48); // H
-      expect(result[1]).toBe(0x45); // E
-      expect(result[2]).toBe(0x4C); // L
-      expect(result[3]).toBe(0x4C); // L
-      expect(result[4]).toBe(0x4F); // O
+      expect(result[0]).toBe(0x0E); // Charset prelude
+      expect(result[1]).toBe(0xC8); // H -> shifted uppercase
+      expect(result[2]).toBe(0xC5); // E
+      expect(result[3]).toBe(0xCC); // L
+      expect(result[4]).toBe(0xCC); // L
+      expect(result[5]).toBe(0xCF); // O
     });
 
-    it('should convert numbers', () => {
+    it('should convert numbers (unaffected by case-swap)', () => {
       const text = '0123456789';
       const result = convertAnsiToPetscii(text);
 
+      expect(result[0]).toBe(0x0E); // Charset prelude
       for (let i = 0; i < 10; i++) {
-        expect(result[i]).toBe(0x30 + i);
+        expect(result[i + 1]).toBe(0x30 + i);
       }
     });
 
@@ -298,44 +307,48 @@ describe('petscii.util', () => {
       const text = 'A\nB';
       const result = convertAnsiToPetscii(text);
 
-      expect(result[0]).toBe(0x41); // A
-      expect(result[1]).toBe(0x0D); // CR (PETSCII return)
-      expect(result[2]).toBe(0x42); // B
+      expect(result[0]).toBe(0x0E); // Charset prelude
+      expect(result[1]).toBe(0xC1); // A -> shifted uppercase
+      expect(result[2]).toBe(0x0D); // CR (PETSCII return)
+      expect(result[3]).toBe(0xC2); // B
     });
 
     it('should handle lowercase letters', () => {
       const text = 'abc';
       const result = convertAnsiToPetscii(text);
 
-      expect(result[0]).toBe(0x61); // a
-      expect(result[1]).toBe(0x62); // b
-      expect(result[2]).toBe(0x63); // c
+      expect(result[0]).toBe(0x0E); // Charset prelude
+      expect(result[1]).toBe(0x41); // a -> shifted lowercase
+      expect(result[2]).toBe(0x42); // b
+      expect(result[3]).toBe(0x43); // c
     });
 
     it('should handle punctuation', () => {
       const text = '!@#$%';
       const result = convertAnsiToPetscii(text);
 
-      expect(result[0]).toBe(0x21); // !
-      expect(result[1]).toBe(0x40); // @
-      expect(result[2]).toBe(0x23); // #
-      expect(result[3]).toBe(0x24); // $
-      expect(result[4]).toBe(0x25); // %
+      expect(result[0]).toBe(0x0E); // Charset prelude
+      expect(result[1]).toBe(0x21); // !
+      expect(result[2]).toBe(0x40); // @
+      expect(result[3]).toBe(0x23); // #
+      expect(result[4]).toBe(0x24); // $
+      expect(result[5]).toBe(0x25); // %
     });
 
     it('should convert unknown characters to space', () => {
       const text = String.fromCharCode(0x80) + String.fromCharCode(0xFF);
       const result = convertAnsiToPetscii(text);
 
-      expect(result[0]).toBe(0x20); // Space
+      expect(result[0]).toBe(0x0E); // Charset prelude
       expect(result[1]).toBe(0x20); // Space
+      expect(result[2]).toBe(0x20); // Space
     });
 
-    it('should handle empty string', () => {
+    it('should still emit the charset prelude for an empty string', () => {
       const text = '';
       const result = convertAnsiToPetscii(text);
 
-      expect(result.length).toBe(0);
+      expect(Array.from(result)).toEqual([0x0E]);
     });
   });
 
@@ -713,6 +726,61 @@ describe('petscii.util', () => {
       // Should contain Unicode block elements
       expect(result.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('convertUnicodePuaToPetscii reverse video', () => {
+  it('emits $12/$92 around reverse glyphs instead of control-byte garbage', () => {
+    // U+E081 = reverse A (bank 0). Old code emitted screenCodeToPetscii(0x81) = 0x01 (a control byte!)
+    const bytes = convertUnicodePuaToPetscii(String.fromCodePoint(0xE081, 0xE001));
+    expect(Array.from(bytes)).toEqual([0x12, 0x41, 0x92, 0x41]);
+  });
+});
+
+describe('convertUnicodePuaToPetscii ANSI parser', () => {
+  it('splits multi-param SGR', () => {
+    const bytes = convertUnicodePuaToPetscii('\x1b[0;7m' + String.fromCodePoint(0xE001));
+    expect(Array.from(bytes)).toContain(0x12);
+  });
+  it('repeats counted cursor moves', () => {
+    const bytes = convertUnicodePuaToPetscii('\x1b[5C');
+    expect(Array.from(bytes)).toEqual([0x1D, 0x1D, 0x1D, 0x1D, 0x1D]);
+  });
+  it('converts absolute positioning to home + moves', () => {
+    const bytes = convertUnicodePuaToPetscii('\x1b[3;5H');
+    expect(Array.from(bytes)).toEqual([0x13, 0x11, 0x11, 0x1D, 0x1D, 0x1D, 0x1D]);
+  });
+});
+
+describe('convertUnicodePuaToPetscii truecolor SGR', () => {
+  it('maps an exact Colodore truecolor match to its VIC index', () => {
+    // #813338 is Colodore VIC 2 (red) -> PETSCII byte 0x1C
+    const bytes = convertUnicodePuaToPetscii('\x1b[38;2;129;51;56m');
+    expect(Array.from(bytes)).toEqual([0x1C]);
+  });
+  it('maps a non-exact truecolor value to the nearest VIC by RGB distance', () => {
+    // Close to Colodore VIC 5 green (#56AC4D) but not exact
+    const bytes = convertUnicodePuaToPetscii('\x1b[38;2;90;172;80m');
+    expect(Array.from(bytes)).toEqual([0x1E]); // Green PETSCII byte
+  });
+});
+
+describe('convertAsciiToPetsciiOutput charset prelude', () => {
+  it('prepends $0E so a power-on C64 shows mixed case correctly', () => {
+    const bytes = convertAsciiToPetsciiOutput('Hi', { charsetPrelude: true });
+    expect(Array.from(bytes)).toEqual([0x0E, 0xC8, 0x49]); // 0x0E, 'H'->0xC8, 'i'->0x49
+  });
+  it('omits the prelude by default (unchanged callers keep old output)', () => {
+    const bytes = convertAsciiToPetsciiOutput('Hi');
+    expect(Array.from(bytes)).toEqual([0xC8, 0x49]);
+  });
+});
+
+describe('convertAnsiToPetscii case handling', () => {
+  it('case-swaps so a .seq file displays correct case in shifted mode', () => {
+    const bytes = convertAnsiToPetscii('Ab');
+    // prelude 0x0E, 'A' -> 0xC1 (shifted uppercase), 'b' -> 0x42 (shifted lowercase)
+    expect(Array.from(bytes)).toEqual([0x0E, 0xC1, 0x42]);
   });
 });
 

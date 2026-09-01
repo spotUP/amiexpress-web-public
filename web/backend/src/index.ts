@@ -1104,7 +1104,16 @@ console.log(
           if (typeof data === "string") {
             // Strip ANSI escape sequences (C64 doesn't understand them)
             const strippedData = data.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-            const petsciiBytes = convertAsciiToPetsciiOutput(strippedData);
+            // One-shot charset prelude (task 4 / audit E4): pre-login.ts
+            // sets needsCharsetPrelude when it detects a real C64 or a
+            // telnet session picks PETSCII mode, since a power-on/reset
+            // C64 boots in unshifted/graphics mode. Send $0E once, on the
+            // very first PETSCII write, then clear the flag.
+            const needsPrelude = !!(connection.session as any)?.needsCharsetPrelude;
+            const petsciiBytes = convertAsciiToPetsciiOutput(strippedData, { charsetPrelude: needsPrelude });
+            if (needsPrelude) {
+              (connection.session as any).needsCharsetPrelude = false;
+            }
             connection.write(petsciiBytes);
           } else {
             connection.write(data);

@@ -57,6 +57,11 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
       session.ansiEnabled = false; // C64 uses raw PETSCII, not ANSI
       session.screenWidth = 40;
       session.screenHeight = 25;
+      // One-shot flag: a power-on/reset C64 boots in unshifted/graphics
+      // mode. index.ts's ansi-output C64 branch consumes this to send the
+      // PETSCII $0E charset prelude before the very first output, then
+      // clears it (task 4 / audit E4).
+      (session as any).needsCharsetPrelude = true;
 
       // Skip graphics prompt — but still honour the system password gate
       // express.e:29548-29550 Not(STEALTH_MODE) path fires before BBSTITLE
@@ -145,6 +150,10 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
     session.ansiEnabled = true; // PETSCII still needs ANSI color codes
     session.screenWidth = 40;
     session.screenHeight = 25;
+    // Same one-shot prelude as the real-C64 auto-detect branch above: this
+    // telnet session is about to receive PETSCII bytes but its terminal
+    // (e.g. SyncTERM in C64 mode) still boots unshifted/graphics.
+    (session as any).needsCharsetPrelude = true;
 console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
     socket.emit('terminal-resize', { cols: 40, rows: 25 });
   } else if (hasR) {
