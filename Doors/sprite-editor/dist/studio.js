@@ -93,13 +93,25 @@ function studioTitle(doc, door, file) {
         return 'Sprite Studio';
     const anim = doc.sprite.animations[doc.animation];
     const dirty = doc.dirty ? '*' : '';
-    return `${dirty}${door}/${file}  ${doc.animation}  frame ${doc.frame + 1}/${anim.frames.length}`;
+    return `${dirty}${door}/${file}  ${doc.animation}  ` +
+        `frame ${doc.frame + 1}/${anim.frames.length}  ` +
+        `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}`;
 }
 class SpriteStudioDoor {
     constructor() {
         this.editor = null;
         this.doc = null;
         this.zoom = exports.DEFAULT_ZOOM;
+        /** Onion skin: the previous frame, ghosted under the empty cells. */
+        this.onionSkin = false;
+        /** One frame on the clipboard, for copying artwork between frames. */
+        this.frameClipboard = null;
+        /** 80x25 like the board, or the caller's real terminal. */
+        this.fixedSize = false;
+        /** Set when a .ans is open instead of a sprite - Save writes art then. */
+        this.artText = null;
+        this.playing = false;
+        this.playTimer = null;
         this.door = '';
         this.file = '';
         this.exitResolve = null;
@@ -209,7 +221,39 @@ class SpriteStudioDoor {
             return;
         this.door = doors[d];
         this.file = sprites[s];
+        this.artText = null;
         this.doc = (0, edit_doc_1.openDoc)((0, assets_1.readSprite)(this.door, this.file));
+        await this.openEditor();
+    }
+    /**
+     * Open a .ans file in the same editor.
+     *
+     * Art mode was a separate screen in the old studio and went out with it.
+     * It does not need a screen: a .ans is just another thing this editor
+     * opens - the difference is only what Save writes, so the door remembers
+     * which kind of document is loaded and nothing else changes.
+     *
+     * Read and written as latin1, never utf8: the widget moves cell chars 1:1
+     * through the string with no re-encoding, so the round trip has to be
+     * byte-preserving or every high-bit character is mangled.
+     */
+    async openArtRequester() {
+        const doors = (0, assets_1.listDoorsWithSprites)();
+        const d = await this.pick('Open art - which door', doors);
+        if (d === null)
+            return;
+        const files = (0, assets_1.listArt)(doors[d]);
+        if (files.length === 0) {
+            await this.message('No art', `${doors[d]} has no art files.`);
+            return;
+        }
+        const f = await this.pick(`Open art - ${doors[d]}`, files);
+        if (f === null)
+            return;
+        this.door = doors[d];
+        this.file = files[f];
+        this.doc = null;
+        this.artText = (0, assets_1.readArt)(this.door, this.file).toString('latin1');
         await this.openEditor();
     }
     /**
@@ -287,25 +331,36 @@ class SpriteStudioDoor {
     // THE EDITOR - the whole application
     // ============================================
     async openEditor() {
-        if (!this.doc)
+        if (!this.doc && this.artText === null)
             return;
-        const sprite = this.doc.sprite;
         if (this.editor) {
             this.editor.destroy();
             this.editor = null;
         }
+        // Art is a full-screen 80x25 ANSI document; a sprite is its own small
+        // canvas. Everything else about the editor is identical, which is the
+        // point of art not needing a screen of its own.
+        const sprite = this.doc?.sprite;
         this.editor = new blessed_1.ANSIEditor({
             parent: this.screen,
-            top: 0, left: 0, width: '100%', height: '100%',
-            title: studioTitle(this.doc, this.door, this.file),
+            top: 0, left: 0,
+            width: this.fixedSize ? 80 : '100%',
+            height: this.fixedSize ? 25 : '100%',
+            title: this.doc
+                ? studioTitle(this.doc, this.door, this.file)
+                : `${this.door}/${this.file}  (art)`,
             initialMode: 'draw',
-            canvasWidth: sprite.cellW,
-            canvasHeight: sprite.cellH,
-            cellScaleX: zoomScales(this.zoom).x, cellScaleY: zoomScales(this.zoom).y,
+            canvasWidth: sprite ? sprite.cellW : 80,
+            canvasHeight: sprite ? sprite.cellH : 25,
+            initialContent: this.artText ?? undefined,
+            cellScaleX: sprite ? zoomScales(this.zoom).x : 1,
+            cellScaleY: sprite ? zoomScales(this.zoom).y : 1,
             // An erased sprite cell is a HOLE - compositing skips it and the
             // game's background shows through. Without this every sprite saved
             // here would carry a black box around its artwork.
-            transparentBackground: true,
+            // A sprite's erased cell is a HOLE; a .ans has no such concept and
+            // erasing there means a black space, as every other ANSI editor does.
+            transparentBackground: Boolean(sprite),
             showLineNumbers: false,
             showMenuBar: true,
             showToolbar: true,
@@ -316,7 +371,8 @@ class SpriteStudioDoor {
             onOpen: async () => { await this.openSpriteRequester(); },
             onExit: () => { void this.close(); },
         });
-        this.loadFrame();
+        if (this.doc)
+            this.loadFrame();
         this.editor.focus();
         this.screen.render();
     }
@@ -335,6 +391,22 @@ class SpriteStudioDoor {
                     { label: '────────────────', separator: true },
                     { label: 'Move Earlier', action: () => this.op(d => (0, edit_doc_1.moveFrame)(d, -1)) },
                     { label: 'Move Later', action: () => this.op(d => (0, edit_doc_1.moveFrame)(d, 1)) },
+                    { label: '────────────────', separator: true },
+                    { label: 'Copy Frame      C-c', action: () => this.copyFrame() },
+                    { label: 'Paste Frame     C-v', action: () => this.pasteFrame() },
+                    { label: '────────────────', separator: true },
+                    { label: 'Onion Skin      C-o', action: () => this.toggleOnionSkin() },
+                ],
+            },
+            {
+                label: 'Sprite',
+                items: [
+                    { label: 'New Sprite...', action: () => void this.newSpriteAsked() },
+                    { label: 'Save As...', action: () => void this.saveAsAsked() },
+                    { label: '────────────────', separator: true },
+                    { label: 'Open Art (.ans)...', action: () => void this.openArtRequester() },
+                    { label: '────────────────', separator: true },
+                    { label: '80x25 / Responsive', action: () => void this.toggleFixedSize() },
                 ],
             },
             {
@@ -347,10 +419,12 @@ class SpriteStudioDoor {
             {
                 label: 'Animation',
                 items: [
-                    { label: 'Play          C-p', action: () => this.previewRequester() },
+                    { label: 'Play          C-p', action: () => this.playInPlace() },
+                    { label: 'Play in a box', action: () => this.previewRequester() },
                     { label: 'Next          C-e', action: () => this.cycleAnimation() },
                     { label: '────────────────', separator: true },
                     { label: 'New...', action: () => void this.newAnimationAsked() },
+                    { label: 'Rename...', action: () => void this.renameAnimationAsked() },
                     { label: 'Delete', action: () => void this.deleteAnimationAsked() },
                     { label: '────────────────', separator: true },
                     { label: 'Slower', action: () => this.op(d => (0, edit_doc_1.setTicksPerFrame)(d, -1)) },
@@ -381,10 +455,37 @@ class SpriteStudioDoor {
         if (!this.doc || !this.editor)
             return;
         this.editor.setCoreCanvas((0, cell_art_1.frameToCanvas)((0, edit_doc_1.currentFrame)(this.doc)));
+        this.editor.setUnderlay(this.onionSkinCanvas());
         // setCoreCanvas marks the widget modified; loading a frame is not user
         // work, and left set a freshly opened sprite reads as dirty.
         this.editor.modified = false;
         this.editor.setLabel?.(` ${studioTitle(this.doc, this.door, this.file)} `);
+        this.screen.render();
+    }
+    /**
+     * The frame BEFORE this one, as a ghost - or nothing.
+     *
+     * The previous frame is what you are animating away from, so it is the
+     * one worth seeing through the holes. On the first frame of a looping
+     * animation that is the LAST frame, because that is the join the loop
+     * actually makes.
+     */
+    onionSkinCanvas() {
+        if (!this.onionSkin || !this.doc)
+            return null;
+        const anim = this.doc.sprite.animations[this.doc.animation];
+        if (anim.frames.length < 2)
+            return null;
+        const prev = this.doc.frame === 0
+            ? (anim.loop ? anim.frames.length - 1 : -1)
+            : this.doc.frame - 1;
+        if (prev < 0)
+            return null;
+        return (0, cell_art_1.frameToCanvas)(anim.frames[prev]);
+    }
+    toggleOnionSkin() {
+        this.onionSkin = !this.onionSkin;
+        this.editor?.setUnderlay(this.onionSkinCanvas());
         this.screen.render();
     }
     /** Commit, run a document op, put the new frame on the canvas. */
@@ -410,6 +511,19 @@ class SpriteStudioDoor {
      * the canvas, rebuilds the editor and puts the same frame back - the
      * document never notices.
      */
+    /**
+     * 80x25 like the board, or the caller's real terminal.
+     *
+     * A sprite drawn in a 200-column window can look right there and wrong on
+     * the 80x25 the BBS actually serves, so the studio has to be able to show
+     * both. The screen is created responsive; this pins the editor to 80x25
+     * inside it, which is what a caller on a real board will see.
+     */
+    async toggleFixedSize() {
+        this.fixedSize = !this.fixedSize;
+        await this.openEditor();
+        this.flash(this.fixedSize ? '80x25 (as the board serves it)' : 'Responsive (your terminal)');
+    }
     async setZoom(zoom) {
         if (zoom === this.zoom)
             return;
@@ -426,6 +540,93 @@ class SpriteStudioDoor {
             const next = names[(names.indexOf(d.animation) + 1) % names.length];
             return (0, edit_doc_1.selectAnimation)(d, next);
         });
+    }
+    // ============================================
+    // FRAME CLIPBOARD
+    // ============================================
+    /**
+     * Copy and paste whole frames.
+     *
+     * Duplicate makes the NEXT frame a copy; this carries artwork to a frame
+     * that already exists, anywhere in any animation of the sprite - which is
+     * how a walk cycle borrows from an idle pose. Refused across sprites of a
+     * different cell size, because setFrame would reject it anyway and a
+     * refusal that explains itself beats one that throws.
+     */
+    copyFrame() {
+        if (!this.doc)
+            return;
+        this.commit();
+        this.frameClipboard = (0, edit_doc_1.currentFrame)(this.doc).map(row => row.map(c => (c ? { ...c } : null)));
+        this.flash('Frame copied');
+    }
+    pasteFrame() {
+        if (!this.doc || !this.frameClipboard) {
+            void this.message('Paste', 'No frame has been copied yet.');
+            return;
+        }
+        const clip = this.frameClipboard;
+        this.op(d => (0, edit_doc_1.setFrame)(d, clip.map(row => row.map(c => (c ? { ...c } : null)))));
+    }
+    /** A one-shot note in the title bar - no dialog for something this small. */
+    flash(text) {
+        if (!this.editor)
+            return;
+        this.editor.setLabel?.(` ${text} `);
+        this.screen.render();
+        setTimeout(() => {
+            if (this.doc)
+                this.editor?.setLabel?.(` ${studioTitle(this.doc, this.door, this.file)} `);
+            this.screen.render();
+        }, 1200);
+    }
+    // ============================================
+    // PLAY IN PLACE
+    // ============================================
+    /**
+     * Play the animation ON the canvas, not in a box over it.
+     *
+     * "it cant play when i draw i need a panel and hotkeys so i can play it
+     * when i need" - so it never runs by itself, and any key stops it. The
+     * canvas is restored to the frame being edited afterwards, and the work
+     * is committed first so playback cannot eat an uncommitted stroke.
+     */
+    playInPlace() {
+        if (!this.doc || !this.editor || this.playing)
+            return;
+        this.commit();
+        const doc = this.doc;
+        const anim = doc.sprite.animations[doc.animation];
+        if (anim.frames.length < 2) {
+            void this.message('Play', 'This animation has a single frame.');
+            return;
+        }
+        this.playing = true;
+        this.editor.setUnderlay(null);
+        let i = 0;
+        const showFrame = () => {
+            this.editor.setCoreCanvas((0, cell_art_1.frameToCanvas)(anim.frames[i % anim.frames.length]));
+            this.editor.modified = false;
+            this.editor.setLabel?.(` PLAYING - any key stops - frame ${(i % anim.frames.length) + 1}/${anim.frames.length} `);
+            this.screen.render();
+            i++;
+        };
+        showFrame();
+        // ticksPerFrame is in GAME ticks; the game runs at 100ms a tick, so the
+        // studio plays at the speed the board will.
+        this.playTimer = setInterval(showFrame, Math.max(1, anim.ticksPerFrame) * 100);
+        const stop = () => {
+            if (!this.playing)
+                return;
+            this.playing = false;
+            if (this.playTimer) {
+                clearInterval(this.playTimer);
+                this.playTimer = null;
+            }
+            this.screen.removeListener('keypress', stop);
+            this.loadFrame();
+        };
+        this.screen.on('keypress', stop);
     }
     async newAnimationAsked() {
         const name = await (0, dialogs_1.promptText)(this.screen, 'New animation name');
@@ -444,7 +645,111 @@ class SpriteStudioDoor {
             this.op(d => (0, edit_doc_1.deleteAnimation)(d));
         }
     }
+    // ============================================
+    // MAKING AND NAMING THINGS
+    // ============================================
+    /**
+     * A new sprite, from nothing.
+     *
+     * Until now the studio could only open what already existed, which made
+     * it an editor of other people's files rather than a place to start one.
+     */
+    async newSpriteAsked() {
+        const doors = (0, assets_1.listDoorsWithSprites)();
+        const d = await this.pick('New sprite - which door', doors);
+        if (d === null)
+            return;
+        const name = await (0, dialogs_1.promptText)(this.screen, 'Sprite name (lowercase, dashes)');
+        if (!name)
+            return;
+        if (!/^[a-z0-9-]+$/.test(name)) {
+            await this.message('Refused', 'A sprite name is lowercase letters, digits and dashes.');
+            return;
+        }
+        const size = await (0, dialogs_1.promptText)(this.screen, 'Size in cells, WxH', '5x2');
+        const match = /^(\d+)x(\d+)$/.exec((size || '').trim());
+        if (!match) {
+            await this.message('Refused', 'Size must look like 5x2 - width by height, in cells.');
+            return;
+        }
+        const cellW = Number(match[1]);
+        const cellH = Number(match[2]);
+        if (cellW < 1 || cellH < 1 || cellW > 80 || cellH > 25) {
+            await this.message('Refused', 'A sprite is between 1x1 and 80x25 cells.');
+            return;
+        }
+        const blank = () => Array.from({ length: cellH }, () => Array.from({ length: cellW }, () => null));
+        const sprite = {
+            name, cellW, cellH,
+            animations: { idle: { ticksPerFrame: 4, loop: true, frames: [blank()] } },
+        };
+        this.door = doors[d];
+        this.file = `${name}.sprite.json`;
+        this.doc = (0, edit_doc_1.openDoc)(sprite);
+        await this.openEditor();
+        await this.save();
+    }
+    /** Save under another name, in the same door. */
+    async saveAsAsked() {
+        if (!this.doc)
+            return;
+        const name = await (0, dialogs_1.promptText)(this.screen, 'Save as (sprite name)', this.file.replace(/\.sprite\.json$/, ''));
+        if (!name)
+            return;
+        if (!/^[a-z0-9-]+$/.test(name)) {
+            await this.message('Refused', 'A sprite name is lowercase letters, digits and dashes.');
+            return;
+        }
+        this.file = `${name}.sprite.json`;
+        this.doc = { ...this.doc, sprite: { ...this.doc.sprite, name } };
+        await this.save();
+    }
+    /**
+     * Rename the current animation.
+     *
+     * edit-doc has no rename op and does not need one: an animation is a key
+     * in a record, so this is addAnimation + carry the frames + delete the
+     * old, done through the same ops everything else uses so the refusals
+     * (bad name, name taken, last animation) still apply.
+     */
+    async renameAnimationAsked() {
+        if (!this.doc)
+            return;
+        const from = this.doc.animation;
+        const to = await (0, dialogs_1.promptText)(this.screen, `Rename "${from}" to`, from);
+        if (!to || to === from)
+            return;
+        this.commit();
+        try {
+            const frames = this.doc.sprite.animations[from].frames;
+            const anim = this.doc.sprite.animations[from];
+            let next = (0, edit_doc_1.addAnimation)(this.doc, to);
+            const sprite = JSON.parse(JSON.stringify(next.sprite));
+            sprite.animations[to] = { ticksPerFrame: anim.ticksPerFrame, loop: anim.loop, frames };
+            next = { ...next, sprite, animation: from, frame: 0 };
+            next = (0, edit_doc_1.deleteAnimation)(next);
+            this.doc = { ...next, animation: to, frame: 0, dirty: true };
+            this.loadFrame();
+        }
+        catch (error) {
+            await this.message('Refused', String(error.message));
+        }
+    }
     async save() {
+        if (this.artText !== null && !this.doc) {
+            try {
+                const text = this.editor.getContent();
+                (0, assets_1.writeArt)(this.door, this.file, Buffer.from(text, 'latin1'));
+                this.artText = text;
+                if (this.editor)
+                    this.editor.modified = false;
+                this.flash(`Saved ${this.file}`);
+            }
+            catch (error) {
+                await this.message('Save failed', String(error.message));
+            }
+            return;
+        }
         if (!this.doc)
             return;
         this.commit();
@@ -491,7 +796,10 @@ class SpriteStudioDoor {
         key(['C-f'], () => this.step(+1));
         key(['C-b'], () => this.step(-1));
         key(['C-e'], () => this.cycleAnimation());
-        key(['C-p'], () => this.previewRequester());
+        key(['C-p'], () => this.playInPlace());
+        key(['C-o'], () => this.toggleOnionSkin());
+        key(['C-c'], () => this.copyFrame());
+        key(['C-v'], () => this.pasteFrame());
     }
     destroy() {
         for (const [keys, handler] of this.keyHandlers)

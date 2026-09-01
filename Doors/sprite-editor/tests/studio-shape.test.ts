@@ -32,8 +32,9 @@ function makeSprite(): Sprite {
 }
 
 export async function theEditorOwnsTheScreenAndItsOwnChrome(): Promise<void> {
-  assert.ok(/width: '100%', height: '100%'/.test(source),
-    'the editor must fill the screen - nothing wraps it');
+  assert.ok(source.includes("width: this.fixedSize ? 80 : '100%'"),
+    'the editor must fill the screen - nothing wraps it - unless it is ' +
+    'deliberately pinned to the 80x25 the board serves');
   for (const on of ['showMenuBar: true', 'showToolbar: true', 'showSidebar: true', 'showStatusBar: true']) {
     assert.ok(source.includes(on),
       `the editor's own chrome must be ON (${on}) - the door does not draw its own`);
@@ -52,8 +53,8 @@ export async function theDoorDrawsNoChromeOfItsOwn(): Promise<void> {
 export async function frameAndAnimationLiveInTheEditorsOwnMenuBar(): Promise<void> {
   const studio: any = new SpriteStudioDoor();
   const menus = studio.buildMenus();
-  assert.deepStrictEqual(menus.map((m: any) => m.label), ['Frame', 'Zoom', 'Animation'],
-    'the door contributes Frame, Zoom and Animation into the editor bar');
+  assert.deepStrictEqual(menus.map((m: any) => m.label), ['Frame', 'Sprite', 'Zoom', 'Animation'],
+    'the door contributes Frame, Sprite, Zoom and Animation into the editor bar');
   assert.ok(source.includes('extraMenus: this.buildMenus()'),
     'they must be handed to the editor as extraMenus, not drawn separately');
 
@@ -61,7 +62,7 @@ export async function frameAndAnimationLiveInTheEditorsOwnMenuBar(): Promise<voi
   for (const needed of ['New Frame', 'Duplicate Frame', 'Delete Frame']) {
     assert.ok(frame.some((l: string) => l.startsWith(needed)), `Frame menu needs ${needed}`);
   }
-  const animation = menus[2].items.filter((i: any) => !i.separator).map((i: any) => i.label);
+  const animation = menus[3].items.filter((i: any) => !i.separator).map((i: any) => i.label);
   for (const needed of ['Play', 'Next', 'New...', 'Delete', 'Slower', 'Faster', 'Toggle Loop']) {
     assert.ok(animation.some((l: string) => l.startsWith(needed)), `Animation menu needs ${needed}`);
   }
@@ -114,8 +115,9 @@ export async function theDefaultIsOneToOne(): Promise<void> {
   // "its super magnified make it 1:1 as default" - the door must not decide
   // a magnification for the artist by fitting the sprite to the screen.
   assert.strictEqual(DEFAULT_ZOOM, 1, 'a sprite opens at actual size');
-  assert.ok(source.includes('cellScaleX: zoomScales(this.zoom).x'),
-    'the editor must be built at the current zoom, not at a fitted one');
+  assert.ok(source.includes('cellScaleX: sprite ? zoomScales(this.zoom).x : 1'),
+    'a sprite is built at the current zoom, not at a fitted one; a .ans is ' +
+    'always 1:1, having no cells to magnify');
   assert.deepStrictEqual(zoomScales(1), { x: 1, y: 1 },
     'actual size is ONE character per cell, which is what the game draws - ' +
     'cell-art rowToTags emits one character per cell, so an editor that ' +
@@ -169,4 +171,69 @@ export async function theCanvasIsCommittedBeforeAnythingChangesTheFrame(): Promi
   const save = source.slice(source.indexOf('private async save('), source.indexOf('private isDirty('));
   assert.ok(save.indexOf('this.commit()') < save.indexOf('writeSprite'),
     'save() must commit the canvas before writing the sprite');
+}
+
+// ============================================================
+// The animation studio, not just an editor that opens a sprite
+// ============================================================
+
+export async function onionSkinShowsThePreviousFrameAndOnlyAsAGhost(): Promise<void> {
+  assert.ok(source.includes('private onionSkinCanvas()'), 'onion skin must exist');
+  assert.ok(source.includes('this.editor.setUnderlay(this.onionSkinCanvas())'),
+    'it must go to the editor as an UNDERLAY - never merged into the canvas, ' +
+    'or the previous frame would be saved into this one');
+  const fn = source.slice(source.indexOf('private onionSkinCanvas('), source.indexOf('private toggleOnionSkin('));
+  assert.ok(fn.includes('anim.loop'),
+    'on frame 0 of a looping animation the previous frame is the LAST one - ' +
+    'that is the join the loop actually makes');
+  assert.ok(source.includes("key(['C-o']"), 'and a hotkey to toggle it');
+}
+
+export async function playingHappensOnTheCanvasAndStopsOnAnyKey(): Promise<void> {
+  const fn = source.slice(source.indexOf('private playInPlace('), source.indexOf('private async newAnimationAsked('));
+  assert.ok(fn.includes('this.commit()'),
+    'playback must commit first - it swaps the canvas, so an uncommitted stroke would be eaten');
+  assert.ok(fn.includes("this.screen.on('keypress', stop)"), 'any key stops it');
+  assert.ok(fn.includes('clearInterval'), 'and stopping kills the timer');
+  assert.ok(fn.includes('this.loadFrame()'), 'and puts the edited frame back');
+  assert.ok(fn.includes('ticksPerFrame') && fn.includes('100'),
+    'it must play at the speed the board will - ticksPerFrame at 100ms a game tick');
+}
+
+export async function theFrameClipboardCarriesArtworkBetweenFrames(): Promise<void> {
+  const copy = source.slice(source.indexOf('private copyFrame('), source.indexOf('private pasteFrame('));
+  assert.ok(copy.includes('this.commit()'), 'copy must take what is on the canvas, not the last commit');
+  assert.ok(copy.includes('{ ...c }'), 'and copy the cells, not alias them');
+  const paste = source.slice(source.indexOf('private pasteFrame('), source.indexOf("/** A one-shot note"));
+  assert.ok(paste.includes('this.op('), 'paste goes through op() like every other document change');
+}
+
+export async function aSpriteCanBeMadeFromNothing(): Promise<void> {
+  const fn = source.slice(source.indexOf('private async newSpriteAsked('), source.indexOf('private async saveAsAsked('));
+  assert.ok(fn.includes('/^[a-z0-9-]+$/'), 'the name is validated');
+  assert.ok(fn.includes('cellW < 1 || cellH < 1'), 'and the size');
+  assert.ok(fn.includes('await this.save()'), 'a new sprite reaches disk immediately, or it is not real');
+}
+
+export async function artFilesOpenInTheSameEditor(): Promise<void> {
+  assert.ok(source.includes('private async openArtRequester('), 'art must be openable');
+  assert.ok(!source.includes('ArtSession'), 'and NOT through a screen of its own');
+  assert.ok(source.includes("Buffer.from(text, 'latin1')"),
+    'art round-trips as latin1 - utf8 would mangle every high-bit character');
+  assert.ok(source.includes('transparentBackground: Boolean(sprite)'),
+    "a .ans has no transparency: erasing there is a black space, not a hole");
+}
+
+export async function theSizeToggleShowsWhatTheBoardWillShow(): Promise<void> {
+  assert.ok(source.includes('private async toggleFixedSize('), 'the toggle must exist');
+  assert.ok(source.includes("width: this.fixedSize ? 80 : '100%'"),
+    'pinned to 80x25, which is what a caller on the board sees');
+  assert.ok(source.includes("height: this.fixedSize ? 25 : '100%'"));
+}
+
+export async function theTitleReportsTheTimingSoSlowerAndFasterAreNotBlind(): Promise<void> {
+  const doc = openDoc(makeSprite());
+  const title = studioTitle(doc, 'pengo', 'egg.sprite.json');
+  assert.ok(title.includes('4tpf'), 'the title says ticks per frame');
+  assert.ok(title.includes('loop'), 'and whether it loops');
 }
