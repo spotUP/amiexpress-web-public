@@ -66,8 +66,10 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
 const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
-const AmigaGuideViewer_1 = require("./AmigaGuideViewer");
 const ViewManager_1 = require("./ViewManager");
+const doorman_layout_1 = require("./doorman-layout");
+const doorman_services_1 = require("./doorman-services");
+const doc_strip_views_1 = require("./doc-strip-views");
 const systemFilter_1 = require("./systemFilter");
 const repoDataSource_1 = require("./repoDataSource");
 const repo_client_1 = require("./repo-client");
@@ -88,84 +90,8 @@ function formatSize(bytes) {
         return `${Math.round(bytes / 1024)} KB`;
     return `${Math.round(bytes / 1048576)} MB`;
 }
-function getCatalogSvc() {
-    for (const k of Object.keys(require.cache))
-        if (k.includes('door-catalog.service'))
-            return require.cache[k]?.exports ?? null;
-    return null;
-}
-function getInstallsRepo() {
-    // Same require.cache discovery as getCatalogSvc -- door_installs is the
-    // single source of truth for what THIS node has installed.
-    for (const k of Object.keys(require.cache))
-        if (k.includes('door-installs.repository'))
-            return require.cache[k]?.exports ?? null;
-    return null;
-}
-/** The backend's install recorder, if this process has it loaded. Same
- *  require.cache discovery as getInstallsRepo(): DOORMAN cannot import
- *  web/backend source paths. recordDoorInstall writes BOTH halves of an
- *  install -- the door_installs link (what getInstallsRepo().recordInstall
- *  used to write alone) and door_installed_files (the on-disk file list a
- *  delete needs) -- so both install call sites route through this instead
- *  of getInstallsRepo() directly. */
-function getInstallRecorder() {
-    for (const k of Object.keys(require.cache))
-        if (k.includes('door-install-record'))
-            return require.cache[k]?.exports ?? null;
-    return null;
-}
-// Shared by both install call sites below: builds the recordDoorInstall
-// input from a fully-populated DoorInstallEntry (consumer mode already has
-// one; owner mode's inline callback builds an equivalent shape inline).
-// No-op + warning, not a throw, when the recorder is unavailable in this
-// process.
-// Same require.cache discovery, for the counterpart of recordInstallViaRecorder
-// below: uninstall must clear door_installed_files alongside door_installs, or
-// a stale row survives naming the OLD door's files under a command a later
-// install reuses -- a delete could then act on the wrong door's file list.
-function clearInstalledFilesViaRecorder(command) {
-    if (!command)
-        return;
-    const recorder = getInstallRecorder();
-    if (!recorder) {
-        console.log('[DOORMAN] warning: install recorder unavailable -- installed-file rows not cleared');
-        return;
-    }
-    recorder.clearInstalledFiles(command);
-}
-function recordInstallViaRecorder(entry) {
-    const recorder = getInstallRecorder();
-    if (!recorder) {
-        console.log('[DOORMAN] warning: install recorder unavailable -- install not recorded locally');
-        return;
-    }
-    recorder.recordDoorInstall({
-        bbsRoot: PROJECT_ROOT,
-        command: entry.command,
-        archiveName: entry.archive_name,
-        installDir: path.join(PROJECT_ROOT, entry.install_dir),
-        infoPath: path.join(PROJECT_ROOT, 'Commands', 'BBSCmd', `${entry.command}.info`),
-        metadata: {
-            catalogId: entry.catalog_id,
-            name: entry.name,
-            description: entry.description,
-            category: entry.category,
-            version: entry.version,
-            releaseGroup: entry.release_group,
-            md5: entry.md5,
-            doorType: entry.door_type,
-            sourceUrl: entry.source_url,
-            sourceRevision: entry.source_revision,
-        },
-    });
-}
-function getStripLib() {
-    for (const k of Object.keys(require.cache))
-        if (k.includes('ami-stripper.lib'))
-            return require.cache[k]?.exports ?? null;
-    return null;
-}
+// The require.cache service getters moved to doorman-services.ts when app.ts
+// reached the 2000-line ceiling.
 /** Adapts the local catalog service's getCatalogEntryByArchive into the
  * LocalCatalogLookup shape repoDataSource's mapManifestDoorToEntry expects
  * (consumer mode: resolving what's installed on THIS BBS is always a local
@@ -173,7 +99,7 @@ function getStripLib() {
  * thrown lookup error both fold into "nothing known locally" rather than
  * propagating -- a lookup failure must never abort the whole browse. */
 function buildLocalCatalogLookup() {
-    const svc = getCatalogSvc();
+    const svc = (0, doorman_services_1.getCatalogSvc)();
     return (archiveName) => {
         try {
             const row = svc?.getCatalogEntryByArchive?.(archiveName);
@@ -199,7 +125,7 @@ function buildLocalCatalogLookup() {
  * per browse); missing repo or a thrown read both fold into "nothing known
  * locally". Keys are lower-cased -- archive_name lookups are NOCASE. */
 function buildInstallLookup() {
-    const repo = getInstallsRepo();
+    const repo = (0, doorman_services_1.getInstallsRepo)();
     let byArchive = null;
     try {
         byArchive = new Map((repo?.listInstalls?.() ?? []).map((row) => [String(row.archive_name).toLowerCase(), { command: row.command, install_dir: row.install_dir }]));
@@ -237,7 +163,7 @@ function discoverDoorDir(archiveName) {
 function resolveArchivePath(archivePath) {
     if (!archivePath)
         return null;
-    const svc = getCatalogSvc();
+    const svc = (0, doorman_services_1.getCatalogSvc)();
     try {
         return svc?.resolveArchivePath ? svc.resolveArchivePath(archivePath) : archivePath;
     }
@@ -247,98 +173,8 @@ function resolveArchivePath(archivePath) {
 }
 // ─── Shared Layout ───────────────────────────────────────────────────────────
 // A single set of panels that all views update in-place.
-class DoormanLayout {
-    constructor(screen, nodeId) {
-        /** Stops the masthead animation; called when the door tears down. */
-        this.stopMasthead = null;
-        this.screen = screen;
-        this.width = Math.floor(screen.width * 0.35) - 8;
-        this.header = new blessed_1.Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3,
-            tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
-        // The animated slash rail, on the header's first row. A child keeps it
-        // out of the outer geometry - nothing below moves, and a theme with no
-        // rail (classic) gets the plain title it always had.
-        const mastheadRow = new blessed_1.Box({ parent: this.header, top: 0, left: 0, width: '100%-2',
-            height: 1, tags: true, content: '', focusable: false,
-            style: door_theme_1.S.bar.style });
-        this.stopMasthead = (0, theme_1.attachMasthead)(mastheadRow, door_theme_1.CURRENT, {
-            title: 'DOORMAN',
-            // One column short: writing a row's last cell leaves the terminal in
-            // a pending-wrap state and clips the final character.
-            width: Math.max(1, (screen.width || 80) - 3),
-            rail: door_theme_1.S.accent,
-            ink: door_theme_1.S.ink,
-            render: () => screen.render(),
-        });
-        this.footer = new blessed_1.Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-            tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
-        this.filterPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: 3,
-            tags: true, style: { border: { fg: door_theme_1.T.dim } }, focusable: false });
-        // keys:false + inputOnFocus:false make this a DISPLAY-ONLY widget — see
-        // sdk/engines/ui/blessed/widgets/textbox.ts:58-60 (keys:false skips
-        // `this.on('keypress', this._onKeypress)` entirely, so Textbox's own
-        // self-editing insertChar()/deleteChar() path is never wired up at
-        // all, no matter how the box gets focused — keyboard activation,
-        // focusNext()/Tab-cycling, or a mouse click all leave it inert) and
-        // :63-68 (inputOnFocus:false skips the readInput() emit on focus).
-        // RepoView's filterKeypress (below) is the ONLY thing that ever writes
-        // to this box, via setValue() — a single source of truth instead of
-        // two editors racing. Round 1-3 patched that race at the manual-path
-        // level (activation timing, Tab's handled signal); this is the actual
-        // root cause: Textbox is a self-editing widget by default, and nothing
-        // before this depended on catching every path that could focus it —
-        // keys:false removes the capability structurally instead.
-        this.filterBox = new blessed_1.Textbox({ parent: this.filterPanel, top: 0, left: 1, width: '100%-2',
-            height: 1, mouse: true, keys: false, inputOnFocus: false,
-            style: { fg: door_theme_1.T.ink, focus: { fg: door_theme_1.T.warn } } });
-        this.filterPanel.hide();
-        this.listPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6',
-            tags: true, style: { border: { fg: door_theme_1.T.accent } }, focusable: false });
-        this.doorList = new blessed_1.List({ parent: this.listPanel, top: 1, left: 1, width: '100%-2',
-            height: '100%-2', keys: true, vi: false, mouse: true, scrollable: true,
-            alwaysScroll: true, tags: true, wrapItems: false,
-            scrollbar: { ch: ' ', style: { bg: door_theme_1.T.bar } },
-            style: { selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink }, item: { fg: door_theme_1.T.ink } } });
-        this.infoPanel = new blessed_1.Panel({ parent: screen, top: 3, left: '35%', width: '65%',
-            height: '100%-6', tags: true, style: { border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
-        this.infoBox = new blessed_1.ScrollableBox({ parent: this.infoPanel, top: 1, left: 1,
-            width: '100%-2', height: '100%-2', tags: true, scrollable: true, keys: true,
-            style: { fg: door_theme_1.T.ink } });
-        // Disable type-ahead on doorList (re-add keypress without the type-ahead block)
-        const _nav = this.doorList._onKeypress?.bind(this.doorList);
-        this.doorList.removeAllListeners('keypress');
-        if (_nav) {
-            this.doorList.on('keypress', (ch, key) => {
-                if (ch?.length === 1 && /[a-zA-Z0-9/ ]/.test(ch))
-                    return;
-                if (key?.name === 'escape' || ch === '\x1b')
-                    return;
-                return _nav(ch, key);
-            });
-        }
-        this.setHeader(`{center}{${door_theme_1.T.accent}-fg}DOORMAN v2{/${door_theme_1.T.accent}-fg}  {${door_theme_1.T.ink}-fg}Node ${nodeId}{/${door_theme_1.T.ink}-fg}{/center}`);
-    }
-    setHeader(content) { this.header.setContent(content); }
-    setFooter(content) { this.footer.setContent(content); }
-    setListLabel(label) { this.listPanel.setLabel(label); }
-    setListItems(items) { this.doorList.setItems(items); }
-    setListSelect(idx) { this.doorList.select(idx); }
-    get listSelected() { return this.doorList.selected ?? 0; }
-    setInfo(content) { this.infoBox.setContent(content); }
-    focusList() { this.doorList.focus(); }
-    focusFilter() { this.filterBox.focus(); }
-    showRepoLayout() {
-        this.filterPanel.show();
-        this.listPanel.top = 6;
-        this.listPanel.height = '100%-9';
-    }
-    showInstalledLayout() {
-        this.filterPanel.hide();
-        this.listPanel.top = 3;
-        this.listPanel.height = '100%-6';
-    }
-    render() { this.screen.render(); }
-}
+// DoormanLayout moved to doorman-layout.ts when app.ts reached the 2000-line
+// ceiling; imported at the bottom of the import block above.
 // ─── Views ────────────────────────────────────────────────────────────────────
 // ── Installed Doors ──────────────────────────────────────────────────────────
 class InstalledView extends ViewManager_1.BaseView {
@@ -392,7 +228,7 @@ class InstalledView extends ViewManager_1.BaseView {
         // Both are raw archive text — sanitize or blessed parses the art as tags.
         let body = '';
         try {
-            const cat = getCatalogSvc()?.getCatalogEntryByCmd?.(d.command);
+            const cat = (0, doorman_services_1.getCatalogSvc)()?.getCatalogEntryByCmd?.(d.command);
             if (cat?.file_id_diz)
                 body = '\n' + (0, ViewManager_1.sanitizeForTags)(cat.file_id_diz);
         }
@@ -517,7 +353,7 @@ class InstalledView extends ViewManager_1.BaseView {
         const d = this.door();
         if (!d)
             return;
-        const svc = getCatalogSvc();
+        const svc = (0, doorman_services_1.getCatalogSvc)();
         if (!svc) {
             this.setStatus('Catalog not available', 'yellow');
             return;
@@ -525,7 +361,7 @@ class InstalledView extends ViewManager_1.BaseView {
         try {
             const entry = svc.getCatalogEntryByCmd(d.command);
             if (entry?.doc_raw) {
-                this.vm.push(new DocView(this.layout, entry.doc_filename ?? entry.archive_name, entry.doc_raw));
+                this.vm.push(new doc_strip_views_1.DocView(this.layout, entry.doc_filename ?? entry.archive_name, entry.doc_raw));
             }
             else {
                 this.setStatus('No documentation in catalog', 'yellow');
@@ -552,7 +388,7 @@ class InstalledView extends ViewManager_1.BaseView {
         const d = this.door();
         if (!d)
             return;
-        const svc = getCatalogSvc();
+        const svc = (0, doorman_services_1.getCatalogSvc)();
         if (!svc) {
             this.setStatus('Catalog not available', 'yellow');
             return;
@@ -567,7 +403,7 @@ class InstalledView extends ViewManager_1.BaseView {
                 (d.location ? path.join(PROJECT_ROOT, d.location) : undefined);
             const resolvedArchive = resolveArchivePath(entry.archive_path);
             const archivePathForStrip = resolvedArchive && fs.existsSync(resolvedArchive) ? resolvedArchive : null;
-            this.vm.push(new StripView(this.layout, entry, archivePathForStrip, liveDir, (stripped) => { if (stripped)
+            this.vm.push(new doc_strip_views_1.StripView(this.layout, entry, archivePathForStrip, liveDir, (stripped) => { if (stripped)
                 this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000); }));
         }
         catch {
@@ -628,7 +464,6 @@ Object.defineProperty(exports, "renderFileLines", { enumerable: true, get: funct
 Object.defineProperty(exports, "formatSuggestedTooltypes", { enumerable: true, get: function () { return repo_view_helpers_1.formatSuggestedTooltypes; } });
 const repo_view_helpers_2 = require("./repo-view-helpers");
 const door_theme_1 = require("./door-theme");
-const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 class RepoView extends ViewManager_1.BaseView {
     constructor(layout, bbs) {
         super();
@@ -700,7 +535,7 @@ class RepoView extends ViewManager_1.BaseView {
         else {
             // Owner mode AND disabled mode: byte-identical to pre-Task-6 —
             // local catalog stats via the same getCatalogSvc()/catalogStats() call.
-            const svc = getCatalogSvc();
+            const svc = (0, doorman_services_1.getCatalogSvc)();
             try {
                 const s = svc?.catalogStats();
                 if (s)
@@ -737,7 +572,7 @@ class RepoView extends ViewManager_1.BaseView {
         // Owner mode AND disabled mode share loadLocalCatalogEntries.
         // buildInstallLookup() overlays door_installs (Task 5) so a fresh
         // owner-mode install still shows as installed here.
-        const svc = getCatalogSvc();
+        const svc = (0, doorman_services_1.getCatalogSvc)();
         const result = (0, repoDataSource_1.loadLocalCatalogEntries)(svc, this.filter, buildInstallLookup());
         this.entries = result.entries;
         this.repoUnavailable = result.repoUnavailable;
@@ -837,7 +672,7 @@ class RepoView extends ViewManager_1.BaseView {
      *  catalog (owner), or the already-fetched detail (consumer). */
     archiveFilesFor(e) {
         try {
-            const files = getCatalogSvc()?.getArchiveFiles?.(e.id) ?? [];
+            const files = (0, doorman_services_1.getCatalogSvc)()?.getArchiveFiles?.(e.id) ?? [];
             if (files.length > 0)
                 return files;
         }
@@ -924,7 +759,7 @@ class RepoView extends ViewManager_1.BaseView {
     getEntryJunkCount(e) {
         // Prefer live file-level count over catalog's potentially stale junk_count
         try {
-            const svc = getCatalogSvc();
+            const svc = (0, doorman_services_1.getCatalogSvc)();
             const files = svc?.getArchiveFiles?.(e.id) ?? [];
             if (files.length > 0)
                 return files.filter((f) => f.is_junk).length;
@@ -1167,18 +1002,18 @@ class RepoView extends ViewManager_1.BaseView {
                     this.setStatus(`Kept the files: ${decision.reason}`, 'yellow', 8000);
                     this.layout.setInfo(log.render());
                     this.layout.render();
-                    getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
-                    clearInstalledFilesViaRecorder(e.installed_as);
+                    (0, doorman_services_1.getInstallsRepo)()?.removeInstall(e.installed_as ?? e.archive_name);
+                    (0, doorman_services_1.clearInstalledFilesViaRecorder)(e.installed_as);
                     void this.refreshAfterRegistry();
                     return;
                 }
                 // door_installs (Task 5) is keyed by command -- installed_as is
                 // the command this door was installed as; archive_name is only a
                 // fallback for a stale row where installed_as was never set.
-                getInstallsRepo()?.removeInstall(e.installed_as ?? e.archive_name);
+                (0, doorman_services_1.getInstallsRepo)()?.removeInstall(e.installed_as ?? e.archive_name);
                 // door_installed_files (this branch's fix) is keyed by command
                 // only -- there is nothing to clear against a bare archive_name.
-                clearInstalledFilesViaRecorder(e.installed_as);
+                (0, doorman_services_1.clearInstalledFilesViaRecorder)(e.installed_as);
                 log.ok('dropped the install record');
                 this.setStatus(`Uninstalled ${e.installed_as}: ${log.summary()}`, 'green', 6000);
                 this.layout.setInfo(log.render());
@@ -1213,8 +1048,8 @@ class RepoView extends ViewManager_1.BaseView {
                             findExtractedBinary: install_core_1.findExtractedBinary,
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                             lookupLocal: buildLocalCatalogLookup(),
-                            getInstallByCommand: (command) => getInstallsRepo()?.getInstallByCommand(command) ?? null,
-                            recordInstall: recordInstallViaRecorder,
+                            getInstallByCommand: (command) => (0, doorman_services_1.getInstallsRepo)()?.getInstallByCommand(command) ?? null,
+                            recordInstall: doorman_services_1.recordInstallViaRecorder,
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,
                             mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
                             unlink: (p) => { try {
@@ -1281,10 +1116,10 @@ class RepoView extends ViewManager_1.BaseView {
                             // mode, using the real local catalog row's id (e.id).
                             recordInstall: (installedCmd, installedDir, archive) => {
                                 // The archive's own command wins, so record that one.
-                                const chk = (cmd) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
+                                const chk = (cmd) => (0, doorman_services_1.getInstallsRepo)()?.getInstallByCommand(cmd) ?? null;
                                 if ((0, install_core_2.commandClaimedByOtherArchive)(chk, installedCmd, archive))
                                     return;
-                                recordInstallViaRecorder({
+                                (0, doorman_services_1.recordInstallViaRecorder)({
                                     id: `install-${installedCmd}`,
                                     catalog_id: e.id ?? null,
                                     archive_name: archive,
@@ -1360,7 +1195,7 @@ class RepoView extends ViewManager_1.BaseView {
             this.setStatus(e.installed ? 'Install dir not found on server' : 'Install first to strip', 'yellow');
             return;
         }
-        this.vm.push(new StripView(this.layout, e, hasArchive ? resolvedArchive : null, installDir ?? undefined, (stripped) => { if (stripped) {
+        this.vm.push(new doc_strip_views_1.StripView(this.layout, e, hasArchive ? resolvedArchive : null, installDir ?? undefined, (stripped) => { if (stripped) {
             this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000);
             this.refresh(this.layout.listSelected);
         } }));
@@ -1382,7 +1217,7 @@ class RepoView extends ViewManager_1.BaseView {
         const e = this.entry();
         if (!e)
             return;
-        const svc = getCatalogSvc();
+        const svc = (0, doorman_services_1.getCatalogSvc)();
         if (!svc?.deleteCatalogEntry) {
             this.setStatus('Catalog service not available', 'yellow');
             return;
@@ -1450,7 +1285,7 @@ class RepoView extends ViewManager_1.BaseView {
             return;
         const e = this.entryWithDetail(selected);
         if (e.doc_raw) {
-            this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
+            this.vm.push(new doc_strip_views_1.DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
             return;
         }
         if (this.repoMode.kind !== 'consumer') {
@@ -1464,7 +1299,7 @@ class RepoView extends ViewManager_1.BaseView {
                 this.setStatus('No documentation available', 'yellow', 4000);
                 return;
             }
-            this.vm.push(new DocView(this.layout, detail.docFilename ?? e.archive_name, detail.doc));
+            this.vm.push(new doc_strip_views_1.DocView(this.layout, detail.docFilename ?? e.archive_name, detail.doc));
         })();
     }
     /** The archive's contents, from the local catalog or from the server. */
@@ -1472,7 +1307,7 @@ class RepoView extends ViewManager_1.BaseView {
         const e = this.entry();
         if (!e)
             return;
-        const svc = getCatalogSvc();
+        const svc = (0, doorman_services_1.getCatalogSvc)();
         if (svc?.getArchiveFiles) {
             let files = [];
             try {
@@ -1510,328 +1345,8 @@ class RepoView extends ViewManager_1.BaseView {
     }
 }
 RepoView.DETAIL_DEBOUNCE_MS = 350;
-// ── Document Viewer ───────────────────────────────────────────────────────────
-class DocView extends ViewManager_1.BaseView {
-    constructor(layout, title, content) {
-        super();
-        this.layout = layout;
-        this.title = title;
-        this.content = content;
-    }
-    enter() {
-        const isGuide = /^@(?:database|node)\b/im.test(this.content);
-        if (isGuide) {
-            (0, AmigaGuideViewer_1.showAmigaGuideViewer)(this.layout.screen, this.content, this.title, () => this.vm.pop());
-            return;
-        }
-        // Plain text viewer
-        const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
-        // Keeps 0x80+ for the same reason sanitizeForTags() does: Amiga door
-        // documentation is drawn with high-bit glyphs, and dropping them pulls
-        // the columns out of alignment. Tabs and newlines survive; other control
-        // characters do not.
-        const text = this.content.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').replace(/[{}]/g, c => `\\${c}`);
-        this.panel = new Panel({ parent: this.layout.screen, top: 0, left: 0, width: '100%',
-            height: '100%-3', label: ` ${this.title} `, tags: true, style: { border: { fg: door_theme_1.T.accent } } });
-        const box = new ScrollableBox({ parent: this.panel, top: 1, left: 1, width: '100%-2',
-            height: '100%-2', tags: false, scrollable: true, alwaysScroll: true, content: text });
-        this.hint = new Panel({ parent: this.layout.screen, bottom: 0, left: 0, width: '100%', height: 3,
-            tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
-            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } } });
-        this.layout.screen.render();
-        this.keys.key(['up', 'down', 'pageup', 'pagedown'], (_, key) => {
-            const n = key?.name ?? '';
-            if (n === 'up')
-                box.scroll(-1);
-            else if (n === 'down')
-                box.scroll(1);
-            else if (n === 'pageup')
-                box.scroll(-20);
-            else if (n === 'pagedown')
-                box.scroll(20);
-            this.layout.render();
-        });
-        this.keys.key(['q', 'Q'], () => this.vm.pop());
-    }
-    exit() {
-        this.keys.release();
-        if (this.panel) {
-            this.panel.destroy();
-            this.panel = null;
-        }
-        if (this.hint) {
-            this.hint.destroy();
-            this.hint = null;
-        }
-        this.layout.render();
-    }
-}
-// ── Strip Selector ────────────────────────────────────────────────────────────
-class StripView extends ViewManager_1.BaseView {
-    constructor(layout, entry, archivePath, overrideDir, onDone) {
-        super();
-        this.checked = [];
-        this.files = [];
-        this.reasons = {};
-        this.origLabel = '';
-        // True only when an installed directory backs this entry. DOORMAN strips
-        // junk from an INSTALLED door's files (analyzeDirectory/
-        // stripFilesFromDirectory — plain fs, no archive format concerns). It does
-        // NOT rewrite archive files in place: there is no portable LHA writer
-        // (lha.js only reads, lhasa on Linux has no `a` create command either),
-        // and silently rewriting a .lha as ZIP bytes under the same filename would
-        // mislead the sysop about what's actually on disk. See stripArchive's doc
-        // comment in ami-stripper.lib.ts. When a door isn't installed yet, this
-        // view still analyzes the archive (read-only, via the portable extractor
-        // factory) so the sysop can preview what would be stripped, but [S] just
-        // explains that installing comes first.
-        this.canStrip = false;
-        /** Set when this strip would edit the repository archive rather than an
-         *  installed directory; `reason` explains why it cannot, when it cannot. */
-        this.archiveStrip = null;
-        this.layout = layout;
-        this.entry = entry;
-        this.archivePath = archivePath;
-        this.overrideDir = overrideDir;
-        this.onDone = onDone;
-    }
-    /** Loud-error convention (see reportInstallFailure in RepoView): log to
-     * the process console for docker logs / journald visibility, and hold a
-     * persistent message in the info panel instead of a message that quietly
-     * self-clears. */
-    reportFailure(step, detail) {
-        console.log(`[DOORMAN] strip failed: ${step}: ${detail} (archive=${this.entry.archive_name})`);
-        this.layout.setInfo(`{${door_theme_1.T.alert}-fg}Strip failed{/${door_theme_1.T.alert}-fg}\n\n` +
-            `{${door_theme_1.T.warn}-fg}Step:{/${door_theme_1.T.warn}-fg} ${(0, ViewManager_1.sanitizeForTags)(step)}\n` +
-            `{${door_theme_1.T.warn}-fg}Detail:{/${door_theme_1.T.warn}-fg} ${(0, ViewManager_1.sanitizeForTags)(detail)}\n` +
-            `{${door_theme_1.T.warn}-fg}Archive:{/${door_theme_1.T.warn}-fg} ${(0, ViewManager_1.sanitizeForTags)(this.entry.archive_name)}\n`);
-        this.layout.render();
-    }
-    enter() {
-        const lib = getStripLib();
-        if (!lib) {
-            console.log(`[DOORMAN] strip failed: lib-unavailable (archive=${this.entry.archive_name})`);
-            this.layout.setFooter(`{center}{${door_theme_1.T.alert}-fg}Stripper library not available{/${door_theme_1.T.alert}-fg}{/center}`);
-            this.vm.pop();
-            return;
-        }
-        const installDir = this.overrideDir;
-        // Two ways to strip. An installed door's DIRECTORY is edited in place
-        // (always possible, pure fs). A repository ARCHIVE is edited in place by
-        // the lha binary, which works for .lha/.lzh and not for .lzx - so a door
-        // that was never installed can still be cleaned on the server, which is
-        // the whole point of curating the repo rather than each install.
-        this.canStrip = !!installDir;
-        this.archiveStrip = null;
-        if (!installDir && this.archivePath) {
-            const svc = getCatalogSvc();
-            const capability = svc?.canStripArchiveOnServer?.(this.archivePath);
-            if (capability?.ok) {
-                this.canStrip = true;
-                this.archiveStrip = { reason: null };
-            }
-            else if (capability?.reason) {
-                this.archiveStrip = { reason: capability.reason };
-            }
-        }
-        this.layout.setFooter(`{center}{${door_theme_1.T.accent}-fg}Analyzing...{/${door_theme_1.T.accent}-fg}{/center}`);
-        this.layout.render();
-        (installDir ? lib.analyzeDirectory(installDir) : lib.analyzeArchive(this.archivePath))
-            .then((result) => {
-            if (result.stripped.length === 0) {
-                this.layout.setInfo(`{${door_theme_1.T.ok}-fg}No ad files found — archive is clean.{/${door_theme_1.T.ok}-fg}`);
-                this.layout.render();
-                setTimeout(() => this.vm.pop(), 1200);
-                return;
-            }
-            this.files = result.stripped;
-            this.reasons = result.reason;
-            this.checked = new Array(this.files.length).fill(true);
-            this.origLabel = '';
-            try {
-                this.origLabel = this.layout.listPanel.options?.label ?? '';
-            }
-            catch { }
-            this.renderFiles();
-            this.keys.key([' '], () => {
-                const idx = this.layout.listSelected;
-                if (idx < this.checked.length) {
-                    this.checked[idx] = !this.checked[idx];
-                    this.renderFiles();
-                }
-            });
-            this.keys.key(['a', 'A'], () => { this.checked.fill(true); this.renderFiles(); });
-            this.keys.key(['n', 'N'], () => { this.checked.fill(false); this.renderFiles(); });
-            this.keys.key(['l', 'L'], () => { this.learnSelected(); });
-            this.keys.key(['s', 'S'], () => {
-                if (this.canStrip && !this.overrideDir && this.archiveStrip) {
-                    this.doStripArchive();
-                    return;
-                }
-                if (!this.canStrip) {
-                    // Wrapped to the pane rather than hard-wrapped at a guessed
-                    // width: the old fixed line breaks re-broke mid-word on a
-                    // narrower pane ("fi les", "thi s platform").
-                    const why = this.archiveStrip?.reason
-                        ?? "This archive cannot be edited in place on this server.";
-                    this.layout.setInfo(`{${door_theme_1.T.warn}-fg}Cannot strip this archive.{/${door_theme_1.T.warn}-fg}\n\n` +
-                        (0, repo_view_helpers_2.wrapToInfoPane)(why, this.layout) + '\n\n' +
-                        (0, repo_view_helpers_2.wrapToInfoPane)(`Install ${(0, ViewManager_1.sanitizeForTags)(this.entry.archive_name)} first and strip the ` +
-                            `installed copy instead.`, this.layout));
-                    this.layout.render();
-                    return;
-                }
-                this.doStrip(lib, installDir);
-            });
-            this.keys.key(['q', 'Q'], () => { this.vm.pop(); this.onDone(null); });
-        })
-            .catch((e) => {
-            this.reportFailure('analyze', e?.message ?? String(e));
-            setTimeout(() => this.vm.pop(), 2500);
-        });
-    }
-    renderFiles() {
-        const items = this.files.map((f, i) => {
-            const box = this.checked[i] ? '[X]' : '[ ]';
-            const fpath = f.path;
-            const name = fpath.length > 24 ? '<' + fpath.slice(fpath.length - 23) : fpath.padEnd(24);
-            return `${box} ${name}`;
-        });
-        const selCount = this.checked.filter(Boolean).length;
-        const modeTag = this.canStrip ? '' : ' (preview)';
-        this.layout.listPanel.setLabel(` ${this.entry.archive_name} — Strip Ads${modeTag} `);
-        this.layout.setListItems(items);
-        const sel = this.files[this.layout.listSelected];
-        const hint = this.canStrip
-            ? `\n{${door_theme_1.T.dim}-fg}[Space] Toggle  [A] All  [N] None  [S] Strip  [ESC/Q] Cancel{/${door_theme_1.T.dim}-fg}`
-            : `\n{${door_theme_1.T.dim}-fg}[Space] Toggle  [A] All  [N] None  Not installed — [S] shows how  [ESC/Q] Cancel{/${door_theme_1.T.dim}-fg}`;
-        this.layout.setInfo(`{${door_theme_1.T.warn}-fg}${selCount}/${this.files.length} selected{/${door_theme_1.T.warn}-fg}\n\n` +
-            (sel ? `{${door_theme_1.T.accent}-fg}${sel.path}{/${door_theme_1.T.accent}-fg}\nReason: ${this.reasons[sel.path] ?? '?'}\n` : '') +
-            hint);
-        this.layout.setFooter(this.canStrip
-            ? `{center}{${door_theme_1.T.warn}-fg}Space{/${door_theme_1.T.warn}-fg}=Toggle  {${door_theme_1.T.warn}-fg}A{/${door_theme_1.T.warn}-fg}=All  {${door_theme_1.T.warn}-fg}N{/${door_theme_1.T.warn}-fg}=None  {${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}=Strip  {${door_theme_1.T.warn}-fg}ESC/Q{/${door_theme_1.T.warn}-fg}=Cancel{/center}`
-            : `{center}{${door_theme_1.T.warn}-fg}Space{/${door_theme_1.T.warn}-fg}=Toggle  {${door_theme_1.T.warn}-fg}A{/${door_theme_1.T.warn}-fg}=All  {${door_theme_1.T.warn}-fg}N{/${door_theme_1.T.warn}-fg}=None  {${door_theme_1.T.dim}-fg}Preview only{/${door_theme_1.T.dim}-fg}  {${door_theme_1.T.warn}-fg}ESC/Q{/${door_theme_1.T.warn}-fg}=Cancel{/center}`);
-        this.layout.render();
-    }
-    /**
-     * Learn the currently selected file as a junk pattern. This teaches the
-     * central classifier to recognise this filename in future archives.
-     * Re-runs the analysis afterward so the sysop sees the updated verdict.
-     */
-    learnSelected() {
-        const idx = this.layout.listSelected;
-        const sel = this.files[idx];
-        if (!sel)
-            return;
-        const filePath = sel.path;
-        const { learnPattern } = require('./repo-client');
-        const { resolveDoorRepoMode, consumerCacheFilePath } = require('./repoDataSource');
-        const mode = resolveDoorRepoMode();
-        if (mode.kind !== 'consumer') {
-            this.layout.setInfo(`{${door_theme_1.T.warn}-fg}No door-repo config — cannot learn patterns.{/${door_theme_1.T.warn}-fg}`);
-            this.layout.render();
-            return;
-        }
-        const cfg = { url: mode.url, cacheFile: consumerCacheFilePath(PROJECT_ROOT) };
-        this.layout.setFooter(`{center}{${door_theme_1.T.accent}-fg}Learning pattern...{/${door_theme_1.T.accent}-fg}{/center}`);
-        this.layout.render();
-        learnPattern(cfg, filePath, mode.learnKey, this.entry.archive_name, filePath)
-            .then((result) => {
-            if (result.ok) {
-                const msg = result.duplicate ? 'Pattern already known' : `Learned: ${filePath}`;
-                this.layout.setInfo(`{${door_theme_1.T.ok}-fg}${msg}{/${door_theme_1.T.ok}-fg}`);
-            }
-            else {
-                this.layout.setInfo(`{${door_theme_1.T.warn}-fg}Learn failed — server may not have DOORREPO_LEARN_KEY set.{/${door_theme_1.T.warn}-fg}`);
-            }
-            this.layout.render();
-            setTimeout(() => { this.layout.setInfo(''); this.layout.render(); }, 1500);
-        })
-            .catch(() => {
-            this.layout.setInfo(`{${door_theme_1.T.warn}-fg}Learn failed.{/${door_theme_1.T.warn}-fg}`);
-            this.layout.render();
-        });
-    }
-    /**
-     * Strip the REPOSITORY archive in place: the published bytes change, so
-     * the backend re-describes the row (size, digests, junk rows) in the same
-     * step. Every other sysop downloads this file, which is why it is worth
-     * doing here rather than making each of them strip their own copy.
-     */
-    doStripArchive() {
-        const toStrip = this.files.filter((_, i) => this.checked[i]);
-        if (toStrip.length === 0) {
-            this.vm.pop();
-            this.onDone(null);
-            return;
-        }
-        const svc = getCatalogSvc();
-        if (!svc?.stripArchiveOnServer) {
-            this.reportFailure('strip', 'catalog service unavailable');
-            setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
-            return;
-        }
-        this.layout.setFooter(`{center}{${door_theme_1.T.accent}-fg}Stripping archive...{/${door_theme_1.T.accent}-fg}{/center}`);
-        this.layout.render();
-        let result;
-        try {
-            result = svc.stripArchiveOnServer(this.entry.id, toStrip.map((f) => f.path));
-        }
-        catch (e) {
-            this.reportFailure('strip', e?.message ?? String(e));
-            setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
-            return;
-        }
-        if (!result.ok) {
-            this.reportFailure('strip', result.reason ?? 'unknown error');
-            setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
-            return;
-        }
-        this.vm.pop();
-        this.onDone(result.removed ?? toStrip.length);
-    }
-    doStrip(lib, installDir) {
-        const toStrip = this.files.filter((_, i) => this.checked[i]);
-        if (toStrip.length === 0) {
-            this.vm.pop();
-            this.onDone(null);
-            return;
-        }
-        this.layout.setFooter(`{center}{${door_theme_1.T.accent}-fg}Stripping...{/${door_theme_1.T.accent}-fg}{/center}`);
-        this.layout.render();
-        (async () => {
-            try {
-                lib.stripFilesFromDirectory(installDir, toStrip.map((f) => f.path));
-                const svc = getCatalogSvc();
-                if (svc) {
-                    try {
-                        svc.updateJunkCount(this.entry.id, this.files.length - toStrip.length);
-                    }
-                    catch { }
-                    try {
-                        svc.removeArchiveFiles(this.entry.id, toStrip.map((f) => f.path));
-                    }
-                    catch { }
-                }
-                this.vm.pop();
-                this.onDone(toStrip.length);
-            }
-            catch (e) {
-                this.reportFailure('strip', e?.message ?? String(e));
-                setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
-            }
-        })();
-    }
-    exit() {
-        if (this.origLabel)
-            try {
-                this.layout.listPanel.setLabel(this.origLabel);
-            }
-            catch { }
-        this.keys.release();
-    }
-    onEsc() { this.vm.pop(); this.onDone(null); }
-}
+// DocView and StripView moved to doc-strip-views.ts when app.ts reached the
+// 2000-line ceiling.
 // ── Confirm Dialog ────────────────────────────────────────────────────────────
 class ConfirmView extends ViewManager_1.BaseView {
     constructor(layout, content, confirmText, cancelText, onConfirm) {
@@ -1900,7 +1415,7 @@ async function createApp(session) {
     const inputManager = new blessed_helpers_1.DoorInputManager(session, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
     inputManager.enable();
     const nodeId = session.bbsSession?.nodeId ?? '?';
-    const layout = new DoormanLayout(screen, nodeId);
+    const layout = new doorman_layout_1.DoormanLayout(screen, nodeId);
     const vm = new ViewManager_1.ViewManager(screen);
     // Hide cursor after every render — blessed re-shows it on each refresh.
     // This is the only reliable way since blessed ignores external cursor state.
