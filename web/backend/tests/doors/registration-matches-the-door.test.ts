@@ -58,6 +58,37 @@ function registrations(): Registration[] {
     });
 }
 
+/**
+ * The command a door's settings manifest says it belongs to.
+ *
+ * The admin renders a door's settings form from the DIRECTORY its
+ * registration points at, so a registration aimed at the wrong door shows
+ * another door's settings under its own name - and offers to save them there.
+ */
+function manifestCommand(doorDir: string): string | null {
+  const manifest = path.join(doorDir, 'door.settings.json');
+  if (!fs.existsSync(manifest)) return null;
+  try {
+    const command = JSON.parse(fs.readFileSync(manifest, 'utf8')).command;
+    return command ? String(command).toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Registrations that deliberately name a door under a second command.
+ *
+ * A sysop may register one door under any name they like - TC and TCONNECT
+ * both open the telnet door, RIP opens rip-browser - so a name that differs
+ * from the door's own is not by itself wrong. It is only wrong when nobody
+ * meant it. This list is what "meant it" looks like; anything else pointing
+ * at a door that ships a settings manifest is a crossed registration.
+ */
+const DECLARED_ALIASES = new Map<string, string>([
+  ['irc.info', 'LIVECHAT'],
+]);
+
 function doorIsTypeScript(doorDir: string): boolean {
   const manifest = path.join(doorDir, 'package.json');
   if (!fs.existsSync(manifest)) return false;
@@ -105,6 +136,34 @@ describe('door registrations', () => {
   // Not a general rule: a registration may point at a door installed on the
   // board and absent from git - Doors/tic-tac-toe (TTT), BestConf, scan.x.
   // This pins the one pair that has already been broken once.
+  // GWWALL, found by the sysop on 2026-09-01: the admin showed it BBSLink's
+  // system code, auth code and scheme code.
+  //
+  // `GWWALL.info` carried LOCATION=Doors/bbslinkwall - the BBSLink one-liner
+  // wall - so GWWALL and LINKWALL were two commands for one door, and the
+  // settings form the admin drew for GWWALL was LINKWALL's manifest. It had
+  // been that way since the SDK migration (890ca13e4); the Global Wall
+  // registration that WAS checked, GWALL, had been uninstalled on 2026-08-31
+  // for naming a missing 68K binary, and this one was never looked at.
+  //
+  // Only doors that ship a manifest are checked, because that is where the
+  // symptom is: a wrong LOCATION on a door with no settings form shows
+  // nothing wrong until someone runs it.
+  it('does not draw one door\'s settings under another door\'s name', () => {
+    const crossed = all.flatMap(r => {
+      const declared = manifestCommand(r.doorDir);
+      if (!declared) return [];
+
+      const command = r.file.replace(/\.info$/i, '').toUpperCase();
+      if (command === declared) return [];
+      if (DECLARED_ALIASES.get(r.file.toLowerCase()) === declared) return [];
+
+      return [`${r.file}: ${r.location} ships settings for ${declared}`];
+    });
+
+    expect(crossed).toEqual([]);
+  });
+
   it('ships the mail composer that AE registers', () => {
     const ae = registrations().find(r => r.file.toLowerCase() === 'ae.info');
 
