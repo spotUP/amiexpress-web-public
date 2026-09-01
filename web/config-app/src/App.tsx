@@ -9,6 +9,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
+import { ScreenFilesPage } from './pages/ScreenFilesPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { UsersPage } from './pages/UsersPage';
@@ -73,6 +74,7 @@ function App() {
 
         {/* Live */}
         <Route path="activity" element={<ActivityPage />} />
+        <Route path="screens" element={<ScreenFilesPage />} />
         <Route path="nodes" element={<NodesWorkspace />} />
         <Route path="operator-chat" element={<OperatorChatWorkspace />} />
 

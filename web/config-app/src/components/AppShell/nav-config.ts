@@ -30,6 +30,7 @@ import {
   Shield,
   Users,
   Zap,
+  FileImage,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -73,6 +74,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: 'conferences', label: 'Conferences', icon: MessageSquare, description: 'Message areas, and the file paths that belong to them' },
       { path: 'doors', label: 'Doors', icon: DoorOpen, description: 'External programs on the command menu' },
+      { path: 'screens', label: 'Screen Files', icon: FileImage, description: 'Every screen the board can display, and where it resolves from' },
     ],
   },
   {

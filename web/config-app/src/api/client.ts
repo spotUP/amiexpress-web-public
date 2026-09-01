@@ -224,6 +224,48 @@ class ApiClient {
     return { data };
   }
 
+  async put<T>(url: string, body?: any): Promise<{ data: T }> {
+    const data = await this.request<T>(url, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { data };
+  }
+
+  // Screen files - every screen the board can display.
+  //
+  // Content crosses as base64 in both directions: a screen carries Amiga
+  // high-bit bytes, and a UTF-8 round trip turns one into U+FFFD.
+  async getScreenIndex() {
+    return this.get<any>(`${API_BASE}/screens`);
+  }
+
+  async getScreenFile(filePath: string) {
+    return this.get<any>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
+  }
+
+  async putScreenFile(filePath: string, contentBase64: string, targets?: string[]) {
+    return this.put<any>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, {
+      content: contentBase64,
+      targets,
+    });
+  }
+
+  async deleteScreenFile(filePath: string) {
+    return this.delete<any>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
+  }
+
+  async shareScreens(nodes: number[], sharedDir: string, dryRun = false) {
+    return this.post<any>(`${API_BASE}/screens/share`, { nodes, sharedDir, dryRun });
+  }
+
+  async resolveScreen(screen: string, node?: number, conf?: number) {
+    const params = new URLSearchParams({ screen });
+    if (node !== undefined) params.set('node', String(node));
+    if (conf !== undefined) params.set('conf', String(conf));
+    return this.get<any>(`${API_BASE}/screens/resolve?${params.toString()}`);
+  }
+
   // System Configuration
   async getSystemConfig() {
     return this.request<ApiResponse>(`${API_BASE}/config/system`);
