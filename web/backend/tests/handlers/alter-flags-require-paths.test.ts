@@ -25,10 +25,15 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { createRequire } from 'module';
 
 process.env.SKIP_DB_INIT = 'true';
+// Flags are PERSISTED (dataDir/Partdownload), so without this a file flagged
+// by one test is still flagged in the next one and the suite passes or fails
+// depending on what ran before it.
+process.env.BBS_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'amiexpress-flags-'));
 
 const SRC = path.resolve(__dirname, '../../src');
 const ALTER_FLAGS = path.join(SRC, 'handlers/operations/alter-flags.handler.ts');
@@ -112,5 +117,102 @@ describe('pressing A reaches the flag prompt', () => {
 
     await expect(handleAlterFlagsCommand(socket, session, '')).resolves.toBeUndefined();
     expect(written.join('')).toContain('to flag');
+  });
+});
+
+/**
+ * The A command's prompt must be the last thing on screen, and the session
+ * must still be listening when it is.
+ *
+ * Reported as "prompt is positioned wrong":
+ *
+ *   Filename(s) to flag: (F)rom, (C)lear, (Enter)=none?
+ *   dsfsdfsf
+ *
+ * express.e cannot produce that. lineInput() blocks (express.e:12599), so
+ * flagFiles() returns only once the user has answered and 0 means "pressed
+ * Enter, done". Porting that blocking read to a state machine gave 0 a
+ * second meaning - "prompt printed, waiting" - and alterFlags read it as the
+ * first, running express.e:12664's closing newline immediately and putting
+ * subState back to DISPLAY_MENU.
+ */
+describe('the flag prompt leaves the cursor on its own line', () => {
+  function pressA() {
+    const written: string[] = [];
+    const socket: any = {
+      emit: (event: string, data: any) => {
+        if (event === 'ansi-output') written.push(String(data));
+      },
+    };
+    const session: any = {
+      user: { slotNumber: 1, username: 'Guest', securityFlags: 'T'.repeat(120), secOverride: '' },
+      currentConf: 0,
+      subState: 'display_menu',
+    };
+    return { socket, session, written };
+  }
+
+  it('writes nothing after the prompt', async () => {
+    const { socket, session, written } = pressA();
+    const {
+      handleAlterFlagsCommand,
+    } = require('../../src/handlers/commands/display-file-commands.handler');
+
+    await handleAlterFlagsCommand(socket, session, '');
+
+    // The prompt ends "=none? " and the cursor has to sit right there, so
+    // whatever the user types continues that line.
+    expect(written.join('')).toMatch(/=none\x1b\[0m\? $/);
+  });
+
+  it('is still waiting for flag input, not back at the menu', async () => {
+    const { socket, session } = pressA();
+    const {
+      handleAlterFlagsCommand,
+    } = require('../../src/handlers/commands/display-file-commands.handler');
+
+    await handleAlterFlagsCommand(socket, session, '');
+
+    // With subState back at DISPLAY_MENU the typed filename was never read
+    // as flag input at all.
+    expect(session.subState).toBe('flag_input');
+    expect(session.tempData?.waitingForFlag).toBe(true);
+  });
+
+  it('re-prompts after a filename without reprinting the list', async () => {
+    const { socket, session, written } = pressA();
+    const { AlterFlagsHandler } = require('../../src/handlers/operations/alter-flags.handler');
+    const {
+      handleAlterFlagsCommand,
+    } = require('../../src/handlers/commands/display-file-commands.handler');
+
+    await handleAlterFlagsCommand(socket, session, '');
+    written.length = 0;
+
+    await AlterFlagsHandler.handleFlagInput(socket, session, 'SOMEFILE.LHA');
+
+    // express.e:12651 JUMPs to backloop, which is BELOW the showFlags() call
+    // at 12598 - so an add re-prompts without listing the flags again.
+    const out = written.join('');
+    expect(out).toContain('to flag');
+    expect(out).not.toContain('No file flags');
+    expect(session.subState).toBe('flag_input');
+  });
+
+  it('closes the command when Enter is pressed', async () => {
+    const { socket, session, written } = pressA();
+    const { AlterFlagsHandler } = require('../../src/handlers/operations/alter-flags.handler');
+    const {
+      handleAlterFlagsCommand,
+    } = require('../../src/handlers/commands/display-file-commands.handler');
+
+    await handleAlterFlagsCommand(socket, session, '');
+    written.length = 0;
+
+    await AlterFlagsHandler.handleFlagInput(socket, session, '');
+
+    // express.e:12603 RETURN, then alterFlags' closing newline at 12664.
+    expect(written.join('')).toBe('\r\n');
+    expect(session.subState).toBe('display_menu');
   });
 });
