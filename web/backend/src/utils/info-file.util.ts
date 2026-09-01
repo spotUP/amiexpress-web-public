@@ -550,6 +550,30 @@ function isPlaceholderIconHeader(buf: Buffer): boolean {
  * Parse an .info file into an InfoFile record. Supports both binary
  * Amiga DiskObject icons and plain-text variants.
  */
+/**
+ * Is this directory entry a real .info file, or a copy's shadow?
+ *
+ * macOS writes an AppleDouble sidecar beside every file it copies to a
+ * non-native filesystem: `._EnglishFrench.info` next to `EnglishFrench.info`,
+ * holding the resource fork and nothing a BBS wants. They travel with any
+ * archive unpacked or volume mounted on a Mac, and every directory scan here
+ * treated them as content - the Languages page listed four of them as
+ * languages, with `._` as their code, above the four real ones.
+ *
+ * The same scan builds the command registry, so a stray `._DOORREPO.info`
+ * would register a command named `._DOORREPO` and, being a registration,
+ * would own that name. Ignored everywhere rather than in the one page that
+ * showed them.
+ */
+export function isRealInfoFile(name: string): boolean {
+  const base = name.replace(/^.*[\\/]/, '');
+  if (base.startsWith('._')) return false;
+  // .DS_Store and friends are not .info files at all, but a scan that filters
+  // by extension alone can still reach them on a case-insensitive match.
+  if (base === '.DS_Store') return false;
+  return base.toLowerCase().endsWith('.info');
+}
+
 export function parseInfoFile(filePath: string): InfoFile {
   return parseInfoBuffer(fs.readFileSync(filePath), filePath);
 }

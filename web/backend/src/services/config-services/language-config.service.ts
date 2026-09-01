@@ -12,6 +12,7 @@ import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
+import { isRealInfoFile } from '../../utils/info-file.util';
 
 export class LanguageConfigService {
   private configRepo: ConfigRepository;
@@ -55,7 +56,7 @@ console.warn('[LanguageConfigService] Languages/ directory not found');
     try {
       const languages: Language[] = [];
       const files = fs.readdirSync(languagesDir);
-      const infoFiles = files.filter(f => f.endsWith('.info'));
+      const infoFiles = files.filter(isRealInfoFile);
 
       let languageNum = 1;
       for (const infoFile of infoFiles) {

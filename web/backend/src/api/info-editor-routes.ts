@@ -11,6 +11,7 @@ import { execSync } from 'child_process';
 import { config } from '../config';
 import { parseInfoFile, writeInfoFile, updateTooltype, toggleTooltypeComment as toggleComment, Tooltype as InfoTooltype } from '../utils/info-file.util';
 import { getSystemTime } from '../utils/date-time.util';
+import { isRealInfoFile } from '../utils/info-file.util';
 
 export const infoEditorRouter = express.Router();
 
@@ -151,7 +152,7 @@ infoEditorRouter.get('/files', async (req: Request, res: Response) => {
             // Skip large/irrelevant directories
             if (entry === 'node_modules' || entry === '.git' || entry === 'logs') continue;
             walk(fullPath);
-          } else if (entry.toLowerCase().endsWith('.info')) {
+          } else if (isRealInfoFile(entry)) {
             const relativePath = path.relative(bbsRoot, fullPath);
             files.push({
               path: fullPath,

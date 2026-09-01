@@ -12,6 +12,7 @@ import * as path from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
+import { isRealInfoFile } from './info-file.util';
 
 // Door/Command types from axenums.e:15
 export enum DoorType {
@@ -889,7 +890,7 @@ export function scanCommandDirectory(
 
     const files = amigafs.readdirSync(dirPath);
     for (const file of files) {
-      if (file.endsWith('.info') || file.endsWith('.Info')) {
+      if (isRealInfoFile(file)) {
         const fullPath = path.join(dirPath, file);
         const cmd = loadCommandFromInfo(fullPath);
 

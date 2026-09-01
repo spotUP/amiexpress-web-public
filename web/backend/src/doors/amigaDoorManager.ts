@@ -27,6 +27,7 @@ import {
   classifyRegistration,
 } from './door-registration-paths';
 import { db } from '../database';
+import { isRealInfoFile } from '../utils/info-file.util';
 
 /**
  * AmigaDOS Assign Definitions
@@ -361,7 +362,7 @@ console.error(`Error parsing .info file ${infoPath}:`, error);
 
     const files = amigafs.readdirSync(commandsPath);
     const infoFiles = files.filter(f => {
-      if (!f.toLowerCase().endsWith('.info')) return false;
+      if (!isRealInfoFile(f)) return false;
       // Filter out files like "BESTCONF.INFO" - command names shouldn't contain dots
       const commandName = path.basename(f, '.info');
       if (commandName.includes('.')) {
@@ -631,7 +632,7 @@ console.error('Error parsing door package.json:', e);
         const commandInfoFiles = files.filter(f => {
           const normalized = f.replace(/\\/g, '/');
           const normalizedPrefix = commandsDirectory.replace(/\\/g, '/');
-          return normalized.startsWith(normalizedPrefix + '/') && f.toLowerCase().endsWith('.info');
+          return normalized.startsWith(normalizedPrefix + '/') && isRealInfoFile(f);
         });
 
         for (const infoFile of commandInfoFiles) {
@@ -659,7 +660,7 @@ console.error('Error parsing door package.json:', e);
       }
 
       // Find .info files and executables
-      const infoFiles = files.filter(f => f.toLowerCase().endsWith('.info'));
+      const infoFiles = files.filter(isRealInfoFile);
 
       // Enhanced executable detection
       const executables = files.filter(f => {
