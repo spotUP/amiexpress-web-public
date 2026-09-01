@@ -2325,27 +2325,13 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
   if (session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT) {
 console.log(' [DOWNLOAD] User entering filename (line-buffered)');
 
-    // Initialize inputBuffer if needed
-    if (!session.inputBuffer) {
-      session.inputBuffer = '';
-    }
-
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer || '';
-      session.inputBuffer = '';
-
+    // This block is where collectLine came from; it calls the shared copy
+    // now so the two prompts cannot drift apart.
+    const { collectLine } = require('../utils/line-input.util');
+    await collectLine(socket, session, data, async (input: string) => {
       const { DownloadHandler } = require('./file/download.handler');
       await DownloadHandler.handleFilenameInput(socket, session, input);
-    } else if (data === '\x7f' || data === '\b') { // Backspace
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      emitText(socket, data);
-    }
+    });
     return;
   }
 
@@ -2841,11 +2827,27 @@ console.log(' In file upload state - canceling upload');
   }
 
   // Handle flag input (A command continuation)
+  //
+  // LINE-buffered, because express.e reads this prompt with lineInput()
+  // (express.e:12599). Handing the handler each keystroke as it arrived
+  // made every character its own answer: typing a filename flagged one
+  // "file" per letter - the sysop's flag list read "W 1 D A Q" - and
+  // reprinted the prompt after each one.
   if (session.subState === LoggedOnSubState.FLAG_INPUT ||
       session.subState === LoggedOnSubState.FLAG_CLEAR_INPUT ||
       session.subState === LoggedOnSubState.FLAG_FROM_INPUT) {
-    const { AlterFlagsHandler } = require('./operations/alter-flags.handler');
-    await AlterFlagsHandler.handleFlagInput(socket, session, data.trim());
+    const { collectLine } = require('../utils/line-input.util');
+    await collectLine(
+      socket,
+      session,
+      data,
+      async (line: string) => {
+        const { AlterFlagsHandler } = require('./operations/alter-flags.handler');
+        await AlterFlagsHandler.handleFlagInput(socket, session, line.trim());
+      },
+      // lineInput echoes the Enter as a line break - see express.e:30376.
+      { echoNewline: true }
+    );
     return;
   }
 
