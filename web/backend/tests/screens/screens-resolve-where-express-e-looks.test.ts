@@ -25,6 +25,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { screenSearchLocations } from '../../src/screens/screen-resolution';
 
 const REPO = path.join(__dirname, '..', '..', '..', '..');
 
@@ -108,11 +109,6 @@ describe('the title screen', () => {
 });
 
 describe('a GLOBAL screen', () => {
-  const handler = fs.readFileSync(
-    path.join(REPO, 'web/backend/src/handlers/screen.handler.ts'),
-    'utf8',
-  );
-
   // express.e:6549 - StringF(screencheck,'\s\s',cmds.bbsLoc,'BULL') - reads a
   // GLOBAL screen from the BOARD ROOT. The resolver searched `<board>/Screens`
   // and nothing else, so a board with BULL.TXT where express.e wants it showed
@@ -121,24 +117,28 @@ describe('a GLOBAL screen', () => {
   //
   // Seven screens ride on this: BULL, ONENODE, LOGON24, LANGUAGES,
   // INTERNETNAMES, REALNAMES, MAILSCAN.
+  //
+  // These two asserted on the SOURCE of screen.handler.ts - they grepped the
+  // GLOBAL branch for `dir: baseDir`. That proves a line exists, never that it
+  // runs, and it broke the moment the table moved into screen-resolution.ts
+  // while the behaviour stayed identical. They ask the resolver now.
   it('is looked for at the board root, which is what express.e reads', () => {
-    const globalBranch = handler.slice(
-      handler.indexOf('screenDirType === ScreenDirType.GLOBAL'),
-      handler.indexOf('screenDirType === ScreenDirType.GLOBAL') + 1400,
-    );
+    const dirs = screenSearchLocations('/board', 'BULL', { nodeId: 1 }).map(l => l.dir);
 
-    expect(globalBranch).toContain("dir: baseDir");
+    expect(dirs).toContain('/board');
   });
 
-  // The board root goes FIRST: it is express.e's answer, and Screens/ is only
-  // there until the files are moved out of it.
   it('prefers the board root over the Screens directory', () => {
-    const globalBranch = handler.slice(handler.indexOf('screenDirType === ScreenDirType.GLOBAL'));
-    const root = globalBranch.indexOf('dir: baseDir');
-    const screens = globalBranch.indexOf('dir: globalScreensDir');
+    const dirs = screenSearchLocations('/board', 'BULL', { nodeId: 1 }).map(l => l.dir);
 
-    expect(root).toBeGreaterThan(-1);
-    expect(screens).toBeGreaterThan(-1);
-    expect(root).toBeLessThan(screens);
+    expect(dirs.indexOf('/board')).toBeGreaterThan(-1);
+    expect(dirs.indexOf(path.join('/board', 'Screens'))).toBeGreaterThan(-1);
+    expect(dirs.indexOf('/board')).toBeLessThan(dirs.indexOf(path.join('/board', 'Screens')));
+  });
+
+  it('every screen express.e reads from cmds.bbsLoc searches the board root', () => {
+    for (const screen of ['BULL', 'ONENODE', 'LOGON24', 'LANGUAGES', 'INTERNETNAMES', 'REALNAMES', 'MAILSCAN']) {
+      expect(screenSearchLocations('/board', screen, { nodeId: 1 })[0].dir).toBe('/board');
+    }
   });
 });
