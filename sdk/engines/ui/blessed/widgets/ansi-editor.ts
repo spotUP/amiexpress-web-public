@@ -488,6 +488,29 @@ export class ANSIEditor extends Box {
     }
   }
 
+  /**
+   * Where the draw canvas sits, and how big it is.
+   *
+   * Sized to the canvas's own extent (cells times scale) and centred in the
+   * region left over after the sidebar, the chrome above and the status bar
+   * below. Clamped so a canvas at least as large as the room starts flush
+   * where it always did - centring must never push content off the top or
+   * the left, which is the usual way this goes wrong.
+   */
+  private centredCanvasGeometry(topOffset: number, sidebarWidth: number, showStatusBar: boolean): {
+    top: number; left: number; width: number; height: number;
+  } {
+    const width = this.canvasW * this.scaleX;
+    const height = this.canvasH * this.scaleY;
+
+    const roomW = (this.width as number) - sidebarWidth;
+    const roomH = (this.height as number) - topOffset - (showStatusBar ? 1 : 0);
+
+    const left = sidebarWidth + Math.max(0, Math.floor((roomW - width) / 2));
+    const top = topOffset + Math.max(0, Math.floor((roomH - height) / 2));
+    return { top, left, width, height };
+  }
+
   private createUI(options: ANSIEditorOptions): void {
     // Calculate layout offsets based on enabled UI components
     let topOffset = 0;
@@ -535,13 +558,22 @@ export class ANSIEditor extends Box {
       wrap: false, // ANSI content is fixed width - never wrap
     });
 
-    // 5. Canvas (for draw mode)
+    // 5. Canvas (for draw mode), CENTRED in the room it has.
+    //
+    // A 5x2 sprite pinned to the top-left of an 80x25 editor reads as an
+    // accident - "can we center the sprites in the sprited canvas?". The
+    // box is sized to the canvas rather than filling the region, and placed
+    // in the middle of what is left after the sidebar and the chrome. A
+    // canvas that fills the room gets no offset, so the 80x25 hosts are
+    // unchanged. The mouse handlers subtract drawCanvas.ileft/itop and the
+    // cursor reads drawCanvas.position, so both follow the box for free.
+    const canvasGeom = this.centredCanvasGeometry(topOffset, sidebarWidth, showStatusBar);
     this.drawCanvas = new Canvas({
       parent: this,
-      top: topOffset,
-      left: sidebarWidth,
-      right: 0,
-      bottom: showStatusBar ? 1 : 0,
+      top: canvasGeom.top,
+      left: canvasGeom.left,
+      width: canvasGeom.width,
+      height: canvasGeom.height,
       style: { bg: 'black', fg: 'white' },
       keys: true,
       mouse: true,
