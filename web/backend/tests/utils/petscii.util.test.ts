@@ -250,6 +250,38 @@ describe('petscii.util', () => {
       expect(result).toContain(' ');
     });
 
+    // Task 11 (audit D1-D3): the ANSI fallback used to render PETSCII $5C,
+    // $5E, $5F as ASCII backslash/caret/underscore. Real PETSCII has no
+    // such characters at those codes - pound sign and the two arrows.
+    it('renders the real PETSCII punctuation at 0x5C/0x5E/0x5F, not ASCII backslash/caret/underscore', () => {
+      const result = convertPetsciiToAnsi(Buffer.from([0x5C, 0x5E, 0x5F]));
+      expect(result).toBe(`${PROLOGUE}£↑←\x1b[0m`);
+    });
+
+    // Task 11 (audit D1): unshifted PETSCII $61-$7A (screen codes $41-$5A)
+    // are graphics glyphs in the up/gfx charset bank on real hardware, not
+    // a "lowercase letter approximation" - the old fallback showed a-z here.
+    it('renders unshifted 0x61/0x73/0x7A as PETSCII graphics glyphs, not lowercase letters', () => {
+      const result = convertPetsciiToAnsi(Buffer.from([0x61, 0x73, 0x7A]));
+      expect(result).toBe(`${PROLOGUE}♠♥♦\x1b[0m`);
+    });
+
+    // Shifted mode: the same screen codes ($41-$5A) render as uppercase
+    // letters, per the C64 shifted/lo-up charset bank.
+    it('renders shifted 0x61/0x7A as uppercase letters', () => {
+      const result = convertPetsciiToAnsi(Buffer.from([0x0E, 0x61, 0x7A]));
+      expect(result).toBe(`${PROLOGUE}AZ\x1b[0m`);
+    });
+
+    // Task 11: a printable char under reverse video must not re-emit SGR 7 -
+    // the $12 handler already put the terminal into reverse; wrapping every
+    // glyph would toggle it straight back off (audit-adjacent regression
+    // this rewrite could easily reintroduce).
+    it('does not re-wrap SGR 7 per glyph while reverse video is active', () => {
+      const result = convertPetsciiToAnsi(Buffer.from([0x12, 0x41, 0x42, 0x92]));
+      expect(result).toBe(`${PROLOGUE}\x1b[7mAB\x1b[27m\x1b[0m`);
+    });
+
     it('ignores unhandled control codes without printing stray characters', () => {
       // $0A, $0F, $10, $80, $8F are no-ops on a C64 (audit A5). Before the
       // blanket guard, these fell through to the printable path and each

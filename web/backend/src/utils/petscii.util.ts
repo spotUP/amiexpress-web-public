@@ -23,6 +23,7 @@
 
 import * as fs from 'fs';
 import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground, C64_PALETTE_COLODORE } from './c64-palette';
+import { SCREENCODE_TO_UNICODE } from './petscii-unicode-map';
 
 /**
  * PETSCII Control Codes - Complete Reference
@@ -326,90 +327,16 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
   if (byte < 0x20 || (byte >= 0x80 && byte <= 0x9F)) return '';
 
   // ========================================
-  // PRINTABLE CHARACTERS - ASCII approximation
+  // PRINTABLE CHARACTERS - screen-code lookup into the real C64 character
+  // ROM, transcribed as Unicode (Box Drawing / Block Elements / Geometric
+  // Shapes / Symbols for Legacy Computing). Letters, digits, punctuation and
+  // graphics are all resolved by the same table lookup - see
+  // petscii-unicode-map.ts. Reverse video is NOT re-wrapped here: the
+  // $12/$92 handlers above already emitted SGR 7/27 into the stream, so
+  // double-wrapping every printable char would toggle it right back off.
   // ========================================
-
-  // Space
-  if (byte === 0x20 || byte === 0xA0 || byte === 0xE0) return ' ';
-
-  // Numbers 0-9
-  if (byte >= 0x30 && byte <= 0x39) return String.fromCharCode(byte);
-
-  // Punctuation (0x21-0x2F, 0x3A-0x40, 0x5B-0x5F)
-  if (byte >= 0x21 && byte <= 0x2F) return String.fromCharCode(byte);
-  if (byte >= 0x3A && byte <= 0x40) return String.fromCharCode(byte);
-  if (byte === 0x5B) return '[';
-  if (byte === 0x5C) return '\\';
-  if (byte === 0x5D) return ']';
-  if (byte === 0x5E) return '^';
-  if (byte === 0x5F) return '_';
-
-  // Letters - depends on shift mode
-  if (state.shiftMode) {
-    // Shifted mode: 0x41-0x5A = uppercase, 0x61-0x7A = lowercase
-    if (byte >= 0x41 && byte <= 0x5A) return String.fromCharCode(byte); // A-Z
-    if (byte >= 0x61 && byte <= 0x7A) return String.fromCharCode(byte); // a-z
-    // 0xC1-0xDA also maps to uppercase in shifted mode
-    if (byte >= 0xC1 && byte <= 0xDA) return String.fromCharCode(byte - 0xC1 + 0x41);
-  } else {
-    // Unshifted mode: 0x41-0x5A = uppercase, 0x61-0x7A = graphics (show as lowercase approximation)
-    if (byte >= 0x41 && byte <= 0x5A) return String.fromCharCode(byte); // A-Z
-    if (byte >= 0x61 && byte <= 0x7A) return String.fromCharCode(byte); // a-z (graphics approximation)
-    // 0xC1-0xDA maps to uppercase
-    if (byte >= 0xC1 && byte <= 0xDA) return String.fromCharCode(byte - 0xC1 + 0x41);
-  }
-
-  // Graphics characters - use Unicode block elements as approximation
-  // 0xA0-0xBF range - various graphics
-  if (byte >= 0xA0 && byte <= 0xBF) {
-    const graphicsMap: { [key: number]: string } = {
-      0xA0: ' ',  // Shifted space
-      0xA1: '\u2598', // Quadrant upper left
-      0xA2: '\u259D', // Quadrant upper right
-      0xA3: '\u2580', // Upper half block
-      0xA4: '\u2596', // Quadrant lower left
-      0xA5: '\u258C', // Left half block
-      0xA6: '\u259E', // Quadrant upper right and lower left
-      0xA7: '\u259B', // Quadrant upper left and upper right and lower left
-      0xA8: '\u2597', // Quadrant lower right
-      0xA9: '\u259A', // Quadrant upper left and lower right
-      0xAA: '\u2590', // Right half block
-      0xAB: '\u259C', // Quadrant upper left and upper right and lower right
-      0xAC: '\u2584', // Lower half block
-      0xAD: '\u2599', // Quadrant upper left and lower left and lower right
-      0xAE: '\u259F', // Quadrant upper right and lower left and lower right
-      0xAF: '\u2588', // Full block
-      // 0xB0-0xBF - more graphics
-      0xB0: '\u2500', // Horizontal line
-      0xB1: '\u2502', // Vertical line
-      0xB2: '\u250C', // Corner top-left
-      0xB3: '\u2510', // Corner top-right
-      0xB4: '\u2514', // Corner bottom-left
-      0xB5: '\u2518', // Corner bottom-right
-      0xB6: '\u251C', // T-left
-      0xB7: '\u2524', // T-right
-      0xB8: '\u252C', // T-top
-      0xB9: '\u2534', // T-bottom
-      0xBA: '\u253C', // Cross
-    };
-    return graphicsMap[byte] || '\u2588'; // Default to full block
-  }
-
-  // 0xC0-0xDF range in unshifted mode - graphics characters
-  if (!state.shiftMode && byte >= 0xC0 && byte <= 0xDF) {
-    // Horizontal line character commonly at 0xC0
-    if (byte === 0xC0) return '\u2500'; // Horizontal line
-    // Return block character for other graphics
-    return '\u2588';
-  }
-
-  // 0xE0-0xFF range - mirrors 0x60-0x7F or 0xA0-0xBF
-  if (byte >= 0xE0 && byte <= 0xFF) {
-    return ' '; // Simplified - usually shifted space or graphics
-  }
-
-  // Unknown - return space
-  return ' ';
+  const screenCode = petsciiToScreenCode(byte) & 0x7F;
+  return SCREENCODE_TO_UNICODE[state.shiftMode ? 1 : 0][screenCode];
 }
 
 /**
