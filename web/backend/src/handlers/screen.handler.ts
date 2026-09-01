@@ -28,7 +28,15 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime, formatLongDate, formatLongTime, formatLongDateTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
-import { readTooltypeMap } from '../utils/info-file.util';
+import {
+  ScreenDirType, getScreenDirType, getScreenFileName,
+  resolveNodeScreenDir, screenSearchLocations,
+} from '../screens/screen-resolution';
+
+// Kept on this module's surface: callers and tests reached the resolver
+// through the loader before it moved, and where a screen comes from is
+// genuinely part of what the loader answers.
+export { resolveNodeScreenDir } from '../screens/screen-resolution';
 import { checkConfAccess } from './message/message-scan.handler';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -90,139 +98,6 @@ function isAnsiAnimation(content: string): boolean {
  * Screen directory type - matches express.e:6544-6640
  * Each screen type uses a specific base directory
  */
-enum ScreenDirType {
-  NODE = 'node',      // nodeScreenDir - Node{X}/ or Node{X}/Screens/
-  CONF = 'conf',      // confScreenDir - Conf{X}/Screens/
-  GLOBAL = 'global',  // cmds.bbsLoc - global Screens/ directory
-}
-
-/**
- * Map screen names to their directory type (express.e:6544-6640)
- * This is a 1:1 port of express.e displayScreen() CASE statements
- */
-const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
-  // nodeScreenDir screens (express.e:6546-6634)
-  'AWAITSCREEN': ScreenDirType.NODE,
-  'NODE_BULL': ScreenDirType.NODE,  // SCREEN_NODE_BULL uses nodeScreenDir + 'BULL'
-  'LOGOFF': ScreenDirType.NODE,
-  'LOGON': ScreenDirType.NODE,
-  'BBSTITLE': ScreenDirType.NODE,
-  'JOIN': ScreenDirType.NODE,
-  'JOINED': ScreenDirType.NODE,
-  'JOINCONF': ScreenDirType.NODE,
-  'JOINMSGBASE': ScreenDirType.NODE,
-  'NEWUSERPW': ScreenDirType.NODE,
-  'NONEWUSERS': ScreenDirType.NODE,
-  'GUESTLOGON': ScreenDirType.NODE,
-  'LOCKOUT0': ScreenDirType.NODE,
-  'LOCKOUT1': ScreenDirType.NODE,
-  'PRIVATE': ScreenDirType.NODE,
-
-  // confScreenDir screens (express.e:6557-6608)
-  'CONF_BULL': ScreenDirType.CONF,  // SCREEN_CONF_BULL uses confScreenDir + 'BULL'
-  'MENU': ScreenDirType.CONF,
-  'CONF_JOINMSGBASE': ScreenDirType.CONF,
-  'DOWNLOADMSG': ScreenDirType.CONF,
-  'FILEHELP': ScreenDirType.CONF,
-  'UPLOADMSG': ScreenDirType.CONF,
-  'NOUPLOADS': ScreenDirType.CONF,
-
-  // cmds.bbsLoc screens (express.e:6548-6550, 6637-6640, 6615-6653)
-  'BULL': ScreenDirType.GLOBAL,  // SCREEN_BULL uses cmds.bbsLoc + 'BULL'
-  'ONENODE': ScreenDirType.GLOBAL,
-  'LOGON24': ScreenDirType.GLOBAL,
-  // express.e:6615-6653 - additional global screens
-  'NONEWATBAUD': ScreenDirType.NODE,    // SCREEN_NONEWATBAUD: nodeScreenDir + 'NONEWAT' + baud
-  'NOTTIME': ScreenDirType.NODE,        // SCREEN_NOT_TIME: nodeScreenDir + 'NOTTIME' + baud
-  'NOCALLERSAT': ScreenDirType.NODE,    // SCREEN_NOCALLERSATBAUD: nodeScreenDir + 'NOCALLERSAT' + baud
-  'LANGUAGES': ScreenDirType.GLOBAL,   // SCREEN_LANGUAGES: cmds.bbsLoc + 'Languages'
-  'INTERNETNAMES': ScreenDirType.GLOBAL, // SCREEN_INTERNETNAMES: cmds.bbsLoc + 'InternetNames'
-  'REALNAMES': ScreenDirType.GLOBAL,   // SCREEN_REALNAMES: cmds.bbsLoc + 'RealNames'
-  'MAILSCAN': ScreenDirType.GLOBAL,    // SCREEN_MAILSCAN: cmds.bbsLoc + 'MailScan'
-};
-
-/**
- * express.e's `nodeScreenDir` (express.e:96, assigned at :31995 from
- * `sopt.nodeScreens`).
- *
- * ACP.e:2666-2673 fills that field: the node's `SCREENS` tooltype when
- * `Node<N>.info` declares one, and `<bbsLoc>/Node<N>/` when it does not.
- * That tooltype is how a board with more nodes than screen directories works
- * on a real Amiga - many nodes point at ONE directory instead of each
- * carrying a copy. Without it, this port could only serve the nodes that had
- * a directory of their own, which on a 255-node board is most of them
- * missing.
- *
- * The result is cached against the icon's mtime: a screen load must not read
- * and parse an .info file every time, and a sysop who edits the tooltype
- * gets the new directory on the next load without a restart.
- */
-const nodeScreenDirCache = new Map<string, { stamp: number; dir: string }>();
-
-export function resolveNodeScreenDir(baseDir: string, nodeId: number): string {
-  const defaultDir = path.join(baseDir, `Node${nodeId}`);
-  const infoPath = path.join(baseDir, `Node${nodeId}.info`);
-
-  let stamp: number;
-  try {
-    stamp = fs.statSync(infoPath).mtimeMs;
-  } catch {
-    return defaultDir; // no icon, so no tooltype - express.e's ELSE branch
-  }
-
-  const cached = nodeScreenDirCache.get(infoPath);
-  if (cached && cached.stamp === stamp) return cached.dir;
-
-  let dir = defaultDir;
-  try {
-    const declared = (readTooltypeMap(infoPath).get('SCREENS') || '').trim();
-    if (declared) {
-      // checkPathSlash() in ACP.e guarantees a trailing slash on the Amiga
-      // side; path.join here does its own separators, so strip it.
-      const cleaned = declared.replace(/[\/]+$/, '');
-      dir = cleaned.includes(':')
-        ? new BBSPaths(baseDir).resolveAmigaPath(cleaned, nodeId)
-        : path.resolve(baseDir, cleaned);
-    }
-  } catch (error) {
-    // A corrupt icon must not take the node's screens away: fall back to the
-    // directory express.e would have used with no tooltype at all.
-console.error(`[loadScreenFile] could not read SCREENS from ${infoPath}: ${(error as Error).message}`);
-    dir = defaultDir;
-  }
-
-  nodeScreenDirCache.set(infoPath, { stamp, dir });
-  return dir;
-}
-
-/**
- * Get the actual screen file name for special screen types
- * Some screens use different file names (e.g., NODE_BULL -> BULL, CONF_BULL -> BULL)
- */
-function getScreenFileName(screenName: string): string {
-  const upper = screenName.toUpperCase();
-  // NODE_BULL and CONF_BULL both use 'BULL' as the file name
-  if (upper === 'NODE_BULL' || upper === 'CONF_BULL') {
-    return 'BULL';
-  }
-  // DOWNLOADMSG, UPLOADMSG -> DownloadMsg, UploadMsg
-  if (upper === 'DOWNLOADMSG') return 'DownloadMsg';
-  if (upper === 'UPLOADMSG') return 'UploadMsg';
-  // express.e:6639-6641 — SCREEN_LOGON24 looks up 'Logon24hrs', not 'LOGON24'.
-  // Sysops with original reference-board files use that name.
-  if (upper === 'LOGON24') return 'Logon24hrs';
-  return screenName;
-}
-
-/**
- * Get screen directory type from screen name
- * Returns the directory type for known screens, or null for unknown screens
- */
-function getScreenDirType(screenName: string): ScreenDirType | null {
-  const upper = screenName.toUpperCase();
-  return SCREEN_DIR_MAP[upper] || null;
-}
-
 /**
  * SAUCE metadata + encoding-aware decode + iCE colors transform live in
  * `utils/amiga-text-decode.util.ts` so bulletins/screens/help files share one
@@ -1535,42 +1410,12 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     const nodeDir = path.join(baseDir, `Node${nodeId}`);
     const globalScreensDir = path.join(baseDir, 'Screens');
 
-    // Add prioritized location based on screen type
-    if (screenDirType === ScreenDirType.NODE) {
-      // express.e:6546 - ONE directory, nodeScreenDir. There is no
-      // Node<N>/Screens/ in express.e and no cross-directory fallback.
-      const nodeScreenDir = resolveNodeScreenDir(baseDir, nodeId);
-      searchLocations.push({
-        dir: nodeScreenDir,
-        desc: nodeScreenDir === nodeDir ? `Node${nodeId}` : `Node${nodeId} SCREENS tooltype`,
-      });
-    } else if (screenDirType === ScreenDirType.CONF) {
-      // Use provided ID or fallback to session relative conference number
-      const actualConfId = conferenceId || session?.relConfNum;
-      if (actualConfId) {
-        const candidateDirs = getConferenceScreensCandidates(baseDir, actualConfId);
-        candidateDirs.forEach(candidate => {
-          searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
-        });
-      }
-    } else if (screenDirType === ScreenDirType.GLOBAL) {
-      // express.e reads a GLOBAL screen from cmds.bbsLoc - the BOARD ROOT -
-      // not from Screens/. SCREEN_BULL is `StringF(screencheck,'\s\s',
-      // cmds.bbsLoc,'BULL')` at express.e:6549, and the same holds for
-      // ONENODE, LOGON24, LANGUAGES, INTERNETNAMES, REALNAMES and MAILSCAN.
-      //
-      // This searched Screens/ ONLY, so a board whose BULL.TXT sits where
-      // express.e wants it would not have displayed one, and a board with it
-      // in Screens/ - which is this one - displays here and shows nothing on
-      // a real Amiga. The board root goes FIRST, which is express.e's answer;
-      // Screens/ stays behind it until the files are moved.
-      searchLocations.push({ dir: baseDir, desc: 'board root' });
-      searchLocations.push({ dir: globalScreensDir, desc: 'Screens' });
-      // Bulletins/ is intentionally excluded: it holds numbered bulletin DATA files
-      // (bull1.txt–bull10.txt etc). findSecurityScreen would misinterpret bull10.txt
-      // as "BULL screen for sec-level 10", displaying the AquaPWFail password-failure
-      // bulletin as the global BULL index screen on every login for sec-10 users.
-    }
+    // express.e:6544-6640 - the directories, in its order, out of the module
+    // the admin's screen manager reads too, so neither can drift.
+    searchLocations.push(...screenSearchLocations(baseDir, screenName, {
+      nodeId,
+      confId: conferenceId || session?.relConfNum,
+    }));
 
     // express.e has NO cross-directory fallback: displayScreen() builds one
     // path from the screen's own directory and returns FALSE when the file is
