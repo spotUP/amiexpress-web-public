@@ -18,6 +18,7 @@
  */
 
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { BBSLinkWallConfig, loadConfig } from './config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -31,16 +32,6 @@ export const metadata = {
   author: 'REBEL/QTX',
   command: 'LINKWALL',
 };
-
-interface BBSLinkConfig {
-  serverHost: string;
-  httpPort: number;
-  timeout: number;
-  syscode: string;
-  authcode: string;
-  schemecode: string;
-  [key: string]: any;
-}
 
 /**
  * Generate random string for session key
@@ -66,67 +57,6 @@ function getMD5(text: string): string {
  */
 function urlEncode(text: string): string {
   return encodeURIComponent(text);
-}
-
-/**
- * Load BBSLink configuration
- */
-function loadConfig(): BBSLinkConfig {
-  const configPath = path.join(process.cwd(), 'Doors', 'bbslink', 'bbslink.cfg');
-
-  const config: BBSLinkConfig = {
-    serverHost: 'games.bbslink.net',
-    httpPort: 80,
-    timeout: 10,
-    syscode: process.env.BBSLINK_SYSCODE || '',
-    authcode: process.env.BBSLINK_AUTHCODE || '',
-    schemecode: process.env.BBSLINK_SCHEMECODE || ''
-  };
-
-  try {
-    if (fs.existsSync(configPath)) {
-      const fileContent = fs.readFileSync(configPath, 'utf-8');
-      const lines = fileContent.split('\n');
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) {
-          continue;
-        }
-
-        const eqIndex = trimmed.indexOf('=');
-        if (eqIndex === -1) continue;
-
-        const key = trimmed.substring(0, eqIndex).trim().toLowerCase();
-        const value = trimmed.substring(eqIndex + 1).trim();
-
-        switch (key) {
-          case 'serverhost':
-            config.serverHost = value;
-            break;
-          case 'httpport':
-            config.httpPort = parseInt(value) || 80;
-            break;
-          case 'timeout':
-            config.timeout = parseInt(value) || 10;
-            break;
-          case 'syscode':
-            config.syscode = value;
-            break;
-          case 'authcode':
-            config.authcode = value;
-            break;
-          case 'schemecode':
-            config.schemecode = value;
-            break;
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[BBSLinkWall] Error loading config:', err);
-  }
-
-  return config;
 }
 
 /**
@@ -180,7 +110,7 @@ async function httpGet(host: string, port: number, path: string, timeout: number
 /**
  * Show the wall
  */
-async function showWall(socket: any, config: BBSLinkConfig): Promise<void> {
+async function showWall(socket: any, config: BBSLinkWallConfig): Promise<void> {
   try {
     const wallText = await httpGet(
       config.serverHost,
@@ -203,7 +133,7 @@ async function showWall(socket: any, config: BBSLinkConfig): Promise<void> {
 async function sendToServer(
   action: string,
   data: string,
-  config: BBSLinkConfig,
+  config: BBSLinkWallConfig,
   userId: number
 ): Promise<string> {
   const xkey = randomString(6);
@@ -313,12 +243,15 @@ door.onStart(async (ctx: DoorContext) => {
   const { socket, user, bbsSession, bbs } = ctx;
 
   try {
-    // Load configuration
-    const config = loadConfig();
+    // Defaults, then Doors/bbslink/bbslink.cfg, then what the sysop set on
+    // BBSLINK, then what they set here - see config.ts. __dirname is this
+    // directory in development and dist/ in production, so the door root is
+    // resolved rather than assumed.
+    const config: BBSLinkWallConfig = loadConfig(__dirname);
 
     // Validate required config
     if (!config.syscode) {
-      socket.emit('ansi-output', '\r\n\x1b[31mError: syscode missing from bbslink.cfg\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[31mError: syscode missing - set it in the admin (Doors -> LINKWALL -> Door settings) or in Doors/bbslink/bbslink.cfg\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[33mPlease configure your BBSLink account settings.\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[33mSign up at: http://www.bbslink.net/\x1b[0m\r\n\r\n');
       await pause(bbs, '\x1b[32mPress any key to continue...\x1b[0m');
@@ -326,12 +259,12 @@ door.onStart(async (ctx: DoorContext) => {
     }
 
     if (!config.authcode) {
-      socket.emit('ansi-output', '\r\n\x1b[31mError: authcode missing from bbslink.cfg\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[31mError: authcode missing - set it in the admin (Doors -> LINKWALL -> Door settings) or in Doors/bbslink/bbslink.cfg\x1b[0m\r\n');
       return;
     }
 
     if (!config.schemecode) {
-      socket.emit('ansi-output', '\r\n\x1b[31mError: schemecode missing from bbslink.cfg\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[31mError: schemecode missing - set it in the admin (Doors -> LINKWALL -> Door settings) or in Doors/bbslink/bbslink.cfg\x1b[0m\r\n');
       return;
     }
 

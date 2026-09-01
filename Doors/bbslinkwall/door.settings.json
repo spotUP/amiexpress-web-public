@@ -1,0 +1,50 @@
+{
+  "command": "LINKWALL",
+  "settings": [
+    {
+      "key": "syscode",
+      "label": "System code",
+      "type": "string",
+      "help": "Your BBSLink system code. The same account as the BBSLINK door - set it on either and the wall finds it."
+    },
+    {
+      "key": "authcode",
+      "label": "Auth code",
+      "type": "string",
+      "secret": true,
+      "help": "Hashed with the session token; never sent in the clear."
+    },
+    {
+      "key": "schemecode",
+      "label": "Scheme code",
+      "type": "string",
+      "secret": true,
+      "help": "The second BBSLink secret. Hashed the same way as the auth code."
+    },
+    {
+      "key": "serverHost",
+      "label": "Server host",
+      "type": "string",
+      "default": "games.bbslink.net",
+      "help": "Where the wall lives. Only change this if BBSLink moves."
+    },
+    {
+      "key": "httpPort",
+      "label": "HTTP port",
+      "type": "number",
+      "default": 80,
+      "min": 1,
+      "max": 65535,
+      "help": "The wall is read and written over HTTP."
+    },
+    {
+      "key": "timeout",
+      "label": "Request timeout (seconds)",
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 120,
+      "help": "How long to wait for BBSLink before giving up."
+    }
+  ]
+}
