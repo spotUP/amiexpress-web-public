@@ -80,15 +80,28 @@ export async function runPreLoginConnect(
     console.error("[SamiLog] Initial refresh failed:", err);
   }
 
-  // 3. FRONTEND syscmd — express.e:29524. Optional; missing syscmd
-  // is not an error.
+  // 3. FRONTEND syscmd — express.e:29524. Optional; a board with no
+  // FRONTEND registration is normal.
+  //
+  // This used to swallow every outcome: a throw printed "syscmd not found"
+  // whatever had actually gone wrong, and a non-zero RESULT was not reported
+  // at all. A sysop whose Who's-Online screen stopped appearing had nothing
+  // to look at - the connect flow simply carried on to the ANSI prompt, which
+  // is exactly what a board with no FRONTEND does. Say which of the two it
+  // was.
   try {
     const { runSysCommand } = await import(
       "../handlers/command-execution.handler"
     );
-    await runSysCommand(emitter as any, session, "FRONTEND", "");
-  } catch {
-    console.log("[PreLoginConnect] FRONTEND syscmd not found, continuing");
+    const result = await runSysCommand(emitter as any, session, "FRONTEND", "");
+    if (result !== 0) {
+      console.log(
+        `[PreLoginConnect] FRONTEND syscmd returned ${result} - not registered, ` +
+        `or refused (access level, or a door type this board cannot run)`
+      );
+    }
+  } catch (err) {
+    console.error("[PreLoginConnect] FRONTEND syscmd failed:", err);
   }
 
   // 4. Password-reset short-circuit — express.e:29152-29213. The
