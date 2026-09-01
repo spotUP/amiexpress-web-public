@@ -1,0 +1,98 @@
+/**
+ * The 80x25 / responsive switch.
+ *
+ * Pinning the three things that have to happen together, because every door
+ * that got this wrong today got it wrong by doing only some of them: ask the
+ * TERMINAL to widen, follow the resize that follows, and put the board's 80
+ * columns back on the way out.
+ */
+
+import { createTerminalModeSwitch, TERMINAL_MODE_MENU_LABEL } from '../../utils/terminal-mode';
+
+function harness() {
+  const calls: string[] = [];
+  const listeners: Record<string, Array<() => void>> = {};
+  const bbs = {
+    enableWideMode: () => calls.push('wide'),
+    disableWideMode: () => calls.push('fixed'),
+  };
+  const screen = {
+    on: (event: string, fn: () => void) => {
+      (listeners[event] ||= []).push(fn);
+    },
+    removeListener: (event: string, fn: () => void) => {
+      listeners[event] = (listeners[event] || []).filter(f => f !== fn);
+    },
+    emit: (event: string) => (listeners[event] || []).forEach(f => f()),
+    listenerCount: (event: string) => (listeners[event] || []).length,
+  };
+  let relayouts = 0;
+  const sw = createTerminalModeSwitch({
+    bbs, screen, onRelayout: () => { relayouts++; },
+  });
+  return { sw, calls, screen, relayouts: () => relayouts };
+}
+
+describe('terminal mode switch', () => {
+  it('asks the terminal to widen as soon as it exists', () => {
+    const h = harness();
+    expect(h.calls).toEqual(['wide']);
+    expect(h.sw.mode()).toBe('wide');
+  });
+
+  it('asks for 80 columns back when switched to fixed', () => {
+    const h = harness();
+    h.sw.toggle();
+    expect(h.sw.mode()).toBe('fixed');
+    expect(h.calls).toEqual(['wide', 'fixed']);
+  });
+
+  it('re-lays out when the mode changes', () => {
+    const h = harness();
+    h.sw.toggle();
+    expect(h.relayouts()).toBe(1);
+  });
+
+  it('re-lays out when the terminal itself resizes', () => {
+    const h = harness();
+    h.screen.emit('resize');
+    h.screen.emit('resize');
+    expect(h.relayouts()).toBe(2);
+  });
+
+  it('does nothing when set to the mode it is already in', () => {
+    const h = harness();
+    h.sw.set('wide');
+    expect(h.calls).toEqual(['wide']);
+    expect(h.relayouts()).toBe(0);
+  });
+
+  it('restores fixed and stops listening when disposed', () => {
+    const h = harness();
+    h.sw.dispose();
+    expect(h.calls).toEqual(['wide', 'fixed']);
+    expect(h.screen.listenerCount('resize')).toBe(0);
+  });
+
+  it('ignores a resize that arrives after disposal', () => {
+    const h = harness();
+    h.sw.dispose();
+    h.screen.emit('resize');
+    expect(h.relayouts()).toBe(0);
+  });
+
+  it('labels itself the same way in every door', () => {
+    const h = harness();
+    expect(h.sw.menuItem().label).toBe(TERMINAL_MODE_MENU_LABEL);
+    h.sw.menuItem().action();
+    expect(h.sw.mode()).toBe('fixed');
+  });
+
+  it('survives a door whose bbs cannot do wide mode at all', () => {
+    const sw = createTerminalModeSwitch({
+      bbs: {}, screen: { on() {}, removeListener() {} }, onRelayout: () => {},
+    });
+    expect(() => sw.toggle()).not.toThrow();
+    expect(() => sw.dispose()).not.toThrow();
+  });
+});

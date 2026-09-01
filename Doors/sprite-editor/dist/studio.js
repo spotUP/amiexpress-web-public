@@ -30,6 +30,7 @@ exports.stepZoom = stepZoom;
 exports.studioTitle = studioTitle;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const edit_doc_1 = require("./edit-doc");
 const assets_1 = require("./assets");
@@ -108,12 +109,18 @@ class SpriteStudioDoor {
         this.guide = false;
         /** One frame on the clipboard, for copying artwork between frames. */
         this.frameClipboard = null;
-        /** 80x25 like the board, or the caller's real terminal. */
-        this.fixedSize = false;
+        /**
+         * 80x25 like the board, or the caller's real terminal.
+         *
+         * The three parts of getting this right - ask the terminal to widen,
+         * follow the resize, put the 80 columns back on exit - live in the SDK
+         * now, because every door with a layout wants them and this one had to
+         * learn each part the hard way.
+         */
+        this.terminalMode = null;
         /** Set when a .ans is open instead of a sprite - Save writes art then. */
         this.artText = null;
         this.playing = false;
-        this.onScreenResize = null;
         this.playTimer = null;
         this.door = '';
         this.file = '';
@@ -125,10 +132,11 @@ class SpriteStudioDoor {
     }
     async start() {
         this.createUI();
-        // Responsive from the start, like livechat: without this the browser
-        // terminal stays at a fixed 80x25 whatever the editor's own geometry
-        // says, and 'responsive' has nothing to resize into.
-        this.applyTerminalMode();
+        this.terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
+            bbs: this.ctx.bbs,
+            screen: this.screen,
+            onRelayout: () => this.relayout(),
+        });
         this.inputManager.enable();
         this.bindHotkeys();
         // Nothing is open yet, so the first thing a sysop sees is the requester
@@ -159,16 +167,6 @@ class SpriteStudioDoor {
             debug: false,
             debugName: 'SPRITED',
         });
-        // Lay out again whenever the terminal changes size.
-        //
-        // The livechat door learned this twice and wrote it down: a one-shot
-        // layout answers "what size am I now", and this answers "what size did
-        // I just become". Without it the editor stays frozen at the size the
-        // door opened with, and resizing the browser window resizes the screen
-        // underneath it while nothing moves - reported here as "i switched to
-        // responsive now it did not resize to my browser window".
-        this.onScreenResize = () => { void this.relayout(); };
-        this.screen.on('resize', this.onScreenResize);
         this.screen.render();
     }
     /**
@@ -379,8 +377,8 @@ class SpriteStudioDoor {
         this.editor = new blessed_1.ANSIEditor({
             parent: this.screen,
             top: 0, left: 0,
-            width: this.fixedSize ? 80 : '100%',
-            height: this.fixedSize ? 25 : '100%',
+            width: this.terminalMode?.mode() === 'fixed' ? 80 : '100%',
+            height: this.terminalMode?.mode() === 'fixed' ? 25 : '100%',
             title: this.doc
                 ? studioTitle(this.doc, this.door, this.file)
                 : `${this.door}/${this.file}  (art)`,
@@ -577,33 +575,11 @@ class SpriteStudioDoor {
      * both. The screen is created responsive; this pins the editor to 80x25
      * inside it, which is what a caller on a real board will see.
      */
-    async toggleFixedSize() {
-        this.fixedSize = !this.fixedSize;
-        this.applyTerminalMode();
-        await this.openEditor();
-        this.flash(this.fixedSize ? '80x25 (as the board serves it)' : 'Responsive (your terminal)');
-    }
-    /**
-     * Ask the TERMINAL for the size, not just the editor.
-     *
-     * Reported twice: "when i select responsive mode it doesnt resize to the
-     * browser size". Sizing the editor to 100% was only ever half of it - the
-     * browser terminal starts in FIXED 80x25 and stays there until a door asks
-     * for wide mode (BBSTerminal's own comment: "DON'T auto-fit on mount ...
-     * only resize when the door calls enableWideMode()"). So there was nothing
-     * bigger to fill. livechat calls enableWideMode() at startup, which is why
-     * it has always worked.
-     *
-     * Fixed mode calls disableWideMode(), which snaps the terminal back to
-     * 80x25 - so the toggle shows what a caller on the board actually sees
-     * rather than a cropped view of a wide one.
-     */
-    applyTerminalMode() {
-        const bbs = this.ctx?.bbs;
-        if (this.fixedSize)
-            bbs?.disableWideMode?.();
-        else
-            bbs?.enableWideMode?.();
+    toggleFixedSize() {
+        this.terminalMode?.toggle();
+        this.flash(this.terminalMode?.mode() === 'fixed'
+            ? '80x25 (as the board serves it)'
+            : 'Responsive (your terminal)');
     }
     async setZoom(zoom) {
         if (zoom === this.zoom)
@@ -884,13 +860,9 @@ class SpriteStudioDoor {
         key(['C-v'], () => this.pasteFrame());
     }
     destroy() {
-        // Leave the board as it was found: a caller returning to the BBS gets
-        // its 80 columns back, not this door's wide terminal.
-        this.ctx?.bbs?.disableWideMode?.();
-        if (this.onScreenResize) {
-            this.screen.removeListener('resize', this.onScreenResize);
-            this.onScreenResize = null;
-        }
+        // Restores the board's 80 columns and drops the resize listener.
+        this.terminalMode?.dispose();
+        this.terminalMode = null;
         if (this.playTimer) {
             clearInterval(this.playTimer);
             this.playTimer = null;

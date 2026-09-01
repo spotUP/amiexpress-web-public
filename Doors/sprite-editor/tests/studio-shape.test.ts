@@ -32,7 +32,7 @@ function makeSprite(): Sprite {
 }
 
 export async function theEditorOwnsTheScreenAndItsOwnChrome(): Promise<void> {
-  assert.ok(source.includes("width: this.fixedSize ? 80 : '100%'"),
+  assert.ok(source.includes("width: this.terminalMode?.mode() === 'fixed' ? 80 : '100%'"),
     'the editor must fill the screen - nothing wraps it - unless it is ' +
     'deliberately pinned to the 80x25 the board serves');
   for (const on of ['showMenuBar: true', 'showToolbar: true', 'showSidebar: true', 'showStatusBar: true']) {
@@ -225,10 +225,9 @@ export async function artFilesOpenInTheSameEditor(): Promise<void> {
 }
 
 export async function theSizeToggleShowsWhatTheBoardWillShow(): Promise<void> {
-  assert.ok(source.includes('private async toggleFixedSize('), 'the toggle must exist');
-  assert.ok(source.includes("width: this.fixedSize ? 80 : '100%'"),
+  assert.ok(source.includes('private toggleFixedSize('), 'the toggle must exist');
+  assert.ok(source.includes("height: this.terminalMode?.mode() === 'fixed' ? 25 : '100%'"),
     'pinned to 80x25, which is what a caller on the board sees');
-  assert.ok(source.includes("height: this.fixedSize ? 25 : '100%'"));
 }
 
 export async function theTitleReportsTheTimingSoSlowerAndFasterAreNotBlind(): Promise<void> {
@@ -240,19 +239,16 @@ export async function theTitleReportsTheTimingSoSlowerAndFasterAreNotBlind(): Pr
 
 export async function theEditorFollowsTheTerminalWhenItResizes(): Promise<void> {
   // "i switched to responsive now it did not resize to my browser window."
-  // The widget takes its geometry at construction, so responsive means
-  // rebuilding on resize - the livechat door's lesson, written down in its
-  // own source after being reported twice.
-  assert.ok(source.includes("this.screen.on('resize', this.onScreenResize)"),
-    'the studio must listen for screen resize');
+  // The listening lives in the shared switch now (its own suite pins that
+  // it hooks and unhooks 'resize'); what stays this door's job is what a
+  // relayout MEANS - the ANSIEditor takes its geometry at construction, so
+  // following a resize means rebuilding it without losing work.
   const fn = source.slice(source.indexOf('private async relayout('), source.indexOf('// ============================================\n  // REQUESTERS'));
   assert.ok(fn.includes('if (this.playing) return;'),
     'a resize during playback must not fight it for the canvas');
   assert.ok(fn.includes('this.commit()'),
     'a window drag must not eat work in progress');
   assert.ok(fn.includes('await this.openEditor()'), 'and the editor is rebuilt at the new size');
-  assert.ok(source.includes("this.screen.removeListener('resize'"),
-    'and the listener goes when the door does');
 }
 
 export async function theTransparencyGuideIsOffUntilAskedFor(): Promise<void> {
@@ -272,16 +268,19 @@ export async function responsiveAsksTheTerminalNotJustTheEditor(): Promise<void>
   // "when i select responsive mode it doesnt resize to the browser size."
   // The browser terminal starts FIXED at 80x25 and only widens when a door
   // asks (BBSTerminal: "DON'T auto-fit on mount"), so sizing the editor to
-  // 100% filled a terminal that never grew.
-  assert.ok(source.includes('private applyTerminalMode('), 'the door must set the terminal mode');
-  assert.ok(source.includes('bbs?.enableWideMode?.()'), 'responsive asks for wide');
-  assert.ok(source.includes('bbs?.disableWideMode?.()'), 'and fixed asks for 80 columns back');
+  // 100% filled a terminal that never grew. The three parts of getting it
+  // right live in the SDK now - this door uses them rather than owning them.
+  assert.ok(source.includes('createTerminalModeSwitch({'),
+    'the door must use the shared switch, not its own copy of the dance');
   const start = source.slice(source.indexOf('async start('), source.indexOf('private createUI('));
-  assert.ok(start.includes('this.applyTerminalMode()'),
-    'and it must be applied at startup, not only when the toggle is used');
+  assert.ok(start.includes('createTerminalModeSwitch'),
+    'and build it at startup, so the terminal is wide before anything is drawn');
+  assert.ok(source.includes('onRelayout: () => this.relayout()'),
+    'with the door supplying what re-layout MEANS for it - here, rebuilding ' +
+    'a widget that took its geometry at construction');
   const destroy = source.slice(source.indexOf('destroy(): void {'));
-  assert.ok(destroy.includes('disableWideMode'),
-    'the board gets its 80 columns back when the door closes');
+  assert.ok(destroy.includes('this.terminalMode?.dispose()'),
+    'and disposing it, which restores the board 80 columns and unhooks resize');
 }
 
 export async function theWheelStepsTheZoomLadder(): Promise<void> {
