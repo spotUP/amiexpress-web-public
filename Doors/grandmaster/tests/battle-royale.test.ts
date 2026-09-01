@@ -160,3 +160,18 @@ export async function theTallerThePanelTheMoreItLists(): Promise<void> {
   };
   assert.ok(listed(38) > listed(20), 'a taller terminal shows more of the field');
 }
+
+export async function theLobbyItselfAsksForNinetyNine(): Promise<void> {
+  // The door-side default was not enough: the SDK lobby widget always
+  // passes a count, taken from the mode's own config, so filling to 99 has
+  // to be declared THERE - "still only one bot in battle royale" was the
+  // adapter's default never getting a look in (2026-09-02).
+  const { readFileSync } = await import('fs');
+  const { join } = await import('path');
+  const source = readFileSync(join(__dirname, '..', 'ui', 'lobby-screen.ts'), 'utf8');
+  assert.ok(source.includes("botFillTarget: modePlayerTarget('battle_royale')"),
+    'the lobby mode config must carry the fill target, from the same table');
+
+  // And that table still says 99, so the two cannot drift apart.
+  assert.strictEqual(modePlayerTarget('battle_royale'), 99);
+}

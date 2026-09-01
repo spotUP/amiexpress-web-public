@@ -1269,13 +1269,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Single entry point for a game-mode key press. Both the window keydown
     // listener and the on-screen game controls (via the imperative ref) call
     // this, so a touch press is indistinguishable from a physical one.
-    const pressGameKey = (key: string, code: string) => {
+    const pressGameKey = (key: string, code: string, mods?: { alt?: boolean; ctrl?: boolean; shift?: boolean }) => {
       if (!gameMode.current || !socketRef.current?.connected) return;
       // Only send if key wasn't already pressed (prevents duplicate downs)
       if (keyState.current[key]) return;
       keyState.current[key] = true;
-      // TEMPORARY: measure the round trip a player actually feels - key sent
-      socketRef.current.emit('key-down', { key, code });
+      // The MODIFIERS travel with the key. Without them a door in game mode
+      // received Alt+Enter as a bare Enter - which in GRANDMASTER's menu is
+      // "select" - so the size toggle could not work there however well the
+      // door was wired (2026-09-02).
+      socketRef.current.emit('key-down', { key, code, ...mods });
       startKeyRepeat(key, code);
     };
 
@@ -1315,7 +1318,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           return;
         }
 
-        pressGameKey(ev.key, ev.code);
+        pressGameKey(ev.key, ev.code, { alt: ev.altKey, ctrl: ev.ctrlKey, shift: ev.shiftKey });
         ev.preventDefault();
       }
     };

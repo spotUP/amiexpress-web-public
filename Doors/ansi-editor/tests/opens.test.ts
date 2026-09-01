@@ -62,14 +62,28 @@ export async function theDoorOpensWithoutThrowing(): Promise<void> {
   }
 }
 
-export async function openingAsksTheTerminalToWiden(): Promise<void> {
-  // Responsive is three things and this is the first: BBSTerminal is fixed
-  // at 80x25 until a door asks otherwise, so a door that only sizes its own
-  // widgets to 100% fills a terminal that never grew.
+export async function openingStaysAtTheSizeTheBoardServes(): Promise<void> {
+  // "ansi-edit opens in fullscreen in bbs mode thats wrong" (2026-09-02).
+  // The SDK switch defaults to 'wide' and taking that default made the door
+  // grab the window; worse, it hid the toggle, because the first Alt+Enter
+  // then took the room AWAY and read as nothing happening.
   const recorded: Recorded = { wide: 0, fixed: 0 };
   const door = await started(recorded);
   try {
-    assert.strictEqual(recorded.wide, 1, 'the door asks for the caller’s real terminal on open');
+    assert.strictEqual(recorded.wide, 0, 'the door does not take the window on its own');
+    assert.strictEqual(door.terminalMode.mode(), 'fixed');
+  } finally {
+    door.cleanup?.();
+  }
+}
+
+export async function altEnterThenAsksForTheWholeTerminal(): Promise<void> {
+  const recorded: Recorded = { wide: 0, fixed: 0 };
+  const door = await started(recorded);
+  try {
+    door.terminalMode.toggle();
+    assert.strictEqual(recorded.wide, 1, 'the caller asks, and gets the room');
+    assert.strictEqual(door.terminalMode.mode(), 'wide');
   } finally {
     door.cleanup?.();
   }

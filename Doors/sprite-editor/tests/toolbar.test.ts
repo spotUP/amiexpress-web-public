@@ -238,3 +238,11 @@ export async function zoomingIsCappedAtWhatFits(): Promise<void> {
   assert.deepStrictEqual(asked, [2], 'and asking again for something too big changes nothing');
   assert.strictEqual(typeof openEditor, 'function');
 }
+
+export async function theDoorOpensAtTheSizeTheBoardServes(): Promise<void> {
+  // "sprited alt+enter does nothing it opens in fullscreen in bbs mode"
+  // (2026-09-02). Opening wide hid the toggle: the first press took the
+  // room away, which reads as nothing happening.
+  assert.ok(source.includes("start: 'fixed'"),
+    'the size switch must start fixed, and the caller asks for the rest');
+}
