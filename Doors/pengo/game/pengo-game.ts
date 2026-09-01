@@ -18,11 +18,18 @@ import {
   HATCH_TIME,
   ENEMY_MOVE_DELAY,
   getLevelConfig,
-  CRUSH_FRAMES,} from './constants';
+  CRUSH_FRAMES,
+  MAX_SCORE,
+  crushComboScore,
+  MAX_LIVING_ENEMIES,
+  AI_TARGET_SIGMA,
+  ENEMY_BREAK_BLOCK_CHANCE,
+} from './constants';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 import { Sprite, bufferToTags } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { buildBoard } from './render';
 import { loadOriginalLevel } from '../levels';
+import { gaussianTargetNear } from './ai';
 
 export class PengoGame {
   private data: PengoData;
@@ -191,6 +198,15 @@ export class PengoGame {
     }
   }
 
+  /** Adds to the score, capped at the arcade's five-digit display (ref1). */
+  private addScore(amount: number): void {
+    this.data.score = Math.min(MAX_SCORE, this.data.score + amount);
+  }
+
+  private livingEnemyCount(): number {
+    return this.data.enemies.filter(e => e.state !== 'dead').length;
+  }
+
   handleDirection(direction: Direction): void {
     if (this.data.pengo.isDead) return;
     this.data.pengo.direction = direction;
@@ -208,7 +224,13 @@ export class PengoGame {
 
     const cell = this.data.grid[targetY]?.[targetX];
 
-    if (cell === 'ice' || cell === 'diamond') {
+    if (cell === 'diamond' && this.data.diamondsAligned) {
+      // Locked in place once the alignment bonus has been scored (ref2
+      // locks them too) - pushing it further would let the score-once
+      // guard in checkDiamondAlignment() be dodged by nudging a diamond
+      // out of line and back, and there is no more bonus to earn anyway.
+      this.cues.push('boop');
+    } else if (cell === 'ice' || cell === 'diamond') {
       this.pushBlock(targetX, targetY, dx, dy);
     } else if (cell === 'wall') {
       this.shakeWall(dir);
@@ -233,23 +255,27 @@ export class PengoGame {
     this.cues.push('dash');
     this.data.pengo.isPushing = true;
     this.data.pengo.pushFrame = 0;
-    this.data.score += SCORES.pushBlock;
+    this.addScore(SCORES.pushBlock);
 
     const cellType = this.data.grid[y][x];
 
-    // Slide block until it hits something
+    // Slide the block cell by cell. Both reference clones agree a
+    // sliding block chain-kills down the WHOLE line of enemies it meets,
+    // not just the first one - ours used to `break` on the first hit, so
+    // a second Sno-Bee further down the same corridor survived. The
+    // block passes straight through each one it catches and keeps going,
+    // stopping only at a wall, another block, or the grid edge.
     let slideX = x;
     let slideY = y;
-    let crushedEnemy = false;
+    const chain: Enemy[] = [];
 
     while (true) {
       const nextX = slideX + dx;
       const nextY = slideY + dy;
       const nextCell = this.data.grid[nextY]?.[nextX];
 
-      // Check for enemy at next position
       const enemyHit = this.data.enemies.find(e =>
-        e.x === nextX && e.y === nextY && e.state !== 'dead'
+        e.x === nextX && e.y === nextY && e.state !== 'dead' && e.state !== 'crushed'
       );
 
       if (enemyHit) {
@@ -260,36 +286,49 @@ export class PengoGame {
         // frame the block reached it.
         enemyHit.state = 'crushed';
         enemyHit.crushTimer = CRUSH_FRAMES;
-        this.data.score += SCORES.crushEnemy;
-        crushedEnemy = true;
-        this.cues.push('explosion');
-
-        // The block comes to REST on the square it did the squashing on -
-        // it does not evaporate. Both cells used to be cleared here, which
-        // deleted the block the player had just pushed.
-        this.data.grid[y][x] = 'empty';
-        this.data.grid[nextY][nextX] = cellType;
+        chain.push(enemyHit);
         slideX = nextX;
         slideY = nextY;
-        break;
+        continue;
       }
 
       if (nextCell === 'empty') {
         slideX = nextX;
         slideY = nextY;
-      } else {
-        // Hit wall or another block
-        break;
+        continue;
       }
+
+      // Hit a wall, another block, or the grid edge.
+      break;
     }
 
-    if (!crushedEnemy) {
-      // Move block to final position
+    if (chain.length > 0) {
+      // One combo per push, keyed to how many the block caught along the
+      // whole line (ref1's table: 1->400, 2->1600, 3->3200, 4+->6400) -
+      // not per-enemy, or a four-kill push would be worth the same as
+      // four separate one-kill pushes and the combo would mean nothing.
+      this.addScore(crushComboScore(chain.length));
+      this.cues.push('explosion');
+      // The block comes to REST on the last square it did the squashing
+      // on - it does not evaporate.
       this.data.grid[y][x] = 'empty';
       this.data.grid[slideY][slideX] = cellType;
+    } else if (slideX !== x || slideY !== y) {
+      // Moved at least one cell before stopping: normal slide.
+      this.data.grid[y][x] = 'empty';
+      this.data.grid[slideY][slideX] = cellType;
+    } else {
+      // Never moved at all - the very next cell was already blocked.
+      // Ref2: a block with nowhere to go is destroyed rather than just
+      // staying put, which is also the "destroy a boxed-in block" move
+      // the player was missing entirely (there was no way to break a
+      // block at all before this).
+      this.data.grid[y][x] = 'empty';
+      this.cues.push('switch');
     }
 
-    // Where the block came to rest, for the renderer's slide flash.
+    // Where the block came to rest (or was destroyed), for the
+    // renderer's slide flash.
     this.data.lastSlide = { x: slideX, y: slideY, tick: this.data.frameCount };
 
     // Check for diamond alignment
@@ -314,7 +353,7 @@ export class PengoGame {
       if (touching) {
         enemy.state = 'stunned';
         enemy.stunTimer = STUN_DURATION;
-        this.data.score += SCORES.stunEnemy;
+        this.addScore(SCORES.stunEnemy);
         stunned = true;
       }
     }
@@ -323,7 +362,18 @@ export class PengoGame {
     this.data.wallShake = { tick: this.data.frameCount };
   }
 
+  /**
+   * The alignment bonus, scored exactly once. It used to re-check (and
+   * re-add) on every later push that still happened to find 2+ diamonds
+   * in a line - even a push unrelated to the diamonds - because only the
+   * SOUND was deduped via `diamondsAligned`, never the score. Diamonds
+   * are also locked from further pushing once this fires (see
+   * handlePush()), so there is no way back into this function with the
+   * flag still false after the first real alignment.
+   */
   private checkDiamondAlignment(): void {
+    if (this.data.diamondsAligned) return;
+
     // Check horizontal alignment
     for (let y = 1; y < GRID_HEIGHT - 1; y++) {
       let count = 0;
@@ -331,11 +381,10 @@ export class PengoGame {
         if (this.data.grid[y][x] === 'diamond') count++;
       }
       if (count >= 2) {
-        this.data.score += count === 2 ? SCORES.diamondAlign2 : SCORES.diamondAlign3;
-        // Only the moment they LINE UP is worth a sound; the check runs on
-        // every push and would otherwise fanfare each one thereafter.
-        if (!this.data.diamondsAligned) this.cues.push('powerup');
+        this.addScore(count === 2 ? SCORES.diamondAlign2 : SCORES.diamondAlign3);
+        this.cues.push('powerup');
         this.data.diamondsAligned = true;
+        return;
       }
     }
 
@@ -346,9 +395,10 @@ export class PengoGame {
         if (this.data.grid[y][x] === 'diamond') count++;
       }
       if (count >= 2) {
-        this.data.score += count === 2 ? SCORES.diamondAlign2 : SCORES.diamondAlign3;
-        if (!this.data.diamondsAligned) this.cues.push('powerup');
+        this.addScore(count === 2 ? SCORES.diamondAlign2 : SCORES.diamondAlign3);
+        this.cues.push('powerup');
         this.data.diamondsAligned = true;
+        return;
       }
     }
   }
@@ -398,8 +448,8 @@ export class PengoGame {
         this.data.eggs.length === 0) {
       this.data.state = 'levelComplete';
       this.cues.push('level-up');
-      this.data.score += SCORES.clearLevel;
-      this.data.score += this.data.timeRemaining * SCORES.timeBonus;
+      this.addScore(SCORES.clearLevel);
+      this.addScore(this.data.timeRemaining * SCORES.timeBonus);
       setTimeout(() => {
         this.data.level++;
         this.initLevel();
@@ -442,9 +492,23 @@ export class PengoGame {
       if (enemy.moveTimer < config.enemySpeed) continue;
       enemy.moveTimer = 0;
 
-      // Simple AI: move towards Pengo
-      const dx = this.data.pengo.x - enemy.x;
-      const dy = this.data.pengo.y - enemy.y;
+      // AI: head for a random point near Pengo, not Pengo's own cell -
+      // ref1's model. A deterministic chase toward the player's exact
+      // position was reported as meaningfully harder than either
+      // reference clone, and than the arcade itself. Re-picked once the
+      // enemy has reached its current target (or never had one).
+      if (enemy.targetX === undefined || enemy.targetY === undefined ||
+          (enemy.x === enemy.targetX && enemy.y === enemy.targetY)) {
+        const target = gaussianTargetNear(
+          this.data.pengo, AI_TARGET_SIGMA,
+          { minX: 1, maxX: GRID_WIDTH - 2, minY: 1, maxY: GRID_HEIGHT - 2 }
+        );
+        enemy.targetX = target.x;
+        enemy.targetY = target.y;
+      }
+
+      const dx = enemy.targetX - enemy.x;
+      const dy = enemy.targetY - enemy.y;
 
       let moveDir: Direction;
       if (Math.abs(dx) > Math.abs(dy)) {
@@ -458,13 +522,23 @@ export class PengoGame {
       const moveDy = moveDir === 'up' ? -1 : moveDir === 'down' ? 1 : 0;
       const newX = enemy.x + moveDx;
       const newY = enemy.y + moveDy;
+      const blockedCell = this.data.grid[newY]?.[newX];
 
-      if (this.data.grid[newY]?.[newX] === 'empty') {
+      if (blockedCell === 'empty') {
         enemy.x = newX;
         enemy.y = newY;
         enemy.direction = moveDir;
+      } else if (blockedCell === 'ice' && Math.random() < ENEMY_BREAK_BLOCK_CHANCE) {
+        // Both references agree enemies break blocks in their path; ref2's
+        // coinflip (rather than always breaking, ref1's model) so a
+        // corridor of ice still slows a Sno-Bee down rather than being
+        // free to walk through. The tick is spent breaking it, not
+        // moving - the block wasn't there a moment ago either way.
+        this.data.grid[newY][newX] = 'empty';
       } else {
-        // Can't move towards player, try random direction
+        // Can't move towards the target, try a random direction (the
+        // existing fallback - unchanged; only WHERE the enemy is headed
+        // is a Gaussian pick now, not this recovery path).
         const dirs: Direction[] = ['up', 'down', 'left', 'right'];
         for (const dir of dirs.sort(() => Math.random() - 0.5)) {
           const rdx = dir === 'left' ? -1 : dir === 'right' ? 1 : 0;
@@ -485,9 +559,15 @@ export class PengoGame {
   private updateEggs(): void {
     for (let i = this.data.eggs.length - 1; i >= 0; i--) {
       const egg = this.data.eggs[i];
-      egg.hatchTimer--;
+      if (egg.hatchTimer > 0) egg.hatchTimer--;
       if (egg.hatchTimer <= 0) {
-        // Hatch into enemy
+        // Population cap: ours was the only one of the three references
+        // with no limit at all - eggs hatched on top of the initial
+        // spawn with nothing to stop it. A ready egg now just waits
+        // (staying in the "about to hatch" warning state) until a
+        // Sno-Bee has died and made room.
+        if (this.livingEnemyCount() >= MAX_LIVING_ENEMIES) continue;
+
         this.cues.push('blip');
         this.data.enemies.push({
           id: this.data.enemyIdCounter++,
@@ -506,13 +586,23 @@ export class PengoGame {
   }
 
   private checkCollisions(): void {
-    // Enemy collision with Pengo
     for (const enemy of this.data.enemies) {
-      if (enemy.state === 'dead' || enemy.state === 'stunned') continue;
-      if (enemy.x === this.data.pengo.x && enemy.y === this.data.pengo.y) {
-        this.killPengo();
-        return;
+      if (enemy.state === 'dead' || enemy.state === 'crushed') continue;
+      if (enemy.x !== this.data.pengo.x || enemy.y !== this.data.pengo.y) continue;
+
+      if (enemy.state === 'stunned') {
+        // Both reference clones agree: walking into an already-stunned
+        // Sno-Bee is a kill, not a pass-through. Smaller than a crush -
+        // that stays the bigger prize for actually setting up a push.
+        enemy.state = 'crushed';
+        enemy.crushTimer = CRUSH_FRAMES;
+        this.addScore(SCORES.touchKillStunned);
+        this.cues.push('zap');
+        continue;
       }
+
+      this.killPengo();
+      return;
     }
   }
 

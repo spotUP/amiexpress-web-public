@@ -13558,13 +13558,18 @@ var init_ansi_editor = __esm({
       // CLIPBOARD OPERATIONS
       // ============================================
       /**
-       * Cut selection to clipboard
+       * Cut selection to clipboard. Undoable (fix-round-2, riding along with
+       * moveBlock()'s fix - same class of bug, identical treatment): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a cut.
        */
       cutSelection() {
-        if (!this.cellCanvas)
+        if (!this.cellCanvas || !this.coreState)
           return;
         const sel = this.selection || this.fullCanvasSelection();
         this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
         for (let y = sel.y1; y <= sel.y2; y++) {
           for (let x = sel.x1; x <= sel.x2; x++) {
             if (this.cellCanvas[y]?.[x]) {
@@ -13684,13 +13689,25 @@ var init_ansi_editor = __esm({
       // BLOCK OPERATIONS
       // ============================================
       /**
-       * Move selected block to cursor position
+       * Move selected block to cursor position. Undoable as ONE logical action
+       * (fix-round-2, final-fix-wave-report.md): a single snapshotUndoState()
+       * before the clear, so one Ctrl+Z restores the pre-move canvas (source
+       * content back, destination empty) in one step. Deliberately does NOT
+       * route the paste half through pasteClipboard()/pasteSelection() - that
+       * pushes its OWN undo entry, which would snapshot the already-cleared
+       * canvas and split this one move into two undo steps: a Ctrl+Z would then
+       * leave the source blank and the paste gone, a state the user never
+       * created (redo recovers it, but nothing on screen says redo is what you
+       * need). CoreCanvas.pasteCanvas() is the same primitive pasteSelection()
+       * calls internally, minus its saveUndoState() call.
        */
       moveBlock() {
-        if (!this.selection || !this.cellCanvas)
+        if (!this.selection || !this.cellCanvas || !this.coreState)
           return;
         const sel = this.selection;
         this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
         for (let y = sel.y1; y <= sel.y2; y++) {
           for (let x = sel.x1; x <= sel.x2; x++) {
             if (this.cellCanvas[y]?.[x]) {
@@ -13698,7 +13715,10 @@ var init_ansi_editor = __esm({
             }
           }
         }
-        this.pasteClipboard();
+        if (this.clipboard) {
+          pasteCanvas(this.cellCanvas, this.clipboard, this.cursor.col, this.cursor.line);
+        }
+        this.syncFromCoreState();
         this.selection = null;
         this.modified = true;
         this.updateDisplay();

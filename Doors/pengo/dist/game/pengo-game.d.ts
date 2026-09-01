@@ -34,11 +34,23 @@ export declare class PengoGame {
     private placePengo;
     private scatterEgg;
     private spawnEnemy;
+    /** Adds to the score, capped at the arcade's five-digit display (ref1). */
+    private addScore;
+    private livingEnemyCount;
     handleDirection(direction: Direction): void;
     handlePush(): void;
     private tryMove;
     private pushBlock;
     private shakeWall;
+    /**
+     * The alignment bonus, scored exactly once. It used to re-check (and
+     * re-add) on every later push that still happened to find 2+ diamonds
+     * in a line - even a push unrelated to the diamonds - because only the
+     * SOUND was deduped via `diamondsAligned`, never the score. Diamonds
+     * are also locked from further pushing once this fires (see
+     * handlePush()), so there is no way back into this function with the
+     * flag still false after the first real alignment.
+     */
     private checkDiamondAlignment;
     update(): void;
     private updateEnemies;

@@ -36,6 +36,14 @@ export interface Enemy {
     crushTimer: number;
     hatchTimer: number;
     moveTimer: number;
+    /**
+     * Where this Sno-Bee is currently headed - a point near Pengo, not
+     * Pengo's own cell (see game/ai.ts). Optional and absent until the
+     * first tick that moves this enemy, so every existing Enemy literal in
+     * the test suite stays valid without updating each one.
+     */
+    targetX?: number;
+    targetY?: number;
 }
 export interface Block {
     x: number;

@@ -17,6 +17,8 @@ const TEST_MODULES = [
     './state-routing.test',
     './camera.test',
     './levels.test',
+    './ai.test',
+    './mechanics.test',
 ];
 (async () => {
     let passed = 0;
