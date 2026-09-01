@@ -2059,8 +2059,16 @@ export class DockablePanel extends Panel {
           dragStart = null;
           detached = false;
         };
-        this.screen.on('mousemove', onMove);
-        this.screen.on('mouseup', onUp);
+        // Routed through btn.onScreenEvent (not a raw screen.on()) so
+        // Element's _unbindScreenEvents() removes these when the button
+        // is destroyed - both when updateTabs() rebuilds the tab bar on
+        // every switch/add/remove, and when the panel itself is
+        // destroyed. Same bug class already fixed above for the panel's
+        // own drag/resize listeners (see bindScreenEvents()); mousemove
+        // is the hot path behind this repo's documented door-freeze
+        // class.
+        btn.onScreenEvent('mousemove', onMove);
+        btn.onScreenEvent('mouseup', onUp);
       }
 
       this.tabButtons.push(btn);
