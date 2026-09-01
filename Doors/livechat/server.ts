@@ -1109,6 +1109,11 @@ export async function createApp(session: DoorSession) {
   terminalMode = createTerminalModeSwitch({
     bbs,
     screen,
+    // The standalone /chat page IS the whole window and always was wide.
+    // Inside the BBS the door opens at the size the board serves and the
+    // caller asks for more with Alt+Enter - "livechat opened in responsive
+    // mode by default in the bbs it should not" (2026-09-01).
+    start: chatOnly ? 'wide' : 'fixed',
     onRelayout: () => { updateLayout(); screen.render(); },
   });
 
@@ -2837,6 +2842,11 @@ export async function createApp(session: DoorSession) {
 
   return {
     state,
+    // The screen and the size switch are handed back so the door can be
+    // DRIVEN by a test - toggled wide, resized, toggled back - rather than
+    // only started. Nothing in the door reads them from here.
+    screen,
+    get terminalMode() { return terminalMode; },
     async run() {
       try {
         // Clear screen before drawing UI (prevent BBS log bleed-through)

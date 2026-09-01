@@ -10,6 +10,7 @@ import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
+import { keyOverride } from '../utils/key-overrides';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 
@@ -1034,6 +1035,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // In game mode, block xterm from processing keys - window handlers will emit events
       if (gameMode.current && socketRef.current?.connected) {
         // Block xterm from processing any keys in game mode
+        return false;
+      }
+
+      // Keys this terminal translates itself, before xterm has an opinion.
+      // Alt+Enter is the doors' size toggle and xterm does not ESC-prefix an
+      // Option combination on macOS, so the door was seeing a bare Enter.
+      const override = keyOverride(ev);
+      if (override !== null) {
+        ev.preventDefault();
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('command', override);
+        }
         return false;
       }
 
