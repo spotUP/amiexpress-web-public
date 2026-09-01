@@ -38,9 +38,23 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileExplorerOverlay = void 0;
+exports.doorPathFrom = doorPathFrom;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
+const ViewManager_1 = require("./ViewManager");
+/**
+ * What a door's path means, from the BBS root.
+ *
+ * A door's LOCATION is relative to the BBS root - `Doors/<door>` - and an
+ * absolute one is already an answer. This used to resolve against
+ * `process.cwd()`, which on the board is /app/web/backend: a tree with no
+ * Doors directory in it, so the explorer opened on nothing for every door
+ * whose registration carries a relative path.
+ */
+function doorPathFrom(bbsRoot, doorPath) {
+    return path.isAbsolute(doorPath) ? doorPath : path.resolve(bbsRoot, doorPath);
+}
 const READABLE_EXTS = new Set(['.txt', '.nfo', '.guide', '.readme', '.doc', '.me', '.1st']);
 function isReadable(filename) {
     const ext = path.extname(filename).toLowerCase();
@@ -106,11 +120,13 @@ class FileExplorerOverlay {
         this._promptHandler = null;
         this.screen = opts.screen;
         this.onClose = opts.onClose;
-        this.projectRoot = process.cwd();
-        // Resolve to absolute path, then if it points to a file (e.g. 68K executable) use parent dir
-        let resolved = path.isAbsolute(opts.doorPath)
-            ? opts.doorPath
-            : path.resolve(this.projectRoot, opts.doorPath);
+        // The BBS root, not the process's working directory. A door's LOCATION is
+        // relative to the BBS root - Doors/<door> - and the backend runs with cwd
+        // /app/web/backend on the board, so resolving against cwd pointed the
+        // explorer at a tree that holds no doors at all. resolveBbsRoot is what
+        // the rest of DOORMAN already uses for exactly this.
+        this.projectRoot = opts.bbsRoot ?? (0, ViewManager_1.resolveBbsRoot)(__dirname);
+        let resolved = doorPathFrom(this.projectRoot, opts.doorPath);
         try {
             this.doorRoot = fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
         }

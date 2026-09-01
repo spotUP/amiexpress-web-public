@@ -6,7 +6,22 @@ interface FileExplorerOptions {
     screen: any;
     doorPath: string;
     onClose: () => void;
+    /**
+     * What a relative door path is relative TO. Defaults to the BBS root, the
+     * way the rest of DOORMAN finds it; a test passes its own.
+     */
+    bbsRoot?: string;
 }
+/**
+ * What a door's path means, from the BBS root.
+ *
+ * A door's LOCATION is relative to the BBS root - `Doors/<door>` - and an
+ * absolute one is already an answer. This used to resolve against
+ * `process.cwd()`, which on the board is /app/web/backend: a tree with no
+ * Doors directory in it, so the explorer opened on nothing for every door
+ * whose registration carries a relative path.
+ */
+export declare function doorPathFrom(bbsRoot: string, doorPath: string): string;
 export declare class FileExplorerOverlay {
     private screen;
     private onClose;
