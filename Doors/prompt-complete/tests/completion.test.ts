@@ -105,9 +105,11 @@ export async function tabCyclesWhenTheFirstGuessIsWrong(): Promise<void> {
   // way forward that is not deleting and typing more.
   const names = ['DOOR', 'DOORREPO', 'DOORS'];
 
+  // Shortest first, so DOORS is reached before the longer DOORREPO - see
+  // theShortestCompletionComesFirst for why that ordering was chosen.
   assert.strictEqual(completeNth('do', names, 0), 'DOOR');
-  assert.strictEqual(completeNth('do', names, 1), 'DOORREPO');
-  assert.strictEqual(completeNth('do', names, 2), 'DOORS');
+  assert.strictEqual(completeNth('do', names, 1), 'DOORS');
+  assert.strictEqual(completeNth('do', names, 2), 'DOORREPO');
 }
 
 export async function cyclingWrapsRatherThanRunningOut(): Promise<void> {
@@ -126,4 +128,34 @@ export async function cyclingOnlyOffersPrefixMatches(): Promise<void> {
 export async function cyclingLeavesAnArgumentAlone(): Promise<void> {
   assert.deepStrictEqual(completionCandidates('find dung', ['FIND']), []);
   assert.strictEqual(completeNth('find dung', ['FIND'], 0), 'find dung');
+}
+
+export async function theShortestCompletionComesFirst(): Promise<void> {
+  // "it auto completes door, donkeykong but not doors". Alphabetically
+  // DONKEYKONG leads and DOORS is fifth, which is five TAB presses away -
+  // so in practice it was never reached. The shortest completion adds the
+  // fewest letters nobody typed, and is almost always the plain command the
+  // longer names are variants of.
+  const names = ['DONKEYKONG', 'DOOR', 'DOORMAN', 'DOORREPO', 'DOORS'];
+
+  assert.deepStrictEqual(
+    completionCandidates('do', names),
+    ['DOOR', 'DOORS', 'DOORMAN', 'DOORREPO', 'DONKEYKONG']
+  );
+  assert.strictEqual(completeNth('do', names, 0), 'DOOR');
+  assert.strictEqual(completeNth('do', names, 1), 'DOORS', 'DOORS is one press away');
+}
+
+export async function equalLengthsStayAlphabetical(): Promise<void> {
+  // Length is the first key, not the only one - otherwise the order of two
+  // equally short names would depend on how the command cache was built.
+  assert.deepStrictEqual(completionCandidates('a', ['AZ', 'AB', 'AM']), ['AB', 'AM', 'AZ']);
+}
+
+export async function theGhostShowsWhatTabWillDo(): Promise<void> {
+  // Reading one name in grey and being handed another by TAB is worse than
+  // showing nothing at all.
+  const names = ['DONKEYKONG', 'DOOR', 'DOORS'];
+  assert.strictEqual(ghostFor('do', names), 'OR');
+  assert.strictEqual(completeNth('do', names, 0), 'DOOR');
 }

@@ -66,14 +66,13 @@ export function ghostFor(buffer: string, names: readonly string[]): string {
   const verb = verbOf(buffer);
   if (verb === null || verb === '') return '';
 
-  for (const name of names) {
-    if (name.toLowerCase().startsWith(verb)) {
-      // Slice by the typed LENGTH, so the offer keeps the name's own
-      // casing rather than echoing back what was typed.
-      return name.slice(verb.length);
-    }
-  }
-  return '';
+  // The first CANDIDATE, so the grey tail always shows what the next TAB
+  // will actually do. Reading one name and being given another is worse
+  // than no suggestion at all.
+  const first = completionCandidates(buffer, names)[0];
+  // Slice by the typed LENGTH, so the offer keeps the name's own casing
+  // rather than echoing back what was typed.
+  return first ? first.slice(verb.length) : '';
 }
 
 /**
@@ -91,13 +90,10 @@ export function completeBuffer(buffer: string, names: readonly string[]): string
   const verb = verbOf(buffer);
   if (verb === null || verb === '') return buffer;
 
-  for (const name of names) {
-    if (name.toLowerCase().startsWith(verb)) {
-      const indent = buffer.slice(0, buffer.length - buffer.trimStart().length);
-      return indent + name;
-    }
-  }
-  return buffer;
+  const first = completionCandidates(buffer, names)[0];
+  if (!first) return buffer;
+  const indent = buffer.slice(0, buffer.length - buffer.trimStart().length);
+  return indent + first;
 }
 
 /**
@@ -112,7 +108,19 @@ export function completeBuffer(buffer: string, names: readonly string[]): string
 export function completionCandidates(buffer: string, names: readonly string[]): string[] {
   const verb = verbOf(buffer);
   if (verb === null || verb === '') return [];
-  return names.filter(name => name.toLowerCase().startsWith(verb));
+
+  // SHORTEST first, then alphabetically.
+  //
+  // Alphabetical order alone answered "do" with DONKEYKONG and put DOORS
+  // fifth, behind DOOR, DOORMAN and DOORREPO - reported as "it autocompletes
+  // door, donkeykong, but not doors", because nobody presses TAB five times.
+  //
+  // The shortest completion is the least presumptuous: it adds the fewest
+  // letters that were not typed, and it is almost always the plain command
+  // that the longer names are variants of.
+  return names
+    .filter(name => name.toLowerCase().startsWith(verb))
+    .sort((a, b) => (a.length - b.length) || a.localeCompare(b));
 }
 
 /**

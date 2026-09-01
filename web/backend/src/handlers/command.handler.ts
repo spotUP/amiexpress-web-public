@@ -3865,7 +3865,6 @@ console.log(' Empty command, redisplaying menu');
 
       const { line: completed } = await promptCompleteNth(config.get('dataDir'), from, press);
       (session as any)._promptCycle = { from, press, result: completed };
-
       if (completed !== session.inputBuffer) {
         // Redraw the WHOLE word rather than appending the tail: the
         // completion uses the command's own spelling, so accepting "do"
