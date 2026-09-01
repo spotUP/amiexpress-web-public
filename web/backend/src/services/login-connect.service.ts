@@ -90,14 +90,18 @@ export async function runPreLoginConnect(
   // is exactly what a board with no FRONTEND does. Say which of the two it
   // was.
   try {
-    const { runSysCommand } = await import(
-      "../handlers/command-execution.handler"
-    );
-    const result = await runSysCommand(emitter as any, session, "FRONTEND", "");
+    const handler = await import("../handlers/command-execution.handler");
+    const result = await handler.runSysCommand(emitter as any, session, "FRONTEND", "");
     if (result !== 0) {
+      // The cache size comes from THIS module instance. A dynamic import that
+      // resolves to a second copy of the handler has its own empty cache, and
+      // every syscmd then fails as "not registered" while the board's own
+      // startup log says sixteen were loaded.
       console.log(
         `[PreLoginConnect] FRONTEND syscmd returned ${result} - not registered, ` +
-        `or refused (access level, or a door type this board cannot run)`
+        `or refused (access level, or a door type this board cannot run). ` +
+        `syscmd cache holds ${handler.commandCache.syscmd.size}: ` +
+        `${[...handler.commandCache.syscmd.keys()].slice(0, 20).join(", ") || "nothing"}`
       );
     }
   } catch (err) {

@@ -21,7 +21,7 @@ const SOURCE = fs.readFileSync(
 
 describe('the FRONTEND step of the connect flow', () => {
   it('reports a non-zero result rather than passing it over', () => {
-    expect(SOURCE).toMatch(/const result = await runSysCommand\([^)]*"FRONTEND"/);
+    expect(SOURCE).toMatch(/const result = await handler\.runSysCommand\([^)]*"FRONTEND"/);
     expect(SOURCE).toMatch(/if \(result !== 0\)/);
   });
 
@@ -30,6 +30,13 @@ describe('the FRONTEND step of the connect flow', () => {
     expect(SOURCE).toMatch(/catch \(err\)/);
     expect(SOURCE).toContain('FRONTEND syscmd failed:');
     expect(SOURCE).not.toContain('FRONTEND syscmd not found, continuing');
+  });
+
+  it('names the cache it looked in, not just the answer it got', () => {
+    // A dynamic import that resolves to a second copy of the handler has its
+    // own empty cache: every syscmd then fails as "not registered" while the
+    // startup log says sixteen were loaded. The size tells the two apart.
+    expect(SOURCE).toContain('handler.commandCache.syscmd.size');
   });
 
   it('still treats a board with no FRONTEND as normal, not as an error', () => {
