@@ -135,8 +135,8 @@ interface SAUCERecord {
   fileSize: number;
   dataType: number;
   fileType: number;
-  tInfo1: number;  // Width for ANSI
-  tInfo2: number;  // Height for ANSI
+  tInfo1: number;  // Width for ANSI - NOT the size source of truth, see canvasW; reserved for future SAUCE serialization
+  tInfo2: number;  // Height for ANSI - NOT the size source of truth, see canvasH; reserved for future SAUCE serialization
   tInfo3: number;
   tInfo4: number;
   comments: string[];
@@ -280,6 +280,22 @@ export class ANSIEditor extends Box {
     return { x1: 0, y1: 0, x2: this.canvasW - 1, y2: this.canvasH - 1 };
   }
 
+  /** Clamp a column into the canvas's horizontal bounds [0, canvasW - 1]. */
+  private clampCol(col: number): number {
+    return Math.max(0, Math.min(this.canvasW - 1, col));
+  }
+
+  /** Clamp a row into the canvas's vertical bounds [0, canvasH - 1]. */
+  private clampLine(line: number): number {
+    return Math.max(0, Math.min(this.canvasH - 1, line));
+  }
+
+  /** Clamp the live cursor position into the current canvas's bounds. */
+  private clampCursorToCanvas(): void {
+    this.cursor.col = this.clampCol(this.cursor.col);
+    this.cursor.line = this.clampLine(this.cursor.line);
+  }
+
   constructor(options: ANSIEditorOptions = {}) {
     super({
       ...options,
@@ -306,8 +322,13 @@ export class ANSIEditor extends Box {
 
     // Initialize core canvas (defaults to 80x25 standard ANSI size)
     this.cellCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
-    this.sauce.tInfo1 = this.canvasW;
-    this.sauce.tInfo2 = this.canvasH;
+    // sauce.tInfo1/tInfo2 are intentionally NOT cached here - a construction-time
+    // snapshot would desync from the real canvas after any resize (setCoreCanvas),
+    // exactly the kind of second source of truth this widget is being cleaned of.
+    // The one place that displays canvas size in the SAUCE record (showSauceEditor)
+    // reads this.canvasW/this.canvasH live instead. tInfo1/tInfo2 stay at their
+    // struct-required placeholder (0) - they exist for a future real SAUCE
+    // serialization path, not as the size source of truth.
 
     // Parse initial content
     if (options.initialContent) {
@@ -1808,7 +1829,7 @@ BBS Door SDK v2.0{/gray-fg}
       parent: modal,
       top: 8,
       left: 2,
-      content: `{gray-fg}Size: ${this.sauce.tInfo1}x${this.sauce.tInfo2}{/}`,
+      content: `{gray-fg}Size: ${this.canvasW}x${this.canvasH}{/}`,
       tags: true,
     });
     new Text({
@@ -2041,6 +2062,14 @@ BBS Door SDK v2.0{/gray-fg}
 
     // Clear the canvas (preserves the editor's configured dimensions)
     this.cellCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
+    // Keep the active layer's canvas reference in sync - same stale-reference
+    // bug setCoreCanvas had (composeLayers/mergeLayerDown/flattenLayers all
+    // read layer.canvas directly, not this.cellCanvas, so without this a
+    // merge-down or flatten-on-save after File > New would still emit the
+    // pre-clear content).
+    if (this.layers[this.activeLayerIndex]) {
+      this.layers[this.activeLayerIndex].canvas = this.cellCanvas;
+    }
     this.syncCoreCanvasToDisplay();
 
     // Reset lines for text mode
@@ -2198,8 +2227,8 @@ BBS Door SDK v2.0{/gray-fg}
       if (x < 0 || y < 0) return;
 
       // Clamp to canvas bounds
-      this.cursor.col = Math.min(Math.max(0, x), this.canvasW - 1);
-      this.cursor.line = Math.min(Math.max(0, y), this.canvasH - 1);
+      this.cursor.col = this.clampCol(x);
+      this.cursor.line = this.clampLine(y);
       this.updateDrawCursor();
 
       // Handle tool-specific click behavior
@@ -2230,8 +2259,8 @@ BBS Door SDK v2.0{/gray-fg}
       if (x < 0 || y < 0) return;
 
       // Clamp to canvas bounds
-      this.cursor.col = Math.min(Math.max(0, x), this.canvasW - 1);
-      this.cursor.line = Math.min(Math.max(0, y), this.canvasH - 1);
+      this.cursor.col = this.clampCol(x);
+      this.cursor.line = this.clampLine(y);
       this.updateDrawCursor();
 
       // For shape tools, update preview on mouse move while drawing
@@ -2432,7 +2461,7 @@ BBS Door SDK v2.0{/gray-fg}
       return;
     }
     if (name === 'right') {
-      this.cursor.col = Math.min(this.canvasW - 1, this.cursor.col + 1);
+      this.cursor.col = this.clampCol(this.cursor.col + 1);
       this.updateDrawCursor();
       return;
     }
@@ -2442,14 +2471,14 @@ BBS Door SDK v2.0{/gray-fg}
       return;
     }
     if (name === 'down') {
-      this.cursor.line = Math.min(this.canvasH - 1, this.cursor.line + 1);
+      this.cursor.line = this.clampLine(this.cursor.line + 1);
       this.updateDrawCursor();
       return;
     }
 
     // Enter moves to next line
     if (name === 'enter' || name === 'return') {
-      this.cursor.line = Math.min(this.canvasH - 1, this.cursor.line + 1);
+      this.cursor.line = this.clampLine(this.cursor.line + 1);
       this.cursor.col = 0;
       this.updateDrawCursor();
       return;
@@ -2470,7 +2499,7 @@ BBS Door SDK v2.0{/gray-fg}
       // Type any printable character
       if (ch && ch.length === 1) {
         this.typeCharAtCursor(ch);
-        this.cursor.col = Math.min(this.canvasW - 1, this.cursor.col + 1);
+        this.cursor.col = this.clampCol(this.cursor.col + 1);
         this.updateDrawCursor();
         return;
       }
@@ -2478,7 +2507,7 @@ BBS Door SDK v2.0{/gray-fg}
       // Space types a space
       if (name === 'space') {
         this.typeCharAtCursor(' ');
-        this.cursor.col = Math.min(this.canvasW - 1, this.cursor.col + 1);
+        this.cursor.col = this.clampCol(this.cursor.col + 1);
         this.updateDrawCursor();
         return;
       }
@@ -4198,14 +4227,13 @@ BBS Door SDK v2.0{/gray-fg}
     }
 
     // this.canvasW/canvasH now reflect the newly-assigned canvas.
-    this.cursor.col = Math.max(0, Math.min(this.canvasW - 1, this.cursor.col));
-    this.cursor.line = Math.max(0, Math.min(this.canvasH - 1, this.cursor.line));
+    this.clampCursorToCanvas();
     if (this.selection) {
       this.selection = {
-        x1: Math.max(0, Math.min(this.canvasW - 1, this.selection.x1)),
-        y1: Math.max(0, Math.min(this.canvasH - 1, this.selection.y1)),
-        x2: Math.max(0, Math.min(this.canvasW - 1, this.selection.x2)),
-        y2: Math.max(0, Math.min(this.canvasH - 1, this.selection.y2)),
+        x1: this.clampCol(this.selection.x1),
+        y1: this.clampLine(this.selection.y1),
+        x2: this.clampCol(this.selection.x2),
+        y2: this.clampLine(this.selection.y2),
       };
     }
 
