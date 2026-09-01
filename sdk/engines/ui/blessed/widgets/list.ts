@@ -71,13 +71,18 @@ export class List extends Element {
     this.interactive = options.interactive !== false;
     this.wrapItemsEnabled = options.wrapItems !== false;
 
-    // Ensure default hover style for interactive lists
-    // Use blue bg for hover (distinct from cyan selected style)
-    if (this.interactive) {
+    // No hover highlight unless the caller asks for one.
+    //
+    // This used to default to blue-on-white for every interactive list,
+    // which is a colour no theme chose and which appeared the moment a
+    // mouse crossed the widget - reported as "if i hover with mouse i get
+    // dark blue non themed color". It also lit a SECOND row while the
+    // selection stayed lit, so two rows looked current at once.
+    //
+    // A door that wants hover feedback can say so, in its own colours. A
+    // door that does not now gets what it drew.
+    if (this.interactive && (this.style.item?.hover || this.style.hover)) {
       this.style.item = this.style.item || {};
-      if (!this.style.item.hover && !this.style.hover) {
-        this.style.item.hover = { bg: 'blue', fg: 'white' };
-      }
     }
 
     // Update content
@@ -238,6 +243,26 @@ export class List extends Element {
       let closeTags = '';
 
       if (this.interactive && isSelected && itemSelectedStyle) {
+        // The selection has to WIN over whatever the row coloured itself.
+        //
+        // The style is applied by wrapping the row in tags, and blessed's
+        // parser respects the LAST tag it saw - so a row containing its own
+        // `{green-fg}` overrode the wrapper and was drawn green on the green
+        // highlight, i.e. invisible. Reported as "the text is not readable
+        // in the highlighted row"; LIVECHAT carries a comment about hitting
+        // the same thing with cyan and worked around it in the door.
+        //
+        // Only the channel the selection actually sets is stripped. A door
+        // that gives `selected` a background but no foreground still gets
+        // its own colours on the selected row, which is a real and
+        // reasonable thing to want.
+        if (itemSelectedStyle.fg) {
+          itemText = itemText.replace(/\{\/?[^}]*-fg\}/g, '');
+        }
+        if (itemSelectedStyle.bg) {
+          itemText = itemText.replace(/\{\/?[^}]*-bg\}/g, '');
+        }
+
         // Apply selected style
         if (itemSelectedStyle.fg) {
           openTags += `{${itemSelectedStyle.fg}-fg}`;
@@ -264,7 +289,11 @@ export class List extends Element {
       }
 
       if (openTags) {
-        itemText = `${openTags}${item}${closeTags}`;
+        // `itemText`, NOT `item`: the selected branch above strips the row's
+        // own colour tags out of itemText, and rebuilding from the untouched
+        // `item` here threw that away - which is why the first attempt at
+        // this fix changed nothing on screen.
+        itemText = `${openTags}${itemText}${closeTags}`;
       }
 
       if (this.wrapItemsEnabled) {
