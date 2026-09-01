@@ -7,7 +7,7 @@
  * second and an unbounded list is a memory leak with a scrollbar.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   DoorOpen,
   Download,
@@ -20,12 +20,15 @@ import {
   Terminal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
 import { useBbsEvents, useRealtime } from '../realtime/RealtimeProvider';
 import { useLastCallers, useLastDownloads, useLastUploads } from '../hooks/useBoardData';
 import { formatBytes, formatClockTime, formatRelativeTime } from '../lib/format';
 import { StatusDot } from '../components/ui/StatusDot';
 import { EmptyState } from '../components/ui/states';
 import type { BBSEvent, BBSEventType } from '../types/realtime';
+import { describeCommand, describeDoorActivity, describeTransfer } from './activity-phrasing';
 import type { StatusTone } from '../types/ui';
 
 /** A busy board fills this in a few minutes; older entries fall off the end. */
@@ -98,7 +101,10 @@ const FILTERS: { id: 'all' | BBSEventType; label: string }[] = [
   { id: 'command', label: 'Commands' },
 ];
 
-function describe(event: BBSEvent): string {
+function describe(
+  event: BBSEvent,
+  conferenceName: (id: number | undefined) => string | undefined,
+): string {
   switch (event.type) {
     case 'user_login':
       return event.data?.location ? `from ${event.data.location}` : '';
@@ -106,19 +112,22 @@ function describe(event: BBSEvent): string {
       return '';
     case 'upload':
     case 'download': {
-      const name = event.data?.fileName ?? 'a file';
       const size = event.data?.fileSize;
-      return size ? `${name} (${formatBytes(size)})` : name;
+      return describeTransfer(
+        event.type,
+        event.data?.fileName,
+        size ? formatBytes(size) : undefined,
+        event.data?.conferenceName ?? conferenceName(event.data?.conferenceId),
+      );
     }
     case 'door_activity':
-      return `${event.data?.action === 'exited' ? 'left' : 'entered'} ${event.data?.doorName ?? 'a door'}`;
+      // isGame is false until a door's category reaches this event: calling
+      // DOORMAN or LINKWALL "a game" would read worse than the shorthand did.
+      return describeDoorActivity(event.data?.doorName, event.data?.action, false);
     case 'custom_door_event':
       return event.data?.message ?? event.data?.eventType ?? '';
-    case 'command': {
-      const conference = event.data?.conferenceId;
-      const name = event.data?.command ?? '?';
-      return conference === undefined ? name : `${name} in conference ${conference}`;
-    }
+    case 'command':
+      return describeCommand(event.data?.command, conferenceName(event.data?.conferenceId));
   }
 }
 
@@ -128,6 +137,25 @@ export function ActivityPage() {
   const [filter, setFilter] = useState<'all' | BBSEventType>('all');
   const [live, setLive] = useState<ActivityEntry[]>([]);
   const sequence = useRef(0);
+
+  // Conference NAMES, so an event can say "Joined Amiga Elite" rather than
+  // "J in conference 2". Cached hard: the list changes when a sysop edits it,
+  // not while a feed is being watched.
+  const conferences = useQuery({
+    queryKey: ['config', 'conferences'],
+    queryFn: () => apiClient.getConferenceConfigs(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const conferenceName = useCallback(
+    (id: number | undefined): string | undefined => {
+      if (id === undefined) return undefined;
+      const rows = (conferences.data as { data?: { id?: number; conferenceNumber?: number; name?: string }[] } | undefined)?.data ?? [];
+      const found = rows.find(c => c.conferenceNumber === id || c.id === id);
+      return found?.name;
+    },
+    [conferences.data],
+  );
 
   const callers = useLastCallers(20);
   const uploads = useLastUploads(10);
@@ -142,7 +170,7 @@ export function ActivityPage() {
       username: event.username,
       nodeId: event.nodeId,
       timestamp: event.timestamp || Date.now(),
-      detail: describe(event),
+      detail: describe(event, conferenceName),
     };
     setLive((current) => appendEntry(current, entry));
   });
@@ -168,7 +196,7 @@ export function ActivityPage() {
         username: file.uploader,
         nodeId: 0,
         timestamp: new Date(file.uploadDate).getTime(),
-        detail: `${file.filename} (${formatBytes(file.size)})`,
+        detail: describeTransfer('upload', file.filename, formatBytes(file.size), file.areaName),
         seeded: true,
       });
     }
@@ -179,7 +207,7 @@ export function ActivityPage() {
         username: file.uploader,
         nodeId: 0,
         timestamp: new Date(file.uploadDate).getTime(),
-        detail: `${file.filename} (${formatBytes(file.size)})`,
+        detail: describeTransfer('download', file.filename, formatBytes(file.size), file.areaName),
         seeded: true,
       });
     }
