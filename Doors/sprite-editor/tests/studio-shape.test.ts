@@ -63,7 +63,8 @@ export async function frameAndAnimationLiveInTheEditorsOwnMenuBar(): Promise<voi
     assert.ok(frame.some((l: string) => l.startsWith(needed)), `Frame menu needs ${needed}`);
   }
   const animation = menus[3].items.filter((i: any) => !i.separator).map((i: any) => i.label);
-  for (const needed of ['Play', 'Next', 'New...', 'Delete', 'Slower', 'Faster', 'Toggle Loop']) {
+  for (const needed of ['Play', 'Next Animation', 'New Animation...', 'Delete Animation',
+    'Slower', 'Faster', 'Loop / Hold']) {
     assert.ok(animation.some((l: string) => l.startsWith(needed)), `Animation menu needs ${needed}`);
   }
 }
@@ -100,9 +101,13 @@ export async function theOpenPathIsARequesterNotAScreen(): Promise<void> {
 }
 
 export async function everyHotkeyIsNonPrintableAndNotTheEditorsOwn(): Promise<void> {
-  const bind = source.slice(source.indexOf('private bindHotkeys'), source.indexOf('destroy(): void {'));
-  const keys = [...bind.matchAll(/key\(\['([^']+)'\]/g)].map(m => m[1]);
-  assert.ok(keys.length > 0, 'the hotkeys must be readable from bindHotkeys');
+  // The full clash rules live in tests/hotkeys.test.ts, which reads the
+  // same table; this keeps the two oldest rules next to the shape they
+  // belong to.
+  const studio: any = new SpriteStudioDoor();
+  const keys = Object.values(studio.commands())
+    .map((c: any) => c.key).filter(Boolean) as string[];
+  assert.ok(keys.length > 0, 'the hotkeys must be readable from the command table');
   const editorsOwn = new Set(['C-s', 'C-m', 'C-z', 'C-y', 'C-h']);
   for (const k of keys) {
     assert.ok(!(k.length === 1 && k >= ' '),
@@ -133,9 +138,11 @@ export async function zoomIsSomethingYouAskFor(): Promise<void> {
   const zoom = studio.buildMenus().find((m: any) => m.label === 'Zoom');
   assert.ok(zoom, 'there must be a Zoom menu');
   assert.deepStrictEqual(
-    zoom.items.map((i: any) => i.label),
+    zoom.items.filter((i: any) => !i.separator).map((i: any) => i.label.trim()).slice(1),
     ['1:1  (actual size)', '2:1', '4:1', '6:1', '8:1'],
     'the steps a sysop can pick, actual size first');
+  assert.ok(zoom.items[0].label.startsWith('Zoom In'),
+    'with the key that walks the ladder at the top of the menu');
   for (const z of ZOOM_STEPS) {
     assert.ok(z === 1 || z % 2 === 0,
       `${z}:1 is odd - a half-block cell holds two pixels vertically, so an ` +
@@ -186,7 +193,8 @@ export async function onionSkinShowsThePreviousFrameAndOnlyAsAGhost(): Promise<v
   assert.ok(fn.includes('anim.loop'),
     'on frame 0 of a looping animation the previous frame is the LAST one - ' +
     'that is the join the loop actually makes');
-  assert.ok(source.includes("key(['C-o']"), 'and a hotkey to toggle it');
+  const studio: any = new SpriteStudioDoor();
+  assert.strictEqual(studio.commands().onionSkin.key, 'C-o', 'and a hotkey to toggle it');
 }
 
 export async function playingHappensOnTheCanvasAndStopsOnAnyKey(): Promise<void> {
@@ -257,7 +265,8 @@ export async function theTransparencyGuideIsOffUntilAskedFor(): Promise<void> {
   assert.ok(source.includes('private guide = false;'), 'the guide starts off');
   assert.ok(source.includes('showTransparencyGuide: this.guide'),
     'and the editor is built with whatever it currently is');
-  assert.ok(source.includes("key(['C-g']"), 'with a hotkey');
+  const guided: any = new SpriteStudioDoor();
+  assert.strictEqual(guided.commands().guide.key, 'C-g', 'with a hotkey');
   const studio: any = new SpriteStudioDoor();
   const sprite = studio.buildMenus().find((m: any) => m.label === 'Frame');
   assert.ok(sprite.items.some((i: any) => i.label.startsWith('Transparency Guide')),

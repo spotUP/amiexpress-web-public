@@ -91,3 +91,51 @@ describe('ANSIEditor host-supplied menus', () => {
     expect(ran).toBe(1);
   });
 });
+
+/**
+ * "all menu items needs to show hotkeys as well" (2026-09-01).
+ *
+ * A menu is where a hotkey is LEARNED. Every item the editor answers with a
+ * key had that key nowhere in its own menus, so the only way to find Ctrl+S
+ * was to already know it.
+ */
+describe('ANSIEditor menu hotkeys', () => {
+  let screen: any;
+  beforeEach(() => { screen = new Screen({ title: 'menu-keys', responsive: true, width: 100, height: 40 } as any); });
+  afterEach(() => screen?.destroy());
+
+  /** Every dropdown item label in the editor's own menus. */
+  function itemLabels(editor: any): string[] {
+    return [editor.fileMenu, editor.editMenu, editor.selectionMenu,
+      editor.colorsMenu, editor.viewMenu, editor.helpMenu]
+      .filter(Boolean)
+      .flatMap((m: any) => (m.items as any[]).map(i => i.label as string));
+  }
+
+  it('names the key beside the command it runs', () => {
+    const editor: any = new ANSIEditor({ parent: screen, showMenuBar: true } as any);
+    const labels = itemLabels(editor);
+    for (const [command, key] of [
+      ['Save', 'C-s'], ['Undo', 'C-z'], ['Redo', 'C-y'],
+      ['Foreground...', 'A-c'], ['Background...', 'A-b'],
+      ['Text Mode', 'C-m'], ['Draw Mode', 'C-m'], ['Exit', 'ESC'],
+    ] as Array<[string, string]>) {
+      const item = labels.find(l => l.startsWith(command));
+      expect(item).toBeDefined();
+      expect(item!.endsWith(key)).toBe(true);
+    }
+  });
+
+  it('gives a menu room for the labels it carries', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen,
+      showMenuBar: true,
+      extraMenus: [{
+        label: 'Frame',
+        items: [{ label: 'Transparency Guide  C-g', action: () => {} }],
+      }],
+    } as any);
+    const host = editor.extraMenuDropdowns[0];
+    expect(host.width).toBeGreaterThanOrEqual('Transparency Guide  C-g'.length + 2);
+  });
+});

@@ -28,6 +28,7 @@ import {
   Screen, ANSIEditor, List, Box,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { HostToolbarGroup } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { menuItemLabel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import {
   createTerminalModeSwitch, type TerminalModeSwitch,
@@ -47,6 +48,23 @@ import {
 import { previewLines } from './preview';
 import { promptText, confirm } from './dialogs';
 import { T, applyTheme } from './door-theme';
+
+/**
+ * One thing the door can do, in the one place that says so.
+ *
+ * `key` is the blessed name the screen binds; `show` is what the menu
+ * prints when that name reads badly ('C-up' as 'C-Up'). No key at all is a
+ * deliberate answer for the items that open a dialog: the editor and the
+ * browser between them have taken most of the alphabet, and a menu item
+ * promising a key that something else already owns is worse than one with
+ * no key.
+ */
+export interface StudioCommand {
+  label: string;
+  key?: string;
+  show?: string;
+  run: () => void;
+}
 
 /** The editor's own sidebar width, subtracted before working out the zoom. */
 export const SIDEBAR_COLS = 6;
@@ -224,6 +242,18 @@ export class SpriteStudioDoor {
    * takes itself down again - the black-screen rule the fork base learned
    * the hard way: whoever hides something owns showing it again.
    */
+  /**
+   * Give a requester the keyboard and keep it.
+   *
+   * Every dialog in this door goes through here. Focus alone loses to the
+   * click that opened it; the trap survives that, and the SDK releases it
+   * for us if the element is destroyed while it still holds one.
+   */
+  private trap(dialog: any): void {
+    dialog.focus();
+    (this.screen as any).trapFocus?.(dialog);
+  }
+
   private pick(title: string, items: string[]): Promise<number | null> {
     return new Promise((resolve) => {
       if (items.length === 0) { resolve(null); return; }
@@ -250,6 +280,7 @@ export class SpriteStudioDoor {
 
       const done = (value: number | null) => {
         (this.screen as any).dialogOpen = false;
+        (this.screen as any).releaseFocusTrap?.(list);
         list.destroy();
         this.editor?.focus();
         this.screen.render();
@@ -259,7 +290,7 @@ export class SpriteStudioDoor {
       (this.screen as any).dialogOpen = true;
       list.on('select', (_item: any, index: number) => done(index));
       list.key(['escape', 'q'], () => done(null));
-      list.focus();
+      this.trap(list);
       this.screen.render();
     });
   }
@@ -387,6 +418,7 @@ export class SpriteStudioDoor {
       } as any);
       const close = () => {
         (this.screen as any).dialogOpen = false;
+        (this.screen as any).releaseFocusTrap?.(box);
         box.destroy();
         this.editor?.focus();
         this.screen.render();
@@ -394,7 +426,13 @@ export class SpriteStudioDoor {
       };
       (this.screen as any).dialogOpen = true;
       box.key(['escape', 'enter', 'space', 'q'], close);
-      box.focus();
+      // Focusing is not enough when the dialog was opened by a CLICK: the
+      // same mouse dispatch carries on to the elements underneath, and the
+      // editor's canvas takes focus straight back - so Escape went to the
+      // canvas and the dialog could not be dismissed at all (reported live
+      // 2026-09-01 from the strip's play button). A trap reasserts itself
+      // whenever focus is outside it.
+      this.trap(box);
       this.screen.render();
     });
   }
@@ -464,107 +502,176 @@ export class SpriteStudioDoor {
   }
 
   /**
-   * The strip under the canvas: what a hand reaches for while animating.
+   * Everything this door can do, with the key that does it.
    *
-   * Playback, frame stepping, onion skin and zoom were all menu items, which
-   * is a dropdown for something you do on every frame. The editor puts this
-   * under the canvas when there is a row spare - a small sprite in a wide
-   * terminal always has one, a full-screen .ans never does - so the strip is
-   * a responsive-mode feature without either side knowing about modes.
+   * ONE table, because a command has three faces - a menu item, a hotkey and
+   * sometimes a button in the footer - and three lists is how a menu comes
+   * to promise a key that is bound to something else. The menus, the key
+   * bindings and the footer strip are all built from this.
    *
-   * Sprites only. A .ans has no frames, no animation and no cells to
+   * The keys are Ctrl combinations, and which ones are free is not a matter
+   * of taste. The EDITOR owns Ctrl+S/M/Z/Y/H/D, Alt+C/B/H, F1-F12, Tab,
+   * Escape and every printable character (in draw mode a letter paints a
+   * letter), and the BROWSER keeps Ctrl+N, Ctrl+T and Ctrl+W whatever the
+   * page says. What is left is the alphabet minus all of that - which is
+   * why some of these are positional rather than mnemonic, and why the
+   * dialog-opening items further down have no key at all rather than a
+   * clashing one. tests/hotkeys.test.ts holds the reserved list.
+   */
+  private commands(): Record<string, StudioCommand> {
+    const frames = (): number => {
+      if (!this.doc) return 0;
+      return this.doc.sprite.animations[this.doc.animation].frames.length;
+    };
+    return {
+      nextFrame:   { label: 'Next Frame', key: 'C-f', run: () => this.step(+1) },
+      prevFrame:   { label: 'Previous Frame', key: 'C-b', run: () => this.step(-1) },
+      firstFrame:  { label: 'First Frame', key: 'C-a', run: () => this.op(d => selectFrame(d, 0)) },
+      lastFrame:   { label: 'Last Frame', key: 'C-l', run: () => this.op(d => selectFrame(d, frames() - 1)) },
+      newFrame:    { label: 'New Frame', key: 'C-k', run: () => this.op(d => addFrame(d, 'blank')) },
+      dupFrame:    { label: 'Duplicate Frame', key: 'C-r', run: () => this.op(d => addFrame(d, 'duplicate')) },
+      delFrame:    { label: 'Delete Frame', key: 'C-x', run: () => void this.deleteFrameAsked() },
+      moveEarlier: { label: 'Move Earlier', key: 'C-up', show: 'C-Up', run: () => this.op(d => moveFrame(d, -1)) },
+      moveLater:   { label: 'Move Later', key: 'C-down', show: 'C-Dn', run: () => this.op(d => moveFrame(d, 1)) },
+      copyFrame:   { label: 'Copy Frame', key: 'C-c', run: () => this.copyFrame() },
+      pasteFrame:  { label: 'Paste Frame', key: 'C-v', run: () => this.pasteFrame() },
+      onionSkin:   { label: 'Onion Skin', key: 'C-o', run: () => this.toggleOnionSkin() },
+      guide:       { label: 'Transparency Guide', key: 'C-g', run: () => this.toggleGuide() },
+
+      play:        { label: 'Play / Stop', key: 'C-p', run: () => this.togglePlay() },
+      playBox:     { label: 'Play in a box', run: () => this.previewRequester() },
+      nextAnim:    { label: 'Next Animation', key: 'C-e', run: () => this.cycleAnimation() },
+      slower:      { label: 'Slower', key: 'C-left', show: 'C-Lt', run: () => this.op(d => setTicksPerFrame(d, -1)) },
+      faster:      { label: 'Faster', key: 'C-right', show: 'C-Rt', run: () => this.op(d => setTicksPerFrame(d, +1)) },
+      toggleLoop:  { label: 'Loop / Hold', key: 'C-u', run: () => this.op(d => toggleLoop(d)) },
+      newAnim:     { label: 'New Animation...', run: () => void this.newAnimationAsked() },
+      renameAnim:  { label: 'Rename Animation...', run: () => void this.renameAnimationAsked() },
+      deleteAnim:  { label: 'Delete Animation', run: () => void this.deleteAnimationAsked() },
+
+      zoomCycle:   { label: 'Zoom In (wraps)', key: 'C-q', run: () => this.cycleZoom() },
+      size:        {
+        label: '80x25 / Responsive', key: 'M-enter', show: 'A-Ent',
+        run: () => this.toggleFixedSize(),
+      },
+
+      newSprite:   { label: 'New Sprite...', run: () => void this.newSpriteAsked() },
+      saveAs:      { label: 'Save As...', run: () => void this.saveAsAsked() },
+      openArt:     { label: 'Open Art (.ans)...', run: () => void this.openArtRequester() },
+    };
+  }
+
+  /** How a menu prints one of them: the label, then the key, right-aligned. */
+  private menuItem(id: string): { label: string; action: () => void } {
+    const cmd = this.commands()[id];
+    return {
+      label: menuItemLabel(cmd.label, cmd.show ?? cmd.key),
+      action: () => cmd.run(),
+    };
+  }
+
+  /**
+   * The footer strip: what a hand reaches for while animating.
+   *
+   * The same commands as the menus, one click away instead of a dropdown.
+   * Sprites only - a .ans has no frames, no animation and no cells to
    * magnify, and a strip of controls that do nothing is worse than none.
    */
   private buildToolbar(): HostToolbarGroup[] {
+    const cmd = this.commands();
     const frames = (): number => {
       if (!this.doc) return 0;
       return this.doc.sprite.animations[this.doc.animation].frames.length;
     };
     return [
       [
-        { label: '|<', action: () => this.op(d => selectFrame(d, 0)) },
-        { label: '<<', action: () => this.step(-1) },
-        { label: () => (this.playing ? '[]' : '|>'), action: () => this.togglePlay() },
-        { label: '>>', action: () => this.step(+1) },
-        { label: '>|', action: () => this.op(d => selectFrame(d, frames() - 1)) },
+        { label: '|<', action: cmd.firstFrame.run },
+        { label: '<<', action: cmd.prevFrame.run },
+        { label: () => (this.playing ? '[]' : '|>'), action: cmd.play.run },
+        { label: '>>', action: cmd.nextFrame.run },
+        { label: '>|', action: cmd.lastFrame.run },
       ],
       [
         { label: () => `${(this.doc?.frame ?? 0) + 1}/${frames()}` },
-        { label: '[+]', action: () => this.op(d => addFrame(d, 'duplicate')) },
-        { label: '[-]', action: () => void this.deleteFrameAsked() },
+        { label: '[+]', action: cmd.dupFrame.run },
+        { label: '[-]', action: cmd.delFrame.run },
       ],
       [
-        {
-          label: () => `ONION ${this.onionSkin ? 'on' : 'off'}`,
-          action: () => this.toggleOnionSkin(),
-        },
+        { label: () => `ONION ${this.onionSkin ? 'on' : 'off'}`, action: cmd.onionSkin.run },
       ],
       [
-        {
-          label: () => `${this.zoom}x`,
-          action: () => void this.setZoom(
-            this.zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1] ? ZOOM_STEPS[0] : stepZoom(this.zoom, 1),
-          ),
-        },
+        { label: () => `${this.zoom}x`, action: cmd.zoomCycle.run },
       ],
     ];
   }
 
+  /** One step up the zoom ladder, back to 1:1 from the top. */
+  private cycleZoom(): void {
+    const top = ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    void this.setZoom(this.zoom === top ? ZOOM_STEPS[0] : stepZoom(this.zoom, 1));
+  }
+
   /** Frame and Animation, in the editor's OWN menu bar. */
   private buildMenus(): Array<{ label: string; items: Array<{ label: string; action?: () => void; separator?: boolean }> }> {
+    const line = { label: '────────────────', separator: true };
     return [
       {
         label: 'Frame',
         items: [
-          { label: 'Next Frame      C-f', action: () => this.step(+1) },
-          { label: 'Previous Frame  C-b', action: () => this.step(-1) },
-          { label: '────────────────', separator: true },
-          { label: 'New Frame', action: () => this.op(d => addFrame(d, 'blank')) },
-          { label: 'Duplicate Frame', action: () => this.op(d => addFrame(d, 'duplicate')) },
-          { label: 'Delete Frame', action: () => void this.deleteFrameAsked() },
-          { label: '────────────────', separator: true },
-          { label: 'Move Earlier', action: () => this.op(d => moveFrame(d, -1)) },
-          { label: 'Move Later', action: () => this.op(d => moveFrame(d, 1)) },
-          { label: '────────────────', separator: true },
-          { label: 'Copy Frame      C-c', action: () => this.copyFrame() },
-          { label: 'Paste Frame     C-v', action: () => this.pasteFrame() },
-          { label: '────────────────', separator: true },
-          { label: 'Onion Skin      C-o', action: () => this.toggleOnionSkin() },
-          { label: 'Transparency Guide  C-g', action: () => this.toggleGuide() },
+          this.menuItem('nextFrame'),
+          this.menuItem('prevFrame'),
+          this.menuItem('firstFrame'),
+          this.menuItem('lastFrame'),
+          line,
+          this.menuItem('newFrame'),
+          this.menuItem('dupFrame'),
+          this.menuItem('delFrame'),
+          line,
+          this.menuItem('moveEarlier'),
+          this.menuItem('moveLater'),
+          line,
+          this.menuItem('copyFrame'),
+          this.menuItem('pasteFrame'),
+          line,
+          this.menuItem('onionSkin'),
+          this.menuItem('guide'),
         ],
       },
       {
         label: 'Sprite',
         items: [
-          { label: 'New Sprite...', action: () => void this.newSpriteAsked() },
-          { label: 'Save As...', action: () => void this.saveAsAsked() },
-          { label: '────────────────', separator: true },
-          { label: 'Open Art (.ans)...', action: () => void this.openArtRequester() },
-          { label: '────────────────', separator: true },
-          { label: '80x25 / Responsive', action: () => void this.toggleFixedSize() },
+          this.menuItem('newSprite'),
+          this.menuItem('saveAs'),
+          line,
+          this.menuItem('openArt'),
+          line,
+          this.menuItem('size'),
         ],
       },
       {
         label: 'Zoom',
-        items: ZOOM_STEPS.map(z => ({
-          label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
-          action: () => void this.setZoom(z),
-        })),
+        items: [
+          this.menuItem('zoomCycle'),
+          line,
+          ...ZOOM_STEPS.map(z => ({
+            label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
+            action: () => void this.setZoom(z),
+          })),
+        ],
       },
       {
         label: 'Animation',
         items: [
-          { label: 'Play          C-p', action: () => this.playInPlace() },
-          { label: 'Play in a box', action: () => this.previewRequester() },
-          { label: 'Next          C-e', action: () => this.cycleAnimation() },
-          { label: '────────────────', separator: true },
-          { label: 'New...', action: () => void this.newAnimationAsked() },
-          { label: 'Rename...', action: () => void this.renameAnimationAsked() },
-          { label: 'Delete', action: () => void this.deleteAnimationAsked() },
-          { label: '────────────────', separator: true },
-          { label: 'Slower', action: () => this.op(d => setTicksPerFrame(d, -1)) },
-          { label: 'Faster', action: () => this.op(d => setTicksPerFrame(d, +1)) },
-          { label: 'Toggle Loop', action: () => this.op(d => toggleLoop(d)) },
+          this.menuItem('play'),
+          this.menuItem('playBox'),
+          this.menuItem('nextAnim'),
+          line,
+          this.menuItem('newAnim'),
+          this.menuItem('renameAnim'),
+          this.menuItem('deleteAnim'),
+          line,
+          this.menuItem('slower'),
+          this.menuItem('faster'),
+          this.menuItem('toggleLoop'),
         ],
       },
     ];
@@ -759,7 +866,10 @@ export class SpriteStudioDoor {
     const doc = this.doc;
     const anim = doc.sprite.animations[doc.animation];
     if (anim.frames.length < 2) {
-      void this.message('Play', 'This animation has a single frame.');
+      // Not an error and not worth a modal - nothing has gone wrong, there
+      // is simply nothing to play. A modal here was also the one the sysop
+      // could not dismiss, because it opened from a click.
+      this.flash('Only one frame in this animation');
       return;
     }
 
@@ -949,23 +1059,24 @@ export class SpriteStudioDoor {
    * editor's own and are left alone.
    */
   private bindHotkeys(): void {
-    const key = (keys: string[], handler: () => void) => {
+    for (const cmd of Object.values(this.commands())) {
+      if (!cmd.key) continue;
+      // Alt+Enter belongs to the SDK's terminal-mode switch, which binds it
+      // itself; binding it here too would toggle twice per press.
+      if (cmd.key === 'M-enter') continue;
+      const keys = [cmd.key];
       const guarded = () => {
         if ((this.screen as any).dialogOpen) return;
-        handler();
+        cmd.run();
+        // TRUE means handled, so the editor never sees it. That matters for
+        // the arrow combinations: the editor's draw handler reads the arrow
+        // name without looking at Ctrl, so Ctrl+Up would move the frame AND
+        // walk the cursor up a row.
+        return true;
       };
       this.screen.key(keys, guarded);
       this.keyHandlers.push([keys, guarded]);
-    };
-
-    key(['C-f'], () => this.step(+1));
-    key(['C-b'], () => this.step(-1));
-    key(['C-e'], () => this.cycleAnimation());
-    key(['C-p'], () => this.playInPlace());
-    key(['C-o'], () => this.toggleOnionSkin());
-    key(['C-g'], () => this.toggleGuide());
-    key(['C-c'], () => this.copyFrame());
-    key(['C-v'], () => this.pasteFrame());
+    }
   }
 
   destroy(): void {

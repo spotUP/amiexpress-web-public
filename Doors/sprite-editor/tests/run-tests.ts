@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./assets.test', './browser-model.test', './preview.test', './edit-doc.test', './studio-shape.test', './toolbar.test'];
+const TEST_MODULES = ['./assets.test', './browser-model.test', './preview.test', './edit-doc.test', './studio-shape.test', './toolbar.test', './dialog-focus.test', './hotkeys.test'];
 
 (async () => {
   let passed = 0;
