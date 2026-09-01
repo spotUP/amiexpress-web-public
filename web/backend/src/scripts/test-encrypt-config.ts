@@ -70,7 +70,6 @@ console.log('\n4. Storing encrypted values in database...');
   if (config.smtp_from_email) updates.smtp_from_email = config.smtp_from_email;
   if (config.sysop_email) updates.sysop_email = config.sysop_email;
   if (config.bbs_email) updates.bbs_email = config.bbs_email;
-  if (config.reg_key) updates.reg_key = config.reg_key;
 
   if (Object.keys(updates).length > 0) {
     configRepo.updateSystemConfig(updates);
@@ -97,15 +96,10 @@ console.log(`     Got: ${dbConfig.smtp_password}`);
 console.log(`   - smtp_username: ${match ? '[OK]' : '[FAIL]'}`);
     if (!match) allMatch = false;
   }
-  if (config.reg_key && dbConfig) {
-    const match = dbConfig.reg_key === config.reg_key;
-console.log(`   - reg_key: ${match ? '[OK]' : '[FAIL]'}`);
-    if (!match) allMatch = false;
-  }
 
   // 6. Show raw database value to confirm it's encrypted
 console.log('\n6. Raw database check (should show enc:... format):');
-  const rawStmt = (db as any).db.prepare('SELECT smtp_password, smtp_username, reg_key FROM system_config WHERE id = 1');
+  const rawStmt = (db as any).db.prepare('SELECT smtp_password, smtp_username FROM system_config WHERE id = 1');
   const rawRow = rawStmt.get() as any;
   if (rawRow) {
     if (rawRow.smtp_password) {
@@ -118,10 +112,6 @@ console.log(`     ${rawRow.smtp_password.slice(0, 60)}...`);
     if (rawRow.smtp_username) {
       const isEnc = rawRow.smtp_username.startsWith('enc:');
 console.log(`   - smtp_username in DB: ${isEnc ? '[ENCRYPTED]' : '[PLAINTEXT]'}`);
-    }
-    if (rawRow.reg_key) {
-      const isEnc = rawRow.reg_key.startsWith('enc:');
-console.log(`   - reg_key in DB: ${isEnc ? '[ENCRYPTED]' : '[PLAINTEXT]'}`);
     }
   }
 

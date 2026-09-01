@@ -323,7 +323,6 @@ export interface SystemConfig {
   convert_to_mb: boolean;      // Convert byte counts to megabytes
 
   // Registration
-  reg_key: string;             // BBS registration key
 
   // Logging
   debug_mode: boolean;

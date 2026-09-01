@@ -607,6 +607,8 @@ console.log('✓ Added quiet_join column');
 console.log('✓ Added convert_to_mb column');
       }
 
+      // Vestigial, see the CREATE TABLE above: still added so an older
+      // database matches the schema, never read.
       if (!systemConfigColumns.includes('reg_key')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN reg_key TEXT DEFAULT \'\'');
 console.log('✓ Added reg_key column');
@@ -1572,6 +1574,10 @@ console.error('Error running migrations:', error);
           -- System Behavior
           quiet_join INTEGER DEFAULT 0,
           convert_to_mb INTEGER DEFAULT 0,
+          -- Vestigial. REGKEY earns nothing on a freeware BBS, so nothing
+          -- reads or writes this any more. Kept rather than dropped
+          -- because DROP COLUMN destroys whatever a live board stored,
+          -- and an unread column costs nothing.
           reg_key TEXT DEFAULT '',
 
           -- Logging

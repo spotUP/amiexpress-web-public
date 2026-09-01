@@ -102,7 +102,6 @@ export interface BBSConfigData {
   // System Behavior
   quiet_join?: boolean;
   convert_to_mb?: boolean;
-  reg_key?: string;
   // express.e:sopt.toggles[TOGGLES_CREDITBYKB] — count UL/DL bytes in kilobytes instead of bytes
   credit_by_kb?: boolean;
 
@@ -307,7 +306,11 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   // System Behavior
   'QUIET_JOIN': 'quiet_join',
   'CONVERT_TO_MB': 'convert_to_mb',
-  'REGKEY': 'reg_key',
+  // REGKEY is deliberately absent: AmiExpress is freeware and this port
+  // is free, so there is no registration name to keep. It is no longer a
+  // known tooltype, which means a board that carries one keeps it - the
+  // writer preserves keys it does not recognise, and express.e:31991 can
+  // still read it on a real Amiga.
   // express.e sopt.toggles[TOGGLES_CREDITBYKB] — counts UL/DL in KB instead of bytes
   'CREDIT_BY_KBYTES': 'credit_by_kb',  // ACP.e:3030 - CREDITBYKB is an index (axcommon.e:385)
 
@@ -903,7 +906,6 @@ function getDefaultConfig(): BBSConfigData {
     ssh_port: 2222,
     quiet_join: false,
     convert_to_mb: false,
-    reg_key: '',
     debug_mode: false,
     log_level: 'info',
     log_retention_days: 90,
@@ -937,7 +939,9 @@ const SENSITIVE_TOOLTYPES = [
   'SMTP_PASSWORD',
   // SMTP_USERNAME is NOT stripped: express.e:31810 reads it out of this file.
   'SENDGRID_API_KEY',
-  'REGKEY',
+  // REGKEY was here AND in secrets-encryption's not-a-secret list, which
+  // stripped from bbsConfig.info the one file express.e:31991 reads it
+  // from. The field is gone; the key is now left where a board put it.
   'FTP_PASSWORD',
   'API_KEY',
   'DISCORD_WEBHOOK_URL',

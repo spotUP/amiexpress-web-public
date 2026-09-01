@@ -128,13 +128,13 @@ describe('Config Routes', () => {
       }
     });
 
-    it('does not expose reg_key in plaintext', async () => {
+    // REGKEY is gone: AmiExpress is freeware and this port is free, so the
+    // API has no registration name to hand out, masked or otherwise.
+    it('does not serve a registration key at all', async () => {
       const res = await request(app).get('/api/config/system');
       if (res.status === 200) {
         const data = res.body.data ?? res.body;
-        if (data.reg_key !== undefined && data.reg_key !== null && data.reg_key !== '') {
-          expect(data.reg_key).toBe('***');
-        }
+        expect(data.reg_key).toBeUndefined();
       }
     });
   });

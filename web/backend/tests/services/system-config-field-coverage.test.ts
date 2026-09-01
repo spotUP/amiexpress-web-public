@@ -352,26 +352,38 @@ describe('System Configuration field coverage', () => {
     });
   });
 
-  describe('the registration name shown at login', () => {
-    it('is configuration, not a secret', () => {
-      // express.e:31991 reads REGKEY straight out of bbsConfig.info, and
-      // prints it to every caller at login (express.e:25696, :29516). A value
-      // read from a plaintext tooltype and shown to everyone who connects is
-      // not a credential - but the substring rule caught nothing here, the
-      // explicit SENSITIVE_FIELDS list did, so the admin wrote it to the
-      // encrypted database while the login banner read the disk and found
-      // nothing. Filling the field in changed nothing on screen.
-      expect(isSensitiveField('reg_key')).toBe(false);
+  describe('the registration key this port no longer has', () => {
+    // AmiExpress is freeware and this port is free, so REGKEY earns nothing
+    // and the field is gone - schema, column read, admin field and the login
+    // banner, which prints the sysop's name instead. What must NOT happen is
+    // destroying the key on a board that carries one: express.e:31991 reads
+    // it from bbsConfig.info on a real Amiga, and the writer preserves
+    // tooltypes it does not recognise.
+    it('is not read back into the configuration', () => {
+      saveBBSConfig(root, { bbs_name: 'Uptown' });
+      fs.appendFileSync(path.join(root, 'bbsConfig.info.txt'), 'REGKEY=Up Rough\n');
+
+      expect((loadBBSConfig(root) as Record<string, unknown>).reg_key).toBeUndefined();
     });
 
-    it('round-trips to the file express.e reads it from', () => {
-      saveBBSConfig(root, { reg_key: 'Up Rough' });
+    it('cannot be set again through the API', () => {
+      // The schema strips what it does not declare, so a client still sending
+      // the old field gets it dropped rather than silently stored.
+      const parsed = SystemConfigSchema.partial().parse({
+        sysop_name: 'Spot',
+        reg_key: 'Up Rough',
+      } as Record<string, unknown>);
 
-      expect(loadBBSConfig(root).reg_key).toBe('Up Rough');
-
-      const text = fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8');
-      expect(text).toContain('REGKEY=Up Rough');
+      expect(parsed).not.toHaveProperty('reg_key');
+      expect(parsed.sysop_name).toBe('Spot');
     });
+
+    // Where an Amiga board's REGKEY actually lives is bbsConfig.info, the
+    // ICON - express.e:31991 reads it there, not from this port's .txt
+    // companion. saveBBSConfig only calls updateTooltype/removeTooltype for
+    // tooltypes it knows, so dropping REGKEY from TOOLTYPE_MAP leaves an
+    // icon's copy alone. The .txt is rebuilt from known keys by design and
+    // never was the file express.e reads.
   });
 
   describe('the contract that stops the fifteenth field', () => {

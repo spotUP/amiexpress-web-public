@@ -4,7 +4,7 @@
  *
  * HYBRID STORAGE ARCHITECTURE:
  * - Most config stored on disk (bbsConfig.info, bbsConfig.info.txt)
- * - Sensitive fields (reg_key, smtp_password, etc.) stored encrypted in database
+ * - Sensitive fields (smtp_password, etc.) stored encrypted in database
  * - getSystemConfig() merges disk + database values
  * - updateSystemConfig() routes fields to appropriate storage
  */

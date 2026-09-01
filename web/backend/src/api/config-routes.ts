@@ -103,7 +103,7 @@ console.error('Config API error:', error);
   router.get('/system', async (req: Request, res: Response) => {
     try {
       const config = await configService.getSystemConfig();
-      // Mask sensitive fields (smtp_password, reg_key, etc.) — never expose in GET response
+      // Mask sensitive fields (smtp_password, etc.) — never expose in GET response
       const sanitized: Record<string, any> = {};
       for (const [key, value] of Object.entries(config as any)) {
         sanitized[key] = isSensitiveField(key) && value ? MASKED_VALUE : value;

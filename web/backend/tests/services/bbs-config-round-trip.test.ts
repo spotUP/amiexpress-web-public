@@ -44,7 +44,6 @@ const describeIcon = hasIcon ? describe : describe.skip;
 const NOT_ROUND_TRIPPED = new Set<string>([
   // Secrets are masked on read; saving an empty value means "leave it alone".
   'smtp_password',
-  'reg_key',
 ]);
 
 /** An empty BBS root: the text companion is written and read without an icon. */

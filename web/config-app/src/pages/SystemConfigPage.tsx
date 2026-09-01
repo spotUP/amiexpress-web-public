@@ -216,8 +216,7 @@ export function SystemConfigPage() {
     // An empty password field means "leave it alone": the server holds these
     // encrypted and never sends them back.
     // An empty SMTP password means "leave it alone": the server holds it
-    // encrypted and never sends it back. reg_key is not a secret - it is a
-    // tooltype the BBS prints at login - so clearing it must be savable.
+    // encrypted and never sends it back. Every other field clears normally.
     if (name === 'smtp_password' && !value) return;
 
     setSavingField(name);
@@ -1730,19 +1729,6 @@ export function SystemConfigPage() {
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">System Behavior</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="reg_key" className="label">
-                Registration Key
-              </label>
-              <TooltypeKey field="reg_key" />
-              <input
-                id="reg_key"
-                type="text"
-                {...register('reg_key')}
-                className="input-field w-full"
-              />
-            </div>
-
             <div className="flex items-center space-x-3">
               <input
                 id="quiet_join"

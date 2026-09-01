@@ -1585,7 +1585,7 @@ console.error("Failed to assign node to session:", error);
   const bbsConfig = config.getConfig();
   const sessionStart = Date.now();
 
-  // Load disk-based config for reg_key and version
+  // Load disk-based config for the sysop name and version
   const { loadBBSConfig } = await import("./services/bbs-config-file.service");
   const diskConfig = loadBBSConfig(bbsConfig.dataDir);
 
@@ -1656,15 +1656,15 @@ console.log(
 
   // express.e:29516-29517 - Registration and node info.
   //
-  // express.e:31991 reads REGKEY from bbsConfig.info and falls back to 'NONE'.
-  // AmiExpress is freeware now, so there is no registration name to print and
-  // "UNREGISTERED" - which this invented - says nothing useful to a caller.
-  // The sysop's name is who the board actually belongs to, and a board that
-  // does carry a REGKEY still shows it.
-  const regKey = diskConfig.reg_key || diskConfig.sysop_name || "NONE";
+  // express.e:31991 reads REGKEY from bbsConfig.info and falls back to
+  // 'NONE'. AmiExpress is freeware and this port is free, so there is no
+  // registration name to print: the sysop's name is who the board actually
+  // belongs to. The REGKEY field is gone from the admin entirely; a board
+  // that carries the tooltype keeps it, for express.e's own banner.
+  const registeredTo = diskConfig.sysop_name || "NONE";
   socket.emit(
     "ansi-output",
-    `\r\nRegistered to ${regKey}. You are connected to Node ${nodeSession.nodeId} via web connection`
+    `\r\nRegistered to ${registeredTo}. You are connected to Node ${nodeSession.nodeId} via web connection`
   );
 
   // express.e:29518-29522 - Connection timestamp

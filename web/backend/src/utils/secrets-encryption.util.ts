@@ -89,13 +89,6 @@ const DISK_ONLY_FIELDS = new Set<string>([
   // reads the disk. Encrypting it into the database left the disk value empty,
   // so the field could not be set at all.
   'system_password',
-
-  // express.e:31991 reads REGKEY out of bbsConfig.info and prints it to every
-  // caller at login (express.e:25696, :28786, :29516). A value read from a
-  // plaintext tooltype and shown to everyone who connects is not a
-  // credential; classing it as one sent it to the encrypted database while
-  // the login banner read the disk, so the field could not be set at all.
-  'reg_key',
 ]);
 
 /** What a masked secret looks like on the way out of the API. */

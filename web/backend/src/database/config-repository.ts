@@ -75,7 +75,7 @@ export class ConfigRepository extends BaseRepository<any> {
         ftp_enabled, ftp_host, ftp_port, ftp_data_ports,
         http_enabled, http_host, http_port,
         telnet_port, ssh_port,
-        quiet_join, convert_to_mb, reg_key,
+        quiet_join, convert_to_mb,
         debug_mode, log_level, log_retention_days, sysop_debug_enabled,
         vapid_public_key, vapid_private_key, vapid_contact_email
       ) VALUES (
@@ -98,7 +98,7 @@ export class ConfigRepository extends BaseRepository<any> {
         ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?
       )
     `);
 
@@ -164,7 +164,6 @@ export class ConfigRepository extends BaseRepository<any> {
       config.ssh_port ?? 31337,
       config.quiet_join ? 1 : 0,
       config.convert_to_mb ? 1 : 0,
-      config.reg_key || '',
       config.debug_mode ? 1 : 0,
       config.log_level || 'info',
       config.log_retention_days || 90,
@@ -1055,7 +1054,6 @@ export class ConfigRepository extends BaseRepository<any> {
       ssh_port: row.ssh_port ?? 31337,
       quiet_join: Boolean(row.quiet_join),
       convert_to_mb: Boolean(row.convert_to_mb),
-      reg_key: decryptSecret(row.reg_key || ''),
       debug_mode: Boolean(row.debug_mode),
       log_level: row.log_level,
       log_retention_days: row.log_retention_days,

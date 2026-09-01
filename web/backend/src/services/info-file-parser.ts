@@ -159,7 +159,6 @@ console.log(`  ${key}=${maskedValue}`);
     const sensitiveKeys = [
       'SMTP_PASSWORD',
       'SMTP_USERNAME',
-      'REGKEY',
       'PASSWORD',
       'SECRET',
     ];

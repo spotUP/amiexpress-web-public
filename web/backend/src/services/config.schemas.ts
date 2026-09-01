@@ -137,7 +137,6 @@ export const SystemConfigSchema = z.object({
   // System Behavior (TOOLTYPE_BBSCONFIG)
   quiet_join: z.boolean().optional(),
   convert_to_mb: z.boolean().optional(),
-  reg_key: z.string().max(200).optional(),
 
   // Logging
   debug_mode: z.boolean().optional(),

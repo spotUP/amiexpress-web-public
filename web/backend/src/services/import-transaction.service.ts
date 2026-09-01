@@ -713,11 +713,10 @@ console.log('[ImportTransaction] Importing FTP config');
       updates.mail_on_pwd_fail = mapped.notifications.mailOnPwdFail;
     }
 
-    // Registration key (sensitive)
-    if (config.regKey) {
-      updates.reg_key = config.regKey;
-console.log('[ImportTransaction] Importing registration key (will be encrypted)');
-    }
+    // An imported board's REGKEY is not carried into the configuration:
+    // AmiExpress is freeware and this port is free, so there is nothing to
+    // register. The key stays in the board's own bbsConfig.info, where
+    // express.e:31991 reads it.
 
     // Only update if we have something to update
     if (Object.keys(updates).length > 0) {

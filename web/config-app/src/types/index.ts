@@ -112,8 +112,6 @@ export interface SystemConfig {
   quiet_join: boolean;
   convert_to_mb: boolean;
 
-  // Registration
-  reg_key: string;
 
   // Logging
   debug_mode: boolean;
