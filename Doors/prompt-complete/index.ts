@@ -32,7 +32,10 @@
  * active. There is nothing to configure yet; the completion happens at the
  * prompt, not in here.
  */
-import { suggestCommands, ghostFor, completeBuffer } from './completion';
+// Explicit .js: this is emitted as ES2020 and imported by the BBS with a
+// file:// URL, and Node's ESM resolver does not guess extensions. It only
+// worked without this because the dev backend runs under tsx, which does.
+import { suggestCommands, ghostFor, completeBuffer } from './completion.js';
 
 /**
  * The interface the BBS calls. Kept deliberately small and pure - names in,
