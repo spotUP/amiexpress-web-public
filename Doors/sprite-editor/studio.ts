@@ -45,18 +45,24 @@ import { T, applyTheme } from './door-theme';
 export const SIDEBAR_COLS = 6;
 
 /**
- * How large one sprite cell is drawn.
+ * Magnification, in characters per sprite cell.
  *
- * A 5x2 sprite at one character per cell is a smudge; the editor's
- * cellScaleX/Y magnify it to fill the room actually available, and a wide
- * sprite gets a smaller scale rather than a clipped one.
+ * ONE by default, on the sysop's instruction after seeing an auto-fitted
+ * sprite fill the screen: "its super magnified make it 1:1 as default".
+ * The art is what it is - a sprite drawn at the size the game draws it is
+ * the honest view, and zooming is something you ask for, from the Zoom
+ * menu, not something the door decides for you.
  */
-export function canvasScale(sprite: Sprite, width: number, height: number): number {
-  const drawable = width - SIDEBAR_COLS;
-  return Math.max(1, Math.min(
-    Math.floor(drawable / Math.max(1, sprite.cellW)),
-    Math.floor(height / Math.max(1, sprite.cellH)),
-  ));
+export const DEFAULT_ZOOM = 1;
+
+/** What the Zoom menu offers, in characters per cell. */
+export const ZOOM_STEPS = [1, 2, 3, 4, 6, 8];
+
+/** The next step up or down, clamped - never off the end of the list. */
+export function stepZoom(current: number, delta: 1 | -1): number {
+  const i = ZOOM_STEPS.indexOf(current);
+  const from = i === -1 ? 0 : i;
+  return ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, from + delta))];
 }
 
 /** The title line: what is open, which animation, which frame. */
@@ -74,6 +80,7 @@ export class SpriteStudioDoor {
   private editor: any = null;
 
   private doc: EditDoc | null = null;
+  private zoom = DEFAULT_ZOOM;
   private door = '';
   private file = '';
   private exitResolve: (() => void) | null = null;
@@ -288,8 +295,6 @@ export class SpriteStudioDoor {
       this.editor = null;
     }
 
-    const scale = canvasScale(sprite, this.screen.width as number, (this.screen.height as number) - 2);
-
     this.editor = new ANSIEditor({
       parent: this.screen,
       top: 0, left: 0, width: '100%', height: '100%',
@@ -297,7 +302,7 @@ export class SpriteStudioDoor {
       initialMode: 'draw',
       canvasWidth: sprite.cellW,
       canvasHeight: sprite.cellH,
-      cellScaleX: scale, cellScaleY: scale,
+      cellScaleX: this.zoom, cellScaleY: this.zoom,
       // An erased sprite cell is a HOLE - compositing skips it and the
       // game's background shows through. Without this every sprite saved
       // here would carry a black box around its artwork.
@@ -334,6 +339,13 @@ export class SpriteStudioDoor {
           { label: 'Move Earlier', action: () => this.op(d => moveFrame(d, -1)) },
           { label: 'Move Later', action: () => this.op(d => moveFrame(d, 1)) },
         ],
+      },
+      {
+        label: 'Zoom',
+        items: ZOOM_STEPS.map(z => ({
+          label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
+          action: () => void this.setZoom(z),
+        })),
       },
       {
         label: 'Animation',
@@ -392,6 +404,20 @@ export class SpriteStudioDoor {
     } catch (error) {
       void this.message('Refused', String((error as Error).message));
     }
+  }
+
+  /**
+   * Redraw at a new magnification.
+   *
+   * The widget takes its scale at construction, so this commits what is on
+   * the canvas, rebuilds the editor and puts the same frame back - the
+   * document never notices.
+   */
+  private async setZoom(zoom: number): Promise<void> {
+    if (zoom === this.zoom) return;
+    this.commit();
+    this.zoom = zoom;
+    await this.openEditor();
   }
 
   private step(delta: number): void {

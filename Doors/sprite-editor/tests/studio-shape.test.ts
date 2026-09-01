@@ -13,7 +13,7 @@ import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
-import { SpriteStudioDoor, canvasScale, studioTitle, SIDEBAR_COLS } from '../studio';
+import { SpriteStudioDoor, studioTitle, DEFAULT_ZOOM, ZOOM_STEPS, stepZoom } from '../studio';
 import { openDoc } from '../edit-doc';
 
 const source = readFileSync(join(__dirname, '..', 'studio.ts'), 'utf8')
@@ -52,8 +52,8 @@ export async function theDoorDrawsNoChromeOfItsOwn(): Promise<void> {
 export async function frameAndAnimationLiveInTheEditorsOwnMenuBar(): Promise<void> {
   const studio: any = new SpriteStudioDoor();
   const menus = studio.buildMenus();
-  assert.deepStrictEqual(menus.map((m: any) => m.label), ['Frame', 'Animation'],
-    'the door contributes exactly Frame and Animation, into the editor bar');
+  assert.deepStrictEqual(menus.map((m: any) => m.label), ['Frame', 'Zoom', 'Animation'],
+    'the door contributes Frame, Zoom and Animation into the editor bar');
   assert.ok(source.includes('extraMenus: this.buildMenus()'),
     'they must be handed to the editor as extraMenus, not drawn separately');
 
@@ -61,7 +61,7 @@ export async function frameAndAnimationLiveInTheEditorsOwnMenuBar(): Promise<voi
   for (const needed of ['New Frame', 'Duplicate Frame', 'Delete Frame']) {
     assert.ok(frame.some((l: string) => l.startsWith(needed)), `Frame menu needs ${needed}`);
   }
-  const animation = menus[1].items.filter((i: any) => !i.separator).map((i: any) => i.label);
+  const animation = menus[2].items.filter((i: any) => !i.separator).map((i: any) => i.label);
   for (const needed of ['Play', 'Next', 'New...', 'Delete', 'Slower', 'Faster', 'Toggle Loop']) {
     assert.ok(animation.some((l: string) => l.startsWith(needed)), `Animation menu needs ${needed}`);
   }
@@ -110,18 +110,31 @@ export async function everyHotkeyIsNonPrintableAndNotTheEditorsOwn(): Promise<vo
   }
 }
 
-export async function theMagnificationLeavesRoomForTheSidebar(): Promise<void> {
-  const sprite = makeSprite();
-  const scale = canvasScale(sprite, 80, 23);
-  assert.ok(scale > 1, 'a 3x2 sprite on an 80-column screen must be magnified');
-  assert.ok(scale * sprite.cellW <= 80 - SIDEBAR_COLS,
-    `scale ${scale} overflows the columns left by the editor's sidebar`);
+export async function theDefaultIsOneToOne(): Promise<void> {
+  // "its super magnified make it 1:1 as default" - the door must not decide
+  // a magnification for the artist by fitting the sprite to the screen.
+  assert.strictEqual(DEFAULT_ZOOM, 1, 'a sprite opens at actual size');
+  assert.ok(source.includes('cellScaleX: this.zoom, cellScaleY: this.zoom'),
+    'the editor must be built at the current zoom, not at a fitted one');
+  assert.ok(!source.includes('canvasScale('),
+    'the auto-fit must be gone, not merely unused');
 }
 
-export async function aWideSpriteGetsASmallerScaleNotAClippedOne(): Promise<void> {
-  const wide = { ...makeSprite(), cellW: 70 } as Sprite;
-  assert.strictEqual(canvasScale(wide, 80, 23), 1,
-    'a 70-wide sprite in 74 drawable columns can only be drawn 1:1');
+export async function zoomIsSomethingYouAskFor(): Promise<void> {
+  const studio: any = new SpriteStudioDoor();
+  const zoom = studio.buildMenus().find((m: any) => m.label === 'Zoom');
+  assert.ok(zoom, 'there must be a Zoom menu');
+  assert.deepStrictEqual(
+    zoom.items.map((i: any) => i.label),
+    ['1:1  (actual size)', '2:1', '3:1', '4:1', '6:1', '8:1'],
+    'the steps a sysop can pick, actual size first');
+}
+
+export async function steppingZoomStopsAtTheEnds(): Promise<void> {
+  assert.strictEqual(stepZoom(1, -1), 1, 'cannot go below actual size');
+  assert.strictEqual(stepZoom(1, 1), 2);
+  assert.strictEqual(stepZoom(ZOOM_STEPS[ZOOM_STEPS.length - 1], 1), 8, 'cannot go past the top');
+  assert.strictEqual(stepZoom(99, -1), 1, 'an unknown zoom falls back to the first step');
 }
 
 export async function theTitleSaysWhatIsOpenAndWhereYouAre(): Promise<void> {

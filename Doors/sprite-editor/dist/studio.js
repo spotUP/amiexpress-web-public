@@ -24,8 +24,8 @@
  * they were always independent of the screen that used to wrap them.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SpriteStudioDoor = exports.SIDEBAR_COLS = void 0;
-exports.canvasScale = canvasScale;
+exports.SpriteStudioDoor = exports.ZOOM_STEPS = exports.DEFAULT_ZOOM = exports.SIDEBAR_COLS = void 0;
+exports.stepZoom = stepZoom;
 exports.studioTitle = studioTitle;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
@@ -38,15 +38,22 @@ const door_theme_1 = require("./door-theme");
 /** The editor's own sidebar width, subtracted before working out the zoom. */
 exports.SIDEBAR_COLS = 6;
 /**
- * How large one sprite cell is drawn.
+ * Magnification, in characters per sprite cell.
  *
- * A 5x2 sprite at one character per cell is a smudge; the editor's
- * cellScaleX/Y magnify it to fill the room actually available, and a wide
- * sprite gets a smaller scale rather than a clipped one.
+ * ONE by default, on the sysop's instruction after seeing an auto-fitted
+ * sprite fill the screen: "its super magnified make it 1:1 as default".
+ * The art is what it is - a sprite drawn at the size the game draws it is
+ * the honest view, and zooming is something you ask for, from the Zoom
+ * menu, not something the door decides for you.
  */
-function canvasScale(sprite, width, height) {
-    const drawable = width - exports.SIDEBAR_COLS;
-    return Math.max(1, Math.min(Math.floor(drawable / Math.max(1, sprite.cellW)), Math.floor(height / Math.max(1, sprite.cellH))));
+exports.DEFAULT_ZOOM = 1;
+/** What the Zoom menu offers, in characters per cell. */
+exports.ZOOM_STEPS = [1, 2, 3, 4, 6, 8];
+/** The next step up or down, clamped - never off the end of the list. */
+function stepZoom(current, delta) {
+    const i = exports.ZOOM_STEPS.indexOf(current);
+    const from = i === -1 ? 0 : i;
+    return exports.ZOOM_STEPS[Math.max(0, Math.min(exports.ZOOM_STEPS.length - 1, from + delta))];
 }
 /** The title line: what is open, which animation, which frame. */
 function studioTitle(doc, door, file) {
@@ -60,6 +67,7 @@ class SpriteStudioDoor {
     constructor() {
         this.editor = null;
         this.doc = null;
+        this.zoom = exports.DEFAULT_ZOOM;
         this.door = '';
         this.file = '';
         this.exitResolve = null;
@@ -254,7 +262,6 @@ class SpriteStudioDoor {
             this.editor.destroy();
             this.editor = null;
         }
-        const scale = canvasScale(sprite, this.screen.width, this.screen.height - 2);
         this.editor = new blessed_1.ANSIEditor({
             parent: this.screen,
             top: 0, left: 0, width: '100%', height: '100%',
@@ -262,7 +269,7 @@ class SpriteStudioDoor {
             initialMode: 'draw',
             canvasWidth: sprite.cellW,
             canvasHeight: sprite.cellH,
-            cellScaleX: scale, cellScaleY: scale,
+            cellScaleX: this.zoom, cellScaleY: this.zoom,
             // An erased sprite cell is a HOLE - compositing skips it and the
             // game's background shows through. Without this every sprite saved
             // here would carry a black box around its artwork.
@@ -297,6 +304,13 @@ class SpriteStudioDoor {
                     { label: 'Move Earlier', action: () => this.op(d => (0, edit_doc_1.moveFrame)(d, -1)) },
                     { label: 'Move Later', action: () => this.op(d => (0, edit_doc_1.moveFrame)(d, 1)) },
                 ],
+            },
+            {
+                label: 'Zoom',
+                items: exports.ZOOM_STEPS.map(z => ({
+                    label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
+                    action: () => void this.setZoom(z),
+                })),
             },
             {
                 label: 'Animation',
@@ -356,6 +370,20 @@ class SpriteStudioDoor {
         catch (error) {
             void this.message('Refused', String(error.message));
         }
+    }
+    /**
+     * Redraw at a new magnification.
+     *
+     * The widget takes its scale at construction, so this commits what is on
+     * the canvas, rebuilds the editor and puts the same frame back - the
+     * document never notices.
+     */
+    async setZoom(zoom) {
+        if (zoom === this.zoom)
+            return;
+        this.commit();
+        this.zoom = zoom;
+        await this.openEditor();
     }
     step(delta) {
         this.op(d => (0, edit_doc_1.selectFrame)(d, d.frame + delta));
