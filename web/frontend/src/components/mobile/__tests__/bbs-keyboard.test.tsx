@@ -6,6 +6,19 @@
  * keyboard shipped without anyone typing an address on it, so what these
  * tests protect is that every character a registration actually needs can be
  * pressed and reaches the terminal.
+ *
+ * Rewritten after 71b1eb4f0 laid the keyboard out the way a phone does. Two
+ * of the assumptions here went stale with it and the suite had been failing
+ * ever since:
+ *
+ *   - the mode key was '!#1'; it is '123' to the numbers layer and '#+=' on
+ *     from there to the symbols layer
+ *   - letter labels follow the SHIFT state now, which is what that commit
+ *     set out to fix ("it still shows uppercase chars, which makes it really
+ *     confusing to type passwords"), so an unshifted key reads 'q', not 'Q'
+ *
+ * What they assert is unchanged: every character a registration needs is
+ * reachable, and reaches the terminal as itself.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -24,9 +37,14 @@ describe('MobileBBSKeyboard', () => {
     const onKey = vi.fn();
     render(<MobileBBSKeyboard onKey={onKey} />);
 
-    for (const ch of ['j', 'o', '@', 'm', 'y', '-', 'b', 'b', 's', '.', 'n', 'e', 't']) {
-      press(ch === ch.toUpperCase() && /[a-z]/i.test(ch) ? ch : ch.toUpperCase());
-    }
+    // A thumb types this by switching layers, so the test does too.
+    press('j'); press('o');
+    press('123'); press('@'); press('ABC');
+    press('m'); press('y');
+    press('123'); press('-'); press('ABC');
+    press('b'); press('b'); press('s');
+    press('123'); press('.'); press('ABC');
+    press('n'); press('e'); press('t');
 
     expect(onKey.mock.calls.map(c => c[0]).join('')).toBe('jo@my-bbs.net');
   });
@@ -34,9 +52,13 @@ describe('MobileBBSKeyboard', () => {
   it('has the characters an email needs', () => {
     render(<MobileBBSKeyboard onKey={() => undefined} />);
 
-    for (const label of ['@', '.', '-', '_']) {
+    // @ - . are on the 123 layer; _ is one further on, under #+=.
+    press('123');
+    for (const label of ['@', '.', '-']) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy();
     }
+    press('#+=');
+    expect(screen.getByRole('button', { name: '_' })).toBeTruthy();
   });
 
   it('sends @ unchanged when shift is held', () => {
@@ -46,6 +68,7 @@ describe('MobileBBSKeyboard', () => {
     render(<MobileBBSKeyboard onKey={onKey} />);
 
     press('⇧');
+    press('123');
     press('@');
 
     expect(onKey).toHaveBeenCalledWith('@');
@@ -66,7 +89,9 @@ describe('MobileBBSKeyboard', () => {
     };
 
     collect();
-    press('!#1');          // switch to the symbol layout
+    press('123');          // the numbers layer
+    collect();
+    press('#+=');          // and the symbols layer beyond it
     collect();
 
     const missing: string[] = [];
@@ -83,11 +108,11 @@ describe('MobileBBSKeyboard', () => {
   it('switches back to the letters with the same key', () => {
     render(<MobileBBSKeyboard onKey={() => undefined} />);
 
-    press('!#1');
-    expect(screen.queryByRole('button', { name: 'Q' })).toBeNull();
+    press('123');
+    expect(screen.queryByRole('button', { name: 'q' })).toBeNull();
 
     press('ABC');
-    expect(screen.getByRole('button', { name: 'Q' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'q' })).toBeTruthy();
   });
 
   it('keeps the arrows, Return and Escape on both layouts', () => {
@@ -95,9 +120,10 @@ describe('MobileBBSKeyboard', () => {
     // switch would strand anyone who went looking for a symbol.
     render(<MobileBBSKeyboard onKey={() => undefined} />);
 
-    press('!#1');
+    press('123');
 
-    for (const label of ['←', '↑', '↓', '→', 'ESC', 'Ret', '⌫', 'Spc']) {
+    // Full words, not abbreviations - the keys read 'space' and 'return'.
+    for (const label of ['←', '↑', '↓', '→', 'ESC', 'return', '⌫', 'space']) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy();
     }
   });
@@ -107,9 +133,9 @@ describe('MobileBBSKeyboard', () => {
     render(<MobileBBSKeyboard onKey={onKey} />);
 
     press('⇧');
-    press('!#1');
+    press('123');
     press('ABC');
-    press('A');          // the key is labelled A and sends a
+    press('a');          // unshifted, so the label is lowercase
 
     expect(onKey).toHaveBeenLastCalledWith('a');
   });
