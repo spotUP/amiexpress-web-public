@@ -144,6 +144,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const { infoEditorRouter } = require('../api/info-editor-routes');
   app.use('/api/info-editor', authenticateToken(db), requireSysop(), infoEditorRouter);
 
+  // ===== Screen Files API - Sysop-only Routes =====
+  const { screensRouter } = require('../api/screens-routes');
+  app.use('/api/screens', authenticateToken(db), requireSysop(), screensRouter);
+
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);
   app.use('/api/chat', chatRouter);
