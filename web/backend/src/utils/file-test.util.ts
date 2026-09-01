@@ -13,7 +13,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import { runExamineCommandsForTesting } from './examine-runner.util';
 import { config } from '../config';
-import { InfoFileParser } from '../services/info-file-parser';
+import { resolveDirectory, readTooltypeMap, isRealInfoFile } from './info-file.util';
 
 const execAsync = promisify(exec);
 
@@ -32,6 +32,29 @@ interface FileCheckerInfo {
 }
 
 /**
+ * Drop the checker cache.
+ *
+ * The loader caches for a minute, which is right on a board and wrong in a
+ * test: a checker installed after the first read would not be seen, and the
+ * test would pass or fail on the previous case's directory. Mirrors
+ * clearMailCache.
+ */
+/**
+ * The checkers as the runner sees them, for tests.
+ *
+ * Whether a tooltype survived the read is not visible through testFile - a
+ * checker with its options eaten still runs and still succeeds.
+ */
+export function loadFileCheckersForTesting(): Map<string, FileCheckerInfo> {
+  return loadFileCheckersFromDisk();
+}
+
+export function clearFileCheckerCache(): void {
+  cachedFileCheckers = null;
+  checkersCacheTime = 0;
+}
+
+/**
  * Load file checkers from Fcheck/*.info directory (disk-based, express.e:18556-18614)
  * This is the proper AmiExpress implementation - checkers are defined in .info files
  */
@@ -43,7 +66,15 @@ function loadFileCheckersFromDisk(): Map<string, FileCheckerInfo> {
 
   const checkers = new Map<string, FileCheckerInfo>();
   const bbsRoot = config.get('dataDir');
-  const fcheckDir = path.join(bbsRoot, 'Fcheck');
+
+  // The directory as it is spelled ON DISK. express.e writes `Fcheck` and this
+  // board's volume holds `FCheck`; on the Amiga's case-insensitive filesystem
+  // they are one directory and on the Linux container they are two. Joining
+  // the express.e spelling raw meant this read ENOENT on the live board and
+  // logged "using built-in checkers only" - so not one of the sysop's fifteen
+  // checkers had ever run. The admin's own service was fixed with this helper
+  // and this, the half that RUNS them, was missed.
+  const fcheckDir = resolveDirectory(bbsRoot, 'Fcheck');
 
   if (!fsSync.existsSync(fcheckDir)) {
 console.log('[FileTest] Fcheck/ directory not found, using built-in checkers only');
@@ -54,17 +85,22 @@ console.log('[FileTest] Fcheck/ directory not found, using built-in checkers onl
 
   try {
     const files = fsSync.readdirSync(fcheckDir);
-    const infoFiles = files.filter(f => f.endsWith('.info'));
+    // isRealInfoFile keeps the AppleDouble `._NAME.info` sidecars out, which
+    // would otherwise be loaded as a checker named `._ZIP`.
+    const infoFiles = files.filter(f => f.endsWith('.info') && isRealInfoFile(f));
 
     for (const infoFile of infoFiles) {
       const infoPath = path.join(fcheckDir, infoFile);
-      const buffer = fsSync.readFileSync(infoPath);
-      const parser = new InfoFileParser();
-      const parsed = parser.parse(buffer);
 
-      // Convert tooltypes to uppercase map
+      // Read through the parser that owns the format. InfoFileParser splits
+      // the file on NUL bytes and cannot read a plain-text .info AT ALL -
+      // which is what the admin writes when it creates a checker, so a
+      // checker made through the admin was unreadable to the code that runs
+      // it. Two faults stacked, and the directory one hid this one.
+      const raw = readTooltypeMap(infoPath);
+
       const toolTypes = new Map<string, string>();
-      for (const [key, value] of parsed.toolTypes.entries()) {
+      for (const [key, value] of raw.entries()) {
         const cleanKey = key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase();
         toolTypes.set(cleanKey, value);
       }
