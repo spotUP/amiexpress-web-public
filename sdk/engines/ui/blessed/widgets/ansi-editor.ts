@@ -68,6 +68,16 @@ export interface ANSIEditorOptions extends ElementOptions {
   showToolbar?: boolean;      // F-key character toolbar
   showStatusBar?: boolean;
   showMenuBar?: boolean;      // Moebius-style menu bar
+  /**
+   * Menus the HOST adds to this editor's own menu bar, after Help.
+   *
+   * A door that teaches this editor a new document kind - the sprite studio
+   * and its Frame/Animation menus - needs its commands in THIS bar. Without
+   * it the only way was a second menu bar drawn above the editor's own with
+   * the editor's switched off, which is what made the sprite studio read as
+   * two applications bolted together.
+   */
+  extraMenus?: HostMenu[];
   showSidebar?: boolean;      // Left sidebar with colors & tools
   onSave?: (content: string) => Promise<boolean>;
   onSaveAs?: () => Promise<void>;  // Open save-as dialog
@@ -96,6 +106,12 @@ const FKEY_CHAR_SETS: string[][] = [
   // Set 8: Greek letters
   ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'σ', 'τ', 'φ', 'ω'],
 ];
+
+/** A menu a host contributes to the editor's own menu bar. */
+export interface HostMenu {
+  label: string;
+  items: DropdownMenuItem[];
+}
 
 export type EditorMode = 'text' | 'draw';
 
@@ -179,6 +195,9 @@ export class ANSIEditor extends Box {
   private colorsMenu?: DropdownMenu;
   private viewMenu?: DropdownMenu;
   private helpMenu?: DropdownMenu;
+  /** Host-contributed menus, in bar order after Help. */
+  private extraMenus: HostMenu[] = [];
+  private extraMenuDropdowns: DropdownMenu[] = [];
 
   // F-key toolbar state
   private fkeySetIndex: number = 0;    // Current character set (0-7)
@@ -378,6 +397,7 @@ export class ANSIEditor extends Box {
     // Floored and floored to at least 1: a fractional or zero scale would
     // put the render and the hit-test on different grids, and a negative
     // one would build an empty row - a silently blank canvas.
+    this.extraMenus = options.extraMenus ?? [];
     this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
     this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
     this.transparentBackground = options.transparentBackground ?? false;
@@ -583,16 +603,19 @@ export class ANSIEditor extends Box {
       tags: true,
     });
 
-    // Menu button positions
-    const menus = [
-      { label: ' File ', left: 0 },
-      { label: ' Edit ', left: 6 },
-      { label: ' Layer ', left: 12 },
-      { label: ' Select ', left: 19 },
-      { label: ' Colors ', left: 28 },
-      { label: ' View ', left: 36 },
-      { label: ' Help ', left: 42 },
-    ];
+    // Menu button positions, derived from the labels rather than written
+    // down beside them. The old literals only happened to match the label
+    // lengths; renaming ' Select ' to ' Sel ' would have left a gap or an
+    // overlap, and a host adding menus of its own could not have placed
+    // them at all.
+    const ownLabels = [' File ', ' Edit ', ' Layer ', ' Select ', ' Colors ', ' View ', ' Help '];
+    const hostLabels = this.extraMenus.map(m => ` ${m.label} `);
+    let nextLeft = 0;
+    const menus = [...ownLabels, ...hostLabels].map(label => {
+      const left = nextLeft;
+      nextLeft += label.length;
+      return { label, left };
+    });
 
     // Store button references for anchor registration
     const menuButtons: Box[] = [];
@@ -616,7 +639,9 @@ export class ANSIEditor extends Box {
     this.createDropdownMenus();
 
     // Register anchors for hover-to-open behavior
-    // Positions are now calculated dynamically from anchor coordinates
+    // Positions are now calculated dynamically from anchor coordinates.
+    // Host menus follow the widget's own, in the same order their buttons
+    // were laid out above, so button N always opens dropdown N.
     const dropdownMenus = [
       this.fileMenu,
       this.editMenu,
@@ -625,6 +650,7 @@ export class ANSIEditor extends Box {
       this.colorsMenu,
       this.viewMenu,
       this.helpMenu,
+      ...this.extraMenuDropdowns,
     ];
     menuButtons.forEach((btn, idx) => {
       const dropdown = dropdownMenus[idx];
@@ -639,6 +665,15 @@ export class ANSIEditor extends Box {
    */
   private createDropdownMenus(): void {
     if (!this.screen) return;
+
+    // Host menus first so they exist before the anchor registration below
+    // walks them. Their items are used as given - a host owns what its own
+    // menu says and does.
+    this.extraMenuDropdowns = this.extraMenus.map(menu => new DropdownMenu({
+      parent: this.screen,
+      width: 22,
+      items: menu.items,
+    }));
 
     // File menu - build items dynamically based on available callbacks
     const fileMenuItems: any[] = [
