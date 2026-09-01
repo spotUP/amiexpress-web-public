@@ -21,6 +21,23 @@ import { FileFlagManager, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsM
  */
 export class AlterFlagsHandler {
   /**
+   * flagFiles() printed a prompt and is waiting for the user to answer it.
+   *
+   * express.e has no such state: lineInput() BLOCKS (express.e:12599), so
+   * flagFiles only ever returns once the user has already replied, and 0
+   * unambiguously means "pressed Enter, done". Splitting that blocking read
+   * into a state machine gave 0 a second meaning, and both callers read it
+   * as the first one - so the moment the prompt appeared, alterFlags
+   * believed the user had finished: it emitted its closing newline
+   * (express.e:12664), which put the cursor on the line BELOW the prompt,
+   * and set subState back to DISPLAY_MENU, so what the user then typed was
+   * never read as flag input at all.
+   *
+   * Reported as "prompt is positioned wrong".
+   */
+  private static readonly WAITING_FOR_INPUT = 3;
+
+  /**
    * Handle A command - Alter Flags
    * Port from express.e:24601-24605 (internalCommandA)
    */
@@ -69,21 +86,26 @@ console.log('[ENV] Files');
     socket.emit('ansi-output', '\r\n');
 
     if (params.length > 0) {
-      // Parameters provided - process directly - express.e:12652-12659
-      const result = await this.flagFiles(socket, session, params);
+      // Parameters provided - process directly - express.e:12652-12656
+      let result = await this.flagFiles(socket, session, params);
       if (result < 0) return; // Error or carrier lost
+      if (result === this.WAITING_FOR_INPUT) return; // resumed by handleFlagInput
 
-      // Continue prompting while flagFiles returns non-zero
+      // express.e:12654-12656 WHILE(stat) stat:=flagFiles(NIL)
       while (result > 0) {
-        const nextResult = await this.flagFiles(socket, session, '');
-        if (nextResult <= 0) break;
+        result = await this.flagFiles(socket, session, null);
+        if (result < 0) return;
+        if (result === this.WAITING_FOR_INPUT) return;
       }
     } else {
-      // No parameters - enter interactive mode - express.e:12660-12663
+      // No parameters - enter interactive mode - express.e:12658-12661
       let result = 0;
       do {
-        result = await this.flagFiles(socket, session, '');
+        result = await this.flagFiles(socket, session, null);
         if (result < 0) return; // Error or carrier lost
+        // The prompt is up. Everything below is what express.e does AFTER
+        // lineInput() returns, so none of it may run yet.
+        if (result === this.WAITING_FOR_INPUT) return;
       } while (result !== 0);
     }
 
@@ -105,28 +127,40 @@ console.log('[ENV] Files');
   private static async flagFiles(
     socket: Socket,
     session: BBSSession,
-    inputStr: string | null
+    inputStr: string | null,
+    /**
+     * express.e calls showFlags() once on entry (express.e:12598) and then
+     * jumps back to the PROMPT after a successful add (express.e:12651
+     * `JUMP backloop`), so the list is not reprinted every time round.
+     */
+    showList: boolean = true
   ): Promise<number> {
     const manager = session.flagManager;
     if (!manager) return 0;
     let changed = false;
 
-    // Show current flags if no input provided - express.e:12596
-    if (!inputStr) {
-      socket.emit('ansi-output', getShowFlagsMessage(manager));
-    }
-
-    let input = inputStr;
-
-    // Prompt for input if not provided - express.e:12598-12601
-    if (!input) {
+    // NULL means "nothing has been typed yet, go and ask" - express.e's
+    // s=NIL. EMPTY STRING means "the user answered, and pressed Enter on an
+    // empty line", which express.e handles at 12603 by falling out of the
+    // IF and returning RESULT_SUCCESS.
+    //
+    // Testing `!inputStr` conflated the two, so Enter at the prompt printed
+    // the prompt again instead of leaving: the command could not be exited
+    // the way its own help text says it can ("(Enter)=none").
+    if (inputStr === null) {
+      // Show current flags, then prompt - express.e:12598-12601
+      if (showList) {
+        socket.emit('ansi-output', getShowFlagsMessage(manager));
+      }
       socket.emit('ansi-output', getFlagFilesPrompt());
 
       // Set state to wait for input
       session.subState = LoggedOnSubState.FLAG_INPUT;
       session.tempData = { waitingForFlag: true };
-      return 0; // Will be called again with user input
+      return this.WAITING_FOR_INPUT;
     }
+
+    const input = inputStr;
 
     // Process input - express.e:12603-12644
 
@@ -149,7 +183,7 @@ console.log('[ENV] Files');
 
         session.subState = LoggedOnSubState.FLAG_CLEAR_INPUT;
         session.tempData = { waitingForClear: true };
-        return 0; // Wait for input
+        return this.WAITING_FOR_INPUT;
       }
 
       // Process clear command - express.e:12614-12621
@@ -187,7 +221,7 @@ console.log('[ENV] Files');
 
         session.subState = LoggedOnSubState.FLAG_FROM_INPUT;
         session.tempData = { waitingForFlagFrom: true };
-        return 0; // Wait for input
+        return this.WAITING_FOR_INPUT;
       }
 
       if (fromInput.length === 0) {
@@ -225,13 +259,21 @@ console.log('[ENV] Files');
       session.tempData.waitingForFlag = false;
       const result = await this.flagFiles(socket, session, input);
 
+      if (result === this.WAITING_FOR_INPUT) {
+        // A (C)lear or (F)rom sub-prompt is up now; stay suspended rather
+        // than closing the command out from under it.
+        return;
+      }
+
       if (result === 0) {
-        // Done
+        // Enter pressed - express.e:12603, then alterFlags:12664
         socket.emit('ansi-output', '\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
       } else {
-        // Continue
-        await this.flagFiles(socket, session, '');
+        // A file was added: express.e JUMPs to backloop, which prints the
+        // prompt WITHOUT calling showFlags again. Anything else is a fresh
+        // flagFiles(NIL) from alterFlags' loop, which does list.
+        await this.flagFiles(socket, session, null, result !== 2);
       }
     } else if (session.tempData?.waitingForClear) {
       session.tempData.waitingForClear = false;
@@ -248,7 +290,7 @@ console.log('[ENV] Files');
       }
 
       // Continue prompting
-      await this.flagFiles(socket, session, '');
+      await this.flagFiles(socket, session, null);
     } else if (session.tempData?.waitingForFlagFrom) {
       session.tempData.waitingForFlagFrom = false;
 
@@ -260,7 +302,7 @@ console.log('[ENV] Files');
       }
 
       // Continue prompting
-      await this.flagFiles(socket, session, '');
+      await this.flagFiles(socket, session, null);
     }
   }
 
