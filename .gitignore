@@ -1,7 +1,13 @@
 # Dependencies
-node_modules/
-backend/node_modules/
-Doors/*/node_modules/
+# No trailing slash: with one, these match DIRECTORIES only, and a SYMLINK
+# named node_modules slips past. Two of them were committed on 2026-09-01
+# (web/backend/node_modules and Doors/grandmaster/node_modules, both pointing
+# into one developer's home directory) and every deploy failed from then on -
+# the image builds a real node_modules with npm ci, and COPY cannot replace a
+# directory with a symlink.
+node_modules
+backend/node_modules
+Doors/*/node_modules
 
 # Build outputs
 dist/
