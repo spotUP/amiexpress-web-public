@@ -203,3 +203,55 @@ describe('ANSIEditor zoom of half-block cells', () => {
     expect(rows[2]).not.toBe(rows[3]);
   });
 });
+
+/**
+ * The transparency guide is a marker, not a texture.
+ *
+ * A transparent cell paints a dim dot so an artist can tell a HOLE from an
+ * opaque black cell. Magnified, that dot was repeated across every
+ * character of the cell, so a zoomed hole became a filled grid of dots -
+ * reported from a crocodile sprite as "dotted artefacts". One dot per cell
+ * says the same thing without competing with the art.
+ */
+describe('ANSIEditor transparency guide when magnified', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const holeRows = (scale: number): string[] => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      cellScaleX: scale, cellScaleY: scale,
+      initialMode: 'draw', transparentBackground: true,
+    } as any);
+    return (editor.buildCanvasContent(
+      () => ({ char: ' ', fg: 7, bg: 0, transparent: true })
+    ) as string).split('\n');
+  };
+
+  it('marks a magnified hole once, not in every character of it', () => {
+    const rows = holeRows(4);
+    const dots = rows.join('').split('.').length - 1;
+    expect(dots).toBe(1);
+  });
+
+  it('puts the mark inside the cell, not at its corner', () => {
+    const rows = holeRows(4);
+    const marked = rows.findIndex(r => r.includes('.'));
+    expect(marked).toBeGreaterThan(0);
+    expect(marked).toBeLessThan(rows.length - 1);
+  });
+
+  it('still marks every hole at actual size, where there is only one character', () => {
+    const rows = holeRows(1);
+    expect(rows.join('').split('.').length - 1).toBe(1);
+  });
+
+  it('keeps the magnified hole the right size', () => {
+    const rows = holeRows(4);
+    expect(rows.length).toBe(4);
+    for (const row of rows) {
+      expect(row.replace(/\{[^}]*\}/g, '').length).toBe(4);
+    }
+  });
+});

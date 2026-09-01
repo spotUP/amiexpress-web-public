@@ -3508,7 +3508,24 @@ BBS Door SDK v2.0{/gray-fg}
         return `{gray-fg}{black-bg}${(ghost.char || ' ').repeat(this.scaleX)}{/black-bg}{/gray-fg}`;
       }
     }
-    if (this.scaleY === 1 || cell.transparent) {
+
+    // A hole is MARKED, not textured. Repeating the guide dot across every
+    // character of a magnified cell turned each hole into a filled grid of
+    // dots that competed with the art - "dotted artefacts". One dot, in the
+    // middle of the cell, says the same thing.
+    if (cell.transparent) {
+      if (this.scaleX === 1 && this.scaleY === 1) {
+        return this.cellToDisplayTag(cell, 1);
+      }
+      const midRow = Math.floor(this.scaleY / 2);
+      const midCol = Math.floor(this.scaleX / 2);
+      const run = sub === midRow
+        ? ' '.repeat(midCol) + '.' + ' '.repeat(this.scaleX - midCol - 1)
+        : ' '.repeat(this.scaleX);
+      return `{gray-fg}{black-bg}${run}{/black-bg}{/gray-fg}`;
+    }
+
+    if (this.scaleY === 1) {
       return this.cellToDisplayTag(cell, this.scaleX);
     }
 
