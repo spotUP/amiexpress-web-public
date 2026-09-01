@@ -15,6 +15,7 @@ const TEST_MODULES = [
   './layout.test',
   './render.test',
   './state-routing.test',
+  './camera.test',
 ];
 
 (async () => {

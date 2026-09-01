@@ -9,12 +9,13 @@
  */
 
 import {
-  CellBuffer, Sprite, createBuffer, blitSprite,
+  CellBuffer, Sprite, createBuffer, blitSprite, cropBuffer,
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { PengoData } from './types';
 import {
-  GRID_WIDTH, GRID_HEIGHT, BOARD_COLS, BOARD_ROWS, CRUSH_FRAMES,
+  GRID_WIDTH, GRID_HEIGHT, WORLD_COLS, WORLD_ROWS, CRUSH_FRAMES,
 } from './constants';
+import { cameraWindowChars } from './camera';
 
 /** How long a pushed block keeps its slide flash, in ticks. */
 const SLIDE_FLASH_TICKS = 5;
@@ -23,12 +24,17 @@ const WALL_SHAKE_TICKS = 6;
 /** An egg this close to hatching cracks visibly. */
 const HATCH_WARNING = 30;
 
-export function buildBoard(
+/**
+ * The whole maze, as drawn - before the camera crops it to what fits the
+ * screen. Exported so a test (or the HUD) can reason about the world
+ * independently of the viewport `buildBoard` returns.
+ */
+export function buildWorld(
   data: PengoData,
   sheet: Record<string, Sprite>,
   tick: number
 ): CellBuffer {
-  const board = createBuffer(BOARD_COLS, BOARD_ROWS);
+  const board = createBuffer(WORLD_COLS, WORLD_ROWS);
 
   const sliding = (x: number, y: number): boolean =>
     !!data.lastSlide && data.lastSlide.x === x && data.lastSlide.y === y &&
@@ -87,4 +93,21 @@ export function buildBoard(
   }
 
   return board;
+}
+
+/**
+ * What the player actually sees: the world, cropped to the camera's
+ * window on Pengo's row. Pure in (data, sheet, tick), same as the world
+ * builder it wraps - the camera itself is stateless, recomputed fresh
+ * from `data.pengo.y` every call, so there is nothing here that can drift
+ * out of sync with a previous frame.
+ */
+export function buildBoard(
+  data: PengoData,
+  sheet: Record<string, Sprite>,
+  tick: number
+): CellBuffer {
+  const world = buildWorld(data, sheet, tick);
+  const window = cameraWindowChars(data.pengo.y);
+  return cropBuffer(world, window);
 }

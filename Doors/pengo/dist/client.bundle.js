@@ -10699,6 +10699,11 @@ function extractRegion(canvas, x, y, width, height) {
   copyRegion(canvas, region, x, y, 0, 0, width, height);
   return region;
 }
+function pasteCanvas(destCanvas, srcCanvas, x, y) {
+  const height = srcCanvas.length;
+  const width = height > 0 ? srcCanvas[0].length : 0;
+  copyRegion(srcCanvas, destCanvas, 0, 0, x, y, width, height);
+}
 function canvasToANSI(canvas, useIceColors = false) {
   let ansi = "";
   let currentFg = -1;
@@ -10961,6 +10966,9 @@ function paintCell(state, x, y, cell, chunked) {
   saveUndoState(state, chunked);
   state.setCanvasCell(x, y, cell);
 }
+function snapshotUndoState(state) {
+  saveUndoState(state);
+}
 function getSelectionData(state) {
   let data = selectionDataByState.get(state);
   if (!data) {
@@ -10971,6 +10979,14 @@ function getSelectionData(state) {
 }
 function getSelectionBounds(state) {
   return getSelectionData(state).bounds;
+}
+function pasteSelection(state, x, y, region) {
+  saveUndoState(state);
+  const canvas = state.getCanvas();
+  if (!canvas)
+    return;
+  pasteCanvas(canvas, region, x, y);
+  state.setModified(true);
 }
 function getToolHandler(tool) {
   switch (tool) {
@@ -11048,11 +11064,15 @@ var init_drawing_tools = __esm({
       },
       onEnd(state, x, y) {
         const startPoint = state.getDrawingStartPoint();
-        const canvas = state.getCanvas();
-        if (!startPoint || !canvas)
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
           return;
         const cell = state.getCurrentCell();
         drawLine(canvas, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(canvas);
         state.setDrawingPreview(null);
         state.setDrawingStartPoint(null);
         state.setDrawingEndPoint(null);
@@ -11091,11 +11111,15 @@ var init_drawing_tools = __esm({
       },
       onEnd(state, x, y) {
         const startPoint = state.getDrawingStartPoint();
-        const canvas = state.getCanvas();
-        if (!startPoint || !canvas)
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
           return;
         const cell = state.getCurrentCell();
         drawBox(canvas, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(canvas);
         state.setDrawingPreview(null);
         state.setDrawingStartPoint(null);
         state.setDrawingEndPoint(null);
@@ -11134,11 +11158,15 @@ var init_drawing_tools = __esm({
       },
       onEnd(state, x, y) {
         const startPoint = state.getDrawingStartPoint();
-        const canvas = state.getCanvas();
-        if (!startPoint || !canvas)
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
           return;
         const cell = state.getCurrentCell();
         drawBoxFilled(canvas, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(canvas);
         state.setDrawingPreview(null);
         state.setDrawingStartPoint(null);
         state.setDrawingEndPoint(null);
@@ -11181,8 +11209,11 @@ var init_drawing_tools = __esm({
       },
       onEnd(state, x, y) {
         const startPoint = state.getDrawingStartPoint();
-        const canvas = state.getCanvas();
-        if (!startPoint || !canvas)
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
           return;
         const cx = Math.floor((startPoint.col + x) / 2);
         const cy = Math.floor((startPoint.line + y) / 2);
@@ -11190,6 +11221,7 @@ var init_drawing_tools = __esm({
         const ry = Math.abs(y - startPoint.line) / 2;
         const cell = state.getCurrentCell();
         drawEllipse(canvas, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+        state.setCanvas(canvas);
         state.setDrawingPreview(null);
         state.setDrawingStartPoint(null);
         state.setDrawingEndPoint(null);
@@ -11232,8 +11264,11 @@ var init_drawing_tools = __esm({
       },
       onEnd(state, x, y) {
         const startPoint = state.getDrawingStartPoint();
-        const canvas = state.getCanvas();
-        if (!startPoint || !canvas)
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
           return;
         const cx = Math.floor((startPoint.col + x) / 2);
         const cy = Math.floor((startPoint.line + y) / 2);
@@ -11241,6 +11276,7 @@ var init_drawing_tools = __esm({
         const ry = Math.abs(y - startPoint.line) / 2;
         const cell = state.getCurrentCell();
         drawEllipseFilled(canvas, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+        state.setCanvas(canvas);
         state.setDrawingPreview(null);
         state.setDrawingStartPoint(null);
         state.setDrawingEndPoint(null);
@@ -13565,35 +13601,34 @@ var init_ansi_editor = __esm({
         }
       }
       /**
-       * Paste clipboard at cursor position
+       * Paste clipboard at cursor position. Routed through the library's
+       * pasteSelection() - which does saveUndoState() for you - instead of
+       * mutating this.cellCanvas by hand, so a paste is undoable (see
+       * IMPORTANT 2, final-fix-wave-report.md): before this, Ctrl+Z after a
+       * paste would pop the snapshot from before whatever stroke preceded it,
+       * silently discarding both the paste and that stroke in one keypress.
        */
       pasteClipboard() {
-        if (!this.cellCanvas || !this.clipboard)
+        if (!this.cellCanvas || !this.clipboard || !this.coreState)
           return;
-        const startX = this.cursor.col;
-        const startY = this.cursor.line;
-        for (let y = 0; y < this.clipboard.length; y++) {
-          for (let x = 0; x < this.clipboard[y].length; x++) {
-            const destX = startX + x;
-            const destY = startY + y;
-            if (destY < this.canvasH && destX < this.canvasW && this.cellCanvas[destY]) {
-              this.cellCanvas[destY][destX] = { ...this.clipboard[y][x] };
-            }
-          }
-        }
-        this.syncCoreCanvasToDisplay();
-        this.modified = true;
+        this.syncToCoreState();
+        pasteSelection(this.coreState, this.cursor.col, this.cursor.line, this.clipboard);
+        this.syncFromCoreState();
         this.updateDisplay();
       }
       // ============================================
       // ROW OPERATIONS
       // ============================================
       /**
-       * Insert a blank row at cursor position
+       * Insert a blank row at cursor position. Undoable (IMPORTANT 2): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a row insert.
        */
       insertRow() {
-        if (!this.cellCanvas)
+        if (!this.cellCanvas || !this.coreState)
           return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
         const y = this.cursor.line;
         for (let row = this.canvasH - 1; row > y; row--) {
           this.cellCanvas[row] = this.cellCanvas[row - 1];
@@ -13607,11 +13642,15 @@ var init_ansi_editor = __esm({
         this.updateDisplay();
       }
       /**
-       * Delete row at cursor position
+       * Delete row at cursor position. Undoable (IMPORTANT 2): an explicit
+       * snapshotUndoState() before mutating this.cellCanvas in place, since
+       * there is no dedicated ToolHandler for a row delete.
        */
       deleteRow() {
-        if (!this.cellCanvas)
+        if (!this.cellCanvas || !this.coreState)
           return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
         const y = this.cursor.line;
         for (let row = y; row < this.canvasH - 1; row++) {
           this.cellCanvas[row] = this.cellCanvas[row + 1];
@@ -13681,11 +13720,15 @@ var init_ansi_editor = __esm({
       // FLIP OPERATIONS
       // ============================================
       /**
-       * Flip selection or canvas horizontally
+       * Flip selection or canvas horizontally. Undoable (IMPORTANT 2): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a flip.
        */
       flipHorizontal() {
-        if (!this.cellCanvas)
+        if (!this.cellCanvas || !this.coreState)
           return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
         const sel = this.selection || this.fullCanvasSelection();
         const width = sel.x2 - sel.x1 + 1;
         for (let y = sel.y1; y <= sel.y2; y++) {
@@ -13705,11 +13748,15 @@ var init_ansi_editor = __esm({
         this.updateDisplay();
       }
       /**
-       * Flip selection or canvas vertically
+       * Flip selection or canvas vertically. Undoable (IMPORTANT 2): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a flip.
        */
       flipVertical() {
-        if (!this.cellCanvas)
+        if (!this.cellCanvas || !this.coreState)
           return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
         const sel = this.selection || this.fullCanvasSelection();
         const height = sel.y2 - sel.y1 + 1;
         for (let y = 0; y < Math.floor(height / 2); y++) {
@@ -15728,9 +15775,20 @@ BBS Door SDK v2.0{/gray-fg}
        * Ctrl+Z / U. In draw mode, routes to the library's per-instance
        * undoDrawing() (see task-4-report.md) instead of the text-mode
        * this.undoStack, which draw-mode operations never populate.
+       *
+       * flushDrawChunk() runs FIRST (IMPORTANT 3): a chunk opened by
+       * drawTool.onStart/paintCell(..., true) is normally flushed on mouseup,
+       * but a mouseup can be missed (pointer leaves the canvas mid-drag). If
+       * Ctrl+Z were pressed in that window, undoDrawing() would pop the
+       * PREVIOUS entry while the stroke's own snapshot still sits pending, and
+       * that stale snapshot would land later whenever mouseup does fire -
+       * silently reappearing after the user thought they'd undone past it.
+       * Flushing here first is a no-op when nothing is chunked, so it's safe
+       * unconditionally.
        */
       undo() {
         if (this.mode === "draw") {
+          this.flushDrawChunk();
           if (this.coreState && undoDrawing(this.coreState)) {
             this.syncFromCoreState();
             if (this.screen) {

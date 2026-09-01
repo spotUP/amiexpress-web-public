@@ -20,6 +20,7 @@ import {
   MENU_OPTIONS,
   DEFAULT_HIGHSCORES,
 } from "./game/constants";
+import { offscreenEnemyMarkers } from "./game/camera";
 
 export { rpcHandlers };
 
@@ -65,7 +66,11 @@ function initScreen(): void {
   gameArea = new Box({
     parent: screen,
     top: 1,
-    left: 0,
+    // The 13x15 world (65 characters) is narrower than the 80-column
+    // terminal - it fits with room to spare, unlike the 30 character
+    // rows the camera has to scroll for. Centring it, rather than
+    // pinning to the left edge, is the only place that spare width goes.
+    left: "center",
     width: BOARD_COLS,
     height: BOARD_ROWS,
     fixed: true,
@@ -85,6 +90,31 @@ function initScreen(): void {
   });
 }
 
+/**
+ * ASCII arrows for the Sno-Bees the camera window is currently hiding.
+ *
+ * The maze is 15 rows tall and only 11 fit on screen at once; a camera
+ * that scrolls the rest into view can hide the Sno-Bee about to reach
+ * Pengo. That is only acceptable if the HUD says so - see the cell-art
+ * camera module's own doc comment on `offScreenMarkers`. This door's
+ * camera only ever scrolls vertically (the maze is exactly as wide as the
+ * screen can show), so only 'n'/'ne'/'nw' and 's'/'se'/'sw' markers can
+ * ever occur here.
+ */
+function offscreenIndicator(): string {
+  const markers = offscreenEnemyMarkers(gameData);
+  if (markers.length === 0) return "";
+
+  const above = markers.filter(m => m.direction[0] === "n").length;
+  const below = markers.filter(m => m.direction[0] === "s").length;
+  const parts: string[] = [];
+  if (above > 0) parts.push(`^${above}`);
+  if (below > 0) parts.push(`v${below}`);
+  if (parts.length === 0) return "";
+
+  return `  {magenta-fg}OFF: ${parts.join(" ")}{/}`;
+}
+
 function formatHUD(): string {
   const scoreStr = gameData.score.toString().padStart(8, "0");
   const livesStr = "*".repeat(Math.max(0, gameData.lives));
@@ -93,7 +123,7 @@ function formatHUD(): string {
   return (
     `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  ` +
     `{red-fg}LIVES: ${livesStr}{/}  {${timeColor}-fg}TIME: ${gameData.timeRemaining}{/}  ` +
-    `{white-fg}ENEMIES: ${enemies}{/}`
+    `{white-fg}ENEMIES: ${enemies}{/}` + offscreenIndicator()
   );
 }
 

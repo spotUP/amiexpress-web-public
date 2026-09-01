@@ -9,17 +9,24 @@
  * chosen after drawing" class of bug cannot recur.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildWorld = buildWorld;
 exports.buildBoard = buildBoard;
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const constants_1 = require("./constants");
+const camera_1 = require("./camera");
 /** How long a pushed block keeps its slide flash, in ticks. */
 const SLIDE_FLASH_TICKS = 5;
 /** How long the walls rattle after a shake. */
 const WALL_SHAKE_TICKS = 6;
 /** An egg this close to hatching cracks visibly. */
 const HATCH_WARNING = 30;
-function buildBoard(data, sheet, tick) {
-    const board = (0, cell_art_1.createBuffer)(constants_1.BOARD_COLS, constants_1.BOARD_ROWS);
+/**
+ * The whole maze, as drawn - before the camera crops it to what fits the
+ * screen. Exported so a test (or the HUD) can reason about the world
+ * independently of the viewport `buildBoard` returns.
+ */
+function buildWorld(data, sheet, tick) {
+    const board = (0, cell_art_1.createBuffer)(constants_1.WORLD_COLS, constants_1.WORLD_ROWS);
     const sliding = (x, y) => !!data.lastSlide && data.lastSlide.x === x && data.lastSlide.y === y &&
         tick - data.lastSlide.tick <= SLIDE_FLASH_TICKS;
     const wallsShaking = !!data.wallShake && tick - data.wallShake.tick <= WALL_SHAKE_TICKS;
@@ -71,5 +78,17 @@ function buildBoard(data, sheet, tick) {
         (0, cell_art_1.blitSprite)(board, sheet['pengo'], `walk-${p.direction}`, tick, p.x, p.y);
     }
     return board;
+}
+/**
+ * What the player actually sees: the world, cropped to the camera's
+ * window on Pengo's row. Pure in (data, sheet, tick), same as the world
+ * builder it wraps - the camera itself is stateless, recomputed fresh
+ * from `data.pengo.y` every call, so there is nothing here that can drift
+ * out of sync with a previous frame.
+ */
+function buildBoard(data, sheet, tick) {
+    const world = buildWorld(data, sheet, tick);
+    const window = (0, camera_1.cameraWindowChars)(data.pengo.y);
+    return (0, cell_art_1.cropBuffer)(world, window);
 }
 //# sourceMappingURL=render.js.map

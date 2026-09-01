@@ -3,7 +3,8 @@
  * Pengo - Game Constants
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.CRUSH_FRAMES = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.crushComboScore = crushComboScore;
 exports.getLevelConfig = getLevelConfig;
 exports.SCREEN_WIDTH = 80;
 /**
@@ -13,22 +14,55 @@ exports.SCREEN_WIDTH = 80;
  * always there.
  */
 exports.SCREEN_HEIGHT = 25;
-exports.GRID_WIDTH = 16;
-exports.GRID_HEIGHT = 11;
+/**
+ * The world grid, in cells - the door's TOTAL maze, border wall included
+ * (same convention this door has always used: row/column 0 and the last
+ * are wall, the interior is GRID_WIDTH-2 x GRID_HEIGHT-2).
+ *
+ * 13x15 because both independent arcade-mechanics reference clones
+ * (PenguBruh-Pengo and cpp-pengo) use it, which is strong evidence it is
+ * the real arcade size - see
+ * thoughts/shared/research/2026-09-01_pengo-arcade-mechanics-gap.md
+ * section 4. It replaces the door's old 16x11, which was sized for the
+ * terminal's sprite budget, not derived from the original.
+ */
+exports.GRID_WIDTH = 13;
+exports.GRID_HEIGHT = 15;
 /**
  * Cell geometry for the sprite renderer: every maze cell is a 5x2 block of
- * characters, so the 16x11 maze is an 80x22 board - the full terminal
- * width, edge to edge, with the HUD above and the hint on the bottom row.
- *
- * The row budget: HUD 1 + board 22 + hint 1 = 24 of the 25 rows a door
- * gets; a twelfth maze row would need 26. The maze dropped from 13 rows to
- * buy the second sprite row (13 x 2 = 26). It holds 11, not the 10 the
- * first pass shipped - that pass budgeted 24 rows and wasted one.
+ * characters. The 13x15 world is 65x30 characters - wider than it is
+ * tall relative to the 80x25 terminal, the opposite problem the old 16x11
+ * board had. It fits horizontally (65 <= 80) with room to spare, but at
+ * 30 rows it is taller than the terminal has ever had room for; only 11
+ * of the 15 maze rows (22 of the 30 character rows) can be shown at once
+ * (row budget: HUD 1 + board 22 + hint 1 = 24 of 25 screen rows). The
+ * `cameraView`/`cropBuffer` pair from the cell-art engine's camera module
+ * makes up that difference by following Pengo up and down through the
+ * maze - see game/camera.ts.
  */
 exports.CELL_W = 5;
 exports.CELL_H = 2;
-exports.BOARD_COLS = exports.GRID_WIDTH * exports.CELL_W;
-exports.BOARD_ROWS = exports.GRID_HEIGHT * exports.CELL_H;
+/** The full maze, in characters - what buildBoard's world buffer covers. */
+exports.WORLD_COLS = exports.GRID_WIDTH * exports.CELL_W;
+exports.WORLD_ROWS = exports.GRID_HEIGHT * exports.CELL_H;
+/** How many maze rows the camera window shows at once. */
+exports.VIEW_GRID_ROWS = 11;
+/**
+ * What actually reaches the screen, in characters - the camera's window.
+ * The world already fits the terminal horizontally (13 == 13, no column
+ * to spare), so the view is exactly as wide as the world and only ever
+ * scrolls vertically.
+ */
+exports.VIEW_COLS = exports.WORLD_COLS;
+exports.VIEW_ROWS = exports.VIEW_GRID_ROWS * exports.CELL_H;
+/**
+ * The rendered board's size, in characters - an alias for VIEW_COLS/ROWS.
+ * Kept under the old names because everything that lays out the screen
+ * (index.ts's gameArea box, the layout tests) only cares what's ON
+ * screen, never the full scrollable world.
+ */
+exports.BOARD_COLS = exports.VIEW_COLS;
+exports.BOARD_ROWS = exports.VIEW_ROWS;
 exports.GAME_TICK_MS = 100;
 exports.STARTING_LIVES = 3;
 exports.INITIAL_TIME = 180;
@@ -41,7 +75,22 @@ exports.SCORES = {
     clearLevel: 500,
     timeBonus: 10,
     eggDestroy: 500,
+    /** Touch-killing an already-stunned Sno-Bee - both reference clones
+     *  agree this is a kill, distinct from (and smaller than) a crush. */
+    touchKillStunned: 100,
 };
+/**
+ * Chain-kill combo, keyed by how many Sno-Bees ONE continuous block push
+ * caught. Ref1's table (`Block.cpp:209-234`); ours used to break at the
+ * first enemy hit, so only the n=1 entry ever fired.
+ */
+exports.CRUSH_COMBO = [400, 1600, 3200, 6400];
+function crushComboScore(chainLength) {
+    const index = Math.min(chainLength, exports.CRUSH_COMBO.length) - 1;
+    return exports.CRUSH_COMBO[Math.max(0, index)];
+}
+/** Five-digit arcade display; ref1 hard-caps the score here. */
+exports.MAX_SCORE = 99999;
 /**
  * How long a squashed Sno-Bee stays on the board, in ticks.
  *
@@ -52,6 +101,28 @@ exports.CRUSH_FRAMES = 12;
 exports.STUN_DURATION = 50;
 exports.HATCH_TIME = 100;
 exports.ENEMY_MOVE_DELAY = 8;
+/**
+ * Concurrent-enemy population cap. Ref2's `MAX_ENEMIES = 3`
+ * (`GameManager.h:45`); ours was the only one of the three references with
+ * no cap at all - eggs hatched on top of the initial spawn without limit.
+ * 4 rather than ref2's 3: our initial spawns already reach 5-8 at higher
+ * levels (`LEVEL_CONFIGS`/`getLevelConfig`), so a cap of 3 would make an
+ * egg on the board something that can never hatch for most of the game.
+ */
+exports.MAX_LIVING_ENEMIES = 4;
+/**
+ * Enemy AI target selection (ref1's model, `Enemy.cpp:379-397`): a random
+ * point drawn from a Gaussian centred on Pengo, not Pengo's exact cell.
+ * Re-picked once the enemy arrives at (or is blocked approaching) its
+ * current target.
+ */
+exports.AI_TARGET_SIGMA = 3;
+/**
+ * Odds an enemy blocked by an ice block breaks it rather than trying
+ * another direction (ref2's `SnobeeChaseState.cpp:54-71`: a 50/50
+ * coinflip per blocked direction).
+ */
+exports.ENEMY_BREAK_BLOCK_CHANCE = 0.5;
 exports.LEVEL_CONFIGS = [
     { enemies: 3, eggs: 0, iceBlocks: 53, enemySpeed: 10, timeLimit: 180 },
     { enemies: 4, eggs: 1, iceBlocks: 48, enemySpeed: 9, timeLimit: 160 },
