@@ -111,6 +111,7 @@ class SpriteStudioDoor {
         /** Set when a .ans is open instead of a sprite - Save writes art then. */
         this.artText = null;
         this.playing = false;
+        this.onScreenResize = null;
         this.playTimer = null;
         this.door = '';
         this.file = '';
@@ -152,7 +153,35 @@ class SpriteStudioDoor {
             debug: false,
             debugName: 'SPRITED',
         });
+        // Lay out again whenever the terminal changes size.
+        //
+        // The livechat door learned this twice and wrote it down: a one-shot
+        // layout answers "what size am I now", and this answers "what size did
+        // I just become". Without it the editor stays frozen at the size the
+        // door opened with, and resizing the browser window resizes the screen
+        // underneath it while nothing moves - reported here as "i switched to
+        // responsive now it did not resize to my browser window".
+        this.onScreenResize = () => { void this.relayout(); };
+        this.screen.on('resize', this.onScreenResize);
         this.screen.render();
+    }
+    /**
+     * Rebuild the editor at the screen's current size.
+     *
+     * The widget takes its geometry at construction, so a resize means
+     * building it again - the same move setZoom makes. The canvas is
+     * committed first and the frame put back afterwards, so nothing in
+     * progress is lost to a window drag. Skipped while playing, which owns
+     * the canvas until a key stops it.
+     */
+    async relayout() {
+        if (this.playing)
+            return;
+        if (!this.doc && this.artText === null)
+            return;
+        if (this.doc)
+            this.commit();
+        await this.openEditor();
     }
     // ============================================
     // REQUESTERS
@@ -802,6 +831,14 @@ class SpriteStudioDoor {
         key(['C-v'], () => this.pasteFrame());
     }
     destroy() {
+        if (this.onScreenResize) {
+            this.screen.removeListener('resize', this.onScreenResize);
+            this.onScreenResize = null;
+        }
+        if (this.playTimer) {
+            clearInterval(this.playTimer);
+            this.playTimer = null;
+        }
         for (const [keys, handler] of this.keyHandlers)
             this.screen.unkey(keys, handler);
         this.keyHandlers = [];

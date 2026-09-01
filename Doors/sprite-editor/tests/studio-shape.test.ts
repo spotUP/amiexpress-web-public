@@ -237,3 +237,20 @@ export async function theTitleReportsTheTimingSoSlowerAndFasterAreNotBlind(): Pr
   assert.ok(title.includes('4tpf'), 'the title says ticks per frame');
   assert.ok(title.includes('loop'), 'and whether it loops');
 }
+
+export async function theEditorFollowsTheTerminalWhenItResizes(): Promise<void> {
+  // "i switched to responsive now it did not resize to my browser window."
+  // The widget takes its geometry at construction, so responsive means
+  // rebuilding on resize - the livechat door's lesson, written down in its
+  // own source after being reported twice.
+  assert.ok(source.includes("this.screen.on('resize', this.onScreenResize)"),
+    'the studio must listen for screen resize');
+  const fn = source.slice(source.indexOf('private async relayout('), source.indexOf('// ============================================\n  // REQUESTERS'));
+  assert.ok(fn.includes('if (this.playing) return;'),
+    'a resize during playback must not fight it for the canvas');
+  assert.ok(fn.includes('this.commit()'),
+    'a window drag must not eat work in progress');
+  assert.ok(fn.includes('await this.openEditor()'), 'and the editor is rebuilt at the new size');
+  assert.ok(source.includes("this.screen.removeListener('resize'"),
+    'and the listener goes when the door does');
+}
