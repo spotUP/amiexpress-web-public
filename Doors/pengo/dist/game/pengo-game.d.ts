@@ -18,7 +18,21 @@ export declare class PengoGame {
      */
     readonly cues: SfxCues;
     constructor(data: PengoData, onRender: (content: string) => void, sheet: Record<string, Sprite>);
+    /**
+     * Levels 1-16: the transcribed arcade originals (`levels/`, see the
+     * provenance note there). Level 17 onward: the door's own procedural
+     * generator, unchanged - there is no 17th original to transcribe, and
+     * looping the 16 back around would make "level 17" secretly identical
+     * to "level 1" with a higher number, which reads as a bug more than a
+     * feature. The real arcade does loop; we don't, and this is why.
+     */
     initLevel(): void;
+    /** A blank grid: every cell empty except the wall border. */
+    private buildWalledGrid;
+    private scatterIceBlocks;
+    private scatterDiamonds;
+    private placePengo;
+    private scatterEgg;
     private spawnEnemy;
     handleDirection(direction: Direction): void;
     handlePush(): void;

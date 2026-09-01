@@ -9,6 +9,7 @@ const constants_1 = require("./constants");
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const render_1 = require("./render");
+const levels_1 = require("../levels");
 class PengoGame {
     constructor(data, onRender, sheet) {
         /**
@@ -23,44 +24,89 @@ class PengoGame {
         this.renderCallback = onRender;
         this.sheet = sheet;
     }
+    /**
+     * Levels 1-16: the transcribed arcade originals (`levels/`, see the
+     * provenance note there). Level 17 onward: the door's own procedural
+     * generator, unchanged - there is no 17th original to transcribe, and
+     * looping the 16 back around would make "level 17" secretly identical
+     * to "level 1" with a higher number, which reads as a bug more than a
+     * feature. The real arcade does loop; we don't, and this is why.
+     */
     initLevel() {
         const config = (0, constants_1.getLevelConfig)(this.data.level);
-        // Initialize grid with walls on edges
-        this.data.grid = [];
-        for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
-            this.data.grid[y] = [];
-            for (let x = 0; x < constants_1.GRID_WIDTH; x++) {
-                if (x === 0 || x === constants_1.GRID_WIDTH - 1 || y === 0 || y === constants_1.GRID_HEIGHT - 1) {
-                    this.data.grid[y][x] = 'wall';
-                }
-                else {
-                    this.data.grid[y][x] = 'empty';
-                }
+        const original = (0, levels_1.loadOriginalLevel)(this.data.level);
+        if (original) {
+            this.data.grid = original.grid;
+        }
+        else {
+            this.data.grid = this.buildWalledGrid();
+            this.scatterIceBlocks(config.iceBlocks);
+            this.scatterDiamonds(3);
+        }
+        this.placePengo();
+        // Spawn enemies
+        this.data.enemies = [];
+        for (let i = 0; i < config.enemies; i++) {
+            this.spawnEnemy();
+        }
+        // Spawn eggs: at the level's own authored spots when there are any,
+        // procedurally scattered otherwise. Either way they become the same
+        // free-floating Egg entities this door has always used - only WHERE
+        // they start changes; the hatch model itself is untouched (see
+        // Stage 3's ruling to leave eggs alone for now).
+        this.data.eggs = [];
+        if (original) {
+            for (const spot of original.eggSpawns) {
+                this.data.eggs.push({
+                    x: spot.x, y: spot.y, hatchTimer: constants_1.HATCH_TIME + Math.random() * 100,
+                });
             }
         }
-        // Place ice blocks randomly
-        let blocksPlaced = 0;
-        while (blocksPlaced < config.iceBlocks) {
+        else {
+            for (let i = 0; i < config.eggs; i++) {
+                this.scatterEgg();
+            }
+        }
+        this.data.timeRemaining = config.timeLimit;
+        this.data.diamondsAligned = false;
+        this.render();
+    }
+    /** A blank grid: every cell empty except the wall border. */
+    buildWalledGrid() {
+        const grid = [];
+        for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
+            grid[y] = [];
+            for (let x = 0; x < constants_1.GRID_WIDTH; x++) {
+                grid[y][x] = (x === 0 || x === constants_1.GRID_WIDTH - 1 || y === 0 || y === constants_1.GRID_HEIGHT - 1)
+                    ? 'wall' : 'empty';
+            }
+        }
+        return grid;
+    }
+    scatterIceBlocks(count) {
+        let placed = 0;
+        while (placed < count) {
             const x = 1 + Math.floor(Math.random() * (constants_1.GRID_WIDTH - 2));
             const y = 1 + Math.floor(Math.random() * (constants_1.GRID_HEIGHT - 2));
             if (this.data.grid[y][x] === 'empty') {
                 this.data.grid[y][x] = 'ice';
-                blocksPlaced++;
+                placed++;
             }
         }
-        // Place 3 diamond blocks
-        let diamondsPlaced = 0;
-        while (diamondsPlaced < 3) {
+    }
+    scatterDiamonds(count) {
+        let placed = 0;
+        while (placed < count) {
             const x = 1 + Math.floor(Math.random() * (constants_1.GRID_WIDTH - 2));
             const y = 1 + Math.floor(Math.random() * (constants_1.GRID_HEIGHT - 2));
             if (this.data.grid[y][x] === 'ice') {
                 this.data.grid[y][x] = 'diamond';
-                diamondsPlaced++;
+                placed++;
             }
         }
-        // Find empty spot for Pengo
-        let pengoPlaced = false;
-        while (!pengoPlaced) {
+    }
+    placePengo() {
+        while (true) {
             const x = 1 + Math.floor(Math.random() * (constants_1.GRID_WIDTH - 2));
             const y = 1 + Math.floor(Math.random() * (constants_1.GRID_HEIGHT - 2));
             if (this.data.grid[y][x] === 'empty') {
@@ -72,32 +118,21 @@ class PengoGame {
                     isDead: false,
                     deathFrame: 0,
                 };
-                pengoPlaced = true;
+                return;
             }
         }
-        // Spawn enemies
-        this.data.enemies = [];
-        for (let i = 0; i < config.enemies; i++) {
-            this.spawnEnemy();
-        }
-        // Spawn eggs
-        this.data.eggs = [];
-        for (let i = 0; i < config.eggs; i++) {
-            let placed = false;
-            while (!placed) {
-                const x = 1 + Math.floor(Math.random() * (constants_1.GRID_WIDTH - 2));
-                const y = 1 + Math.floor(Math.random() * (constants_1.GRID_HEIGHT - 2));
-                if (this.data.grid[y][x] === 'empty' &&
-                    Math.abs(x - this.data.pengo.x) > 3 &&
-                    Math.abs(y - this.data.pengo.y) > 3) {
-                    this.data.eggs.push({ x, y, hatchTimer: constants_1.HATCH_TIME + Math.random() * 100 });
-                    placed = true;
-                }
+    }
+    scatterEgg() {
+        while (true) {
+            const x = 1 + Math.floor(Math.random() * (constants_1.GRID_WIDTH - 2));
+            const y = 1 + Math.floor(Math.random() * (constants_1.GRID_HEIGHT - 2));
+            if (this.data.grid[y][x] === 'empty' &&
+                Math.abs(x - this.data.pengo.x) > 3 &&
+                Math.abs(y - this.data.pengo.y) > 3) {
+                this.data.eggs.push({ x, y, hatchTimer: constants_1.HATCH_TIME + Math.random() * 100 });
+                return;
             }
         }
-        this.data.timeRemaining = config.timeLimit;
-        this.data.diamondsAligned = false;
-        this.render();
     }
     spawnEnemy() {
         let placed = false;
