@@ -353,21 +353,13 @@ export function createList(options?: ListOptions): List {
     );
   }
 
-  // Ensure style object exists with hover defaults
-  const style = processedOptions.style || {};
-  const itemStyle = (style as any).item || {};
-
-  // Set default hover style if not provided (subtle highlight)
-  if (!itemStyle.hover) {
-    itemStyle.hover = {
-      bg: 'blue',
-      fg: 'white',
-    };
-  }
-
-  // Merge styles back
-  (style as any).item = itemStyle;
-  processedOptions.style = style;
+  // No hover style is injected here.
+  //
+  // This used to force blue-on-white onto every list the SDK built, before
+  // the widget ever saw the options - a colour no theme chose, and the
+  // reason removing the widget's own default changed nothing on screen.
+  // The mouse now moves the real selection rather than painting a second
+  // highlight, so there is nothing left for a hover style to say.
 
   return blessed.list({
     ...processedOptions,
@@ -1022,6 +1014,35 @@ export function createScreen(
     console.log(`[createScreen] Modem emulation detected (${bps} bps) - enabling slow connection mode`);
     screen.enableSlowConnectionMode();
   }
+
+  /**
+   * Hand the terminal back the way it was found.
+   *
+   * A door paints the screen in its own colours, and ESC[0m does NOT
+   * unpaint cells that are already coloured - it only affects what is drawn
+   * afterwards. So resetting at the BBS's prompt was never going to be
+   * enough: reported twice, first as telnet doors leaving a blue
+   * background and then as "bg colors still leak when i exit typescript
+   * doors" after the first fix.
+   *
+   * Reset THEN erase, in that order, because ESC[2J erases using the
+   * current background - clearing first would repaint the whole screen in
+   * the very colour being escaped from. That is the same ordering the C
+   * door's ansi.c defends, for the same reason.
+   *
+   * This belongs here rather than in each door's teardown: there are nine
+   * places a door session ends, doors are written by other people, and
+   * every TypeScript door that draws a screen comes through createScreen.
+   */
+  screen.on('destroy', () => {
+    try {
+      const write = bbs?.write ?? options?.output;
+      write?.('\x1b[0m\x1b[2J\x1b[H');
+    } catch {
+      // A door that is already gone cannot be tidied up after; not worth
+      // throwing out of a teardown for.
+    }
+  });
 
   return screen;
 }
