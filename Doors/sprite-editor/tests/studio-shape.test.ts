@@ -116,12 +116,12 @@ export async function theDefaultIsOneToOne(): Promise<void> {
   assert.strictEqual(DEFAULT_ZOOM, 1, 'a sprite opens at actual size');
   assert.ok(source.includes('cellScaleX: zoomScales(this.zoom).x'),
     'the editor must be built at the current zoom, not at a fitted one');
-  assert.deepStrictEqual(zoomScales(1), { x: 2, y: 1 },
-    'actual size is one character ROW per cell row, two characters ACROSS - ' +
-    'a terminal character is twice as tall as it is wide, so one character ' +
-    'per cell draws every pixel as a tall rectangle');
-  assert.deepStrictEqual(zoomScales(4), { x: 8, y: 4 }, 'the aspect holds at every level');
-  assert.strictEqual(CELL_ASPECT, 2);
+  assert.deepStrictEqual(zoomScales(1), { x: 1, y: 1 },
+    'actual size is ONE character per cell, which is what the game draws - ' +
+    'cell-art rowToTags emits one character per cell, so an editor that ' +
+    'widened it would be lying about the sprite');
+  assert.deepStrictEqual(zoomScales(4), { x: 4, y: 4 }, 'zoom scales both axes together');
+  assert.strictEqual(CELL_ASPECT, 1);
   assert.ok(!source.includes('canvasScale('),
     'the auto-fit must be gone, not merely unused');
 }
@@ -132,13 +132,19 @@ export async function zoomIsSomethingYouAskFor(): Promise<void> {
   assert.ok(zoom, 'there must be a Zoom menu');
   assert.deepStrictEqual(
     zoom.items.map((i: any) => i.label),
-    ['1:1  (actual size)', '2:1', '3:1', '4:1', '6:1', '8:1'],
+    ['1:1  (actual size)', '2:1', '4:1', '6:1', '8:1'],
     'the steps a sysop can pick, actual size first');
+  for (const z of ZOOM_STEPS) {
+    assert.ok(z === 1 || z % 2 === 0,
+      `${z}:1 is odd - a half-block cell holds two pixels vertically, so an ` +
+      'odd scale gives one of them more rows than the other and distorts the art');
+  }
 }
 
 export async function steppingZoomStopsAtTheEnds(): Promise<void> {
   assert.strictEqual(stepZoom(1, -1), 1, 'cannot go below actual size');
   assert.strictEqual(stepZoom(1, 1), 2);
+  assert.strictEqual(stepZoom(2, 1), 4, 'the odd step is gone from the ladder');
   assert.strictEqual(stepZoom(ZOOM_STEPS[ZOOM_STEPS.length - 1], 1), 8, 'cannot go past the top');
   assert.strictEqual(stepZoom(99, -1), 1, 'an unknown zoom falls back to the first step');
 }

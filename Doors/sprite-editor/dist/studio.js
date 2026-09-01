@@ -51,19 +51,32 @@ exports.DEFAULT_ZOOM = 1;
 /**
  * Characters per cell ACROSS, at every zoom level.
  *
- * A terminal character is about twice as tall as it is wide, so a sprite
- * cell drawn as one character is a tall rectangle - reported looking at a
- * 5x1 sprite: "the blocks are very tall something seems wrong". Drawing
- * each cell two characters wide makes a pixel roughly square, which is what
- * the door's old hand-written painter did with its CELL_CHAR_WIDTH = 2 and
- * what was lost when the editor took over the canvas.
+ * ONE, because that is what the GAME draws. cell-art's rowToTags emits one
+ * character per cell, so a sprite cell on the board is a single character -
+ * a tall rectangle, since a terminal character is about twice as tall as it
+ * is wide. The editor must show the same thing.
  *
- * This is aspect correction, not magnification: at zoom 1 the sprite is
- * still one character ROW per cell row - actual size.
+ * This was 2 for one commit, to make a pixel look square after "the blocks
+ * are very tall something seems wrong". Putting SPRITED and Pengo side by
+ * side killed it: the egg was twice as wide in the editor as in the game.
+ * The tallness is real and the game has it too; an editor that corrects it
+ * is lying about what you are drawing.
  */
-exports.CELL_ASPECT = 2;
-/** What the Zoom menu offers, in cell rows per cell. */
-exports.ZOOM_STEPS = [1, 2, 3, 4, 6, 8];
+exports.CELL_ASPECT = 1;
+/**
+ * What the Zoom menu offers, in characters per cell.
+ *
+ * EVEN above 1, on the sysop's instruction: "if scaling is an issue use even
+ * scaling so we always get correct aspect". A sprite cell holds TWO pixels
+ * vertically when it is half-block art, so an odd scale cannot split it
+ * evenly - at 3:1 the top pixel gets two rows and the bottom one, and the
+ * art is distorted in a way that is hard to see and easy to draw against.
+ * Even scales give each half exactly the same height.
+ *
+ * 1 stays, and is not a distortion: at actual size the cell is a single
+ * character and the terminal's own font draws the two halves of '▀' evenly.
+ */
+exports.ZOOM_STEPS = [1, 2, 4, 6, 8];
 /** The two scales the editor is built with at a given zoom level. */
 function zoomScales(zoom) {
     return { x: zoom * exports.CELL_ASPECT, y: zoom };
