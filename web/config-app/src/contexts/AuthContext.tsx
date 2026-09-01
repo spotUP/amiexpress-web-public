@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import type { User } from '../types';
+import { ADMIN_TOKEN_KEY } from '../api/auth-token';
 
 const AUTH_USER_STORAGE_KEY = 'amiexpress-config-user';
 
@@ -106,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== 'authToken') {
+      if (event.key !== ADMIN_TOKEN_KEY) {
         return;
       }
       // If token cleared, log out locally; otherwise refresh user info

@@ -50,6 +50,33 @@ describe('the session token is read from one place', () => {
     expect(offenders.join(', ')).toBe('');
   });
 
+  // The admin and the BBS terminal are ONE ORIGIN - the board at `/`, the
+  // admin at `/admin` - so they share a localStorage. Both used `authToken`:
+  // the BBS chat writes it on login and clears it on logout, and the admin
+  // listens for that key changing to keep its tabs in step. A caller logging
+  // into the board handed their token to the sysop's admin session, or
+  // cleared it and logged the sysop out. Reported on the live board, with the
+  // BBS login as `origo` and the admin as `sysop`.
+  //
+  // A privilege boundary is not a place to share a storage key.
+  it('does not use the storage key the BBS terminal writes', () => {
+    const offenders = sourceFiles(SRC)
+      .filter((file) => !file.endsWith(path.join('api', 'auth-token.ts')))
+      .filter((file) => /'authToken'/.test(code(file)))
+      .map((file) => path.relative(SRC, file));
+
+    expect(offenders.join(', ')).toBe('');
+  });
+
+  it('reads and writes that key through one module', () => {
+    const offenders = sourceFiles(SRC)
+      .filter((file) => !file.endsWith(path.join('api', 'auth-token.ts')))
+      .filter((file) => /localStorage\.(getItem|setItem|removeItem)\(\s*ADMIN_TOKEN_KEY/.test(code(file)))
+      .map((file) => path.relative(SRC, file));
+
+    expect(offenders.join(', ')).toBe('');
+  });
+
   it('no request puts the token in a query string', () => {
     // The auth middleware never reads one, so a URL carrying `?token=` is a
     // request that cannot be authorised - and it leaks the JWT into history,

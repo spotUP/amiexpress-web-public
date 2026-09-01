@@ -1,4 +1,5 @@
 import type { ApiResponse, User } from '../types';
+import { readAdminToken, writeAdminToken } from './auth-token';
 
 const API_BASE = '/api';
 const AUTH_BASE = '/auth';
@@ -44,15 +45,15 @@ class ApiClient {
   }
 
   constructor() {
-    this.token = localStorage.getItem('authToken');
+    this.token = readAdminToken();
   }
 
   setToken(token: string | null) {
     this.token = token;
     if (token) {
-      localStorage.setItem('authToken', token);
+      writeAdminToken(token);
     } else {
-      localStorage.removeItem('authToken');
+      writeAdminToken(null);
     }
   }
 

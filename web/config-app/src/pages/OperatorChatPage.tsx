@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { MessageSquare, Clock, User, Hash, Terminal } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { OperatorChatTerminal } from '../components/OperatorChatTerminal';
+import { readAdminToken, writeAdminToken } from '../api/auth-token';
 
 interface PageRequest {
   id: string;
@@ -60,7 +61,7 @@ export function OperatorChatPage() {
     // Get auth token from URL query params (for Discord links) or localStorage (for logged-in admins)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get('token');
-    const storageToken = localStorage.getItem('authToken');
+    const storageToken = readAdminToken();
     const token = urlToken || storageToken;
 
     if (!token) {
@@ -110,7 +111,7 @@ export function OperatorChatPage() {
       // If session expired, clear token and redirect to login
       if (error.message.includes('Session expired') || error.message.includes('expired')) {
         console.log('[Operator Chat] Session expired, clearing token');
-        localStorage.removeItem('authToken');
+        writeAdminToken(null);
       }
     });
 

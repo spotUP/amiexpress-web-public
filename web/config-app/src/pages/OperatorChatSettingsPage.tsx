@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { readAdminToken } from '../api/auth-token';
 
 interface OperatorChatConfig {
   enabled: boolean;
@@ -121,7 +122,7 @@ export function OperatorChatSettingsPage() {
       try {
         const response = await fetch('/api/config/push/vapid-config', {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            'Authorization': `Bearer ${readAdminToken()}`
           }
         });
         if (response.ok) {
@@ -148,7 +149,7 @@ export function OperatorChatSettingsPage() {
       const response = await fetch('/api/config/push/generate-vapid', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Authorization': `Bearer ${readAdminToken()}`,
           'Content-Type': 'application/json'
         }
       });
@@ -179,7 +180,7 @@ export function OperatorChatSettingsPage() {
       const response = await fetch('/api/config/push/vapid-config', {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Authorization': `Bearer ${readAdminToken()}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

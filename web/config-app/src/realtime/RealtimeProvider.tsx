@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createInvalidationScheduler } from './query-bridge';
 import { useNotification } from '../contexts/NotificationContext';
 import type { BBSEvent, ImportProgressEvent, OperatorPageEvent, RealtimeStatus } from '../types/realtime';
+import { readAdminToken } from '../api/auth-token';
 
 type EventListener = (event: BBSEvent) => void;
 
@@ -58,7 +59,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
+    const token = readAdminToken();
     if (!token) {
       // Not signed in: the pages keep polling, the header says so.
       setStatus('offline');
