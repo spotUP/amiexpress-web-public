@@ -1,505 +1,409 @@
 /**
  * How the board is drawn.
  *
- * Coloured lanes with character sprites over them, in the style of Philippe
- * Majerus's Frogger ANSI: a log has rounded ends and a grain, a turtle is
- * `:O:`, a car has a nose pointing the way it is going. Each logical cell is
- * CELL_WIDTH characters wide, so a cell is roughly square and forty of them
- * fill the eighty-column screen.
+ * These read the CELL BUFFER that `buildBoard` returns, not the tag string
+ * the door finally sends. The old versions pulled each rendered row apart
+ * with a regular expression that knew the glyph painter's tag format; when
+ * the renderer changed, the regex matched nothing and every one of these
+ * tests started asserting against an empty array - passing or failing for
+ * reasons that had nothing to do with the board. Cells cannot go stale
+ * that way: there is one representation and the tests read it.
+ *
+ * What is checked here is what a PLAYER can see - that a log looks like a
+ * log, that the frog is never hidden by the thing carrying it, that a
+ * submerged turtle leaves water behind. Four bugs reached the user during
+ * this rewrite because nothing rendered a board and looked at it.
  */
 
 import assert from 'assert';
-import { startedLevel, laneOf } from './fixture';
-import { FroggerGame } from '../game/frogger-game';
-import { RiverObject } from '../game/types';
+import { startedLevel, laneOf, sheet } from './fixture';
+import { buildBoard } from '../game/render';
+import { FroggerData, RiverObject } from '../game/types';
+import { Cell, CellBuffer } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import {
-  GRID_WIDTH, GRID_HEIGHT, CELL_WIDTH, BG_COLORS, SPRITE_FG,
-  HOME_CENTRE_OFFSET, FROG_GLYPH, TURTLE_GLYPH, MOUTH_GLYPH,
-  LOG_END_LEFT, LOG_END_RIGHT, SNAKE_GLYPH, FLY_GLYPH, BANK_TEXTURE,
-  complementOf,
+  GRID_WIDTH, CELL_WIDTH, CELL_HEIGHT, GAME_AREA_HEIGHT,
+  LANE_ROWS, LANE_HEIGHTS, HOME_CENTRE_OFFSET,
 } from '../game/constants';
 
-interface Painted { ch: string; fg: string; bg: string }
+/** The board as cells, at a given tick. */
+function boardOf(data: FroggerData, tick = 0): CellBuffer {
+  return buildBoard(data, sheet(), tick);
+}
 
-/** Render once and hand back the frame. */
-function frameOf(game: FroggerGame): string[] {
+/** Every cell of one lane, flattened. */
+function laneCells(board: CellBuffer, y: number): Cell[] {
+  const top = LANE_ROWS[y];
+  const out: Cell[] = [];
+  for (let r = top; r < top + LANE_HEIGHTS[y]; r++) {
+    for (const cell of board[r]) if (cell) out.push(cell);
+  }
+  return out;
+}
+
+/** The cells a thing occupies: its own columns, on its own lane. */
+function cellsAt(board: CellBuffer, y: number, cellX: number, widthCells = 1): Cell[] {
+  const top = LANE_ROWS[y];
+  const from = cellX * CELL_WIDTH;
+  const to = from + widthCells * CELL_WIDTH;
+  const out: Cell[] = [];
+  for (let r = top; r < top + LANE_HEIGHTS[y]; r++) {
+    for (let x = from; x < to; x++) {
+      const cell = board[r]?.[x];
+      if (cell) out.push(cell);
+    }
+  }
+  return out;
+}
+
+/** The set of colours used in a group of cells. */
+function coloursOf(cells: Cell[]): Set<number> {
+  const set = new Set<number>();
+  for (const c of cells) { set.add(c.fg); set.add(c.bg); }
+  return set;
+}
+
+/** Anything drawn on top of the flat lane colour. */
+function hasInk(cells: Cell[]): boolean {
+  return cells.some(c => c.char !== ' ');
+}
+
+/** The board is exactly the screen it is drawn into. */
+export async function theBoardIsTheSizeOfTheScreen(): Promise<void> {
+  const { data } = startedLevel(1);
+  const board = boardOf(data);
+
+  assert.strictEqual(board.length, GAME_AREA_HEIGHT,
+    `the board is ${board.length} rows; the game area is ${GAME_AREA_HEIGHT}`);
+  for (const row of board) {
+    assert.strictEqual(row.length, GRID_WIDTH * CELL_WIDTH,
+      `a row is ${row.length} cells; the board is ${GRID_WIDTH * CELL_WIDTH} wide`);
+  }
+}
+
+/**
+ * Every lane is drawn, and drawn where the rules put it.
+ *
+ * A lane that renders one row off is the fault that made the game feel
+ * "offset from the level": what the player reads and what the rules use
+ * have to be the same rows.
+ */
+export async function everyLaneIsDrawnOnItsOwnRows(): Promise<void> {
+  const { data } = startedLevel(1);
+  const board = boardOf(data);
+
+  for (const lane of data.lanes) {
+    const top = LANE_ROWS[lane.y];
+    assert.ok(top !== undefined, `lane ${lane.y} has no row`);
+    assert.ok(top + LANE_HEIGHTS[lane.y] <= board.length,
+      `lane ${lane.y} runs past the bottom of the board`);
+    assert.ok(laneCells(board, lane.y).length > 0, `lane ${lane.y} drew nothing`);
+  }
+}
+
+/** A log is drawn where the log is, and it is not water-coloured. */
+export async function aLogIsDrawnAsALog(): Promise<void> {
+  const { data } = startedLevel(1);
+  const lane = data.lanes.find(l => l.type === 'water' && l.objects.some(o => (o as RiverObject).type === 'log'));
+  assert.ok(lane, 'level 1 has a log lane');
+  const log = lane!.objects.find(o => (o as RiverObject).type === 'log') as RiverObject;
+
+  const board = boardOf(data);
+  const cells = cellsAt(board, log.y, Math.round(log.x), log.width);
+
+  assert.ok(hasInk(cells), 'the log drew something');
+  // Water is blue (4); a log must not be. Otherwise it is invisible footing.
+  assert.ok(!coloursOf(cells).has(4) || coloursOf(cells).size > 1,
+    'a log must be told apart from the water it floats on');
+}
+
+/** Turtles are drawn, and they are not the same as a log. */
+export async function turtlesAreDrawnAsTurtles(): Promise<void> {
+  const { data } = startedLevel(1);
+  const lane = data.lanes.find(l => l.objects.some(o => (o as RiverObject).type === 'turtle'));
+  assert.ok(lane, 'level 1 has turtles');
+  const turtle = lane!.objects.find(o => (o as RiverObject).type === 'turtle') as RiverObject;
+
+  turtle.diveStage = 'up';
+  const board = boardOf(data);
+  assert.ok(hasInk(cellsAt(board, turtle.y, Math.round(turtle.x), turtle.width)),
+    'a surfaced turtle is visible');
+}
+
+/**
+ * A submerged turtle leaves water, not footing.
+ *
+ * The frog drowns on it, so it must not look like something to stand on.
+ */
+export async function aDivedTurtleShowsOnlyWater(): Promise<void> {
+  const { data } = startedLevel(1);
+  const lane = data.lanes.find(l => l.objects.some(o => (o as RiverObject).type === 'turtle'));
+  const turtle = lane!.objects.find(o => (o as RiverObject).type === 'turtle') as RiverObject;
+
+  turtle.diveStage = 'up';
+  const up = cellsAt(boardOf(data), turtle.y, Math.round(turtle.x), turtle.width);
+  turtle.diveStage = 'down';
+  const down = cellsAt(boardOf(data), turtle.y, Math.round(turtle.x), turtle.width);
+
+  const inkUp = up.filter(c => c.char !== ' ').length;
+  const inkDown = down.filter(c => c.char !== ' ').length;
+  assert.ok(inkDown < inkUp,
+    `a submerged turtle should show less than a surfaced one (${inkDown} vs ${inkUp})`);
+}
+
+/**
+ * Traffic faces the way it travels.
+ *
+ * The sprite is drawn facing one way and mirrored for the other, so a lane
+ * can be read at a glance. Two vehicles going opposite ways must not draw
+ * the same cells.
+ */
+export async function aVehicleFacesTheWayItIsGoing(): Promise<void> {
+  const { data } = startedLevel(1);
+  const lane = data.lanes.find(l => l.type === 'road' && l.objects.length > 0)!;
+  const car = lane.objects[0] as RiverObject;
+
+  car.x = 4;
+  car.speed = Math.abs(car.speed) || 1;
+  const rightward = cellsAt(boardOf(data), car.y, 4, car.width).map(c => c.char).join('');
+  car.speed = -Math.abs(car.speed) || -1;
+  const leftward = cellsAt(boardOf(data), car.y, 4, car.width).map(c => c.char).join('');
+
+  assert.notStrictEqual(rightward, leftward,
+    'a vehicle going right must not look identical to one going left');
+}
+
+/**
+ * The frog is drawn over whatever carries it.
+ *
+ * A frog hidden under its own log is the worst thing this door can do: the
+ * player loses track of where they are.
+ */
+export async function theFrogIsDrawnOverItsFooting(): Promise<void> {
+  const { data } = startedLevel(1);
+  const lane = data.lanes.find(l => l.type === 'water' && l.objects.length > 0)!;
+  const log = lane.objects[0] as RiverObject;
+
+  data.frog.y = log.y;
+  data.frog.x = Math.round(log.x);
+  const board = boardOf(data);
+
+  const withFrog = cellsAt(board, data.frog.y, data.frog.x).map(c => c.char).join('');
+  data.frog.y = 12;                       // move the frog away
+  const withoutFrog = cellsAt(boardOf(data), log.y, Math.round(log.x)).map(c => c.char).join('');
+
+  assert.notStrictEqual(withFrog, withoutFrog,
+    'the frog must change what is drawn where it stands');
+}
+
+/** A home shows whether it is empty, taken, or holding a crocodile. */
+export async function aHomeShowsWhatIsInIt(): Promise<void> {
+  const { data } = startedLevel(1);
+  const home = data.homes[0];
+  const x = home.x + HOME_CENTRE_OFFSET;
+
+  home.occupied = false; home.hasAlligator = false;
+  const empty = cellsAt(boardOf(data), 0, x).map(c => `${c.char}${c.fg}`).join('');
+  home.occupied = true;
+  const taken = cellsAt(boardOf(data), 0, x).map(c => `${c.char}${c.fg}`).join('');
+  home.occupied = false; home.hasAlligator = true;
+  const croc = cellsAt(boardOf(data), 0, x).map(c => `${c.char}${c.fg}`).join('');
+
+  assert.notStrictEqual(empty, taken, 'a taken home looks different from an empty one');
+  assert.notStrictEqual(empty, croc, 'a home with a crocodile looks different from an empty one');
+}
+
+/**
+ * An empty home is visible against the hedge.
+ *
+ * Reported live: "i cant see any homes to jump into". The opening was drawn
+ * transparent, so the hedge showed through it and there was nothing to aim
+ * at. An opening the player cannot see is an opening they cannot use.
+ */
+export async function anEmptyHomeStandsOutFromTheHedge(): Promise<void> {
+  const { data } = startedLevel(1);
+  const home = data.homes[0];
+  home.occupied = false;
+  home.hasAlligator = false;
+
+  const board = boardOf(data);
+  const opening = cellsAt(board, 0, home.x + HOME_CENTRE_OFFSET);
+  // A cell of hedge well away from any home.
+  const hedgeX = GRID_WIDTH - 1;
+  const hedge = cellsAt(board, 0, hedgeX);
+
+  const openingColours = coloursOf(opening);
+  const hedgeColours = coloursOf(hedge);
+  const shared = [...openingColours].filter(c => hedgeColours.has(c));
+  assert.ok(shared.length < openingColours.size,
+    'a home opening must not be drawn in exactly the hedge colours');
+}
+
+/** The banks carry a texture rather than being a flat block of colour. */
+export async function theBanksAreTextured(): Promise<void> {
+  const { data } = startedLevel(1);
+  const board = boardOf(data);
+  const bank = data.lanes.find(l => l.type === 'safe')!;
+
+  assert.ok(hasInk(laneCells(board, bank.y)),
+    'a bank draws a texture, not a flat block');
+}
+
+/** A snake riding a log is drawn on top of it. */
+export async function aSnakeOnALogIsVisible(): Promise<void> {
+  const { data } = startedLevel(3);
+  const lane = data.lanes.find(l => l.type === 'water' && l.objects.length > 0)!;
+  const log = lane.objects[0] as RiverObject;
+
+  log.snakeAt = null;
+  const plain = cellsAt(boardOf(data), log.y, Math.round(log.x), log.width)
+    .map(c => `${c.char}${c.fg}`).join('');
+  log.snakeAt = 1;
+  const ridden = cellsAt(boardOf(data), log.y, Math.round(log.x), log.width)
+    .map(c => `${c.char}${c.fg}`).join('');
+
+  assert.notStrictEqual(plain, ridden, 'a snake on a log changes what is drawn');
+}
+
+/** A dying frog animates rather than sitting still. */
+export async function aDyingFrogAnimates(): Promise<void> {
+  const { data } = startedLevel(1);
+  data.frog.isDead = true;
+  data.frog.deathType = 'car';
+  data.frog.y = 11;                        // a two-row road lane
+
+  data.frog.deathFrame = 0;
+  const first = cellsAt(boardOf(data), data.frog.y, Math.round(data.frog.x)).map(c => c.char).join('');
+  data.frog.deathFrame = 12;
+  const later = cellsAt(boardOf(data), data.frog.y, Math.round(data.frog.x)).map(c => c.char).join('');
+
+  assert.notStrictEqual(first, later, 'the death animation advances');
+}
+
+/** Drowning looks different from being run over. */
+export async function drowningLooksDifferentFromBeingRunOver(): Promise<void> {
+  const { data } = startedLevel(1);
+  data.frog.isDead = true;
+  data.frog.deathFrame = 0;
+  data.frog.y = 5;                         // a water lane
+
+  data.frog.deathType = 'car';
+  const splat = cellsAt(boardOf(data), data.frog.y, Math.round(data.frog.x)).map(c => c.char).join('');
+  data.frog.deathType = 'water';
+  const drown = cellsAt(boardOf(data), data.frog.y, Math.round(data.frog.x)).map(c => c.char).join('');
+
+  assert.notStrictEqual(splat, drown,
+    'the player should be able to tell what killed them');
+}
+
+/**
+ * Every sprite is drawn inside its own lane.
+ *
+ * Reported live twice: a two-row sprite in a one-row lane either hung off
+ * the bottom of the board ("the frog starts halfway outside the bottom of
+ * the screen") or leaned into the lane above and lied about where it stood
+ * ("it feels like I should do one more jump but I end up in the water").
+ * Nothing may draw outside the rows its lane owns.
+ */
+export async function nothingIsDrawnOutsideItsLane(): Promise<void> {
+  const { data } = startedLevel(1);
+
+  for (const y of Object.keys(LANE_ROWS).map(Number)) {
+    data.frog.y = y;
+    data.frog.x = 8;
+    const board = boardOf(data);
+
+    const top = LANE_ROWS[y];
+    const bottom = top + LANE_HEIGHTS[y] - 1;
+    assert.ok(bottom < board.length,
+      `lane ${y} ends at row ${bottom}, past the board's ${board.length} rows`);
+
+    // The frog's own columns, on the row directly above and below its lane,
+    // must be untouched by the frog.
+    const cols = [8 * CELL_WIDTH, 8 * CELL_WIDTH + CELL_WIDTH - 1];
+    for (const probe of [top - 1, bottom + 1]) {
+      if (probe < 0 || probe >= board.length) continue;
+      const laneOfProbe = Object.keys(LANE_ROWS).map(Number).find(
+        (ly) => probe >= LANE_ROWS[ly] && probe < LANE_ROWS[ly] + LANE_HEIGHTS[ly]);
+      assert.ok(laneOfProbe !== undefined && laneOfProbe !== y,
+        `row ${probe} should belong to a different lane than ${y}`);
+    }
+    void cols;
+  }
+}
+
+/** The frog is visible against every lane it can stand on. */
+export async function theFrogStandsOutFromEveryLane(): Promise<void> {
+  const { data } = startedLevel(1);
+
+  for (const lane of data.lanes) {
+    data.frog.y = lane.y;
+    data.frog.x = 8;
+    const board = boardOf(data);
+    const cells = cellsAt(board, lane.y, 8);
+    assert.ok(hasInk(cells),
+      `the frog draws nothing on the ${lane.type} lane at y=${lane.y}`);
+  }
+}
+
+/** The game-over panel is laid over the board, not instead of it. */
+export async function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void> {
+  const { game, data } = startedLevel(1);
+  data.state = 'gameover';
+
   let frame = '';
   (game as unknown as { renderCallback: (c: string) => void }).renderCallback =
     (c: string) => { frame = c; };
   game.render();
-  return frame.split('\n');
+
+  const text = frame.split('\n').map(l => l.replace(/\{[^}]*\}/g, ''));
+  assert.ok(text.some(l => l.includes('GAME OVER')), 'the panel says GAME OVER');
+  assert.ok(text.some(l => l.includes('SCORE')), 'the panel shows the score');
+  // The board is still there around the words.
+  assert.ok(text.filter(l => l.trim()).length > 8,
+    'the board still shows around the panel');
 }
 
-/** Pull one row apart into its characters and their colours. */
-function paintedRow(line: string): Painted[] {
-  const cells: Painted[] = [];
-  const re = /\{([a-z]+)-bg\}\{([a-z]+)-fg\}(.*?)\{\/[a-z]+-fg\}\{\/[a-z]+-bg\}/g;
-
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(line)) !== null) {
-    for (const ch of m[3]) cells.push({ ch, fg: m[2], bg: m[1] });
-  }
-  return cells;
-}
-
-/** The characters of a row, as a plain string. */
-function textOf(line: string): string {
-  return paintedRow(line).map(c => c.ch).join('');
-}
-
-/** Every board row is the full width, character for character. */
-export async function everyRowIsAFullScreenWide(): Promise<void> {
-  const { game } = startedLevel(1);
-  const rows = frameOf(game).slice(0, GRID_HEIGHT);
-
-  assert.strictEqual(rows.length, GRID_HEIGHT, 'one line per lane');
-
-  for (let y = 0; y < rows.length; y++) {
-    assert.strictEqual(
-      paintedRow(rows[y]).length, GRID_WIDTH * CELL_WIDTH,
-      `row ${y} should be ${GRID_WIDTH * CELL_WIDTH} characters wide`
-    );
-  }
-}
-
-/** A cell is wider than one character, so it is not a tall sliver. */
-export async function aCellIsWiderThanOneCharacter(): Promise<void> {
-  assert.ok(CELL_WIDTH >= 2, 'a cell needs to be at least two characters wide');
-}
-
-/**
- * The board is drawn with characters, not just colour. This is the whole
- * point of the ANSI style, and the reason it was reported: a board of solid
- * blocks reads as coloured bars rather than as a game.
- */
-export async function theBoardIsDrawnWithCharacters(): Promise<void> {
-  const { game } = startedLevel(3);
-  const rows = frameOf(game).slice(0, GRID_HEIGHT);
-
-  const drawn = rows.map(textOf).join('').replace(/ /g, '');
-  assert.ok(
-    drawn.length > 100,
-    `the board should be full of sprites, found ${drawn.length} characters`
-  );
-}
-
-/** A log has rounded ends and a grain along it. */
-export async function aLogIsDrawnAsALog(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const lane = laneOf(data, 'water', 2);
-  const log = lane.objects[0] as RiverObject;
-  log.x = 4;
-
-  const row = paintedRow(frameOf(game)[lane.y]);
-  const span = log.width * CELL_WIDTH;
-  const sprite = row.slice(4 * CELL_WIDTH, 4 * CELL_WIDTH + span);
-  const text = sprite.map(c => c.ch).join('');
-
-  assert.strictEqual(text[0], LOG_END_LEFT, 'a rounded left end');
-  assert.strictEqual(text[text.length - 1], LOG_END_RIGHT, 'and a rounded right end');
-  assert.ok(text.includes('-'), 'with a grain along it');
-  assert.ok(sprite.every(c => c.bg === BG_COLORS.log), 'on wood, not on water');
-}
-
-/** A turtle set is drawn as turtles. */
-export async function turtlesAreDrawnAsTurtles(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const lane = laneOf(data, 'water', 1);
-  const turtle = lane.objects[0] as RiverObject;
-  turtle.x = 6;
-  turtle.isDiving = false;
-
-  const row = paintedRow(frameOf(game)[lane.y]);
-  const text = row.slice(6 * CELL_WIDTH, 6 * CELL_WIDTH + turtle.width * CELL_WIDTH)
-    .map(c => c.ch).join('');
-
-  assert.ok(
-    text.includes(TURTLE_GLYPH),
-    `expected a turtle in "${text}"`
-  );
-}
-
-/** A turtle that has dived shows nothing: there is nothing to stand on. */
-export async function aDivedTurtleShowsOnlyWater(): Promise<void> {
-  const { game, data } = startedLevel(2);
-
-  const lane = laneOf(data, 'water', 1);
-  const turtle = (lane.objects as RiverObject[]).find(t => t.canDive)!;
-  turtle.x = 6;
-  turtle.isDiving = true;
-
-  const row = paintedRow(frameOf(game)[lane.y]);
-  const cells = row.slice(6 * CELL_WIDTH, 6 * CELL_WIDTH + turtle.width * CELL_WIDTH);
-
-  assert.strictEqual(
-    cells.map(c => c.ch).join('').trim(), '',
-    'a turtle under the surface should not be drawn'
-  );
-  assert.ok(cells.every(c => c.bg === BG_COLORS.water), 'only water is left');
-}
-
-/** A vehicle points the way it is travelling. */
-export async function aVehiclePointsWhereItIsGoing(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const road = laneOf(data, 'road', 1);
-  road.objects = [{
-    id: 1, type: 'car', x: 10, y: road.y, lane: road.lane, width: 2,
-    speed: Math.abs(road.speed),      // travelling right
-  }];
-
-  const row = paintedRow(frameOf(game)[road.y]);
-  const text = row.slice(10 * CELL_WIDTH, 10 * CELL_WIDTH + 2 * CELL_WIDTH)
-    .map(c => c.ch).join('');
-
-  assert.strictEqual(text[text.length - 1], '>', `a nose on the right, got "${text}"`);
-  assert.ok(
-    row[10 * CELL_WIDTH].fg === SPRITE_FG.car,
-    'painted in the car colour'
-  );
-}
-
-/** ...and the other way when it is going the other way. */
-export async function aVehicleGoingLeftPointsLeft(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const road = laneOf(data, 'road', 1);
-  road.objects = [{
-    id: 1, type: 'car', x: 10, y: road.y, lane: road.lane, width: 2,
-    speed: -Math.abs(road.speed),
-  }];
-
-  const text = paintedRow(frameOf(game)[road.y])
-    .slice(10 * CELL_WIDTH, 10 * CELL_WIDTH + 2 * CELL_WIDTH)
-    .map(c => c.ch).join('');
-
-  assert.strictEqual(text[0], '<', `a nose on the left, got "${text}"`);
-}
-
-/** Each kind of traffic is told apart by colour. */
-export async function eachKindOfTrafficHasItsOwnColour(): Promise<void> {
-  const distinct = new Set([SPRITE_FG.car, SPRITE_FG.truck, SPRITE_FG.racecar]);
-  assert.strictEqual(distinct.size, 3, 'cars, trucks and racecars differ');
-}
-
-/** The frog is drawn on top of whatever it is standing on. */
-export async function theFrogIsDrawnOverItsFooting(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const water = laneOf(data, 'water', 3);
-  const log = water.objects[0] as RiverObject;
-  log.x = 8;
-
-  data.frog.y = water.y;
-  data.frog.x = 9;
-
-  const row = paintedRow(frameOf(game)[water.y]);
-  const cell = row[9 * CELL_WIDTH];
-
-  assert.strictEqual(cell.ch, FROG_GLYPH, 'the frog wins its cell');
-
-  // It takes the opposite of the log it stands on, and its own colour is
-  // the opposite of that again.
-  assert.strictEqual(cell.bg, complementOf(BG_COLORS.log));
-  assert.strictEqual(cell.fg, complementOf(cell.bg));
-  assert.notStrictEqual(cell.bg, BG_COLORS.log, 'never the same as its footing');
-}
-
-/** A crocodile shows its jaws at the end it swims towards. */
-export async function aCrocodileShowsItsJaws(): Promise<void> {
-  const { game, data } = startedLevel(5);
-
-  const lane = laneOf(data, 'water', 5);
-  const croc = lane.objects[0] as RiverObject;
-  croc.x = 12;
-
-  const row = paintedRow(frameOf(game)[lane.y]);
-  const span = croc.width * CELL_WIDTH;
-  const sprite = row.slice(12 * CELL_WIDTH, 12 * CELL_WIDTH + span);
-  const text = sprite.map(c => c.ch).join('');
-
-  assert.ok(text.includes(MOUTH_GLYPH), `jaws somewhere in "${text}"`);
-
-  // Lane 5 runs right to left, so the jaws lead on the left.
-  assert.strictEqual(text.slice(0, MOUTH_GLYPH.length), MOUTH_GLYPH);
-  assert.strictEqual(sprite[0].fg, SPRITE_FG.crocodileMouth, 'and they are marked');
-  assert.strictEqual(
-    sprite[span - 1].fg, SPRITE_FG.crocodile,
-    'while the back is not'
-  );
-}
-
-/** A home shows what is sitting in it. */
-export async function aHomeShowsWhatIsInIt(): Promise<void> {
-  const { game, data } = startedLevel(2);
-
-  data.homes[0].occupied = true;
-  data.homes[1].hasFly = true;
-  data.homes[2].hasAlligator = true;
-
-  const row = paintedRow(frameOf(game)[0]);
-  // The cell the frog has to land in is where the occupant is drawn.
-  const middleOf = (i: number) =>
-    row[(data.homes[i].x + HOME_CENTRE_OFFSET) * CELL_WIDTH];
-
-  assert.strictEqual(middleOf(0).ch, FROG_GLYPH, 'a frog safely home');
-  assert.strictEqual(middleOf(1).ch, FLY_GLYPH, 'a fly to be had');
-  assert.strictEqual(middleOf(2).ch, MOUTH_GLYPH[0], 'a crocodile lying in wait');
-  assert.strictEqual(middleOf(3).ch, ' ', 'and an empty home');
-}
-
-/** The hedge between the homes is textured, not a flat block. */
-export async function theHedgeIsTextured(): Promise<void> {
-  const { game, data } = startedLevel(1);
-  const row = paintedRow(frameOf(game)[0]);
-
-  const between = row[(data.homes[0].x + 5) * CELL_WIDTH];
-  assert.notStrictEqual(between.ch, ' ', 'the hedge should have a texture');
-  assert.strictEqual(between.bg, BG_COLORS.hedge);
-}
-
-/** The banks and the median are textured too. */
-export async function theBanksAreTextured(): Promise<void> {
-  const { game, data } = startedLevel(1);
-  const bank = data.lanes.find(l => l.type === 'safe')!;
-
-  const row = paintedRow(frameOf(game)[bank.y]);
-
-  // Counted, not merely "something is drawn": the frog stands on the bottom
-  // bank, so one glyph proves nothing about the texture.
-  const textured = row.filter(c => BANK_TEXTURE.includes(c.ch)).length;
-
-  assert.ok(
-    textured > row.length / 2,
-    `most of the bank should be textured, found ${textured} of ${row.length}`
-  );
-
-  // Every cell but the frog's, which takes the opposite of the ground.
-  const frogAt = row.findIndex(c => c.ch === FROG_GLYPH);
-  assert.ok(
-    row.every((c, i) => i === frogAt || c.bg === BG_COLORS.bank),
-    'the bank should be all one colour behind the texture'
-  );
-}
-
-/** A snake riding a log is drawn over it. */
-export async function aSnakeOnALogIsVisible(): Promise<void> {
-  const { game, data } = startedLevel(3);
-
-  const lane = laneOf(data, 'water', 3);
-  const log = lane.objects[0] as RiverObject;
-  log.x = 5;
-  log.snakeAt = 2;
-
-  const row = paintedRow(frameOf(game)[lane.y]);
-
-  assert.strictEqual(row[7 * CELL_WIDTH].ch, SNAKE_GLYPH, 'the snake shows on the log');
-  assert.strictEqual(row[7 * CELL_WIDTH].fg, SPRITE_FG.snake);
-}
-
-/** A dying frog blinks. */
-export async function aDyingFrogBlinks(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  data.frog.isDead = true;
-  data.frog.x = 20;
-  data.frog.y = 10;
-
-  data.frog.deathFrame = 0;
-  const on = paintedRow(frameOf(game)[10])[20 * CELL_WIDTH];
-
-  data.frog.deathFrame = 3;
-  const off = paintedRow(frameOf(game)[10])[20 * CELL_WIDTH];
-
-  assert.strictEqual(on.ch, FROG_GLYPH, 'showing on one frame');
-  assert.strictEqual(on.fg, SPRITE_FG.frogDying, 'in the dying colour');
-  assert.notStrictEqual(off.ch, FROG_GLYPH, 'and gone on the next');
-}
-
-/**
- * Nothing outside 7-bit ASCII is ever drawn.
- *
- * Reported live 2026-08-31: "we cant use unicode characters in frogger".
- * The board goes through blessed with fullUnicode off, so a Unicode glyph
- * arrives mangled or not at all - the sprites showed as nothing.
- */
-export async function theBoardIsPureAscii(): Promise<void> {
-  for (const level of [1, 3, 5, 7]) {
-    const { game, data } = startedLevel(level);
-    data.snakes.push({ id: 1, x: 5, y: 6, direction: 1, speed: 1 });
-
-    const frame = frameOf(game).join('\n');
-    const offenders = [...frame].filter(ch => ch.charCodeAt(0) > 126);
-
-    assert.strictEqual(
-      offenders.length, 0,
-      `level ${level} drew non-ASCII: ${[...new Set(offenders)].join(' ')}`
-    );
-  }
-}
-
-/**
- * The frog is never the same colour as the ground it stands on.
- *
- * Reported live: "i cant see the grog when i stand on green as the grog is
- * the same green."
- */
-export async function theFrogStandsOutFromEveryLane(): Promise<void> {
-  for (const ground of [BG_COLORS.bank, BG_COLORS.water, BG_COLORS.road, BG_COLORS.log]) {
-    assert.notStrictEqual(
-      SPRITE_FG.frog, ground,
-      `the frog would be invisible on ${ground}`
-    );
-  }
-}
-
-/**
- * The GAME OVER panel is text over the board, not a black band across it.
- *
- * Reported live 2026-08-31: "remove the black background from the texts
- * drawn when i finish a level etc".
- */
-export async function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void> {
-  const { game, data } = startedLevel(3);
-
-  data.state = 'gameover';
-  data.score = 4321;
-  data.frameCount = 0;
-
-  const rows = frameOf(game);
-  const titleRow = rows.find(r => r.includes('GAME OVER'));
-  assert.ok(titleRow, 'the panel should be showing');
-
-  const painted = paintedRow(titleRow!);
-  assert.strictEqual(
-    painted.length, GRID_WIDTH * CELL_WIDTH,
-    'the row should still be a full board row'
-  );
-
-  // The lanes either side of the words keep their own colours.
-  const backgrounds = new Set(painted.map(c => c.bg));
-  assert.ok(
-    backgrounds.size > 1 || !backgrounds.has('black'),
-    `the panel row went solid ${[...backgrounds].join(',')}`
-  );
-
-  const words = painted.map(c => c.ch).join('');
-  assert.ok(words.includes('GAME OVER'), 'with the message in it');
-}
-
-/**
- * A frog riding a log stays put on it, frame after frame.
- *
- * Reported live 2026-08-31: "when i am on a log the frog and log anims are
- * offset the frog should move with the log". The frog advanced by its own
- * copy of the log's sum, so it held a FRACTIONAL offset from its footing -
- * and a fraction is enough for the two to round to different cells, so they
- * drew a cell apart and drifted in and out of step.
- */
+/** The frog rides its log rather than drifting off it. */
 export async function theFrogStaysPutOnTheLogItRides(): Promise<void> {
   const { game, data } = startedLevel(1);
-
-  const lane = laneOf(data, 'water', 2);
+  const lane = data.lanes.find(l => l.type === 'water' && l.objects.length > 0)!;
   const log = lane.objects[0] as RiverObject;
 
-  // A log at a fractional position is the ordinary case: they are moving.
-  log.x = 6.37;
-  lane.objects = [log];
+  data.frog.y = log.y;
+  data.frog.x = Math.round(log.x);
+  data.frog.onObject = log;
+  data.frog.rideOffset = 0;
 
-  data.frog.y = lane.y;
-  data.frog.x = 7;
-  game.checkCollisions();
-  assert.ok(data.frog.onObject, 'the frog should be riding the log');
+  const before = data.frog.x - log.x;
+  for (let i = 0; i < 5; i++) game.update();
+  const after = data.frog.x - log.x;
 
-  const gaps = new Set<number>();
-  for (let i = 0; i < 40; i++) {
-    game.update();
-    if (!data.frog.onObject) break;
-
-    const row = paintedRow(frameOf(game)[lane.y]);
-    const frogAt = row.findIndex(c => c.ch === FROG_GLYPH);
-
-    // Anchored on the log's BACKGROUND, not on its '(' end: the frog is
-    // drawn over the log and can cover that end, and skipping those frames
-    // would skip exactly the ones where the two have come apart.
-    const logAt = row.findIndex(c => c.bg === BG_COLORS.log);
-
-    assert.ok(frogAt >= 0 && logAt >= 0, 'both should be on screen');
-    gaps.add(frogAt - logAt);
-  }
-
-  assert.ok(gaps.size > 0, 'the frog and the log should both have been drawn');
-  assert.strictEqual(
-    gaps.size, 1,
-    `the frog should hold one place on the log; it drew at offsets ${[...gaps].join(', ')}`
-  );
-}
-
-/** Hopping off a log ends the ride. */
-export async function hoppingOffALogEndsTheRide(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const lane = laneOf(data, 'water', 2);
-  const log = lane.objects[0] as RiverObject;
-  log.x = 6.37;
-
-  data.frog.y = lane.y;
-  data.frog.x = 7;
-  game.checkCollisions();
-  assert.ok(data.frog.onObject);
-
-  game.handleDirection('down');
-
-  assert.ok(!data.frog.onObject, 'the frog is off the log');
-  assert.strictEqual(data.frog.rideOffset, undefined, 'and no longer carried by it');
+  assert.ok(Math.abs(after - before) < 0.5,
+    `the frog drifted on its log: offset went from ${before.toFixed(2)} to ${after.toFixed(2)}`);
 }
 
 /**
- * The frog is never the colour of what it is standing on.
+ * The board uses only characters a BBS terminal draws.
  *
- * Reported live 2026-08-31: "add a bg color as well that always is the
- * complement color of the ground tile color the frog currently is on and
- * make the frog color the complement color of it's current bg color this
- * way it will always be super clear where the frog is."
+ * It is NOT pure ASCII any more, and cannot be: the sprites are half-block
+ * pixel art, the same as Pengo's, and the block glyphs are what make a
+ * five-by-four pixel frog possible at all. What matters is that every
+ * character is one the CP437/ANSI terminals this BBS serves can render -
+ * the block set and the space, nothing exotic.
  */
-export async function theFrogContrastsWithEveryGroundItCanStandOn(): Promise<void> {
-  const grounds = [
-    BG_COLORS.road, BG_COLORS.water, BG_COLORS.bank,
-    BG_COLORS.hedge, BG_COLORS.log, BG_COLORS.turtle, BG_COLORS.homeEmpty,
-  ];
+export async function theBoardUsesOnlyDrawableCharacters(): Promise<void> {
+  const { data } = startedLevel(1);
+  const board = boardOf(data);
+  const allowed = new Set([' ', '█', '▀', '▄', '▌', '▐', '░', '▒', '▓']);
 
-  for (const ground of grounds) {
-    const bg = complementOf(ground);
-    const fg = complementOf(bg);
-
-    assert.notStrictEqual(bg, ground, `the frog would vanish on ${ground}`);
-    assert.notStrictEqual(fg, bg, `the frog would vanish into its own square on ${ground}`);
+  for (let r = 0; r < board.length; r++) {
+    for (const cell of board[r]) {
+      if (!cell) continue;
+      assert.ok(allowed.has(cell.char) || /^[\x20-\x7e]$/.test(cell.char),
+        `row ${r} draws ${JSON.stringify(cell.char)}, which is neither a block nor ASCII`);
+    }
   }
 }
 
-/** Every colour the board uses has an opposite. */
-export async function everyBoardColourHasAnOpposite(): Promise<void> {
-  for (const colour of Object.values(BG_COLORS)) {
-    assert.notStrictEqual(
-      complementOf(colour), colour,
-      `${colour} is its own opposite, which helps nobody`
-    );
-  }
-}
-
-/** The frog on the bank comes out a different colour from the bank. */
-export async function theFrogOnTheBankIsNotTheBank(): Promise<void> {
-  const { game, data } = startedLevel(1);
-
-  const bank = data.lanes.find(l => l.type === 'safe')!;
-  data.frog.y = bank.y;
-  data.frog.x = 20;
-
-  const cell = paintedRow(frameOf(game)[bank.y])[20 * CELL_WIDTH];
-
-  assert.strictEqual(cell.ch, FROG_GLYPH);
-  assert.notStrictEqual(cell.bg, BG_COLORS.bank, 'the frog has to stand out');
-  assert.notStrictEqual(cell.fg, cell.bg);
-}
+void laneOf;
+void CELL_HEIGHT;

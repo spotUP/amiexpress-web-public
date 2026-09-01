@@ -109,12 +109,14 @@ export async function theHudKeepsItsSingleRow(): Promise<void> {
 
 /** The panes tile the screen: HUD, board, footer, with nothing overlapping. */
 export async function theThreePanesTileTheScreen(): Promise<void> {
-  const hudRows = 1;
-  const footerRows = 3;
+  // The play screen, with the logo hidden: one score line and the board,
+  // filling the terminal exactly. There is no separate status row - the
+  // score line already carries lives, level, homes and the clock.
+  const scoreRows = 1;
 
-  assert.ok(
-    hudRows + GAME_AREA_HEIGHT + footerRows <= SCREEN_HEIGHT,
-    `the panes need ${hudRows + GAME_AREA_HEIGHT + footerRows} rows of ${SCREEN_HEIGHT}`
+  assert.strictEqual(
+    scoreRows + GAME_AREA_HEIGHT, SCREEN_HEIGHT,
+    `the play screen needs ${scoreRows + GAME_AREA_HEIGHT} rows of ${SCREEN_HEIGHT}`
   );
 }
 
@@ -174,15 +176,22 @@ export async function theTitleFitsTheWidthItIsGiven(): Promise<void> {
  * where the board ends, and the title fills the space at the top.
  */
 export async function theScreenIsLogoStatusAndBoard(): Promise<void> {
-  const used = LOGO_HEIGHT + 1 + GAME_AREA_HEIGHT;
+  // The menu and attract screens still carry the logo, with the score line
+  // and the board beneath it. That is the tallest arrangement the door
+  // draws, so it is the one worth checking against the screen.
+  const menuRows = LOGO_HEIGHT + 1 + 1;
 
-  assert.strictEqual(
-    GAME_AREA_HEIGHT, GRID_HEIGHT,
-    'the game area should be exactly the board, with no spare rows'
-  );
   assert.ok(
-    used <= SCREEN_HEIGHT,
-    `logo + status + board is ${used} rows of ${SCREEN_HEIGHT}`
+    menuRows <= SCREEN_HEIGHT,
+    `logo + spacer + score line is ${menuRows} rows of ${SCREEN_HEIGHT}`
+  );
+
+  // The board is no longer one row per lane: the ten lanes that carry
+  // moving things are two rows tall so their sprites have somewhere to be.
+  assert.ok(
+    GAME_AREA_HEIGHT > GRID_HEIGHT,
+    `the board is ${GAME_AREA_HEIGHT} rows for ${GRID_HEIGHT} lanes; ` +
+    'the moving lanes should be taller than one row each'
   );
 }
 

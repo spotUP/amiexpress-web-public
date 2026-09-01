@@ -11,7 +11,14 @@ import { LevelConfig, HighScore } from './types';
 
 // Screen dimensions
 export const SCREEN_WIDTH = 80;
-export const SCREEN_HEIGHT = 24;
+/**
+/**
+ * A game door owns the full 80x25 terminal; only the BBS proper is limited
+ * to 23 rows. The door asks its blessed screen for all 25 explicitly -
+ * without that it takes a 24-row default, and a 24-row board loses its
+ * bottom lane, which is the row the player starts on.
+ */
+export const SCREEN_HEIGHT = 25;
 
 // Game timing
 export const GAME_TICK_MS = 50;  // 20 FPS
@@ -37,8 +44,58 @@ export const STARTING_LIVES = 3;
 export const EXTRA_LIFE_SCORE = 20000;
 
 // Grid settings (logical grid, not screen)
-export const GRID_WIDTH = 40;   // 2 chars per cell
+export const GRID_WIDTH = 16;   // 5 chars per cell
 export const GRID_HEIGHT = 13;  // Total lanes including safe zones
+
+/**
+ * How tall each lane is drawn, in terminal rows, keyed by the lane's `y`.
+ *
+ * Animated sprites need Pengo's cell: 5 characters by 2 rows. The screen is
+ * 25 rows, one goes to the score line and one to the status line, so the
+ * board has 23 - and thirteen lanes at two rows each would want 26.
+ *
+ * The ten lanes that carry moving things get their two rows; the three that
+ * are standing ground - the start bank, the median, the home row - keep one
+ * each. Nothing that animates was cut:
+ *
+ *   10 moving lanes x 2 = 20
+ *   the median x 2       =  2
+ *   home row, start bank =  2
+ *                        = 24
+ *
+ * Twenty-four plus the score line is 25, the whole terminal a game door
+ * owns. The median is two rows because the frog stands there halfway
+ * across and deserves the room; the home row and the start bank stay thin
+ * and the frog uses a squat one-row sprite on them. Drawing the TALL frog
+ * in a thin lane caused two earlier faults - leaning into the lane above
+ * put it in the water while it stood on land, and clipping cut its legs
+ * off - so a sprite that FITS is the only version that neither lies nor
+ * truncates.
+ */
+export const LANE_HEIGHTS: Record<number, number> = {
+  0: 1,   // home row
+  1: 2, 2: 2, 3: 2, 4: 2, 5: 2,   // water
+  6: 2,   // median - the frog RESTS here mid-crossing, so it gets room
+  7: 2, 8: 2, 9: 2, 10: 2, 11: 2, // road
+  12: 1,  // start bank
+};
+
+/**
+ * The top terminal row of each lane, keyed by the lane's `y`.
+ *
+ * Derived from LANE_HEIGHTS rather than written out, so the two can never
+ * drift apart: y counts from the home row (0) at the top of the screen down
+ * to the start bank (12) at the bottom, which is the order the rows run in.
+ */
+export const LANE_ROWS: Record<number, number> = (() => {
+  const rows: Record<number, number> = {};
+  let row = 0;
+  for (let y = 0; y < GRID_HEIGHT; y++) {
+    rows[y] = row;
+    row += LANE_HEIGHTS[y];
+  }
+  return rows;
+})();
 
 /**
  * The board is exactly as tall as it is: no spare rows underneath it.
@@ -46,7 +103,8 @@ export const GRID_HEIGHT = 13;  // Total lanes including safe zones
  * The clock used to have a row of its own below the board, with blank rows
  * after that; it is a number in the status line now.
  */
-export const GAME_AREA_HEIGHT = GRID_HEIGHT;
+export const GAME_AREA_HEIGHT = Object.values(LANE_HEIGHTS)
+  .reduce((total, h) => total + h, 0);
 
 /**
  * The lanes, bottom to top.
@@ -74,25 +132,50 @@ export const GAME_AREA_HEIGHT = GRID_HEIGHT;
  * `lane` is the FAQ's own numbering, counting away from the median in each
  * direction, which is how the level table addresses them.
  */
+/**
+ * Speeds are in CELLS per step, and a cell is now five characters wide
+ * rather than two. Every speed below is therefore its old value times
+ * 16/40 = 0.4, which leaves the apparent speed - characters crossed per
+ * second, the only thing a player can see - exactly as it was. A lane that
+ * visibly sped up or slowed down here would pass every test in the suite,
+ * so the arithmetic is written out rather than eyeballed:
+ *
+ *   1.5 -> 0.60    2.0 -> 0.80    1.0 -> 0.40
+ *   2.5 -> 1.00    3.0 -> 1.20
+ */
 export const LANE_CONFIG = [
-  { type: 'safe',  y: 12 },                                  // Start bank
-  { type: 'road',  y: 11, lane: 1, dir: -1, speed: 1.5 },
-  { type: 'road',  y: 10, lane: 2, dir: 1,  speed: 2.0 },
-  { type: 'road',  y: 9,  lane: 3, dir: -1, speed: 1.0 },
-  { type: 'road',  y: 8,  lane: 4, dir: 1,  speed: 2.5 },     // The fast lane
-  { type: 'road',  y: 7,  lane: 5, dir: -1, speed: 3.0 },
+  { type: 'safe',  y: 12 },                                   // Start bank
+  { type: 'road',  y: 11, lane: 1, dir: -1, speed: 0.6 },
+  { type: 'road',  y: 10, lane: 2, dir: 1,  speed: 0.8 },
+  { type: 'road',  y: 9,  lane: 3, dir: -1, speed: 0.4 },
+  { type: 'road',  y: 8,  lane: 4, dir: 1,  speed: 1.0 },     // The fast lane
+  { type: 'road',  y: 7,  lane: 5, dir: -1, speed: 1.2 },
   { type: 'safe',  y: 6 },                                    // Median
-  { type: 'water', y: 5,  lane: 1, dir: -1, speed: 1.0 },
-  { type: 'water', y: 4,  lane: 2, dir: 1,  speed: 2.0 },
-  { type: 'water', y: 3,  lane: 3, dir: -1, speed: 1.5 },
-  { type: 'water', y: 2,  lane: 4, dir: 1,  speed: 2.5 },
-  { type: 'water', y: 1,  lane: 5, dir: -1, speed: 1.0 },
+  { type: 'water', y: 5,  lane: 1, dir: -1, speed: 0.4 },
+  { type: 'water', y: 4,  lane: 2, dir: 1,  speed: 0.8 },
+  { type: 'water', y: 3,  lane: 3, dir: -1, speed: 0.6 },
+  { type: 'water', y: 2,  lane: 4, dir: 1,  speed: 1.0 },
+  { type: 'water', y: 1,  lane: 5, dir: -1, speed: 0.4 },
   { type: 'home',  y: 0 },
 ] as const;
 
 /** Where the five homes sit, and how wide the opening is. */
-export const HOME_POSITIONS = [4, 12, 20, 28, 36];
-export const HOME_WIDTH = 3;
+/**
+ * Where the five homes sit, and how wide the opening is.
+ *
+ * In the old 40-column board the homes sat at 4/12/20/28/36, three cells
+ * wide, with the middle cell as the target. Scaling those positions by
+ * 16/40 gives 1.6, 4.8, 8, 11.2 and 14.4 - only one of which is a column
+ * the frog can stand on, and a home whose centre is unreachable makes the
+ * FAQ's "exact center" rule unsatisfiable.
+ *
+ * So the homes are re-laid rather than rescaled: five single cells, evenly
+ * spaced three apart. One cell is five characters, which is about what
+ * three old two-character cells were, so the opening is the same size on
+ * screen and the centre is now the cell itself.
+ */
+export const HOME_POSITIONS = [1, 4, 7, 10, 13];
+export const HOME_WIDTH = 1;
 
 /**
  * Where in a home a frog has to land.
@@ -101,7 +184,7 @@ export const HOME_WIDTH = 3;
  * to accept anything within two cells of the home, which made the row
  * forgiving in a way the arcade is famous for not being.
  */
-export const HOME_CENTRE_OFFSET = 1;
+export const HOME_CENTRE_OFFSET = 0;
 
 /**
  * Turtle dive timing.
@@ -128,19 +211,43 @@ export const TURTLE_SINKING_GLYPH = '(-)';
  * long logs in lane 3, medium logs in lane 5, and sets of turtles in lanes
  * 1 and 4 (its diagram draws a set as "( )( )( )").
  */
+/**
+ * Widths in grid cells, re-derived for the 16-column board.
+ *
+ * A cell went from two characters to five, so a width chosen to look right
+ * at 40 columns cannot simply be scaled by 16/40 - that lands most of these
+ * between one and two cells and collapses the distinctions the FAQ draws
+ * (a truck is bigger than a car; lane 3 carries LONG logs and lane 2 short
+ * ones). These are chosen to keep the ORDER and to stay near the old width
+ * in characters, which is what a player actually sees:
+ *
+ *   old cells (chars)      new cells (chars)
+ *   car        2 (4)   ->  1 (5)
+ *   truck      3 (6)   ->  2 (10)
+ *   shortLog   3 (6)   ->  2 (10)
+ *   mediumLog  4 (8)   ->  3 (15)
+ *   longLog    6 (12)  ->  4 (20)
+ *   turtle     3 (6)   ->  2 (10)
+ *
+ * Where a width had to round up, the object covers slightly more of its
+ * lane than it did - the river in particular is a little more forgiving,
+ * because logs are the thing that grew most. If it plays too easy, the fix
+ * is fewer objects per lane in the level table, not narrower sprites: a log
+ * under two cells cannot show a sprite that reads as a log.
+ */
 export const OBJECT_WIDTHS = {
-  car: 2,
-  truck: 3,
-  racecar: 2,
-  shortLog: 3,
-  mediumLog: 4,
-  longLog: 6,
-  log: 4,
-  turtle: 3,
-  crocodile: 4,
-  otter: 3,
-  alligator: 4,
-  snake: 2,
+  car: 1,
+  truck: 2,
+  racecar: 1,
+  shortLog: 2,
+  mediumLog: 3,
+  longLog: 4,
+  log: 3,
+  turtle: 2,
+  crocodile: 3,
+  otter: 2,
+  alligator: 3,
+  snake: 1,
 };
 
 /**
@@ -169,7 +276,15 @@ export const SCORES = {
  * and Grandmaster use. Forty cells at two characters fills the 80-column
  * screen exactly.
  */
-export const CELL_WIDTH = 2;
+export const CELL_WIDTH = 5;
+
+/**
+ * How tall one grid cell is drawn, in terminal rows.
+ *
+ * Two, matching every Pengo sprite, so a sprite authored for one door reads
+ * the same in the other and the half-block pixel grid is the same shape.
+ */
+export const CELL_HEIGHT = 2;
 
 /**
  * The board is drawn as blocks of background colour rather than as ASCII
@@ -351,17 +466,42 @@ export const COLORS = {
  *   snakes        - one added at level 3, a second at level 7
  *   crocInHome    - "CROC IN HOME MAKES APPEARANCE" from level 2
  */
+/**
+ * Counts re-derived for the 16-column board, preserving OCCUPANCY.
+ *
+ * These numbers were chosen for a 40-column board. Carrying them over
+ * unchanged does not keep the difficulty - it multiplies it, because the
+ * board lost 60% of its columns while the objects on it only got about 40%
+ * narrower. Level 1's river lane went from three long logs covering 18 of
+ * 40 cells (45%) to covering 12 of 16 (75%): lanes so full that spawns
+ * overlapped and the frog could start under traffic. It showed up as a
+ * flaky hop test - one run in five - which is the only reason it was caught
+ * before the user saw it.
+ *
+ * So each count is `round(oldCount * oldWidth / newWidth * 16/40)`, which
+ * holds the fraction of each lane that is covered roughly where it was:
+ *
+ *   cars       3 x 2 / 40 = 15%  ->  2 x 1 / 16 = 13%
+ *   turtles    4 x 3 / 40 = 30%  ->  2 x 2 / 16 = 25%
+ *   long logs  3 x 6 / 40 = 45%  ->  2 x 4 / 16 = 50%
+ *
+ * One real cost, stated rather than hidden: sixteen columns cannot express
+ * the same gradations as forty. Counts that used to run 1..5 across the ten
+ * levels now run 1..4, so the level-to-level ramp is slightly coarser. The
+ * FAQ's "cars become more numerous as levels progress" still holds - lane 1
+ * goes 2, 3, 3, 3, 4 - but with fewer distinct steps than the arcade had.
+ */
 export const LEVEL_TABLE: LevelConfig[] = [
-  { level: 1,  cars: [3, 3, 3, 1, 2], lane4Fast: true,  turtleSets: [4, 4], shortLogs: 3, longLogs: 3, mediumLogs: 3, lane5Crocodile: false, crocEveryNth: null, snakes: 0, crocInHome: false },
-  { level: 2,  cars: [4, 4, 3, 2, 3], lane4Fast: true,  turtleSets: [3, 4], shortLogs: 3, longLogs: 1, mediumLogs: 3, lane5Crocodile: false, crocEveryNth: 5,    snakes: 0, crocInHome: true  },
-  { level: 3,  cars: [4, 4, 5, 2, 3], lane4Fast: false, turtleSets: [3, 4], shortLogs: 3, longLogs: 1, mediumLogs: 2, lane5Crocodile: false, crocEveryNth: 3,    snakes: 1, crocInHome: true  },
-  { level: 4,  cars: [4, 4, 4, 3, 4], lane4Fast: true,  turtleSets: [3, 3], shortLogs: 2, longLogs: 1, mediumLogs: 2, lane5Crocodile: false, crocEveryNth: 2,    snakes: 1, crocInHome: true  },
-  { level: 5,  cars: [5, 4, 5, 4, 3], lane4Fast: false, turtleSets: [2, 3], shortLogs: 2, longLogs: 1, mediumLogs: 0, lane5Crocodile: true,  crocEveryNth: null, snakes: 1, crocInHome: true  },
-  { level: 6,  cars: [3, 3, 3, 1, 2], lane4Fast: false, turtleSets: [4, 4], shortLogs: 3, longLogs: 3, mediumLogs: 2, lane5Crocodile: false, crocEveryNth: 2,    snakes: 1, crocInHome: true  },
-  { level: 7,  cars: [4, 4, 4, 2, 3], lane4Fast: true,  turtleSets: [3, 5], shortLogs: 3, longLogs: 1, mediumLogs: 2, lane5Crocodile: false, crocEveryNth: 2,    snakes: 2, crocInHome: true  },
-  { level: 8,  cars: [4, 4, 5, 2, 3], lane4Fast: true,  turtleSets: [3, 4], shortLogs: 3, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 2, crocInHome: true  },
-  { level: 9,  cars: [4, 4, 4, 3, 4], lane4Fast: true,  turtleSets: [3, 3], shortLogs: 2, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 2, crocInHome: true  },
-  { level: 10, cars: [5, 4, 5, 4, 4], lane4Fast: false, turtleSets: [2, 3], shortLogs: 2, longLogs: 1, mediumLogs: 0, lane5Crocodile: true,  crocEveryNth: null, snakes: 2, crocInHome: true  },
+  { level: 1,  cars: [2, 2, 2, 1, 2], lane4Fast: true,  turtleSets: [2, 2], shortLogs: 2, longLogs: 2, mediumLogs: 2, lane5Crocodile: false, crocEveryNth: null, snakes: 0, crocInHome: false },
+  { level: 2,  cars: [3, 3, 2, 2, 2], lane4Fast: true,  turtleSets: [2, 2], shortLogs: 2, longLogs: 1, mediumLogs: 2, lane5Crocodile: false, crocEveryNth: 5,    snakes: 0, crocInHome: true  },
+  { level: 3,  cars: [3, 3, 4, 2, 2], lane4Fast: false, turtleSets: [2, 2], shortLogs: 2, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 3,    snakes: 1, crocInHome: true  },
+  { level: 4,  cars: [3, 3, 3, 2, 3], lane4Fast: true,  turtleSets: [2, 2], shortLogs: 1, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 1, crocInHome: true  },
+  { level: 5,  cars: [4, 3, 4, 3, 2], lane4Fast: false, turtleSets: [1, 2], shortLogs: 1, longLogs: 1, mediumLogs: 0, lane5Crocodile: true,  crocEveryNth: null, snakes: 1, crocInHome: true  },
+  { level: 6,  cars: [2, 2, 2, 1, 2], lane4Fast: false, turtleSets: [2, 2], shortLogs: 2, longLogs: 2, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 1, crocInHome: true  },
+  { level: 7,  cars: [3, 3, 3, 2, 2], lane4Fast: true,  turtleSets: [2, 3], shortLogs: 2, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 2, crocInHome: true  },
+  { level: 8,  cars: [3, 3, 4, 2, 2], lane4Fast: true,  turtleSets: [2, 2], shortLogs: 2, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 2, crocInHome: true  },
+  { level: 9,  cars: [3, 3, 3, 2, 3], lane4Fast: true,  turtleSets: [2, 2], shortLogs: 1, longLogs: 1, mediumLogs: 1, lane5Crocodile: false, crocEveryNth: 2,    snakes: 2, crocInHome: true  },
+  { level: 10, cars: [4, 3, 4, 3, 3], lane4Fast: false, turtleSets: [1, 2], shortLogs: 1, longLogs: 1, mediumLogs: 0, lane5Crocodile: true,  crocEveryNth: null, snakes: 2, crocInHome: true  },
 ];
 
 /** How many crocodiles fill water lane 5 when the table's C says it does. */

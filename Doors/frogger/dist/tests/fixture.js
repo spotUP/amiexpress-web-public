@@ -4,8 +4,11 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createData = createData;
+exports.sheet = sheet;
 exports.startedLevel = startedLevel;
 exports.laneOf = laneOf;
+const path_1 = require("path");
+const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const frogger_game_1 = require("../game/frogger-game");
 const constants_1 = require("../game/constants");
 function createData() {
@@ -50,11 +53,24 @@ function createData() {
         frameCount: 0,
     };
 }
+/**
+ * The real sprite sheet, loaded once.
+ *
+ * Tests draw with the art the door ships rather than with a stub, so a
+ * sprite that is missing an animation the renderer asks for fails here
+ * instead of at the player.
+ */
+let cachedSheet = null;
+function sheet() {
+    if (!cachedSheet)
+        cachedSheet = (0, cell_art_1.loadSpriteSheet)((0, path_1.join)(__dirname, '..', 'sprites'));
+    return cachedSheet;
+}
 /** A started level with no display attached. */
 function startedLevel(level = 1) {
     const data = createData();
     data.level = level;
-    const game = new frogger_game_1.FroggerGame(data, () => { });
+    const game = new frogger_game_1.FroggerGame(data, () => { }, sheet());
     game.initLevel();
     data.state = 'playing';
     return { game, data };

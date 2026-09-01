@@ -1,0 +1,73 @@
+{
+ "name": "fly",
+ "cellW": 5,
+ "cellH": 2,
+ "animations": {
+  "idle": {
+   "ticksPerFrame": 3,
+   "loop": true,
+   "frames": [
+    [
+     [
+      null,
+      null,
+      [
+       "▄",
+       15,
+       0
+      ],
+      null,
+      null
+     ],
+     [
+      null,
+      [
+       "▀",
+       15,
+       0
+      ],
+      [
+       "▀",
+       0,
+       0
+      ],
+      [
+       "▀",
+       15,
+       0
+      ],
+      null
+     ]
+    ],
+    [
+     [
+      null,
+      [
+       "▄",
+       15,
+       0
+      ],
+      null,
+      [
+       "▄",
+       15,
+       0
+      ],
+      null
+     ],
+     [
+      null,
+      null,
+      [
+       "▀",
+       0,
+       0
+      ],
+      null,
+      null
+     ]
+    ]
+   ]
+  }
+ }
+}

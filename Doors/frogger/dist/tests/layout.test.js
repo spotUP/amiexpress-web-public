@@ -100,9 +100,11 @@ async function theHudKeepsItsSingleRow() {
 }
 /** The panes tile the screen: HUD, board, footer, with nothing overlapping. */
 async function theThreePanesTileTheScreen() {
-    const hudRows = 1;
-    const footerRows = 3;
-    assert_1.default.ok(hudRows + constants_1.GAME_AREA_HEIGHT + footerRows <= constants_1.SCREEN_HEIGHT, `the panes need ${hudRows + constants_1.GAME_AREA_HEIGHT + footerRows} rows of ${constants_1.SCREEN_HEIGHT}`);
+    // The play screen, with the logo hidden: one score line and the board,
+    // filling the terminal exactly. There is no separate status row - the
+    // score line already carries lives, level, homes and the clock.
+    const scoreRows = 1;
+    assert_1.default.strictEqual(scoreRows + constants_1.GAME_AREA_HEIGHT, constants_1.SCREEN_HEIGHT, `the play screen needs ${scoreRows + constants_1.GAME_AREA_HEIGHT} rows of ${constants_1.SCREEN_HEIGHT}`);
 }
 /**
  * The menu box has to be wide enough for the block title.
@@ -146,9 +148,15 @@ async function theTitleFitsTheWidthItIsGiven() {
  * where the board ends, and the title fills the space at the top.
  */
 async function theScreenIsLogoStatusAndBoard() {
-    const used = attract_1.LOGO_HEIGHT + 1 + constants_1.GAME_AREA_HEIGHT;
-    assert_1.default.strictEqual(constants_1.GAME_AREA_HEIGHT, constants_1.GRID_HEIGHT, 'the game area should be exactly the board, with no spare rows');
-    assert_1.default.ok(used <= constants_1.SCREEN_HEIGHT, `logo + status + board is ${used} rows of ${constants_1.SCREEN_HEIGHT}`);
+    // The menu and attract screens still carry the logo, with the score line
+    // and the board beneath it. That is the tallest arrangement the door
+    // draws, so it is the one worth checking against the screen.
+    const menuRows = attract_1.LOGO_HEIGHT + 1 + 1;
+    assert_1.default.ok(menuRows <= constants_1.SCREEN_HEIGHT, `logo + spacer + score line is ${menuRows} rows of ${constants_1.SCREEN_HEIGHT}`);
+    // The board is no longer one row per lane: the ten lanes that carry
+    // moving things are two rows tall so their sprites have somewhere to be.
+    assert_1.default.ok(constants_1.GAME_AREA_HEIGHT > constants_1.GRID_HEIGHT, `the board is ${constants_1.GAME_AREA_HEIGHT} rows for ${constants_1.GRID_HEIGHT} lanes; ` +
+        'the moving lanes should be taller than one row each');
 }
 /** The logo fits the screen it is drawn across. */
 async function theLogoFitsTheScreen() {

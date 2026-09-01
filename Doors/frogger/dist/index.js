@@ -8,6 +8,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.rpcHandlers = void 0;
+const path_1 = require("path");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
@@ -19,6 +20,14 @@ const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
 const attract_1 = require("./game/attract");
 const constants_1 = require("./game/constants");
+const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
+/**
+ * The board's art, loaded once for the life of the door.
+ *
+ * Same split Pengo handles: __dirname is Doors/frogger under tsx and
+ * Doors/frogger/dist in production, and sprites/ is copied alongside both.
+ */
+const spriteSheet = (0, cell_art_1.loadSpriteSheet)((0, path_1.join)(__dirname, "sprites"));
 /**
  * Create initial game data
  */
@@ -111,6 +120,12 @@ function initScreen() {
         smartCSR: true,
         dockBorders: true,
         title: "Frogger",
+        // A game door owns the whole 80x25 terminal - only the BBS proper is
+        // limited to 23 rows. Without an explicit height the screen takes a
+        // 24-row default and the board's bottom lane, the one the player
+        // starts on, falls off the end of it.
+        width: constants_1.SCREEN_WIDTH,
+        height: constants_1.SCREEN_HEIGHT,
         fullUnicode: false,
         output: (data) => doorContext?.output.write(data),
         input: null,
@@ -276,7 +291,7 @@ function startDemo() {
     demoGame = new frogger_game_1.FroggerGame(demoData, (content) => {
         gameArea.setContent(content);
         screen.render();
-    });
+    }, spriteSheet);
     demoGame.initLevel();
 }
 function stopDemo() {
@@ -300,8 +315,29 @@ function runDemoFrame() {
         stopDemo();
     }
 }
+/**
+ * The play screen has no logo on it.
+ *
+ * The arcade shows the score on the top line and the board everywhere else;
+ * the five-row logo plus its spacer was costing a quarter of the screen,
+ * and those rows are exactly what the two-row animated lanes are made of.
+ * The logo still opens the door and still sits over the menu and the
+ * attract loop - it just gets out of the way while somebody is playing.
+ */
+function layoutForPlay() {
+    logoBox.hide();
+    hudBox.top = 0;
+    gameArea.top = 1;
+}
+/** Menu and attract get the logo back, and the panes move down under it. */
+function layoutForMenu() {
+    logoBox.show();
+    hudBox.top = attract_1.LOGO_HEIGHT + 1;
+    gameArea.top = attract_1.LOGO_HEIGHT + 2;
+}
 function showMenu() {
     stopAttract();
+    layoutForMenu();
     gameData.state = "menu";
     gameData.menuSelection = 0;
     renderMenu();
@@ -438,6 +474,7 @@ function cycleLives() {
  * Start the game
  */
 function startGame() {
+    layoutForPlay();
     gameData.state = "playing";
     gameData.score = 0;
     // FAQ 6.3: the cabinet was set to 3, 5, 7 or 256 frogs.
@@ -460,7 +497,7 @@ function startGame() {
         // would each need their own flush.
         if (sfx && game)
             sfx.flush(game.cues);
-    });
+    }, spriteSheet);
     game.initLevel();
     if (gameLoop)
         clearInterval(gameLoop);

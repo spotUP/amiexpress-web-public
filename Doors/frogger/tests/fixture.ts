@@ -3,6 +3,8 @@
  */
 
 import { FroggerData } from '../game/types';
+import { join } from 'path';
+import { loadSpriteSheet, Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { FroggerGame } from '../game/frogger-game';
 import {
   GRID_WIDTH, GRID_HEIGHT, STARTING_LIVES, INITIAL_TIME,
@@ -52,11 +54,24 @@ export function createData(): FroggerData {
   };
 }
 
+/**
+ * The real sprite sheet, loaded once.
+ *
+ * Tests draw with the art the door ships rather than with a stub, so a
+ * sprite that is missing an animation the renderer asks for fails here
+ * instead of at the player.
+ */
+let cachedSheet: Record<string, Sprite> | null = null;
+export function sheet(): Record<string, Sprite> {
+  if (!cachedSheet) cachedSheet = loadSpriteSheet(join(__dirname, '..', 'sprites'));
+  return cachedSheet;
+}
+
 /** A started level with no display attached. */
 export function startedLevel(level = 1): { game: FroggerGame; data: FroggerData } {
   const data = createData();
   data.level = level;
-  const game = new FroggerGame(data, () => { /* no display in tests */ });
+  const game = new FroggerGame(data, () => { /* no display in tests */ }, sheet());
   game.initLevel();
   data.state = 'playing';
   return { game, data };

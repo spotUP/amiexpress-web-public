@@ -9,6 +9,8 @@
 /* eslint-disable no-console */
 
 const TEST_MODULES = [
+  './geometry.test',
+  './sprites.test',
   './levels.test',
   './scoring.test',
   './hazards.test',
