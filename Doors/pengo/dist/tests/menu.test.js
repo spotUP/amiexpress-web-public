@@ -62,7 +62,11 @@ async function theMenuIsDrivenByMenuSelection() {
  */
 async function noPopupIsWiderThanItsParent() {
     const src = indexSource();
-    const boardColumns = constants_1.GRID_WIDTH * 2;
+    // gameArea is drawn at exactly BOARD_COLS (the camera's on-screen view
+    // width, not the door's old GRID_WIDTH*2 approximation - the 13x15
+    // world/camera work made that formula wrong: GRID_WIDTH stopped being
+    // proportional to the board's actual character width).
+    const boardColumns = constants_1.BOARD_COLS;
     // Every popup that asks to be centred must be parented to the screen.
     const centred = [...src.matchAll(/new (?:Box|ScrollableBox)\(\{([\s\S]*?)\n  \}\)/g)];
     for (const [, body] of centred) {

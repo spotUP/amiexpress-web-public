@@ -17,10 +17,11 @@
   "accessLevel": 0,
   "author": "AmiExpress BBS",
   "scripts": {
-    "build": "tsc && npm run bundle:client",
+    "build": "tsc && npm run bundle:client && npm run copy-sprites",
     "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process",
     "watch": "tsc --watch",
-    "test": "tsx tests/run-tests.ts"
+    "test": "tsx tests/run-tests.ts",
+    "copy-sprites": "mkdir -p dist/sprites && cp sprites/*.sprite.json dist/sprites/"
   },
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk"

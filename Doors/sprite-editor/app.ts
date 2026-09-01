@@ -1,17 +1,19 @@
 /**
  * Sprite Studio - the browser + preview UI.
  *
- * Layout (percentage-based, reflowing on the backend's screen:resize the
- * way livechat does):
+ * Layout (Studio 2c: integer rows/cols from layout.ts's LAYOUT.browser -
+ * no percent strings; see layout.ts's comment for why the old percent
+ * layout was unsafe):
  *
+ *   row 0:  menu bar
  *   +----------------+----------------+--------------------------------+
- *   | DOORS 25%      | SPRITES 25%    | PREVIEW (rest)                 |
+ *   | DOORS          | SPRITES        | PREVIEW (rest)                 |
  *   |                +----------------+  the selected animation,       |
  *   |                | ANIMATIONS     |  playing at its own speed,     |
  *   |                |                |  fat pixels (scale 2)          |
  *   +----------------+----------------+--------------------------------+
- *   | status: door/sprite/animation | TAB panes  ARROWS move  Q quit   |
- *   +-------------------------------------------------------------------+
+ *   rows 20-23: reserved headroom (future floating/minimized panels)
+ *   row 24: status: door/sprite/animation | TAB panes  ARROWS move  Q quit
  *
  * All selection logic lives in browser-model (tested); all pixels live in
  * preview (tested). This file is glue and stays that way.
@@ -25,7 +27,13 @@ import {
 } from './browser-model';
 import { previewLines } from './preview';
 import { readSprite } from './assets';
+import { EditScreen } from './edit-screen';
+import { ArtSession } from './art-screen';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
+import { LAYOUT } from './layout';
+import { createStudioMenuBar } from './menu';
+import { makePanel, panelContentRect, resetPanelLayout } from './panels';
 import { T, applyTheme } from './door-theme';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
@@ -37,11 +45,18 @@ export class StudioApp {
   private inputManager: any = null;
   private state: BrowserState = null as any;
 
+  private doorsPanel: any = null;
+  private spritesPanel: any = null;
+  private animationsPanel: any = null;
+  private previewPanel: any = null;
   private doorsList: any = null;
   private spritesList: any = null;
   private animationsList: any = null;
   private previewBox: any = null;
   private statusBar: any = null;
+  private menuBar: any = null;
+  /** Double-click gate for the sprites list - see wireMouseSelection(). */
+  private lastSpriteClick: { index: number; at: number } = { index: -1, at: 0 };
 
   private playback: ReturnType<typeof setInterval> | null = null;
   /** Resolves start()'s stay-alive promise; the door exits when it fires. */
@@ -49,6 +64,9 @@ export class StudioApp {
   private tick = 0;
   /** The loaded sheet for the current selection, cached per selection. */
   private loaded: { key: string; sprite: Sprite } | null = null;
+  private editScreen: EditScreen | null = null;
+  private artSession: ArtSession | null = null;
+  private bindingSet!: BindingSet;
 
   constructor(ctx: DoorContext) {
     this.ctx = ctx;
@@ -56,9 +74,15 @@ export class StudioApp {
 
   async start(): Promise<void> {
     applyTheme((this.ctx as any).bbs);   // chrome only; see door-theme.ts
+
     this.screen = createScreen((this.ctx as any).bbs, {
       title: 'Sprite Studio',
       responsive: true,
+      // Mirrors livechat/ui/screen.ts: fastCSR forces the fast
+      // scroll-region optimisation, which corrupts the terminal while a
+      // DockablePanel is being dragged/resized. Disabled for the same
+      // reason livechat disables it - stable dockable-panel rendering.
+      fastCSR: false,
     });
     this.screen.program.write('\x1b[2J');
     this.screen.program.write('\x1b[H');
@@ -74,8 +98,12 @@ export class StudioApp {
     this.inputManager.enable();
 
     this.state = initialState();
-    this.buildLayout();
+    // bindKeys() first: it builds this.bindingSet, which buildLayout()
+    // needs for the menu bar's items. See EditScreen's constructor for
+    // the identical reasoning (neither call touches a widget).
     this.bindKeys();
+    this.buildLayout();
+    this.wireMouseSelection();
     this.refresh();
 
     // The playback loop only advances the tick; previewLines owns what a
@@ -97,75 +125,259 @@ export class StudioApp {
     });
   }
 
+  /**
+   * Studio 2c: each content pane is now a DockablePanel (panels.ts's
+   * makePanel), built from the SAME LAYOUT rect the bare box used to take
+   * directly - the panel supplies the border/title bar the box used to
+   * draw itself, and the actual widget (list/box) becomes its content
+   * child, positioned by panels.ts's panelContentRect (fix round 1:
+   * top:1, not top:0 - see its doc comment for why row 0 belongs to the
+   * title bar, not the content).
+   */
   private buildLayout(): void {
+    const { doors, sprites, animations, preview, status } = LAYOUT.browser;
+    this.doorsPanel = makePanel(this.screen, { key: 'doors', title: ' Doors ', rect: doors });
+    const doorsContent = panelContentRect(doors);
     this.doorsList = blessed.list({
-      parent: this.screen,
-      top: 0, left: 0, width: '25%', height: '90%',
-      label: ' Doors ',
-      border: { type: 'line' },
-      tags: true, keys: false, mouse: false,
+      parent: this.doorsPanel,
+      top: doorsContent.top, left: doorsContent.left, width: doorsContent.width, height: doorsContent.height,
+      border: { type: 'none' },
+      // keys stay off: the door drives every key through the screen (see
+      // the class comment on buildBindings), so a widget's own keys never
+      // fire. mouse:true is new (Studio 2c): click-to-select, wired below
+      // in wireMouseSelection() through the SAME handlers as arrow/enter.
+      tags: true, keys: false, mouse: true,
       style: {
-        border: { fg: T.accent },
         selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });
+    this.spritesPanel = makePanel(this.screen, { key: 'sprites', title: ' Sprites ', rect: sprites });
+    const spritesContent = panelContentRect(sprites);
     this.spritesList = blessed.list({
-      parent: this.screen,
-      top: 0, left: '25%', width: '25%', height: '45%',
-      label: ' Sprites ',
-      border: { type: 'line' },
-      tags: true, keys: false, mouse: false,
+      parent: this.spritesPanel,
+      top: spritesContent.top, left: spritesContent.left, width: spritesContent.width, height: spritesContent.height,
+      border: { type: 'none' },
+      tags: true, keys: false, mouse: true,
       style: {
-        border: { fg: T.accent },
         selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });
+    this.animationsPanel = makePanel(this.screen, { key: 'animations', title: ' Animations ', rect: animations });
+    const animationsContent = panelContentRect(animations);
     this.animationsList = blessed.list({
-      parent: this.screen,
-      top: '45%', left: '25%', width: '25%', height: '45%',
-      label: ' Animations ',
-      border: { type: 'line' },
-      tags: true, keys: false, mouse: false,
+      parent: this.animationsPanel,
+      top: animationsContent.top, left: animationsContent.left,
+      width: animationsContent.width, height: animationsContent.height,
+      border: { type: 'none' },
+      tags: true, keys: false, mouse: true,
       style: {
-        border: { fg: T.accent },
         selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });
+    this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
+    const previewContent = panelContentRect(preview);
     this.previewBox = blessed.box({
-      parent: this.screen,
-      top: 0, left: '50%', width: '50%', height: '90%',
-      label: ' Preview ',
-      border: { type: 'line' },
-      tags: true,
-      style: { border: { fg: T.ok } },
+      parent: this.previewPanel,
+      top: previewContent.top, left: previewContent.left, width: previewContent.width, height: previewContent.height,
+      border: { type: 'none' },
+      tags: true, mouse: true,
     });
     this.statusBar = blessed.box({
       parent: this.screen,
-      bottom: 0, left: 0, width: '100%', height: 1,
+      top: status.top, left: status.left, width: status.width, height: status.height,
       tags: true,
     });
+    // Created LAST, purely additive - no existing screen.children[N]
+    // index shifts under it.
+    this.menuBar = createStudioMenuBar(this.screen, this.bindingSet.menuItems());
+  }
+
+  /**
+   * Browser mouse selection (Studio 2c). No new selection logic: a click
+   * on a row reuses moveSelection/cyclePane through this.apply(), the
+   * exact path arrow keys already take, and a double-click on a sprite
+   * calls the SAME 'studio.edit' binding handler 'e' invokes - found by
+   * id in this.bindingSet.bindings, not a second copy of the handler.
+   */
+  private wireMouseSelection(): void {
+    const PANE_ORDER: BrowserState['pane'][] = ['doors', 'sprites', 'animations'];
+
+    /** Step this.state to the target pane using ONLY cyclePane, forward. */
+    const focusPane = (pane: BrowserState['pane']): void => {
+      const steps = (PANE_ORDER.indexOf(pane) - PANE_ORDER.indexOf(this.state.pane) + 3) % 3;
+      for (let i = 0; i < steps; i++) this.apply(cyclePane(this.state, 1));
+    };
+
+    const wirePane = (list: any, pane: BrowserState['pane'], indexOf: (s: BrowserState) => number): void => {
+      list.on('select', (_item: string, clickedIndex: number) => {
+        if (this.editScreen || this.artSession) return;
+        focusPane(pane);
+        const indexDelta = clickedIndex - indexOf(this.state);
+        if (indexDelta !== 0) this.apply(moveSelection(this.state, indexDelta));
+      });
+    };
+    wirePane(this.doorsList, 'doors', (s) => s.doorIndex);
+    wirePane(this.animationsList, 'animations', (s) => s.animationIndex);
+
+    // Sprites gets the same click-to-select PLUS a hand-rolled double-
+    // click gate (this SDK's List has no built-in dblclick - see
+    // dockable-panel.ts's identical closure-timestamp pattern) that opens
+    // the editor through the exact 'e' binding handler (found by id, the
+    // same function reference the 'e' key already dispatches - not a
+    // second copy of it).
+    this.spritesList.on('select', (_item: string, clickedIndex: number) => {
+      if (this.editScreen || this.artSession) return;
+      focusPane('sprites');
+      const indexDelta = clickedIndex - this.state.spriteIndex;
+      if (indexDelta !== 0) this.apply(moveSelection(this.state, indexDelta));
+
+      const now = Date.now();
+      const isDoubleClick = clickedIndex === this.lastSpriteClick.index &&
+        now - this.lastSpriteClick.at < 400;
+      this.lastSpriteClick = { index: clickedIndex, at: now };
+      if (isDoubleClick) {
+        this.bindingSet.bindings.find(b => b.id === 'studio.edit')?.handler();
+      }
+    });
+  }
+
+  /**
+   * The browser's key table. One StudioBinding array, wired verbatim (the
+   * screen drives everything; the widgets' own keys stay off, the way
+   * every arcade door learned to - a widget's keys:true never fires when
+   * input is routed by the door) and fed to buildBindingSet so a later
+   * task can build a menu from the same source, without a second
+   * hand-maintained list of what's bound.
+   */
+  private buildBindings(): StudioBinding[] {
+    return [
+      // Pane/selection movement - how every door, sprite, and animation
+      // gets reached - groups under 'Sprite' below alongside the two
+      // things you actually DO with the current selection (studio-2c's
+      // menu plan asked for 'Sprite'/'Animation'/'Help'; there is no
+      // animation-only action distinct from these, so a 'Navigate' menu
+      // is the honest label rather than an 'Animation' menu whose only
+      // items are generic cursor movement).
+      { id: 'nav.up', keys: ['up', 'k'], hotkeyHint: 'up/k', menu: 'Navigate', label: 'Move Up',
+        handler: () => this.apply(moveSelection(this.state, -1)) },
+      { id: 'nav.down', keys: ['down', 'j'], hotkeyHint: 'down/j', menu: 'Navigate', label: 'Move Down',
+        handler: () => this.apply(moveSelection(this.state, 1)) },
+      { id: 'nav.pageUp', keys: ['pageup'], hotkeyHint: 'pageup', menu: 'Navigate', label: 'Page Up',
+        handler: () => this.apply(moveSelection(this.state, -10)) },
+      { id: 'nav.pageDown', keys: ['pagedown'], hotkeyHint: 'pagedown', menu: 'Navigate', label: 'Page Down',
+        handler: () => this.apply(moveSelection(this.state, 10)) },
+      { id: 'nav.paneNext', keys: ['tab', 'right'], hotkeyHint: 'tab', menu: 'Navigate', label: 'Next Pane',
+        handler: () => this.apply(cyclePane(this.state, 1)) },
+      { id: 'nav.panePrev', keys: ['S-tab', 'left'], hotkeyHint: 'S-tab', menu: 'Navigate', label: 'Previous Pane',
+        handler: () => this.apply(cyclePane(this.state, -1)) },
+      { id: 'studio.quit', keys: ['q', 'escape', 'C-c'], hotkeyHint: 'q', menu: 'Sprite', label: 'Quit',
+        handler: () => {
+          if (this.editScreen || this.artSession) return;
+          this.destroy();
+          void this.ctx.close();
+        } },
+      { id: 'studio.edit', keys: ['e'], hotkeyHint: 'e', menu: 'Sprite', label: 'Edit Sprite',
+        handler: () => {
+          const sel = selection(this.state);
+          const sprite = this.currentSprite();
+          if (!sel.door || !sel.sprite || !sprite || this.editScreen || this.artSession) return;
+          // The browser sleeps while the editor owns the screen: its panes
+          // hide and its playback pauses, so two timers never fight over
+          // render() and apply() ignores keys while the editor is open, so
+          // the browser's own bindings cannot drift the selection underneath it.
+          if (this.playback) { clearInterval(this.playback); this.playback = null; }
+          // menuBar included: it stays mounted at top:0 with live
+          // hover/click listeners otherwise, sitting directly under the
+          // editor's own menu bar - a hovering mouse could open this
+          // browser's "Sprite > Quit" while the editor owns the screen.
+          for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                           this.previewPanel, this.statusBar, this.menuBar]) w.hide();
+          this.editScreen = new EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
+            this.editScreen = null;
+            for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                             this.previewPanel, this.statusBar, this.menuBar]) w.show();
+            this.loaded = null; // the sprite may have been saved - reload it
+            this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
+            this.refresh();
+          });
+        } },
+      { id: 'studio.artMode', keys: ['m'], hotkeyHint: 'm', menu: 'Sprite', label: 'Art Mode',
+        handler: () => {
+          const sel = selection(this.state);
+          if (!sel.door || this.editScreen || this.artSession) return;
+          // Same sleep/wake contract as 'e': panes hide and playback pauses
+          // while the art session owns the screen, and apply() ignores keys
+          // while it is open (see below) so the browser cannot drift underneath
+          // it. listArt(door) plus the '[new file]' row is never empty, so
+          // there is no black-screen risk in hiding before the list paints -
+          // the same reasoning the ansi-editor door's showFileBrowser relies on.
+          if (this.playback) { clearInterval(this.playback); this.playback = null; }
+          // menuBar included - same reasoning as the 'e' handler above.
+          for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                           this.previewPanel, this.statusBar, this.menuBar]) w.hide();
+          this.artSession = new ArtSession(this.screen, sel.door, () => {
+            this.artSession = null;
+            for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                             this.previewPanel, this.statusBar, this.menuBar]) w.show();
+            this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
+            this.refresh();
+          });
+        } },
+
+      // F1 - standard help key, non-printable (contributes nothing to the
+      // glyph exclusion set - see edit-screen.ts's studio.help for the
+      // same reasoning). Writes straight to the existing status bar
+      // widget, the same way refresh() already does, rather than adding a
+      // new flash/state mechanism this browser doesn't otherwise have.
+      { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
+        handler: () => {
+          this.statusBar.setContent(
+            `{${T.accent}-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`
+          );
+          this.screen.render();
+        } },
+
+      // Studio 2c: menu-only (empty keys is legal - see bindings.ts's
+      // anEmptyKeysBindingIsMenuOnly), restores every panel to its LAYOUT
+      // rect and floating state through panels.ts's resetPanelLayout -
+      // the same setState() DockablePanel uses to restore a saved layout.
+      { id: 'view.resetLayout', keys: [], hotkeyHint: '', menu: 'View', label: 'Reset Layout',
+        handler: () => {
+          resetPanelLayout(this.doorsPanel, LAYOUT.browser.doors);
+          resetPanelLayout(this.spritesPanel, LAYOUT.browser.sprites);
+          resetPanelLayout(this.animationsPanel, LAYOUT.browser.animations);
+          resetPanelLayout(this.previewPanel, LAYOUT.browser.preview);
+        } },
+    ];
   }
 
   private bindKeys(): void {
-    // The screen drives everything; the widgets' own keys stay off, the
-    // way every arcade door learned to (a widget's keys:true never fires
-    // when input is routed by the door).
-    this.screen.key(['up', 'k'], () => this.apply(moveSelection(this.state, -1)));
-    this.screen.key(['down', 'j'], () => this.apply(moveSelection(this.state, 1)));
-    this.screen.key(['pageup'], () => this.apply(moveSelection(this.state, -10)));
-    this.screen.key(['pagedown'], () => this.apply(moveSelection(this.state, 10)));
-    this.screen.key(['tab', 'right'], () => this.apply(cyclePane(this.state, 1)));
-    this.screen.key(['S-tab', 'left'], () => this.apply(cyclePane(this.state, -1)));
-    this.screen.key(['q', 'escape', 'C-c'], () => {
-      this.destroy();
-      void this.ctx.close();
-    });
+    const bindings = this.buildBindings();
+    // Final fix wave, Important 4: this used to wire the RAW table while
+    // menuItems() (built by buildBindingSet below, read by
+    // createStudioMenuBar) served the GUARDED array - the opposite of the
+    // invariant bindings.ts's module doc comment documents, and of what
+    // edit-screen.ts's bindKeys() does. Harmless only as long as no
+    // isBlocked predicate was passed; the browser and editor share ONE
+    // Screen instance, so `this.screen.dialogOpen` set by an editor-owned
+    // confirm()/promptText() (dialogs.ts) is visible here too - pass it so
+    // the browser's own keyboard path stays inert while the editor's
+    // dialog owns the screen, exactly like edit-screen.ts's bindKeys().
+    this.bindingSet = buildBindingSet(bindings, () => this.screen.dialogOpen);
+    for (const binding of this.bindingSet.bindings) this.screen.key(binding.keys, binding.handler);
   }
 
   private apply(next: BrowserState): void {
+    // Blessed fires EVERY handler bound to a key, so while the edit
+    // screen owns the arrows and tab, the browser's own bindings still
+    // run - and were mutating the selection underneath the editor.
+    // Every navigation key funnels through here; one guard covers them.
+    if (this.editScreen) return;
+    // Art mode owns the screen the same way while it is open.
+    if (this.artSession) return;
     if (next === this.state) return;
     const before = selection(this.state);
     this.state = next;
@@ -193,8 +405,19 @@ export class StudioApp {
   }
 
   private refresh(): void {
-    const focus = (list: any, on: boolean) => {
-      list.style.border.fg = on ? 'lightyellow' : 'cyan';
+    // Studio 2c: the coloured border that shows which pane has focus now
+    // lives on the PANEL (the content list is borderless - the panel
+    // draws it), so this targets this.doorsPanel/etc, not the list. The
+    // panel's own style.border may not exist yet (DockablePanel only
+    // creates it lazily, in applyBorderHoverStyle(), on first hover), so
+    // it is created here rather than assumed present.
+    const focus = (panel: any, on: boolean) => {
+      panel.style.border = panel.style.border || {};
+      // Theme tokens, not literals: 82's colour migration reached this door
+      // on main while this file was being rewritten here, and
+      // sdk/tests/unit/door-colour-migration.test.ts fails the door on any
+      // literal colour. Focused reads as the accent, unfocused as chrome.
+      panel.style.border.fg = on ? T.accent : T.dim;
     };
     this.doorsList.setItems(this.state.doors);
     this.doorsList.select(this.state.doorIndex);
@@ -209,9 +432,9 @@ export class StudioApp {
     this.spritesList.select(this.state.spriteIndex);
     this.animationsList.setItems(this.state.animations);
     this.animationsList.select(this.state.animationIndex);
-    focus(this.doorsList, this.state.pane === 'doors');
-    focus(this.spritesList, this.state.pane === 'sprites');
-    focus(this.animationsList, this.state.pane === 'animations');
+    focus(this.doorsPanel, this.state.pane === 'doors');
+    focus(this.spritesPanel, this.state.pane === 'sprites');
+    focus(this.animationsPanel, this.state.pane === 'animations');
 
     const sel = selection(this.state);
     const left =
@@ -250,8 +473,12 @@ export class StudioApp {
       `{${T.dim}-fg}${sprite.name} - ${sel.animation} - ` +
       `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
       `${anim.loop ? 'loop' : 'hold'}{/}`;
+    // Fix round 1, Important 2: no leading '\n' - see panels.ts's
+    // panelContentRect doc comment. This pane's content child already
+    // starts one row below the panel's title bar; a literal leading
+    // newline here would double-blank that row.
     this.previewBox.setContent(
-      '\n' + lines.map(l => pad + l).join('\n') + '\n\n ' + meta
+      lines.map(l => pad + l).join('\n') + '\n\n ' + meta
     );
     this.screen.render();
   }
@@ -261,6 +488,10 @@ export class StudioApp {
       clearInterval(this.playback);
       this.playback = null;
     }
+    this.editScreen?.destroy();
+    this.editScreen = null;
+    this.artSession?.destroy();
+    this.artSession = null;
     if (this.inputManager) { this.inputManager.disable(); this.inputManager = null; }
     if (this.screen) {
       // removeAllListeners would also strip the stay-alive 'destroy'

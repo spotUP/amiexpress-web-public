@@ -3,9 +3,6 @@
  * Handles persistence operations for hybrid door mode
  */
 import * as fs from 'fs';
-// The narrow subpath, not the package root: one path helper, not the SDK's
-// audio engine.
-import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import * as path from 'path';
 import { trackForState } from './music-select';
 import { DEFAULT_HIGHSCORES, MAX_HIGHSCORES, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, } from './game/constants';
@@ -31,11 +28,16 @@ import { DEFAULT_HIGHSCORES, MAX_HIGHSCORES, MAX_NAME_LENGTH, DEFAULT_KEY_MAP, }
  * at the resolved path would pass just as happily on the broken version.
  */
 export function getDoorRoot(startAt = __dirname) {
-    // The walk lives in the SDK now - resolveDoorRoot. Three doors had grown
-    // their own copy of it, and the doors that had NOT grown one (BBSLink, the
-    // BBSLink wall, the telnet door, GRANDMASTER) are exactly the ones found
-    // reading paths that never existed.
-    return resolveDoorRoot(startAt);
+    let dir = startAt;
+    for (let i = 0; i < 5; i++) {
+        if (fs.existsSync(path.join(dir, 'package.json')))
+            return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir)
+            break;
+        dir = parent;
+    }
+    return __dirname;
 }
 /**
  * Where the high scores live.

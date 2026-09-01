@@ -214,6 +214,15 @@ function bg(color) {
     return `${CSI}48;5;${code}m`;
   }
 }
+function isExplicitColour(name) {
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(name))
+    return true;
+  if (/^\d{1,3}$/.test(name)) {
+    const n = Number(name);
+    return n >= 0 && n <= 255;
+  }
+  return false;
+}
 function parseTags(text) {
   const cached = _parseTagsCache.get(text);
   if (cached !== void 0) {
@@ -302,6 +311,12 @@ function parseTags(text) {
         case "bg":
           return defaultBg;
         default:
+          if (name.endsWith("-fg") && isExplicitColour(name.slice(0, -3))) {
+            return defaultFg;
+          }
+          if (name.endsWith("-bg") && isExplicitColour(name.slice(0, -3))) {
+            return defaultBg;
+          }
           return attrs.reset;
       }
     }
@@ -424,8 +439,15 @@ function parseTags(text) {
         return "{";
       case "close":
         return "}";
-      default:
+      default: {
+        if (name.endsWith("-fg") || name.endsWith("-bg")) {
+          const colour = name.slice(0, -3);
+          if (isExplicitColour(colour)) {
+            return name.endsWith("-fg") ? fg(colour) : bg(colour);
+          }
+        }
         return match2;
+      }
     }
   });
   if (_parseTagsCache.size >= _parseTagsCacheLimit) {
@@ -776,7 +798,7 @@ var init_colors = __esm({
       setScrollRegion: (top, bottom) => `${CSI}${top + 1};${bottom + 1}r`,
       resetScrollRegion: `${CSI}r`
     };
-    tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
+    tagRegex = /\{(\/?)([\w#-]*)(?::([\w-]+))?\}/g;
     defaultFg = `${CSI}39m`;
     defaultBg = `${CSI}49m`;
     _parseTagsCache = /* @__PURE__ */ new Map();
@@ -800,6 +822,12 @@ function getBreakpointName(width) {
 function isMobileWidth(width) {
   return width < BREAKPOINT_XS;
 }
+function calculateDialogWidth(screenWidth) {
+  if (screenWidth < BREAKPOINT_XS) {
+    return Math.min(MAX_DIALOG_WIDTH_MOBILE, screenWidth - DIALOG_EDGE_PADDING * 2);
+  }
+  return Math.min(Math.floor(screenWidth * MAX_DIALOG_WIDTH_PERCENT), screenWidth - DIALOG_EDGE_PADDING * 2);
+}
 function enforceMinTouchHeight(height, touchFriendly) {
   if (!touchFriendly)
     return height;
@@ -808,7 +836,7 @@ function enforceMinTouchHeight(height, touchFriendly) {
   }
   return height;
 }
-var MIN_TOUCH_HEIGHT, BREAKPOINT_XS, BREAKPOINT_SM, BREAKPOINT_MD, SWIPE_THRESHOLD, SWIPE_THRESHOLD_VERTICAL, SWIPE_MAX_TIME, LONG_PRESS_TIME, DOUBLE_TAP_INTERVAL, DEFAULT_PADDING, MOBILE_PADDING;
+var MIN_TOUCH_HEIGHT, BREAKPOINT_XS, BREAKPOINT_SM, BREAKPOINT_MD, SWIPE_THRESHOLD, SWIPE_THRESHOLD_VERTICAL, SWIPE_MAX_TIME, LONG_PRESS_TIME, DOUBLE_TAP_INTERVAL, MAX_DIALOG_WIDTH_MOBILE, MAX_DIALOG_WIDTH_PERCENT, DIALOG_EDGE_PADDING, DEFAULT_PADDING, MOBILE_PADDING;
 var init_responsive_constants = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js"() {
     "use strict";
@@ -821,6 +849,9 @@ var init_responsive_constants = __esm({
     SWIPE_MAX_TIME = 500;
     LONG_PRESS_TIME = 500;
     DOUBLE_TAP_INTERVAL = 300;
+    MAX_DIALOG_WIDTH_MOBILE = 45;
+    MAX_DIALOG_WIDTH_PERCENT = 0.8;
+    DIALOG_EDGE_PADDING = 2;
     DEFAULT_PADDING = 1;
     MOBILE_PADDING = 0;
   }
@@ -4340,21 +4371,816 @@ var init_screen = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/text.js
+var Text;
 var init_text = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/text.js"() {
     "use strict";
     init_element();
+    Text = class extends Element {
+      constructor(options = {}) {
+        super({
+          ...options,
+          border: options.border !== void 0 ? options.border : void 0
+        });
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+    };
   }
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/list.js
-var ESC5;
+var ESC5, List;
 var init_list = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/list.js"() {
     "use strict";
     init_element();
     init_colors();
     ESC5 = String.fromCharCode(27);
+    List = class extends Element {
+      /** blessed-style widget kind; see Element.type. */
+      get type() {
+        return "list";
+      }
+      constructor(options = {}) {
+        let scrollbarConfig = void 0;
+        if (options.scrollbar !== false) {
+          const userScrollbar = typeof options.scrollbar === "object" ? options.scrollbar : {};
+          scrollbarConfig = {
+            ch: userScrollbar.ch || " ",
+            // Space with bg color (Amiga-safe)
+            track: userScrollbar.track || { ch: " ", style: { bg: "black" } },
+            // Space with dark bg for track
+            style: userScrollbar.style || { bg: "cyan" },
+            // Cyan background for thumb
+            ...userScrollbar
+            // Spread user options to preserve any extra properties
+          };
+        }
+        super({
+          scrollable: true,
+          focusable: true,
+          clickable: true,
+          keys: true,
+          mouse: true,
+          wrap: false,
+          // List items should not wrap
+          ...options,
+          scrollbar: scrollbarConfig
+        });
+        this.items = [];
+        this.selected = 0;
+        this.previousSelected = -1;
+        this.interactive = true;
+        this.wrapItemsEnabled = false;
+        this.lineToItem = [];
+        this.itemLineStart = [];
+        this.itemLineCount = [];
+        this._lastKeyTime = 0;
+        this._lastWheelTime = 0;
+        this._isMobileMode = false;
+        this._mobileRowHeight = 2;
+        this._swipeStartY = 0;
+        this._swipeStartScroll = 0;
+        this.items = options.items || [];
+        this.selected = options.selected || 0;
+        this.interactive = options.interactive !== false;
+        this.wrapItemsEnabled = options.wrapItems !== false;
+        this._updateContent();
+        this.on("attach", () => {
+          if (this.wrapItemsEnabled) {
+            this._updateContent();
+          }
+        });
+        this.on("resize", () => {
+          if (this.wrapItemsEnabled) {
+            this._updateContent();
+          }
+        });
+        this.on("focus", () => {
+          this._updateContent();
+          this.screen?.render();
+        });
+        this.on("blur", () => {
+          this._updateContent();
+          this.screen?.render();
+        });
+        if (options.keys !== false) {
+          this.removeAllListeners("keypress");
+          this.on("keypress", this._onKeypress.bind(this));
+        }
+        if (options.mouse !== false) {
+          this.on("click", this._onClick.bind(this));
+          this.on("wheelup", () => {
+            const now2 = Date.now();
+            if (now2 - this._lastWheelTime < 80)
+              return;
+            this._lastWheelTime = now2;
+            this.up();
+            this.screen?.render();
+          });
+          this.on("wheeldown", () => {
+            const now2 = Date.now();
+            if (now2 - this._lastWheelTime < 80)
+              return;
+            this._lastWheelTime = now2;
+            this.down();
+            this.screen?.render();
+          });
+        }
+      }
+      _onClick(event) {
+        if (!this.interactive)
+          return;
+        const pos = this._getCoords();
+        if (!pos)
+          return;
+        const hasDrawnBorder = this.hasBorder();
+        const border = hasDrawnBorder ? 1 : 0;
+        const padding = this.options.padding || 0;
+        const padTop = typeof padding === "number" ? padding : padding.top || 0;
+        const relY = event.y - pos.yi - border - padTop;
+        const scroll = this.getScroll();
+        const lineIndex = relY + scroll;
+        const itemIndex = this.wrapItemsEnabled ? this.lineToItem[lineIndex] : lineIndex;
+        if (itemIndex !== void 0 && itemIndex >= 0 && itemIndex < this.items.length) {
+          this.select(itemIndex);
+          this.emit("select", this.items[itemIndex], itemIndex);
+          this.emit("action", this.items[itemIndex], itemIndex);
+        }
+      }
+      _updateContent() {
+        const lines = this._lines;
+        const padWidth = this.getItemWrapWidth();
+        if (lines && this.previousSelected >= 0 && this.previousSelected < this.items.length && this.selected >= 0 && this.selected < this.items.length) {
+          const oldIdx = this.previousSelected;
+          const newIdx = this.selected;
+          if (oldIdx !== newIdx) {
+            if (!this.wrapItemsEnabled && lines.length === this.items.length) {
+              const oldParsed = this.options.tags !== false ? parseTags(this.items[oldIdx]) : this.items[oldIdx];
+              const newParsed = this.options.tags !== false ? parseTags(this.items[newIdx]) : this.items[newIdx];
+              lines[oldIdx] = this._padLine("  " + oldParsed, padWidth);
+              lines[newIdx] = this._padLine("> " + newParsed, padWidth);
+              return;
+            }
+          } else {
+            return;
+          }
+        }
+        const newLines = [];
+        this.lineToItem = [];
+        this.itemLineStart = [];
+        this.itemLineCount = [];
+        const width = this.getItemWrapWidth();
+        if (width <= 0) {
+          console.warn(`[List] _updateContent: Invalid width ${width}`);
+          if (this.content)
+            return;
+        }
+        this.items.forEach((item, index) => {
+          const isSelected = index === this.selected;
+          const marker = isSelected ? this.focused ? ">>" : "> " : "  ";
+          const start2 = newLines.length;
+          const itemSelectedStyle = this.options.style?.item?.selected || this.options.style?.selected;
+          let itemText = item;
+          let openTags = "";
+          let closeTags = "";
+          if (this.interactive && isSelected && itemSelectedStyle) {
+            if (itemSelectedStyle.fg) {
+              itemText = itemText.replace(/\{\/?[^}]*-fg\}/g, "");
+            }
+            if (itemSelectedStyle.bg) {
+              itemText = itemText.replace(/\{\/?[^}]*-bg\}/g, "");
+            }
+            if (itemSelectedStyle.fg) {
+              openTags += `{${itemSelectedStyle.fg}-fg}`;
+              closeTags = `{/${itemSelectedStyle.fg}-fg}` + closeTags;
+            }
+            if (itemSelectedStyle.bg) {
+              openTags += `{${itemSelectedStyle.bg}-bg}`;
+              closeTags = `{/${itemSelectedStyle.bg}-bg}` + closeTags;
+            }
+            if (this.focused)
+              openTags += "{bold}";
+            if (itemSelectedStyle.underline)
+              openTags += "{underline}";
+          }
+          if (openTags) {
+            itemText = `${openTags}${itemText}${closeTags}`;
+          }
+          if (this.wrapItemsEnabled) {
+            const parsed = this.options.tags !== false ? parseTags(itemText) : itemText;
+            const wrapWidth = Math.max(1, width - (this.interactive ? 2 : 0));
+            const wrapped = this.wrapAnsiText(parsed, wrapWidth);
+            if (wrapped.length === 0) {
+              newLines.push(marker);
+              this.lineToItem.push(index);
+            } else {
+              newLines.push(marker + wrapped[0]);
+              this.lineToItem.push(index);
+              for (let i = 1; i < wrapped.length; i++) {
+                newLines.push("  " + wrapped[i]);
+                this.lineToItem.push(index);
+              }
+            }
+          } else {
+            const parsed = this.options.tags !== false ? parseTags(itemText) : itemText;
+            newLines.push(this._padLine(marker + parsed, padWidth));
+            this.lineToItem.push(index);
+          }
+          const count = newLines.length - start2;
+          this.itemLineStart[index] = start2;
+          this.itemLineCount[index] = count || 1;
+        });
+        this._lines = newLines;
+        this.content = newLines.join("\n");
+        this._contentDirty = false;
+        const maxScroll = this.getScrollHeight();
+        if (this.childBase > maxScroll) {
+          this.childBase = maxScroll;
+        }
+      }
+      _onKeypress(ch, key) {
+        if (!this.interactive || !this.focused) {
+          return false;
+        }
+        const vi = this.options.vi;
+        const isNavKey = key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right" || key.name === "pageup" || key.name === "pagedown" || key.name === "home" || key.name === "end" || vi && (key.name === "k" || key.name === "j" || key.name === "g" || key.name === "G");
+        if (isNavKey) {
+          const now2 = Date.now();
+          if (now2 - this._lastKeyTime < 50)
+            return true;
+          this._lastKeyTime = now2;
+        }
+        if (key.name === "up" || vi && key.name === "k") {
+          if (process.env.SDK_LOG_LIST === "1")
+            console.log(`[List] UP from ${this.selected}`);
+          this.up();
+          this.screen?.render();
+          return true;
+        }
+        if (key.name === "down" || vi && key.name === "j") {
+          if (process.env.SDK_LOG_LIST === "1")
+            console.log(`[List] DOWN from ${this.selected}`);
+          this.down();
+          this.screen?.render();
+          return true;
+        }
+        if (key.name === "left" || key.name === "pageup") {
+          const jump = Math.min(10, this.selected);
+          this.select(this.selected - jump);
+          this.screen?.render();
+          return true;
+        }
+        if (key.name === "right" || key.name === "pagedown") {
+          const jump = Math.min(10, this.items.length - 1 - this.selected);
+          this.select(this.selected + jump);
+          this.screen?.render();
+          return true;
+        }
+        if (key.name === "home" || vi && key.name === "g") {
+          this.select(0);
+          this.screen?.render();
+          return true;
+        }
+        if (key.name === "end" || vi && key.name === "G") {
+          this.select(this.items.length - 1);
+          this.screen?.render();
+          return true;
+        }
+        if (key.name === "enter" || key.name === "space") {
+          this.emit("select", this.items[this.selected], this.selected);
+          this.emit("action", this.items[this.selected], this.selected);
+          this.screen?.render();
+          return false;
+        }
+        if (key.name === "escape") {
+          this.blur();
+          this.emit("cancel");
+          this.screen?.render();
+          return true;
+        }
+        if (ch && typeof ch === "string" && ch.length === 1 && /[a-zA-Z0-9]/.test(ch)) {
+          if (this.items.length === 0)
+            return false;
+          const searchChar = ch.toLowerCase();
+          const startIndex = (this.selected + 1) % this.items.length;
+          for (let i = 0; i < this.items.length; i++) {
+            const index = (startIndex + i) % this.items.length;
+            const item = this.items[index];
+            const ansiRegex2 = new RegExp(ESC5 + "\\[[0-9;]*m", "g");
+            const plainItem = parseTags(item).replace(ansiRegex2, "");
+            if (plainItem.toLowerCase().startsWith(searchChar)) {
+              this.select(index);
+              this.screen?.render();
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+      setItems(items) {
+        this.items = items;
+        if (items.length === 0) {
+          this.selected = 0;
+        } else {
+          this.selected = Math.min(this.selected, items.length - 1);
+        }
+        this._lines = void 0;
+        this._updateContent();
+        this.emit("set items", items);
+      }
+      select(index) {
+        this.previousSelected = this.selected;
+        this.selected = Math.max(0, Math.min(index, this.items.length - 1));
+        this._updateContent();
+        let visibleHeight = this.iheight;
+        if (visibleHeight <= 0) {
+          const pos = this._getCoords();
+          if (pos) {
+            const border = this.options.border ? 2 : 0;
+            const padding = this.options.padding || 0;
+            const padTop = typeof padding === "number" ? padding : padding.top || 0;
+            const padBottom = typeof padding === "number" ? padding : padding.bottom || 0;
+            visibleHeight = pos.yl - pos.yi - border - padTop - padBottom;
+          }
+        }
+        if (visibleHeight <= 0) {
+          visibleHeight = 10;
+        }
+        const totalLines = this._lines?.length || this.items.length;
+        if (totalLines > visibleHeight && this.items.length > 0) {
+          const currentScroll = this.getScroll();
+          if (this.selected < 0 || this.selected >= this.items.length) {
+            return;
+          }
+          const lineStart = this.itemLineStart[this.selected] ?? this.selected;
+          const lineCount = this.itemLineCount[this.selected] ?? 1;
+          const lineEnd = lineStart + lineCount - 1;
+          if (lineStart < currentScroll) {
+            this.setScroll(lineStart);
+          } else if (lineEnd >= currentScroll + visibleHeight) {
+            this.setScroll(lineEnd - visibleHeight + 1);
+          }
+        }
+        this.emit("select item", this.items[this.selected], this.selected);
+      }
+      up(amount = 1) {
+        this.select(this.selected - amount);
+      }
+      down(amount = 1) {
+        this.select(this.selected + amount);
+      }
+      getSelected() {
+        return this.selected;
+      }
+      getSelectedItem() {
+        return this.items[this.selected];
+      }
+      setWrapItems(enabled) {
+        this.wrapItemsEnabled = enabled;
+        this._updateContent();
+      }
+      clearItems() {
+        this.items = [];
+        this.selected = 0;
+        this._updateContent();
+      }
+      addItem(item) {
+        this.items.push(item);
+        this._updateContent();
+      }
+      removeItem(index) {
+        this.items.splice(index, 1);
+        this.selected = Math.min(this.selected, this.items.length - 1);
+        this._updateContent();
+      }
+      insertItem(index, item) {
+        this.items.splice(index, 0, item);
+        this._updateContent();
+      }
+      /**
+       * Get item by index, string content, or element
+       * EXACT from neo-blessed list.js lines 358-360
+       */
+      getItem(child) {
+        const index = this.getItemIndex(child);
+        return this.items[index];
+      }
+      /**
+       * Set item content by index, string, or element
+       * EXACT from neo-blessed list.js lines 362-368
+       */
+      setItem(child, content) {
+        const index = this.getItemIndex(child);
+        if (index === -1)
+          return;
+        this.items[index] = content;
+        this._updateContent();
+      }
+      /**
+       * Push item to end of list (returns new length)
+       * EXACT from neo-blessed list.js lines 411-414
+       */
+      pushItem(content) {
+        this.addItem(content);
+        return this.items.length;
+      }
+      /**
+       * Pop last item from list
+       * EXACT from neo-blessed list.js lines 416-418
+       */
+      popItem() {
+        const item = this.items[this.items.length - 1];
+        this.removeItem(this.items.length - 1);
+        return item;
+      }
+      /**
+       * Add item to beginning of list (returns new length)
+       * EXACT from neo-blessed list.js lines 420-423
+       */
+      unshiftItem(content) {
+        this.insertItem(0, content);
+        return this.items.length;
+      }
+      /**
+       * Remove and return first item from list
+       * EXACT from neo-blessed list.js lines 425-427
+       */
+      shiftItem() {
+        const item = this.items[0];
+        this.removeItem(0);
+        return item;
+      }
+      /**
+       * Splice items (remove and/or insert)
+       * EXACT from neo-blessed list.js lines 429-442
+       */
+      spliceItem(child, n, ...items) {
+        const index = this.getItemIndex(child);
+        if (index === -1)
+          return [];
+        const removed = [];
+        let removeCount = n;
+        while (removeCount--) {
+          const item = this.items[index];
+          this.removeItem(index);
+          removed.push(item);
+        }
+        let insertIndex = index;
+        items.forEach((item) => {
+          this.insertItem(insertIndex++, item);
+        });
+        return removed;
+      }
+      /**
+       * Find item by search string or regex (with wrap-around)
+       * EXACT from neo-blessed list.js lines 444-487
+       */
+      find(search, back = false) {
+        return this.fuzzyFind(search, back);
+      }
+      /**
+       * Fuzzy find item by search string or regex
+       * EXACT from neo-blessed list.js lines 444-487
+       */
+      fuzzyFind(search, back = false) {
+        const start2 = this.selected + (back ? -1 : 1);
+        let searchStr = search;
+        if (typeof search === "number") {
+          searchStr = search + "";
+        }
+        if (typeof searchStr === "string" && searchStr[0] === "/" && searchStr[searchStr.length - 1] === "/") {
+          try {
+            search = new RegExp(searchStr.slice(1, -1));
+          } catch (e) {
+          }
+        }
+        let test;
+        if (typeof search === "string") {
+          test = (item) => item.indexOf(search) !== -1;
+        } else if (search instanceof RegExp) {
+          test = (item) => search.test(item);
+        } else if (typeof search === "function") {
+          test = search;
+        } else {
+          return this.selected;
+        }
+        if (!back) {
+          for (let i = start2; i < this.items.length; i++) {
+            const item = this.items[i];
+            const cleaned = item.replace(/{[^}]*}/g, "");
+            if (test(cleaned))
+              return i;
+          }
+          for (let i = 0; i < start2; i++) {
+            const item = this.items[i];
+            const cleaned = item.replace(/{[^}]*}/g, "");
+            if (test(cleaned))
+              return i;
+          }
+        } else {
+          for (let i = start2; i >= 0; i--) {
+            const item = this.items[i];
+            const cleaned = item.replace(/{[^}]*}/g, "");
+            if (test(cleaned))
+              return i;
+          }
+          for (let i = this.items.length - 1; i > start2; i--) {
+            const item = this.items[i];
+            const cleaned = item.replace(/{[^}]*}/g, "");
+            if (test(cleaned))
+              return i;
+          }
+        }
+        return this.selected;
+      }
+      /**
+       * Get item index from various inputs (number, string content, or element)
+       * EXACT from neo-blessed list.js lines 489-504
+       */
+      getItemIndex(child) {
+        if (typeof child === "number") {
+          return child;
+        } else if (typeof child === "string") {
+          let index = this.items.indexOf(child);
+          if (index !== -1)
+            return index;
+          for (let i = 0; i < this.items.length; i++) {
+            const cleaned = this.items[i].replace(/{[^}]*}/g, "");
+            if (cleaned === child) {
+              return i;
+            }
+          }
+          return -1;
+        } else {
+          return -1;
+        }
+      }
+      /**
+       * Move selection by offset
+       * EXACT from neo-blessed list.js lines 540-542
+       */
+      move(offset) {
+        this.select(this.selected + offset);
+      }
+      /**
+       * Interactive picker - focus list, wait for selection
+       * EXACT from neo-blessed list.js lines 552-585
+       */
+      pick(label, callback) {
+        if (!callback) {
+          callback = label;
+          label = "";
+        }
+        if (!this.interactive) {
+          return callback();
+        }
+        const self2 = this;
+        const focused = this.screen.focused;
+        if (focused && focused._done) {
+          focused._done("stop");
+        }
+        if (this.screen && this.screen.saveFocus) {
+          this.screen.saveFocus();
+        }
+        this.focus();
+        this.show();
+        this.select(0);
+        if (label) {
+          this.setLabel(label);
+        }
+        this.screen?.render();
+        this.once("action", function(el, selected) {
+          if (label) {
+            self2.removeLabel();
+          }
+          if (self2.screen && self2.screen.restoreFocus) {
+            self2.screen.restoreFocus();
+          }
+          self2.hide();
+          self2.screen?.render();
+          if (el === null || el === void 0) {
+            return callback();
+          }
+          const selectedItem = self2.items[selected];
+          const cleaned = selectedItem ? selectedItem.replace(/{[^}]*}/g, "") : "";
+          return callback(void 0, cleaned);
+        });
+      }
+      /**
+       * Emit action and select events for current selection
+       * EXACT from neo-blessed list.js lines 587-591
+       */
+      enterSelected(i) {
+        if (i != null) {
+          this.select(i);
+        }
+        this.emit("action", this.items[this.selected], this.selected);
+        this.emit("select", this.items[this.selected], this.selected);
+      }
+      /**
+       * Emit action and cancel events
+       * EXACT from neo-blessed list.js lines 593-597
+       */
+      cancelSelected(i) {
+        if (i != null) {
+          this.select(i);
+        }
+        this.emit("action");
+        this.emit("cancel");
+      }
+      /**
+       * Pad a line with spaces to fill the full width.
+       * This prevents ghost characters from old selection when content changes.
+       */
+      _padLine(line3, width) {
+        const visibleWidth = textWidth(line3);
+        if (visibleWidth < width) {
+          return line3 + " ".repeat(width - visibleWidth);
+        }
+        return line3;
+      }
+      getItemWrapWidth() {
+        const innerWidth = this.iwidth;
+        if (innerWidth > 0)
+          return innerWidth;
+        const pos = this._getCoords();
+        if (pos) {
+          const border = this.options.border ? 2 : 0;
+          const padding = this.options.padding || 0;
+          const padLeft = typeof padding === "number" ? padding : padding.left || 0;
+          const padRight = typeof padding === "number" ? padding : padding.right || 0;
+          const scrollbar = this.hasScrollbar() ? 1 : 0;
+          const width = pos.xl - pos.xi - border - padLeft - padRight - scrollbar;
+          if (width > 0)
+            return width;
+        }
+        if (typeof this.options.width === "number") {
+          const padding = this.options.padding || 0;
+          const padLeft = typeof padding === "number" ? padding : padding.left || 0;
+          const padRight = typeof padding === "number" ? padding : padding.right || 0;
+          const border = this.options.border ? 2 : 0;
+          const scrollbar = this.hasScrollbar() ? 1 : 0;
+          return Math.max(1, this.options.width - border - padLeft - padRight - scrollbar);
+        }
+        return 80;
+      }
+      wrapAnsiText(text, width) {
+        const lines = [];
+        if (width <= 0)
+          return lines;
+        const textLines = text.split(/\r?\n/);
+        for (const line3 of textLines) {
+          if (textWidth(line3) <= width) {
+            lines.push(line3);
+            continue;
+          }
+          let currentLine = "";
+          let currentWidth = 0;
+          let inAnsi = false;
+          let ansiBuffer = "";
+          let activeAnsi = "";
+          for (let i = 0; i < line3.length; i += 1) {
+            const ch = line3[i];
+            if (ch === ESC5) {
+              inAnsi = true;
+              ansiBuffer = ch;
+              continue;
+            }
+            if (inAnsi) {
+              ansiBuffer += ch;
+              if (ch === "m") {
+                inAnsi = false;
+                currentLine += ansiBuffer;
+                activeAnsi += ansiBuffer;
+                ansiBuffer = "";
+              }
+              continue;
+            }
+            if (currentWidth >= width) {
+              lines.push(currentLine);
+              currentLine = activeAnsi + ch;
+              currentWidth = 1;
+            } else {
+              currentLine += ch;
+              currentWidth += 1;
+            }
+          }
+          if (currentLine) {
+            lines.push(currentLine);
+          }
+        }
+        return lines;
+      }
+      // Override onMouse to track which item is hovered
+      onMouse(event) {
+        const handled = super.onMouse(event);
+        if (event.action !== "mousemove")
+          return handled;
+        if (this._scrollbarDragging)
+          return handled;
+        const coords = this._getCoords();
+        if (!coords)
+          return handled;
+        const hasDrawnBorder = this.hasBorder();
+        const border = hasDrawnBorder ? 1 : 0;
+        if (this.hasScrollbar() && event.x === coords.xl - border - 1) {
+          return handled;
+        }
+        const relY = event.y - coords.yi - border;
+        if (relY < 0 || relY >= this.iheight) {
+          return handled;
+        }
+        const scroll = this.getScroll();
+        const lineIndex = relY + scroll;
+        const itemIndex = this.lineToItem[lineIndex];
+        if (itemIndex !== void 0 && itemIndex !== this.selected) {
+          this.select(itemIndex);
+          this.screen?.render();
+        }
+        return handled;
+      }
+      // Override destroy
+      destroy() {
+        super.destroy();
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      /**
+       * Handle breakpoint change - adjust row heights
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+          this._enterMobileMode();
+        } else {
+          this._exitMobileMode();
+        }
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Called when entering mobile mode - enable touch features
+       */
+      _enterMobileMode() {
+        this._isMobileMode = true;
+        this.emit("enter-mobile");
+      }
+      /**
+       * Called when exiting mobile mode - disable touch features
+       */
+      _exitMobileMode() {
+        this._isMobileMode = false;
+        this.emit("exit-mobile");
+      }
+      /**
+       * Handle swipe start for mobile scrolling
+       */
+      handleSwipeStart(y) {
+        this._swipeStartY = y;
+        this._swipeStartScroll = this.getScroll();
+      }
+      /**
+       * Handle swipe move for mobile scrolling
+       */
+      handleSwipeMove(y) {
+        if (!this._isMobileMode)
+          return;
+        const deltaY = this._swipeStartY - y;
+        if (Math.abs(deltaY) >= 1) {
+          const newScroll = Math.max(0, this._swipeStartScroll + deltaY);
+          this.setScroll(newScroll);
+          if (this.screen)
+            this.screen.render();
+        }
+      }
+      /**
+       * Handle swipe end with momentum
+       */
+      handleSwipeEnd(velocityY) {
+        if (!this._isMobileMode || Math.abs(velocityY) < 0.5)
+          return;
+        let momentum = velocityY * 3;
+        const applyMomentum = () => {
+          if (Math.abs(momentum) < 0.5)
+            return;
+          const currentScroll = this.getScroll();
+          const newScroll = Math.max(0, currentScroll + Math.round(momentum));
+          this.setScroll(newScroll);
+          momentum *= 0.85;
+          if (this.screen)
+            this.screen.render();
+          setTimeout(applyMomentum, 16);
+        };
+        applyMomentum();
+      }
+    };
   }
 });
 
@@ -4598,10 +5424,55 @@ var init_scrollablebox = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js
+var ScrollableText;
 var init_scrollabletext = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js"() {
     "use strict";
     init_text();
+    ScrollableText = class extends Text {
+      constructor(options = {}) {
+        super({
+          ...options,
+          scrollable: true,
+          alwaysScroll: options.alwaysScroll !== false,
+          // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
+          scrollbar: options.scrollbar === void 0 || options.scrollbar ? {
+            ch: " ",
+            track: { ch: " ", style: { bg: "black" } },
+            style: (options.scrollbar && typeof options.scrollbar === "object" ? options.scrollbar.style : void 0) || { bg: "cyan" }
+          } : void 0
+        });
+        this.clickable = false;
+        this.options.clickable = false;
+        this.on("wheelup", () => this.scroll(-3));
+        this.on("wheeldown", () => this.scroll(3));
+        this.key(["up", "k"], () => this.scroll(-1));
+        this.key(["down", "j"], () => this.scroll(1));
+        this.key(["pageup", "C-b"], () => this.scroll(-this.iheight));
+        this.key(["pagedown", "C-f", "space"], () => this.scroll(this.iheight));
+        this.key(["home", "g"], () => this.scrollTo(0));
+        this.key(["end", "G"], () => this.scrollTo(this.getScrollHeight()));
+      }
+      /**
+       * Get the current scroll percentage
+       */
+      getScrollPercent() {
+        return this.getScrollPerc();
+      }
+      /**
+       * Set scroll by percentage (0-100)
+       */
+      setScrollPercent(percent) {
+        this.setScrollPerc(percent);
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+    };
   }
 });
 
@@ -4633,16 +5504,350 @@ var init_radioset = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/overlay.js
-var ESC6;
+var ESC6, Overlay;
 var init_overlay = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/overlay.js"() {
     "use strict";
     init_box();
     ESC6 = String.fromCharCode(27);
+    Overlay = class extends Box {
+      constructor(options = {}) {
+        const { bg: _ignoredBg, ...styleWithoutBg } = options.style || {};
+        super({
+          ...options,
+          top: options.top || 0,
+          left: options.left || 0,
+          width: options.width || "100%",
+          height: options.height || "100%",
+          focusable: true,
+          // Enable focus for key handling
+          keyable: true,
+          // Enable key events
+          clickable: true,
+          // Enable click events
+          style: {
+            bg: "transparent",
+            ...styleWithoutBg
+            // CSS overlay provides dimming for web, ANSI clients just see the modal on top
+          }
+        });
+        this._desktopOpacity = options.opacity !== void 0 ? options.opacity : 0.5;
+        this._mobileOpacity = options.mobileOpacity !== void 0 ? options.mobileOpacity : 0.7;
+        this._overlayOpacity = this._desktopOpacity;
+        this._overlayWidgetId = `overlay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        this._tapToDismiss = options.tapToDismiss !== false;
+        this.enableKeys();
+        this.on("show", () => {
+          if (this.screen && this.options.trapFocus) {
+            this.screen.trapFocus(this);
+          }
+          this._emitOverlayWidgetEvent(true);
+          if (this.screen) {
+            this.screen.render();
+          }
+        });
+        this.on("hide", () => {
+          if (this.screen && this.options.trapFocus) {
+            this.screen.releaseFocusTrap(this);
+          }
+          this._emitOverlayWidgetEvent(false);
+        });
+        this.key(["escape"], () => {
+          this.hide();
+          this.emit("cancel");
+          if (this.screen) {
+            this.screen.render();
+          }
+        });
+        this.on("click", (data) => {
+          if (!this._tapToDismiss)
+            return;
+          const target = data?.el || data?.element;
+          if (target === this || target === void 0) {
+            this.hide();
+            this.emit("dismiss");
+            if (this.screen) {
+              this.screen.render();
+            }
+          }
+        });
+        this.on("attach", () => {
+          if (this.screen) {
+            this.screen.on("resize", () => {
+              if (!this.hidden) {
+                this._emitOverlayWidgetEvent(true);
+              }
+            });
+          }
+        });
+      }
+      /**
+       * Emit overlay event for web clients to render actual transparency
+       */
+      _emitOverlayWidgetEvent(show) {
+        if (!this.screen) {
+          return;
+        }
+        const coords = this._getCoords();
+        const pos = coords ? {
+          x: coords.xi,
+          y: coords.yi,
+          width: coords.xl - coords.xi,
+          height: coords.yl - coords.yi
+        } : {
+          // Default to full screen if coords not available
+          x: 0,
+          y: 0,
+          width: this.screen.width,
+          height: this.screen.height
+        };
+        const payload = {
+          id: this._overlayWidgetId,
+          show,
+          opacity: this._overlayOpacity,
+          x: pos.x,
+          y: pos.y,
+          width: pos.width,
+          height: pos.height
+        };
+        if (this._exclude) {
+          payload.exclude = {
+            x: this._exclude.xi,
+            y: this._exclude.yi,
+            width: this._exclude.xl - this._exclude.xi,
+            height: this._exclude.yl - this._exclude.yi
+          };
+        }
+        const data = JSON.stringify(payload);
+        const osc = ESC6 + `]9999;overlay;${data}` + String.fromCharCode(7);
+        this.screen.program.write(osc);
+      }
+      /**
+       * Get overlay opacity
+       */
+      get opacity() {
+        return this._overlayOpacity;
+      }
+      /**
+       * Set overlay opacity (0-1)
+       */
+      setOpacity(opacity) {
+        this._overlayOpacity = Math.max(0, Math.min(1, opacity));
+        if (this.screen && !this.hidden) {
+          this._emitOverlayWidgetEvent(true);
+          this.screen.render();
+        }
+      }
+      /**
+       * Get overlay opacity (legacy method)
+       */
+      getOpacity() {
+        return this._overlayOpacity;
+      }
+      /**
+       * Mark a region (in terminal cell coordinates) that should NOT be dimmed.
+       * Used by ConfirmModal so the dialog area punches through the CSS overlay.
+       * Pass undefined to clear the cutout.
+       */
+      setExclude(bounds) {
+        this._exclude = bounds;
+        if (this.screen && !this.hidden) {
+          this._emitOverlayWidgetEvent(true);
+        }
+      }
+      /**
+       * Show overlay with fade in effect
+       */
+      fadeIn(duration = 300, callback) {
+        const steps = 20;
+        const stepDuration = duration / steps;
+        const opacityStep = this.opacity / steps;
+        let currentOpacity = 0;
+        const interval = setInterval(() => {
+          currentOpacity += opacityStep;
+          if (currentOpacity >= this.opacity) {
+            currentOpacity = this.opacity;
+            clearInterval(interval);
+            if (callback)
+              callback();
+          }
+          if (this.screen) {
+            this.screen.render();
+          }
+        }, stepDuration);
+        this.show();
+      }
+      /**
+       * Hide overlay with fade out effect
+       */
+      fadeOut(duration = 300, callback) {
+        const steps = 20;
+        const stepDuration = duration / steps;
+        const opacityStep = this.opacity / steps;
+        let currentOpacity = this.opacity;
+        const interval = setInterval(() => {
+          currentOpacity -= opacityStep;
+          if (currentOpacity <= 0) {
+            currentOpacity = 0;
+            clearInterval(interval);
+            this.hide();
+            if (callback)
+              callback();
+          }
+          if (this.screen) {
+            this.screen.render();
+          }
+        }, stepDuration);
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      /**
+       * Handle resize - update overlay dimensions
+       */
+      _handleResize(width, height, state) {
+        super._handleResize(width, height, state);
+        if (!this.hidden) {
+          this._emitOverlayWidgetEvent(true);
+        }
+      }
+      /**
+       * Handle breakpoint change - adjust opacity
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+          this._overlayOpacity = this._mobileOpacity;
+        } else {
+          this._overlayOpacity = this._desktopOpacity;
+        }
+        if (!this.hidden) {
+          this._emitOverlayWidgetEvent(true);
+        }
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Called when entering mobile mode - increase opacity for visibility
+       */
+      _enterMobileMode() {
+        this._overlayOpacity = this._mobileOpacity;
+        if (!this.hidden) {
+          this._emitOverlayWidgetEvent(true);
+        }
+        this.emit("enter-mobile");
+      }
+      /**
+       * Called when exiting mobile mode - restore desktop opacity
+       */
+      _exitMobileMode() {
+        this._overlayOpacity = this._desktopOpacity;
+        if (!this.hidden) {
+          this._emitOverlayWidgetEvent(true);
+        }
+        this.emit("exit-mobile");
+      }
+      /**
+       * Enable/disable tap-to-dismiss
+       */
+      setTapToDismiss(enabled) {
+        this._tapToDismiss = enabled;
+      }
+      /**
+       * Check if tap-to-dismiss is enabled
+       */
+      isTapToDismissEnabled() {
+        return this._tapToDismiss;
+      }
+      /**
+       * Set mobile opacity
+       */
+      setMobileOpacity(opacity) {
+        this._mobileOpacity = Math.max(0, Math.min(1, opacity));
+        if (this.isMobile() && !this.hidden) {
+          this._overlayOpacity = this._mobileOpacity;
+          this._emitOverlayWidgetEvent(true);
+        }
+      }
+      /**
+       * Set desktop opacity
+       */
+      setDesktopOpacity(opacity) {
+        this._desktopOpacity = Math.max(0, Math.min(1, opacity));
+        if (!this.isMobile() && !this.hidden) {
+          this._overlayOpacity = this._desktopOpacity;
+          this._emitOverlayWidgetEvent(true);
+        }
+      }
+    };
   }
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js
+function centerElement(element) {
+  if (!element || !element.screen)
+    return;
+  const screen2 = element.screen;
+  const screenWidth = screen2.width;
+  const screenHeight = screen2.height;
+  let width;
+  let height;
+  const elWidth = element.width;
+  const elHeight = element.height;
+  if (typeof elWidth === "string" && elWidth.includes("%")) {
+    const percent = parseInt(elWidth) / 100;
+    width = Math.floor(screenWidth * percent);
+  } else if (typeof elWidth === "number") {
+    width = elWidth;
+  } else {
+    width = 40;
+  }
+  if (typeof elHeight === "string" && elHeight.includes("%")) {
+    const percent = parseInt(elHeight) / 100;
+    height = Math.floor(screenHeight * percent);
+  } else if (typeof elHeight === "number") {
+    height = elHeight;
+  } else {
+    height = 12;
+  }
+  const left = Math.floor((screenWidth - width) / 2);
+  const top = Math.floor((screenHeight - height) / 2);
+  element.left = left;
+  element.top = top;
+  if (typeof element.emit === "function") {
+    element.emit("move");
+  }
+}
+function makeModalResponsive(element) {
+  if (!element || !element.screen) {
+    return () => {
+    };
+  }
+  const screen2 = element.screen;
+  const handleResize = () => {
+    centerElement(element);
+    screen2.render();
+  };
+  screen2.on("resize", handleResize);
+  centerElement(element);
+  return () => {
+    screen2.removeListener("resize", handleResize);
+  };
+}
+function trapModalInput(modal) {
+  const keysToTrap = ["up", "down", "pageup", "pagedown", "home", "end"];
+  const handlers = [];
+  keysToTrap.forEach((key) => {
+    const handler2 = () => {
+    };
+    modal.key?.([key], handler2);
+    handlers.push(() => {
+      modal.unkey?.([key], handler2);
+    });
+  });
+  return () => {
+    handlers.forEach((fn) => fn());
+  };
+}
 var init_modal_helpers = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js"() {
     "use strict";
@@ -4781,10 +5986,213 @@ var init_listbar = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js
+var BigText;
 var init_bigtext = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js"() {
     "use strict";
     init_box();
+    BigText = class extends Box {
+      constructor(options = {}) {
+        super({
+          ...options,
+          width: options.width || "shrink",
+          height: options.height || "shrink"
+        });
+        this.text = "";
+        this._isMobileMode = false;
+        this.text = options.text || "";
+        this.font = options.font || "standard";
+        this.fch = options.fch || "#";
+        this.updateContent();
+      }
+      /**
+       * Generate big text from input string
+       */
+      generateBigText() {
+        switch (this.font) {
+          case "banner":
+            return this.generateBanner();
+          case "block":
+            return this.generateBlock();
+          case "simple":
+            return this.generateSimple();
+          default:
+            return this.generateStandard();
+        }
+      }
+      /**
+       * Generate standard 5-line ASCII art
+       */
+      generateStandard() {
+        const patterns = {
+          A: [
+            "  ###  ",
+            " #   # ",
+            "#     #",
+            "#######",
+            "#     #"
+          ],
+          B: [
+            "######",
+            "#     #",
+            "######",
+            "#     #",
+            "######"
+          ],
+          C: [
+            " ##### ",
+            "#     #",
+            "#      ",
+            "#     #",
+            " ##### "
+          ],
+          // Add more letters as needed...
+          " ": [
+            "   ",
+            "   ",
+            "   ",
+            "   ",
+            "   "
+          ]
+        };
+        const lines = ["", "", "", "", ""];
+        const chars = this.text.toUpperCase().split("");
+        for (const char of chars) {
+          const pattern = patterns[char] || patterns[" "];
+          for (let i = 0; i < 5; i++) {
+            lines[i] += pattern[i] + " ";
+          }
+        }
+        return lines.join("\n");
+      }
+      /**
+       * Generate banner style (3-line)
+       */
+      generateBanner() {
+        const patterns = {
+          A: [
+            " ### ",
+            "# # #",
+            "#####"
+          ],
+          B: [
+            "#### ",
+            "#### ",
+            "#### "
+          ],
+          // Simplified patterns
+          " ": [
+            "  ",
+            "  ",
+            "  "
+          ]
+        };
+        const lines = ["", "", ""];
+        const chars = this.text.toUpperCase().split("");
+        for (const char of chars) {
+          const pattern = patterns[char] || patterns[" "];
+          for (let i = 0; i < 3; i++) {
+            lines[i] += pattern[i] + " ";
+          }
+        }
+        return lines.join("\n");
+      }
+      /**
+       * Generate block style (filled rectangles)
+       */
+      generateBlock() {
+        const width = 5;
+        const height = 5;
+        const ch = this.fch;
+        const lines = [];
+        for (let i = 0; i < height; i++) {
+          let line3 = "";
+          for (const char of this.text) {
+            line3 += ch.repeat(width) + " ";
+          }
+          lines.push(line3);
+        }
+        return lines.join("\n");
+      }
+      /**
+       * Generate simple double-height text
+       */
+      generateSimple() {
+        const topLine = this.text.split("").map((c) => c + " ").join("");
+        const bottomLine = topLine;
+        return topLine + "\n" + bottomLine;
+      }
+      /**
+       * Update content with generated big text
+       */
+      updateContent() {
+        const bigText = this.generateBigText();
+        this.setContent(bigText);
+      }
+      /**
+       * Set text content
+       */
+      setText(text) {
+        this.text = text;
+        this.updateContent();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Get text content
+       */
+      getText() {
+        return this.text;
+      }
+      /**
+       * Set font style
+       */
+      setFont(font) {
+        this.font = font;
+        this.updateContent();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Set fill character
+       */
+      setFillChar(ch) {
+        this.fch = ch;
+        this.updateContent();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile && !this._isMobileMode) {
+          this._enterMobileMode();
+        } else if (!state.isMobile && this._isMobileMode) {
+          this._exitMobileMode();
+        }
+        this.updateContent();
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      _enterMobileMode() {
+        this._isMobileMode = true;
+        this._desktopFont = this.font;
+        if (this.font === "standard" || this.font === "block") {
+          this.font = "simple";
+        }
+      }
+      _exitMobileMode() {
+        this._isMobileMode = false;
+        if (this._desktopFont) {
+          this.font = this._desktopFont;
+          this._desktopFont = void 0;
+        }
+      }
+    };
   }
 });
 
@@ -4865,10 +6273,247 @@ var init_viewport = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/canvas.js
+var Canvas2;
 var init_canvas = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/canvas.js"() {
     "use strict";
     init_box();
+    Canvas2 = class extends Box {
+      constructor(options = {}) {
+        const { fillChar, clearChar, ...boxOptions } = options;
+        super(boxOptions);
+        this.buffer = [];
+        this.canvasWidth = 0;
+        this.canvasHeight = 0;
+        this._dirty = false;
+        this._renderTimeout = null;
+        this.fillChar = fillChar || "*";
+        this.clearChar = clearChar || " ";
+        this.initializeBuffer();
+        this.on("attach", () => {
+          this.initializeBuffer();
+        });
+      }
+      /**
+       * Initialize canvas buffer
+       * Accounts for borders and padding to use actual content area
+       */
+      initializeBuffer() {
+        const coords = this._getCoords?.();
+        let width;
+        let height;
+        if (coords) {
+          width = coords.xl - coords.xi;
+          height = coords.yl - coords.yi;
+          if (this.options.border) {
+            width -= 2;
+            height -= 2;
+          }
+        } else {
+          width = typeof this.width === "number" ? this.width : 80;
+          height = typeof this.height === "number" ? this.height : 24;
+          if (this.options.border) {
+            width -= 2;
+            height -= 2;
+          }
+          const padding = this.options.padding;
+          if (padding) {
+            if (typeof padding === "number") {
+              width -= padding * 2;
+              height -= padding * 2;
+            } else {
+              width -= (padding.left || 0) + (padding.right || 0);
+              height -= (padding.top || 0) + (padding.bottom || 0);
+            }
+          }
+        }
+        this.canvasWidth = Math.max(1, width);
+        this.canvasHeight = Math.max(1, height);
+        this.buffer = [];
+        for (let y = 0; y < this.canvasHeight; y++) {
+          this.buffer[y] = [];
+          for (let x = 0; x < this.canvasWidth; x++) {
+            this.buffer[y][x] = this.clearChar;
+          }
+        }
+      }
+      /**
+       * Set pixel at coordinates
+       * @param autoRender - If true (default), schedules a debounced render. Set to false for batch operations.
+       */
+      setPixel(x, y, char = this.fillChar, autoRender = true) {
+        if (x >= 0 && x < this.canvasWidth && y >= 0 && y < this.canvasHeight) {
+          this.buffer[y][x] = char;
+          if (autoRender) {
+            this._scheduleRender();
+          }
+        }
+      }
+      /**
+       * Schedule a debounced render (16ms = ~60fps)
+       */
+      _scheduleRender() {
+        this._dirty = true;
+        if (!this._renderTimeout) {
+          this._renderTimeout = setTimeout(() => {
+            this._renderTimeout = null;
+            if (this._dirty) {
+              this._dirty = false;
+              this.render();
+            }
+          }, 16);
+        }
+      }
+      /**
+       * Get pixel at coordinates
+       */
+      getPixel(x, y) {
+        if (x >= 0 && x < this.canvasWidth && y >= 0 && y < this.canvasHeight) {
+          return this.buffer[y][x];
+        }
+        return void 0;
+      }
+      /**
+       * Clear the canvas
+       */
+      clearCanvas() {
+        for (let y = 0; y < this.canvasHeight; y++) {
+          for (let x = 0; x < this.canvasWidth; x++) {
+            this.buffer[y][x] = this.clearChar;
+          }
+        }
+        this.render();
+      }
+      /**
+       * Draw a line from (x1, y1) to (x2, y2)
+       */
+      drawLine(x1, y1, x2, y2, char = this.fillChar) {
+        const dx = Math.abs(x2 - x1);
+        const dy = Math.abs(y2 - y1);
+        const sx = x1 < x2 ? 1 : -1;
+        const sy = y1 < y2 ? 1 : -1;
+        let err = dx - dy;
+        let x = x1;
+        let y = y1;
+        while (true) {
+          this.setPixel(x, y, char);
+          if (x === x2 && y === y2)
+            break;
+          const e2 = 2 * err;
+          if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+          }
+          if (e2 < dx) {
+            err += dx;
+            y += sy;
+          }
+        }
+      }
+      /**
+       * Draw a rectangle
+       */
+      drawRect(x, y, width, height, char = this.fillChar, filled = false) {
+        if (filled) {
+          for (let dy = 0; dy < height; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              this.setPixel(x + dx, y + dy, char);
+            }
+          }
+        } else {
+          for (let dx = 0; dx < width; dx++) {
+            this.setPixel(x + dx, y, char);
+            this.setPixel(x + dx, y + height - 1, char);
+          }
+          for (let dy = 0; dy < height; dy++) {
+            this.setPixel(x, y + dy, char);
+            this.setPixel(x + width - 1, y + dy, char);
+          }
+        }
+      }
+      /**
+       * Draw a circle
+       */
+      drawCircle(cx, cy, radius, char = this.fillChar) {
+        let x = radius;
+        let y = 0;
+        let err = 0;
+        while (x >= y) {
+          this.setPixel(cx + x, cy + y, char);
+          this.setPixel(cx + y, cy + x, char);
+          this.setPixel(cx - y, cy + x, char);
+          this.setPixel(cx - x, cy + y, char);
+          this.setPixel(cx - x, cy - y, char);
+          this.setPixel(cx - y, cy - x, char);
+          this.setPixel(cx + y, cy - x, char);
+          this.setPixel(cx + x, cy - y, char);
+          if (err <= 0) {
+            y += 1;
+            err += 2 * y + 1;
+          }
+          if (err > 0) {
+            x -= 1;
+            err -= 2 * x + 1;
+          }
+        }
+      }
+      /**
+       * Draw text at position
+       */
+      drawText(x, y, text) {
+        for (let i = 0; i < text.length; i++) {
+          this.setPixel(x + i, y, text[i]);
+        }
+      }
+      /**
+       * Fill area with character
+       */
+      fill(x, y, char = this.fillChar) {
+        const targetChar = this.getPixel(x, y);
+        if (targetChar === char || targetChar === void 0)
+          return;
+        const stack = [[x, y]];
+        while (stack.length > 0) {
+          const [cx, cy] = stack.pop();
+          if (cx < 0 || cx >= this.canvasWidth || cy < 0 || cy >= this.canvasHeight)
+            continue;
+          if (this.buffer[cy][cx] !== targetChar)
+            continue;
+          this.buffer[cy][cx] = char;
+          stack.push([cx + 1, cy]);
+          stack.push([cx - 1, cy]);
+          stack.push([cx, cy + 1]);
+          stack.push([cx, cy - 1]);
+        }
+      }
+      /**
+       * Render canvas to content
+       */
+      render() {
+        const lines = this.buffer.map((row) => row.join(""));
+        this.setContent(lines.join("\n"));
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Get canvas dimensions
+       */
+      getCanvasSize() {
+        return {
+          width: this.canvasWidth,
+          height: this.canvasHeight
+        };
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.initializeBuffer();
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+    };
   }
 });
 
@@ -5450,14 +7095,14 @@ var init_dockable_panel = __esm({
         if (this.screenListenersBound || !this.screen)
           return;
         this.screenListenersBound = true;
-        this.screen.on("mousemove", (data) => {
+        this.onScreenEvent("mousemove", (data) => {
           if (this.isResizing && this.currentResizeEdge) {
             this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
           } else if (this.isDragging) {
             this.handleDrag(data.x, data.y);
           }
         });
-        this.screen.on("mouseup", () => {
+        this.onScreenEvent("mouseup", () => {
           if (this.isDragging) {
             this.stopDrag();
           }
@@ -5465,7 +7110,7 @@ var init_dockable_panel = __esm({
             this.stopResize();
           }
         });
-        this.screen.on("resize", () => {
+        this.onScreenEvent("resize", () => {
           const breakpoint = this.screen.responsiveLayout.getBreakpoint();
           const isMobile = breakpoint === "xs";
           if (isMobile) {
@@ -6810,8 +8455,8 @@ var init_dockable_panel = __esm({
               dragStart = null;
               detached = false;
             };
-            this.screen.on("mousemove", onMove);
-            this.screen.on("mouseup", onUp);
+            btn.onScreenEvent("mousemove", onMove);
+            btn.onScreenEvent("mouseup", onUp);
           }
           this.tabButtons.push(btn);
           currentX += String(label).length + 3;
@@ -8046,6 +9691,7 @@ var init_fileexplorer = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js
+var DocModal;
 var init_doc_modal = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js"() {
     "use strict";
@@ -8054,10 +9700,470 @@ var init_doc_modal = __esm({
     init_scrollabletext();
     init_responsive_constants();
     init_modal_helpers();
+    DocModal = class extends Box {
+      constructor(options = {}) {
+        super({
+          ...options,
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          label: options.title ? ` ${options.title} ` : options.label,
+          border: options.border || { type: "line" },
+          shadow: false,
+          hidden: true,
+          mouse: true,
+          keys: true,
+          closable: true,
+          trapFocus: true,
+          ch: " ",
+          zIndex: options.zIndex || 9999,
+          style: {
+            fg: "white",
+            bg: options.contentStyle?.bg || "blue",
+            border: { fg: "cyan" },
+            ...options.style
+          }
+        });
+        this._header = null;
+        this._isMobileMode = false;
+        this._swipeStartY = 0;
+        this._swipeStartTime = 0;
+        this._onClose = options.onClose;
+        this._closeKeys = ["escape", "q", "f1", ...options.closeKeys || []];
+        this._tapToDismiss = options.tapToDismiss !== false;
+        this._swipeToScroll = options.swipeToScroll !== false;
+        this._hasHeader = !!options.header;
+        this._desktopFooterText = options.footerText !== void 0 ? options.footerText : "{bold} Scroll: Arrows/PageUp/PageDown/Left/Right | Top/Bottom: Home/End | Close: ESC/Q/F1 {/bold}";
+        this._mobileFooterText = options.mobileFooterText !== void 0 ? options.mobileFooterText : "{bold} Swipe to scroll | Tap to close {/bold}";
+        this._contentTopDesktop = 0;
+        if (options.header) {
+          this._header = new BigText({
+            parent: this,
+            top: 0,
+            left: "center",
+            width: "shrink",
+            height: "shrink",
+            content: options.header,
+            font: "simple",
+            ch: " ",
+            style: {
+              fg: options.headerStyle?.fg || "cyan",
+              bg: options.headerStyle?.bg || "black"
+            }
+          });
+          this._contentTopDesktop = 3;
+        }
+        this._footer = new Box({
+          parent: this,
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          height: 1,
+          tags: true,
+          style: {
+            fg: options.footerStyle?.fg || "black",
+            bg: options.footerStyle?.bg || "cyan"
+          },
+          content: this._desktopFooterText
+        });
+        this._contentArea = new ScrollableText({
+          parent: this,
+          top: this._contentTopDesktop,
+          left: 0,
+          width: "100%-2",
+          height: `100%-${this._contentTopDesktop + 3}`,
+          // Account for border, footer
+          tags: true,
+          mouse: true,
+          scrollable: true,
+          alwaysScroll: true,
+          focusable: true,
+          ch: " ",
+          scrollbar: {
+            ch: " ",
+            style: { bg: "cyan" }
+          },
+          style: {
+            fg: options.contentStyle?.fg || "white",
+            ...options.contentStyle?.bg && { bg: options.contentStyle.bg }
+          },
+          content: options.content || ""
+        });
+        this._setupKeyHandlers();
+        this._setupTouchHandlers();
+      }
+      /**
+       * Set up keyboard navigation and close handlers
+       */
+      _setupKeyHandlers() {
+        const closeModal = () => {
+          if (this._trapCleanup) {
+            this._trapCleanup();
+            this._trapCleanup = void 0;
+          }
+          if (this.screen) {
+            if (this.screen.releaseFocusTrap) {
+              this.screen.releaseFocusTrap(this);
+            } else if (this.screen.focusPop) {
+              this.screen.focusPop();
+            }
+            if (this.screen.restoreFocus && this._savedFocus) {
+              this.screen.restoreFocus(this._savedFocus);
+            }
+          }
+          this.hide();
+          if (this._onClose) {
+            this._onClose();
+          }
+          this.emit("close");
+        };
+        const handleWheelUp = () => {
+          this._contentArea.scroll(-3);
+          this.screen?.render();
+        };
+        const handleWheelDown = () => {
+          this._contentArea.scroll(3);
+          this.screen?.render();
+        };
+        this._contentArea.on("wheelup", handleWheelUp);
+        this._contentArea.on("wheeldown", handleWheelDown);
+        this.on("wheelup", handleWheelUp);
+        this.on("wheeldown", handleWheelDown);
+        this._contentArea.key(["up", "k"], () => {
+          this._contentArea.scroll(-1);
+          this.screen?.render();
+        });
+        this._contentArea.key(["down", "j"], () => {
+          this._contentArea.scroll(1);
+          this.screen?.render();
+        });
+        this._contentArea.key(["pageup", "left", "b"], () => {
+          const height = this._contentArea.height || 20;
+          this._contentArea.scroll(-(height - 2));
+          this.screen?.render();
+        });
+        this._contentArea.key(["pagedown", "right", "space"], () => {
+          const height = this._contentArea.height || 20;
+          this._contentArea.scroll(height - 2);
+          this.screen?.render();
+        });
+        this._contentArea.key(["home", "g"], () => {
+          this._contentArea.setScrollPerc(0);
+          this.screen?.render();
+        });
+        this._contentArea.key(["end", "S-g"], () => {
+          this._contentArea.setScrollPerc(100);
+          this.screen?.render();
+        });
+        this._contentArea.key(this._closeKeys, () => {
+          console.log("[DocModal/diag] close key hit the CONTENT AREA");
+          closeModal();
+        });
+        this.key(this._closeKeys, () => {
+          console.log("[DocModal/diag] close key hit the MODAL");
+          closeModal();
+        });
+        this.on("close", () => {
+          closeModal();
+        });
+      }
+      /**
+       * Set up touch/swipe handlers for mobile
+       */
+      _setupTouchHandlers() {
+        this._contentArea.on("mousedown", (data) => {
+          if (!this._swipeToScroll)
+            return;
+          this._swipeStartY = data.y;
+          this._swipeStartTime = Date.now();
+        });
+        this._contentArea.on("mouseup", (data) => {
+          if (!this._swipeToScroll)
+            return;
+          const deltaY = data.y - this._swipeStartY;
+          const deltaTime = Date.now() - this._swipeStartTime;
+          if (deltaTime < 500 && Math.abs(deltaY) >= 2) {
+            const scrollAmount = deltaY > 0 ? -Math.abs(deltaY) * 2 : Math.abs(deltaY) * 2;
+            this._contentArea.scroll(scrollAmount);
+            this.screen?.render();
+          }
+        });
+        this.on("click", (data) => {
+          if (!this._isMobileMode || !this._tapToDismiss)
+            return;
+          const target = data?.el || data?.element;
+          if (target === this) {
+            this.hide();
+            if (this._onClose) {
+              this._onClose();
+            }
+            this.emit("close");
+          }
+        });
+      }
+      /**
+       * Show the modal
+       */
+      display(focusOnClose) {
+        if (this.screen) {
+          this.position.width = this.screen.width;
+          this.position.height = this.screen.height;
+          this.position.top = 0;
+          this.position.left = 0;
+          const screenWidth = this.screen.width;
+          if (screenWidth < BREAKPOINT_SM) {
+            this._setMobileLayout();
+          } else {
+            this._setDesktopLayout();
+          }
+        }
+        this._invalidateCache(this);
+        if (focusOnClose) {
+          const originalOnClose = this._onClose;
+          this._onClose = () => {
+            if (originalOnClose)
+              originalOnClose();
+            focusOnClose.focus?.();
+          };
+        }
+        if (this.screen) {
+          if (this.screen.saveFocus) {
+            this._savedFocus = this.screen.saveFocus();
+          }
+          if (this.screen.trapFocus) {
+            this.screen.trapFocus(this);
+          } else if (this.screen.focusPush) {
+            this.screen.focusPush(this);
+          }
+          this._trapCleanup = trapModalInput(this);
+        }
+        this.show();
+        this.setFront();
+        this._contentArea?.focus();
+        this.screen?.render();
+        const scr = this.screen;
+        console.log(`[DocModal/diag] trapIsMe=${scr?.focusTrap === this} trap=${scr?.focusTrap?.constructor?.name} focused=${scr?._focused?.constructor?.name} closeKeys=${JSON.stringify(this._closeKeys)}`);
+      }
+      /**
+       * Invalidate coordinate cache for element and children
+       */
+      _invalidateCache(element) {
+        element._coordsCacheValid = false;
+        if (element.children) {
+          for (const child of element.children) {
+            this._invalidateCache(child);
+          }
+        }
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      /**
+       * Handle resize - adjust layout for screen size
+       */
+      _handleResize(width, height, state) {
+        super._handleResize?.(width, height, state);
+        this.position.width = width;
+        this.position.height = height;
+        if (width < BREAKPOINT_SM) {
+          this._setMobileLayout();
+        } else {
+          this._setDesktopLayout();
+        }
+        this._invalidateCache(this);
+      }
+      /**
+       * Handle breakpoint change
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange?.(breakpoint, previousBreakpoint, state);
+        if (state.isMobile || breakpoint === "xs" || breakpoint === "small") {
+          this._setMobileLayout();
+        } else {
+          this._setDesktopLayout();
+        }
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Called when entering mobile mode
+       */
+      _enterMobileMode() {
+        this._setMobileLayout();
+        this.emit("enter-mobile");
+      }
+      /**
+       * Called when exiting mobile mode
+       */
+      _exitMobileMode() {
+        this._setDesktopLayout();
+        this.emit("exit-mobile");
+      }
+      /**
+       * Set mobile-friendly layout
+       */
+      _setMobileLayout() {
+        if (!this._footer || !this._contentArea)
+          return;
+        this._isMobileMode = true;
+        if (this._header) {
+          this._header.hide();
+        }
+        this._contentArea.position.top = 0;
+        this._contentArea.position.height = "100%-3";
+        this._footer.setContent(this._mobileFooterText);
+        if (this.screen && this.screen.width < BREAKPOINT_XS) {
+          this._footer.position.height = MIN_TOUCH_HEIGHT;
+          this._contentArea.position.height = `100%-${MIN_TOUCH_HEIGHT + 2}`;
+        }
+        this._invalidateCache(this);
+        this.screen?.render();
+      }
+      /**
+       * Set desktop layout
+       */
+      _setDesktopLayout() {
+        if (!this._footer || !this._contentArea)
+          return;
+        this._isMobileMode = false;
+        if (this._header) {
+          this._header.show();
+        }
+        this._contentArea.position.top = this._contentTopDesktop;
+        this._contentArea.position.height = `100%-${this._contentTopDesktop + 3}`;
+        this._footer.setContent(this._desktopFooterText);
+        this._footer.position.height = 1;
+        this._invalidateCache(this);
+        this.screen?.render();
+      }
+      // ============================================================================
+      // Public API
+      // ============================================================================
+      /**
+       * Set content
+       */
+      setContent(content) {
+        if (!this._contentArea)
+          return;
+        this._contentArea.setContent(content);
+      }
+      /**
+       * Get content
+       */
+      getContent() {
+        if (!this._contentArea)
+          return "";
+        return this._contentArea.getContent();
+      }
+      /**
+       * Append content
+       */
+      appendContent(content) {
+        if (!this._contentArea)
+          return;
+        const current = this._contentArea.getContent();
+        this._contentArea.setContent(current + content);
+      }
+      /**
+       * Set title
+       */
+      setTitle(title) {
+        this.setLabel(` ${title} `);
+      }
+      /**
+       * Set header text (bigtext)
+       */
+      setHeader(text) {
+        if (this._header) {
+          this._header.setContent(text);
+        }
+      }
+      /**
+       * Set footer text (desktop)
+       */
+      setFooterText(text) {
+        this._desktopFooterText = text;
+        if (!this._isMobileMode && this._footer) {
+          this._footer.setContent(text);
+        }
+      }
+      /**
+       * Set mobile footer text
+       */
+      setMobileFooterText(text) {
+        this._mobileFooterText = text;
+        if (this._isMobileMode && this._footer) {
+          this._footer.setContent(text);
+        }
+      }
+      /**
+       * Scroll to top
+       */
+      scrollToTop() {
+        if (!this._contentArea)
+          return;
+        this._contentArea.setScrollPerc(0);
+      }
+      /**
+       * Scroll to bottom
+       */
+      scrollToBottom() {
+        if (!this._contentArea)
+          return;
+        this._contentArea.setScrollPerc(100);
+      }
+      /**
+       * Get the content area element (for advanced customization)
+       */
+      getContentArea() {
+        return this._contentArea || null;
+      }
+      /**
+       * Set close callback
+       */
+      onClose(callback) {
+        this._onClose = callback;
+      }
+      /**
+       * Check if in mobile mode
+       */
+      isMobile() {
+        return this._isMobileMode;
+      }
+      /**
+       * Enable/disable tap-to-dismiss
+       */
+      setTapToDismiss(enabled) {
+        this._tapToDismiss = enabled;
+      }
+      /**
+       * Enable/disable swipe scrolling
+       */
+      setSwipeToScroll(enabled) {
+        this._swipeToScroll = enabled;
+      }
+    };
   }
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
+function confirmButtonStyle(colour) {
+  const activeFg = LIGHT_FILLS.has(colour) ? "black" : "white";
+  const active = { fg: activeFg, bg: colour, bold: true, border: { fg: colour } };
+  return {
+    fg: colour,
+    bg: "black",
+    bold: true,
+    // Drawn in the modal's own background: the cells stay, the frame does not
+    // show. Removing the border outright would move both buttons whenever
+    // focus changed.
+    border: { fg: "black" },
+    focus: active,
+    // The mouse and the keyboard must agree about which button is active.
+    hover: { ...active }
+  };
+}
+var LIGHT_FILLS, ConfirmModal;
 var init_confirm_modal = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
     "use strict";
@@ -8066,13 +10172,1197 @@ var init_confirm_modal = __esm({
     init_overlay();
     init_modal_helpers();
     init_responsive_constants();
+    LIGHT_FILLS = /* @__PURE__ */ new Set([
+      "white",
+      "yellow",
+      "green",
+      "cyan",
+      "lightblue",
+      "lightgreen",
+      "lightcyan",
+      "lightyellow",
+      "lightwhite",
+      "brightwhite",
+      "brightyellow",
+      "brightgreen",
+      "brightcyan"
+    ]);
+    ConfirmModal = class extends Box {
+      constructor(options = {}) {
+        const originalParent = options.parent;
+        const useOverlay = options.overlay === true;
+        const frame = options.themeStyles?.frame?.style;
+        const borderColor = options.borderColor || frame?.border?.fg || "cyan";
+        const surfaceFg = frame?.fg || "white";
+        const surfaceBg = frame?.bg || "black";
+        if (!options.message && typeof options.content === "string") {
+          options = { ...options, message: options.content, content: void 0 };
+        }
+        super({
+          ...options,
+          parent: useOverlay ? void 0 : originalParent,
+          top: "center",
+          left: "center",
+          width: options.width || 60,
+          height: options.height || 12,
+          label: options.title ? ` ${options.title} ` : " Confirm ",
+          border: options.border || { type: "line", fg: borderColor },
+          shadow: true,
+          hidden: true,
+          mouse: true,
+          keys: true,
+          trapFocus: true,
+          ch: " ",
+          style: {
+            fg: surfaceFg,
+            bg: surfaceBg,
+            border: { fg: borderColor },
+            ...options.style
+          }
+        });
+        this._isMobileMode = false;
+        this._onConfirm = options.onConfirm;
+        this._onCancel = options.onCancel;
+        this._singleButton = options.singleButton || false;
+        if (useOverlay && originalParent) {
+          this._overlay = new Overlay({
+            parent: originalParent,
+            opacity: options.overlayOpacity ?? 0.5,
+            hidden: true
+          });
+          originalParent.append(this);
+        }
+        this._messageBox = new Box({
+          parent: this,
+          top: 1,
+          left: 2,
+          width: "100%-4",
+          height: "100%-5",
+          tags: true,
+          scrollable: true,
+          alwaysScroll: true,
+          mouse: true,
+          keys: true,
+          content: options.message || "",
+          scrollbar: {
+            ch: " ",
+            style: { bg: "gray" }
+          },
+          style: {
+            fg: "white",
+            bg: "black"
+          }
+        });
+        const confirmColor = options.confirmColor || "green";
+        const cancelColor = options.cancelColor || "red";
+        this._confirmButton = new Button({
+          parent: this,
+          bottom: 1,
+          left: this._singleButton ? "center" : 10,
+          width: 14,
+          height: 3,
+          content: options.confirmText || "[ Confirm ]",
+          align: "center",
+          valign: "middle",
+          border: { type: "line" },
+          mouse: true,
+          clickable: true,
+          focusable: true,
+          style: confirmButtonStyle(confirmColor)
+        });
+        if (!this._singleButton) {
+          this._cancelButton = new Button({
+            parent: this,
+            bottom: 1,
+            right: 10,
+            width: 14,
+            height: 3,
+            content: options.cancelText || "[ Cancel ]",
+            align: "center",
+            valign: "middle",
+            border: { type: "line" },
+            mouse: true,
+            clickable: true,
+            focusable: true,
+            style: confirmButtonStyle(cancelColor)
+          });
+        }
+        this._setupEventHandlers();
+      }
+      _setupEventHandlers() {
+        this._confirmButton.on("press", () => {
+          this._handleConfirm();
+        });
+        this._confirmButton.on("click", () => {
+          this._handleConfirm();
+        });
+        this._confirmButton.key(["enter", "return"], () => {
+          this._handleConfirm();
+          return true;
+        });
+        if (this._cancelButton) {
+          this._cancelButton.on("press", () => {
+            this._handleCancel();
+          });
+          this._cancelButton.on("click", () => {
+            this._handleCancel();
+          });
+          this._cancelButton.key(["enter", "return"], () => {
+            this._handleCancel();
+            return true;
+          });
+          this._confirmButton.key(["tab"], () => {
+            this._cancelButton?.focus();
+            this.screen?.render();
+            return true;
+          });
+          this._cancelButton.key(["tab"], () => {
+            this._confirmButton.focus();
+            this.screen?.render();
+            return true;
+          });
+        }
+        this.key(["escape"], () => {
+          this._handleCancel();
+        });
+      }
+      _handleConfirm() {
+        if (this._onConfirm) {
+          this._onConfirm();
+        }
+        this.emit("confirm");
+        this.hide();
+      }
+      _handleCancel() {
+        if (this._onCancel) {
+          this._onCancel();
+        }
+        this.emit("cancel");
+        this.hide();
+      }
+      /**
+       * Show the modal
+       */
+      display() {
+        if (this._overlay) {
+          this._overlay.show();
+        }
+        if (!this._responsiveCleanup) {
+          this._responsiveCleanup = makeModalResponsive(this);
+        }
+        if (this.screen) {
+          this.screen.saveFocus?.();
+          this.screen.focusPush?.(this);
+          if (!this._trapCleanup) {
+            this._trapCleanup = trapModalInput(this);
+          }
+        }
+        this.show();
+        this.setFront();
+        this._confirmButton.focus();
+        this.screen?.render();
+        if (this._overlay) {
+          const coords = this._getCoords?.();
+          if (coords) {
+            this._overlay.setExclude({ xi: coords.xi, yi: coords.yi, xl: coords.xl, yl: coords.yl });
+          }
+        }
+      }
+      /**
+       * Hide the modal
+       */
+      hide() {
+        super.hide();
+        if (this._overlay) {
+          this._overlay.setExclude(void 0);
+          this._overlay.hide();
+        }
+        if (this.screen) {
+          this.screen.restoreFocus?.();
+        }
+        if (this._trapCleanup) {
+          this._trapCleanup();
+          this._trapCleanup = void 0;
+        }
+      }
+      /**
+       * Set message content
+       */
+      setMessage(message) {
+        this._messageBox.setContent(message);
+        this.screen?.render();
+      }
+      /**
+       * Set title
+       */
+      setTitle(title) {
+        this.setLabel(` ${title} `);
+        this.screen?.render();
+      }
+      /**
+       * Set confirm callback
+       */
+      onConfirm(callback) {
+        this._onConfirm = callback;
+      }
+      /**
+       * Set cancel callback
+       */
+      onCancel(callback) {
+        this._onCancel = callback;
+      }
+      /**
+       * Override destroy
+       */
+      destroy() {
+        if (this._responsiveCleanup) {
+          this._responsiveCleanup();
+          this._responsiveCleanup = void 0;
+        }
+        if (this._trapCleanup) {
+          this._trapCleanup();
+          this._trapCleanup = void 0;
+        }
+        super.destroy();
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange?.(breakpoint, previousBreakpoint, state);
+        if (state.isMobile || breakpoint === "xs") {
+          this._setMobileLayout();
+        } else {
+          this._setDesktopLayout();
+        }
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      _enterMobileMode() {
+        this._setMobileLayout();
+        this.emit("enter-mobile");
+      }
+      _exitMobileMode() {
+        this._setDesktopLayout();
+        this.emit("exit-mobile");
+      }
+      _setMobileLayout() {
+        if (!this.screen)
+          return;
+        this._isMobileMode = true;
+        const screenWidth = this.screen.width;
+        this.width = calculateDialogWidth(screenWidth);
+        this._confirmButton.width = 16;
+        this._confirmButton.height = MIN_TOUCH_HEIGHT;
+        if (this._cancelButton) {
+          this._cancelButton.width = 16;
+          this._cancelButton.height = MIN_TOUCH_HEIGHT;
+        }
+        this.screen?.render();
+      }
+      _setDesktopLayout() {
+        this._isMobileMode = false;
+        this.width = 60;
+        this._confirmButton.width = 14;
+        this._confirmButton.height = 3;
+        if (this._cancelButton) {
+          this._cancelButton.width = 14;
+          this._cancelButton.height = 3;
+        }
+        this.screen?.render();
+      }
+    };
   }
 });
 
 // ../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js
+function createCanvas(width, height) {
+  const canvas = [];
+  for (let y = 0; y < height; y++) {
+    canvas[y] = [];
+    for (let x = 0; x < width; x++) {
+      canvas[y][x] = {
+        char: " ",
+        fg: 7,
+        // White
+        bg: 0,
+        // Black
+        blink: false
+      };
+    }
+  }
+  return canvas;
+}
+function cloneCanvas(canvas) {
+  return canvas.map((row) => row.map((cell) => ({ ...cell })));
+}
+function clearCanvas(canvas, char = " ", fg2 = 7, bg2 = 0) {
+  for (let y = 0; y < canvas.length; y++) {
+    for (let x = 0; x < canvas[y].length; x++) {
+      canvas[y][x] = { char, fg: fg2, bg: bg2, blink: false };
+    }
+  }
+}
+function setCell(canvas, x, y, cell) {
+  if (y >= 0 && y < canvas.length && x >= 0 && x < canvas[y].length) {
+    canvas[y][x] = { ...cell };
+  }
+}
+function getCell(canvas, x, y) {
+  if (y >= 0 && y < canvas.length && x >= 0 && x < canvas[y].length) {
+    return { ...canvas[y][x] };
+  }
+  return null;
+}
+function isCellEmpty(cell) {
+  if (!cell)
+    return true;
+  if (cell.transparent === true)
+    return true;
+  return cell.char === " " && cell.bg === 0;
+}
+function isInBounds(canvas, x, y) {
+  return y >= 0 && y < canvas.length && x >= 0 && x < canvas[y].length;
+}
+function drawLine(canvas, x0, y0, x1, y1, cell) {
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  let x = x0;
+  let y = y0;
+  while (true) {
+    setCell(canvas, x, y, cell);
+    if (x === x1 && y === y1)
+      break;
+    const e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+}
+function drawBox(canvas, x0, y0, x1, y1, cell) {
+  const left = Math.min(x0, x1);
+  const right = Math.max(x0, x1);
+  const top = Math.min(y0, y1);
+  const bottom = Math.max(y0, y1);
+  for (let x = left; x <= right; x++) {
+    setCell(canvas, x, top, cell);
+    setCell(canvas, x, bottom, cell);
+  }
+  for (let y = top; y <= bottom; y++) {
+    setCell(canvas, left, y, cell);
+    setCell(canvas, right, y, cell);
+  }
+}
+function drawBoxFilled(canvas, x0, y0, x1, y1, cell) {
+  const left = Math.min(x0, x1);
+  const right = Math.max(x0, x1);
+  const top = Math.min(y0, y1);
+  const bottom = Math.max(y0, y1);
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      setCell(canvas, x, y, cell);
+    }
+  }
+}
+function drawEllipse(canvas, cx, cy, rx, ry, cell) {
+  if (rx === 0 && ry === 0) {
+    setCell(canvas, cx, cy, cell);
+    return;
+  }
+  if (rx === 0) {
+    for (let y2 = cy - ry; y2 <= cy + ry; y2++) {
+      setCell(canvas, cx, y2, cell);
+    }
+    return;
+  }
+  if (ry === 0) {
+    for (let x2 = cx - rx; x2 <= cx + rx; x2++) {
+      setCell(canvas, x2, cy, cell);
+    }
+    return;
+  }
+  let x = 0;
+  let y = ry;
+  let d1 = ry * ry - rx * rx * ry + 0.25 * rx * rx;
+  let dx = 2 * ry * ry * x;
+  let dy = 2 * rx * rx * y;
+  while (dx < dy) {
+    setCell(canvas, cx + x, cy + y, cell);
+    setCell(canvas, cx - x, cy + y, cell);
+    setCell(canvas, cx + x, cy - y, cell);
+    setCell(canvas, cx - x, cy - y, cell);
+    if (d1 < 0) {
+      x++;
+      dx += 2 * ry * ry;
+      d1 += dx + ry * ry;
+    } else {
+      x++;
+      y--;
+      dx += 2 * ry * ry;
+      dy -= 2 * rx * rx;
+      d1 += dx - dy + ry * ry;
+    }
+  }
+  let d2 = ry * ry * (x + 0.5) * (x + 0.5) + rx * rx * (y - 1) * (y - 1) - rx * rx * ry * ry;
+  while (y >= 0) {
+    setCell(canvas, cx + x, cy + y, cell);
+    setCell(canvas, cx - x, cy + y, cell);
+    setCell(canvas, cx + x, cy - y, cell);
+    setCell(canvas, cx - x, cy - y, cell);
+    if (d2 > 0) {
+      y--;
+      dy -= 2 * rx * rx;
+      d2 += rx * rx - dy;
+    } else {
+      y--;
+      x++;
+      dx += 2 * ry * ry;
+      dy -= 2 * rx * rx;
+      d2 += dx - dy + rx * rx;
+    }
+  }
+}
+function drawEllipseFilled(canvas, cx, cy, rx, ry, cell) {
+  if (rx === 0 && ry === 0) {
+    setCell(canvas, cx, cy, cell);
+    return;
+  }
+  if (rx === 0) {
+    for (let y = cy - ry; y <= cy + ry; y++) {
+      setCell(canvas, cx, y, cell);
+    }
+    return;
+  }
+  if (ry === 0) {
+    for (let x = cx - rx; x <= cx + rx; x++) {
+      setCell(canvas, x, cy, cell);
+    }
+    return;
+  }
+  for (let y = -ry; y <= ry; y++) {
+    const x = Math.floor(rx * Math.sqrt(1 - y * y / (ry * ry)));
+    for (let dx = -x; dx <= x; dx++) {
+      setCell(canvas, cx + dx, cy + y, cell);
+    }
+  }
+}
+function floodFill(canvas, x, y, fillCell) {
+  if (!isInBounds(canvas, x, y))
+    return;
+  const targetCell = getCell(canvas, x, y);
+  if (!targetCell)
+    return;
+  if (cellsEqual(targetCell, fillCell))
+    return;
+  const stack = [{ line: y, col: x }];
+  const visited = /* @__PURE__ */ new Set();
+  while (stack.length > 0) {
+    const pos = stack.pop();
+    const key = `${pos.col},${pos.line}`;
+    if (visited.has(key))
+      continue;
+    if (!isInBounds(canvas, pos.col, pos.line))
+      continue;
+    const currentCell = getCell(canvas, pos.col, pos.line);
+    if (!currentCell || !cellsEqual(currentCell, targetCell))
+      continue;
+    visited.add(key);
+    setCell(canvas, pos.col, pos.line, fillCell);
+    stack.push({ line: pos.line - 1, col: pos.col });
+    stack.push({ line: pos.line + 1, col: pos.col });
+    stack.push({ line: pos.line, col: pos.col - 1 });
+    stack.push({ line: pos.line, col: pos.col + 1 });
+  }
+}
+function cellsEqual(a, b) {
+  return a.char === b.char && a.fg === b.fg && a.bg === b.bg && a.blink === b.blink;
+}
+function copyRegion(srcCanvas, destCanvas, srcX, srcY, destX, destY, width, height) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const cell = getCell(srcCanvas, srcX + x, srcY + y);
+      if (cell) {
+        setCell(destCanvas, destX + x, destY + y, cell);
+      }
+    }
+  }
+}
+function extractRegion(canvas, x, y, width, height) {
+  const region = createCanvas(width, height);
+  copyRegion(canvas, region, x, y, 0, 0, width, height);
+  return region;
+}
+function pasteCanvas(destCanvas, srcCanvas, x, y) {
+  const height = srcCanvas.length;
+  const width = height > 0 ? srcCanvas[0].length : 0;
+  copyRegion(srcCanvas, destCanvas, 0, 0, x, y, width, height);
+}
+function canvasToANSI(canvas, useIceColors = false) {
+  let ansi = "";
+  let currentFg = -1;
+  let currentBg = -1;
+  let currentBlink = false;
+  for (let y = 0; y < canvas.length; y++) {
+    for (let x = 0; x < canvas[y].length; x++) {
+      const cell = canvas[y][x];
+      const cellBlink = cell.blink ?? false;
+      if (cell.fg !== currentFg || cell.bg !== currentBg || cellBlink !== currentBlink) {
+        let codes = [];
+        if (cellBlink !== currentBlink) {
+          codes.push(cellBlink ? 5 : 25);
+          currentBlink = cellBlink;
+        }
+        if (cell.fg !== currentFg) {
+          if (cell.fg < 8) {
+            codes.push(30 + cell.fg);
+          } else {
+            codes.push(90 + (cell.fg - 8));
+          }
+          currentFg = cell.fg;
+        }
+        if (cell.bg !== currentBg) {
+          if (cell.bg < 8 || !useIceColors) {
+            codes.push(40 + cell.bg % 8);
+          } else {
+            codes.push(100 + (cell.bg - 8));
+          }
+          currentBg = cell.bg;
+        }
+        if (codes.length > 0) {
+          ansi += `\x1B[${codes.join(";")}m`;
+        }
+      }
+      ansi += cell.char;
+    }
+    if (y < canvas.length - 1) {
+      ansi += "\r\n";
+    }
+  }
+  ansi += "\x1B[0m";
+  return ansi;
+}
+function parseANSIToCanvas(canvas, ansiContent, startX = 0, startY = 0) {
+  const height = canvas.length;
+  const width = height > 0 ? canvas[0].length : 0;
+  let x = startX;
+  let y = startY;
+  let fg2 = 7;
+  let bg2 = 0;
+  let blink = false;
+  let i = 0;
+  while (i < ansiContent.length) {
+    const char = ansiContent[i];
+    if (char === "\x1B" && ansiContent[i + 1] === "[") {
+      let j = i + 2;
+      let params = "";
+      while (j < ansiContent.length && !/[a-zA-Z]/.test(ansiContent[j])) {
+        params += ansiContent[j];
+        j++;
+      }
+      if (j < ansiContent.length) {
+        const cmd = ansiContent[j];
+        const paramList = params ? params.split(";").map((p) => parseInt(p, 10) || 0) : [0];
+        switch (cmd) {
+          case "m":
+            for (const param of paramList) {
+              if (param === 0) {
+                fg2 = 7;
+                bg2 = 0;
+                blink = false;
+              } else if (param === 1) {
+                if (fg2 < 8)
+                  fg2 += 8;
+              } else if (param === 5) {
+                blink = true;
+              } else if (param === 25) {
+                blink = false;
+              } else if (param >= 30 && param <= 37) {
+                fg2 = param - 30;
+              } else if (param >= 40 && param <= 47) {
+                bg2 = param - 40;
+              } else if (param >= 90 && param <= 97) {
+                fg2 = param - 90 + 8;
+              } else if (param >= 100 && param <= 107) {
+                bg2 = param - 100 + 8;
+              }
+            }
+            break;
+          case "H":
+          case "f":
+            y = (paramList[0] || 1) - 1;
+            x = (paramList[1] || 1) - 1;
+            break;
+          case "A":
+            y = Math.max(0, y - (paramList[0] || 1));
+            break;
+          case "B":
+            y = Math.min(height - 1, y + (paramList[0] || 1));
+            break;
+          case "C":
+            x = Math.min(width - 1, x + (paramList[0] || 1));
+            break;
+          case "D":
+            x = Math.max(0, x - (paramList[0] || 1));
+            break;
+          case "J":
+            if (paramList[0] === 2) {
+              clearCanvas(canvas);
+            }
+            break;
+          case "K":
+            if (y >= 0 && y < height) {
+              for (let lx = x; lx < width; lx++) {
+                canvas[y][lx] = { char: " ", fg: 7, bg: 0, blink: false };
+              }
+            }
+            break;
+          case "s":
+            break;
+          case "u":
+            break;
+        }
+        i = j + 1;
+        continue;
+      }
+    }
+    if (char === "\n") {
+      x = 0;
+      y++;
+      i++;
+      continue;
+    }
+    if (char === "\r") {
+      x = 0;
+      i++;
+      continue;
+    }
+    if (char === "	") {
+      x = Math.min(width - 1, (Math.floor(x / 8) + 1) * 8);
+      i++;
+      continue;
+    }
+    if (y >= 0 && y < height && x >= 0 && x < width) {
+      canvas[y][x] = { char, fg: fg2, bg: bg2, blink };
+      x++;
+      if (x >= width) {
+        x = 0;
+        y++;
+      }
+    }
+    i++;
+  }
+}
+function resizeCanvas(canvas, newWidth, newHeight) {
+  const resized = createCanvas(newWidth, newHeight);
+  const height = Math.min(canvas.length, newHeight);
+  const width = canvas.length > 0 ? Math.min(canvas[0].length, newWidth) : 0;
+  copyRegion(canvas, resized, 0, 0, 0, 0, width, height);
+  return resized;
+}
 var init_canvas2 = __esm({
   "../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js"() {
     "use strict";
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/tools/drawing-tools.js
+function getUndoData(state) {
+  let data = undoDataByState.get(state);
+  if (!data) {
+    data = { undoStack: [], redoStack: [], currentUndoChunk: null };
+    undoDataByState.set(state, data);
+  }
+  return data;
+}
+function peekUndoCanvas(state) {
+  const stack = getUndoData(state).undoStack;
+  return stack[stack.length - 1]?.canvas;
+}
+function saveUndoState(state, chunked = false) {
+  const canvas = state.getCanvas();
+  if (!canvas)
+    return;
+  const data = getUndoData(state);
+  if (chunked) {
+    if (!data.currentUndoChunk) {
+      data.currentUndoChunk = cloneCanvas(canvas);
+      data.redoStack = [];
+    }
+  } else {
+    data.undoStack.push({
+      canvas: cloneCanvas(canvas),
+      timestamp: Date.now()
+    });
+    if (data.undoStack.length > 50) {
+      data.undoStack.shift();
+    }
+    data.redoStack = [];
+  }
+}
+function restoreAndDiscardUndo(state) {
+  const data = getUndoData(state);
+  const snapshot = data.undoStack.pop();
+  if (snapshot) {
+    state.setCanvas(cloneCanvas(snapshot.canvas));
+  }
+}
+function flushUndoChunk(state) {
+  const data = getUndoData(state);
+  if (data.currentUndoChunk) {
+    data.undoStack.push({
+      canvas: data.currentUndoChunk,
+      timestamp: Date.now()
+    });
+    if (data.undoStack.length > 50) {
+      data.undoStack.shift();
+    }
+    data.currentUndoChunk = null;
+  }
+}
+function undoDrawing(state) {
+  const data = getUndoData(state);
+  const undoState = data.undoStack.pop();
+  if (!undoState)
+    return false;
+  const currentCanvas = state.getCanvas();
+  if (currentCanvas) {
+    data.redoStack.push({ canvas: cloneCanvas(currentCanvas), timestamp: Date.now() });
+    if (data.redoStack.length > 50) {
+      data.redoStack.shift();
+    }
+  }
+  state.setCanvas(undoState.canvas);
+  return true;
+}
+function redoDrawing(state) {
+  const data = getUndoData(state);
+  const redoState = data.redoStack.pop();
+  if (!redoState)
+    return false;
+  const currentCanvas = state.getCanvas();
+  if (currentCanvas) {
+    data.undoStack.push({ canvas: cloneCanvas(currentCanvas), timestamp: Date.now() });
+    if (data.undoStack.length > 50) {
+      data.undoStack.shift();
+    }
+  }
+  state.setCanvas(redoState.canvas);
+  return true;
+}
+function clearUndoStack(state) {
+  const data = getUndoData(state);
+  data.undoStack = [];
+  data.redoStack = [];
+  data.currentUndoChunk = null;
+}
+function paintCell(state, x, y, cell, chunked) {
+  saveUndoState(state, chunked);
+  state.setCanvasCell(x, y, cell);
+}
+function snapshotUndoState(state) {
+  saveUndoState(state);
+}
+function getSelectionData(state) {
+  let data = selectionDataByState.get(state);
+  if (!data) {
+    data = { startPoint: null, endPoint: null, bounds: null, selectedRegion: null };
+    selectionDataByState.set(state, data);
+  }
+  return data;
+}
+function getSelectionBounds(state) {
+  return getSelectionData(state).bounds;
+}
+function pasteSelection(state, x, y, region) {
+  saveUndoState(state);
+  const canvas = state.getCanvas();
+  if (!canvas)
+    return;
+  pasteCanvas(canvas, region, x, y);
+  state.setModified(true);
+}
+function getToolHandler(tool) {
+  switch (tool) {
+    case "draw":
+      return drawTool;
+    case "line":
+      return lineTool;
+    case "box":
+      return boxTool;
+    case "box-fill":
+      return boxFillTool;
+    case "ellipse":
+      return ellipseTool;
+    case "ellipse-fill":
+      return ellipseFillTool;
+    case "fill":
+      return fillTool;
+    case "pick":
+      return pickTool;
+    case "select":
+      return selectTool;
+    case "text":
+      return drawTool;
+    default:
+      return drawTool;
+  }
+}
+var undoDataByState, drawTool, lineTool, boxTool, boxFillTool, ellipseTool, ellipseFillTool, fillTool, pickTool, selectionDataByState, selectTool;
+var init_drawing_tools = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/tools/drawing-tools.js"() {
+    "use strict";
+    init_canvas2();
+    undoDataByState = /* @__PURE__ */ new WeakMap();
+    drawTool = {
+      onStart(state, x, y) {
+        saveUndoState(state, true);
+        const cell = state.getCurrentCell();
+        state.setCanvasCell(x, y, cell);
+      },
+      onMove(state, x, y) {
+        const cell = state.getCurrentCell();
+        state.setCanvasCell(x, y, cell);
+      },
+      onEnd(state, x, y) {
+        flushUndoChunk(state);
+      },
+      onCancel(state) {
+        flushUndoChunk(state);
+      }
+    };
+    lineTool = {
+      onStart(state, x, y) {
+        saveUndoState(state);
+        state.setDrawingStartPoint({ line: y, col: x });
+        state.setDrawingEndPoint({ line: y, col: x });
+        const canvas = state.getCanvas();
+        if (canvas) {
+          state.setDrawingPreview(cloneCanvas(canvas));
+        }
+      },
+      onMove(state, x, y) {
+        state.setDrawingEndPoint({ line: y, col: x });
+        const startPoint = state.getDrawingStartPoint();
+        const canvas = state.getCanvas();
+        const preview = state.getDrawingPreview();
+        if (!startPoint || !canvas || !preview)
+          return;
+        const originalCanvas = peekUndoCanvas(state);
+        if (originalCanvas) {
+          state.setDrawingPreview(cloneCanvas(originalCanvas));
+        }
+        const cell = state.getCurrentCell();
+        drawLine(preview, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(cloneCanvas(preview));
+      },
+      onEnd(state, x, y) {
+        const startPoint = state.getDrawingStartPoint();
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
+          return;
+        const cell = state.getCurrentCell();
+        drawLine(canvas, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(canvas);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      },
+      onCancel(state) {
+        restoreAndDiscardUndo(state);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      }
+    };
+    boxTool = {
+      onStart(state, x, y) {
+        saveUndoState(state);
+        state.setDrawingStartPoint({ line: y, col: x });
+        state.setDrawingEndPoint({ line: y, col: x });
+        const canvas = state.getCanvas();
+        if (canvas) {
+          state.setDrawingPreview(cloneCanvas(canvas));
+        }
+      },
+      onMove(state, x, y) {
+        state.setDrawingEndPoint({ line: y, col: x });
+        const startPoint = state.getDrawingStartPoint();
+        const canvas = state.getCanvas();
+        const preview = state.getDrawingPreview();
+        if (!startPoint || !canvas || !preview)
+          return;
+        const originalCanvas = peekUndoCanvas(state);
+        if (originalCanvas) {
+          state.setDrawingPreview(cloneCanvas(originalCanvas));
+        }
+        const cell = state.getCurrentCell();
+        drawBox(preview, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(cloneCanvas(preview));
+      },
+      onEnd(state, x, y) {
+        const startPoint = state.getDrawingStartPoint();
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
+          return;
+        const cell = state.getCurrentCell();
+        drawBox(canvas, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(canvas);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      },
+      onCancel(state) {
+        restoreAndDiscardUndo(state);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      }
+    };
+    boxFillTool = {
+      onStart(state, x, y) {
+        saveUndoState(state);
+        state.setDrawingStartPoint({ line: y, col: x });
+        state.setDrawingEndPoint({ line: y, col: x });
+        const canvas = state.getCanvas();
+        if (canvas) {
+          state.setDrawingPreview(cloneCanvas(canvas));
+        }
+      },
+      onMove(state, x, y) {
+        state.setDrawingEndPoint({ line: y, col: x });
+        const startPoint = state.getDrawingStartPoint();
+        const canvas = state.getCanvas();
+        const preview = state.getDrawingPreview();
+        if (!startPoint || !canvas || !preview)
+          return;
+        const originalCanvas = peekUndoCanvas(state);
+        if (originalCanvas) {
+          state.setDrawingPreview(cloneCanvas(originalCanvas));
+        }
+        const cell = state.getCurrentCell();
+        drawBoxFilled(preview, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(cloneCanvas(preview));
+      },
+      onEnd(state, x, y) {
+        const startPoint = state.getDrawingStartPoint();
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
+          return;
+        const cell = state.getCurrentCell();
+        drawBoxFilled(canvas, startPoint.col, startPoint.line, x, y, cell);
+        state.setCanvas(canvas);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      },
+      onCancel(state) {
+        restoreAndDiscardUndo(state);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      }
+    };
+    ellipseTool = {
+      onStart(state, x, y) {
+        saveUndoState(state);
+        state.setDrawingStartPoint({ line: y, col: x });
+        state.setDrawingEndPoint({ line: y, col: x });
+        const canvas = state.getCanvas();
+        if (canvas) {
+          state.setDrawingPreview(cloneCanvas(canvas));
+        }
+      },
+      onMove(state, x, y) {
+        state.setDrawingEndPoint({ line: y, col: x });
+        const startPoint = state.getDrawingStartPoint();
+        const canvas = state.getCanvas();
+        const preview = state.getDrawingPreview();
+        if (!startPoint || !canvas || !preview)
+          return;
+        const originalCanvas = peekUndoCanvas(state);
+        if (originalCanvas) {
+          state.setDrawingPreview(cloneCanvas(originalCanvas));
+        }
+        const cx = Math.floor((startPoint.col + x) / 2);
+        const cy = Math.floor((startPoint.line + y) / 2);
+        const rx = Math.abs(x - startPoint.col) / 2;
+        const ry = Math.abs(y - startPoint.line) / 2;
+        const cell = state.getCurrentCell();
+        drawEllipse(preview, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+        state.setCanvas(cloneCanvas(preview));
+      },
+      onEnd(state, x, y) {
+        const startPoint = state.getDrawingStartPoint();
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
+          return;
+        const cx = Math.floor((startPoint.col + x) / 2);
+        const cy = Math.floor((startPoint.line + y) / 2);
+        const rx = Math.abs(x - startPoint.col) / 2;
+        const ry = Math.abs(y - startPoint.line) / 2;
+        const cell = state.getCurrentCell();
+        drawEllipse(canvas, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+        state.setCanvas(canvas);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      },
+      onCancel(state) {
+        restoreAndDiscardUndo(state);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      }
+    };
+    ellipseFillTool = {
+      onStart(state, x, y) {
+        saveUndoState(state);
+        state.setDrawingStartPoint({ line: y, col: x });
+        state.setDrawingEndPoint({ line: y, col: x });
+        const canvas = state.getCanvas();
+        if (canvas) {
+          state.setDrawingPreview(cloneCanvas(canvas));
+        }
+      },
+      onMove(state, x, y) {
+        state.setDrawingEndPoint({ line: y, col: x });
+        const startPoint = state.getDrawingStartPoint();
+        const canvas = state.getCanvas();
+        const preview = state.getDrawingPreview();
+        if (!startPoint || !canvas || !preview)
+          return;
+        const originalCanvas = peekUndoCanvas(state);
+        if (originalCanvas) {
+          state.setDrawingPreview(cloneCanvas(originalCanvas));
+        }
+        const cx = Math.floor((startPoint.col + x) / 2);
+        const cy = Math.floor((startPoint.line + y) / 2);
+        const rx = Math.abs(x - startPoint.col) / 2;
+        const ry = Math.abs(y - startPoint.line) / 2;
+        const cell = state.getCurrentCell();
+        drawEllipseFilled(preview, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+        state.setCanvas(cloneCanvas(preview));
+      },
+      onEnd(state, x, y) {
+        const startPoint = state.getDrawingStartPoint();
+        if (!startPoint)
+          return;
+        const original = peekUndoCanvas(state);
+        const canvas = original ? cloneCanvas(original) : state.getCanvas();
+        if (!canvas)
+          return;
+        const cx = Math.floor((startPoint.col + x) / 2);
+        const cy = Math.floor((startPoint.line + y) / 2);
+        const rx = Math.abs(x - startPoint.col) / 2;
+        const ry = Math.abs(y - startPoint.line) / 2;
+        const cell = state.getCurrentCell();
+        drawEllipseFilled(canvas, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+        state.setCanvas(canvas);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      },
+      onCancel(state) {
+        restoreAndDiscardUndo(state);
+        state.setDrawingPreview(null);
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      }
+    };
+    fillTool = {
+      onStart(state, x, y) {
+        saveUndoState(state);
+        const canvas = state.getCanvas();
+        if (!canvas)
+          return;
+        const cell = state.getCurrentCell();
+        floodFill(canvas, x, y, cell);
+      },
+      onMove(state, x, y) {
+      },
+      onEnd(state, x, y) {
+      },
+      onCancel(state) {
+        restoreAndDiscardUndo(state);
+      }
+    };
+    pickTool = {
+      onStart(state, x, y) {
+        const cell = state.getCanvasCell(x, y);
+        if (!cell)
+          return;
+        state.setCurrentFg(cell.fg);
+        state.setCurrentBg(cell.bg);
+        if (cell.char !== " ") {
+          state.setCurrentChar(cell.char);
+        }
+      },
+      onMove(state, x, y) {
+      },
+      onEnd(state, x, y) {
+      },
+      onCancel(state) {
+      }
+    };
+    selectionDataByState = /* @__PURE__ */ new WeakMap();
+    selectTool = {
+      onStart(state, x, y) {
+        const data = getSelectionData(state);
+        data.startPoint = { line: y, col: x };
+        data.endPoint = { line: y, col: x };
+        data.bounds = null;
+      },
+      onMove(state, x, y) {
+        const data = getSelectionData(state);
+        data.endPoint = { line: y, col: x };
+        state.setDrawingStartPoint(data.startPoint);
+        state.setDrawingEndPoint(data.endPoint);
+      },
+      onEnd(state, x, y) {
+        const data = getSelectionData(state);
+        if (!data.startPoint)
+          return;
+        const canvas = state.getCanvas();
+        if (!canvas)
+          return;
+        const x1 = Math.min(data.startPoint.col, x);
+        const y1 = Math.min(data.startPoint.line, y);
+        const x2 = Math.max(data.startPoint.col, x);
+        const y2 = Math.max(data.startPoint.line, y);
+        data.bounds = { x1, y1, x2, y2 };
+        const width = x2 - x1 + 1;
+        const height = y2 - y1 + 1;
+        data.selectedRegion = extractRegion(canvas, x1, y1, width, height);
+      },
+      onCancel(state) {
+        const data = getSelectionData(state);
+        data.startPoint = null;
+        data.endPoint = null;
+        data.bounds = null;
+        data.selectedRegion = null;
+        state.setDrawingStartPoint(null);
+        state.setDrawingEndPoint(null);
+      }
+    };
   }
 });
 
@@ -8345,15 +11635,836 @@ var init_ansi_utils = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js
+var EditorState;
 var init_editor_state = __esm({
   "../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js"() {
     "use strict";
     init_ansi_utils();
     init_canvas2();
+    EditorState = class {
+      constructor(initialContent = "", maxLines = 1e4, maxLineLength = 1e3) {
+        this.maxLines = maxLines;
+        this.maxLineLength = maxLineLength;
+        this.state = {
+          lines: initialContent ? initialContent.split("\n") : [""],
+          cursor: { line: 0, col: 0 },
+          selection: null,
+          scrollTop: 0,
+          scrollLeft: 0,
+          insertMode: true,
+          modified: false,
+          undoStack: [],
+          redoStack: []
+        };
+      }
+      /**
+       * Get current state (immutable)
+       */
+      getState() {
+        return this.state;
+      }
+      /**
+       * Get all lines
+       */
+      getLines() {
+        return this.state.lines;
+      }
+      /**
+       * Get specific line
+       */
+      getLine(lineNum) {
+        return this.state.lines[lineNum];
+      }
+      /**
+       * Get line count
+       */
+      getLineCount() {
+        return this.state.lines.length;
+      }
+      /**
+       * Get full document content
+       */
+      getContent() {
+        return this.state.lines.join("\n");
+      }
+      /**
+       * Set content (replaces all lines)
+       */
+      setContent(content) {
+        const lines = content ? content.split("\n") : [""];
+        if (lines.length > this.maxLines) {
+          lines.length = this.maxLines;
+        }
+        for (let i = 0; i < lines.length; i++) {
+          if (ANSIUtils.visualLength(lines[i]) > this.maxLineLength) {
+            lines[i] = lines[i].substring(0, this.maxLineLength);
+          }
+        }
+        this.state.lines = lines;
+        this.state.modified = true;
+        this.state.cursor = { line: 0, col: 0 };
+        this.state.selection = null;
+      }
+      /**
+       * Get cursor position
+       */
+      getCursor() {
+        return this.state.cursor;
+      }
+      /**
+       * Set cursor position
+       */
+      setCursor(position) {
+        const line3 = Math.max(0, Math.min(position.line, this.state.lines.length - 1));
+        const maxCol = ANSIUtils.visualLength(this.state.lines[line3] || "");
+        const col = Math.max(0, Math.min(position.col, maxCol));
+        this.state.cursor = { line: line3, col };
+      }
+      /**
+       * Move cursor by delta
+       */
+      moveCursor(deltaLine, deltaCol) {
+        this.setCursor({
+          line: this.state.cursor.line + deltaLine,
+          col: this.state.cursor.col + deltaCol
+        });
+      }
+      /**
+       * Get selection
+       */
+      getSelection() {
+        return this.state.selection;
+      }
+      /**
+       * Check if there's an active selection
+       */
+      hasSelection() {
+        return this.state.selection !== null;
+      }
+      /**
+       * Get selected text
+       */
+      getSelectedText() {
+        if (!this.state.selection) {
+          return "";
+        }
+        return this.state.selection.text;
+      }
+      /**
+       * Set selection
+       */
+      setSelection(start2, end) {
+        const { startPos, endPos } = this.normalizeSelection(start2, end);
+        const text = this.getTextRange(startPos, endPos);
+        this.state.selection = {
+          start: startPos,
+          end: endPos,
+          text
+        };
+      }
+      /**
+       * Extend selection to current cursor position
+       */
+      extendSelection(anchor) {
+        this.setSelection(anchor, this.state.cursor);
+      }
+      /**
+       * Clear selection
+       */
+      clearSelection() {
+        this.state.selection = null;
+      }
+      /**
+       * Delete selected text
+       */
+      deleteSelection() {
+        if (!this.state.selection) {
+          return false;
+        }
+        const { start: start2, end, text } = this.state.selection;
+        this.pushOperation({
+          type: "delete",
+          position: start2,
+          content: text,
+          timestamp: Date.now()
+        });
+        if (start2.line === end.line) {
+          const line3 = this.state.lines[start2.line];
+          const actualStart = ANSIUtils.getActualPosition(line3, start2.col);
+          const actualEnd = ANSIUtils.getActualPosition(line3, end.col);
+          this.state.lines[start2.line] = line3.substring(0, actualStart) + line3.substring(actualEnd);
+        } else {
+          const firstLine = this.state.lines[start2.line];
+          const lastLine = this.state.lines[end.line];
+          const actualStart = ANSIUtils.getActualPosition(firstLine, start2.col);
+          const actualEnd = ANSIUtils.getActualPosition(lastLine, end.col);
+          this.state.lines[start2.line] = firstLine.substring(0, actualStart) + lastLine.substring(actualEnd);
+          this.state.lines.splice(start2.line + 1, end.line - start2.line);
+        }
+        this.state.cursor = { ...start2 };
+        this.clearSelection();
+        this.state.modified = true;
+        return true;
+      }
+      /**
+       * Normalize selection (ensure start is before end)
+       */
+      normalizeSelection(start2, end) {
+        if (start2.line < end.line || start2.line === end.line && start2.col <= end.col) {
+          return { startPos: start2, endPos: end };
+        } else {
+          return { startPos: end, endPos: start2 };
+        }
+      }
+      /**
+       * Get text range between two positions
+       */
+      getTextRange(start2, end) {
+        if (start2.line === end.line) {
+          const line3 = this.state.lines[start2.line];
+          const actualStart = ANSIUtils.getActualPosition(line3, start2.col);
+          const actualEnd = ANSIUtils.getActualPosition(line3, end.col);
+          return line3.substring(actualStart, actualEnd);
+        } else {
+          const lines = [];
+          const firstLine = this.state.lines[start2.line];
+          const actualStart = ANSIUtils.getActualPosition(firstLine, start2.col);
+          lines.push(firstLine.substring(actualStart));
+          for (let i = start2.line + 1; i < end.line; i++) {
+            lines.push(this.state.lines[i]);
+          }
+          const lastLine = this.state.lines[end.line];
+          const actualEnd = ANSIUtils.getActualPosition(lastLine, end.col);
+          lines.push(lastLine.substring(0, actualEnd));
+          return lines.join("\n");
+        }
+      }
+      /**
+       * Get scroll position
+       */
+      getScroll() {
+        return {
+          top: this.state.scrollTop,
+          left: this.state.scrollLeft
+        };
+      }
+      /**
+       * Set scroll position
+       */
+      setScroll(top, left) {
+        this.state.scrollTop = Math.max(0, top);
+        this.state.scrollLeft = Math.max(0, left);
+      }
+      /**
+       * Get insert mode
+       */
+      getInsertMode() {
+        return this.state.insertMode;
+      }
+      /**
+       * Toggle insert mode
+       */
+      toggleInsertMode() {
+        this.state.insertMode = !this.state.insertMode;
+      }
+      /**
+       * Set insert mode
+       */
+      setInsertMode(insertMode) {
+        this.state.insertMode = insertMode;
+      }
+      /**
+       * Check if document is modified
+       */
+      isModified() {
+        return this.state.modified;
+      }
+      /**
+       * Set modified flag
+       */
+      setModified(modified) {
+        this.state.modified = modified;
+      }
+      /**
+       * Insert character at cursor
+       */
+      insertChar(char) {
+        const { line: line3, col } = this.state.cursor;
+        const currentLine = this.state.lines[line3];
+        const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+        if (this.state.insertMode) {
+          this.state.lines[line3] = currentLine.substring(0, actualPos) + char + currentLine.substring(actualPos);
+        } else {
+          this.state.lines[line3] = currentLine.substring(0, actualPos) + char + currentLine.substring(actualPos + 1);
+        }
+        this.state.cursor.col++;
+        this.state.modified = true;
+      }
+      /**
+       * Insert text at cursor
+       */
+      insertText(text) {
+        const { line: line3, col } = this.state.cursor;
+        const currentLine = this.state.lines[line3];
+        const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+        this.state.lines[line3] = currentLine.substring(0, actualPos) + text + currentLine.substring(actualPos);
+        this.state.cursor.col += ANSIUtils.visualLength(text);
+        this.state.modified = true;
+      }
+      /**
+       * Delete character before cursor (backspace)
+       */
+      deleteCharBefore() {
+        const { line: line3, col } = this.state.cursor;
+        if (col > 0) {
+          const currentLine = this.state.lines[line3];
+          const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+          const prevActualPos = ANSIUtils.getActualPosition(currentLine, col - 1);
+          this.state.lines[line3] = currentLine.substring(0, prevActualPos) + currentLine.substring(actualPos);
+          this.state.cursor.col--;
+          this.state.modified = true;
+          return true;
+        } else if (line3 > 0) {
+          const prevLine = this.state.lines[line3 - 1];
+          const prevLineLength = ANSIUtils.visualLength(prevLine);
+          this.state.lines[line3 - 1] = prevLine + this.state.lines[line3];
+          this.state.lines.splice(line3, 1);
+          this.state.cursor.line--;
+          this.state.cursor.col = prevLineLength;
+          this.state.modified = true;
+          return true;
+        }
+        return false;
+      }
+      /**
+       * Delete character after cursor (delete key)
+       */
+      deleteCharAfter() {
+        const { line: line3, col } = this.state.cursor;
+        const currentLine = this.state.lines[line3];
+        const lineLength = ANSIUtils.visualLength(currentLine);
+        if (col < lineLength) {
+          const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+          const nextActualPos = ANSIUtils.getActualPosition(currentLine, col + 1);
+          this.state.lines[line3] = currentLine.substring(0, actualPos) + currentLine.substring(nextActualPos);
+          this.state.modified = true;
+          return true;
+        } else if (line3 < this.state.lines.length - 1) {
+          this.state.lines[line3] = currentLine + this.state.lines[line3 + 1];
+          this.state.lines.splice(line3 + 1, 1);
+          this.state.modified = true;
+          return true;
+        }
+        return false;
+      }
+      /**
+       * Insert new line at cursor
+       */
+      insertNewLine() {
+        const { line: line3, col } = this.state.cursor;
+        const currentLine = this.state.lines[line3];
+        const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+        const beforeCursor = currentLine.substring(0, actualPos);
+        const afterCursor = currentLine.substring(actualPos);
+        this.state.lines[line3] = beforeCursor;
+        this.state.lines.splice(line3 + 1, 0, afterCursor);
+        this.state.cursor.line++;
+        this.state.cursor.col = 0;
+        this.state.modified = true;
+      }
+      /**
+       * Delete entire line
+       */
+      deleteLine(lineNum) {
+        if (lineNum >= 0 && lineNum < this.state.lines.length) {
+          this.state.lines.splice(lineNum, 1);
+          if (this.state.lines.length === 0) {
+            this.state.lines = [""];
+          }
+          if (this.state.cursor.line >= this.state.lines.length) {
+            this.state.cursor.line = this.state.lines.length - 1;
+          }
+          this.state.modified = true;
+        }
+      }
+      /**
+       * Duplicate current line
+       */
+      duplicateLine(lineNum) {
+        if (lineNum >= 0 && lineNum < this.state.lines.length) {
+          const lineCopy = this.state.lines[lineNum];
+          this.state.lines.splice(lineNum + 1, 0, lineCopy);
+          this.state.modified = true;
+        }
+      }
+      /**
+       * Get undo stack size
+       */
+      getUndoStackSize() {
+        return this.state.undoStack.length;
+      }
+      /**
+       * Get redo stack size
+       */
+      getRedoStackSize() {
+        return this.state.redoStack.length;
+      }
+      /**
+       * Can undo?
+       */
+      canUndo() {
+        return this.state.undoStack.length > 0;
+      }
+      /**
+       * Can redo?
+       */
+      canRedo() {
+        return this.state.redoStack.length > 0;
+      }
+      /**
+       * Add operation to undo stack
+       */
+      pushOperation(operation) {
+        this.state.undoStack.push(operation);
+        if (this.state.undoStack.length > 100) {
+          this.state.undoStack.shift();
+        }
+        this.state.redoStack = [];
+      }
+      /**
+       * Pop operation from undo stack
+       */
+      popUndo() {
+        return this.state.undoStack.pop();
+      }
+      /**
+       * Pop operation from redo stack
+       */
+      popRedo() {
+        return this.state.redoStack.pop();
+      }
+      /**
+       * Push operation to redo stack
+       */
+      pushRedo(operation) {
+        this.state.redoStack.push(operation);
+      }
+      /**
+       * Undo last operation
+       */
+      undo() {
+        const operation = this.popUndo();
+        if (!operation) {
+          return false;
+        }
+        const inverseOperation = {
+          type: operation.type,
+          position: operation.position,
+          content: operation.previousContent || "",
+          previousContent: operation.content,
+          timestamp: Date.now()
+        };
+        switch (operation.type) {
+          case "insert":
+            this.deleteTextAt(operation.position, operation.content.length, false);
+            break;
+          case "delete":
+            this.insertTextAt(operation.position, operation.content, false);
+            break;
+          case "replace":
+            if (operation.previousContent) {
+              this.replaceTextAt(operation.position, operation.content.length, operation.previousContent, false);
+            }
+            break;
+        }
+        this.pushRedo(operation);
+        this.state.modified = true;
+        return true;
+      }
+      /**
+       * Redo last undone operation
+       */
+      redo() {
+        const operation = this.popRedo();
+        if (!operation) {
+          return false;
+        }
+        switch (operation.type) {
+          case "insert":
+            this.insertTextAt(operation.position, operation.content, false);
+            break;
+          case "delete":
+            this.deleteTextAt(operation.position, operation.content.length, false);
+            break;
+          case "replace":
+            this.replaceTextAt(operation.position, operation.previousContent?.length || 0, operation.content, false);
+            break;
+        }
+        this.pushOperation(operation);
+        this.state.modified = true;
+        return true;
+      }
+      /**
+       * Insert text at specific position (internal use for undo/redo)
+       */
+      insertTextAt(pos, text, recordOperation = true) {
+        const { line: line3, col } = pos;
+        if (line3 < 0 || line3 >= this.state.lines.length) {
+          return;
+        }
+        const currentLine = this.state.lines[line3];
+        const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+        const textLines = text.split("\n");
+        if (textLines.length === 1) {
+          this.state.lines[line3] = currentLine.substring(0, actualPos) + text + currentLine.substring(actualPos);
+        } else {
+          const firstPart = currentLine.substring(0, actualPos) + textLines[0];
+          const lastPart = textLines[textLines.length - 1] + currentLine.substring(actualPos);
+          const middleParts = textLines.slice(1, -1);
+          this.state.lines.splice(line3, 1, firstPart, ...middleParts, lastPart);
+        }
+        if (recordOperation) {
+          this.pushOperation({
+            type: "insert",
+            position: pos,
+            content: text,
+            timestamp: Date.now()
+          });
+        }
+        this.state.modified = true;
+      }
+      /**
+       * Delete text at specific position (internal use for undo/redo)
+       */
+      deleteTextAt(pos, length, recordOperation = true) {
+        const { line: line3, col } = pos;
+        if (line3 < 0 || line3 >= this.state.lines.length) {
+          return;
+        }
+        const currentLine = this.state.lines[line3];
+        const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+        const deletedText = currentLine.substring(actualPos, actualPos + length);
+        this.state.lines[line3] = currentLine.substring(0, actualPos) + currentLine.substring(actualPos + length);
+        if (recordOperation) {
+          this.pushOperation({
+            type: "delete",
+            position: pos,
+            content: deletedText,
+            timestamp: Date.now()
+          });
+        }
+        this.state.modified = true;
+      }
+      /**
+       * Replace text at specific position (internal use for undo/redo)
+       */
+      replaceTextAt(pos, oldLength, newText, recordOperation = true) {
+        const { line: line3, col } = pos;
+        if (line3 < 0 || line3 >= this.state.lines.length) {
+          return;
+        }
+        const currentLine = this.state.lines[line3];
+        const actualPos = ANSIUtils.getActualPosition(currentLine, col);
+        const oldText = currentLine.substring(actualPos, actualPos + oldLength);
+        this.state.lines[line3] = currentLine.substring(0, actualPos) + newText + currentLine.substring(actualPos + oldLength);
+        if (recordOperation) {
+          this.pushOperation({
+            type: "replace",
+            position: pos,
+            content: newText,
+            previousContent: oldText,
+            timestamp: Date.now()
+          });
+        }
+        this.state.modified = true;
+      }
+      // ===== CANVAS MODE METHODS =====
+      /**
+       * Get editor mode (text or draw)
+       */
+      getMode() {
+        return this.state.mode || "text";
+      }
+      /**
+       * Set editor mode
+       */
+      setMode(mode) {
+        if (mode === "draw" && !this.state.canvas) {
+          this.initializeCanvas(80, 25);
+        }
+        this.state.mode = mode;
+      }
+      /**
+       * Initialize canvas for drawing mode
+       */
+      initializeCanvas(width, height) {
+        this.state.canvas = createCanvas(width, height);
+        this.state.canvasWidth = width;
+        this.state.canvasHeight = height;
+        this.state.currentTool = "draw";
+        this.state.brushMode = "half-block";
+        this.state.currentFg = 7;
+        this.state.currentBg = 0;
+        this.state.currentChar = "\u2588";
+        this.state.drawingStartPoint = null;
+        this.state.drawingEndPoint = null;
+        this.state.drawingPreview = null;
+        this.state.iceColorsEnabled = false;
+      }
+      /**
+       * Get canvas
+       */
+      getCanvas() {
+        return this.state.canvas;
+      }
+      /**
+       * Set canvas
+       */
+      setCanvas(canvas) {
+        this.state.canvas = canvas;
+        this.state.canvasWidth = canvas[0]?.length || 0;
+        this.state.canvasHeight = canvas.length;
+        this.state.modified = true;
+      }
+      /**
+       * Get canvas dimensions
+       */
+      getCanvasDimensions() {
+        return {
+          width: this.state.canvasWidth || 0,
+          height: this.state.canvasHeight || 0
+        };
+      }
+      /**
+       * Clear canvas
+       */
+      clearCanvas() {
+        if (this.state.canvas) {
+          clearCanvas(this.state.canvas);
+          this.state.modified = true;
+        }
+      }
+      /**
+       * Get current drawing tool
+       */
+      getCurrentTool() {
+        return this.state.currentTool || "draw";
+      }
+      /**
+       * Set current drawing tool
+       */
+      setCurrentTool(tool) {
+        this.state.currentTool = tool;
+      }
+      /**
+       * Get brush mode
+       */
+      getBrushMode() {
+        return this.state.brushMode || "half-block";
+      }
+      /**
+       * Set brush mode
+       */
+      setBrushMode(mode) {
+        this.state.brushMode = mode;
+      }
+      /**
+       * Get current foreground color
+       */
+      getCurrentFg() {
+        return this.state.currentFg || 7;
+      }
+      /**
+       * Set current foreground color
+       */
+      setCurrentFg(fg2) {
+        this.state.currentFg = Math.max(0, Math.min(15, fg2));
+      }
+      /**
+       * Get current background color
+       */
+      getCurrentBg() {
+        return this.state.currentBg || 0;
+      }
+      /**
+       * Set current background color
+       */
+      setCurrentBg(bg2) {
+        this.state.currentBg = Math.max(0, Math.min(15, bg2));
+      }
+      /**
+       * Get current character
+       */
+      getCurrentChar() {
+        return this.state.currentChar || "\u2588";
+      }
+      /**
+       * Set current character
+       */
+      setCurrentChar(char) {
+        this.state.currentChar = char;
+      }
+      /**
+       * Get current drawing cell (based on current fg/bg/char)
+       */
+      getCurrentCell() {
+        return {
+          char: this.getCurrentChar(),
+          fg: this.getCurrentFg(),
+          bg: this.getCurrentBg(),
+          blink: false
+        };
+      }
+      /**
+       * Get drawing start point (for shape tools)
+       */
+      getDrawingStartPoint() {
+        return this.state.drawingStartPoint || null;
+      }
+      /**
+       * Set drawing start point
+       */
+      setDrawingStartPoint(pos) {
+        this.state.drawingStartPoint = pos;
+      }
+      /**
+       * Get drawing end point (for shape tools)
+       */
+      getDrawingEndPoint() {
+        return this.state.drawingEndPoint || null;
+      }
+      /**
+       * Set drawing end point
+       */
+      setDrawingEndPoint(pos) {
+        this.state.drawingEndPoint = pos;
+      }
+      /**
+       * Get drawing preview canvas
+       */
+      getDrawingPreview() {
+        return this.state.drawingPreview || null;
+      }
+      /**
+       * Set drawing preview canvas
+       */
+      setDrawingPreview(preview) {
+        this.state.drawingPreview = preview;
+      }
+      /**
+       * Check if iCE colors are enabled
+       */
+      isIceColorsEnabled() {
+        return this.state.iceColorsEnabled || false;
+      }
+      /**
+       * Toggle iCE colors
+       */
+      toggleIceColors() {
+        this.state.iceColorsEnabled = !this.state.iceColorsEnabled;
+      }
+      /**
+       * Set iCE colors
+       */
+      setIceColors(enabled) {
+        this.state.iceColorsEnabled = enabled;
+      }
+      /**
+       * Set canvas cell at position
+       */
+      setCanvasCell(x, y, cell) {
+        if (this.state.canvas) {
+          setCell(this.state.canvas, x, y, cell);
+          this.state.modified = true;
+        }
+      }
+      /**
+       * Get canvas cell at position
+       */
+      getCanvasCell(x, y) {
+        if (this.state.canvas) {
+          return getCell(this.state.canvas, x, y);
+        }
+        return null;
+      }
+      /**
+       * Convert canvas to ANSI string
+       */
+      canvasToANSI() {
+        if (this.state.canvas) {
+          return canvasToANSI(this.state.canvas, this.isIceColorsEnabled());
+        }
+        return "";
+      }
+      /**
+       * Load content into canvas (for file loading)
+       */
+      loadCanvasFromANSI(content, width, height) {
+        const canvas = createCanvas(width, height);
+        const lines = content.split("\n");
+        let currentFg = 7;
+        let currentBg = 0;
+        for (let y = 0; y < Math.min(lines.length, height); y++) {
+          let x = 0;
+          const line3 = lines[y];
+          for (let i = 0; i < line3.length && x < width; i++) {
+            const char = line3[i];
+            if (char === "\x1B") {
+              const match2 = line3.substring(i).match(/^\x1b\[([0-9;]+)m/);
+              if (match2) {
+                const codes = match2[1].split(";").map(Number);
+                for (const code of codes) {
+                  if (code >= 30 && code <= 37) {
+                    currentFg = code - 30;
+                  } else if (code >= 90 && code <= 97) {
+                    currentFg = code - 90 + 8;
+                  } else if (code >= 40 && code <= 47) {
+                    currentBg = code - 40;
+                  } else if (code >= 100 && code <= 107) {
+                    currentBg = code - 100 + 8;
+                  }
+                }
+                i += match2[0].length - 1;
+                continue;
+              }
+            }
+            setCell(canvas, x, y, {
+              char,
+              fg: currentFg,
+              bg: currentBg,
+              blink: false
+            });
+            x++;
+          }
+        }
+        this.setCanvas(canvas);
+      }
+      /**
+       * Resize canvas
+       */
+      resizeCanvas(newWidth, newHeight) {
+        if (this.state.canvas) {
+          this.state.canvas = resizeCanvas(this.state.canvas, newWidth, newHeight);
+          this.state.canvasWidth = newWidth;
+          this.state.canvasHeight = newHeight;
+          this.state.modified = true;
+        }
+      }
+      /**
+       * Clone current canvas (for undo)
+       */
+      cloneCanvas() {
+        if (this.state.canvas) {
+          return cloneCanvas(this.state.canvas);
+        }
+        return void 0;
+      }
+    };
   }
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js
+var FKEY_CHAR_SETS, HALF_BLOCK, ANSIEditor;
 var init_ansi_editor = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js"() {
     "use strict";
@@ -8367,7 +12478,3500 @@ var init_ansi_editor = __esm({
     init_dropdown_menu();
     init_modal_helpers();
     init_canvas2();
+    init_drawing_tools();
     init_editor_state();
+    FKEY_CHAR_SETS = [
+      // Set 1: Block/shade characters
+      ["\u2588", "\u2593", "\u2592", "\u2591", "\u2580", "\u2584", "\u258C", "\u2590", "\u25A0", "\u25A1", "\u25AA", "\u25AB"],
+      // Set 2: Box drawing - singles
+      ["\u2500", "\u2502", "\u250C", "\u2510", "\u2514", "\u2518", "\u251C", "\u2524", "\u252C", "\u2534", "\u253C", "\u2500"],
+      // Set 3: Box drawing - doubles
+      ["\u2550", "\u2551", "\u2554", "\u2557", "\u255A", "\u255D", "\u2560", "\u2563", "\u2566", "\u2569", "\u256C", "\u2550"],
+      // Set 4: Box drawing - mixed
+      ["\u2553", "\u2556", "\u2559", "\u255C", "\u2552", "\u2555", "\u2558", "\u255B", "\u255E", "\u2561", "\u2565", "\u2568"],
+      // Set 5: Arrows and symbols
+      ["\u2190", "\u2192", "\u2191", "\u2193", "\u2194", "\u2195", "\u25C4", "\u25BA", "\u25B2", "\u25BC", "\u25CA", "\u2666"],
+      // Set 6: Math and misc
+      ["\xB1", "\xD7", "\xF7", "\u2264", "\u2265", "\u2260", "\u2248", "\u221E", "\u221A", "\u2211", "\u220F", "\u03C0"],
+      // Set 7: Card suits and symbols
+      ["\u2660", "\u2663", "\u2665", "\u2666", "\u263A", "\u263B", "\u263C", "\u266A", "\u266B", "\u2020", "\u2021", "\xA7"],
+      // Set 8: Greek letters
+      ["\u03B1", "\u03B2", "\u03B3", "\u03B4", "\u03B5", "\u03B8", "\u03BB", "\u03BC", "\u03C3", "\u03C4", "\u03C6", "\u03C9"]
+    ];
+    HALF_BLOCK = {
+      UPPER: "\u2580",
+      // Upper half filled
+      LOWER: "\u2584",
+      // Lower half filled
+      FULL: "\u2588",
+      // Both halves filled
+      EMPTY: " ",
+      // Neither half filled
+      SHADE_LIGHT: "\u2591",
+      SHADE_MEDIUM: "\u2592",
+      SHADE_DARK: "\u2593"
+    };
+    ANSIEditor = class _ANSIEditor extends Box {
+      /**
+       * Draw-mode canvas width/height. These two getters are the ONLY source of
+       * canvas dimensions in the widget - every bound check, allocation, and
+       * loop reads through here instead of a hardcoded 80/25 literal. Before
+       * cellCanvas is allocated (during construction) they fall back to the
+       * requested option; afterward they always reflect the real array, so a
+       * later setCoreCanvas() swap with a different-sized canvas "just works".
+       */
+      get canvasW() {
+        return this.cellCanvas?.[0]?.length ?? this.optCanvasWidth;
+      }
+      get canvasH() {
+        return this.cellCanvas?.length ?? this.optCanvasHeight;
+      }
+      /**
+       * Characters per cell across and rows per cell down. The ONLY source of
+       * magnification: buildCanvasContent() repeats by them, screenToCanvasX/Y
+       * divide by them, and updateDrawCursor() multiplies by them, so the
+       * render and the hit-test can never be scaled by two different numbers.
+       */
+      get scaleX() {
+        return this.optCellScaleX;
+      }
+      get scaleY() {
+        return this.optCellScaleY;
+      }
+      /** Get the current draw-mode canvas dimensions in cells. */
+      getCanvasSize() {
+        return { width: this.canvasW, height: this.canvasH };
+      }
+      /** Get the current magnification, in characters per cell. */
+      getCellScale() {
+        return { x: this.scaleX, y: this.scaleY };
+      }
+      /** Full-canvas selection bounds - the default when no explicit selection exists. */
+      fullCanvasSelection() {
+        return { x1: 0, y1: 0, x2: this.canvasW - 1, y2: this.canvasH - 1 };
+      }
+      /** Clamp a column into the canvas's horizontal bounds [0, canvasW - 1]. */
+      clampCol(col) {
+        return Math.max(0, Math.min(this.canvasW - 1, col));
+      }
+      /** Clamp a row into the canvas's vertical bounds [0, canvasH - 1]. */
+      clampLine(line3) {
+        return Math.max(0, Math.min(this.canvasH - 1, line3));
+      }
+      /**
+       * Rendered column/row -> canvas column/row: the inverse of the repeat
+       * buildCanvasContent() applies. Every mouse path goes through these, so a
+       * click lands on the cell the artist actually pointed at whatever the
+       * magnification; at the default 1/1 they reduce to the plain clamp the
+       * handlers used before.
+       */
+      screenToCanvasX(x) {
+        return this.clampCol(Math.floor(x / this.scaleX));
+      }
+      screenToCanvasY(y) {
+        return this.clampLine(Math.floor(y / this.scaleY));
+      }
+      /** Clamp the live cursor position into the current canvas's bounds. */
+      clampCursorToCanvas() {
+        this.cursor.col = this.clampCol(this.cursor.col);
+        this.cursor.line = this.clampLine(this.cursor.line);
+      }
+      /**
+       * Allocate a blank width x height canvas. When transparentBackground is
+       * on, every cell starts marked `transparent: true` instead of the plain
+       * opaque {char:' ', fg:7, bg:0} CoreCanvas.createCanvas() always builds -
+       * the same distinction eraseAtCursor() applies to a single cell. Used at
+       * construction and by newDocument() (File > New); a freshly-added layer
+       * stays a plain CoreCanvas.createCanvas() call, out of this task's scope.
+       */
+      createBlankCanvas(width, height) {
+        const canvas = createCanvas(width, height);
+        if (this.transparentBackground) {
+          for (const row of canvas) {
+            for (const cell of row) {
+              cell.transparent = true;
+            }
+          }
+        }
+        return canvas;
+      }
+      constructor(options = {}) {
+        super({
+          ...options,
+          border: options.border || { type: "line", fg: "cyan" },
+          label: options.label || ` ${options.title || "ANSI Editor"} `,
+          tags: true,
+          keys: true,
+          mouse: true,
+          vi: true
+        });
+        this.fkeySetIndex = 0;
+        this.fkeyButtons = [];
+        this.mode = "draw";
+        this.lines = [];
+        this.cursor = { line: 0, col: 0 };
+        this.scrollTop = 0;
+        this.scrollLeft = 0;
+        this.modified = false;
+        this.currentFg = 7;
+        this.currentBg = 0;
+        this.currentChar = "\u2588";
+        this.cellCanvas = null;
+        this.currentTool = "text";
+        this.isDrawing = false;
+        this.coreState = null;
+        this.undoStack = [];
+        this.redoStack = [];
+        this.layers = [];
+        this.activeLayerIndex = 0;
+        this.nextLayerId = 1;
+        this.sauce = {
+          title: "",
+          author: "",
+          group: "",
+          date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 8).replace(/-/g, ""),
+          fileSize: 0,
+          dataType: 1,
+          // Character (ANSI)
+          fileType: 1,
+          // ANSi
+          tInfo1: 0,
+          // Width - set from canvas size in constructor
+          tInfo2: 0,
+          // Height - set from canvas size in constructor
+          tInfo3: 0,
+          tInfo4: 0,
+          comments: [],
+          tFlags: 0,
+          tInfoS: ""
+        };
+        this.iceColorsEnabled = false;
+        this.clipboard = null;
+        this.selection = null;
+        this.brushMode = "text";
+        this.halfBlockSubY = 0;
+        this.lastPreviewPos = null;
+        this.uiVisible = true;
+        this.modalOpen = false;
+        this.mode = options.initialMode || "draw";
+        this.maxLines = options.maxLines || 1e3;
+        this.maxLineLength = options.maxLineLength || 160;
+        this.optCanvasWidth = options.canvasWidth || 80;
+        this.optCanvasHeight = options.canvasHeight || 25;
+        this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
+        this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
+        this.transparentBackground = options.transparentBackground ?? false;
+        this.showLineNumbers = options.showLineNumbers ?? true;
+        this.onSaveCallback = options.onSave;
+        this.onSaveAsCallback = options.onSaveAs;
+        this.onOpenCallback = options.onOpen;
+        this.onOpenBBSCallback = options.onOpenBBS;
+        this.onExitCallback = options.onExit;
+        this.hideUIHotkey = options.hideUIHotkey || "f2";
+        this.cellCanvas = this.createBlankCanvas(this.canvasW, this.canvasH);
+        if (options.initialContent) {
+          this.lines = options.initialContent.split("\n");
+          if (this.lines.length > this.maxLines) {
+            this.lines = this.lines.slice(0, this.maxLines);
+          }
+          parseANSIToCanvas(this.cellCanvas, options.initialContent);
+        } else {
+          this.lines = [""];
+        }
+        this.saveUndoState();
+        this.layers = [{
+          id: this.nextLayerId++,
+          name: "Layer 1",
+          canvas: this.cellCanvas,
+          visible: true,
+          locked: false,
+          opacity: 100
+        }];
+        this.activeLayerIndex = 0;
+        this.coreState = new EditorState();
+        this.coreState.setCanvas(cloneCanvas(this.cellCanvas));
+        this.createUI(options);
+        this.setupKeyHandlers();
+        this.setupMouseHandlers();
+        if (this.mode === "draw") {
+          this.syncCoreCanvasToDisplay();
+        }
+        if (this.mode === "draw") {
+          this.drawCanvas.focus();
+        } else {
+          this.viewport.focus();
+        }
+      }
+      createUI(options) {
+        let topOffset = 0;
+        const showMenuBar = options.showMenuBar !== false;
+        const showToolbar = options.showToolbar !== false;
+        const showSidebar = options.showSidebar !== false;
+        const showStatusBar = options.showStatusBar !== false;
+        const sidebarWidth = showSidebar ? 6 : 0;
+        if (showMenuBar) {
+          this.createMenuBar();
+          topOffset = 1;
+        }
+        if (showToolbar) {
+          this.createFkeyToolbar(topOffset);
+          topOffset += 1;
+        }
+        if (showSidebar) {
+          this.createSidebar(topOffset, showStatusBar);
+        }
+        this.viewport = new Box({
+          parent: this,
+          top: topOffset,
+          left: sidebarWidth,
+          right: 0,
+          bottom: showStatusBar ? 1 : 0,
+          style: { bg: "black", fg: "white" },
+          scrollable: true,
+          alwaysScroll: true,
+          keys: true,
+          mouse: true,
+          vi: true,
+          focusable: true,
+          clickable: true,
+          input: true,
+          wrap: false
+          // ANSI content is fixed width - never wrap
+        });
+        this.drawCanvas = new Canvas2({
+          parent: this,
+          top: topOffset,
+          left: sidebarWidth,
+          right: 0,
+          bottom: showStatusBar ? 1 : 0,
+          style: { bg: "black", fg: "white" },
+          keys: true,
+          mouse: true,
+          focusable: true,
+          clickable: true,
+          input: true,
+          wrap: false,
+          // ANSI canvas is fixed-width - never wrap
+          fillChar: this.currentChar,
+          clearChar: " "
+        });
+        this.drawCanvas.on("focus", () => {
+          if (this.screen && this.screen.program) {
+            this.screen.program.setMouse({ allMotion: true }, true);
+          }
+        });
+        this.drawCanvas.on("blur", () => {
+          if (this.screen && this.screen.program) {
+            this.screen.program.setMouse({ allMotion: false }, true);
+          }
+        });
+        this.drawCursor = new Box({
+          parent: this,
+          top: topOffset,
+          left: sidebarWidth,
+          width: 1,
+          height: 1,
+          content: "\u2588",
+          style: { bg: "red", fg: "red" },
+          tags: true,
+          clickable: false,
+          mouse: false
+        });
+        this.drawCursor.setFront();
+        if (this.mode === "draw") {
+          this.viewport.hide();
+          this.drawCanvas.show();
+          this.drawCursor.show();
+        } else {
+          this.viewport.show();
+          this.drawCanvas.hide();
+          this.drawCursor.hide();
+        }
+        if (showStatusBar) {
+          this.statusBar = new Text({
+            parent: this,
+            bottom: 0,
+            left: 0,
+            width: "100%",
+            height: 1,
+            content: "",
+            style: { bg: "blue", fg: "white" },
+            tags: true
+          });
+        }
+        this.updateDisplay();
+      }
+      /**
+       * Create Moebius-style menu bar with dropdown menus
+       */
+      createMenuBar() {
+        this.menuBar = new Box({
+          parent: this,
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: 1,
+          style: { bg: "gray", fg: "black" },
+          tags: true
+        });
+        const menus = [
+          { label: " File ", left: 0 },
+          { label: " Edit ", left: 6 },
+          { label: " Layer ", left: 12 },
+          { label: " Select ", left: 19 },
+          { label: " Colors ", left: 28 },
+          { label: " View ", left: 36 },
+          { label: " Help ", left: 42 }
+        ];
+        const menuButtons = [];
+        menus.forEach((menu) => {
+          const btn = new Box({
+            parent: this.menuBar,
+            top: 0,
+            left: menu.left,
+            width: menu.label.length,
+            height: 1,
+            content: menu.label,
+            style: { bg: "gray", fg: "black", hover: { bg: "blue", fg: "white" } },
+            tags: true,
+            mouse: true,
+            clickable: true
+          });
+          menuButtons.push(btn);
+        });
+        this.createDropdownMenus();
+        const dropdownMenus = [
+          this.fileMenu,
+          this.editMenu,
+          this.layerMenu,
+          this.selectionMenu,
+          this.colorsMenu,
+          this.viewMenu,
+          this.helpMenu
+        ];
+        menuButtons.forEach((btn, idx) => {
+          const dropdown = dropdownMenus[idx];
+          if (dropdown) {
+            dropdown.registerAnchor(btn);
+          }
+        });
+      }
+      /**
+       * Create dropdown menus for the menu bar
+       */
+      createDropdownMenus() {
+        if (!this.screen)
+          return;
+        const fileMenuItems = [
+          { label: "New", action: () => this.newDocument() },
+          { label: "Open...", action: () => this.onOpenCallback?.() }
+        ];
+        if (this.onOpenBBSCallback) {
+          fileMenuItems.push({ label: "Open BBS Files...", action: () => this.onOpenBBSCallback?.() });
+        }
+        fileMenuItems.push({ label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true }, { label: "Save", action: () => this.save() }, { label: "Save As...", action: () => this.onSaveAsCallback?.() }, { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true }, { label: "SAUCE Info...", action: () => this.showSauceEditor() }, { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true }, { label: "Exit", action: () => this.onExitCallback?.() });
+        this.fileMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: fileMenuItems
+        });
+        this.editMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: [
+            { label: "Undo", action: () => this.undo() },
+            { label: "Redo", action: () => this.redo() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Cut", action: () => this.cutSelection() },
+            { label: "Copy", action: () => this.copySelection() },
+            { label: "Paste", action: () => this.pasteClipboard() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Insert Row", action: () => this.insertRow() },
+            { label: "Delete Row", action: () => this.deleteRow() }
+          ]
+        });
+        this.selectionMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: [
+            { label: "Select All", action: () => this.selectAll() },
+            { label: "Deselect", action: () => this.deselect() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Move Block", action: () => this.moveBlock() },
+            { label: "Copy Block", action: () => this.copyBlock() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Flip Horizontal", action: () => this.flipHorizontal() },
+            { label: "Flip Vertical", action: () => this.flipVertical() }
+          ]
+        });
+        this.colorsMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: [
+            { label: "Foreground...", action: () => this.showColorPicker(true) },
+            { label: "Background...", action: () => this.showColorPicker(false) },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Swap FG/BG", action: () => this.swapColors() },
+            { label: "Default Colors", action: () => this.resetColors() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: this.iceColorsEnabled ? "[X] iCE Colors" : "[ ] iCE Colors", action: () => this.toggleIceColors() }
+          ]
+        });
+        this.layerMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: [
+            { label: "Add Layer", action: () => this.addLayer() },
+            { label: "Delete Layer", action: () => this.deleteLayer() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Merge Down", action: () => this.mergeLayerDown() },
+            { label: "Flatten All", action: () => this.flattenLayers() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Toggle Visibility", action: () => this.toggleLayerVisibility() },
+            { label: "Toggle Lock", action: () => this.toggleLayerLock() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Move Up", action: () => this.moveLayerUp() },
+            { label: "Move Down", action: () => this.moveLayerDown() }
+          ]
+        });
+        this.viewMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: [
+            { label: "Toggle Sidebar", action: () => this.toggleSidebar() },
+            { label: "Toggle Toolbar", action: () => this.toggleFkeyToolbar() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "Text Mode", action: () => this.mode !== "text" && this.toggleMode() },
+            { label: "Draw Mode", action: () => this.mode !== "draw" && this.toggleMode() }
+          ]
+        });
+        this.helpMenu = new DropdownMenu({
+          parent: this.screen,
+          width: 22,
+          items: [
+            { label: "Keyboard Shortcuts", action: () => this.showHelp() },
+            { label: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", separator: true },
+            { label: "About ANSI Editor", action: () => this.showAbout() }
+          ]
+        });
+      }
+      /**
+       * Open a dropdown menu
+       */
+      openMenu(index) {
+        const menus = [
+          { menu: this.fileMenu, left: 0 },
+          { menu: this.editMenu, left: 6 },
+          { menu: this.layerMenu, left: 12 },
+          { menu: this.selectionMenu, left: 19 },
+          { menu: this.colorsMenu, left: 28 },
+          { menu: this.viewMenu, left: 36 },
+          { menu: this.helpMenu, left: 42 }
+        ];
+        const item = menus[index];
+        if (item?.menu) {
+          item.menu.openAt(item.left + this.aleft + 1, this.atop + 2);
+        }
+      }
+      /**
+       * Create F-key character toolbar (Moebius-style)
+       */
+      createFkeyToolbar(topOffset) {
+        this.fkeyToolbar = new Box({
+          parent: this,
+          top: topOffset,
+          left: 0,
+          width: "100%",
+          height: 1,
+          style: { bg: "black", fg: "white" },
+          tags: true
+        });
+        const prevBtn = new Text({
+          parent: this.fkeyToolbar,
+          top: 0,
+          left: 0,
+          width: 1,
+          height: 1,
+          content: "{cyan-fg}<{/cyan-fg}",
+          style: { bg: "black", fg: "white", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        prevBtn.on("click", () => this.prevFkeySet());
+        new Text({
+          parent: this.fkeyToolbar,
+          top: 0,
+          left: 1,
+          width: 1,
+          height: 1,
+          content: `${this.fkeySetIndex + 1}`,
+          style: { bg: "black", fg: "cyan" },
+          tags: true
+        });
+        const nextBtn = new Text({
+          parent: this.fkeyToolbar,
+          top: 0,
+          left: 2,
+          width: 1,
+          height: 1,
+          content: "{cyan-fg}>{/cyan-fg}",
+          style: { bg: "black", fg: "white", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        nextBtn.on("click", () => this.nextFkeySet());
+        this.fkeyButtons = [];
+        for (let i = 0; i < 12; i++) {
+          const fkeyBtn = new Box({
+            parent: this.fkeyToolbar,
+            top: 0,
+            left: 4 + i * 5,
+            // All on single row
+            width: 5,
+            height: 1,
+            content: this.getFkeyButtonContent(i),
+            style: { bg: "black", fg: "white", hover: { bg: "blue" } },
+            tags: true,
+            mouse: true,
+            clickable: true
+          });
+          fkeyBtn.on("click", () => this.selectFkeyChar(i));
+          this.fkeyButtons.push(fkeyBtn);
+        }
+      }
+      /**
+       * Get F-key button content (e.g., "F1█")
+       */
+      getFkeyButtonContent(index) {
+        const fkeyNum = index + 1;
+        const fkeyLabel = fkeyNum <= 9 ? `F${fkeyNum}` : fkeyNum === 10 ? "10" : fkeyNum === 11 ? "11" : "12";
+        const char = FKEY_CHAR_SETS[this.fkeySetIndex]?.[index] || "?";
+        return `{cyan-fg}${fkeyLabel}{/}{white-fg}${char}{/}`;
+      }
+      /**
+       * Update F-key toolbar characters
+       */
+      updateFkeyToolbar() {
+        if (!this.fkeyToolbar)
+          return;
+        this.fkeyButtons.forEach((btn, i) => {
+          btn.setContent(this.getFkeyButtonContent(i));
+        });
+        this.screen?.render();
+      }
+      /**
+       * Go to previous F-key character set
+       */
+      prevFkeySet() {
+        this.fkeySetIndex = (this.fkeySetIndex - 1 + FKEY_CHAR_SETS.length) % FKEY_CHAR_SETS.length;
+        this.updateFkeyToolbar();
+      }
+      /**
+       * Go to next F-key character set
+       */
+      nextFkeySet() {
+        this.fkeySetIndex = (this.fkeySetIndex + 1) % FKEY_CHAR_SETS.length;
+        this.updateFkeyToolbar();
+      }
+      /**
+       * Select a character from F-key toolbar
+       */
+      selectFkeyChar(index) {
+        const char = FKEY_CHAR_SETS[this.fkeySetIndex]?.[index];
+        if (char) {
+          this.currentChar = char;
+          this.drawCursor.setContent(char);
+          this.updateStatusBar();
+          this.screen?.render();
+        }
+      }
+      /**
+       * Create left sidebar with color palette and tool buttons (Moebius-style)
+       */
+      createSidebar(topOffset, showStatusBar) {
+        this.sidebar = new Box({
+          parent: this,
+          top: topOffset,
+          left: 0,
+          width: 6,
+          bottom: showStatusBar ? 1 : 0,
+          style: { bg: "black", fg: "white" },
+          tags: true
+        });
+        this.colorPalette = new Box({
+          parent: this.sidebar,
+          top: 0,
+          left: 0,
+          width: 6,
+          height: 8,
+          tags: true
+        });
+        const colors2 = [
+          "black",
+          "red",
+          "green",
+          "yellow",
+          "blue",
+          "magenta",
+          "cyan",
+          "white",
+          "gray",
+          "lightred",
+          "lightgreen",
+          "lightyellow",
+          "lightblue",
+          "lightmagenta",
+          "lightcyan",
+          "lightwhite"
+        ];
+        for (let i = 0; i < 16; i++) {
+          const row = i % 8;
+          const col = Math.floor(i / 8);
+          const swatch = new Box({
+            parent: this.colorPalette,
+            top: row,
+            left: col * 3,
+            width: 3,
+            height: 1,
+            content: "   ",
+            style: { bg: colors2[i] },
+            mouse: true,
+            clickable: true
+          });
+          swatch.on("click", (data) => {
+            if (data.button === "left") {
+              this.currentFg = i;
+            } else if (data.button === "right") {
+              this.currentBg = i;
+            }
+            this.updateStatusBar();
+            this.updateSidebarFGBG();
+            this.screen?.render();
+          });
+        }
+        this.fgBgIndicator = new Text({
+          parent: this.sidebar,
+          top: 8,
+          left: 0,
+          width: 6,
+          height: 2,
+          content: this.getFGBGContent(),
+          style: { bg: "black" },
+          tags: true
+        });
+        this.toolPanel = new Box({
+          parent: this.sidebar,
+          top: 10,
+          left: 0,
+          width: 6,
+          height: 8,
+          tags: true
+        });
+        const tools = [
+          { label: "{yellow-fg}T{/}ext", tool: "text" },
+          { label: "{yellow-fg}D{/}raw", tool: "draw" },
+          { label: "{yellow-fg}L{/}ine", tool: "line" },
+          { label: "{yellow-fg}R{/}ect", tool: "box" },
+          { label: "{yellow-fg}E{/}llip", tool: "ellipse" },
+          { label: "{yellow-fg}F{/}ill", tool: "fill" },
+          { label: "{yellow-fg}P{/}ick", tool: "pick" },
+          { label: "{yellow-fg}S{/}el", tool: "select" }
+        ];
+        tools.forEach((t, idx) => {
+          const isSelected = this.currentTool === t.tool;
+          const toolBtn = new Box({
+            parent: this.toolPanel,
+            top: idx,
+            left: 0,
+            width: 6,
+            height: 1,
+            content: (isSelected ? "{inverse}" : "") + t.label + (isSelected ? "{/inverse}" : ""),
+            style: { bg: "black", fg: "white", hover: { bg: "blue" } },
+            tags: true,
+            mouse: true,
+            clickable: true
+          });
+          toolBtn.on("click", () => {
+            this.switchTool(t.tool);
+            this.updateSidebarToolSelection();
+          });
+        });
+        this.createBrushModePanel();
+      }
+      /**
+       * Get FG/BG content string
+       */
+      getFGBGContent() {
+        const colors2 = [
+          "black",
+          "red",
+          "green",
+          "yellow",
+          "blue",
+          "magenta",
+          "cyan",
+          "white",
+          "gray",
+          "lightred",
+          "lightgreen",
+          "lightyellow",
+          "lightblue",
+          "lightmagenta",
+          "lightcyan",
+          "lightwhite"
+        ];
+        const fgColor = colors2[this.currentFg] || "white";
+        const bgColor = colors2[this.currentBg] || "black";
+        return `{${fgColor}-fg}F{/}{${bgColor}-bg}B{/}${this.currentFg}/${this.currentBg}`;
+      }
+      /**
+       * Update FG/BG indicator in sidebar
+       */
+      updateSidebarFGBG() {
+        if (this.fgBgIndicator) {
+          this.fgBgIndicator.setContent(this.getFGBGContent());
+        }
+      }
+      /**
+       * Create brush mode panel in sidebar (compact)
+       */
+      createBrushModePanel() {
+        if (!this.sidebar)
+          return;
+        new Text({
+          parent: this.sidebar,
+          top: 11,
+          left: 0,
+          content: "{gray-fg}------{/}",
+          tags: true
+        });
+        const brushModeBtn = new Box({
+          parent: this.sidebar,
+          top: 12,
+          left: 0,
+          width: 6,
+          height: 1,
+          content: this.getBrushModeContent(),
+          style: { bg: "black", fg: "cyan", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        brushModeBtn.on("click", () => {
+          if (this.brushMode === "text") {
+            this.switchBrushMode("half-block");
+          } else {
+            this.switchBrushMode("text");
+          }
+          brushModeBtn.setContent(this.getBrushModeContent());
+          if (this.halfBlockBtn) {
+            this.halfBlockBtn.setContent(this.getHalfBlockContent());
+          }
+          this.screen?.render();
+        });
+        this.halfBlockBtn = new Box({
+          parent: this.sidebar,
+          top: 13,
+          left: 0,
+          width: 6,
+          height: 1,
+          content: this.getHalfBlockContent(),
+          style: { bg: "black", fg: "yellow", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        this.halfBlockBtn.on("click", () => {
+          if (this.brushMode === "half-block") {
+            this.toggleHalfBlockSubY();
+            this.halfBlockBtn.setContent(this.getHalfBlockContent());
+            this.screen?.render();
+          }
+        });
+      }
+      getBrushModeContent() {
+        if (this.brushMode === "half-block") {
+          return "{cyan-fg}{inverse}HlfBlk{/inverse}{/}";
+        }
+        return "{cyan-fg}HlfBlk{/}";
+      }
+      getHalfBlockContent() {
+        if (this.brushMode === "half-block") {
+          return `{yellow-fg}${this.halfBlockSubY === 0 ? "\u2580Up" : "\u2584Dn"}{/}`;
+        }
+        return "";
+      }
+      /**
+       * Create layer panel in sidebar
+       */
+      createLayerPanel() {
+        if (!this.sidebar)
+          return;
+        new Text({
+          parent: this.sidebar,
+          top: 25,
+          left: 0,
+          width: 6,
+          height: 1,
+          content: "{cyan-fg}Layers{/}",
+          style: { bg: "black" },
+          tags: true
+        });
+        this.layerPanel = new Box({
+          parent: this.sidebar,
+          top: 26,
+          left: 0,
+          width: 6,
+          height: 4,
+          style: { bg: "black" },
+          tags: true
+        });
+        const layerActions = new Box({
+          parent: this.sidebar,
+          top: 30,
+          left: 0,
+          width: 6,
+          height: 1,
+          style: { bg: "black" },
+          tags: true
+        });
+        const addBtn = new Box({
+          parent: layerActions,
+          top: 0,
+          left: 0,
+          width: 2,
+          height: 1,
+          content: "{green-fg}+{/}",
+          style: { bg: "black", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        addBtn.on("click", () => this.addLayer());
+        const delBtn = new Box({
+          parent: layerActions,
+          top: 0,
+          left: 2,
+          width: 2,
+          height: 1,
+          content: "{red-fg}-{/}",
+          style: { bg: "black", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        delBtn.on("click", () => this.deleteLayer());
+        const mergeBtn = new Box({
+          parent: layerActions,
+          top: 0,
+          left: 4,
+          width: 3,
+          height: 1,
+          content: "{yellow-fg}M{/}",
+          style: { bg: "black", hover: { bg: "blue" } },
+          tags: true,
+          mouse: true,
+          clickable: true
+        });
+        mergeBtn.on("click", () => this.mergeLayerDown());
+        this.updateLayerPanel();
+      }
+      /**
+       * Update layer panel display
+       */
+      updateLayerPanel() {
+        if (!this.layerPanel)
+          return;
+        while (this.layerPanel.children.length > 0) {
+          const child = this.layerPanel.children[0];
+          child.destroy();
+        }
+        const visibleLayers = this.layers.slice().reverse().slice(0, 5);
+        visibleLayers.forEach((layer, displayIdx) => {
+          const actualIdx = this.layers.length - 1 - displayIdx;
+          const isActive = actualIdx === this.activeLayerIndex;
+          const visIcon = layer.visible ? "{white-fg}*{/}" : "{gray-fg}.{/}";
+          const lockIcon = layer.locked ? "{red-fg}L{/}" : " ";
+          const layerRow = new Box({
+            parent: this.layerPanel,
+            top: displayIdx,
+            left: 0,
+            width: 6,
+            height: 1,
+            content: (isActive ? "{inverse}" : "") + `${visIcon}${lockIcon}${layer.name.slice(0, 4)}` + (isActive ? "{/inverse}" : ""),
+            style: { bg: "black", fg: "white", hover: { bg: "blue" } },
+            tags: true,
+            mouse: true,
+            clickable: true
+          });
+          layerRow.on("click", (data) => {
+            if (data.button === "left") {
+              this.activeLayerIndex = actualIdx;
+              this.adoptCellCanvas(this.layers[actualIdx].canvas);
+              this.updateLayerPanel();
+              this.updateDisplay();
+            } else if (data.button === "right") {
+              this.layers[actualIdx].visible = !this.layers[actualIdx].visible;
+              this.updateLayerPanel();
+              this.composeLayers();
+              this.updateDisplay();
+            }
+          });
+        });
+        this.screen?.render();
+      }
+      /**
+       * Add new layer
+       */
+      addLayer() {
+        const newLayer = {
+          id: this.nextLayerId++,
+          name: `Layer ${this.nextLayerId - 1}`,
+          canvas: createCanvas(this.canvasW, this.canvasH),
+          visible: true,
+          locked: false,
+          opacity: 100
+        };
+        this.layers.splice(this.activeLayerIndex + 1, 0, newLayer);
+        this.activeLayerIndex++;
+        this.adoptCellCanvas(newLayer.canvas);
+        this.updateLayerPanel();
+        this.updateDisplay();
+        this.modified = true;
+      }
+      /**
+       * Delete current layer
+       */
+      deleteLayer() {
+        if (this.layers.length <= 1)
+          return;
+        this.layers.splice(this.activeLayerIndex, 1);
+        if (this.activeLayerIndex >= this.layers.length) {
+          this.activeLayerIndex = this.layers.length - 1;
+        }
+        this.adoptCellCanvas(this.layers[this.activeLayerIndex].canvas);
+        this.composeLayers();
+        this.updateLayerPanel();
+        this.updateDisplay();
+        this.modified = true;
+      }
+      /**
+       * Merge current layer down into layer below
+       */
+      mergeLayerDown() {
+        if (this.activeLayerIndex === 0)
+          return;
+        const srcLayer = this.layers[this.activeLayerIndex];
+        const dstLayer = this.layers[this.activeLayerIndex - 1];
+        for (let y = 0; y < srcLayer.canvas.length; y++) {
+          for (let x = 0; x < srcLayer.canvas[y].length; x++) {
+            const srcCell = srcLayer.canvas[y][x];
+            if (!isCellEmpty(srcCell)) {
+              dstLayer.canvas[y][x] = { ...srcCell };
+            }
+          }
+        }
+        this.layers.splice(this.activeLayerIndex, 1);
+        this.activeLayerIndex--;
+        this.adoptCellCanvas(dstLayer.canvas);
+        this.composeLayers();
+        this.updateLayerPanel();
+        this.updateDisplay();
+        this.modified = true;
+      }
+      /**
+       * Toggle layer visibility
+       */
+      toggleLayerVisibility(layerIndex) {
+        const idx = layerIndex ?? this.activeLayerIndex;
+        if (idx >= 0 && idx < this.layers.length) {
+          this.layers[idx].visible = !this.layers[idx].visible;
+          this.composeLayers();
+          this.updateLayerPanel();
+          this.updateDisplay();
+        }
+      }
+      /**
+       * Toggle layer lock
+       */
+      toggleLayerLock(layerIndex) {
+        const idx = layerIndex ?? this.activeLayerIndex;
+        if (idx >= 0 && idx < this.layers.length) {
+          this.layers[idx].locked = !this.layers[idx].locked;
+          this.updateLayerPanel();
+        }
+      }
+      /**
+       * Compose all visible layers into a single output canvas
+       */
+      composeLayers() {
+        const width = this.canvasW;
+        const height = this.canvasH;
+        const output = createCanvas(width, height);
+        for (const layer of this.layers) {
+          if (!layer.visible)
+            continue;
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const cell = layer.canvas[y]?.[x];
+              if (cell && !isCellEmpty(cell)) {
+                output[y][x] = { ...cell };
+              }
+            }
+          }
+        }
+        return output;
+      }
+      /**
+       * Flatten all layers into one
+       */
+      flattenLayers() {
+        if (this.layers.length <= 1)
+          return;
+        const flattened = this.composeLayers();
+        this.layers = [{
+          id: this.nextLayerId++,
+          name: "Flattened",
+          canvas: flattened,
+          visible: true,
+          locked: false,
+          opacity: 100
+        }];
+        this.activeLayerIndex = 0;
+        this.adoptCellCanvas(flattened);
+        this.updateLayerPanel();
+        this.updateDisplay();
+        this.modified = true;
+      }
+      /**
+       * Move current layer up (toward front)
+       */
+      moveLayerUp() {
+        if (this.activeLayerIndex >= this.layers.length - 1)
+          return;
+        const temp = this.layers[this.activeLayerIndex];
+        this.layers[this.activeLayerIndex] = this.layers[this.activeLayerIndex + 1];
+        this.layers[this.activeLayerIndex + 1] = temp;
+        this.activeLayerIndex++;
+        this.composeLayers();
+        this.updateLayerPanel();
+        this.updateDisplay();
+        this.modified = true;
+      }
+      /**
+       * Move current layer down (toward back)
+       */
+      moveLayerDown() {
+        if (this.activeLayerIndex <= 0)
+          return;
+        const temp = this.layers[this.activeLayerIndex];
+        this.layers[this.activeLayerIndex] = this.layers[this.activeLayerIndex - 1];
+        this.layers[this.activeLayerIndex - 1] = temp;
+        this.activeLayerIndex--;
+        this.composeLayers();
+        this.updateLayerPanel();
+        this.updateDisplay();
+        this.modified = true;
+      }
+      /**
+       * Toggle iCE Colors mode (16 BG colors vs 8 + blink)
+       */
+      toggleIceColors() {
+        this.iceColorsEnabled = !this.iceColorsEnabled;
+        this.updateStatusBar();
+        if (this.colorsMenu) {
+        }
+        this.screen?.render();
+      }
+      // ============================================
+      // CLIPBOARD OPERATIONS
+      // ============================================
+      /**
+       * Cut selection to clipboard. Undoable (fix-round-2, riding along with
+       * moveBlock()'s fix - same class of bug, identical treatment): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a cut.
+       */
+      cutSelection() {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        const sel = this.selection || this.fullCanvasSelection();
+        this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
+        for (let y = sel.y1; y <= sel.y2; y++) {
+          for (let x = sel.x1; x <= sel.x2; x++) {
+            if (this.cellCanvas[y]?.[x]) {
+              this.cellCanvas[y][x] = { char: " ", fg: 7, bg: 0 };
+            }
+          }
+        }
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+        this.updateDisplay();
+      }
+      /**
+       * Copy selection to clipboard
+       */
+      copySelection() {
+        const sel = this.selection || this.fullCanvasSelection();
+        this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
+      }
+      /**
+       * Copy a region to clipboard
+       */
+      copyRegion(x1, y1, x2, y2) {
+        if (!this.cellCanvas)
+          return;
+        const width = x2 - x1 + 1;
+        const height = y2 - y1 + 1;
+        this.clipboard = [];
+        for (let y = 0; y < height; y++) {
+          this.clipboard[y] = [];
+          for (let x = 0; x < width; x++) {
+            const srcCell = this.cellCanvas[y1 + y]?.[x1 + x];
+            this.clipboard[y][x] = srcCell ? { ...srcCell } : { char: " ", fg: 7, bg: 0 };
+          }
+        }
+      }
+      /**
+       * Paste clipboard at cursor position. Routed through the library's
+       * pasteSelection() - which does saveUndoState() for you - instead of
+       * mutating this.cellCanvas by hand, so a paste is undoable (see
+       * IMPORTANT 2, final-fix-wave-report.md): before this, Ctrl+Z after a
+       * paste would pop the snapshot from before whatever stroke preceded it,
+       * silently discarding both the paste and that stroke in one keypress.
+       */
+      pasteClipboard() {
+        if (!this.cellCanvas || !this.clipboard || !this.coreState)
+          return;
+        this.syncToCoreState();
+        pasteSelection(this.coreState, this.cursor.col, this.cursor.line, this.clipboard);
+        this.syncFromCoreState();
+        this.updateDisplay();
+      }
+      // ============================================
+      // ROW OPERATIONS
+      // ============================================
+      /**
+       * Insert a blank row at cursor position. Undoable (IMPORTANT 2): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a row insert.
+       */
+      insertRow() {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
+        const y = this.cursor.line;
+        for (let row = this.canvasH - 1; row > y; row--) {
+          this.cellCanvas[row] = this.cellCanvas[row - 1];
+        }
+        this.cellCanvas[y] = [];
+        for (let x = 0; x < this.canvasW; x++) {
+          this.cellCanvas[y][x] = { char: " ", fg: 7, bg: 0 };
+        }
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+        this.updateDisplay();
+      }
+      /**
+       * Delete row at cursor position. Undoable (IMPORTANT 2): an explicit
+       * snapshotUndoState() before mutating this.cellCanvas in place, since
+       * there is no dedicated ToolHandler for a row delete.
+       */
+      deleteRow() {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
+        const y = this.cursor.line;
+        for (let row = y; row < this.canvasH - 1; row++) {
+          this.cellCanvas[row] = this.cellCanvas[row + 1];
+        }
+        this.cellCanvas[this.canvasH - 1] = [];
+        for (let x = 0; x < this.canvasW; x++) {
+          this.cellCanvas[this.canvasH - 1][x] = { char: " ", fg: 7, bg: 0 };
+        }
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+        this.updateDisplay();
+      }
+      // ============================================
+      // SELECTION OPERATIONS
+      // ============================================
+      /**
+       * Select entire canvas
+       */
+      selectAll() {
+        this.selection = this.fullCanvasSelection();
+        this.updateDisplay();
+      }
+      /**
+       * Clear selection
+       */
+      deselect() {
+        this.selection = null;
+        this.updateDisplay();
+      }
+      // ============================================
+      // BLOCK OPERATIONS
+      // ============================================
+      /**
+       * Move selected block to cursor position. Undoable as ONE logical action
+       * (fix-round-2, final-fix-wave-report.md): a single snapshotUndoState()
+       * before the clear, so one Ctrl+Z restores the pre-move canvas (source
+       * content back, destination empty) in one step. Deliberately does NOT
+       * route the paste half through pasteClipboard()/pasteSelection() - that
+       * pushes its OWN undo entry, which would snapshot the already-cleared
+       * canvas and split this one move into two undo steps: a Ctrl+Z would then
+       * leave the source blank and the paste gone, a state the user never
+       * created (redo recovers it, but nothing on screen says redo is what you
+       * need). CoreCanvas.pasteCanvas() is the same primitive pasteSelection()
+       * calls internally, minus its saveUndoState() call.
+       */
+      moveBlock() {
+        if (!this.selection || !this.cellCanvas || !this.coreState)
+          return;
+        const sel = this.selection;
+        this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
+        for (let y = sel.y1; y <= sel.y2; y++) {
+          for (let x = sel.x1; x <= sel.x2; x++) {
+            if (this.cellCanvas[y]?.[x]) {
+              this.cellCanvas[y][x] = { char: " ", fg: 7, bg: 0 };
+            }
+          }
+        }
+        if (this.clipboard) {
+          pasteCanvas(this.cellCanvas, this.clipboard, this.cursor.col, this.cursor.line);
+        }
+        this.syncFromCoreState();
+        this.selection = null;
+        this.modified = true;
+        this.updateDisplay();
+      }
+      /**
+       * Copy selected block to cursor position
+       */
+      copyBlock() {
+        if (!this.selection)
+          return;
+        const sel = this.selection;
+        this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
+        this.pasteClipboard();
+        this.selection = null;
+        this.modified = true;
+        this.updateDisplay();
+      }
+      // ============================================
+      // FLIP OPERATIONS
+      // ============================================
+      /**
+       * Flip selection or canvas horizontally. Undoable (IMPORTANT 2): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a flip.
+       */
+      flipHorizontal() {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
+        const sel = this.selection || this.fullCanvasSelection();
+        const width = sel.x2 - sel.x1 + 1;
+        for (let y = sel.y1; y <= sel.y2; y++) {
+          const row = this.cellCanvas[y];
+          if (!row)
+            continue;
+          for (let x = 0; x < Math.floor(width / 2); x++) {
+            const leftX = sel.x1 + x;
+            const rightX = sel.x2 - x;
+            const temp = row[leftX];
+            row[leftX] = row[rightX];
+            row[rightX] = temp;
+          }
+        }
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+        this.updateDisplay();
+      }
+      /**
+       * Flip selection or canvas vertically. Undoable (IMPORTANT 2): an
+       * explicit snapshotUndoState() before mutating this.cellCanvas in place,
+       * since there is no dedicated ToolHandler for a flip.
+       */
+      flipVertical() {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        this.syncToCoreState();
+        snapshotUndoState(this.coreState);
+        const sel = this.selection || this.fullCanvasSelection();
+        const height = sel.y2 - sel.y1 + 1;
+        for (let y = 0; y < Math.floor(height / 2); y++) {
+          const topY = sel.y1 + y;
+          const bottomY = sel.y2 - y;
+          for (let x = sel.x1; x <= sel.x2; x++) {
+            const temp = this.cellCanvas[topY][x];
+            this.cellCanvas[topY][x] = this.cellCanvas[bottomY][x];
+            this.cellCanvas[bottomY][x] = temp;
+          }
+        }
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+        this.updateDisplay();
+      }
+      // ============================================
+      // ABOUT DIALOG
+      // ============================================
+      /**
+       * Show About dialog
+       */
+      showAbout() {
+        if (!this.screen || this.modalOpen)
+          return;
+        this.drawCursor.hide();
+        this.modalOpen = true;
+        const aboutText = `{cyan-fg}{bold}ANSI EDITOR{/bold}{/cyan-fg}
+{gray-fg}Version 2.0{/gray-fg}
+
+{white-fg}A Moebius-style ANSI art editor for
+the AmiExpress BBS system.{/white-fg}
+
+{yellow-fg}{bold}Features:{/bold}{/yellow-fg}
+  - Full 16-color ANSI palette
+  - Multiple drawing tools
+  - Layer support
+  - iCE colors mode
+  - SAUCE metadata
+  - Undo/Redo
+
+{yellow-fg}{bold}Inspired by:{/bold}{/yellow-fg}
+  - Moebius (Andy Herbert)
+  - TheDraw
+  - ACiDDraw
+  - PabloDraw
+
+{gray-fg}Part of AmiExpress-Web
+BBS Door SDK v2.0{/gray-fg}
+
+{cyan-fg}Press any key to close{/cyan-fg}`;
+        const aboutModal = new DocModal({
+          parent: this.screen,
+          title: "About ANSI Editor",
+          content: aboutText,
+          closeKeys: ["escape", "q", "enter", "space"],
+          footerText: "{bold} Press any key to close {/bold}",
+          style: {
+            fg: "white",
+            bg: "blue",
+            border: { fg: "cyan" }
+          },
+          contentStyle: {
+            fg: "white",
+            bg: "blue"
+          },
+          onClose: () => {
+            aboutModal.destroy();
+            this.restoreFocusAfterDialog();
+          }
+        });
+        const focusTarget = this.mode === "draw" ? this.drawCanvas : this.viewport;
+        aboutModal.display(focusTarget);
+      }
+      /**
+       * Show SAUCE metadata editor dialog
+       */
+      showSauceEditor() {
+        if (!this.screen || this.modalOpen)
+          return;
+        this.drawCursor.hide();
+        this.modalOpen = true;
+        const overlay = new Overlay({
+          parent: this.screen,
+          opacity: 0.5
+        });
+        const modal = new Box({
+          parent: overlay,
+          top: "center",
+          left: "center",
+          width: 50,
+          height: 18,
+          border: { type: "line" },
+          label: " SAUCE Information ",
+          tags: true,
+          keys: true,
+          mouse: true,
+          style: { fg: "white", bg: "blue", border: { fg: "cyan" } }
+        });
+        let title = this.sauce.title;
+        let author = this.sauce.author;
+        let group = this.sauce.group;
+        new Text({
+          parent: modal,
+          top: 1,
+          left: 2,
+          content: "{cyan-fg}Title:{/}",
+          tags: true
+        });
+        const titleBox = new Box({
+          parent: modal,
+          top: 1,
+          left: 10,
+          width: 35,
+          height: 1,
+          content: title,
+          style: { bg: "black", fg: "white" },
+          tags: true
+        });
+        new Text({
+          parent: modal,
+          top: 3,
+          left: 2,
+          content: "{cyan-fg}Author:{/}",
+          tags: true
+        });
+        const authorBox = new Box({
+          parent: modal,
+          top: 3,
+          left: 10,
+          width: 35,
+          height: 1,
+          content: author,
+          style: { bg: "black", fg: "white" },
+          tags: true
+        });
+        new Text({
+          parent: modal,
+          top: 5,
+          left: 2,
+          content: "{cyan-fg}Group:{/}",
+          tags: true
+        });
+        const groupBox = new Box({
+          parent: modal,
+          top: 5,
+          left: 10,
+          width: 35,
+          height: 1,
+          content: group,
+          style: { bg: "black", fg: "white" },
+          tags: true
+        });
+        new Text({
+          parent: modal,
+          top: 7,
+          left: 2,
+          content: `{gray-fg}Date: ${this.sauce.date}{/}`,
+          tags: true
+        });
+        new Text({
+          parent: modal,
+          top: 8,
+          left: 2,
+          content: `{gray-fg}Size: ${this.canvasW}x${this.canvasH}{/}`,
+          tags: true
+        });
+        new Text({
+          parent: modal,
+          top: 9,
+          left: 2,
+          content: `{gray-fg}iCE: ${this.iceColorsEnabled ? "Yes" : "No"}{/}`,
+          tags: true
+        });
+        let activeField = 0;
+        const fields = [titleBox, authorBox, groupBox];
+        const values = [title, author, group];
+        const updateFields = () => {
+          fields.forEach((f, i) => {
+            f.style.bg = i === activeField ? "cyan" : "black";
+            f.style.fg = i === activeField ? "black" : "white";
+          });
+          this.screen?.render();
+        };
+        updateFields();
+        new Text({
+          parent: modal,
+          top: 11,
+          left: 2,
+          content: "{yellow-fg}Tab{/}: Next field  {yellow-fg}Enter{/}: Edit  {yellow-fg}ESC{/}: Close",
+          tags: true
+        });
+        const trapCleanup = trapModalInput(modal);
+        const closeDialog = (save) => {
+          trapCleanup();
+          overlay.destroy();
+          if (save) {
+            this.sauce.title = values[0];
+            this.sauce.author = values[1];
+            this.sauce.group = values[2];
+            this.modified = true;
+          }
+          this.restoreFocusAfterDialog();
+        };
+        modal.key(["tab"], () => {
+          activeField = (activeField + 1) % fields.length;
+          updateFields();
+        });
+        modal.key(["S-tab"], () => {
+          activeField = (activeField - 1 + fields.length) % fields.length;
+          updateFields();
+        });
+        modal.key(["enter"], () => {
+          const current = values[activeField];
+          const fieldNames = ["Title", "Author", "Group"];
+          const promptBox = new Box({
+            parent: modal,
+            top: 13,
+            left: 2,
+            width: 44,
+            height: 3,
+            border: { type: "line" },
+            label: ` Edit ${fieldNames[activeField]} `,
+            tags: true,
+            style: { bg: "black", fg: "white", border: { fg: "yellow" } }
+          });
+          const input = new Text({
+            parent: promptBox,
+            top: 0,
+            left: 1,
+            width: 40,
+            content: `{inverse}${current.padEnd(35)}{/inverse}`,
+            tags: true
+          });
+          let editValue = current;
+          let cursorPos = current.length;
+          const updateInput = () => {
+            const displayVal = editValue.padEnd(35);
+            const before = displayVal.slice(0, cursorPos);
+            const at = displayVal[cursorPos] || " ";
+            const after = displayVal.slice(cursorPos + 1);
+            input.setContent(`${before}{inverse}${at}{/inverse}${after}`);
+            this.screen?.render();
+          };
+          updateInput();
+          const handleKey = (_ch, key) => {
+            if (key.name === "escape") {
+              promptBox.destroy();
+              modal.removeListener("keypress", handleKey);
+              return;
+            }
+            if (key.name === "enter") {
+              values[activeField] = editValue.trim();
+              fields[activeField].setContent(values[activeField]);
+              promptBox.destroy();
+              modal.removeListener("keypress", handleKey);
+              return;
+            }
+            if (key.name === "backspace") {
+              if (cursorPos > 0) {
+                editValue = editValue.slice(0, cursorPos - 1) + editValue.slice(cursorPos);
+                cursorPos--;
+                updateInput();
+              }
+              return;
+            }
+            if (key.name === "left") {
+              if (cursorPos > 0)
+                cursorPos--;
+              updateInput();
+              return;
+            }
+            if (key.name === "right") {
+              if (cursorPos < editValue.length)
+                cursorPos++;
+              updateInput();
+              return;
+            }
+            if (key.ch && !key.ctrl && !key.meta && editValue.length < 35) {
+              editValue = editValue.slice(0, cursorPos) + key.ch + editValue.slice(cursorPos);
+              cursorPos++;
+              updateInput();
+            }
+          };
+          modal.on("keypress", handleKey);
+          this.screen?.render();
+        });
+        modal.key(["escape", "q"], () => closeDialog(true));
+        overlay.on("cancel", () => closeDialog(false));
+        overlay.show();
+        modal.focus();
+        this.screen.render();
+      }
+      /**
+       * Update sidebar tool selection highlighting
+       */
+      updateSidebarToolSelection() {
+        if (!this.toolPanel)
+          return;
+        const tools = ["text", "draw", "line", "box", "ellipse", "fill", "pick", "select"];
+        const labels = ["Text", "Draw", "Line", "Rect", "Ellip", "Fill", "Pick", "Select"];
+        this.toolPanel.children.forEach((child, idx) => {
+          if (child instanceof Box && idx < tools.length) {
+            const isSelected = this.currentTool === tools[idx];
+            const shortcut = labels[idx][0];
+            const rest = labels[idx].slice(1);
+            child.setContent((isSelected ? "{inverse}" : "") + `{yellow-fg}${shortcut}{/yellow-fg}${rest}` + (isSelected ? "{/inverse}" : ""));
+          }
+        });
+        this.screen?.render();
+      }
+      /**
+       * Toggle sidebar visibility
+       */
+      toggleSidebar() {
+        if (this.sidebar) {
+          if (this.sidebar.hidden) {
+            this.sidebar.show();
+            this.viewport.left = 6;
+            this.drawCanvas.left = 6;
+            this.drawCursor.left = 6;
+          } else {
+            this.sidebar.hide();
+            this.viewport.left = 0;
+            this.drawCanvas.left = 0;
+            this.drawCursor.left = 0;
+          }
+          this.screen?.render();
+        }
+      }
+      /**
+       * Toggle F-key toolbar visibility
+       */
+      toggleFkeyToolbar() {
+        if (this.fkeyToolbar) {
+          if (this.fkeyToolbar.hidden) {
+            this.fkeyToolbar.show();
+          } else {
+            this.fkeyToolbar.hide();
+          }
+          this.screen?.render();
+        }
+      }
+      /**
+       * Swap foreground and background colors
+       */
+      swapColors() {
+        const tmp = this.currentFg;
+        this.currentFg = this.currentBg;
+        this.currentBg = tmp;
+        this.updateStatusBar();
+        this.screen?.render();
+      }
+      /**
+       * Reset colors to default (white on black)
+       */
+      resetColors() {
+        this.currentFg = 7;
+        this.currentBg = 0;
+        this.updateStatusBar();
+        this.screen?.render();
+      }
+      /**
+       * Create new document (clear canvas)
+       */
+      newDocument() {
+        if (!this.cellCanvas)
+          return;
+        this.adoptCellCanvas(this.createBlankCanvas(this.canvasW, this.canvasH));
+        this.syncCoreCanvasToDisplay();
+        this.lines = [""];
+        this.cursor = { line: 0, col: 0 };
+        this.modified = false;
+        this.undoStack = [];
+        this.redoStack = [];
+        this.saveUndoState();
+        this.updateDisplay();
+      }
+      setupKeyHandlers() {
+        this.viewport.key(["?"], () => {
+          this.showHelp();
+          return true;
+        });
+        this.drawCanvas.key(["?"], () => {
+          this.showHelp();
+          return true;
+        });
+        const handleExit = () => {
+          if (this.modalOpen)
+            return true;
+          if (this.onExitCallback) {
+            if (this.modified) {
+              this.confirmExit();
+            } else {
+              this.onExitCallback();
+            }
+          }
+          return true;
+        };
+        this.key(["escape"], handleExit);
+        this.viewport.key(["escape"], handleExit);
+        this.drawCanvas.key(["escape"], handleExit);
+        this.viewport.key([this.hideUIHotkey], () => {
+          this.toggleUI();
+          return true;
+        });
+        this.viewport.on("keypress", (ch, key) => {
+          if (!key)
+            return;
+          if (key.ctrl) {
+            if (key.name === "s") {
+              this.save().catch(console.error);
+              return;
+            } else if (key.name === "m") {
+              this.toggleMode();
+              return;
+            } else if (key.name === "z") {
+              this.undo();
+              return;
+            } else if (key.name === "y") {
+              this.redo();
+              return;
+            }
+          }
+          this.handleTextKey(ch, key);
+          this.updateDisplay();
+        });
+        this.drawCanvas.on("keypress", (ch, key) => {
+          if (!key)
+            return;
+          if (key.ctrl) {
+            if (key.name === "s") {
+              this.save().catch(console.error);
+              return;
+            } else if (key.name === "m") {
+              this.toggleMode();
+              return;
+            } else if (key.name === "z") {
+              this.undo();
+              return;
+            } else if (key.name === "y") {
+              this.redo();
+              return;
+            }
+          }
+          this.handleDrawKey(ch, key);
+          this.updateStatusBar();
+          if (this.screen) {
+            this.screen.render();
+          }
+        });
+      }
+      setupMouseHandlers() {
+        this.viewport.on("click", (data) => {
+          if (!data)
+            return;
+          const x = data.x - this.viewport.aleft;
+          const y = data.y - this.viewport.atop;
+          if (x < 0 || y < 0)
+            return;
+          this.cursor.line = y + this.scrollTop;
+          this.cursor.col = x + this.scrollLeft;
+          while (this.lines.length <= this.cursor.line) {
+            this.lines.push("");
+          }
+          const line3 = this.lines[this.cursor.line] || "";
+          if (this.cursor.col > line3.length) {
+            this.lines[this.cursor.line] = line3.padEnd(this.cursor.col, " ");
+          }
+          this.updateDisplay();
+          if (this.screen) {
+            this.screen.render();
+          }
+        });
+        this.drawCanvas.on("click", (data) => {
+          if (!data || this.modalOpen || DropdownMenu.shouldBlockClick())
+            return;
+          const x = data.x - this.drawCanvas.ileft;
+          const y = data.y - this.drawCanvas.itop;
+          if (x < 0 || y < 0)
+            return;
+          this.cursor.col = this.screenToCanvasX(x);
+          this.cursor.line = this.screenToCanvasY(y);
+          this.updateDrawCursor();
+          if (data.button === "left") {
+            this.handleToolClick(this.cursor.col, this.cursor.line);
+          } else if (data.button === "right") {
+            this.drawWithBackgroundColor();
+          }
+          this.updateStatusBar();
+          if (this.screen) {
+            this.screen.render();
+          }
+        });
+        this.drawCanvas.on("mouse", (data) => {
+          if (!data || !data.action || this.modalOpen || DropdownMenu.shouldBlockClick())
+            return;
+          const x = data.x - this.drawCanvas.ileft;
+          const y = data.y - this.drawCanvas.itop;
+          if (x < 0 || y < 0)
+            return;
+          if (data.action === "mouseup") {
+            this.flushDrawChunk();
+          }
+          this.cursor.col = this.screenToCanvasX(x);
+          this.cursor.line = this.screenToCanvasY(y);
+          this.updateDrawCursor();
+          const shapeTools = ["line", "box", "box-fill", "ellipse", "ellipse-fill", "select"];
+          const isShapeTool = shapeTools.includes(this.currentTool);
+          if (isShapeTool && this.isDrawing && data.action === "mousemove") {
+            this.updateShapePreview(this.cursor.col, this.cursor.line);
+          } else if (!isShapeTool) {
+            if ((data.action === "mousedown" || data.action === "mousemove") && data.button) {
+              if (data.button === "left") {
+                if (this.brushMode === "half-block") {
+                  this.drawHalfBlock(this.cursor.col, this.cursor.line, this.halfBlockSubY);
+                } else {
+                  this.drawAtCursor();
+                }
+              } else if (data.button === "right") {
+                if (this.brushMode === "half-block") {
+                  this.drawHalfBlockWithBg(this.cursor.col, this.cursor.line, this.halfBlockSubY);
+                } else {
+                  this.drawWithBackgroundColor();
+                }
+              }
+            }
+          }
+          this.updateStatusBar();
+          if (this.screen) {
+            this.screen.render();
+          }
+        });
+      }
+      toggleUI() {
+        this.uiVisible = !this.uiVisible;
+        if (this.menuBar) {
+          if (this.uiVisible)
+            this.menuBar.show();
+          else
+            this.menuBar.hide();
+        }
+        if (this.fkeyToolbar) {
+          if (this.uiVisible)
+            this.fkeyToolbar.show();
+          else
+            this.fkeyToolbar.hide();
+        }
+        if (this.sidebar) {
+          if (this.uiVisible)
+            this.sidebar.show();
+          else
+            this.sidebar.hide();
+        }
+        if (this.statusBar) {
+          if (this.uiVisible)
+            this.statusBar.show();
+          else
+            this.statusBar.hide();
+        }
+        let topOffset = 0;
+        let leftOffset = 0;
+        if (this.uiVisible) {
+          if (this.menuBar)
+            topOffset += 1;
+          if (this.fkeyToolbar)
+            topOffset += 1;
+          if (this.sidebar)
+            leftOffset = 6;
+        }
+        this.viewport.top = topOffset;
+        this.viewport.left = leftOffset;
+        this.viewport.bottom = this.uiVisible && this.statusBar ? 1 : 0;
+        this.drawCanvas.top = topOffset;
+        this.drawCanvas.left = leftOffset;
+        this.drawCanvas.bottom = this.uiVisible && this.statusBar ? 1 : 0;
+        this.drawCursor.top = topOffset;
+        this.drawCursor.left = leftOffset;
+        this.updateDrawCursor();
+        this.updateDisplay();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      handleTextKey(ch, key) {
+        const { name, ctrl, shift } = key;
+        if (name === "left") {
+          this.moveCursor(-1, 0);
+        } else if (name === "right") {
+          this.moveCursor(1, 0);
+        } else if (name === "up") {
+          this.moveCursor(0, -1);
+        } else if (name === "down") {
+          this.moveCursor(0, 1);
+        } else if (name === "home") {
+          this.cursor.col = 0;
+        } else if (name === "end") {
+          this.cursor.col = this.lines[this.cursor.line]?.length || 0;
+        } else if (name === "pageup") {
+          const viewportHeight = this.viewport.height - 2;
+          this.cursor.line = Math.max(0, this.cursor.line - viewportHeight);
+        } else if (name === "pagedown") {
+          const viewportHeight = this.viewport.height - 2;
+          this.cursor.line = Math.min(this.lines.length - 1, this.cursor.line + viewportHeight);
+        } else if (name === "return" || name === "enter") {
+          this.insertNewLine();
+        } else if (name === "backspace") {
+          this.deleteChar(true);
+        } else if (name === "delete") {
+          this.deleteChar(false);
+        } else if (name === "tab") {
+          this.overwriteTextAtCursor("  ");
+        } else if (ch && ch.length === 1 && !ctrl) {
+          this.overwriteTextAtCursor(ch);
+        } else if (ctrl && name === "d") {
+          this.lines.splice(this.cursor.line, 1);
+          if (this.lines.length === 0)
+            this.lines = [""];
+          this.modified = true;
+        }
+      }
+      handleDrawKey(ch, key) {
+        const { name, shift, ctrl } = key;
+        const fkeyMatch = name?.match(/^f(\d+)$/);
+        if (fkeyMatch) {
+          const fkeyNum = parseInt(fkeyMatch[1], 10);
+          if (fkeyNum >= 1 && fkeyNum <= 12) {
+            if (shift) {
+              this.nextFkeySet();
+            } else {
+              this.selectFkeyChar(fkeyNum - 1);
+            }
+            return;
+          }
+        }
+        if (key.meta || key.alt) {
+          if (name === "c") {
+            this.showColorPicker(true);
+            return;
+          }
+          if (name === "b") {
+            this.showColorPicker(false);
+            return;
+          }
+          if (name === "h") {
+            if (this.brushMode === "half-block") {
+              this.switchBrushMode("text");
+            } else {
+              this.switchBrushMode("half-block");
+            }
+            return;
+          }
+        }
+        if (ctrl) {
+          if (name === "h") {
+            this.toggleHalfBlockSubY();
+            return;
+          }
+        }
+        if (name === "tab" && this.brushMode === "half-block") {
+          this.toggleHalfBlockSubY();
+          return;
+        }
+        if (name === "left") {
+          this.cursor.col = Math.max(0, this.cursor.col - 1);
+          this.updateDrawCursor();
+          return;
+        }
+        if (name === "right") {
+          this.cursor.col = this.clampCol(this.cursor.col + 1);
+          this.updateDrawCursor();
+          return;
+        }
+        if (name === "up") {
+          this.cursor.line = Math.max(0, this.cursor.line - 1);
+          this.updateDrawCursor();
+          return;
+        }
+        if (name === "down") {
+          this.cursor.line = this.clampLine(this.cursor.line + 1);
+          this.updateDrawCursor();
+          return;
+        }
+        if (name === "enter" || name === "return") {
+          this.cursor.line = this.clampLine(this.cursor.line + 1);
+          this.cursor.col = 0;
+          this.updateDrawCursor();
+          return;
+        }
+        if (name === "backspace") {
+          if (this.cursor.col > 0) {
+            this.cursor.col--;
+            this.eraseAtCursor();
+            this.updateDrawCursor();
+          }
+          return;
+        }
+        if (this.currentTool === "text") {
+          if (ch && ch.length === 1) {
+            this.typeCharAtCursor(ch);
+            this.cursor.col = this.clampCol(this.cursor.col + 1);
+            this.updateDrawCursor();
+            return;
+          }
+          if (name === "space") {
+            this.typeCharAtCursor(" ");
+            this.cursor.col = this.clampCol(this.cursor.col + 1);
+            this.updateDrawCursor();
+            return;
+          }
+          return;
+        }
+        const toolShortcuts = {
+          "t": "text",
+          "d": "draw",
+          "l": "line",
+          "r": "box",
+          "e": "ellipse",
+          "f": "fill",
+          "p": "pick",
+          "s": "select"
+        };
+        const lowerCh = ch?.toLowerCase();
+        if (lowerCh && toolShortcuts[lowerCh]) {
+          this.switchTool(toolShortcuts[lowerCh]);
+          return;
+        }
+        if (lowerCh === "u") {
+          this.undo();
+          return;
+        }
+        if (name === "space") {
+          this.drawAtCursor(false);
+        }
+      }
+      /**
+       * Switch to a different drawing tool. Abandons an in-progress shape/select
+       * drag exactly like today: the canvas is left untouched, as if the second
+       * click had never happened. Before this task that fell out for free
+       * (the old shape-preview overlay never touched this.cellCanvas until the
+       * second click); now that shape tools mutate the real canvas on every
+       * onMove for live preview, abandoning one requires an explicit onCancel to
+       * restore it. Also flushes any still-open freehand/half-block drag chunk,
+       * so switching tools mid-drag doesn't leave dangling unflushed undo state.
+       */
+      switchTool(tool) {
+        if (this.isDrawing && this.coreState) {
+          this.syncToCoreState();
+          getToolHandler(this.currentTool).onCancel(this.coreState);
+          this.syncFromCoreState();
+        }
+        this.flushDrawChunk();
+        this.currentTool = tool;
+        this.isDrawing = false;
+        this.lastPreviewPos = null;
+        this.updateToolbar();
+        this.updateStatusBar();
+      }
+      /**
+       * Type a character at cursor position (for text tool). Each keypress is a
+       * single discrete undo entry (chunked=false) - unlike a mouse drag, there
+       * is no natural "stroke" boundary to flush on, so every character typed is
+       * its own Ctrl+Z step. Routed through paintCell(), not drawTool, because
+       * the painted char is whatever was just typed, not necessarily
+       * this.currentChar (drawTool always paints state.getCurrentCell()).
+       */
+      typeCharAtCursor(char) {
+        if (!this.coreState)
+          return;
+        const y = this.cursor.line;
+        const x = this.cursor.col;
+        const cell = { char, fg: this.currentFg, bg: this.currentBg, blink: false };
+        this.syncToCoreState();
+        paintCell(this.coreState, x, y, cell, false);
+        this.syncFromCoreState();
+      }
+      moveCursor(dx, dy) {
+        if (dy !== 0) {
+          this.cursor.line = Math.max(0, Math.min(999, this.cursor.line + dy));
+          while (this.lines.length <= this.cursor.line) {
+            this.lines.push("");
+          }
+          const line3 = this.lines[this.cursor.line] || "";
+          if (this.cursor.col > line3.length) {
+            this.lines[this.cursor.line] = line3.padEnd(this.cursor.col, " ");
+          }
+        }
+        if (dx !== 0) {
+          this.cursor.col = Math.max(0, Math.min(this.maxLineLength, this.cursor.col + dx));
+          const line3 = this.lines[this.cursor.line] || "";
+          if (this.cursor.col > line3.length) {
+            this.lines[this.cursor.line] = line3.padEnd(this.cursor.col, " ");
+          }
+        }
+      }
+      insertTextAtCursor(text) {
+        const line3 = this.lines[this.cursor.line] || "";
+        const before = line3.substring(0, this.cursor.col);
+        const after = line3.substring(this.cursor.col);
+        this.lines[this.cursor.line] = before + text + after;
+        this.cursor.col += text.length;
+        this.modified = true;
+      }
+      overwriteTextAtCursor(text) {
+        let line3 = this.lines[this.cursor.line] || "";
+        if (this.cursor.col > line3.length) {
+          line3 = line3.padEnd(this.cursor.col, " ");
+        }
+        const before = line3.substring(0, this.cursor.col);
+        const after = line3.substring(this.cursor.col + text.length);
+        this.lines[this.cursor.line] = before + text + after;
+        this.cursor.col += text.length;
+        this.modified = true;
+      }
+      insertNewLine() {
+        const line3 = this.lines[this.cursor.line] || "";
+        const before = line3.substring(0, this.cursor.col);
+        const after = line3.substring(this.cursor.col);
+        this.lines[this.cursor.line] = before;
+        this.lines.splice(this.cursor.line + 1, 0, after);
+        this.cursor.line++;
+        this.cursor.col = 0;
+        this.modified = true;
+      }
+      deleteChar(backspace) {
+        const line3 = this.lines[this.cursor.line] || "";
+        if (backspace) {
+          if (this.cursor.col > 0) {
+            const before = line3.substring(0, this.cursor.col - 1);
+            const after = line3.substring(this.cursor.col);
+            this.lines[this.cursor.line] = before + after;
+            this.cursor.col--;
+            this.modified = true;
+          } else if (this.cursor.line > 0) {
+            const prevLine = this.lines[this.cursor.line - 1];
+            this.cursor.col = prevLine.length;
+            this.lines[this.cursor.line - 1] = prevLine + line3;
+            this.lines.splice(this.cursor.line, 1);
+            this.cursor.line--;
+            this.modified = true;
+          }
+        } else {
+          if (this.cursor.col < line3.length) {
+            const before = line3.substring(0, this.cursor.col);
+            const after = line3.substring(this.cursor.col + 1);
+            this.lines[this.cursor.line] = before + after;
+            this.modified = true;
+          } else if (this.cursor.line < this.lines.length - 1) {
+            const nextLine = this.lines[this.cursor.line + 1];
+            this.lines[this.cursor.line] = line3 + nextLine;
+            this.lines.splice(this.cursor.line + 1, 1);
+            this.modified = true;
+          }
+        }
+      }
+      toggleMode() {
+        if (this.mode === "text") {
+          this.mode = "draw";
+          this.viewport.hide();
+          this.drawCanvas.show();
+          this.drawCursor.show();
+          this.updateDrawCursor();
+          this.drawCanvas.focus();
+        } else {
+          this.mode = "text";
+          this.drawCanvas.hide();
+          this.drawCursor.hide();
+          this.viewport.show();
+          this.viewport.focus();
+        }
+        this.updateToolbar();
+        this.updateStatusBar();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      updateDrawCursor() {
+        if (!this.drawCursor || this.mode !== "draw")
+          return;
+        const canvasTop = this.drawCanvas.position.top || 0;
+        const canvasLeft = this.drawCanvas.position.left || 0;
+        this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY;
+        this.drawCursor.left = canvasLeft + this.cursor.col * this.scaleX;
+        this.drawCursor.width = this.scaleX;
+        this.drawCursor.height = this.scaleY;
+        this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
+      }
+      /**
+       * Paint the current fg/bg/char cell at the cursor through the library's
+       * drawTool - onStart's chunk guard makes repeated calls from a continuous
+       * mouse drag safe (only the first call of a stroke pushes undo state; the
+       * rest just paint), flushed on mouseup (flushDrawChunk()). A single
+       * keyboard press (chunked=false) instead pushes its own immediate undo
+       * entry, since there's no drag to flush at the end of.
+       */
+      drawAtCursor(chunked = true) {
+        if (!this.coreState)
+          return;
+        const y = this.cursor.line;
+        const x = this.cursor.col;
+        this.syncToCoreState();
+        if (chunked) {
+          drawTool.onStart(this.coreState, x, y);
+        } else {
+          paintCell(this.coreState, x, y, this.coreState.getCurrentCell(), false);
+        }
+        this.syncFromCoreState();
+      }
+      /**
+       * Erase (Backspace) is a discrete keyboard action, not a drag - one
+       * immediate undo entry per press (chunked=false). Routed through
+       * paintCell(), not drawTool, because the empty/transparent cell it paints
+       * is independent of currentFg/Bg/Char.
+       */
+      eraseAtCursor() {
+        if (!this.coreState)
+          return;
+        const y = this.cursor.line;
+        const x = this.cursor.col;
+        const emptyCell = this.transparentBackground ? { char: " ", fg: 7, bg: 0, blink: false, transparent: true } : { char: " ", fg: 7, bg: 0, blink: false };
+        this.syncToCoreState();
+        paintCell(this.coreState, x, y, emptyCell, false);
+        this.syncFromCoreState();
+      }
+      /**
+       * Draw with background color (Moebius-style RMB drawing)
+       * Swaps FG and BG colors so RMB draws with the current background color.
+       * Chunked like drawAtCursor() - RMB drag/click flushes on mouseup the same
+       * way LMB does. Routed through paintCell() (not drawTool) because the
+       * swapped-colors cell isn't state.getCurrentCell().
+       */
+      drawWithBackgroundColor() {
+        if (!this.coreState)
+          return;
+        const y = this.cursor.line;
+        const x = this.cursor.col;
+        const cell = {
+          char: this.currentChar,
+          fg: this.currentBg,
+          // Use BG as FG
+          bg: this.currentFg,
+          // Use FG as BG
+          blink: false
+        };
+        this.syncToCoreState();
+        paintCell(this.coreState, x, y, cell, true);
+        this.syncFromCoreState();
+      }
+      // ============================================
+      // HALF-BLOCK DRAWING SYSTEM (Moebius-style 2x resolution)
+      // ============================================
+      /**
+       * Draw in half-block mode at cursor position
+       * Each cell represents 2 vertical "pixels" using ▀▄█ characters
+       * FG color = upper half, BG color = lower half
+       */
+      drawHalfBlock(x, y, subY) {
+        if (!this.cellCanvas)
+          return;
+        const existingCell = getCell(this.cellCanvas, x, y);
+        if (!existingCell)
+          return;
+        const currentChar = existingCell.char;
+        const currentFg = existingCell.fg;
+        const currentBg = existingCell.bg;
+        let newChar;
+        let newFg;
+        let newBg;
+        if (subY === 0) {
+          if (currentChar === HALF_BLOCK.LOWER || currentChar === HALF_BLOCK.FULL) {
+            if (this.currentFg === currentBg) {
+              newChar = HALF_BLOCK.FULL;
+              newFg = this.currentFg;
+              newBg = this.currentFg;
+            } else {
+              newChar = HALF_BLOCK.UPPER;
+              newFg = this.currentFg;
+              newBg = currentBg;
+            }
+          } else if (currentChar === HALF_BLOCK.UPPER) {
+            newChar = HALF_BLOCK.UPPER;
+            newFg = this.currentFg;
+            newBg = currentBg;
+          } else {
+            newChar = HALF_BLOCK.UPPER;
+            newFg = this.currentFg;
+            newBg = this.currentBg;
+          }
+        } else {
+          if (currentChar === HALF_BLOCK.UPPER || currentChar === HALF_BLOCK.FULL) {
+            if (this.currentFg === currentFg) {
+              newChar = HALF_BLOCK.FULL;
+              newFg = this.currentFg;
+              newBg = this.currentFg;
+            } else {
+              newChar = HALF_BLOCK.UPPER;
+              newFg = currentFg;
+              newBg = this.currentFg;
+            }
+          } else if (currentChar === HALF_BLOCK.LOWER) {
+            newChar = HALF_BLOCK.UPPER;
+            newFg = currentBg;
+            newBg = this.currentFg;
+          } else {
+            newChar = HALF_BLOCK.LOWER;
+            newFg = this.currentFg;
+            newBg = this.currentBg;
+          }
+        }
+        const newCell = {
+          char: newChar,
+          fg: newFg,
+          bg: newBg,
+          blink: false
+        };
+        if (this.coreState) {
+          this.syncToCoreState();
+          paintCell(this.coreState, x, y, newCell, true);
+          this.syncFromCoreState();
+        }
+      }
+      /**
+       * Erase in half-block mode at cursor position
+       */
+      eraseHalfBlock(x, y, subY) {
+        if (!this.cellCanvas)
+          return;
+        const existingCell = getCell(this.cellCanvas, x, y);
+        if (!existingCell)
+          return;
+        const currentChar = existingCell.char;
+        const currentFg = existingCell.fg;
+        const currentBg = existingCell.bg;
+        let newChar;
+        let newFg;
+        let newBg;
+        if (subY === 0) {
+          if (currentChar === HALF_BLOCK.FULL || currentChar === HALF_BLOCK.UPPER) {
+            if (currentChar === HALF_BLOCK.FULL) {
+              newChar = HALF_BLOCK.LOWER;
+              newFg = currentBg;
+              newBg = 0;
+            } else {
+              newChar = HALF_BLOCK.LOWER;
+              newFg = currentBg;
+              newBg = 0;
+            }
+          } else {
+            return;
+          }
+        } else {
+          if (currentChar === HALF_BLOCK.FULL || currentChar === HALF_BLOCK.UPPER) {
+            newChar = HALF_BLOCK.UPPER;
+            newFg = currentFg;
+            newBg = 0;
+          } else if (currentChar === HALF_BLOCK.LOWER) {
+            newChar = HALF_BLOCK.EMPTY;
+            newFg = 7;
+            newBg = 0;
+          } else {
+            return;
+          }
+        }
+        const newCell = {
+          char: newChar,
+          fg: newFg,
+          bg: newBg,
+          blink: false
+        };
+        setCell(this.cellCanvas, x, y, newCell);
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+      }
+      /**
+       * Draw half-block with background color (Moebius-style RMB)
+       * Uses background color instead of foreground for the half being drawn
+       */
+      drawHalfBlockWithBg(x, y, subY) {
+        if (!this.cellCanvas)
+          return;
+        const existingCell = getCell(this.cellCanvas, x, y);
+        if (!existingCell)
+          return;
+        const currentChar = existingCell.char;
+        const currentFg = existingCell.fg;
+        const currentBg = existingCell.bg;
+        let newChar;
+        let newFg;
+        let newBg;
+        const drawColor = this.currentBg;
+        if (subY === 0) {
+          if (currentChar === HALF_BLOCK.EMPTY || currentChar === " ") {
+            newChar = HALF_BLOCK.UPPER;
+            newFg = drawColor;
+            newBg = 0;
+          } else if (currentChar === HALF_BLOCK.LOWER) {
+            newChar = HALF_BLOCK.FULL;
+            newFg = drawColor;
+            newBg = currentFg;
+          } else if (currentChar === HALF_BLOCK.UPPER) {
+            newChar = HALF_BLOCK.UPPER;
+            newFg = drawColor;
+            newBg = currentBg;
+          } else {
+            newChar = HALF_BLOCK.FULL;
+            newFg = drawColor;
+            newBg = currentBg;
+          }
+        } else {
+          if (currentChar === HALF_BLOCK.EMPTY || currentChar === " ") {
+            newChar = HALF_BLOCK.LOWER;
+            newFg = drawColor;
+            newBg = 0;
+          } else if (currentChar === HALF_BLOCK.UPPER) {
+            newChar = HALF_BLOCK.FULL;
+            newFg = currentFg;
+            newBg = drawColor;
+          } else if (currentChar === HALF_BLOCK.LOWER) {
+            newChar = HALF_BLOCK.LOWER;
+            newFg = drawColor;
+            newBg = currentBg;
+          } else {
+            newChar = HALF_BLOCK.FULL;
+            newFg = currentFg;
+            newBg = drawColor;
+          }
+        }
+        const newCell = {
+          char: newChar,
+          fg: newFg,
+          bg: newBg,
+          blink: false
+        };
+        if (this.coreState) {
+          this.syncToCoreState();
+          paintCell(this.coreState, x, y, newCell, true);
+          this.syncFromCoreState();
+        }
+      }
+      /**
+       * Get sub-Y position from mouse Y coordinate
+       * Each cell is 1 character tall, but we track upper/lower half
+       */
+      getSubYFromMouseY(mouseY, cellY) {
+        return this.halfBlockSubY;
+      }
+      /**
+       * Toggle which half-block sub-row is active
+       */
+      toggleHalfBlockSubY() {
+        this.halfBlockSubY = this.halfBlockSubY === 0 ? 1 : 0;
+        this.updateStatusBar();
+      }
+      /**
+       * Switch brush mode
+       */
+      switchBrushMode(mode) {
+        this.brushMode = mode;
+        this.updateStatusBar();
+        this.updateSidebarBrushMode();
+      }
+      /**
+       * Update sidebar to show current brush mode
+       */
+      updateSidebarBrushMode() {
+        if (!this.sidebar)
+          return;
+        const children = this.sidebar.children;
+        const brushModes = ["text", "half-block"];
+        children.forEach((child) => {
+          if (child instanceof Box) {
+            const content = child._originalContent || child.content;
+            if (content && typeof content === "string") {
+              if (content.includes("Text") || content.includes("HBlock")) {
+                const isText = content.includes("Text");
+                const mode = isText ? "text" : "half-block";
+                const label = isText ? "Text" : "HBlock";
+                const isSelected = this.brushMode === mode;
+                child.setContent((isSelected ? "{inverse}" : "") + `{cyan-fg}${label}{/cyan-fg}` + (isSelected ? "{/inverse}" : ""));
+              }
+              if (content.includes("Upper") || content.includes("Lower") || content.includes("\u2580") || content.includes("\u2584")) {
+                if (this.brushMode === "half-block") {
+                  child.setContent(`{yellow-fg}${this.halfBlockSubY === 0 ? "\u2580Upper" : "\u2584Lower"}{/yellow-fg}`);
+                } else {
+                  child.setContent("");
+                }
+              }
+            }
+          }
+        });
+        this.screen?.render();
+      }
+      // ============================================
+      // LIBRARY TOOL DISPATCH
+      // ============================================
+      /**
+       * Push the widget's live canvas + current paint attributes into coreState
+       * immediately before invoking a library tool handler. coreState is the one
+       * persistent EditorState per widget instance (constructed once, never
+       * recreated) - its identity is what the library's per-instance undo/redo
+       * (and selection) WeakMaps key on, so two ANSIEditor widgets never undo or
+       * select for each other. Every other method in this file still reads
+       * this.cellCanvas/currentFg/currentBg/currentChar directly (getContent,
+       * save, layers, syncCoreCanvasToDisplay, ...) - re-pointing all of those
+       * at coreState was out of scope for this task - so every tool invocation
+       * is bracketed by this and syncFromCoreState().
+       */
+      syncToCoreState() {
+        if (!this.coreState || !this.cellCanvas)
+          return;
+        this.coreState.setCanvas(this.cellCanvas);
+        this.coreState.setCurrentFg(this.currentFg);
+        this.coreState.setCurrentBg(this.currentBg);
+        this.coreState.setCurrentChar(this.currentChar);
+      }
+      /**
+       * Pull the canvas (and any tool-driven attribute change, e.g. pickTool's
+       * fg/bg/char) back out of coreState after a library tool handler runs.
+       * A shape tool's onMove/onEnd replaces coreState's canvas array wholesale
+       * (Canvas.cloneCanvas()), so this.cellCanvas must be re-pointed at the new
+       * array, not assumed to still be the same reference - and the active
+       * layer's canvas reference kept in sync the same way setCoreCanvas()/
+       * newDocument() already do (Task 1's invariant).
+       */
+      syncFromCoreState() {
+        if (!this.coreState)
+          return;
+        const canvas = this.coreState.getCanvas();
+        if (canvas) {
+          this.cellCanvas = canvas;
+          if (this.layers[this.activeLayerIndex]) {
+            this.layers[this.activeLayerIndex].canvas = this.cellCanvas;
+          }
+        }
+        this.currentFg = this.coreState.getCurrentFg();
+        this.currentBg = this.coreState.getCurrentBg();
+        this.currentChar = this.coreState.getCurrentChar();
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+      }
+      /**
+       * Flush a still-open chunked undo entry from a continuous freehand/
+       * half-block/RMB drag (drawTool.onStart / paintCell(..., true) both open
+       * one; drawTool.onEnd just flushes it regardless of which one started it,
+       * since they share the same per-instance undo data). Safe to call even
+       * when nothing is chunked (no-op) - called unconditionally on mouseup.
+       */
+      flushDrawChunk() {
+        if (!this.coreState)
+          return;
+        drawTool.onEnd(this.coreState, this.cursor.col, this.cursor.line);
+      }
+      /**
+       * The ONLY way this.cellCanvas is allowed to be re-pointed at a different
+       * Cell[][] array OUTSIDE the syncToCoreState()/syncFromCoreState()
+       * tool-call bracket - layer switch/add/delete/merge/flatten, and the
+       * public setCoreCanvas(). Every one of those is, from the undo system's
+       * perspective, switching documents: the library's undo/redo stacks are a
+       * timeline of snapshots of ONE Cell[][] array. undo()/redo() call
+       * undoDrawing()/redoDrawing() directly, WITHOUT going through
+       * syncToCoreState() first (they don't need the current fg/bg/char) - so if
+       * this.cellCanvas is swapped by a raw assignment instead of through here,
+       * coreState keeps pointing at the OLD array until the next tool call
+       * happens to refresh it. A bare Ctrl+Z in that window pops a snapshot
+       * built against the old canvas and writes it into whichever layer is
+       * active NOW via syncFromCoreState()'s
+       * `this.layers[activeLayerIndex].canvas = this.cellCanvas` - silently
+       * destroying content on a layer nobody drew on. Fixed at the root by
+       * keeping coreState's canvas reference authoritative and IMMEDIATELY
+       * current, never lazily refreshed, and by treating a canvas swap as a new
+       * undo timeline (clearUndoStack) rather than trying to preserve history
+       * that no longer describes what's on screen - the same treatment
+       * newDocument() (File > New) already gave itself for exactly this reason.
+       *
+       * Rejected alternative: validate-before-pop (tag each undo entry with
+       * which canvas/layer it belongs to, check at undo() time). Considered and
+       * rejected as more invasive for no behavioral gain here - it would still
+       * have to decide what to do on a mismatch (skip deeper into the stack,
+       * breaking LIFO, or refuse and report "nothing to undo", which is exactly
+       * what clearing the stack up front already gives for free) and it doesn't
+       * remove the root cause (coreState still going stale between the swap and
+       * the next tool call) the way keeping it always-current does.
+       *
+       * Rejected alternative: per-layer undo histories (rebase instead of
+       * clear). Would preserve "switch back to layer 1, still able to undo the
+       * edit from before you left it" - a real nicety - but requires N
+       * independent undo timelines keyed by layer identity, a materially larger
+       * feature than this bug fix calls for. Not built here; noted in the
+       * report as a disclosed limitation of the clear-based fix.
+       *
+       * Also folds in Task 1's `this.layers[activeLayerIndex].canvas` sync (the
+       * same invariant setCoreCanvas()/newDocument() used to each maintain by
+       * hand) so every non-tool-bracket canvas swap keeps both invariants in
+       * one place instead of two easy-to-forget call sites.
+       */
+      adoptCellCanvas(canvas) {
+        this.cellCanvas = canvas;
+        if (this.layers[this.activeLayerIndex]) {
+          this.layers[this.activeLayerIndex].canvas = canvas;
+        }
+        if (this.coreState) {
+          this.coreState.setCanvas(canvas);
+          clearUndoStack(this.coreState);
+        }
+      }
+      /**
+       * Render one cell as a blessed content tag, including the transparent
+       * guide glyph. The single definition syncCoreCanvasToDisplay() and
+       * renderSelectionPreview() both use, so the guide-glyph handling can't
+       * drift between the "committed canvas" and "live selection drag" render
+       * paths the way it did before this task (renderPreview() duplicated this
+       * logic without the transparent branch - see task-4-report.md).
+       */
+      /**
+       * The one place a canvas becomes blessed content. Each cell is emitted
+       * scaleX times across and each cell row scaleY times down, so a magnified
+       * canvas is a pure repeat of what one character per cell already
+       * produced - there is no second, "scaled" rendering path that could
+       * disagree with the plain one, and at the default 1/1 the output is
+       * byte-identical to the two hand-written loops this replaced.
+       *
+       * `cellAt` lets a caller substitute cells it wants drawn instead of the
+       * canvas's own - the marching-ants selection overlay does exactly that -
+       * without duplicating the loop and its scaling.
+       */
+      buildCanvasContent(cellAt) {
+        const rows = [];
+        for (let y = 0; y < this.canvasH; y++) {
+          let row = "";
+          for (let x = 0; x < this.canvasW; x++) {
+            row += this.cellToDisplayTag(cellAt(x, y), this.scaleX);
+          }
+          for (let n = 0; n < this.scaleY; n++)
+            rows.push(row);
+        }
+        return rows.join("\n");
+      }
+      cellToDisplayTag(cell, repeat = 1) {
+        if (cell.transparent) {
+          return `{gray-fg}{black-bg}${".".repeat(repeat)}{/black-bg}{/gray-fg}`;
+        }
+        const fgColor = _ANSIEditor.ANSI_COLOR_NAMES[cell.fg] || "white";
+        const bgColor = _ANSIEditor.ANSI_COLOR_NAMES[cell.bg] || "black";
+        const char = (cell.char || " ").repeat(repeat);
+        return `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
+      }
+      /**
+       * Update the live preview while dragging a shape/select tool. For the
+       * five canvas-mutating shape tools (line/box/box-fill/ellipse/
+       * ellipse-fill), onMove restores the pre-drag snapshot and redraws the
+       * shape onto it fresh each call (see drawing-tools.ts's peekUndoCanvas
+       * usage), replacing coreState's canvas - so syncFromCoreState() +
+       * syncCoreCanvasToDisplay() IS the live preview, with no separate overlay
+       * needed, and it inherits the transparent-guide-glyph rendering for free.
+       * select never mutates the canvas (a selection is a read-only rectangle),
+       * so it gets its own renderSelectionPreview() overlay instead.
+       */
+      updateShapePreview(x, y) {
+        if (!this.isDrawing || !this.cellCanvas || !this.coreState)
+          return;
+        if (this.lastPreviewPos && this.lastPreviewPos.x === x && this.lastPreviewPos.y === y) {
+          return;
+        }
+        this.lastPreviewPos = { x, y };
+        this.syncToCoreState();
+        getToolHandler(this.currentTool).onMove(this.coreState, x, y);
+        if (this.currentTool === "select") {
+          this.renderSelectionPreview();
+        } else {
+          this.syncFromCoreState();
+        }
+      }
+      /**
+       * Render the marching-ants preview for an in-progress select-tool drag.
+       * Reads the in-progress rectangle from coreState.getDrawingStart/EndPoint()
+       * - the same values selectTool.onMove already stores - instead of keeping
+       * a second, separately-tracked copy of "what's being dragged".
+       */
+      renderSelectionPreview() {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        const start2 = this.coreState.getDrawingStartPoint();
+        const end = this.coreState.getDrawingEndPoint();
+        if (!start2 || !end) {
+          this.syncCoreCanvasToDisplay();
+          return;
+        }
+        const minX = Math.max(0, Math.min(start2.col, end.col));
+        const maxX = Math.min(this.canvasW - 1, Math.max(start2.col, end.col));
+        const minY = Math.max(0, Math.min(start2.line, end.line));
+        const maxY = Math.min(this.canvasH - 1, Math.max(start2.line, end.line));
+        const marchCell = { char: "\xB7", fg: 15, bg: 0, blink: false };
+        this.drawCanvas.setContent(this.buildCanvasContent((x, y) => {
+          const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY && (y === minY || y === maxY || x === minX || x === maxX);
+          const useMarch = isEdge && (x + y) % 2 === 0;
+          return useMarch ? marchCell : this.cellCanvas[y]?.[x] || { char: " ", fg: 7, bg: 0 };
+        }));
+        if (this.drawCursor) {
+          this.drawCursor.setFront();
+        }
+      }
+      /**
+       * A two-click shape/select tool: first click starts it (onStart), second
+       * click commits it (onEnd). Shared by all six tools that follow this
+       * pattern (line/box/box-fill/ellipse/ellipse-fill/select) - dispatched
+       * through getToolHandler() so adding an 11th such tool needs no widget
+       * change here.
+       */
+      handleShapeToolClick(x, y) {
+        if (!this.coreState)
+          return;
+        const handler2 = getToolHandler(this.currentTool);
+        this.syncToCoreState();
+        if (!this.isDrawing) {
+          this.isDrawing = true;
+          this.lastPreviewPos = null;
+          handler2.onStart(this.coreState, x, y);
+        } else {
+          handler2.onEnd(this.coreState, x, y);
+          if (this.currentTool === "select") {
+            const bounds = getSelectionBounds(this.coreState);
+            if (bounds) {
+              this.selection = bounds;
+            }
+          }
+          this.isDrawing = false;
+        }
+        this.syncFromCoreState();
+      }
+      /**
+       * Handle tool-specific click behavior using the shared library tools.
+       */
+      handleToolClick(x, y) {
+        if (!this.cellCanvas || !this.coreState)
+          return;
+        switch (this.currentTool) {
+          case "draw":
+            if (this.brushMode === "half-block") {
+              this.drawHalfBlock(x, y, this.halfBlockSubY);
+            } else {
+              this.drawAtCursor();
+            }
+            break;
+          case "text":
+            this.drawAtCursor();
+            break;
+          case "line":
+          case "box":
+          case "box-fill":
+          case "ellipse":
+          case "ellipse-fill":
+          case "select":
+            this.handleShapeToolClick(x, y);
+            break;
+          case "fill":
+            this.syncToCoreState();
+            fillTool.onStart(this.coreState, x, y);
+            this.syncFromCoreState();
+            break;
+          case "pick":
+            this.syncToCoreState();
+            pickTool.onStart(this.coreState, x, y);
+            this.syncFromCoreState();
+            break;
+        }
+        this.modified = true;
+      }
+      /**
+       * Sync core canvas to blessed Canvas widget for display
+       * ANSI art canvas (canvasW x canvasH), 1 character per cell
+       */
+      syncCoreCanvasToDisplay() {
+        if (!this.cellCanvas)
+          return;
+        this.drawCanvas.setContent(this.buildCanvasContent((x, y) => this.cellCanvas[y]?.[x] || { char: " ", fg: 7, bg: 0 }));
+        if (this.drawCursor) {
+          this.drawCursor.setFront();
+        }
+      }
+      updateDisplay() {
+        if (this.mode === "text") {
+          this.renderTextMode();
+        } else {
+          this.updateDrawCursor();
+        }
+        this.updateStatusBar();
+        this.updateToolbar();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      renderTextMode() {
+        const viewportHeight = this.viewport.height - 2;
+        const viewportWidth = this.viewport.width - 2;
+        if (this.cursor.line < this.scrollTop) {
+          this.scrollTop = this.cursor.line;
+        } else if (this.cursor.line >= this.scrollTop + viewportHeight) {
+          this.scrollTop = this.cursor.line - viewportHeight + 1;
+        }
+        const lineNumberWidth = this.showLineNumbers ? 5 : 0;
+        const content = [];
+        for (let i = 0; i < viewportHeight; i++) {
+          const lineIndex = this.scrollTop + i;
+          if (lineIndex >= this.lines.length)
+            break;
+          const line3 = this.lines[lineIndex] || "";
+          let displayLine = "";
+          if (this.showLineNumbers) {
+            displayLine += `{gray-fg}${(lineIndex + 1).toString().padStart(4)} {/}`;
+          }
+          if (lineIndex === this.cursor.line) {
+            const before = line3.substring(0, this.cursor.col);
+            const at = line3[this.cursor.col] || " ";
+            const after = line3.substring(this.cursor.col + 1);
+            displayLine += before + `{inverse}${at}{/inverse}` + after;
+          } else {
+            displayLine += line3;
+          }
+          content.push(displayLine);
+        }
+        this.viewport.setContent(content.join("\n"));
+      }
+      updateStatusBar() {
+        if (!this.statusBar)
+          return;
+        const colors2 = [
+          "black",
+          "red",
+          "green",
+          "yellow",
+          "blue",
+          "magenta",
+          "cyan",
+          "white",
+          "gray",
+          "lightred",
+          "lightgreen",
+          "lightyellow",
+          "lightblue",
+          "lightmagenta",
+          "lightcyan",
+          "lightwhite"
+        ];
+        const modifiedMark = this.modified ? "{yellow-fg}*{/}" : " ";
+        const pos = `{white-fg}X:${(this.cursor.col + 1).toString().padStart(3)} Y:${(this.cursor.line + 1).toString().padStart(3)}{/}`;
+        const canvasSize = `{gray-fg}${this.canvasW}x${this.canvasH}{/}`;
+        const charPreview = this.currentChar || "\u2588";
+        const fgColor = colors2[this.currentFg] || "white";
+        const bgColor = colors2[this.currentBg] || "black";
+        const toolNames = {
+          "draw": "DRAW",
+          "line": "LINE",
+          "box": "RECT",
+          "box-fill": "FILL-RECT",
+          "ellipse": "ELLIPSE",
+          "ellipse-fill": "FILL-ELLIPSE",
+          "fill": "FILL",
+          "pick": "PICK",
+          "select": "SELECT",
+          "text": "TEXT"
+        };
+        const toolName = toolNames[this.currentTool] || "TEXT";
+        const drawingState = this.isDrawing ? " {yellow-fg}[1]{/}" : "";
+        const iceIndicator = this.iceColorsEnabled ? "{magenta-fg}iCE{/}" : "";
+        const layerInfo = this.layers.length > 1 ? `{cyan-fg}L${this.activeLayerIndex + 1}/${this.layers.length}{/}` : "";
+        const brushModeNames = {
+          "text": "",
+          "half-block": "HLF",
+          "custom": "CUS",
+          "shading": "SHD",
+          "colorize": "COL"
+        };
+        const brushIndicator = this.brushMode !== "text" ? `{green-fg}${brushModeNames[this.brushMode]}${this.brushMode === "half-block" ? this.halfBlockSubY === 0 ? "\u2580" : "\u2584" : ""}{/}` : "";
+        this.statusBar.setContent(` ${modifiedMark} ${pos} | ${canvasSize} | {${fgColor}-fg}{${bgColor}-bg}${charPreview}{/} {${fgColor}-fg}FG:${this.currentFg.toString().padStart(2)}{/} {${bgColor}-bg}{white-fg}BG:${this.currentBg.toString().padStart(2)}{/} | {cyan-fg}${toolName}{/}${drawingState}` + (brushIndicator ? ` ${brushIndicator}` : "") + (layerInfo ? ` | ${layerInfo}` : "") + (iceIndicator ? ` ${iceIndicator}` : ""));
+      }
+      updateToolbar() {
+        if (this.fkeyToolbar) {
+          this.updateFkeyToolbar();
+        }
+        if (this.sidebar) {
+          this.updateSidebarToolSelection();
+        }
+      }
+      async save() {
+        if (!this.onSaveCallback)
+          return;
+        let content;
+        if (this.mode === "draw") {
+          content = this.drawCanvas.getContent();
+        } else {
+          content = this.lines.join("\n");
+        }
+        const success = await this.onSaveCallback(content);
+        if (success) {
+          this.modified = false;
+          this.updateDisplay();
+        }
+      }
+      confirmExit() {
+        if (!this.screen) {
+          if (this.onExitCallback)
+            this.onExitCallback();
+          return;
+        }
+        this.drawCursor.hide();
+        this.modalOpen = true;
+        let shouldExit = false;
+        const modal = new ConfirmModal({
+          parent: this.screen,
+          title: "Unsaved Changes",
+          message: "You have unsaved changes.\n\nSave: Save and exit\nDiscard: Exit without saving\nESC: Cancel and continue editing",
+          confirmText: "[ Save ]",
+          cancelText: "[ Discard ]",
+          confirmColor: "green",
+          cancelColor: "red",
+          borderColor: "yellow",
+          overlay: true,
+          style: {
+            fg: "white",
+            bg: "black"
+          },
+          onConfirm: () => {
+            shouldExit = true;
+            modal.destroy();
+            this.save().then(() => {
+              if (this.onExitCallback)
+                this.onExitCallback();
+            }).catch(console.error);
+          },
+          onCancel: () => {
+            shouldExit = true;
+            modal.destroy();
+            if (this.onExitCallback)
+              this.onExitCallback();
+          }
+        });
+        modal.key(["escape"], () => {
+          if (!shouldExit) {
+            modal.hide();
+            modal.destroy();
+            this.restoreFocusAfterDialog();
+          }
+          return true;
+        });
+        modal.display();
+      }
+      restoreFocusAfterDialog() {
+        setImmediate(() => {
+          this.modalOpen = false;
+        });
+        if (this.mode === "draw") {
+          this.drawCursor.show();
+          this.updateDrawCursor();
+          this.drawCanvas.focus();
+        } else {
+          this.viewport.focus();
+        }
+        this.updateStatusBar();
+        this.screen?.render();
+      }
+      showColorPicker(isForeground) {
+        if (!this.screen || this.modalOpen)
+          return;
+        this.drawCursor.hide();
+        this.modalOpen = true;
+        const colorCodes = [
+          "black",
+          "red",
+          "green",
+          "yellow",
+          "blue",
+          "magenta",
+          "cyan",
+          "white",
+          "gray",
+          "lightred",
+          "lightgreen",
+          "lightyellow",
+          "lightblue",
+          "lightmagenta",
+          "lightcyan",
+          "lightwhite"
+        ];
+        let selectedFg = this.currentFg;
+        let selectedBg = this.currentBg;
+        let editingFg = isForeground;
+        const overlay = new Overlay({
+          parent: this.screen,
+          opacity: 0.5
+        });
+        const modal = new Box({
+          parent: overlay,
+          top: "center",
+          left: "center",
+          width: 22,
+          height: 10,
+          border: { type: "line" },
+          label: " Colors ",
+          tags: true,
+          keys: true,
+          mouse: true,
+          ch: " ",
+          style: { fg: "white", bg: "black", border: { fg: "cyan" } }
+        });
+        new Text({
+          parent: modal,
+          top: 0,
+          left: 0,
+          content: "FG",
+          style: { fg: editingFg ? "cyan" : "gray", bold: editingFg }
+        });
+        new Text({
+          parent: modal,
+          top: 4,
+          left: 0,
+          content: "BG",
+          style: { fg: !editingFg ? "cyan" : "gray", bold: !editingFg }
+        });
+        const fgSwatches = [];
+        for (let i = 0; i < 16; i++) {
+          const row = Math.floor(i / 8);
+          const col = i % 8;
+          const isSelected = i === selectedFg;
+          const swatch = new Box({
+            parent: modal,
+            top: row + 1,
+            left: col * 2 + 3,
+            width: 2,
+            height: 1,
+            mouse: true,
+            content: "  ",
+            style: { bg: colorCodes[i], inverse: isSelected }
+          });
+          swatch.on("click", () => {
+            selectedFg = i;
+            editingFg = true;
+            updateSelection();
+          });
+          fgSwatches.push(swatch);
+        }
+        const bgSwatches = [];
+        for (let i = 0; i < 16; i++) {
+          const row = Math.floor(i / 8);
+          const col = i % 8;
+          const isSelected = i === selectedBg;
+          const swatch = new Box({
+            parent: modal,
+            top: row + 5,
+            left: col * 2 + 3,
+            width: 2,
+            height: 1,
+            mouse: true,
+            content: "  ",
+            style: { bg: colorCodes[i], inverse: isSelected }
+          });
+          swatch.on("click", () => {
+            selectedBg = i;
+            editingFg = false;
+            updateSelection();
+          });
+          bgSwatches.push(swatch);
+        }
+        const fgLabel = modal.children[0];
+        const bgLabel = modal.children[1];
+        const updateSelection = () => {
+          fgSwatches.forEach((s, i) => {
+            s.style.inverse = i === selectedFg;
+          });
+          bgSwatches.forEach((s, i) => {
+            s.style.inverse = i === selectedBg;
+          });
+          fgLabel.style.fg = editingFg ? "cyan" : "gray";
+          bgLabel.style.fg = !editingFg ? "cyan" : "gray";
+          this.screen?.render();
+        };
+        const trapCleanup = trapModalInput(modal);
+        const closeDialog = (save) => {
+          trapCleanup();
+          overlay.destroy();
+          if (save) {
+            this.currentFg = selectedFg;
+            this.currentBg = selectedBg;
+          }
+          this.restoreFocusAfterDialog();
+        };
+        const currentIdx = () => editingFg ? selectedFg : selectedBg;
+        const setIdx = (idx) => {
+          if (editingFg)
+            selectedFg = idx;
+          else
+            selectedBg = idx;
+        };
+        modal.key(["left", "h"], () => {
+          setIdx(currentIdx() > 0 ? currentIdx() - 1 : 15);
+          updateSelection();
+        });
+        modal.key(["right", "l"], () => {
+          setIdx(currentIdx() < 15 ? currentIdx() + 1 : 0);
+          updateSelection();
+        });
+        modal.key(["up", "k"], () => {
+          const idx = currentIdx();
+          if (editingFg && idx >= 8) {
+            setIdx(idx - 8);
+          } else if (editingFg && idx < 8) {
+            editingFg = false;
+            selectedBg = idx + 8;
+          } else if (!editingFg && idx >= 8) {
+            setIdx(idx - 8);
+          } else {
+            editingFg = true;
+            selectedFg = idx + 8;
+          }
+          updateSelection();
+        });
+        modal.key(["down", "j"], () => {
+          const idx = currentIdx();
+          if (editingFg && idx < 8) {
+            setIdx(idx + 8);
+          } else if (editingFg && idx >= 8) {
+            editingFg = false;
+            selectedBg = idx - 8;
+          } else if (!editingFg && idx < 8) {
+            setIdx(idx + 8);
+          } else {
+            editingFg = true;
+            selectedFg = idx - 8;
+          }
+          updateSelection();
+        });
+        modal.key(["tab"], () => {
+          editingFg = !editingFg;
+          updateSelection();
+        });
+        modal.key(["enter", "space"], () => closeDialog(true));
+        modal.key(["escape", "q"], () => closeDialog(false));
+        overlay.on("cancel", () => closeDialog(false));
+        overlay.show();
+        modal.focus();
+        this.screen.render();
+      }
+      showCharacterPicker() {
+        if (!this.screen || this.modalOpen)
+          return;
+        this.drawCursor.hide();
+        this.modalOpen = true;
+        const charSets = [
+          { label: "Blocks", chars: ["\u2588", "\u2593", "\u2592", "\u2591", "\u2580", "\u2584", "\u258C", "\u2590"] },
+          { label: "Boxes", chars: ["\u25A0", "\u25A1", "\u25AA", "\u25AB", "\u25FC", "\u25FB", "\u25AC", "\u25AD"] },
+          { label: "Circles", chars: ["\u25CF", "\u25CB", "\u25C9", "\u25CE", "\u2022", "\u25E6", "\u25D0", "\u25D1"] },
+          { label: "Lines", chars: ["\u2500", "\u2502", "\u250C", "\u2510", "\u2514", "\u2518", "\u251C", "\u2524"] },
+          { label: "Symbols", chars: ["/", "\\", "|", "-", "+", "*", "#", "@"] },
+          { label: "Arrows", chars: ["\u2190", "\u2192", "\u2191", "\u2193", "\u2194", "\u2195", "\u25C4", "\u25BA"] }
+        ];
+        const allChars = charSets.flatMap((s) => s.chars);
+        const overlay = new Overlay({
+          parent: this.screen,
+          opacity: 0.5
+        });
+        const modal = new Box({
+          parent: overlay,
+          top: "center",
+          left: "center",
+          width: 30,
+          height: 16,
+          // Fixed height - list will scroll
+          border: { type: "line" },
+          label: " Character ",
+          tags: true,
+          keys: true,
+          mouse: true,
+          ch: " ",
+          style: { fg: "white", bg: "blue", border: { fg: "magenta" } }
+        });
+        const items = allChars.map((char, idx) => {
+          const set = charSets.find((s) => s.chars.includes(char));
+          return `${char}  ${set?.label || "Other"}`;
+        });
+        const list = new List({
+          parent: modal,
+          top: 0,
+          left: 0,
+          width: "100%-2",
+          height: "100%-2",
+          items,
+          mouse: true,
+          keys: true,
+          tags: true,
+          scrollable: true,
+          scrollbar: {
+            ch: " ",
+            style: { bg: "magenta" }
+          },
+          style: {
+            fg: "white",
+            bg: "blue",
+            selected: { fg: "black", bg: "magenta" }
+          }
+        });
+        const currentIdx = allChars.indexOf(this.currentChar);
+        if (currentIdx >= 0)
+          list.select(currentIdx);
+        const trapCleanup = trapModalInput(modal);
+        const closeDialog = (selectedChar) => {
+          trapCleanup();
+          overlay.destroy();
+          if (selectedChar) {
+            this.currentChar = selectedChar;
+          }
+          this.restoreFocusAfterDialog();
+        };
+        list.on("select", (_item, idx) => closeDialog(allChars[idx]));
+        list.key(["escape", "q"], () => closeDialog());
+        overlay.on("cancel", () => closeDialog());
+        overlay.show();
+        list.focus();
+        this.screen.render();
+      }
+      showHelp() {
+        if (!this.screen || this.modalOpen)
+          return;
+        this.drawCursor.hide();
+        this.modalOpen = true;
+        const helpText = `{cyan-fg}{bold}MOEBIUS-STYLE ANSI EDITOR{/bold}{/cyan-fg}
+
+{yellow-fg}{bold}INTERFACE:{/bold}{/yellow-fg}
+  Menu Bar       File/Edit/Layer/Select/Colors/View/Help
+  F-Key Toolbar  F1-F12 character sets (< > to change set)
+  Left Sidebar   Colors + Tools + Layers
+  Status Bar     Position, colors, tool, layer, iCE mode
+
+{yellow-fg}{bold}F-KEYS (Character Selection):{/bold}{/yellow-fg}
+  F1-F12         Select character from current set
+  Shift+F-key    Change to next character set
+  < > buttons    Previous/next character set
+
+{yellow-fg}{bold}COLOR SELECTION:{/bold}{/yellow-fg}
+  Left Click     Select foreground color from palette
+  Right Click    Select background color from palette
+  Alt+C          Open foreground color picker
+  Alt+B          Open background color picker
+
+{yellow-fg}{bold}TOOLS (use sidebar or keyboard):{/bold}{/yellow-fg}
+  T              Text mode (type characters)
+  D              Draw tool (freehand)
+  L              Line tool (click two points)
+  R              Rectangle tool
+  E              Ellipse tool
+  F              Fill tool (flood fill)
+  P              Pick tool (sample color/char)
+  S              Select tool
+
+{yellow-fg}{bold}LAYERS:{/bold}{/yellow-fg}
+  Layer menu     Add, delete, merge, move layers
+  Sidebar +/-    Add/delete layer
+  Sidebar M      Merge down
+  Left Click     Select layer
+  Right Click    Toggle layer visibility
+  * = visible    L = locked
+
+{yellow-fg}{bold}NAVIGATION:{/bold}{/yellow-fg}
+  Arrow Keys     Move cursor
+  Enter          Move to next line
+  Backspace      Erase and move left
+
+{yellow-fg}{bold}DRAWING:{/bold}{/yellow-fg}
+  Type any key   Place character (in text mode)
+  Space          Draw with current tool
+  Left Click     Draw at position
+  Right Click    Erase at position
+  Mouse Drag     Continuous draw/erase
+
+{yellow-fg}{bold}EDITING:{/bold}{/yellow-fg}
+  Ctrl+Z         Undo
+  Ctrl+Y         Redo
+  Ctrl+S         Save
+  Ctrl+M         Toggle Text/Draw mode
+  U              Undo (in draw mode)
+
+{yellow-fg}{bold}FILE:{/bold}{/yellow-fg}
+  SAUCE Info     Edit SAUCE metadata (title, author, group)
+  iCE Colors     Toggle 16 BG colors (vs 8 + blink)
+
+{yellow-fg}{bold}VIEW:{/bold}{/yellow-fg}
+  F2             Toggle fullscreen (hide/show UI)
+  ?              This help screen
+  ESC            Exit editor
+
+{yellow-fg}{bold}TIPS:{/bold}{/yellow-fg}
+  - F-keys select from 8 character sets
+  - Layers let you work on separate elements
+  - SAUCE metadata is saved with the file
+  - iCE colors enable 16 background colors
+`;
+        const helpModal = new DocModal({
+          parent: this.screen,
+          title: "ANSI Editor Help",
+          content: helpText,
+          closeKeys: ["escape", "q", "?", "enter", "space"],
+          footerText: "{bold} Scroll: Arrows/PgUp/PgDn | Close: ESC/Q/?/Enter {/bold}",
+          style: {
+            fg: "white",
+            bg: "blue",
+            border: { fg: "cyan" }
+          },
+          contentStyle: {
+            fg: "white",
+            bg: "blue"
+            // Match modal background for transparent look
+          },
+          onClose: () => {
+            helpModal.destroy();
+            this.restoreFocusAfterDialog();
+          }
+        });
+        const focusTarget = this.mode === "draw" ? this.drawCanvas : this.viewport;
+        helpModal.display(focusTarget);
+      }
+      saveUndoState() {
+        this.undoStack.push(this.lines.join("\n"));
+        if (this.undoStack.length > 100) {
+          this.undoStack.shift();
+        }
+        this.redoStack = [];
+      }
+      /**
+       * Ctrl+Z / U. In draw mode, routes to the library's per-instance
+       * undoDrawing() (see task-4-report.md) instead of the text-mode
+       * this.undoStack, which draw-mode operations never populate.
+       *
+       * flushDrawChunk() runs FIRST (IMPORTANT 3): a chunk opened by
+       * drawTool.onStart/paintCell(..., true) is normally flushed on mouseup,
+       * but a mouseup can be missed (pointer leaves the canvas mid-drag). If
+       * Ctrl+Z were pressed in that window, undoDrawing() would pop the
+       * PREVIOUS entry while the stroke's own snapshot still sits pending, and
+       * that stale snapshot would land later whenever mouseup does fire -
+       * silently reappearing after the user thought they'd undone past it.
+       * Flushing here first is a no-op when nothing is chunked, so it's safe
+       * unconditionally.
+       */
+      undo() {
+        if (this.mode === "draw") {
+          this.flushDrawChunk();
+          if (this.coreState && undoDrawing(this.coreState)) {
+            this.syncFromCoreState();
+            if (this.screen) {
+              this.screen.render();
+            }
+          }
+          return;
+        }
+        if (this.undoStack.length > 1) {
+          const current = this.undoStack.pop();
+          this.redoStack.push(current);
+          const previous = this.undoStack[this.undoStack.length - 1];
+          this.lines = previous.split("\n");
+          this.modified = true;
+          this.updateDisplay();
+        }
+      }
+      /** Ctrl+Y. Draw-mode counterpart of undo() above, via redoDrawing(). */
+      redo() {
+        if (this.mode === "draw") {
+          if (this.coreState && redoDrawing(this.coreState)) {
+            this.syncFromCoreState();
+            if (this.screen) {
+              this.screen.render();
+            }
+          }
+          return;
+        }
+        if (this.redoStack.length > 0) {
+          const next = this.redoStack.pop();
+          this.undoStack.push(next);
+          this.lines = next.split("\n");
+          this.modified = true;
+          this.updateDisplay();
+        }
+      }
+      /**
+       * Get current content
+       */
+      getContent() {
+        if (this.mode === "draw") {
+          if (this.cellCanvas) {
+            return canvasToANSI(this.cellCanvas);
+          }
+          return this.drawCanvas.getContent();
+        } else {
+          return this.lines.join("\n");
+        }
+      }
+      /**
+       * Get the core canvas (Cell[][]) for advanced operations
+       */
+      getCoreCanvas() {
+        return this.cellCanvas;
+      }
+      /**
+       * Set the core canvas directly. Size-safe: adoptCellCanvas() keeps the
+       * active layer's canvas reference in sync (it would otherwise go stale,
+       * pointing at the old canvas while this.cellCanvas points at the new one)
+       * and clears coreState's draw-mode undo history (a host swapping in a
+       * different frame - e.g. the sprite editor's frame-swap use case this
+       * method exists for - is a new undo timeline, not a continuation of the
+       * old canvas's; see adoptCellCanvas()'s doc comment for the full
+       * reasoning). Also clamps the cursor and any live selection into the new
+       * canvas's bounds so neither can end up referencing cells that no longer
+       * exist.
+       */
+      setCoreCanvas(canvas) {
+        this.adoptCellCanvas(canvas);
+        this.clampCursorToCanvas();
+        if (this.selection) {
+          this.selection = {
+            x1: this.clampCol(this.selection.x1),
+            y1: this.clampLine(this.selection.y1),
+            x2: this.clampCol(this.selection.x2),
+            y2: this.clampLine(this.selection.y2)
+          };
+        }
+        this.syncCoreCanvasToDisplay();
+        this.modified = true;
+        this.updateDisplay();
+      }
+      /**
+       * Check if content has been modified
+       */
+      isModified() {
+        return this.modified;
+      }
+      /**
+       * Set content - parses ANSI and updates both text lines and cell canvas
+       */
+      setContent(content) {
+        this.lines = content.split("\n");
+        this.cursor = { line: 0, col: 0 };
+        if (this.cellCanvas) {
+          clearCanvas(this.cellCanvas);
+          parseANSIToCanvas(this.cellCanvas, content);
+          this.syncCoreCanvasToDisplay();
+        }
+        this.modified = false;
+        this.saveUndoState();
+        this.updateDisplay();
+      }
+    };
+    ANSIEditor.ANSI_COLOR_NAMES = [
+      "black",
+      "red",
+      "green",
+      "yellow",
+      "blue",
+      "magenta",
+      "cyan",
+      "white",
+      "gray",
+      "lightred",
+      "lightgreen",
+      "lightyellow",
+      "lightblue",
+      "lightmagenta",
+      "lightcyan",
+      "lightwhite"
+    ];
   }
 });
 

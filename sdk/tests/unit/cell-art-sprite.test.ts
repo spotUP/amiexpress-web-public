@@ -12,6 +12,7 @@ import {
   parseSprite,
   frameAt,
   blitSprite,
+  serializeSprite,
   SpriteAnimation,
 } from '../../engines/graphics/cell-art/sprite';
 
@@ -115,5 +116,19 @@ describe('blitSprite', () => {
     const s = parseSprite(rawSprite());
     expect(() => blitSprite(createBuffer(2, 1), s, 'blnk', 0, 0, 0))
       .toThrow(/blnk/);
+  });
+});
+
+describe('serializeSprite', () => {
+  it('is the exact inverse of parseSprite', () => {
+    const original = parseSprite(rawSprite());
+    const reparsed = parseSprite(JSON.parse(serializeSprite(original)));
+    expect(reparsed).toEqual(original);
+  });
+
+  it('refuses to serialize a sprite that would not load back', () => {
+    const broken = parseSprite(rawSprite());
+    (broken.animations.blink.frames[0][0][0] as any).fg = 99;
+    expect(() => serializeSprite(broken)).toThrow(/fg/);
   });
 });

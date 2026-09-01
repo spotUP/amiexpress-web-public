@@ -1,93 +1,96 @@
 /**
  * How the board is drawn.
  *
- * Coloured lanes with character sprites over them, in the style of Philippe
- * Majerus's Frogger ANSI: a log has rounded ends and a grain, a turtle is
- * `:O:`, a car has a nose pointing the way it is going. Each logical cell is
- * CELL_WIDTH characters wide, so a cell is roughly square and forty of them
- * fill the eighty-column screen.
+ * These read the CELL BUFFER that `buildBoard` returns, not the tag string
+ * the door finally sends. The old versions pulled each rendered row apart
+ * with a regular expression that knew the glyph painter's tag format; when
+ * the renderer changed, the regex matched nothing and every one of these
+ * tests started asserting against an empty array - passing or failing for
+ * reasons that had nothing to do with the board. Cells cannot go stale
+ * that way: there is one representation and the tests read it.
+ *
+ * What is checked here is what a PLAYER can see - that a log looks like a
+ * log, that the frog is never hidden by the thing carrying it, that a
+ * submerged turtle leaves water behind. Four bugs reached the user during
+ * this rewrite because nothing rendered a board and looked at it.
  */
-/** Every board row is the full width, character for character. */
-export declare function everyRowIsAFullScreenWide(): Promise<void>;
-/** A cell is wider than one character, so it is not a tall sliver. */
-export declare function aCellIsWiderThanOneCharacter(): Promise<void>;
+/** The board is exactly the screen it is drawn into. */
+export declare function theBoardIsTheSizeOfTheScreen(): Promise<void>;
 /**
- * The board is drawn with characters, not just colour. This is the whole
- * point of the ANSI style, and the reason it was reported: a board of solid
- * blocks reads as coloured bars rather than as a game.
+ * Every lane is drawn, and drawn where the rules put it.
+ *
+ * A lane that renders one row off is the fault that made the game feel
+ * "offset from the level": what the player reads and what the rules use
+ * have to be the same rows.
  */
-export declare function theBoardIsDrawnWithCharacters(): Promise<void>;
-/** A log has rounded ends and a grain along it. */
+export declare function everyLaneIsDrawnOnItsOwnRows(): Promise<void>;
+/** A log is drawn where the log is, and it is not water-coloured. */
 export declare function aLogIsDrawnAsALog(): Promise<void>;
-/** A turtle set is drawn as turtles. */
+/** Turtles are drawn, and they are not the same as a log. */
 export declare function turtlesAreDrawnAsTurtles(): Promise<void>;
-/** A turtle that has dived shows nothing: there is nothing to stand on. */
+/**
+ * A submerged turtle leaves water, not footing.
+ *
+ * The frog drowns on it, so it must not look like something to stand on.
+ */
 export declare function aDivedTurtleShowsOnlyWater(): Promise<void>;
-/** A vehicle points the way it is travelling. */
-export declare function aVehiclePointsWhereItIsGoing(): Promise<void>;
-/** ...and the other way when it is going the other way. */
-export declare function aVehicleGoingLeftPointsLeft(): Promise<void>;
-/** Each kind of traffic is told apart by colour. */
-export declare function eachKindOfTrafficHasItsOwnColour(): Promise<void>;
-/** The frog is drawn on top of whatever it is standing on. */
+/**
+ * Traffic faces the way it travels.
+ *
+ * The sprite is drawn facing one way and mirrored for the other, so a lane
+ * can be read at a glance. Two vehicles going opposite ways must not draw
+ * the same cells.
+ */
+export declare function aVehicleFacesTheWayItIsGoing(): Promise<void>;
+/**
+ * The frog is drawn over whatever carries it.
+ *
+ * A frog hidden under its own log is the worst thing this door can do: the
+ * player loses track of where they are.
+ */
 export declare function theFrogIsDrawnOverItsFooting(): Promise<void>;
-/** A crocodile shows its jaws at the end it swims towards. */
-export declare function aCrocodileShowsItsJaws(): Promise<void>;
-/** A home shows what is sitting in it. */
+/** A home shows whether it is empty, taken, or holding a crocodile. */
 export declare function aHomeShowsWhatIsInIt(): Promise<void>;
-/** The hedge between the homes is textured, not a flat block. */
-export declare function theHedgeIsTextured(): Promise<void>;
-/** The banks and the median are textured too. */
+/**
+ * An empty home is visible against the hedge.
+ *
+ * Reported live: "i cant see any homes to jump into". The opening was drawn
+ * transparent, so the hedge showed through it and there was nothing to aim
+ * at. An opening the player cannot see is an opening they cannot use.
+ */
+export declare function anEmptyHomeStandsOutFromTheHedge(): Promise<void>;
+/** The banks carry a texture rather than being a flat block of colour. */
 export declare function theBanksAreTextured(): Promise<void>;
-/** A snake riding a log is drawn over it. */
+/** A snake riding a log is drawn on top of it. */
 export declare function aSnakeOnALogIsVisible(): Promise<void>;
-/** A dying frog blinks. */
-export declare function aDyingFrogBlinks(): Promise<void>;
+/** A dying frog animates rather than sitting still. */
+export declare function aDyingFrogAnimates(): Promise<void>;
+/** Drowning looks different from being run over. */
+export declare function drowningLooksDifferentFromBeingRunOver(): Promise<void>;
 /**
- * Nothing outside 7-bit ASCII is ever drawn.
+ * Every sprite is drawn inside its own lane.
  *
- * Reported live 2026-08-31: "we cant use unicode characters in frogger".
- * The board goes through blessed with fullUnicode off, so a Unicode glyph
- * arrives mangled or not at all - the sprites showed as nothing.
+ * Reported live twice: a two-row sprite in a one-row lane either hung off
+ * the bottom of the board ("the frog starts halfway outside the bottom of
+ * the screen") or leaned into the lane above and lied about where it stood
+ * ("it feels like I should do one more jump but I end up in the water").
+ * Nothing may draw outside the rows its lane owns.
  */
-export declare function theBoardIsPureAscii(): Promise<void>;
-/**
- * The frog is never the same colour as the ground it stands on.
- *
- * Reported live: "i cant see the grog when i stand on green as the grog is
- * the same green."
- */
+export declare function nothingIsDrawnOutsideItsLane(): Promise<void>;
+/** The frog is visible against every lane it can stand on. */
 export declare function theFrogStandsOutFromEveryLane(): Promise<void>;
-/**
- * The GAME OVER panel is text over the board, not a black band across it.
- *
- * Reported live 2026-08-31: "remove the black background from the texts
- * drawn when i finish a level etc".
- */
+/** The game-over panel is laid over the board, not instead of it. */
 export declare function theGameOverPanelDoesNotBlackOutTheBoard(): Promise<void>;
-/**
- * A frog riding a log stays put on it, frame after frame.
- *
- * Reported live 2026-08-31: "when i am on a log the frog and log anims are
- * offset the frog should move with the log". The frog advanced by its own
- * copy of the log's sum, so it held a FRACTIONAL offset from its footing -
- * and a fraction is enough for the two to round to different cells, so they
- * drew a cell apart and drifted in and out of step.
- */
+/** The frog rides its log rather than drifting off it. */
 export declare function theFrogStaysPutOnTheLogItRides(): Promise<void>;
-/** Hopping off a log ends the ride. */
-export declare function hoppingOffALogEndsTheRide(): Promise<void>;
 /**
- * The frog is never the colour of what it is standing on.
+ * The board uses only characters a BBS terminal draws.
  *
- * Reported live 2026-08-31: "add a bg color as well that always is the
- * complement color of the ground tile color the frog currently is on and
- * make the frog color the complement color of it's current bg color this
- * way it will always be super clear where the frog is."
+ * It is NOT pure ASCII any more, and cannot be: the sprites are half-block
+ * pixel art, the same as Pengo's, and the block glyphs are what make a
+ * five-by-four pixel frog possible at all. What matters is that every
+ * character is one the CP437/ANSI terminals this BBS serves can render -
+ * the block set and the space, nothing exotic.
  */
-export declare function theFrogContrastsWithEveryGroundItCanStandOn(): Promise<void>;
-/** Every colour the board uses has an opposite. */
-export declare function everyBoardColourHasAnOpposite(): Promise<void>;
-/** The frog on the bank comes out a different colour from the bank. */
-export declare function theFrogOnTheBankIsNotTheBank(): Promise<void>;
+export declare function theBoardUsesOnlyDrawableCharacters(): Promise<void>;
 //# sourceMappingURL=render.test.d.ts.map

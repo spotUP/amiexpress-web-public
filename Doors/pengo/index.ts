@@ -12,7 +12,7 @@ import { join } from "path";
 import { PengoGame } from "./game/pengo-game";
 import { createInitialGameData } from "./game/initial-data";
 import { rpcHandlers, setMusicState } from "./server";
-import { PengoData, InputKey, Direction } from "./game/types";
+import { PengoData, InputKey, Direction, GameState } from "./game/types";
 import {
   BOARD_COLS,
   BOARD_ROWS,
@@ -20,6 +20,7 @@ import {
   MENU_OPTIONS,
   DEFAULT_HIGHSCORES,
 } from "./game/constants";
+import { offscreenEnemyMarkers } from "./game/camera";
 
 export { rpcHandlers };
 
@@ -65,7 +66,11 @@ function initScreen(): void {
   gameArea = new Box({
     parent: screen,
     top: 1,
-    left: 0,
+    // The 15x17 world (75 characters) is narrower than the 80-column
+    // terminal - it fits with room to spare, unlike the 30 character
+    // rows the camera has to scroll for. Centring it, rather than
+    // pinning to the left edge, is the only place that spare width goes.
+    left: "center",
     width: BOARD_COLS,
     height: BOARD_ROWS,
     fixed: true,
@@ -85,6 +90,31 @@ function initScreen(): void {
   });
 }
 
+/**
+ * ASCII arrows for the Sno-Bees the camera window is currently hiding.
+ *
+ * The maze is 15 rows tall and only 11 fit on screen at once; a camera
+ * that scrolls the rest into view can hide the Sno-Bee about to reach
+ * Pengo. That is only acceptable if the HUD says so - see the cell-art
+ * camera module's own doc comment on `offScreenMarkers`. This door's
+ * camera only ever scrolls vertically (the maze is exactly as wide as the
+ * screen can show), so only 'n'/'ne'/'nw' and 's'/'se'/'sw' markers can
+ * ever occur here.
+ */
+function offscreenIndicator(): string {
+  const markers = offscreenEnemyMarkers(gameData);
+  if (markers.length === 0) return "";
+
+  const above = markers.filter(m => m.direction[0] === "n").length;
+  const below = markers.filter(m => m.direction[0] === "s").length;
+  const parts: string[] = [];
+  if (above > 0) parts.push(`^${above}`);
+  if (below > 0) parts.push(`v${below}`);
+  if (parts.length === 0) return "";
+
+  return `  {magenta-fg}OFF: ${parts.join(" ")}{/}`;
+}
+
 function formatHUD(): string {
   const scoreStr = gameData.score.toString().padStart(8, "0");
   const livesStr = "*".repeat(Math.max(0, gameData.lives));
@@ -93,7 +123,7 @@ function formatHUD(): string {
   return (
     `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LEVEL: ${gameData.level}{/}  ` +
     `{red-fg}LIVES: ${livesStr}{/}  {${timeColor}-fg}TIME: ${gameData.timeRemaining}{/}  ` +
-    `{white-fg}ENEMIES: ${enemies}{/}`
+    `{white-fg}ENEMIES: ${enemies}{/}` + offscreenIndicator()
   );
 }
 
@@ -305,8 +335,25 @@ function handleInput(key: string): void {
     case "enterName":
       handleNameEntryInput(inputKey);
       break;
-    default:
-      showMenu();
+    case "dying":
+    case "levelComplete":
+      // Timed animation hand-overs: the game loop drives these itself
+      // (death via pengo.isDead/deathFrame in PengoGame.update(); level
+      // transition via the setTimeout in update() that flips state back to
+      // 'playing' after 2000ms). A keypress here must be a no-op - routing
+      // it to showMenu() was the bug ("the game ends after level 1").
+      break;
+    default: {
+      // Exhaustiveness guard: every GameState member above is handled
+      // explicitly, so gameData.state narrows to `never` here. Adding a
+      // state to the union without adding a case above fails this
+      // assignment at compile time instead of silently falling through to
+      // a runtime default. No runtime action is taken for an unrecognized
+      // value - a no-op is safe; dumping the player to showMenu() mid-game
+      // is exactly the destructive fallback this fix removes.
+      const _exhaustive: never = gameData.state;
+      void _exhaustive;
+    }
   }
 
   syncMusicState();

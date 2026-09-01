@@ -5,7 +5,13 @@
 export type GameState = "menu" | "playing" | "dying" | "levelComplete" | "gameover" | "highscores" | "enterName" | "paused" | "help";
 export type Direction = "up" | "down" | "left" | "right";
 export type CellType = "empty" | "ice" | "diamond" | "wall";
-export type EnemyState = "walking" | "hatching" | "stunned" | "dead";
+/**
+ * `crushed` is the moment between the block landing and the Sno-Bee being
+ * gone: it plays its squash animation, and only then is it removed. Without
+ * it a crushed enemy simply stopped being drawn on the same tick the block
+ * arrived - "when i push a block against an enemy it doesn't animate".
+ */
+export type EnemyState = "walking" | "hatching" | "stunned" | "crushed" | "dead";
 export interface Position {
     x: number;
     y: number;
@@ -26,8 +32,20 @@ export interface Enemy {
     direction: Direction;
     state: EnemyState;
     stunTimer: number;
+    /** Ticks left of the squash animation, while `state` is 'crushed'. */
+    crushTimer: number;
     hatchTimer: number;
     moveTimer: number;
+    /**
+     * Where this Sno-Bee is currently headed - a point near Pengo, not
+     * Pengo's own cell (see game/ai.ts). Optional and absent until the
+     * first tick that moves this enemy, so every existing Enemy literal in
+     * the test suite stays valid without updating each one.
+     */
+    targetX?: number;
+    targetY?: number;
+    /** Moves spent on the current target, so a stale one gets re-aimed. */
+    targetAge?: number;
 }
 export interface Block {
     x: number;
@@ -35,6 +53,28 @@ export interface Block {
     type: CellType;
     isSliding: boolean;
     slideDirection: Direction | null;
+}
+/**
+ * A block in flight, between the cell it left and the cell it will stop on.
+ *
+ * A push used to resolve inside a single keypress: the whole slide ran in
+ * one synchronous loop, so a block travelled its entire length in one
+ * frame. Reported in play as blocks disappearing, and diagnosed exactly -
+ * "they move too fast making it a 1 frame animation". Both reference
+ * clones model a pushed block as a moving thing, and so does the arcade;
+ * this is that model.
+ */
+export interface SlidingBlock {
+    x: number;
+    y: number;
+    type: CellType;
+    /** Direction of travel, one cell per SLIDE_TICKS_PER_CELL. */
+    dx: number;
+    dy: number;
+    /** Ticks until the next cell step. */
+    timer: number;
+    /** How many Sno-Bees this one push has caught, for the combo score. */
+    crushed: number;
 }
 export interface Egg {
     x: number;
@@ -57,6 +97,8 @@ export interface PengoData {
     enemies: Enemy[];
     grid: CellType[][];
     eggs: Egg[];
+    /** Blocks currently in flight from a push. */
+    slidingBlocks: SlidingBlock[];
     diamondsAligned: boolean;
     enemyIdCounter: number;
     /**

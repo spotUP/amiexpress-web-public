@@ -3,6 +3,7 @@
  * 1981 Konami arcade game port for AmiExpress BBS
  */
 
+import { join } from "path";
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
@@ -37,6 +38,15 @@ import {
   DEFAULT_HIGHSCORES,
   HOME_POSITIONS,
 } from "./game/constants";
+import { loadSpriteSheet } from "@amiexpress/bbs-door-sdk/engines/graphics/cell-art";
+
+/**
+ * The board's art, loaded once for the life of the door.
+ *
+ * Same split Pengo handles: __dirname is Doors/frogger under tsx and
+ * Doors/frogger/dist in production, and sprites/ is copied alongside both.
+ */
+const spriteSheet = loadSpriteSheet(join(__dirname, "sprites"));
 
 // Export RPC handlers for hybrid mode
 export { rpcHandlers };
@@ -148,6 +158,12 @@ function initScreen(): void {
     smartCSR: true,
     dockBorders: true,
     title: "Frogger",
+    // A game door owns the whole 80x25 terminal - only the BBS proper is
+    // limited to 23 rows. Without an explicit height the screen takes a
+    // 24-row default and the board's bottom lane, the one the player
+    // starts on, falls off the end of it.
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
     fullUnicode: false,
     output: (data: string) => doorContext?.output.write(data),
     input: null as any,
@@ -336,7 +352,7 @@ function startDemo(): void {
   demoGame = new FroggerGame(demoData, (content: string) => {
     gameArea.setContent(content);
     screen.render();
-  });
+  }, spriteSheet);
   demoGame.initLevel();
 }
 
@@ -365,8 +381,31 @@ function runDemoFrame(): void {
   }
 }
 
+/**
+ * The play screen has no logo on it.
+ *
+ * The arcade shows the score on the top line and the board everywhere else;
+ * the five-row logo plus its spacer was costing a quarter of the screen,
+ * and those rows are exactly what the two-row animated lanes are made of.
+ * The logo still opens the door and still sits over the menu and the
+ * attract loop - it just gets out of the way while somebody is playing.
+ */
+function layoutForPlay(): void {
+  logoBox.hide();
+  (hudBox as any).top = 0;
+  (gameArea as any).top = 1;
+}
+
+/** Menu and attract get the logo back, and the panes move down under it. */
+function layoutForMenu(): void {
+  logoBox.show();
+  (hudBox as any).top = LOGO_HEIGHT + 1;
+  (gameArea as any).top = LOGO_HEIGHT + 2;
+}
+
 function showMenu(): void {
   stopAttract();
+  layoutForMenu();
   gameData.state = "menu";
   gameData.menuSelection = 0;
   renderMenu();
@@ -522,6 +561,7 @@ function cycleLives(): void {
  * Start the game
  */
 function startGame(): void {
+  layoutForPlay();
   gameData.state = "playing";
   gameData.score = 0;
   // FAQ 6.3: the cabinet was set to 3, 5, 7 or 256 frogs.
@@ -545,7 +585,7 @@ function startGame(): void {
     // place that sees them all - no hunting for the five call sites that
     // would each need their own flush.
     if (sfx && game) sfx.flush(game.cues);
-  });
+  }, spriteSheet);
 
   game.initLevel();
 

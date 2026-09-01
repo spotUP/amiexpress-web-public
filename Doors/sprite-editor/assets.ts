@@ -14,7 +14,7 @@
 
 import * as fs from 'fs';
 import { basename, dirname, join, resolve, sep } from 'path';
-import { Sprite, parseSprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { Sprite, parseSprite, serializeSprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 
 /**
  * Doors/, found by walking up from wherever this file runs - which is
@@ -80,4 +80,35 @@ export function listSprites(door: string): string[] {
 export function readSprite(door: string, file: string): Sprite {
   const path = resolveAssetPath(door, 'sprites', file);
   return parseSprite(JSON.parse(fs.readFileSync(path, 'utf8')), file);
+}
+
+/** Write one sheet: guarded path, validated content, atomic replace. */
+export function writeSprite(door: string, file: string, sprite: Sprite): void {
+  const path = resolveAssetPath(door, 'sprites', file);
+  const json = serializeSprite(sprite); // throws before any disk touch
+  const tmp = `${path}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, json);
+  fs.renameSync(tmp, path); // atomic on the same filesystem
+}
+
+/** `*.ans` files in a door's art/ directory, sorted; [] when none. */
+export function listArt(door: string): string[] {
+  try {
+    const dir = resolveAssetPath(door, 'art', '.');
+    return fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.ans')).sort();
+  } catch {
+    return []; // no art/ directory is a normal state, not an error
+  }
+}
+
+export function readArt(door: string, file: string): Buffer {
+  return fs.readFileSync(resolveAssetPath(door, 'art', file));
+}
+
+export function writeArt(door: string, file: string, data: Buffer): void {
+  const path = resolveAssetPath(door, 'art', file);
+  fs.mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, path);
 }

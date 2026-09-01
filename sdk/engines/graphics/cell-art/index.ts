@@ -11,12 +11,22 @@ export {
   PALETTE,
   createBuffer,
   blitCells,
+  flipCellsH,
+  flipCellsV,
   rowToTags,
   bufferToTags,
 } from './cells';
 export type { Cell, CellRow, CellBuffer } from './cells';
 
-export { parseSprite, frameAt, blitSprite } from './sprite';
+export { parseSprite, serializeSprite, frameAt, blitSprite } from './sprite';
 export type { Sprite, SpriteAnimation } from './sprite';
 
 export { loadSpriteSheet } from './load';
+
+export { cameraView, cropBuffer, offScreenMarkers } from './camera';
+export type { Rect, CameraOptions, OffScreenMarker } from './camera';
+
+export { compilePixels, decompilePixels } from './halfblock';
+export type { PixelGrid } from './halfblock';
+
+export { frameToCanvas, canvasToFrame } from './editor-canvas';

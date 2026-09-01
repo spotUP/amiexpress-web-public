@@ -5,6 +5,7 @@
  * The level's traffic, footing and hazards all come from FAQ 6.4's table by
  * way of getLevelConfig; nothing here invents a count or a direction.
  */
+import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { FroggerData, Direction } from './types';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 export declare class FroggerGame {
@@ -20,7 +21,16 @@ export declare class FroggerGame {
      * the demo's cues are simply never drained.
      */
     readonly cues: SfxCues;
-    constructor(data: FroggerData, onRender: (content: string) => void);
+    /**
+     * The sprite sheet the board is drawn from.
+     *
+     * Required, not optional: there is no second renderer to fall back to.
+     * A door that can draw without its art is a door whose art can silently
+     * stop being used, which is how the glyph painter this replaced managed
+     * to outlive its usefulness.
+     */
+    private sheet;
+    constructor(data: FroggerData, onRender: (content: string) => void, sheet: Record<string, Sprite>);
     /**
      * The game's own clock, in milliseconds of play.
      *
@@ -187,45 +197,16 @@ export declare class FroggerGame {
     /**
      * The GAME OVER panel, laid over the middle of the board.
      *
+     * Written into the CELL BUFFER, before anything becomes a tag string.
+     * It used to pull each rendered row apart with a regular expression that
+     * knew the old painter's tag format; the engine writes tags in a
+     * different shape, so the panel silently landed in an empty array and
+     * the game-over screen came up blank. Cells cannot go stale that way -
+     * there is one representation and the panel writes into it.
+     *
      * The cabinet blinks GAME OVER and asks for a coin; a BBS door has no
      * coin slot, so it asks for a key.
      */
     private overlayGameOver;
-    /**
-     * Write `text` into an already-painted row at column `left`, keeping
-     * whatever background each character lands on.
-     */
-    private overlayText;
-    /** The ground: road, water, the banks and the median, and the hedge. */
-    private paintLanes;
-    /** The five homes cut into the hedge. */
-    private paintHomes;
-    /** Everything travelling in a lane. */
-    private paintObjects;
-    /** The snakes patrolling the median. */
-    private paintSnakes;
-    /**
-     * The player.
-     *
-     * Drawn as the opposite of the ground it is standing on, with itself the
-     * opposite of that again: the frog is never the same colour as what is
-     * under it, whatever that happens to be. A fixed colour always collides
-     * with something - green on the green banks is what was reported - and
-     * the frog is the one thing on the board that must never be hard to find.
-     */
-    private paintFrog;
-    /**
-     * The sprite for one moving thing, built to exactly fill its cells.
-     *
-     * `mouthAt` is where the jaws of a crocodile or otter go: the leading end,
-     * whichever way it is swimming. The player has to be able to see which end
-     * eats them.
-     */
-    private spriteFor;
-    /**
-     * A vehicle: a body with a nose on the end it is travelling towards, so
-     * you can see which way the traffic is coming from.
-     */
-    private vehicleSprite;
 }
 //# sourceMappingURL=frogger-game.d.ts.map

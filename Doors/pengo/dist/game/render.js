@@ -9,17 +9,24 @@
  * chosen after drawing" class of bug cannot recur.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildWorld = buildWorld;
 exports.buildBoard = buildBoard;
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const constants_1 = require("./constants");
+const camera_1 = require("./camera");
 /** How long a pushed block keeps its slide flash, in ticks. */
 const SLIDE_FLASH_TICKS = 5;
 /** How long the walls rattle after a shake. */
 const WALL_SHAKE_TICKS = 6;
 /** An egg this close to hatching cracks visibly. */
 const HATCH_WARNING = 30;
-function buildBoard(data, sheet, tick) {
-    const board = (0, cell_art_1.createBuffer)(constants_1.BOARD_COLS, constants_1.BOARD_ROWS);
+/**
+ * The whole maze, as drawn - before the camera crops it to what fits the
+ * screen. Exported so a test (or the HUD) can reason about the world
+ * independently of the viewport `buildBoard` returns.
+ */
+function buildWorld(data, sheet, tick) {
+    const board = (0, cell_art_1.createBuffer)(constants_1.WORLD_COLS, constants_1.WORLD_ROWS);
     const sliding = (x, y) => !!data.lastSlide && data.lastSlide.x === x && data.lastSlide.y === y &&
         tick - data.lastSlide.tick <= SLIDE_FLASH_TICKS;
     const wallsShaking = !!data.wallShake && tick - data.wallShake.tick <= WALL_SHAKE_TICKS;
@@ -40,6 +47,15 @@ function buildBoard(data, sheet, tick) {
             }
         }
     }
+    // Blocks in flight. They are NOT in the grid while they travel - they
+    // were taken out of it when the push started and go back when they stop -
+    // so if they were not drawn here they would vanish for the whole slide,
+    // which is the very fault this animation exists to fix.
+    for (const block of data.slidingBlocks) {
+        const sprite = block.type === 'diamond' ? sheet['diamond'] : sheet['ice'];
+        const anim = block.type === 'diamond' ? 'sparkle' : 'sliding';
+        (0, cell_art_1.blitSprite)(board, sprite, anim, tick, block.x, block.y);
+    }
     // Eggs
     for (const egg of data.eggs) {
         const anim = egg.hatchTimer <= HATCH_WARNING ? 'hatching' : 'idle';
@@ -50,6 +66,13 @@ function buildBoard(data, sheet, tick) {
     for (const enemy of data.enemies) {
         if (enemy.state === 'dead')
             continue;
+        // A crushed Sno-Bee plays its squash from its OWN timer, not the board
+        // tick, so the animation runs once at its own pace rather than being
+        // sampled wherever the shared clock happens to be.
+        if (enemy.state === 'crushed') {
+            (0, cell_art_1.blitSprite)(board, sheet['sno-bee'], 'crushed', constants_1.CRUSH_FRAMES - enemy.crushTimer, enemy.x, enemy.y);
+            continue;
+        }
         (0, cell_art_1.blitSprite)(board, sheet['sno-bee'], enemy.state === 'stunned' ? 'stunned' : 'crawl', tick, enemy.x, enemy.y);
     }
     // The penguin, last and on top.
@@ -64,5 +87,17 @@ function buildBoard(data, sheet, tick) {
         (0, cell_art_1.blitSprite)(board, sheet['pengo'], `walk-${p.direction}`, tick, p.x, p.y);
     }
     return board;
+}
+/**
+ * What the player actually sees: the world, cropped to the camera's
+ * window on Pengo's row. Pure in (data, sheet, tick), same as the world
+ * builder it wraps - the camera itself is stateless, recomputed fresh
+ * from `data.pengo.y` every call, so there is nothing here that can drift
+ * out of sync with a previous frame.
+ */
+function buildBoard(data, sheet, tick) {
+    const world = buildWorld(data, sheet, tick);
+    const window = (0, camera_1.cameraWindowChars)(data.pengo.y);
+    return (0, cell_art_1.cropBuffer)(world, window);
 }
 //# sourceMappingURL=render.js.map

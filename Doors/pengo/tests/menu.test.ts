@@ -23,7 +23,7 @@
 import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { GRID_WIDTH, MENU_OPTIONS } from '../game/constants';
+import { BOARD_COLS, MENU_OPTIONS } from '../game/constants';
 
 function indexSource(): string {
   return readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
@@ -71,7 +71,11 @@ export async function theMenuIsDrivenByMenuSelection(): Promise<void> {
  */
 export async function noPopupIsWiderThanItsParent(): Promise<void> {
   const src = indexSource();
-  const boardColumns = GRID_WIDTH * 2;
+  // gameArea is drawn at exactly BOARD_COLS (the camera's on-screen view
+  // width, not the door's old GRID_WIDTH*2 approximation - the 13x15
+  // world/camera work made that formula wrong: GRID_WIDTH stopped being
+  // proportional to the board's actual character width).
+  const boardColumns = BOARD_COLS;
 
   // Every popup that asks to be centred must be parented to the screen.
   const centred = [...src.matchAll(/new (?:Box|ScrollableBox)\(\{([\s\S]*?)\n  \}\)/g)];

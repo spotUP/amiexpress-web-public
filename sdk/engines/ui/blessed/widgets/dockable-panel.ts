@@ -344,7 +344,14 @@ export class DockablePanel extends Panel {
 
     // Drag and resize handlers
     // Note: Resize takes priority over drag - they should never both be active
-    this.screen.on('mousemove', (data: any) => {
+    //
+    // Routed through onScreenEvent (not a raw screen.on()) so Element's
+    // _unbindScreenEvents() removes these on destroy(). Anonymous closures
+    // passed straight to screen.on() bypass the SDK's _slisteners tracking
+    // and survive destroy() forever - EditScreen builds/destroys four
+    // panels per editor open, which leaked +4 permanent mousemove listeners
+    // per open (2026-09-01).
+    this.onScreenEvent('mousemove', (data: any) => {
       if (this.isResizing && this.currentResizeEdge) {
         // Resize mode - only handle resize, never drag
         this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
@@ -354,7 +361,7 @@ export class DockablePanel extends Panel {
       }
     });
 
-    this.screen.on('mouseup', () => {
+    this.onScreenEvent('mouseup', () => {
       if (this.isDragging) {
         this.stopDrag();
       }
@@ -364,7 +371,7 @@ export class DockablePanel extends Panel {
     });
 
     // Screen resize handler - update docked panels and constrain floating panels
-    this.screen.on('resize', () => {
+    this.onScreenEvent('resize', () => {
       // Check for mobile mode (Auto-Flow)
       const breakpoint = this.screen.responsiveLayout.getBreakpoint();
       const isMobile = breakpoint === 'xs';
@@ -2052,8 +2059,16 @@ export class DockablePanel extends Panel {
           dragStart = null;
           detached = false;
         };
-        this.screen.on('mousemove', onMove);
-        this.screen.on('mouseup', onUp);
+        // Routed through btn.onScreenEvent (not a raw screen.on()) so
+        // Element's _unbindScreenEvents() removes these when the button
+        // is destroyed - both when updateTabs() rebuilds the tab bar on
+        // every switch/add/remove, and when the panel itself is
+        // destroyed. Same bug class already fixed above for the panel's
+        // own drag/resize listeners (see bindScreenEvents()); mousemove
+        // is the hot path behind this repo's documented door-freeze
+        // class.
+        btn.onScreenEvent('mousemove', onMove);
+        btn.onScreenEvent('mouseup', onUp);
       }
 
       this.tabButtons.push(btn);

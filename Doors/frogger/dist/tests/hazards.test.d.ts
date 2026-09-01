@@ -107,4 +107,18 @@ export declare function missingTheHomeByAWholeCellStillKills(): Promise<void>;
  * a whole number of cells along it.
  */
 export declare function aHopLandsOnAWholeCell(): Promise<void>;
+/**
+ * A frog standing on the visible end of a log is standing on the log.
+ *
+ * Reported live: "i jumped to the edge of a log and died... the visible
+ * edges of some sprites are not having correct collision detection". The
+ * footing test asked whether the frog's LEFT EDGE fell inside the log, but
+ * the frog is a whole cell and logs sit at fractional positions drawn to
+ * the character - so a frog visibly half-on the end of a log lost the test
+ * by a fraction of a cell and drowned. What is drawn and what is ruled
+ * have to agree, so the test is now the frog's centre.
+ */
+export declare function aFrogOnTheVisibleEndOfALogRidesIt(): Promise<void>;
+/** Past the halfway point off the end, though, it really is in the water. */
+export declare function aFrogMostlyOffTheEndOfALogDrowns(): Promise<void>;
 //# sourceMappingURL=hazards.test.d.ts.map

@@ -8,10 +8,11 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FroggerGame = void 0;
+const render_1 = require("./render");
 const constants_1 = require("./constants");
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 class FroggerGame {
-    constructor(data, onRender) {
+    constructor(data, onRender, sheet) {
         /**
          * What just happened, for whoever is listening.
          *
@@ -24,6 +25,7 @@ class FroggerGame {
         this.cues = new arcade_1.SfxCues();
         this.data = data;
         this.renderCallback = onRender;
+        this.sheet = sheet;
     }
     /**
      * The game's own clock, in milliseconds of play.
@@ -666,7 +668,20 @@ class FroggerGame {
         }
     }
     overlaps(frogX, objX, objWidth) {
-        return frogX >= objX && frogX < objX + objWidth;
+        // The frog is a CELL, not a point.
+        //
+        // This used to ask whether the frog's left edge fell inside the object,
+        // which is not what the player sees. Logs and traffic sit at fractional
+        // positions and are drawn to the character, so a frog standing visibly
+        // on the end of a log could fail a test its own left edge lost by a
+        // fraction of a cell: "i jumped to the edge of a log and died".
+        //
+        // So the test is the frog's CENTRE, which is the same as asking whether
+        // at least half of it is over the object - what a player reads off the
+        // screen, and symmetric at both ends rather than generous on one side
+        // and lethal on the other.
+        const frogCentre = frogX + 0.5;
+        return frogCentre >= objX && frogCentre < objX + objWidth;
     }
     /**
      * Check if frog reached a home slot.
@@ -895,295 +910,61 @@ class FroggerGame {
      */
     render() {
         const d = this.data;
-        const width = constants_1.GRID_WIDTH * constants_1.CELL_WIDTH;
-        // One entry per CHARACTER, not per cell: sprites are drawn across the
-        // characters of the cells they cover.
-        const chars = [];
-        const fgs = [];
-        const bgs = [];
-        for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
-            chars.push(new Array(width).fill(' '));
-            fgs.push(new Array(width).fill('white'));
-            bgs.push(new Array(width).fill(constants_1.BG_COLORS.road));
-        }
-        const put = (y, x, text, fg, bg) => {
-            for (let i = 0; i < text.length; i++) {
-                const cx = x + i;
-                if (cx < 0 || cx >= width || y < 0 || y >= constants_1.GRID_HEIGHT)
-                    continue;
-                chars[y][cx] = text[i];
-                fgs[y][cx] = fg;
-                if (bg)
-                    bgs[y][cx] = bg;
-            }
-        };
-        this.paintLanes(bgs, chars, fgs, put);
-        this.paintHomes(put);
-        this.paintObjects(put);
-        this.paintSnakes(put);
-        this.paintFrog(put, (y, x) => bgs[y]?.[x] ?? constants_1.BG_COLORS.road);
-        const lines = [];
-        for (let y = 0; y < constants_1.GRID_HEIGHT; y++) {
-            let line = '';
-            let run = '';
-            let fg = '';
-            let bg = '';
-            const flush = () => {
-                if (!run)
-                    return;
-                line += `{${bg}-bg}{${fg}-fg}${run}{/${fg}-fg}{/${bg}-bg}`;
-                run = '';
-            };
-            for (let x = 0; x < width; x++) {
-                if (fgs[y][x] !== fg || bgs[y][x] !== bg) {
-                    flush();
-                    fg = fgs[y][x];
-                    bg = bgs[y][x];
-                }
-                run += chars[y][x];
-            }
-            flush();
-            lines.push(line);
-        }
+        const board = (0, render_1.buildBoard)(d, this.sheet, d.frameCount);
         // Losing the last frog used to leave the board frozen with nothing on
-        // it: the state was set, and nothing ever drew it.
+        // it: the state was set, and nothing ever drew it. The panel goes into
+        // the CELL BUFFER, before the board becomes tag strings - overlaying
+        // afterwards meant parsing tags back apart, and the parser knew a tag
+        // format the renderer no longer writes, so the panel came up blank.
         if (d.state === 'gameover')
-            this.overlayGameOver(lines);
+            this.overlayGameOver(board);
         // No clock row under the board: the time is a number in the status
         // line, and the board ends where the board ends.
-        this.renderCallback(lines.join('\n'));
+        this.renderCallback((0, render_1.boardToLines)(board).join('\n'));
     }
     /**
      * The GAME OVER panel, laid over the middle of the board.
      *
+     * Written into the CELL BUFFER, before anything becomes a tag string.
+     * It used to pull each rendered row apart with a regular expression that
+     * knew the old painter's tag format; the engine writes tags in a
+     * different shape, so the panel silently landed in an empty array and
+     * the game-over screen came up blank. Cells cannot go stale that way -
+     * there is one representation and the panel writes into it.
+     *
      * The cabinet blinks GAME OVER and asks for a coin; a BBS door has no
      * coin slot, so it asks for a key.
      */
-    overlayGameOver(lines) {
+    overlayGameOver(board) {
         const d = this.data;
-        const width = constants_1.GRID_WIDTH * constants_1.CELL_WIDTH;
         const showPrompt = Math.floor(d.frameCount / constants_1.GAME_OVER_BLINK_FRAMES) % 2 === 0;
         const panel = [
-            { text: 'GAME OVER', colour: 'lightred' },
-            { text: '', colour: 'white' },
-            { text: `SCORE ${d.score}`, colour: 'lightgreen' },
-            { text: `LEVEL ${d.level}`, colour: 'lightgreen' },
-            { text: `HOMES ${d.homesCompleted} OF 5`, colour: 'lightgreen' },
-            { text: '', colour: 'white' },
-            { text: showPrompt ? 'PRESS ENTER' : '', colour: 'lightyellow' },
+            { text: 'GAME OVER', colour: 9 },
+            { text: '', colour: 7 },
+            { text: `SCORE ${d.score}`, colour: 10 },
+            { text: `LEVEL ${d.level}`, colour: 10 },
+            { text: `HOMES ${d.homesCompleted} OF 5`, colour: 10 },
+            { text: '', colour: 7 },
+            { text: showPrompt ? 'PRESS ENTER' : '', colour: 11 },
         ];
-        const top = Math.max(0, Math.floor((lines.length - panel.length) / 2));
+        const width = board[0]?.length ?? 0;
+        const top = Math.max(0, Math.floor((board.length - panel.length) / 2));
         panel.forEach((row, i) => {
             const y = top + i;
-            if (y >= lines.length || !row.text)
+            const dest = board[y];
+            if (!dest || !row.text)
                 return;
             const left = Math.max(0, Math.floor((width - row.text.length) / 2));
             // Laid over the board a character at a time, so the game behind the
-            // message still shows. It used to be painted on a black band across
-            // the whole row.
-            lines[y] = this.overlayText(lines[y], left, row.text, row.colour);
+            // message still shows through around the words rather than sitting
+            // under a black band.
+            for (let x = 0; x < row.text.length; x++) {
+                const cell = dest[left + x];
+                if (!cell)
+                    continue;
+                dest[left + x] = { char: row.text[x], fg: row.colour, bg: cell.bg };
+            }
         });
-    }
-    /**
-     * Write `text` into an already-painted row at column `left`, keeping
-     * whatever background each character lands on.
-     */
-    overlayText(line, left, text, colour) {
-        // Pull the row apart into characters and their colours.
-        const cells = [];
-        const re = /\{([a-z]+)-bg\}\{([a-z]+)-fg\}(.*?)\{\/[a-z]+-fg\}\{\/[a-z]+-bg\}/g;
-        let m;
-        while ((m = re.exec(line)) !== null) {
-            for (const ch of m[3])
-                cells.push({ ch, fg: m[2], bg: m[1] });
-        }
-        for (let i = 0; i < text.length; i++) {
-            const cell = cells[left + i];
-            if (!cell)
-                continue;
-            cell.ch = text[i];
-            cell.fg = colour;
-        }
-        let out = '';
-        let run = '';
-        let fg = '';
-        let bg = '';
-        const flush = () => {
-            if (!run)
-                return;
-            out += `{${bg}-bg}{${fg}-fg}${run}{/${fg}-fg}{/${bg}-bg}`;
-            run = '';
-        };
-        for (const cell of cells) {
-            if (cell.fg !== fg || cell.bg !== bg) {
-                flush();
-                fg = cell.fg;
-                bg = cell.bg;
-            }
-            run += cell.ch;
-        }
-        flush();
-        return out;
-    }
-    /** The ground: road, water, the banks and the median, and the hedge. */
-    paintLanes(bgs, chars, fgs, put) {
-        const width = constants_1.GRID_WIDTH * constants_1.CELL_WIDTH;
-        for (const lane of this.data.lanes) {
-            const bg = lane.type === 'road' ? constants_1.BG_COLORS.road :
-                lane.type === 'water' ? constants_1.BG_COLORS.water :
-                    lane.type === 'safe' ? constants_1.BG_COLORS.bank :
-                        constants_1.BG_COLORS.hedge;
-            bgs[lane.y].fill(bg);
-            chars[lane.y].fill(' ');
-            fgs[lane.y].fill('white');
-            // The banks and the median carry a texture, the way the reference art
-            // does - a flat block of colour looks like a gap in the game.
-            if (lane.type === 'safe') {
-                const texture = constants_1.BANK_TEXTURE.repeat(Math.ceil(width / constants_1.BANK_TEXTURE.length));
-                put(lane.y, 0, texture.slice(0, width), constants_1.SPRITE_FG.bank, bg);
-            }
-        }
-        // The hedge along the top, between the homes.
-        const hedge = constants_1.HEDGE_TEXTURE.repeat(width);
-        put(0, 0, hedge.slice(0, width), constants_1.SPRITE_FG.hedge, constants_1.BG_COLORS.hedge);
-    }
-    /** The five homes cut into the hedge. */
-    paintHomes(put) {
-        const span = constants_1.HOME_WIDTH * constants_1.CELL_WIDTH;
-        for (const home of this.data.homes) {
-            const x = home.x * constants_1.CELL_WIDTH;
-            const inside = home.occupied ? { glyph: constants_1.FROG_GLYPH, fg: constants_1.SPRITE_FG.homeFrog } :
-                home.hasAlligator ? { glyph: constants_1.MOUTH_GLYPH[0], fg: constants_1.SPRITE_FG.homeCrocodile } :
-                    home.hasFly ? { glyph: constants_1.FLY_GLYPH, fg: constants_1.SPRITE_FG.homeFly } :
-                        { glyph: ' ', fg: constants_1.SPRITE_FG.home };
-            // The opening itself, dark, with the frame either side of it.
-            put(0, x, ' '.repeat(span), constants_1.SPRITE_FG.home, constants_1.BG_COLORS.homeEmpty);
-            put(0, x, constants_1.HOME_LEFT, constants_1.SPRITE_FG.home, constants_1.BG_COLORS.homeEmpty);
-            put(0, x + span - 1, constants_1.HOME_RIGHT, constants_1.SPRITE_FG.home, constants_1.BG_COLORS.homeEmpty);
-            // Drawn at the cell the frog actually has to land in (FAQ 7: "You
-            // must hit exact center"), so what is shown and what is accepted
-            // cannot drift apart.
-            put(0, x + constants_1.HOME_CENTRE_OFFSET * constants_1.CELL_WIDTH, inside.glyph, inside.fg, constants_1.BG_COLORS.homeEmpty);
-        }
-    }
-    /** Everything travelling in a lane. */
-    paintObjects(put) {
-        for (const lane of this.data.lanes) {
-            for (const raw of lane.objects) {
-                const obj = raw;
-                const x = Math.round(obj.x) * constants_1.CELL_WIDTH;
-                const sprite = this.spriteFor(obj);
-                put(obj.y, x, sprite.text, sprite.fg, sprite.bg);
-                // A crocodile or otter's jaws, drawn over the leading end of it.
-                if (sprite.mouthAt !== undefined) {
-                    const fg = obj.type === 'otter' ? constants_1.SPRITE_FG.otterMouth : constants_1.SPRITE_FG.crocodileMouth;
-                    put(obj.y, x + sprite.mouthAt, constants_1.MOUTH_GLYPH, fg, sprite.bg);
-                }
-                // Riders sit on top of whatever carries them.
-                if (obj.snakeAt !== null && obj.snakeAt !== undefined) {
-                    put(obj.y, x + obj.snakeAt * constants_1.CELL_WIDTH, constants_1.SNAKE_GLYPH, constants_1.SPRITE_FG.snake, sprite.bg);
-                }
-                if (obj.ladyFrogAt !== null && obj.ladyFrogAt !== undefined) {
-                    put(obj.y, x + obj.ladyFrogAt * constants_1.CELL_WIDTH, constants_1.FROG_GLYPH, constants_1.SPRITE_FG.ladyFrog, sprite.bg);
-                }
-            }
-        }
-    }
-    /** The snakes patrolling the median. */
-    paintSnakes(put) {
-        for (const snake of this.data.snakes) {
-            put(snake.y, Math.round(snake.x) * constants_1.CELL_WIDTH, constants_1.SNAKE_GLYPH, constants_1.SPRITE_FG.snake, constants_1.BG_COLORS.bank);
-        }
-    }
-    /**
-     * The player.
-     *
-     * Drawn as the opposite of the ground it is standing on, with itself the
-     * opposite of that again: the frog is never the same colour as what is
-     * under it, whatever that happens to be. A fixed colour always collides
-     * with something - green on the green banks is what was reported - and
-     * the frog is the one thing on the board that must never be hard to find.
-     */
-    paintFrog(put, groundAt) {
-        const d = this.data;
-        const x = Math.round(d.frog.x) * constants_1.CELL_WIDTH;
-        const ground = groundAt(d.frog.y, x);
-        const bg = (0, constants_1.complementOf)(ground);
-        const fg = (0, constants_1.complementOf)(bg);
-        if (!d.frog.isDead) {
-            put(d.frog.y, x, constants_1.FROG_GLYPH, fg, bg);
-            return;
-        }
-        // A death blinks: at one cell there is no room for an animation, but a
-        // flashing frog is unmistakable.
-        if (Math.floor(d.frog.deathFrame / 3) % 2 === 0) {
-            put(d.frog.y, x, constants_1.FROG_GLYPH, constants_1.SPRITE_FG.frogDying, bg);
-        }
-    }
-    /**
-     * The sprite for one moving thing, built to exactly fill its cells.
-     *
-     * `mouthAt` is where the jaws of a crocodile or otter go: the leading end,
-     * whichever way it is swimming. The player has to be able to see which end
-     * eats them.
-     */
-    spriteFor(obj) {
-        const span = obj.width * constants_1.CELL_WIDTH;
-        const rightwards = obj.speed >= 0;
-        switch (obj.type) {
-            case 'log': {
-                const grain = constants_1.LOG_GRAIN.repeat(span);
-                const body = constants_1.LOG_END_LEFT + grain.slice(0, span - 2) + constants_1.LOG_END_RIGHT;
-                return { text: body, fg: constants_1.SPRITE_FG.log, bg: constants_1.BG_COLORS.log };
-            }
-            case 'turtle': {
-                if (obj.isDiving) {
-                    // Under the surface: nothing to stand on, and nothing to see.
-                    return { text: ' '.repeat(span), fg: 'white', bg: constants_1.BG_COLORS.water };
-                }
-                // A sinking set is drawn low, and dimmer, so the tell is visible
-                // at a glance rather than only to someone counting seconds.
-                const sinking = obj.diveStage === 'sinking';
-                const glyph = sinking ? constants_1.TURTLE_SINKING_GLYPH : constants_1.TURTLE_GLYPH;
-                const turtles = glyph.repeat(Math.ceil(span / glyph.length));
-                return {
-                    text: turtles.slice(0, span),
-                    fg: sinking ? constants_1.SPRITE_FG.turtleSinking : constants_1.SPRITE_FG.turtle,
-                };
-            }
-            case 'crocodile': {
-                const body = constants_1.CROCODILE_BODY.repeat(span);
-                return {
-                    text: body,
-                    fg: constants_1.SPRITE_FG.crocodile,
-                    mouthAt: rightwards ? span - constants_1.MOUTH_GLYPH.length : 0,
-                };
-            }
-            case 'otter': {
-                const body = constants_1.OTTER_BODY.repeat(span);
-                return {
-                    text: body,
-                    fg: constants_1.SPRITE_FG.otter,
-                    mouthAt: rightwards ? span - constants_1.MOUTH_GLYPH.length : 0,
-                };
-            }
-            case 'truck':
-                return { text: this.vehicleSprite(span, rightwards), fg: constants_1.SPRITE_FG.truck };
-            case 'racecar':
-                return { text: this.vehicleSprite(span, rightwards), fg: constants_1.SPRITE_FG.racecar };
-            default:
-                return { text: this.vehicleSprite(span, rightwards), fg: constants_1.SPRITE_FG.car };
-        }
-    }
-    /**
-     * A vehicle: a body with a nose on the end it is travelling towards, so
-     * you can see which way the traffic is coming from.
-     */
-    vehicleSprite(span, rightwards) {
-        if (span <= 1)
-            return rightwards ? '>' : '<';
-        const body = 'I' + constants_1.CROCODILE_BODY.repeat(Math.max(0, span - 3)) + 'I';
-        return rightwards ? body + '>' : '<' + body;
     }
 }
 exports.FroggerGame = FroggerGame;

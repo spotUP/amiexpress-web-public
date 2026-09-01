@@ -64,7 +64,7 @@ function emptyBoard() {
 function enemyAt(x, y) {
     return {
         id: 1, x, y, direction: 'left', state: 'walking',
-        stunTimer: 0, hatchTimer: 0, moveTimer: 0,
+        stunTimer: 0, crushTimer: 0, hatchTimer: 0, moveTimer: 0,
     };
 }
 /** Pushing a block is what Pengo does; it should be what Pengo sounds like. */
@@ -79,8 +79,24 @@ async function crushingASnoBeeSounds() {
     const { game, data } = emptyBoard();
     data.grid[4][5] = 'ice';
     data.enemies = [enemyAt(6, 4)];
-    game.handlePush();
+    settlePush(game, data);
     assert_1.default.deepStrictEqual(game.cues.drain(), ['dash', 'explosion']);
+}
+/**
+ * Push, then let the block finish travelling.
+ *
+ * The cues a push produces no longer all arrive on the keypress: 'dash'
+ * fires as the block leaves, but 'explosion' and the diamond fanfare fire
+ * when it STOPS, which is a few ticks later now that a slide is animated
+ * rather than resolved instantly. Draining before it lands sees only half
+ * the sounds.
+ */
+function settlePush(game, data, maxTicks = 200) {
+    game.handlePush();
+    let ticks = 0;
+    while (data.slidingBlocks.length > 0 && ticks++ < maxTicks) {
+        game.advanceSlidingBlocks();
+    }
 }
 /** A wall shake that stuns and one that catches nobody are different sounds. */
 async function aWallShakeSaysWhetherItCaughtAnything() {
@@ -106,7 +122,7 @@ async function liningUpTheDiamondsSounds() {
     data.grid[3][4] = 'diamond';
     data.grid[3][6] = 'diamond';
     data.grid[4][5] = 'ice';
-    game.handlePush();
+    settlePush(game, data);
     assert_1.default.ok(game.cues.pending.includes('powerup'), 'the alignment announces itself');
 }
 /** ...and it announces itself once, not on every push thereafter. */

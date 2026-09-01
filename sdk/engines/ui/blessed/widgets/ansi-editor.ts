@@ -52,6 +52,12 @@ export interface ANSIEditorOptions extends ElementOptions {
   maxLineLength?: number;
   canvasWidth?: number;   // Draw-mode canvas width in cells. Default: 80.
   canvasHeight?: number;  // Draw-mode canvas height in cells. Default: 25.
+  // Presentation-only magnification: a cell is drawn cellScaleX characters
+  // wide and cellScaleY rows tall. getCoreCanvas() is unaffected, so a host
+  // editing a 5x2 sprite reads back a 5x2 grid however large it is drawn.
+  // Default 1/1 - existing hosts render exactly as they do today.
+  cellScaleX?: number;
+  cellScaleY?: number;
   // When true, a freshly-created canvas (construction, File > New) and any
   // erased cell are transparent instead of a solid black space - see
   // CoreCanvas.isCellEmpty() and the Cell.transparent doc comment.
@@ -252,6 +258,12 @@ export class ANSIEditor extends Box {
   // automatically.
   private optCanvasWidth: number;
   private optCanvasHeight: number;
+  // Presentation-only magnification, in characters per cell. Unlike the
+  // dimensions above there is no live array to read them back from - a
+  // canvas knows its size, not how large it is being drawn - so these
+  // fields ARE the source, read only through the scaleX/scaleY getters.
+  private optCellScaleX: number;
+  private optCellScaleY: number;
   // When true, freshly-allocated canvases (construction, File > New) start
   // all-transparent and eraseAtCursor() marks a cell transparent instead of
   // resetting it to an opaque fg:7,bg:0 space. See createBlankCanvas().
@@ -277,9 +289,23 @@ export class ANSIEditor extends Box {
   private get canvasW(): number { return this.cellCanvas?.[0]?.length ?? this.optCanvasWidth; }
   private get canvasH(): number { return this.cellCanvas?.length ?? this.optCanvasHeight; }
 
+  /**
+   * Characters per cell across and rows per cell down. The ONLY source of
+   * magnification: buildCanvasContent() repeats by them, screenToCanvasX/Y
+   * divide by them, and updateDrawCursor() multiplies by them, so the
+   * render and the hit-test can never be scaled by two different numbers.
+   */
+  private get scaleX(): number { return this.optCellScaleX; }
+  private get scaleY(): number { return this.optCellScaleY; }
+
   /** Get the current draw-mode canvas dimensions in cells. */
   getCanvasSize(): { width: number; height: number } {
     return { width: this.canvasW, height: this.canvasH };
+  }
+
+  /** Get the current magnification, in characters per cell. */
+  getCellScale(): { x: number; y: number } {
+    return { x: this.scaleX, y: this.scaleY };
   }
 
   /** Full-canvas selection bounds - the default when no explicit selection exists. */
@@ -296,6 +322,16 @@ export class ANSIEditor extends Box {
   private clampLine(line: number): number {
     return Math.max(0, Math.min(this.canvasH - 1, line));
   }
+
+  /**
+   * Rendered column/row -> canvas column/row: the inverse of the repeat
+   * buildCanvasContent() applies. Every mouse path goes through these, so a
+   * click lands on the cell the artist actually pointed at whatever the
+   * magnification; at the default 1/1 they reduce to the plain clamp the
+   * handlers used before.
+   */
+  private screenToCanvasX(x: number): number { return this.clampCol(Math.floor(x / this.scaleX)); }
+  private screenToCanvasY(y: number): number { return this.clampLine(Math.floor(y / this.scaleY)); }
 
   /** Clamp the live cursor position into the current canvas's bounds. */
   private clampCursorToCanvas(): void {
@@ -339,6 +375,11 @@ export class ANSIEditor extends Box {
     this.maxLineLength = options.maxLineLength || 160;
     this.optCanvasWidth = options.canvasWidth || 80;
     this.optCanvasHeight = options.canvasHeight || 25;
+    // Floored and floored to at least 1: a fractional or zero scale would
+    // put the render and the hit-test on different grids, and a negative
+    // one would build an empty row - a silently blank canvas.
+    this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
+    this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
     this.transparentBackground = options.transparentBackground ?? false;
     this.showLineNumbers = options.showLineNumbers ?? true;
     this.onSaveCallback = options.onSave;
@@ -2291,8 +2332,8 @@ BBS Door SDK v2.0{/gray-fg}
       if (x < 0 || y < 0) return;
 
       // Clamp to canvas bounds
-      this.cursor.col = this.clampCol(x);
-      this.cursor.line = this.clampLine(y);
+      this.cursor.col = this.screenToCanvasX(x);
+      this.cursor.line = this.screenToCanvasY(y);
       this.updateDrawCursor();
 
       // Handle tool-specific click behavior
@@ -2330,8 +2371,8 @@ BBS Door SDK v2.0{/gray-fg}
       }
 
       // Clamp to canvas bounds
-      this.cursor.col = this.clampCol(x);
-      this.cursor.line = this.clampLine(y);
+      this.cursor.col = this.screenToCanvasX(x);
+      this.cursor.line = this.screenToCanvasY(y);
       this.updateDrawCursor();
 
       // For shape tools, update preview on mouse move while drawing
@@ -2797,11 +2838,17 @@ BBS Door SDK v2.0{/gray-fg}
     const canvasTop = (this.drawCanvas.position.top as number) || 0;
     const canvasLeft = (this.drawCanvas.position.left as number) || 0;
 
-    this.drawCursor.top = canvasTop + this.cursor.line;
-    this.drawCursor.left = canvasLeft + this.cursor.col;
+    // Scaled: the overlay lands on the cell's first drawn character and
+    // covers the whole magnified cell, so it marks the cell an artist sees
+    // rather than its top-left corner. At the default 1/1 this is the
+    // 1x1 box at (line, col) it has always been.
+    this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY;
+    this.drawCursor.left = canvasLeft + this.cursor.col * this.scaleX;
+    this.drawCursor.width = this.scaleX;
+    this.drawCursor.height = this.scaleY;
 
     // Show the current drawing character in the cursor
-    this.drawCursor.setContent(this.currentChar);
+    this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
   }
 
   /**
@@ -3300,13 +3347,40 @@ BBS Door SDK v2.0{/gray-fg}
    * paths the way it did before this task (renderPreview() duplicated this
    * logic without the transparent branch - see task-4-report.md).
    */
-  private cellToDisplayTag(cell: Cell): string {
+  /**
+   * The one place a canvas becomes blessed content. Each cell is emitted
+   * scaleX times across and each cell row scaleY times down, so a magnified
+   * canvas is a pure repeat of what one character per cell already
+   * produced - there is no second, "scaled" rendering path that could
+   * disagree with the plain one, and at the default 1/1 the output is
+   * byte-identical to the two hand-written loops this replaced.
+   *
+   * `cellAt` lets a caller substitute cells it wants drawn instead of the
+   * canvas's own - the marching-ants selection overlay does exactly that -
+   * without duplicating the loop and its scaling.
+   */
+  private buildCanvasContent(cellAt: (x: number, y: number) => Cell): string {
+    const rows: string[] = [];
+    for (let y = 0; y < this.canvasH; y++) {
+      let row = '';
+      for (let x = 0; x < this.canvasW; x++) {
+        row += this.cellToDisplayTag(cellAt(x, y), this.scaleX);
+      }
+      for (let n = 0; n < this.scaleY; n++) rows.push(row);
+    }
+    return rows.join('\n');
+  }
+
+  private cellToDisplayTag(cell: Cell, repeat: number = 1): string {
+    // `repeat` widens the cell INSIDE one pair of tags rather than emitting
+    // the whole tagged run N times: same pixels, a third of the content
+    // string at scale 3, and one colour switch per cell instead of three.
     if (cell.transparent) {
-      return `{gray-fg}{black-bg}.{/black-bg}{/gray-fg}`;
+      return `{gray-fg}{black-bg}${'.'.repeat(repeat)}{/black-bg}{/gray-fg}`;
     }
     const fgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.fg] || 'white';
     const bgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.bg] || 'black';
-    const char = cell.char || ' ';
+    const char = (cell.char || ' ').repeat(repeat);
     return `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
   }
 
@@ -3361,18 +3435,12 @@ BBS Door SDK v2.0{/gray-fg}
     const maxY = Math.min(this.canvasH - 1, Math.max(start.line, end.line));
     const marchCell: Cell = { char: '·', fg: 15, bg: 0, blink: false };
 
-    let content = '';
-    for (let y = 0; y < this.canvasH; y++) {
-      for (let x = 0; x < this.canvasW; x++) {
-        const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY &&
-          (y === minY || y === maxY || x === minX || x === maxX);
-        const useMarch = isEdge && (x + y) % 2 === 0;
-        const cell = useMarch ? marchCell : (this.cellCanvas[y]?.[x] || { char: ' ', fg: 7, bg: 0 });
-        content += this.cellToDisplayTag(cell);
-      }
-      if (y < this.canvasH - 1) content += '\n';
-    }
-    this.drawCanvas.setContent(content);
+    this.drawCanvas.setContent(this.buildCanvasContent((x, y) => {
+      const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY &&
+        (y === minY || y === maxY || x === minX || x === maxX);
+      const useMarch = isEdge && (x + y) % 2 === 0;
+      return useMarch ? marchCell : (this.cellCanvas![y]?.[x] || { char: ' ', fg: 7, bg: 0 });
+    }));
     if (this.drawCursor) {
       this.drawCursor.setFront();
     }
@@ -3460,21 +3528,13 @@ BBS Door SDK v2.0{/gray-fg}
   private syncCoreCanvasToDisplay(): void {
     if (!this.cellCanvas) return;
 
-    // Render canvas with colors using blessed tags
-    // 1 character per cell, canvasW columns x canvasH rows. A transparent
-    // cell (see cellToDisplayTag()) paints a dim guide glyph so an artist
-    // can see the through-holes - getCoreCanvas() still returns the cell's
-    // real char/fg/bg untouched; this is presentation-only.
-    let content = '';
-    for (let y = 0; y < this.canvasH; y++) {
-      for (let x = 0; x < this.canvasW; x++) {
-        const cell = this.cellCanvas[y]?.[x] || { char: ' ', fg: 7, bg: 0 };
-        content += this.cellToDisplayTag(cell);
-      }
-      if (y < this.canvasH - 1) content += '\n';
-    }
-
-    this.drawCanvas.setContent(content);
+    // A transparent cell (see cellToDisplayTag()) paints a dim guide glyph
+    // so an artist can see the through-holes - getCoreCanvas() still
+    // returns the cell's real char/fg/bg untouched; this is
+    // presentation-only, as is the magnification buildCanvasContent applies.
+    this.drawCanvas.setContent(this.buildCanvasContent(
+      (x, y) => this.cellCanvas![y]?.[x] || { char: ' ', fg: 7, bg: 0 }
+    ));
     // Ensure cursor stays above canvas content
     if (this.drawCursor) {
       this.drawCursor.setFront();
