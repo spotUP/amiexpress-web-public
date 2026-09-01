@@ -1725,6 +1725,63 @@ static void ui_draw_bar(ansi_buf *b, int top, int cols, const char *text)
     ansi_center(b, top + 1, 1, cols, text);
 }
 
+/* One dialog, used by every screen that has something to say.
+ *
+ * Before this, each message cleared the whole screen to black, printed two
+ * lines at the top-left and waited for a key - so a refusal looked like the
+ * door had crashed and taken the interface with it. Reported on 2026-08-31
+ * ("it clears the door and writes this on a black screen", "this message
+ * belongs in a dialog").
+ *
+ * Drawn OVER whatever is already on screen: a centred box in the same border
+ * style the panels use, so it reads as part of this door rather than a
+ * different program. The caller redraws its own screen afterwards, exactly
+ * as it does after any other overlay.
+ *
+ * `line2` may be NULL. Both lines are clipped, never wrapped - a message
+ * that does not fit was written too long, and silently reflowing it would
+ * hide that.
+ */
+static void ui_notice(ansi_buf *b, char *frame, long framecap,
+                      const ui_geometry *g, const char *title,
+                      const char *line1, const char *line2)
+{
+    int width = g->cols - 8;
+    int height = line2 != (const char *) 0 ? 8 : 7;
+    int left;
+    int top;
+    int inner;
+
+    if (width > 64) {
+        width = 64;
+    }
+    if (width < 20) {
+        width = 20;
+    }
+    left = ((g->cols - width) / 2) + 1;
+    top = ((g->rows - height) / 2) + 1;
+    inner = width - 4;
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 0);
+    /* A PANEL, not a box: this opens on top of the browser, so it has to
+     * paint over the archive list and the ANSI art behind it. A frame alone
+     * left both reading straight through the middle of the dialog. */
+    ansi_panel(b, top, left, height, width, ANSI_CYAN, ANSI_BLACK, title);
+
+    ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+    ansi_text(b, top + 2, left + 2, line1, inner);
+    if (line2 != (const char *) 0) {
+        ansi_text(b, top + 3, left + 2, line2, inner);
+    }
+
+    ansi_color(b, ANSI_CYAN, ANSI_BLACK, 1);
+    ansi_text(b, top + height - 2, left + 2, "Press any key.", inner);
+    ansi_flush(b);
+
+    (void) ae_key();
+}
+
 /* Install index, defined further down with the rest of its file I/O. The
  * browser needs it here: the list mark, the header count and the detail
  * pane's "[CMD]" tag all read it. */
@@ -1788,7 +1845,11 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
                           int installed, int has_junk)
 {
     char bar[160];
-    const char *optional[10];
+    /* Sized above the number of parts that can be pushed below, not equal to
+     * it: this array was exactly full at ten, so the next key added to the
+     * screen wrote one past the end. flow_build_footer_bar drops what does
+     * not fit the width, so a spare slot costs nothing. */
+    const char *optional[16];
     int n = 0;
     int len;
 
@@ -1811,6 +1872,10 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * ever makes sense for an installed entry. */
     if (installed) {
         optional[n++] = "M=Access";
+        /* T edits the rest of the command config - TYPE, STACK, MENUNAME -
+         * and is gated the same way M is: an uninstalled archive has no
+         * .info to edit. */
+        optional[n++] = "T=Config";
     }
     optional[n++] = "A=Archive";
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
@@ -1824,20 +1889,29 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * width-budgeted, see flow.h - guarantees Q=Quit is never the one that
      * gets cut, unlike the old strcat-then-truncate-at-cols shape this
      * replaced, which silently dropped it on any row with ads AND doc). */
-    optional[n++] = "F=Find";
-    optional[n++] = "C=System";
+    /* The screen-level keys are no longer listed one by one. They could
+     * never all fit - sixteen keys, four slots at eighty columns - and the
+     * ones that fell off the end were live and advertised nowhere, which is
+     * how a sysop came to ask what T did. "/" opens the bar, and /help
+     * lists everything including these. The row-scoped keys above stay on
+     * the bar, because those are the ones pressed constantly. */
     optional[n++] = "L=Installed";
+    optional[n++] = "C=Type";
     optional[n++] = "K=Patterns";
     if (owner_is_enabled() && !owner_is_logged_in()) {
         optional[n++] = "O=Owner";
     }
     if (owner_is_logged_in()) {
-        optional[n++] = "D=Hide";
+        optional[n++] = "X=Hide";
     }
 
+    /* "/=Cmds" is MANDATORY, not optional. It is the way to reach everything
+     * this bar cannot fit, so it is the one part that must never be the one
+     * dropped - an optional entry for it fell off at eighty columns, which
+     * is exactly the width most of this board's users are on. */
     len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
-                                installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install",
-                                optional, n, "Q=Quit");
+                                installed ? "ENTER/D=Get  U=Uninstall" : "ENTER/D=Get  I=Install",
+                                optional, n, "/=Cmds  Q=Quit");
     if (len < 0) {
         bar[0] = '\0'; /* unreachable with this door's fixed short strings and bar[160] */
     }
@@ -2489,7 +2563,9 @@ static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
         int key;
 
         ansi_begin(b, frame, framecap);
-        ansi_box(b, g->pane_top, g->list_left, 3, boxw, ANSI_YELLOW, "FILTER");
+        /* Also an overlay - it opens over the list it is filtering. */
+        ansi_panel(b, g->pane_top, g->list_left, 3, boxw, ANSI_YELLOW,
+                   ANSI_BLACK, "FILTER");
         ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 1);
         ansi_text(b, g->pane_top + 1, g->list_left + 1, v->text, inner);
         /* Park the cursor after the text so a terminal showing it looks right. */
@@ -2982,18 +3058,43 @@ static void strip_installed_door_apply(const dr_config *cfg, const char *archive
  * install index existed: which command the archive was installed as, and
  * therefore which directory to delete from. */
 static void strip_installed_door(const dr_config *cfg, const char *archive,
-                                 long junk, ansi_buf *b, char *frame, long framecap)
+                                 long junk, ansi_buf *b, char *frame, long framecap,
+                                 const ui_geometry *g)
 {
     const char *cmdname = index_lookup(cfg, archive);
     char install_dir[256];
 
-    if (cmdname == (const char *) 0) {
-        return; /* not installed by this door - S does nothing, per the footer */
+    /* Every one of these used to be a bare return.
+     *
+     * "/strip seems to do nothing when i browse an archive" - and it did
+     * nothing, in silence, for two ordinary reasons. That was defensible
+     * for the S KEY, which the footer only offers when the door is
+     * installed and has ads, and is not defensible for a command typed out
+     * in full: the bar lists /strip whatever is selected, so a silent
+     * return is indistinguishable from a broken command.
+     *
+     * The gate itself is unchanged and lives in flow.c now, so the two
+     * halves of it are tested rather than read.
+     */
+    switch (flow_strip_verdict(cmdname != (const char *) 0, junk)) {
+    case FLOW_STRIP_NOT_INSTALLED:
+        ui_notice(b, frame, framecap, g, "Not installed",
+                  "Stripping deletes ad files from a door on THIS board,",
+                  "and this archive has no directory here yet.");
+        return;
+    case FLOW_STRIP_NO_ADS:
+        ui_notice(b, frame, framecap, g, "Nothing to strip",
+                  "The repository counts no ad files in this archive.",
+                  "Use /archive to see everything inside it.");
+        return;
+    default:
+        break;
     }
-    if (junk == 0) {
-        return; /* the server says there is nothing to strip */
-    }
+
     if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
+        ui_notice(b, frame, framecap, g, "Cannot strip",
+                  "The path to this door's directory does not fit.",
+                  "Check DOORSDIR in the door's configuration.");
         return;
     }
 
@@ -3130,14 +3231,21 @@ static void plain_strip_installed_door(const dr_config *cfg, const char *archive
     const char *cmdname = index_lookup(cfg, archive);
     char install_dir[256];
 
-    if (cmdname == (const char *) 0) {
-        return; /* not installed by this door */
-    }
-    if (junk == 0) {
+    /* Same gate as the ANSI screen, and it has to answer here too - this
+     * is what a teletype terminal gets when it types /strip. */
+    switch (flow_strip_verdict(cmdname != (const char *) 0, junk)) {
+    case FLOW_STRIP_NOT_INSTALLED:
+        ae_put("This archive has no directory on this board, so there is nothing", 1);
+        ae_put("to strip. Install it first.", 1);
+        return;
+    case FLOW_STRIP_NO_ADS:
         ae_put("This archive has no ad files to strip.", 1);
         return;
+    default:
+        break;
     }
     if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
+        ae_put("The path to this door's directory does not fit. Check DOORSDIR.", 1);
         return;
     }
 
@@ -3225,55 +3333,47 @@ static int write_info_file_atomic(const dr_config *cfg, const char *info_path,
 static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
                                   const char *archive)
 {
-    char token[128];
-    char body[640];
-    char tokenhdr[160];
-    const char *headers[2];
-    http_response resp;
-    int body_len;
-    dr_config local_cfg;
+    char path[300];
+    FILE *f;
 
-    if (!config_read_token(cfg, token, sizeof(token))) {
+    /* Written to a file, not POSTed.
+     *
+     * This used to POST to the BBS's own management API, and it has never
+     * worked on this board: the 68K emulator runs INSIDE the backend's Node
+     * process, so a door blocking on a reply starves the event loop that
+     * would produce it. The request times out after 30 seconds and the
+     * answer arrives afterwards, unread. Measured on the live board and
+     * written up in web/backend/src/doors/door-list-snapshot.ts, which is
+     * where the door LIST solved the same problem the same way - the BBS
+     * writes a file at launch, the door reads it, no socket.
+     *
+     * This is the return direction: the door appends a line, and the BBS
+     * reads it when the door exits (door.handler.ts). That is late enough
+     * to be sure the install finished, and early enough that the sysop's
+     * next screen already knows about it.
+     *
+     * On a REAL AmiExpress board nothing reads this file, which is correct:
+     * door_installs is a table in this project's database, not something an
+     * Amiga has. The install is complete without it - the door is on disk
+     * and its .info is written - so a failure here is silent by design,
+     * exactly as the POST version was.
+     */
+    if (flow_build_local_path(path, sizeof(path), cfg->doors_dir,
+                              "DoorRepo/DoorRepo.installs") < 0) {
         return;
     }
 
-    /* http_request() always targets cfg->host:cfg->port, and those name the
-     * REMOTE catalog server (RepoHost/RepoPort - bbs.uprough.net by
-     * default). This report is for THIS board's own management API, so a
-     * local copy of cfg with host/port swapped for bbs_host/bbs_port is
-     * passed instead - on every board that has not overridden RepoHost,
-     * posting straight to cfg->host would send this board's launch token,
-     * in cleartext, to bbs.uprough.net. */
-    local_cfg = *cfg;
-    strncpy(local_cfg.host, cfg->bbs_host, sizeof(local_cfg.host) - 1);
-    local_cfg.host[sizeof(local_cfg.host) - 1] = '\0';
-    local_cfg.port = cfg->bbs_port;
-
-    /* json_build_install_body(), not a bare sprintf("%s"): the catalog
-     * this archive name comes from holds thousands of Latin-1 entries,
-     * some containing '"' or '\\' - unescaped, either would break this
-     * JSON body and the server's express.json would reject the whole
-     * request, silently losing the install report this function exists
-     * to send. See json_lite.h for the escaping contract. */
-    body_len = json_build_install_body(body, sizeof(body), cmdname, archive);
-    if (body_len < 0) {
-        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
+    f = fopen(path, "a");
+    if (f == (FILE *) 0) {
         return;
     }
 
-    sprintf(tokenhdr, "X-Door-Token: %s\r\n", token);
-    headers[0] = "Content-Type: application/json\r\n";
-    headers[1] = tokenhdr;
-
-    memset(&resp, 0, sizeof(resp));
-    if (http_request(&local_cfg, "POST", "/api/door-admin/installed",
-                     body, (unsigned long) body_len,
-                     headers, 2, &resp,
-                     (int (*)(void *, const unsigned char *, unsigned long)) 0,
-                     (void *) 0) != HTTP_OK
-        || resp.status != 200) {
-        ae_put("[SKIP] the BBS did not record this install - it is on disk and will run.", 1);
-    }
+    /* One line per install, in the "|" family every other file this door
+     * exchanges with the BBS uses. The command name is validated before it
+     * reaches here and an archive name comes from the catalog, so neither
+     * can carry the separator. */
+    fprintf(f, "INSTALL|%s|%s\n", cmdname, archive);
+    fclose(f);
 }
 
 /* The whole install, from an entry in the list to a runnable BBS command.
@@ -3696,12 +3796,121 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
  * something already known. Anything else in that directory - a config the
  * sysop wrote, a log the door kept - is deliberately left, and the final
  * message says so when the directory could not be removed. */
+/* One pass over a Commands directory, deciding what each OTHER registration
+ * is to the door being removed. See flow.h's uninstall section: an alias is
+ * the same binary under a second name and goes with the door, a co-tenant is
+ * a different door in the same directory and stays.
+ *
+ * A door is not reliably registered under its own name - 5D-LogOff is
+ * registered as G - and a registration left pointing at files that are gone
+ * answers with an error where the BBS's own command should have run. On the
+ * live board that is what made logging off impossible. */
+typedef struct {
+    const dr_config *cfg;
+    const char *dir;             /* the Commands directory being walked */
+    const char *door_location;   /* resolved LOCATION of the door being removed */
+    const char *door_dir;        /* its own directory, or "" when it owns none */
+    const char *own_info;        /* this door's own .info - already handled */
+    int aliases_removed;
+    int aliases_failed;
+    int cotenants;
+} uninstall_sweep;
+
+static int uninstall_sweep_entry(void *ctx, const char *name, unsigned long size,
+                                 int is_dir)
+{
+    uninstall_sweep *s = (uninstall_sweep *) ctx;
+    char full[320];
+    char resolved[320];
+    dr_info_fields fields;
+    unsigned long len;
+    int relation;
+
+    /* `size` is unused here. Written as a test rather than the usual
+     * `(void) size;` because vbcc reads that cast as a statement with no
+     * effect and warns (153), and the cross-compile is otherwise clean. */
+    if (size == 0 && is_dir) {
+        return 0;
+    }
+    if (is_dir) {
+        return 0;
+    }
+
+    len = (unsigned long) strlen(name);
+    if (len < 6) {
+        return 0;
+    }
+    if (flow_path_has_info_suffix(name) == 0) {
+        return 0;
+    }
+    if (flow_build_local_path(full, sizeof(full), s->dir, name) < 0) {
+        return 0;
+    }
+    if (s->own_info != (const char *) 0 && strcmp(full, s->own_info) == 0) {
+        return 0;
+    }
+
+    if (flow_read_door_info(full, &fields) == 0 || fields.location_found == 0) {
+        return 0;
+    }
+    if (flow_resolve_location(fields.location, s->cfg->doors_dir,
+                              resolved, (unsigned long) sizeof(resolved)) == 0) {
+        return 0;
+    }
+
+    relation = flow_registration_class(resolved, s->door_location, s->door_dir);
+    if (relation == FLOW_REG_ALIAS) {
+        char msg[400];
+
+        if (remove(full) == 0) {
+            s->aliases_removed++;
+            sprintf(msg, "Also removed %s - the same door under another name.", name);
+        } else {
+            s->aliases_failed++;
+            sprintf(msg, "Could not remove %s, which names the same door.", name);
+        }
+        ae_put(msg, 1);
+    } else if (relation == FLOW_REG_COTENANT) {
+        s->cotenants++;
+    }
+
+    return 0;
+}
+
 static void uninstall_door_apply(const dr_config *cfg, const char *archive,
                                  const char *cmdname, const char *install_dir,
                                  const char *info_path)
 {
     char msg[320];
     int removed = 0;
+    char door_location[320];
+    char door_dir[320];
+    int have_location = 0;
+    int owns_dir = 0;
+    uninstall_sweep sweep;
+    dr_info_fields fields;
+
+    /* Read the LOCATION before the .info is gone: everything below needs to
+     * know which binary this command named. */
+    if (flow_read_door_info(info_path, &fields) != 0 && fields.location_found != 0) {
+        have_location = flow_resolve_location(fields.location, cfg->doors_dir,
+                                              door_location,
+                                              (unsigned long) sizeof(door_location));
+    }
+    if (have_location) {
+        /* Is the LOCATION itself a directory? dirlist_scan answers by
+         * enumerating it - a door has no stat(). A LOCATION that IS a
+         * directory owns that directory; taking its parent instead is what
+         * pointed a delete at Doors: itself on 2026-08-31. */
+        int location_is_dir = (dirlist_scan(door_location, (dirlist_cb) 0, (void *) 0) >= 0);
+
+        owns_dir = flow_own_directory(door_location, location_is_dir,
+                                      (const char *) 0, cfg->doors_dir,
+                                      door_dir, (unsigned long) sizeof(door_dir));
+    }
+    if (owns_dir == 0) {
+        door_dir[0] = '\0';
+    }
 
     if (remove(info_path) != 0) {
         sprintf(msg, "Could not remove %s. The command is still installed.", info_path);
@@ -3710,6 +3919,22 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
         return;
     }
     ae_put("BBS command removed.", 1);
+
+    /* Every OTHER registration naming this same binary goes too - a door is
+     * not reliably registered under its own name, and one left behind
+     * answers with an error where the BBS's own command should run. A
+     * DIFFERENT door in the same directory is counted, not touched. */
+    sweep.cfg = cfg;
+    sweep.dir = cfg->bbscmd_dir;
+    sweep.door_location = have_location ? door_location : "";
+    sweep.door_dir = door_dir;
+    sweep.own_info = info_path;
+    sweep.aliases_removed = 0;
+    sweep.aliases_failed = 0;
+    sweep.cotenants = 0;
+    if (have_location) {
+        (void) dirlist_scan(cfg->bbscmd_dir, uninstall_sweep_entry, &sweep);
+    }
 
     files_load(cfg, archive);
     if (g_files_ok) {
@@ -3737,7 +3962,15 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
     sprintf(msg, "Removed %d file(s) from %s.", removed, install_dir);
     ae_put(msg, 1);
 
-    if (remove(install_dir) != 0) {
+    if (sweep.cotenants > 0) {
+        /* Another door lives here. Doors/emp_tools holds Joincnf and Bulls;
+         * removing the directory would take a door the sysop did not ask
+         * about. Said out loud, because the directory staying is a
+         * decision, not a failure. */
+        sprintf(msg, "%s kept - %d other command(s) still point into it.",
+                install_dir, sweep.cotenants);
+        ae_put(msg, 1);
+    } else if (remove(install_dir) != 0) {
         sprintf(msg, "%s still exists - it is not empty. Anything left there was not", install_dir);
         ae_put(msg, 1);
         ae_put("part of the archive and has been left alone.", 1);
@@ -3747,7 +3980,8 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
 
     {
         char logmsg[256];
-        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d", cmdname, removed);
+        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d aliases=%d shared=%d",
+                cmdname, removed, sweep.aliases_removed, sweep.cotenants);
         log_line(cfg, logmsg);
     }
 }
@@ -4001,24 +4235,182 @@ static int read_info_raw(const char *info_path, char *out, unsigned long outsize
  * like strip_installed_door() does, and defends against "not installed"
  * even though the footer already hides M for that case (index_lookup()
  * NULL check, same pattern). */
-static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
-                           ansi_buf *b, char *frame, long framecap,
-                           const ui_geometry *g)
+/* The .info editors' scratch, shared by both of them.
+ *
+ * Static rather than automatic: 4KB is far too much for a 68K door's stack.
+ * One pair rather than a pair each: do_edit_access and do_edit_tooltype are
+ * both called from the main event loop, one keypress at a time, and neither
+ * runs while the other does - two pairs cost 4KB of BSS out of the ~45KB the
+ * emulator's segment budget leaves this door.
+ */
+static char g_info_raw[2048];
+static char g_info_content[2048];
+
+/* The .info editor's other half: the fields that are not ACCESS.
+ *
+ * ACCESS keeps its own screen (do_edit_access below) because disabling a
+ * door writes ACCESS and DRACCESS as one decision - see
+ * flow_compute_prior_access, and the ruling recorded there. Everything else
+ * is one key, one value, and the file's shape must survive it: the edit goes
+ * through flow_rewrite_tooltype, which replaces that one line and copies
+ * every other byte - BBSCMD, CATEGORY, MULTINODE, a tooltype this door has
+ * never heard of - through untouched.
+ *
+ * Works the same on a real AmiExpress board as it does here: nothing below
+ * asks the BBS anything. The door reads the .info, rewrites one line, and
+ * writes it back through the same atomic path the install uses.
+ */
+static void do_edit_tooltype_cmd(const dr_config *cfg, const char *cmdname,
+                                 ansi_buf *b, char *frame, long framecap,
+                                 const ui_geometry *g)
 {
-    const char *cmdname = index_lookup(cfg, entry->archive);
+    char info_path[256];
+    char choice[4];
+    char value[128];
+    char msg[420];
+    const char *key;
+    unsigned long max_len;
+    long parsed;
+
+    if (cmdname == (const char *) 0) {
+        ui_notice(b, frame, framecap, g, "Not installed",
+                  "DoorRepo has no record of installing this archive,",
+                  "so there is no command config for it to edit.");
+        return;
+    }
+
+    if (flow_build_info_path(info_path, sizeof(info_path), cfg->bbscmd_dir, cmdname) < 0) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("The path to this command's config is too long to build.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    choice[0] = '\0';
+    if (!ui_text_prompt(b, frame, framecap, g,
+                        "Edit which field - T=Type  S=Stack  N=Menu name:",
+                        choice, 1)) {
+        return;                      /* empty answer = changed their mind */
+    }
+
+    switch (choice[0]) {
+    case 't': case 'T':
+        key = "TYPE";
+        max_len = 8;
+        break;
+    case 's': case 'S':
+        key = "STACK";
+        max_len = 7;
+        break;
+    case 'n': case 'N':
+        key = "MENUNAME";
+        max_len = 40;
+        break;
+    default:
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("Not a field this editor knows. Nothing was changed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    value[0] = '\0';
+    sprintf(msg, "New %s:", key);
+    if (!ui_text_prompt(b, frame, framecap, g, msg, value, (int) max_len)) {
+        return;
+    }
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    if (strcmp(key, "STACK") == 0) {
+        if (flow_validate_stack_size(value, &parsed) != 0) {
+            ae_put("That is not a usable stack size: digits only, 1024-1048576.", 1);
+            ae_put("Nothing was changed.", 1);
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+    } else if (flow_validate_tooltype_value(value, max_len) != 0) {
+        sprintf(msg, "That is not a usable %s: no '=', no control characters,", key);
+        ae_put(msg, 1);
+        sprintf(msg, "and at most %lu characters. Nothing was changed.", max_len);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (!read_info_raw(info_path, g_info_raw, sizeof(g_info_raw))) {
+        sprintf(msg, "Could not read %s. Nothing was changed.", info_path);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (flow_rewrite_tooltype(g_info_raw, g_info_content, sizeof(g_info_content),
+                              key, value) < 0) {
+        ae_put("That edit would not fit this command's config, so nothing was", 1);
+        ae_put("changed. The .info may be unusually long or hand-edited.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (!write_info_file_atomic(cfg, info_path, g_info_content, "TOOLTYPE")) {
+        return;                      /* it reports its own failure */
+    }
+
+    sprintf(msg, "%s is now %s for %s.", key, value, cmdname);
+    ae_put(msg, 1);
+    sprintf(msg, "TOOLTYPE OK cmd=%s %s=%s", cmdname, key, value);
+    log_line(cfg, msg);
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
+}
+
+/* Catalog-screen wrappers: a row there is an ARCHIVE, so the command it was
+ * installed as comes from DoorRepo's own index. The board screen (L) needs
+ * neither - every row there is already a command the BBS knows - which is
+ * why the editors take a name and these two resolve one. */
+static void do_edit_tooltype(const dr_config *cfg, const dr_entry *entry,
+                             ansi_buf *b, char *frame, long framecap,
+                             const ui_geometry *g)
+{
+    do_edit_tooltype_cmd(cfg, index_lookup(cfg, entry->archive), b, frame, framecap, g);
+}
+
+static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
+                               ansi_buf *b, char *frame, long framecap,
+                               const ui_geometry *g)
+{
     char info_path[256];
     dr_info_fields fields;
     char access_buf[8];
     long current_access;
     long new_access;
     long prior_access;
-    /* Static rather than automatic: 4KB combined is far too much for a
-     * 68K door's stack (same reasoning as UI_FRAME_BYTES/view_index above).
-     * do_edit_access() is single-threaded and non-reentrant, called once
-     * per M keypress from the main event loop, so a static scratch buffer
-     * is safe here. */
-    static char info_raw[2048];
-    static char info_content[2048];
     char msg[420];
     char logmsg[300];
 
@@ -4185,7 +4577,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
      * untouched. See read_info_raw()'s and flow_rewrite_access_lines()'s
      * own doc comments for why this replaced the old
      * flow_build_info_content() rebuild. */
-    if (!read_info_raw(info_path, info_raw, sizeof(info_raw))) {
+    if (!read_info_raw(info_path, g_info_raw, sizeof(g_info_raw))) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
         ansi_reset(b);
@@ -4199,7 +4591,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    if (flow_rewrite_access_lines(info_raw, info_content, sizeof(info_content),
+    if (flow_rewrite_access_lines(g_info_raw, g_info_content, sizeof(g_info_content),
                                   new_access, prior_access) < 0) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
@@ -4219,7 +4611,7 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     ansi_clear(b);
     ansi_flush(b);
 
-    if (!write_info_file_atomic(cfg, info_path, info_content, "ACCESS")) {
+    if (!write_info_file_atomic(cfg, info_path, g_info_content, "ACCESS")) {
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
         (void) ae_key();
@@ -4234,8 +4626,8 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
                 prior_access);
         ae_put(msg, 1);
     }
-    sprintf(logmsg, "ACCESS OK archive=%s cmd=%s from=%ld to=%ld",
-            entry->archive, cmdname, current_access, new_access);
+    sprintf(logmsg, "ACCESS OK cmd=%s from=%ld to=%ld",
+            cmdname, current_access, new_access);
     log_line(cfg, logmsg);
 
     ae_put("", 1);
@@ -4243,15 +4635,453 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     (void) ae_key();
 }
 
+/* ---------------------------------------------------------------------
+ * The command bar, and the help it finally gives this door somewhere to put
+ *
+ * The footer cannot advertise this door: the catalog screen answers sixteen
+ * keys and eighty columns fit four of them, which is how `T` came to be live
+ * and advertised nowhere until a sysop asked what it did. "/" opens a line
+ * where any of them can be typed out in full, with an argument the keys
+ * would need a second prompt for - "find dungeon", "type XIM".
+ *
+ * The keys are not going anywhere: one keypress beats typing for the things
+ * done constantly. This is for the rest, for arguments, and for anyone who
+ * cannot see a footer at all.
+ */
+
+/* What each command does, printed by /help. Kept beside flow_commands[] in
+ * flow.c: the parser owns the names, this owns the sentences. */
+typedef struct {
+    int id;
+    const char *summary;
+} ui_help_line;
+
+static const ui_help_line ui_help_lines[] = {
+    { FLOW_CMD_HELP,      "this list" },
+    { FLOW_CMD_GET,       "download the selected archive" },
+    { FLOW_CMD_INSTALL,   "install it as a BBS command" },
+    { FLOW_CMD_UNINSTALL, "remove an installed door" },
+    { FLOW_CMD_FILES,     "browse a door's own files on disk" },
+    { FLOW_CMD_DOC,       "read its documentation" },
+    { FLOW_CMD_ARCHIVE,   "list what is inside the archive" },
+    { FLOW_CMD_STRIP,     "remove the ad files from a door" },
+    { FLOW_CMD_ACCESS,    "edit the access level  (access 255)" },
+    { FLOW_CMD_CONFIG,    "edit TYPE, STACK or MENUNAME" },
+    { FLOW_CMD_HISTORY,   "what this door has done" },
+    { FLOW_CMD_INSTALLED, "the doors this board has" },
+    { FLOW_CMD_FIND,      "search the catalog  (find dungeon)" },
+    { FLOW_CMD_TYPE,      "filter by door type  (type XIM)" },
+    { FLOW_CMD_RESET,     "clear the filters" },
+    { FLOW_CMD_HIDE,      "hide an archive from the repo  (owner)" },
+    { FLOW_CMD_OWNER,     "owner mode" },
+    { FLOW_CMD_PATTERNS,  "the junk patterns this repo has learned" },
+    { FLOW_CMD_QUIT,      "leave the door" }
+};
+
+#define UI_HELP_COUNT ((int) (sizeof(ui_help_lines) / sizeof(ui_help_lines[0])))
+
+static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g)
+{
+    int rows = g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS - 2;
+    int top = 0;
+    int need_redraw = 1;
+
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    for (;;) {
+        int key;
+
+        if (need_redraw) {
+            int i;
+
+            ansi_begin(b, frame, framecap);
+            ansi_clear(b);
+            ansi_cursor(b, 0);
+            ui_draw_bar(b, 1, g->cols, "DoorRepo - Commands");
+            ansi_box(b, UI_HEADER_ROWS + 1, 1,
+                     g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS, g->cols - 1,
+                     ANSI_CYAN, "Type / then any of these");
+
+            for (i = 0; i < rows && top + i < UI_HELP_COUNT; i++) {
+                char line[120];
+                const ui_help_line *h = &ui_help_lines[top + i];
+
+                sprintf(line, "%-11s %.60s", flow_command_name(h->id), h->summary);
+                ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+                /* _raw: no padding. This screen is drawn onto one that was
+                 * just cleared, so padding each row out to the box width
+                 * writes spaces over blank space - 1036 bytes of a 2559
+                 * byte paint, measured on a captured session. Bytes are
+                 * milliseconds here: every 198 of them is an XIM message
+                 * costing about 45ms of 68K emulation. */
+                ansi_text_raw(b, UI_HEADER_ROWS + 2 + i, 3, line, g->cols - 6);
+            }
+
+            {
+                char bar[160];
+                int len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                                "Up/Down  PgUp/PgDn",
+                                                (const char *const *) 0, 0,
+                                                "Q=Back");
+                if (len < 0) {
+                    bar[0] = '\0';
+                }
+                ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
+            }
+
+            ansi_flush(b);
+            need_redraw = 0;
+        }
+
+        key = ui_read_key();
+        if (key == 'q' || key == 'Q') {
+            return;
+        }
+        {
+            int action = ui_nav_action(key);
+            int before = top;
+
+            if (action == FLOW_NAV_UP && top > 0) {
+                top--;
+            } else if (action == FLOW_NAV_DOWN && top + rows < UI_HELP_COUNT) {
+                top++;
+            } else if (action == FLOW_NAV_PGUP) {
+                top = (top > rows) ? top - rows : 0;
+            } else if (action == FLOW_NAV_PGDN) {
+                top = (top + rows < UI_HELP_COUNT - rows)
+                    ? top + rows
+                    : ((UI_HELP_COUNT > rows) ? UI_HELP_COUNT - rows : 0);
+            } else if (action == FLOW_NAV_HOME) {
+                top = 0;
+            } else if (action == FLOW_NAV_END) {
+                top = (UI_HELP_COUNT > rows) ? UI_HELP_COUNT - rows : 0;
+            }
+            if (top != before) {
+                need_redraw = 1;
+            }
+        }
+    }
+}
+
+/* Reads a line into `out`. Returns 0 when the sysop changed their mind. */
+/* The summary /help prints for a command, or "" when it has none. */
+static const char *ui_help_summary(int id)
+{
+    int i;
+
+    for (i = 0; i < UI_HELP_COUNT; i++) {
+        if (ui_help_lines[i].id == id) {
+            return ui_help_lines[i].summary;
+        }
+    }
+    return "";
+}
+
+/* How many suggestions the bar shows at once. Eight is most of the
+ * nineteen without covering the list the sysop is choosing FROM. */
+#define UI_CMDBAR_ROWS 8
+
+/* The command bar, with the completion LIVECHAT has had all along.
+ *
+ * "The / commands in the doorrepo door have no auto complete so I have no
+ * idea what commands there are." It was a bare line prompt: the nineteen
+ * commands were discoverable only through /help, which is itself one of the
+ * nineteen. So the bar now opens with the whole list showing and narrows as
+ * the letters arrive - the same shape as LIVECHAT's dropdown and as this
+ * door's own FILTER panel, which already refilters on every keystroke
+ * rather than dropping to a line prompt.
+ *
+ * Up/Down walk the list, TAB completes to whatever is highlighted, and
+ * ENTER runs it. ENTER completing first is deliberate: with "install"
+ * highlighted on screen, running install is what the display just promised
+ * - and it rescues the ambiguous words ("in") that flow_parse_command can
+ * only treat as a search.
+ *
+ * A line with a space in it is an argument being typed ("find dungeon"),
+ * and the suggestions get out of the way. That is also how to search for a
+ * word that happens to start a command name.
+ */
+static int ui_command_bar(ansi_buf *b, char *frame, long framecap,
+                          const ui_geometry *g, char *out, int outcap)
+{
+    int len = 0;
+    int sel = 0;
+    int top = 0;
+    int row = g->rows - UI_FOOTER_ROWS + 2;
+
+    out[0] = '\0';
+
+    for (;;) {
+        int ids[FLOW_CMD_MAX_SUGGESTIONS];
+        int count = flow_command_suggest(out, ids, FLOW_CMD_MAX_SUGGESTIONS);
+        int shown = (count < UI_CMDBAR_ROWS) ? count : UI_CMDBAR_ROWS;
+        const char *ghost = "";
+        char line[160];
+        int key;
+        int i;
+
+        if (sel >= count) {
+            sel = (count > 0) ? count - 1 : 0;
+        }
+        if (sel < top) {
+            top = sel;
+        } else if (sel >= top + UI_CMDBAR_ROWS) {
+            top = sel - UI_CMDBAR_ROWS + 1;
+        }
+        if (top < 0) {
+            top = 0;
+        }
+
+        /* The grey tail after the cursor is the rest of the HIGHLIGHTED
+         * command, not always the first one - otherwise walking the list
+         * with the arrows and pressing TAB would complete to something
+         * other than what the eye is on. */
+        if (count > 0 && len > 0) {
+            const char *name = flow_command_name(ids[sel]);
+            if (strncmp(out, name, (size_t) len) == 0) {
+                ghost = name + len;
+            }
+        }
+
+        ansi_begin(b, frame, framecap);
+
+        for (i = 0; i < shown; i++) {
+            int id = ids[top + i];
+            int panel_row = row - shown + i;
+            int selected = (top + i == sel);
+
+            sprintf(line, " %-11s %.58s", flow_command_name(id),
+                    ui_help_summary(id));
+            ansi_fill(b, panel_row, 1, g->cols,
+                      selected ? ANSI_BLACK : ANSI_WHITE,
+                      selected ? ANSI_CYAN : ANSI_BLUE);
+            ansi_color(b, selected ? ANSI_BLACK : ANSI_WHITE,
+                       selected ? ANSI_CYAN : ANSI_BLUE, selected);
+            ansi_text(b, panel_row, 2, line, g->cols - 2);
+        }
+
+        ansi_fill(b, row, 1, g->cols, ANSI_WHITE, ANSI_BLUE);
+        ansi_color(b, ANSI_YELLOW, ANSI_BLUE, 1);
+        sprintf(line, "/%.100s", out);
+        ansi_text(b, row, 2, line, g->cols - 2);
+        if (ghost[0] != '\0') {
+            /* Dim, so it reads as an offer rather than as typed text. */
+            ansi_color(b, ANSI_CYAN, ANSI_BLUE, 0);
+            ansi_text(b, row, 3 + len, ghost, g->cols - 3 - len);
+        }
+        ansi_goto(b, row, 3 + len);
+        ansi_cursor(b, 1);
+        ansi_flush(b);
+
+        key = ui_read_key();
+
+        if (key == UI_KEY_ENTER) {
+            /* Run what is highlighted, not the half-word underneath it. */
+            if (count > 0) {
+                const char *name = flow_command_name(ids[sel]);
+                if (len == 0 || strncmp(out, name, (size_t) len) == 0) {
+                    strncpy(out, name, (size_t) outcap - 1);
+                    out[outcap - 1] = '\0';
+                    len = (int) strlen(out);
+                }
+            }
+            ansi_begin(b, frame, framecap);
+            ansi_cursor(b, 0);
+            ansi_reset(b);
+            ansi_flush(b);
+            return (out[0] != '\0') ? 1 : 0;
+        }
+        if (key == 9) {                      /* TAB completes, and stays */
+            if (count > 0) {
+                const char *name = flow_command_name(ids[sel]);
+                if (len == 0 || strncmp(out, name, (size_t) len) == 0) {
+                    strncpy(out, name, (size_t) outcap - 1);
+                    out[outcap - 1] = '\0';
+                    len = (int) strlen(out);
+                }
+            }
+            continue;
+        }
+        if (key == UI_KEY_UP) {
+            if (sel > 0) {
+                sel--;
+            }
+            continue;
+        }
+        if (key == UI_KEY_DOWN) {
+            if (sel + 1 < count) {
+                sel++;
+            }
+            continue;
+        }
+        if (key == 27 || key >= 1000) {
+            continue;                        /* stray escapes mean nothing */
+        }
+        if (key == 8 || key == 127) {
+            if (len > 0) {
+                out[--len] = '\0';
+            }
+            sel = 0;
+            top = 0;
+        } else if (key == 21) {              /* CTRL-U clears */
+            len = 0;
+            out[0] = '\0';
+            sel = 0;
+            top = 0;
+        } else if (key >= 32 && key < 127 && len < outcap - 1) {
+            /* Typed as typed. The parser lowercases the verb itself, and an
+             * argument ("find Dungeon") is the user's own text. */
+            out[len++] = (char) key;
+            out[len] = '\0';
+            sel = 0;
+            top = 0;
+        }
+    }
+}
+
+/* Defined further down; the dispatcher below needs both. */
+static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
+                           ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g);
+static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
+                            char *frame, long framecap, const ui_geometry *g);
+
+/* What the bar could not do itself, because it changes the caller's own
+ * view rather than acting on disk. */
+#define UI_POST_NONE    0
+#define UI_POST_DOC     1
+#define UI_POST_ARCHIVE 2
+
+/* Runs a row-scoped command on the selected entry.
+ *
+ * The keys already do exactly these things, so this hands over to the same
+ * functions rather than growing a second copy of each action - the whole
+ * point of the bar is another way IN, not another implementation.
+ *
+ * Returns a UI_POST_* code for the two that are view state rather than work:
+ * the caller owns info_mode.
+ */
+static int ui_dispatch_row_command(const dr_config *cfg, dr_catalog *cat,
+                                   const ui_view *view, unsigned long selected,
+                                   int cmd, const char *arg, ansi_buf *b,
+                                   char *frame, long framecap,
+                                   const ui_geometry *g)
+{
+    const dr_entry *sel = &cat->rows[view->index[selected]];
+    const char *cmdname;
+
+    (void) arg;
+
+    switch (cmd) {
+    case FLOW_CMD_GET:
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        download_and_verify(cfg, sel);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        break;
+    case FLOW_CMD_INSTALL:
+        install_door(cfg, sel, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_UNINSTALL:
+        uninstall_door(cfg, sel->archive, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_STRIP:
+        strip_installed_door(cfg, sel->archive, sel->junk, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_ACCESS:
+        do_edit_access(cfg, sel, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_CONFIG:
+        do_edit_tooltype(cfg, sel, b, frame, framecap, g);
+        break;
+    case FLOW_CMD_FILES:
+        cmdname = index_lookup(cfg, sel->archive);
+        if (cmdname != (const char *) 0 && cmdname[0] != '\0') {
+            files_loop_ansi(cfg, cmdname, frame, framecap, g);
+        } else {
+            ui_notice(b, frame, framecap, g, "Not installed",
+                      "This archive has no directory on this board yet.",
+                      "Install it first, or use /archive to look inside it.");
+        }
+        break;
+    case FLOW_CMD_DOC:
+        return UI_POST_DOC;
+    case FLOW_CMD_ARCHIVE:
+        return UI_POST_ARCHIVE;
+    case FLOW_CMD_HIDE:
+    case FLOW_CMD_OWNER:
+    case FLOW_CMD_PATTERNS:
+        /* Owner-side actions keep their keys: they are gated on owner mode
+         * and one of them deletes from the repository itself, which is not
+         * something to reach by typing a prefix at a prompt. */
+        ui_notice(b, frame, framecap, g, "Use the key",
+                  "Owner actions are on their own keys - O, K and X -",
+                  "and are not reachable from the command bar.");
+        break;
+    default:
+        ui_notice(b, frame, framecap, g, "Not here",
+                  "That command does not apply to this screen.",
+                  "Type /help for the list.");
+        break;
+    }
+
+    return UI_POST_NONE;
+}
+
 /* Defined below (the "Installed doors screen" section) - forward declared
  * here so this loop's 'l'/'L' case (Task 4) can call it before its own
  * definition appears in the file. */
+static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
+                           ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g)
+{
+    do_edit_access_cmd(cfg, index_lookup(cfg, entry->archive), b, frame, framecap, g);
+}
+
 static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat);
+static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                              const ui_geometry *g);
 /* The board's own doors, read from the BBS - see the block above
  * board_load() for why L needs both this and the screen above. */
 static int board_load(const dr_config *cfg);
 static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                             const ui_geometry *g);
+
+/* Repaint the whole browser: clear, chrome, list.
+ *
+ * Extracted from the browse loop because a SECOND caller needed exactly it.
+ * The command bar paints a suggestion panel across the bottom of the
+ * screen, and the dialogs some commands open are drawn ON TOP of the
+ * browser rather than on a cleared screen - so a /command that ended in a
+ * notice showed that notice framed by the leftovers of the bar that
+ * launched it (screenshot, 2026-08-31). The loop only repainted afterwards,
+ * which is one dialog too late.
+ *
+ * The detail pane is deliberately NOT drawn here: it costs a network fetch,
+ * and every caller either follows this with the pane's own stale-check or
+ * is about to cover the screen anyway.
+ */
+static void ui_repaint_browser(ansi_buf *b, char *frame, long framecap,
+                               const dr_config *cfg, const ui_geometry *g,
+                               const dr_catalog *cat, const ui_view *v,
+                               const char *filter_desc, const dr_entry *sel_entry,
+                               unsigned long top_index, unsigned long selected)
+{
+    ansi_begin(b, frame, framecap);
+    ansi_clear(b);
+    ansi_cursor(b, 0);
+    ui_draw_chrome(b, cfg, g, cat, v, filter_desc, sel_entry);
+    ui_draw_list(b, cfg, g, cat, v, top_index, selected, -1, -1);
+    ansi_flush(b);
+}
 
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
@@ -4372,15 +5202,16 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
          * selection silently and paints once, where they stopped.
          *
          */
-        ansi_begin(&buf, frame, (long) sizeof(frame));
         if (need_full_redraw) {
-            ansi_clear(&buf);
-            ansi_cursor(&buf, 0);
-            ui_draw_chrome(&buf, cfg, &g, cat, &view, filter_desc, sel_entry);
-            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
+            ui_repaint_browser(&buf, frame, (long) sizeof(frame), cfg, &g, cat,
+                               &view, filter_desc, sel_entry, top_index, selected);
             /* ansi_clear() already blanked the pane, so the next pane draw
              * must not try to blank rows from before the clear. */
             info_rows_used = 0;
+        }
+        ansi_begin(&buf, frame, (long) sizeof(frame));
+        if (need_full_redraw) {
+            /* already painted above */
         } else if (top_index != prev_top) {
             /* The window scrolled: every row is different. */
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
@@ -4516,7 +5347,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                                         (unsigned long) g.visible_rows);
             break;
         case UI_KEY_ENTER:
-        case 'r': case 'R':
+        case 'd': case 'D':
             if (view.count > 0) {
                 const dr_entry *sel = &cat->rows[view.index[selected]];
                 char question[160];
@@ -4547,13 +5378,102 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 need_full_redraw = 1;
             }
             break;
-        case 'f': case 'F':
-            /* Filter in place over the rows already loaded - no refetch. */
-            ui_filter_prompt(&buf, frame, (long) sizeof(frame), &g, &view, cat);
-            selected = 0;
-            top_index = 0;
+        case '/': {
+            /* The command bar. Everything the footer cannot fit, typed out
+             * in full, with the arguments the keys would need a second
+             * prompt for. An unrecognised line is a search, so "/dungeon"
+             * still finds dungeon - which is what a bar that opened on "/"
+             * should do. */
+            char cmdline[128];
+            char arg[96];
+            int cmd;
+
+            if (!ui_command_bar(&buf, frame, (long) sizeof(frame), &g,
+                                cmdline, (int) sizeof(cmdline) - 1)) {
+                need_full_redraw = 1;
+                break;                       /* changed their mind */
+            }
+
+            cmd = flow_parse_command(cmdline, arg, sizeof(arg));
             need_full_redraw = 1;
+
+            /* Put the browser back BEFORE running the command.
+             *
+             * The bar leaves its suggestion panel across the bottom of the
+             * screen, and several of these commands answer with a dialog
+             * drawn on top of the browser rather than on a cleared screen -
+             * so the notice came up framed by the leftovers of the bar that
+             * launched it. The loop's own repaint happens after the command
+             * returns, which is one dialog too late. */
+            ui_repaint_browser(&buf, frame, (long) sizeof(frame), cfg, &g, cat,
+                               &view, filter_desc, sel_entry, top_index, selected);
+            info_rows_used = 0;
+
+            switch (cmd) {
+            case FLOW_CMD_HELP:
+                ui_help_screen(&buf, frame, (long) sizeof(frame), &g);
+                break;
+            case FLOW_CMD_HISTORY:
+                history_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+                break;
+            case FLOW_CMD_INSTALLED:
+                board_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+                break;
+            case FLOW_CMD_TYPE:
+                ui_view_cycle_type(&view, cat);
+                ui_view_rebuild(&view, cat);
+                selected = 0;
+                top_index = 0;
+                break;
+            case FLOW_CMD_RESET:
+                view.text[0] = '\0';
+                view.type[0] = '\0';
+                ui_view_rebuild(&view, cat);
+                selected = 0;
+                top_index = 0;
+                break;
+            case FLOW_CMD_FIND:
+            case FLOW_CMD_UNKNOWN:
+                /* Either "find <text>" or a bare line that is not a
+                 * command: both are a search for what was typed. An empty
+                 * one clears the filter rather than matching nothing. */
+                strncpy(view.text, arg, sizeof(view.text) - 1);
+                view.text[sizeof(view.text) - 1] = '\0';
+                ui_view_rebuild(&view, cat);
+                selected = 0;
+                top_index = 0;
+                break;
+            case FLOW_CMD_QUIT:
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 1);
+                ansi_reset(&buf);
+                ansi_clear(&buf);
+                ansi_flush(&buf);
+                return BROWSE_QUIT;
+            default:
+                /* Everything else acts on the selected row, and the keys
+                 * already do exactly that - so the bar hands over rather
+                 * than growing a second copy of each action. */
+                if (view.count > 0) {
+                    int post = ui_dispatch_row_command(cfg, cat, &view, selected,
+                                                       cmd, arg, &buf, frame,
+                                                       (long) sizeof(frame), &g);
+                    if (post == UI_POST_DOC) {
+                        info_mode = (info_mode == UI_INFO_DOC) ? UI_INFO_DIZ : UI_INFO_DOC;
+                        info_scroll = 0;
+                    } else if (post == UI_POST_ARCHIVE) {
+                        info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
+                        info_scroll = 0;
+                    }
+                } else {
+                    ui_notice(&buf, frame, (long) sizeof(frame), &g, "Nothing selected",
+                              "That command works on the highlighted row,",
+                              "and the list is empty.");
+                }
+                break;
+            }
             break;
+        }
         case 'a': case 'A':
             info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
             info_scroll = 0;
@@ -4596,7 +5516,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             if (view.count > 0) {
                 strip_installed_door(cfg, cat->rows[view.index[selected]].archive,
                                      cat->rows[view.index[selected]].junk, &buf, frame,
-                                     (long) sizeof(frame));
+                                     (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
                 ansi_flush(&buf);
@@ -4622,6 +5542,29 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 ansi_flush(&buf);
                 need_full_redraw = 1;
             }
+            break;
+        case 't': case 'T':
+            /* The rest of the command config - TYPE, STACK, MENUNAME. M
+             * keeps ACCESS, which is a different decision (it also writes
+             * DRACCESS). */
+            if (view.count > 0) {
+                do_edit_tooltype(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                                 (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'h': case 'H':
+            /* What this door has actually done. A delete prints its steps
+             * as it goes and they scroll away with the screen; this is
+             * where they can be read afterwards. */
+            history_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 0);
+            ansi_flush(&buf);
+            need_full_redraw = 1;
             break;
         case 'l': case 'L':
             /* The BOARD's doors when the BBS can be asked, DoorRepo's own
@@ -4681,7 +5624,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             (void) ae_key();
             need_full_redraw = 1;
             break;
-        case 'd': case 'D':
+        case 'x': case 'X':
             if (owner_is_enabled() && view.count > 0) {
                 const dr_entry *sel = &cat->rows[view.index[selected]];
                 char question[160];
@@ -4811,7 +5754,7 @@ static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
         }
         optional[n++] = "A=Archive";
         len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
-                                    "ENTER/R=Get  U=Uninstall",
+                                    "ENTER/D=Get  U=Uninstall",
                                     optional, n, "Q=Back");
     }
     if (len < 0) {
@@ -4902,6 +5845,10 @@ typedef struct {
     char name[BOARD_NAME_MAX];
     unsigned long size;
     int has_archive;
+    /* From the snapshot's ENABLED field. A door the sysop has disabled must
+     * not be handed back to the BBS: the refusal would arrive after this
+     * door has exited, where it reads as DoorRepo having crashed. */
+    int enabled;
 } board_door;
 
 static board_door g_board[BOARD_MAX_DOORS];
@@ -4932,6 +5879,10 @@ static void board_add_line(const char *line)
     strcpy(g_board[g_board_count].name, name);
     g_board[g_board_count].size = size;
     g_board[g_board_count].has_archive = (archive[0] != '\0');
+    /* A row whose flag cannot be read counts as enabled: every door the BBS
+     * put in this list is one it was willing to run. */
+    g_board[g_board_count].enabled = 1;
+    (void) flow_doors_row_enabled(line, &g_board[g_board_count].enabled);
     g_board_count++;
 }
 
@@ -5021,9 +5972,22 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
     unsigned long top_index = 0;
     int rows = g->visible_rows;
     int need_redraw = 1;
+    int name_width;
 
     if (rows < 1) {
         rows = 1;
+    }
+
+    /* The name column takes whatever the panel has left after the command
+     * column and the '+' marker. Computed from the geometry, not hardcoded:
+     * a fixed 40 overflowed an 80-column board and BUBBLEBOBBLE wrapped out
+     * of the frame on the live one. */
+    name_width = g->cols - 4 - 12 - 1 - 2;
+    if (name_width < 8) {
+        name_width = 8;
+    }
+    if (name_width > 60) {
+        name_width = 60;
     }
 
     for (;;) {
@@ -5032,41 +5996,87 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
 
         if (need_redraw) {
             char title[96];
+            char panel[64];
 
             ansi_begin(&buf, frame, framecap);
             ansi_clear(&buf);
             ansi_cursor(&buf, 0);
 
-            strcpy(title, "Doors on this board   ");
+            /* The same chrome as every other screen here: a blue bar at the
+             * top, one panel between it and the footer, a blue bar at the
+             * bottom. ui_compute_geometry owns those numbers - the first
+             * version of this screen invented its own and drew rows past
+             * the panel's bottom border. */
+            strcpy(title, "DoorRepo v");
+            strcat(title, DOOR_VERSION);
+            strcat(title, "   ");
             ui_append_ulong(title, (unsigned long) g_board_count);
-            strcat(title, " installed");
-            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+            strcat(title, " doors on this board");
+            ui_draw_bar(&buf, 1, g->cols, title);
+
+            strcpy(panel, "BOARD (");
+            ui_append_ulong(panel, (unsigned long) g_board_count);
+            strcat(panel, ")");
+            ansi_box(&buf, g->pane_top, g->list_left, g->pane_height,
+                     g->cols, ANSI_CYAN, panel);
 
             if (g_board_count == 0) {
-                ansi_text(&buf, 3, 3, "The BBS reported no installed doors.",
-                          g->cols - 6);
+                ansi_color(&buf, ANSI_WHITE, ANSI_BLACK, 0);
+                ansi_text(&buf, g->pane_top + 1, g->list_left + 2,
+                          "The BBS reported no installed doors.", g->cols - 4);
             } else {
                 for (i = 0; i < rows; i++) {
                     unsigned long r = top_index + (unsigned long) i;
-                    char line[BOARD_CMD_MAX + BOARD_NAME_MAX + 24];
+                    char line[160];
                     int is_sel;
 
                     if (r >= (unsigned long) g_board_count) {
                         break;
                     }
                     is_sel = (r == selected);
-                    sprintf(line, "%-12.12s %-40.40s %s",
-                            g_board[r].cmd, g_board[r].name,
-                            g_board[r].has_archive ? "+" : " ");
-                    ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
-                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+
+                    sprintf(line, "%-12.12s %-*.*s %c",
+                            g_board[r].cmd,
+                            name_width, name_width, g_board[r].name,
+                            g_board[r].has_archive ? '+' : ' ');
+
+                    /* White-on-blue, the same as every other list in this
+                     * door - blessed's { selected: { bg:'blue', fg:'white' } },
+                     * see ui_draw_list_rows(). This screen had it inverted
+                     * to black-on-white, which read as a different program. */
+                    if (is_sel) {
+                        ansi_color(&buf, ANSI_WHITE, ANSI_BLUE, 1);
+                    } else {
+                        ansi_color(&buf, ANSI_WHITE, ANSI_BLACK, 0);
+                    }
+                    ansi_text(&buf, g->pane_top + 1 + i, g->list_left + 2,
+                              line, g->cols - 4);
                 }
                 ansi_reset(&buf);
             }
 
-            ansi_color(&buf, 3, 0, 0);
-            ansi_text(&buf, g->rows - 1, 3, "F=Files  Q=Quit", g->cols - 6);
-            ansi_reset(&buf);
+            {
+                /* Every key this screen answers, through the same
+                 * width-budgeted builder the other footers use - so it drops
+                 * parts in a known order on a narrow terminal and never
+                 * loses Q. A key that is not on the bar may as well not
+                 * exist: M and T were reachable here before this and
+                 * advertised nowhere. */
+                char bar[160];
+                const char *parts[3];
+                int len;
+
+                parts[0] = "M=Access";
+                parts[1] = "T=Config";
+                parts[2] = "H=History";
+                len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                            "ENTER=Run  F=Files", parts, 3,
+                                            "Q=Quit");
+                if (len < 0) {
+                    bar[0] = '\0';
+                }
+                ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
+            }
             ansi_flush(&buf);
             need_redraw = 0;
         }
@@ -5118,8 +6128,71 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
         case 'f': case 'F':
             if (g_board_count > 0 && selected < (unsigned long) g_board_count) {
                 files_loop_ansi(cfg, g_board[selected].cmd, frame, framecap, g);
+                need_redraw = 1;
             }
             break;
+        case 'm': case 'M':
+        case 't': case 'T':
+            /* The config editors belong HERE, not only on the catalog
+             * screen. A catalog row is an ARCHIVE, and its "installed" mark
+             * comes from DoorRepo's own index - so on a board whose doors
+             * were installed by DOORMAN, by hand, or before that index
+             * existed, M and T were hidden and refused. Every row on THIS
+             * screen is a command the BBS itself reported, which is the
+             * thing whose .info is being edited. Reported 2026-08-31.
+             */
+            if (g_board_count > 0 && selected < (unsigned long) g_board_count) {
+                if (key == 'm' || key == 'M') {
+                    do_edit_access_cmd(cfg, g_board[selected].cmd, &buf, frame, framecap, g);
+                } else {
+                    do_edit_tooltype_cmd(cfg, g_board[selected].cmd, &buf, frame, framecap, g);
+                }
+                need_redraw = 1;
+            }
+            break;
+        case 'h': case 'H':
+            history_loop_ansi(cfg, frame, framecap, g);
+            need_redraw = 1;
+            break;
+        case '\r': case '\n': {
+            /* Run the selected door.
+             *
+             * Two doors cannot share a node, so the BBS is handed the
+             * command and runs it once THIS door has exited - AmiExpress's
+             * RETURNCOMMAND, and the same queue-then-exit order DOORMAN
+             * uses for the same reason. Nothing happens until the exit, so
+             * the shutdown below is part of the action, not cleanup after
+             * it. */
+            const char *cmd = (g_board_count > 0 && selected < (unsigned long) g_board_count)
+                ? g_board[selected].cmd : (const char *) 0;
+            int enabled = (cmd != (const char *) 0) ? g_board[selected].enabled : 0;
+            int decision = flow_run_decision(cmd, enabled);
+            char msg[160];
+
+            if (decision == FLOW_RUN_OK) {
+                ansi_begin(&buf, frame, framecap);
+                ansi_cursor(&buf, 1);
+                ansi_reset(&buf);
+                ansi_clear(&buf);
+                ansi_flush(&buf);
+                sprintf(msg, "Starting %.20s...", cmd);
+                ae_put(msg, 1);
+                ae_return_command(cmd);
+                ae_shutdown();
+                return;                  /* not reached: ae_shutdown exits */
+            }
+
+            sprintf(msg, "%s",
+                    (decision == FLOW_RUN_DISABLED)
+                        ? "That door is disabled - enable it before running it."
+                        : (decision == FLOW_RUN_NOCOMMAND)
+                            ? "That row has no command to run."
+                            : "Nothing selected.");
+            ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+            ansi_text(&buf, g->rows - 1, 3, msg, g->cols - 6);
+            ansi_flush(&buf);
+            break;
+        }
         case 'q': case 'Q':
             ansi_begin(&buf, frame, framecap);
             ansi_cursor(&buf, 1);
@@ -5231,6 +6304,210 @@ static void fb_size_text(char *out, unsigned long outsize, const fb_page *pg, in
     }
 }
 
+
+/* ---------------------------------------------------------------------
+ * History screen - what this door has actually done
+ *
+ * The delete log the parity plan asks for, and the reason it is a screen
+ * rather than a line of status: a delete prints its steps as it goes, and
+ * they scroll away with the screen that showed them. Afterwards the only
+ * record is LogFile, which a sysop on a real Amiga board has no comfortable
+ * way to read from inside the door.
+ *
+ * Reads the log at open time, keeps the LAST HISTORY_MAX action lines
+ * (flow_log_line_is_action decides what counts), and pages through them
+ * newest-last. Nothing here asks the BBS anything, so it works the same on a
+ * real AmiExpress board as it does under the emulator.
+ */
+
+#define HISTORY_MAX      40
+#define HISTORY_LINE_MAX 96
+
+static char g_history[HISTORY_MAX][HISTORY_LINE_MAX];
+static int g_history_count;
+/* Index of the OLDEST kept line once the ring has wrapped; 0 until then. */
+static int g_history_start;
+
+/* The i'th kept line, oldest first. */
+static const char *history_line(int i)
+{
+    return g_history[(g_history_start + i) % HISTORY_MAX];
+}
+
+/* Fills g_history with the last HISTORY_MAX action lines from the log.
+ * Returns how many were kept, or -1 when the log could not be read at all -
+ * "no log yet" and "nothing worth showing in it" are different answers. */
+static int history_load(const dr_config *cfg)
+{
+    FILE *f;
+    char line[512];
+    int next = 0;
+    int total = 0;
+
+    g_history_count = 0;
+    g_history_start = 0;
+
+    f = fopen(cfg->log_file, "r");
+    if (f == (FILE *) 0) {
+        return -1;
+    }
+
+    while (fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        unsigned long len = (unsigned long) strlen(line);
+
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (!flow_log_line_is_action(line)) {
+            continue;
+        }
+
+        /* A ring, so a long log costs one pass and no memory beyond the
+         * window: the last HISTORY_MAX matching lines end up in the array,
+         * oldest at `next` once it has wrapped. */
+        strncpy(g_history[next], line, HISTORY_LINE_MAX - 1);
+        g_history[next][HISTORY_LINE_MAX - 1] = '\0';
+        next = (next + 1) % HISTORY_MAX;
+        total++;
+    }
+    fclose(f);
+
+    if (total == 0) {
+        return 0;
+    }
+
+    if (total < HISTORY_MAX) {
+        g_history_start = 0;
+        g_history_count = total;
+        return total;
+    }
+
+    /* Wrapped. The oldest kept line is wherever the ring was about to
+     * overwrite next; the screen reads through history_line() rather than
+     * the array being rotated straight - a rotate needs a second copy of the
+     * whole window, and 3.8KB of automatic storage does not belong on a 68K
+     * door's stack. */
+    g_history_start = next;
+    g_history_count = HISTORY_MAX;
+    return HISTORY_MAX;
+}
+
+static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
+                              const ui_geometry *g)
+{
+    ansi_buf buf;
+    int loaded;
+    int rows = g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS - 2;
+    int top = 0;
+    int need_redraw = 1;
+
+    if (rows < 1) {
+        rows = 1;
+    }
+    loaded = history_load(cfg);
+
+    /* Opened on the newest entries: what a sysop wants after a delete is
+     * what just happened, not what happened first. */
+    if (g_history_count > rows) {
+        top = g_history_count - rows;
+    }
+
+    for (;;) {
+        int key;
+
+        if (need_redraw) {
+            int i;
+
+            ansi_begin(&buf, frame, framecap);
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+            /* The same blue header every other screen wears, and the panel
+             * below it starts where every other panel starts. A screen that
+             * invents its own chrome reads as a different program. */
+            ui_draw_bar(&buf, 1, g->cols, "DoorRepo - History");
+            ansi_box(&buf, UI_HEADER_ROWS + 1, 1,
+                     g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS, g->cols - 1,
+                     ANSI_CYAN, "What this door has done");
+
+            if (loaded < 0) {
+                ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                ansi_text(&buf, 3, 3, "No log file yet - nothing has been installed or removed.",
+                          g->cols - 6);
+            } else if (g_history_count == 0) {
+                ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                ansi_text(&buf, 3, 3, "The log has no installs or removals in it.", g->cols - 6);
+            } else {
+                for (i = 0; i < rows && top + i < g_history_count; i++) {
+                    const char *line = history_line(top + i);
+                    int failed = (strstr(line, "FAILED") != (char *) 0);
+
+                    ansi_color(&buf, failed ? ANSI_RED : ANSI_WHITE, ANSI_BLACK, 0);
+                    ansi_text(&buf, UI_HEADER_ROWS + 2 + i, 3, line, g->cols - 6);
+                }
+            }
+
+            {
+                char bar[160];
+                char count[48];
+                const char *parts[1];
+                int len;
+
+                sprintf(count, "%d entr%s", g_history_count,
+                        g_history_count == 1 ? "y" : "ies");
+                parts[0] = count;
+                /* Built by the same function every other footer is, so it
+                 * drops parts at the same widths and never loses Q. */
+                len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                            "Up/Down  PgUp/PgDn",
+                                            parts, 1, "Q=Back");
+                if (len < 0) {
+                    bar[0] = '\0';
+                }
+                ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
+            }
+
+            ansi_flush(&buf);
+            need_redraw = 0;
+        }
+
+        key = ae_key();
+        switch (key) {
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, framecap);
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return;
+        default:
+            break;
+        }
+
+        {
+            int action = ui_nav_action(key);
+            int before = top;
+
+            if (action == FLOW_NAV_UP && top > 0) {
+                top--;
+            } else if (action == FLOW_NAV_DOWN && top + rows < g_history_count) {
+                top++;
+            } else if (action == FLOW_NAV_PGUP) {
+                top = (top > rows) ? top - rows : 0;
+            } else if (action == FLOW_NAV_PGDN) {
+                top = (top + rows < g_history_count - rows) ? top + rows
+                    : ((g_history_count > rows) ? g_history_count - rows : 0);
+            } else if (action == FLOW_NAV_HOME) {
+                top = 0;
+            } else if (action == FLOW_NAV_END) {
+                top = (g_history_count > rows) ? g_history_count - rows : 0;
+            }
+            if (top != before) {
+                need_redraw = 1;
+            }
+        }
+    }
+}
+
 static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
                             char *frame, long framecap, const ui_geometry *g)
 {
@@ -5279,13 +6556,26 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
             ansi_cursor(&buf, 0);
 
             sprintf(title, "%.20s%s%.40s", cmdname, rel[0] ? "/" : "", rel);
-            ansi_box(&buf, 1, 1, g->rows - 2, g->cols - 1, 6, title);
+            /* Same blue header and same panel geometry as every other
+             * screen: this used to be a lone box from row 1 with its own
+             * one-line footer, which read as a different program.
+             * ("this screen doesnt follow the other pages design", 2026-08-31) */
+            ui_draw_bar(&buf, 1, g->cols, "DoorRepo - Files");
+            ansi_box(&buf, UI_HEADER_ROWS + 1, 1,
+                     g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS, g->cols - 1,
+                     ANSI_CYAN, title);
 
             if (n < 0) {
-                ansi_text(&buf, 3, 3, "This door has no directory on disk.",
-                          g->cols - 6);
+                /* Not a screenful of nothing with one line in it: this is a
+                 * message, so it is a dialog over the list the sysop came
+                 * from. */
+                ansi_flush(&buf);
+                ui_notice(&buf, frame, framecap, g, "No files",
+                          "This door has no directory on disk.",
+                          (const char *) 0);
+                return;
             } else if (page.total == 0) {
-                ansi_text(&buf, 3, 3, "(empty)", g->cols - 6);
+                ansi_text(&buf, UI_HEADER_ROWS + 2, 3, "(empty)", g->cols - 6);
             } else {
                 for (i = 0; i < page.got; i++) {
                     char line[FB_NAME_MAX + 32];
@@ -5295,15 +6585,26 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
                     fb_size_text(sizetext, sizeof(sizetext), &page, i);
                     sprintf(line, "%-40.40s %8.8s", page.names[i], sizetext);
                     ansi_color(&buf, is_sel ? 0 : 7, is_sel ? 7 : 0, 0);
-                    ansi_text(&buf, 2 + i, 3, line, g->cols - 6);
+                    ansi_text(&buf, UI_HEADER_ROWS + 2 + i, 3, line, g->cols - 6);
                 }
                 ansi_reset(&buf);
             }
 
             ansi_color(&buf, 3, 0, 0);
-            ansi_text(&buf, g->rows - 1, 3,
-                      rel[0] ? "ENTER=Open  B=Up  Q=Quit" : "ENTER=Open  Q=Quit",
-                      g->cols - 6);
+            {
+                char bar[160];
+                const char *parts[1];
+                int len;
+
+                parts[0] = rel[0] ? "B=Up" : (const char *) 0;
+                len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                            "ENTER=Open", parts,
+                                            rel[0] ? 1 : 0, "Q=Quit");
+                if (len < 0) {
+                    bar[0] = '\0';
+                }
+                ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
+            }
             ansi_reset(&buf);
             ansi_flush(&buf);
             need_redraw = 0;
@@ -5567,7 +6868,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                                         (unsigned long) g.visible_rows);
             break;
         case UI_KEY_ENTER:
-        case 'r': case 'R':
+        case 'd': case 'D':
             if (view.count > 0) {
                 const dr_entry *sel = &cat->rows[view.index[selected]];
                 char question[160];
@@ -5603,7 +6904,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             if (view.count > 0) {
                 strip_installed_door(cfg, cat->rows[view.index[selected]].archive,
                                      cat->rows[view.index[selected]].junk, &buf, frame,
-                                     (long) sizeof(frame));
+                                     (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
                 ansi_flush(&buf);
@@ -5847,7 +7148,7 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
         page_number = (int) info.page_number;
         print_page(cat, &info, filter_desc);
 
-        ae_put("Selection (number), [N]ext [P]rev [T]ype [S]earch [A]ll [L]ist installed [Q]uit: ", 0);
+        ae_put("Selection (number), [N]ext [P]rev [C]ycle type [/]Find [R]eset [L]ist installed [Q]uit: ", 0);
         get_trimmed_line(input, sizeof(input));
 
         if (carrier_lost()) {
@@ -5887,11 +7188,15 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
         case 'p': case 'P':
             page_number -= 1;
             break;
-        case 't': case 'T':
+        /* The same letters the ANSI screens use: C cycles the type filter,
+         * / finds, R resets. This screen used to say T for type, S for
+         * search and A for all - three letters that mean Config, Strip and
+         * Archive everywhere else in the same door. */
+        case 'c': case 'C':
             return BROWSE_FILTER_TYPE;
-        case 's': case 'S':
+        case '/':
             return BROWSE_FILTER_SEARCH;
-        case 'a': case 'A':
+        case 'r': case 'R':
             return BROWSE_ALL;
         case 'l': case 'L':
             installed_loop_plain(cfg, cat);
