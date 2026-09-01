@@ -283,11 +283,83 @@ sync_image_owned() {
 }
 
 # VOLUME-OWNED: copy only if missing; image is just the seed.
+# A conference the board no longer has must not come back.
+#
+# The admin's conference delete does the right thing: it shifts NAME.n and
+# LOCATION.n down, drops the icon, and (when asked) removes the directory. Then
+# the next container start put all of it back, because the seeding below copies
+# any Conf<n> directory the volume is "missing" and seeds any Conf<n>.info that
+# is absent. A board with five conferences was carrying fourteen directories and
+# fourteen icons, and the screen manager listed all fourteen.
+#
+# So the rule is the board's own: a conference is what ConfConfig.info declares
+# (express.e:31849 walks NAME.i and LOCATION.i for i:=1 TO NCONFS), and its
+# directory is whatever LOCATION.n names - never derived from the number. With
+# no ConfConfig.info at all, this is a genuine first run and the image's list is
+# the only truth there is.
+
+# Tooltypes are NUL-separated strings inside the icon; splitting on NUL gives
+# one per line without needing a parser in shell.
+conf_tooltype_lines() {
+    tr '\000' '\n' < "$BBS_DATA_DIR/ConfConfig.info" 2>/dev/null
+}
+
+conf_declared_count() {
+    conf_tooltype_lines | sed -n 's/^NCONFS=\([0-9][0-9]*\).*/\1/p' | head -1
+}
+
+# `LOCATION.5=BBS:Conf12/` -> `Conf12`
+conf_referenced_dirs() {
+    conf_tooltype_lines \
+        | sed -n 's/^LOCATION\.[0-9][0-9]*=//p' \
+        | sed 's/[[:space:]]*$//' \
+        | sed 's|[/\\]*$||' \
+        | sed 's/^.*://' \
+        | sed 's|.*/||'
+}
+
+# 0 (true) when this Conf<n> directory or Conf<n>.info icon still belongs to
+# the board.
+conference_still_exists() {
+    entry="$1"
+
+    # Only Conf<n> and Conf<n>.info answer to this rule. Everything else in the
+    # seeding lists - Screens, Node<n>, Doors, Access - is structure the image
+    # owns, and blocking it here would empty a board.
+    case "$entry" in
+        Conf[0-9]*) : ;;
+        *) return 0 ;;
+    esac
+
+    [ -f "$BBS_DATA_DIR/ConfConfig.info" ] || return 0
+
+    case "$entry" in
+        *.info)
+            n="${entry#Conf}"
+            n="${n%.info}"
+            nconfs="$(conf_declared_count)"
+            [ -n "$nconfs" ] || return 0
+            [ "$n" -le "$nconfs" ]
+            ;;
+        *)
+            conf_referenced_dirs | grep -qx "$entry"
+            ;;
+    esac
+}
+
 sync_volume_owned() {
     local file="$1"
     local src="$DEFAULT_DATA_DIR/$file"
     local dst="$BBS_DATA_DIR/$file"
     [ -f "$src" ] || return
+    case "$file" in
+        Conf[0-9]*.info)
+            if ! conference_still_exists "$file"; then
+                echo "[Entrypoint]   [VOLUME-OWNED] $file: skipped - the board has no conference $file"
+                return
+            fi
+            ;;
+    esac
     if [ ! -f "$dst" ]; then
         cp "$src" "$dst"
         echo "[Entrypoint]   [VOLUME-OWNED] $file: seeded from image (first run)"
@@ -353,7 +425,7 @@ if [ ! -f "$BBS_DATA_DIR/.initialized" ]; then
         # Doors and Libs are included because BBS expects them at $BBS_DATA_DIR/Doors/ and $BBS_DATA_DIR/Libs/
         # Node0-Node40 (41 nodes), Conf1-Conf13 (13 conferences)
         for dir in Screens Bulletins Commands Node0 Node1 Node2 Node3 Node4 Node5 Node6 Node7 Node8 Node9 Node10 Node11 Node12 Node13 Node14 Node15 Node16 Node17 Node18 Node19 Node20 Node21 Node22 Node23 Node24 Node25 Node26 Node27 Node28 Node29 Node30 Node31 Node32 Node33 Node34 Node35 Node36 Node37 Node38 Node39 Node40 Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 Conf11 Conf12 Conf13 Conf14 Doors Libs Access Languages Protocols FCheck Storage SysopStats Zoom HELP Utils C Devs L S Scripts System AmiXnet RIPgraphics Partdownload; do
-            if [ -d "$DEFAULT_DATA_DIR/$dir" ] && [ ! -d "$BBS_DATA_DIR/$dir" ]; then
+            if [ -d "$DEFAULT_DATA_DIR/$dir" ] && [ ! -d "$BBS_DATA_DIR/$dir" ] && conference_still_exists "$dir"; then
                 echo "[Entrypoint]   Copying $dir..."
                 cp -r "$DEFAULT_DATA_DIR/$dir" "$BBS_DATA_DIR/$dir"
             else
@@ -373,7 +445,7 @@ else
 
     # Repair mode: copy any missing directories without overwriting existing ones
     for dir in Screens Bulletins Commands Node0 Node1 Node2 Node3 Node4 Node5 Node6 Node7 Node8 Node9 Node10 Node11 Node12 Node13 Node14 Node15 Node16 Node17 Node18 Node19 Node20 Node21 Node22 Node23 Node24 Node25 Node26 Node27 Node28 Node29 Node30 Node31 Node32 Node33 Node34 Node35 Node36 Node37 Node38 Node39 Node40 Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 Conf11 Conf12 Conf13 Conf14 Doors Libs Access Languages Protocols FCheck Storage SysopStats Zoom HELP Utils C Devs L S Scripts System AmiXnet RIPgraphics Partdownload; do
-        if [ -d "$DEFAULT_DATA_DIR/$dir" ] && [ ! -d "$BBS_DATA_DIR/$dir" ]; then
+        if [ -d "$DEFAULT_DATA_DIR/$dir" ] && [ ! -d "$BBS_DATA_DIR/$dir" ] && conference_still_exists "$dir"; then
             echo "[Entrypoint]   REPAIR: Copying missing $dir..."
             cp -r "$DEFAULT_DATA_DIR/$dir" "$BBS_DATA_DIR/$dir"
         fi
