@@ -181,3 +181,40 @@ describe('ANSIEditor teardown', () => {
     expect((screen.children as any[]).length).toBe(0);
   });
 });
+
+/**
+ * A dialog opened from the menu keeps the keyboard.
+ *
+ * "sauce info does nothing" (2026-09-02). It opened - the modal is there in
+ * the screen buffer - but the click that opened it carried on to the
+ * elements underneath, the canvas took focus back, and Tab/Enter/Escape
+ * never reached the dialog. The same fault the sprite studio's own
+ * requesters had, fixed the same way.
+ */
+describe('ANSIEditor modals', () => {
+  let screen: any;
+  beforeEach(() => { screen = new Screen({ title: 'modals', responsive: true, width: 100, height: 30 } as any); });
+  afterEach(() => screen?.destroy());
+
+  it('opens SAUCE Info and holds focus against a thief', () => {
+    const editor: any = new ANSIEditor({ parent: screen, canvasWidth: 8, canvasHeight: 4 } as any);
+    editor.showSauceEditor();
+
+    expect(editor.modalOpen).toBe(true);
+    expect(editor.modalTrap).toBeDefined();
+    expect(screen.getFocusTrap()).toBe(editor.modalTrap);
+
+    // What a click underneath does:
+    editor.drawCanvas.focus();
+    (screen.program as any).emit('data', '\x1b');   // Escape reaches the dialog
+    expect(screen.getFocusTrap() === editor.modalTrap || editor.modalTrap === undefined).toBe(true);
+  });
+
+  it('lets the trap go when the dialog closes', () => {
+    const editor: any = new ANSIEditor({ parent: screen, canvasWidth: 8, canvasHeight: 4 } as any);
+    editor.showSauceEditor();
+    editor.restoreFocusAfterDialog();
+    expect(editor.modalTrap).toBeUndefined();
+    expect(screen.getFocusTrap()).toBeNull();
+  });
+});

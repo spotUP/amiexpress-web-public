@@ -390,7 +390,9 @@ export class ANSIEditor extends Box {
   private onExitCallback?: () => void;
   private hideUIHotkey: string;
   private uiVisible: boolean = true;
-  private modalOpen: boolean = false;  // Track when dialogs are open
+  private modalOpen: boolean = false;
+  /** The dialog currently holding the keyboard, if any. */
+  private modalTrap?: any;
 
   /**
    * Draw-mode canvas width/height. These two getters are the ONLY source of
@@ -2385,7 +2387,7 @@ BBS Door SDK v2.0{/gray-fg}
     overlay.on('cancel', () => closeDialog(false));
 
     overlay.show();
-    modal.focus();
+    this.takeModalFocus(modal);
     this.screen.render();
   }
 
@@ -3736,6 +3738,35 @@ BBS Door SDK v2.0{/gray-fg}
    * canvas's own - the marching-ants selection overlay does exactly that -
    * without duplicating the loop and its scaling.
    */
+  /**
+   * What is visible at (x, y), the layer stack included.
+   *
+   * Each layer owns a canvas and the ACTIVE one is what the tools paint,
+   * but nothing ever composited them: a layer's `visible` flag changed no
+   * pixel, so Add Layer, Toggle Visibility, Move Up and Move Down were a
+   * menu that did nothing you could see (audited 2026-09-02 against "most
+   * entries seem dead"). The active layer wins wherever it has been drawn
+   * on; where it has not, the topmost VISIBLE layer below shows through,
+   * which is what a layer is for.
+   */
+  private compositeCellAt(x: number, y: number): Cell {
+    const own = this.cellCanvas?.[y]?.[x];
+    const blank = (c?: Cell): boolean =>
+      !c || c.transparent === true || ((c.char === ' ' || !c.char) && !c.bg);
+    if (!blank(own)) return own!;
+
+    if (this.layers.length > 1) {
+      // Down from the active layer: nearer layers hide farther ones.
+      for (let i = this.activeLayerIndex - 1; i >= 0; i--) {
+        const layer = this.layers[i];
+        if (!layer?.visible) continue;
+        const cell = layer.canvas?.[y]?.[x];
+        if (!blank(cell)) return cell!;
+      }
+    }
+    return own || { char: ' ', fg: 7, bg: 0 };
+  }
+
   private buildCanvasContent(cellAt: (x: number, y: number) => Cell): string {
     const rows: string[] = [];
     for (let y = 0; y < this.canvasH; y++) {
@@ -3892,7 +3923,7 @@ BBS Door SDK v2.0{/gray-fg}
       const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY &&
         (y === minY || y === maxY || x === minX || x === maxX);
       const useMarch = isEdge && (x + y) % 2 === 0;
-      return useMarch ? marchCell : (this.cellCanvas![y]?.[x] || { char: ' ', fg: 7, bg: 0 });
+      return useMarch ? marchCell : this.compositeCellAt(x, y);
     }));
     if (this.drawCursor) {
       this.drawCursor.setFront();
@@ -3985,9 +4016,7 @@ BBS Door SDK v2.0{/gray-fg}
     // so an artist can see the through-holes - getCoreCanvas() still
     // returns the cell's real char/fg/bg untouched; this is
     // presentation-only, as is the magnification buildCanvasContent applies.
-    this.drawCanvas.setContent(this.buildCanvasContent(
-      (x, y) => this.cellCanvas![y]?.[x] || { char: ' ', fg: 7, bg: 0 }
-    ));
+    this.drawCanvas.setContent(this.buildCanvasContent((x, y) => this.compositeCellAt(x, y)));
     // Ensure cursor stays above canvas content
     if (this.drawCursor) {
       this.drawCursor.setFront();
@@ -4213,7 +4242,28 @@ BBS Door SDK v2.0{/gray-fg}
     modal.display();
   }
 
+  /**
+   * Give a modal the keyboard and KEEP it.
+   *
+   * focus() alone loses to the click that opened it: the same mouse
+   * dispatch carries on to the elements underneath and the canvas takes
+   * focus straight back, so Tab, Enter and Escape never reach the dialog -
+   * "sauce info does nothing" (2026-09-02), which is the same fault the
+   * sprite studio's own requesters had. A trap reasserts itself whenever
+   * focus lands outside it.
+   */
+  private takeModalFocus(el: any): void {
+    this.modalTrap = el;
+    el.focus();
+    (this.screen as any)?.trapFocus?.(el);
+  }
+
   private restoreFocusAfterDialog(): void {
+    if (this.modalTrap) {
+      (this.screen as any)?.releaseFocusTrap?.(this.modalTrap);
+      this.modalTrap = undefined;
+    }
+
     // Defer clearing modal flag so ESC handler still sees it as true
     // (ESC both closes modal AND triggers exit handler - we need exit handler to see modalOpen=true)
     setImmediate(() => {
@@ -4425,7 +4475,7 @@ BBS Door SDK v2.0{/gray-fg}
     overlay.on('cancel', () => closeDialog(false));
 
     overlay.show();
-    modal.focus();
+    this.takeModalFocus(modal);
     this.screen.render();
   }
 
@@ -4515,7 +4565,7 @@ BBS Door SDK v2.0{/gray-fg}
     overlay.on('cancel', () => closeDialog());
 
     overlay.show();
-    list.focus();
+    this.takeModalFocus(list);
     this.screen.render();
   }
 
