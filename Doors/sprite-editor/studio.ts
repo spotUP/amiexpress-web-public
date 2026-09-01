@@ -143,6 +143,10 @@ export class SpriteStudioDoor {
 
   async start(): Promise<void> {
     this.createUI();
+    // Responsive from the start, like livechat: without this the browser
+    // terminal stays at a fixed 80x25 whatever the editor's own geometry
+    // says, and 'responsive' has nothing to resize into.
+    this.applyTerminalMode();
     this.inputManager.enable();
     this.bindHotkeys();
 
@@ -605,8 +609,30 @@ export class SpriteStudioDoor {
    */
   private async toggleFixedSize(): Promise<void> {
     this.fixedSize = !this.fixedSize;
+    this.applyTerminalMode();
     await this.openEditor();
     this.flash(this.fixedSize ? '80x25 (as the board serves it)' : 'Responsive (your terminal)');
+  }
+
+  /**
+   * Ask the TERMINAL for the size, not just the editor.
+   *
+   * Reported twice: "when i select responsive mode it doesnt resize to the
+   * browser size". Sizing the editor to 100% was only ever half of it - the
+   * browser terminal starts in FIXED 80x25 and stays there until a door asks
+   * for wide mode (BBSTerminal's own comment: "DON'T auto-fit on mount ...
+   * only resize when the door calls enableWideMode()"). So there was nothing
+   * bigger to fill. livechat calls enableWideMode() at startup, which is why
+   * it has always worked.
+   *
+   * Fixed mode calls disableWideMode(), which snaps the terminal back to
+   * 80x25 - so the toggle shows what a caller on the board actually sees
+   * rather than a cropped view of a wide one.
+   */
+  private applyTerminalMode(): void {
+    const bbs: any = (this.ctx as any)?.bbs;
+    if (this.fixedSize) bbs?.disableWideMode?.();
+    else bbs?.enableWideMode?.();
   }
 
   private async setZoom(zoom: number): Promise<void> {
@@ -893,6 +919,9 @@ export class SpriteStudioDoor {
   }
 
   destroy(): void {
+    // Leave the board as it was found: a caller returning to the BBS gets
+    // its 80 columns back, not this door's wide terminal.
+    (this.ctx as any)?.bbs?.disableWideMode?.();
     if (this.onScreenResize) {
       this.screen.removeListener('resize', this.onScreenResize);
       this.onScreenResize = null;

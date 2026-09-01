@@ -267,3 +267,19 @@ export async function theTransparencyGuideIsOffUntilAskedFor(): Promise<void> {
   assert.ok(sprite.items.some((i: any) => i.label.startsWith('Transparency Guide')),
     'and a menu entry, since every hotkey has one');
 }
+
+export async function responsiveAsksTheTerminalNotJustTheEditor(): Promise<void> {
+  // "when i select responsive mode it doesnt resize to the browser size."
+  // The browser terminal starts FIXED at 80x25 and only widens when a door
+  // asks (BBSTerminal: "DON'T auto-fit on mount"), so sizing the editor to
+  // 100% filled a terminal that never grew.
+  assert.ok(source.includes('private applyTerminalMode('), 'the door must set the terminal mode');
+  assert.ok(source.includes('bbs?.enableWideMode?.()'), 'responsive asks for wide');
+  assert.ok(source.includes('bbs?.disableWideMode?.()'), 'and fixed asks for 80 columns back');
+  const start = source.slice(source.indexOf('async start('), source.indexOf('private createUI('));
+  assert.ok(start.includes('this.applyTerminalMode()'),
+    'and it must be applied at startup, not only when the toggle is used');
+  const destroy = source.slice(source.indexOf('destroy(): void {'));
+  assert.ok(destroy.includes('disableWideMode'),
+    'the board gets its 80 columns back when the door closes');
+}
