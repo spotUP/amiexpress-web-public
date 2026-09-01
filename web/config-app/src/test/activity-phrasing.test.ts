@@ -43,9 +43,11 @@ describe('a command', () => {
 
   // A door command, or one a sysop added, has no entry. The letter is still
   // better than an empty line.
-  it('falls back to the command itself when it does not know it', () => {
-    expect(describeCommand('ZZ', 'Amiga Elite')).toBe('ZZ in Amiga Elite');
-    expect(describeCommand('ZZ', undefined)).toBe('ZZ');
+  // A door's own command reaches here - the live feed showed "FROGGER in
+  // Amiga Warez!", which reads like a fragment of something.
+  it('says an unknown command was RUN, rather than naming it bare', () => {
+    expect(describeCommand('FROGGER', 'Amiga Warez!')).toBe('Ran FROGGER in Amiga Warez!');
+    expect(describeCommand('ZZ', undefined)).toBe('Ran ZZ');
   });
 
   it('is case-insensitive about the command', () => {

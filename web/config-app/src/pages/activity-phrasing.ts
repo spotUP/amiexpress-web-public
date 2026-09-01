@@ -82,8 +82,9 @@ export function describeCommand(
 
   const phrase = COMMAND_PHRASE[letter];
   if (!phrase) {
-    // An unknown command still says where it happened.
-    return conferenceName ? `${letter} in ${conferenceName}` : letter;
+    // A door's own command, or one a sysop added, has no entry. "FROGGER in
+    // Amiga Warez!" reads like a fragment; "Ran FROGGER" is what happened.
+    return conferenceName ? `Ran ${letter} in ${conferenceName}` : `Ran ${letter}`;
   }
 
   if (letter === JOINS_A_CONFERENCE) {

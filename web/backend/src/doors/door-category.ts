@@ -16,6 +16,7 @@
 
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
+import { config } from '../config';
 
 /** The normalised kinds. Anything unrecognised keeps its own lower-cased name. */
 export type DoorCategory = string;
@@ -72,15 +73,39 @@ export function doorCategoryAt(doorPath: string | undefined): DoorCategory | nul
   return category;
 }
 
+/**
+ * A door's registration carries a RELATIVE location - the board logs
+ * "Registered door: FROGGER  Doors/frogger" - and the backend's cwd is
+ * web/backend, not the board. Resolving `Doors/frogger` against cwd looks in
+ * /app/web/backend/Doors/frogger, which does not exist, so every door came
+ * back with no category and every game was "Opened" rather than played.
+ *
+ * The same mistake as the GWall door and the file checkers, and it survived
+ * because the tests only ever passed an absolute temp directory - the one
+ * shape the board never sends.
+ */
+function absoluteCandidates(doorPath: string): string[] {
+  if (path.isAbsolute(doorPath)) return [doorPath];
+
+  const boardRoot = config.get('dataDir');
+  return boardRoot ? [path.join(boardRoot, doorPath), doorPath] : [doorPath];
+}
+
 function candidateDirectories(doorPath: string): string[] {
-  try {
-    if (amigafs.statSync(doorPath).isDirectory()) {
-      return [doorPath];
+  const directories: string[] = [];
+
+  for (const candidate of absoluteCandidates(doorPath)) {
+    try {
+      directories.push(
+        amigafs.statSync(candidate).isDirectory() ? candidate : path.dirname(candidate),
+      );
+    } catch {
+      // Not there under this root - the next candidate may be.
+      directories.push(path.dirname(candidate));
     }
-  } catch {
-    // Not there - fall through to the parent, which may still be.
   }
-  return [path.dirname(doorPath)];
+
+  return directories;
 }
 
 /** Drop the cache. For tests, and for a door reinstalled under a new category. */

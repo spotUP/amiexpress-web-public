@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { config as appConfig } from '../../src/config';
 import {
   doorCategoryAt,
   normaliseCategory,
@@ -104,6 +105,31 @@ describe('reading it off disk', () => {
 
   it('says nothing for no path at all', () => {
     expect(doorCategoryAt(undefined)).toBeNull();
+  });
+
+  // What the board ACTUALLY passes. A registration carries a relative
+  // location - the board logs "Registered door: FROGGER  Doors/frogger" - and
+  // the backend's cwd is web/backend, not the board, so resolving it against
+  // cwd finds nothing and every game came back "Opened".
+  //
+  // The first version of these tests only ever used an absolute temp
+  // directory, which is the one shape the board never sends, so they passed
+  // while the feature did nothing on the live board.
+  it('resolves a door path relative to the BOARD, not the working directory', () => {
+    const previousDataDir = appConfig.get('dataDir');
+    appConfig.set('dataDir', root);
+    try {
+      fs.mkdirSync(path.join(root, 'Doors', 'frogger'), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, 'Doors', 'frogger', 'package.json'),
+        JSON.stringify({ name: 'frogger', category: 'game' }),
+      );
+      clearDoorCategoryCache();
+
+      expect(doorCategoryAt('Doors/frogger')).toBe('game');
+    } finally {
+      appConfig.set('dataDir', previousDataDir);
+    }
   });
 });
 
