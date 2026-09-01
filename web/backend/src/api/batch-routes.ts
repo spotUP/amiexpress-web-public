@@ -11,7 +11,8 @@ const STANDARD_BATCH_FILES = ['batch0', 'batch000', 'batch1', 'batch2', 'batch3'
 function batchRoots(): string[] {
   const roots = [
     config.getConfig().dataDir,
-    process.env.BBS_ROOT || path.resolve(process.cwd(), '..'),
+    // BBS_DATA_DIR is what the container sets; BBS_ROOT is empty there.
+    process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(process.cwd(), '..'),
     // Project root (two levels up from web/backend) to find default batch files in repo/default-data
     path.resolve(process.cwd(), '..', '..'),
   ].filter(Boolean);
@@ -93,7 +94,13 @@ function resolveAssign(p: string): string {
   }
   if (lower.startsWith('doors:')) {
     const rel = p.substring(6);
-    return path.join(process.env.BBS_ROOT || path.resolve(process.cwd(), '..'), 'Doors', rel);
+    // The BBS root, like the bbs: branch above. This read BBS_ROOT - empty in
+    // the container - and fell back to cwd/.., which is /app/web on the
+    // board: a directory with no Doors in it. So the batch editor reported
+    // "Program not found" for every doors: line while the identical bbs:
+    // Doors/... line resolved, verified on the live board with one file and
+    // both spellings.
+    return path.join(base, 'Doors', rel);
   }
   return p;
 }
