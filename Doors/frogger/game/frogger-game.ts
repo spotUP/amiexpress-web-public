@@ -805,7 +805,20 @@ export class FroggerGame {
   }
 
   private overlaps(frogX: number, objX: number, objWidth: number): boolean {
-    return frogX >= objX && frogX < objX + objWidth;
+    // The frog is a CELL, not a point.
+    //
+    // This used to ask whether the frog's left edge fell inside the object,
+    // which is not what the player sees. Logs and traffic sit at fractional
+    // positions and are drawn to the character, so a frog standing visibly
+    // on the end of a log could fail a test its own left edge lost by a
+    // fraction of a cell: "i jumped to the edge of a log and died".
+    //
+    // So the test is the frog's CENTRE, which is the same as asking whether
+    // at least half of it is over the object - what a player reads off the
+    // screen, and symmetric at both ends rather than generous on one side
+    // and lethal on the other.
+    const frogCentre = frogX + 0.5;
+    return frogCentre >= objX && frogCentre < objX + objWidth;
   }
 
   /**

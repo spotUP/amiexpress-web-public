@@ -35,6 +35,8 @@ exports.theGameOverPromptBlinks = theGameOverPromptBlinks;
 exports.gettingHomeIsDecidedByTheCellTheFrogIsDrawnOn = gettingHomeIsDecidedByTheCellTheFrogIsDrawnOn;
 exports.missingTheHomeByAWholeCellStillKills = missingTheHomeByAWholeCellStillKills;
 exports.aHopLandsOnAWholeCell = aHopLandsOnAWholeCell;
+exports.aFrogOnTheVisibleEndOfALogRidesIt = aFrogOnTheVisibleEndOfALogRidesIt;
+exports.aFrogMostlyOffTheEndOfALogDrowns = aFrogMostlyOffTheEndOfALogDrowns;
 const assert_1 = __importDefault(require("assert"));
 const fixture_1 = require("./fixture");
 const constants_1 = require("../game/constants");
@@ -424,5 +426,50 @@ async function aHopLandsOnAWholeCell() {
     data.frog.x = 14.7;
     game.handleDirection('up');
     assert_1.default.strictEqual(data.frog.x, Math.round(14.7), `the frog landed on ${data.frog.x}`);
+}
+/**
+ * A frog standing on the visible end of a log is standing on the log.
+ *
+ * Reported live: "i jumped to the edge of a log and died... the visible
+ * edges of some sprites are not having correct collision detection". The
+ * footing test asked whether the frog's LEFT EDGE fell inside the log, but
+ * the frog is a whole cell and logs sit at fractional positions drawn to
+ * the character - so a frog visibly half-on the end of a log lost the test
+ * by a fraction of a cell and drowned. What is drawn and what is ruled
+ * have to agree, so the test is now the frog's centre.
+ */
+async function aFrogOnTheVisibleEndOfALogRidesIt() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    const lane = data.lanes.find(l => l.type === 'water' && l.objects.length > 0);
+    const log = lane.objects[0];
+    // A log sitting four tenths of a cell right of the grid: its drawn left
+    // edge lands inside the frog's cell, so the two visibly overlap.
+    log.x = 4.4;
+    log.width = 2;
+    log.isDiving = false;
+    data.frog.y = log.y;
+    data.frog.x = 4;
+    data.frog.isDead = false;
+    data.frog.isJumping = false;
+    game.checkCollisions();
+    assert_1.default.strictEqual(data.frog.isDead, false, 'a frog whose centre is over the log must ride it, not drown');
+    assert_1.default.strictEqual(data.frog.onObject, log, 'and it is riding THAT log');
+}
+/** Past the halfway point off the end, though, it really is in the water. */
+async function aFrogMostlyOffTheEndOfALogDrowns() {
+    const { game, data } = (0, fixture_1.startedLevel)(1);
+    const lane = data.lanes.find(l => l.type === 'water' && l.objects.length > 0);
+    for (const o of lane.objects)
+        o.x = -50; // clear the lane
+    const log = lane.objects[0];
+    log.x = 4.4;
+    log.width = 2;
+    log.isDiving = false;
+    data.frog.y = log.y;
+    data.frog.x = 6; // centre 6.5, past the log's end at 6.4
+    data.frog.isDead = false;
+    data.frog.isJumping = false;
+    game.checkCollisions();
+    assert_1.default.strictEqual(data.frog.isDead, true, 'more than half off the end is in the water');
 }
 //# sourceMappingURL=hazards.test.js.map

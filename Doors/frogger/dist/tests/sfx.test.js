@@ -59,9 +59,12 @@ async function drowningSoundsDifferentFromBeingRunOver() {
     const road = (0, fixture_1.startedLevel)(1);
     const roadLane = (0, fixture_1.laneOf)(road.data, 'road', 1);
     road.data.frog.y = roadLane.y;
-    // Inside the vehicle, not rounded to its cell: vehicles start on a
-    // fractional x, and rounding can land just BEHIND the bumper.
-    road.data.frog.x = roadLane.objects[0].x + 0.5;
+    // Squarely inside the vehicle. Footing and collision are decided by the
+    // frog's CENTRE - half of it has to be over the thing - so the frog goes
+    // at the vehicle's own x, which puts its centre half a cell in. It used
+    // to sit at x + 0.5, which under the centre rule is exactly the far edge
+    // and therefore a miss.
+    road.data.frog.x = roadLane.objects[0].x;
     road.game.cues.clear();
     road.game.checkCollisions();
     assert_1.default.deepStrictEqual(water.game.cues.drain(), ['drop'], 'the river plunks');
