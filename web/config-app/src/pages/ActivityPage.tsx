@@ -17,6 +17,7 @@ import {
   Play,
   Upload,
   Zap,
+  Terminal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useBbsEvents, useRealtime } from '../realtime/RealtimeProvider';
@@ -64,6 +65,7 @@ const TYPE_ICON: Record<BBSEventType, LucideIcon> = {
   download: Download,
   door_activity: DoorOpen,
   custom_door_event: Zap,
+  command: Terminal,
 };
 
 const TYPE_TONE: Record<BBSEventType, StatusTone> = {
@@ -73,6 +75,8 @@ const TYPE_TONE: Record<BBSEventType, StatusTone> = {
   download: 'info',
   door_activity: 'warn',
   custom_door_event: 'warn',
+  // What a user is DOING is the ordinary case, not an alert.
+  command: 'neutral',
 };
 
 const TYPE_LABEL: Record<BBSEventType, string> = {
@@ -82,6 +86,7 @@ const TYPE_LABEL: Record<BBSEventType, string> = {
   download: 'Download',
   door_activity: 'Door',
   custom_door_event: 'Door event',
+  command: 'Command',
 };
 
 const FILTERS: { id: 'all' | BBSEventType; label: string }[] = [
@@ -90,6 +95,7 @@ const FILTERS: { id: 'all' | BBSEventType; label: string }[] = [
   { id: 'upload', label: 'Uploads' },
   { id: 'download', label: 'Downloads' },
   { id: 'door_activity', label: 'Doors' },
+  { id: 'command', label: 'Commands' },
 ];
 
 function describe(event: BBSEvent): string {
@@ -108,6 +114,11 @@ function describe(event: BBSEvent): string {
       return `${event.data?.action === 'exited' ? 'left' : 'entered'} ${event.data?.doorName ?? 'a door'}`;
     case 'custom_door_event':
       return event.data?.message ?? event.data?.eventType ?? '';
+    case 'command': {
+      const conference = event.data?.conferenceId;
+      const name = event.data?.command ?? '?';
+      return conference === undefined ? name : `${name} in conference ${conference}`;
+    }
   }
 }
 

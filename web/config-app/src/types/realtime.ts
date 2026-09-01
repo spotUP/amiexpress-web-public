@@ -13,7 +13,8 @@ export type BBSEventType =
   | 'upload'
   | 'download'
   | 'door_activity'
-  | 'custom_door_event';
+  | 'custom_door_event'
+  | 'command';
 
 interface BBSEventBase {
   username: string;
@@ -52,12 +53,24 @@ export interface CustomDoorEvent extends BBSEventBase {
   data?: { doorName?: string; eventType?: string; message?: string };
 }
 
+/**
+ * A command the user ran - the name only.
+ *
+ * The parameters are deliberately not on the wire: a command line can carry
+ * a password, and this reaches every admin socket.
+ */
+export interface CommandEvent extends BBSEventBase {
+  type: 'command';
+  data?: { command: string; conferenceId?: number };
+}
+
 export type BBSEvent =
   | UserLoginEvent
   | UserLogoutEvent
   | TransferEvent
   | DoorActivityEvent
-  | CustomDoorEvent;
+  | CustomDoorEvent
+  | CommandEvent;
 
 /** Emitted to the `admin` room during an import. */
 export interface ImportProgressEvent {

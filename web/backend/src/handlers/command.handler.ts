@@ -4187,6 +4187,28 @@ export async function processCommand(socket: any, session: BBSSession, command: 
     return 'IGNORED';
   }
 
+  // Tell the admin's Activity feed what the user is doing.
+  //
+  // Every command a logged-on user runs comes through here, and none of them
+  // was reported: the feed could say someone was on and that a door was open,
+  // and nothing about the rest of the session.
+  //
+  // The command NAME only - never `params`. A command line can carry a
+  // password, this is broadcast to every admin socket, and anything written
+  // to disk is displayed by the Configuration Files page.
+  try {
+    const { emitCommand } = require('../services/bbs-event-emitter');
+    emitCommand({
+      username: session.user?.username || 'Unknown',
+      nodeId: Number(session.nodeId ?? 0),
+      command: String(command || '').toUpperCase(),
+      conferenceId: session.currentConference,
+      timestamp: Date.now(),
+    });
+  } catch {
+    // A feed that cannot be told must never stop the command running.
+  }
+
 console.log(`[CommandPriority] Processing command: ${command} with params: ${params} allowSyscmd: ${allowSyscmd}`);
 
   // SPECIAL CASE: "J" command with numeric params should use internal handler directly

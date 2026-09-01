@@ -36,7 +36,8 @@ export function queryKeysForEvent(event: BBSEvent): QueryKeyPrefix[] {
       return [NODES, STATS_SYSTEM, LAST_DOWNLOADS];
     case 'door_activity':
     case 'custom_door_event':
-      // The node card shows the door a caller is in; nothing else moves.
+    case 'command':
+      // The node card shows what a caller is doing; nothing else moves.
       return [NODES];
   }
 }
