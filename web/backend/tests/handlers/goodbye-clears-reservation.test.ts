@@ -30,22 +30,33 @@ describe('handleGoodbyeCommand clears node reservation on logoff (A-3, express.e
     );
   });
 
+  /**
+   * The source of handleGoodbyeCommand, from its signature to the next
+   * top-level declaration.
+   *
+   * This used to be a regex with a hard `{0,8000}` cap, which is a trap: the
+   * function grew to 8101 characters and the match silently became null, so
+   * both tests below failed reporting "expected not null" - saying nothing
+   * about clearNodeReservation, which was still there and still correct.
+   * Slicing to the next declaration cannot go stale that way.
+   */
+  function goodbyeBody(): string {
+    const start = src.indexOf('export async function handleGoodbyeCommand');
+    expect(start).toBeGreaterThan(-1);
+    const after = src.slice(start + 10);
+    const next = after.search(/\nexport |\nfunction |\nclass /);
+    return next === -1 ? after : after.slice(0, next);
+  }
+
   test('handleGoodbyeCommand body calls clearNodeReservation(session.nodeId)', () => {
-    // Find handleGoodbyeCommand body (until next export or end-of-function).
-    const block = src.match(
-      /export async function handleGoodbyeCommand[\s\S]{0,8000}?(?=\nexport |\nfunction |\nclass |$)/
-    );
-    expect(block).not.toBeNull();
-    expect(block![0]).toMatch(
+    const block = [goodbyeBody()];
+    expect(block[0].length).toBeGreaterThan(0);
+    expect(block[0]).toMatch(
       /clearNodeReservation\(\s*session\.nodeId[^)]*\)/
     );
   });
 
   test('cites express.e:8213 for the clear call', () => {
-    const block = src.match(
-      /export async function handleGoodbyeCommand[\s\S]{0,8000}?(?=\nexport |\nfunction |\nclass |$)/
-    );
-    expect(block).not.toBeNull();
-    expect(block![0]).toMatch(/express\.e:8213/);
+    expect(goodbyeBody()).toMatch(/express\.e:8213/);
   });
 });
