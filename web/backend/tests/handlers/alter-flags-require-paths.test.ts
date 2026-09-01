@@ -30,10 +30,25 @@ import * as path from 'path';
 import { createRequire } from 'module';
 
 process.env.SKIP_DB_INIT = 'true';
-// Flags are PERSISTED (dataDir/Partdownload), so without this a file flagged
-// by one test is still flagged in the next one and the suite passes or fails
-// depending on what ran before it.
-process.env.BBS_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'amiexpress-flags-'));
+
+/**
+ * Flags are PERSISTED to <dataDir>/Partdownload/flagged<slot>.
+ *
+ * Setting BBS_DATA_DIR here does NOT redirect them: jest's setup loads the
+ * config module before this file runs, so dataDir is already resolved to
+ * the repo and these tests wrote real flag files into it - one of them left
+ * SOMEFILE.LHA sitting in the sysop's board twice.
+ *
+ * So the manager is INJECTED instead. handleAlterFlagsCommand only builds
+ * one when the session has none, and an injected one is pointed at a temp
+ * directory, which needs no cooperation from module load order.
+ */
+const FLAG_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'amiexpress-flags-'));
+
+function tempFlagManager(slot: number) {
+  const { FileFlagManager } = require('../../src/utils/file-flag.util');
+  return new FileFlagManager(FLAG_DIR, slot, 0);
+}
 
 const SRC = path.resolve(__dirname, '../../src');
 const ALTER_FLAGS = path.join(SRC, 'handlers/operations/alter-flags.handler.ts');
@@ -109,6 +124,7 @@ describe('pressing A reaches the flag prompt', () => {
       user: { slotNumber: 1, username: 'Guest', securityFlags: 'T'.repeat(120), secOverride: '' },
       currentConf: 0,
       subState: 0,
+      flagManager: tempFlagManager(1),
     };
 
     const {
@@ -148,6 +164,7 @@ describe('the flag prompt leaves the cursor on its own line', () => {
       user: { slotNumber: 1, username: 'Guest', securityFlags: 'T'.repeat(120), secOverride: '' },
       currentConf: 0,
       subState: 'display_menu',
+      flagManager: tempFlagManager(2),
     };
     return { socket, session, written };
   }
