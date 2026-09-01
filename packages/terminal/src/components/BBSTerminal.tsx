@@ -1971,7 +1971,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             // Draw BEFORE clearing the flag's render, and keep the canvas up
             // for a beat: the buffer is the whole picture, and dropping out
             // of rip mode without painting it is what used to happen.
-            drawRipBuffer();
+            drawRipBuffer(true);
             setRipMode(false);
             data = ripParts[1] || '';
           } else {
@@ -1989,7 +1989,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           ripBuffer.current += parts[0];
           console.log('[RIP] Exiting RIP graphics mode');
           ripModeRef.current = false;
-          drawRipBuffer();
+          drawRipBuffer(true);
           setRipMode(false);
           data = parts[1] || '';
           if (!data) return;
@@ -3044,12 +3044,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * that has not been drawn yet is handed over.
    */
   const ripDrawn = useRef<number>(0);
-  const drawRipBuffer = useCallback(() => {
+  const drawRipBuffer = useCallback((final = false) => {
     const renderer = ripRendererRef.current;
+    // Not mounted yet - the canvas appears on the render after ripMode is
+    // set. Nothing is consumed, so this content is drawn by the next call.
     if (!renderer) return;
-    const pending = ripBuffer.current.slice(ripDrawn.current);
+
+    let pending = ripBuffer.current.slice(ripDrawn.current);
     if (!pending) return;
-    ripDrawn.current = ripBuffer.current.length;
+
+    if (!final) {
+      // Socket chunks fall wherever the network puts them, which is happily
+      // in the middle of a command. Everything from the last '!|' onwards
+      // may be half of one, so it waits for the rest rather than being
+      // parsed as garbage and skipped.
+      const lastStart = pending.lastIndexOf('!|');
+      if (lastStart <= 0) return;
+      pending = pending.slice(0, lastStart);
+    }
+
+    ripDrawn.current += pending.length;
     try {
       renderer.render(pending);
     } catch (err) {

@@ -222,8 +222,19 @@ export async function execute(session: any) {
       // that the terminal would try to interpret as RIP commands.
       socket.emit('ansi-output', '\x1b[1!' + content);
       
-      // 2. Wait for any keypress to return
-      // The RIP graphics are an overlay on the client, so the user just needs to press a key
+      // 2. Wait for a keypress to return.
+      //
+      // NOT the one that got us here. Enter on the list fires 'select',
+      // which calls this - and blessed then delivers that same Enter to
+      // whatever is listening, so a listener attached right now resolves
+      // immediately and the picture is gone within a frame. Reported as
+      // "rip opens a window border for 1 frame and close again when i press
+      // enter on an image".
+      //
+      // The listener goes on after a beat, so the keystroke that opened the
+      // image cannot also close it. Same fault the sprite editor's dialogs
+      // had ("a dialog no longer eats the keystroke that opened it").
+      await new Promise<void>(resolve => setTimeout(resolve, 150));
       await new Promise<void>(resolve => {
         screen.once('keypress', () => resolve());
       });
