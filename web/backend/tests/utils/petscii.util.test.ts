@@ -13,6 +13,48 @@ import {
   convertPetsciiInputToAscii,
   isPetsciiSeqFile,
 } from '../../src/utils/petscii.util';
+import {
+  C64_PALETTE_COLODORE,
+  PETSCII_COLOR_TO_VIC,
+  vicToSgrForeground,
+  vicToSgrBackground,
+} from '../../src/utils/c64-palette';
+
+// C64 power-on prologue: light blue pen (VIC 14) on blue background (VIC 6).
+const PROLOGUE = vicToSgrForeground(14) + vicToSgrBackground(6);
+
+describe('c64-palette', () => {
+  it('maps all 16 PETSCII color codes to distinct VIC indices', () => {
+    const indices = Object.values(PETSCII_COLOR_TO_VIC);
+    expect(indices.sort((a, b) => a - b)).toEqual([...Array(16).keys()]);
+    expect(C64_PALETTE_COLODORE.length).toBe(16);
+  });
+
+  it('emits truecolor SGR from Colodore values', () => {
+    expect(vicToSgrForeground(2)).toBe('\x1b[38;2;129;51;56m'); // #813338 red
+    expect(vicToSgrForeground(8)).toBe('\x1b[38;2;142;80;41m'); // #8E5029 orange, distinct from yellow
+  });
+});
+
+describe('convertPetsciiToPetMe64 palette', () => {
+  it('orange and brown are no longer both yellow', () => {
+    const orange = convertPetsciiToPetMe64(Buffer.from([0x81, 0x41]));
+    const brown = convertPetsciiToPetMe64(Buffer.from([0x95, 0x41]));
+    expect(orange).toContain('\x1b[38;2;142;80;41m');
+    expect(brown).toContain('\x1b[38;2;85;56;0m');
+  });
+
+  it('starts in C64 power-on state: light blue pen on blue background', () => {
+    const out = convertPetsciiToPetMe64(Buffer.from([0x41]));
+    expect(out.startsWith('\x1b[38;2;112;109;235m\x1b[48;2;46;44;155m')).toBe(true);
+  });
+
+  it('clear screen repaints the blue background', () => {
+    const out = convertPetsciiToPetMe64(Buffer.from([0x93]));
+    // bg SGR must be active before ESC[2J so xterm fills with blue
+    expect(out.indexOf('\x1b[48;2;46;44;155m')).toBeLessThan(out.indexOf('\x1b[2J'));
+  });
+});
 
 describe('petscii.util', () => {
   describe('isPetsciiSeqFile', () => {
@@ -70,7 +112,7 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([0x41, 0x42, 0x43]); // ABC
       const result = convertPetsciiToPetMe64(buffer);
 
-      expect(result).toContain('\x1b[97m'); // White color prefix
+      expect(result).toContain(PROLOGUE); // C64 power-on colors (light blue pen, blue bg)
       expect(result).toContain('\x1b[0m');  // Reset at end
     });
 
@@ -78,7 +120,7 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([0x1C, 0x41]); // Red + A
       const result = convertPetsciiToPetMe64(buffer);
 
-      expect(result).toContain('\x1b[31m'); // ANSI red
+      expect(result).toContain(vicToSgrForeground(2)); // Truecolor red (Colodore)
     });
 
     it('should handle character set switching', () => {
@@ -127,7 +169,7 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([]);
       const result = convertPetsciiToPetMe64(buffer);
 
-      expect(result).toContain('\x1b[97m'); // White prefix
+      expect(result).toContain(PROLOGUE); // C64 power-on colors
       expect(result).toContain('\x1b[0m');  // Reset
     });
 
@@ -178,7 +220,7 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([0x1C, 0x41]); // Red + A
       const result = convertPetsciiToAnsi(buffer);
 
-      expect(result).toContain('\x1b[31m'); // ANSI red
+      expect(result).toContain(vicToSgrForeground(2)); // Truecolor red (Colodore)
       expect(result).toContain('A');
     });
 
@@ -196,8 +238,8 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([0x00, 0x03, 0x08, 0x09, 0x83]);
       const result = convertPetsciiToAnsi(buffer);
 
-      // Control codes should not produce output (except ANSI codes)
-      expect(result.length).toBeLessThan(20); // Just color + reset codes
+      // Control codes should not produce output - just the power-on prologue + reset
+      expect(result).toBe(`${PROLOGUE}\x1b[0m`);
     });
 
     it('should handle space characters', () => {
@@ -212,21 +254,21 @@ describe('petscii.util', () => {
       // blanket guard, these fell through to the printable path and each
       // printed as a stray space (or block char) - only 'A' should appear.
       const result = convertPetsciiToAnsi(Buffer.from([0x0A, 0x0F, 0x10, 0x80, 0x8F, 0x41]));
-      expect(result).toBe('\x1b[97mA\x1b[0m');
+      expect(result).toBe(`${PROLOGUE}A\x1b[0m`);
     });
 
     it('RETURN cancels reverse video in the ANSI fallback (emits SGR reverse-off)', () => {
       // RVS on, 'A', RETURN, 'A' -> RETURN must emit reverse-off SGR and
       // reset state so nothing downstream treats reverse video as still on.
       const result = convertPetsciiToAnsi(Buffer.from([0x12, 0x41, 0x0D, 0x41]));
-      expect(result).toBe('\x1b[97m\x1b[7mA\x1b[27m\r\nA\x1b[0m');
+      expect(result).toBe(`${PROLOGUE}\x1b[7mA\x1b[27m\r\nA\x1b[0m`);
     });
 
     it('Shift+RETURN ($8D) does NOT cancel reverse video in the ANSI fallback', () => {
       // RVS on, 'A', Shift+RETURN (must NOT reset RVS), 'A', real RETURN
       // (must still see reverseVideo=true and emit the reverse-off SGR).
       const result = convertPetsciiToAnsi(Buffer.from([0x12, 0x41, 0x8D, 0x41, 0x0D]));
-      expect(result).toBe('\x1b[97m\x1b[7mA\r\nA\x1b[27m\r\n\x1b[0m');
+      expect(result).toBe(`${PROLOGUE}\x1b[7mA\r\nA\x1b[27m\r\n\x1b[0m`);
     });
   });
 
@@ -579,9 +621,9 @@ describe('petscii.util', () => {
 
       const result = convertPetsciiToAnsi(buffer);
 
-      expect(result).toContain('\x1b[31m'); // Red
-      expect(result).toContain('\x1b[97m'); // White
-      expect(result).toContain('\x1b[32m'); // Green
+      expect(result).toContain(vicToSgrForeground(2)); // Red
+      expect(result).toContain(vicToSgrForeground(1)); // White
+      expect(result).toContain(vicToSgrForeground(5)); // Green
       expect(result).toContain('HELLO');
       expect(result).toContain('BBS');
     });
@@ -614,9 +656,9 @@ describe('petscii.util', () => {
 
       const result = convertPetsciiToAnsi(buffer);
 
-      expect(result).toContain('\x1b[2J\x1b[H'); // Clear + home
-      expect(result).toContain('\x1b[97m'); // White
-      expect(result).toContain('\x1b[31m'); // Red
+      expect(result).toContain(vicToSgrBackground(6) + '\x1b[2J\x1b[H'); // Blue bg active before clear + home
+      expect(result).toContain(vicToSgrForeground(1)); // White
+      expect(result).toContain(vicToSgrForeground(2)); // Red
       expect(result).toContain('HELLO');
       expect(result).toContain('WORLD');
       expect(result).toContain('\r\n'); // Line break
