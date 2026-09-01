@@ -94,7 +94,30 @@ describe('the command emit site', () => {
   // A feed fed from anywhere else would miss whatever routes around it.
   it('is the funnel every command passes through', () => {
     const funnel = source.slice(source.indexOf('export async function processCommand'));
-    expect(funnel.slice(0, 2000)).toContain('emitCommand(');
+    expect(funnel.slice(0, 2500)).toContain('emitCommand(');
+  });
+
+  // A command that names a DOOR is reported by the door's own entered/exited
+  // event. Emitting here as well put every door in the feed twice - "Ran
+  // FROGGER in Amiga Warez!" beside "Started a game of FROGGER" - which the
+  // sysop saw on the live board and called wrong.
+  //
+  // So the report happens on the paths that handle the command HERE, never
+  // unconditionally at the top of the funnel.
+  it('reports only the commands it runs itself, not doors', () => {
+    const funnel = source.slice(source.indexOf('export async function processCommand'));
+
+    // Every report is immediately followed by an internal dispatch - which is
+    // exactly "only what this handler runs itself". The J-with-a-number case
+    // reports too, and correctly: it deliberately bypasses the door path and
+    // calls the internal handler directly.
+    const reports = funnel.split('reportCommand();').length - 1;
+    const reportsThenDispatch = [
+      ...funnel.matchAll(/reportCommand\(\);\s*await processBBSCommand\(/g),
+    ].length;
+
+    expect(reports).toBeGreaterThan(0);
+    expect(reportsThenDispatch).toBe(reports);
   });
 
   // A command line can carry a password - the login prompt, AUTOVAL_PASSWORD,

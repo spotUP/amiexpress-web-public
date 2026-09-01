@@ -4189,25 +4189,29 @@ export async function processCommand(socket: any, session: BBSSession, command: 
 
   // Tell the admin's Activity feed what the user is doing.
   //
-  // Every command a logged-on user runs comes through here, and none of them
-  // was reported: the feed could say someone was on and that a door was open,
-  // and nothing about the rest of the session.
+  // Only for commands this handles ITSELF. A command that turns out to name a
+  // door is reported by the door's own entered/exited event, and emitting
+  // here as well put every door in the feed twice - once as "Ran FROGGER in
+  // Amiga Warez!" and again as "Started a game of FROGGER", which is the
+  // better line of the two.
   //
   // The command NAME only - never `params`. A command line can carry a
   // password, this is broadcast to every admin socket, and anything written
   // to disk is displayed by the Configuration Files page.
-  try {
-    const { emitCommand } = require('../services/bbs-event-emitter');
-    emitCommand({
-      username: session.user?.username || 'Unknown',
-      nodeId: Number(session.nodeId ?? 0),
-      command: String(command || '').toUpperCase(),
-      conferenceId: session.currentConference,
-      timestamp: Date.now(),
-    });
-  } catch {
-    // A feed that cannot be told must never stop the command running.
-  }
+  const reportCommand = () => {
+    try {
+      const { emitCommand } = require('../services/bbs-event-emitter');
+      emitCommand({
+        username: session.user?.username || 'Unknown',
+        nodeId: Number(session.nodeId ?? 0),
+        command: String(command || '').toUpperCase(),
+        conferenceId: session.currentConference,
+        timestamp: Date.now(),
+      });
+    } catch {
+      // A feed that cannot be told must never stop the command running.
+    }
+  };
 
 console.log(`[CommandPriority] Processing command: ${command} with params: ${params} allowSyscmd: ${allowSyscmd}`);
 
@@ -4218,6 +4222,7 @@ console.log(`[CommandPriority] Processing command: ${command} with params: ${par
   const trimmedParams = params.trim();
   if (command === 'J' && trimmedParams && /^\d+(\.\d+)?$/.test(trimmedParams)) {
 console.log(`[CommandPriority] J with numeric param "${trimmedParams}" - using internal handler directly`);
+    reportCommand();
     await processBBSCommand(socket, session, command, params);
     // After join completes, trigger display flow to show menu
     // Clear skipNextDisplayFlowMenu flag that may have been set by previous menu display
@@ -4255,6 +4260,7 @@ console.log('[CommandPriority] BbsCommand denied by permissions');
 
   // Try InternalCommand last
 console.log('[CommandPriority] Trying as InternalCommand');
+  reportCommand();
   await processBBSCommand(socket, session, command, params);
   return 'SUCCESS';
 }
