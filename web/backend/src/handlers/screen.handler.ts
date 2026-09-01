@@ -1329,7 +1329,7 @@ export function loadScreenFile(
   conferenceId?: number,
   nodeId: number = 0,
   session?: BBSSession
-): { content: string; isPetscii: boolean; isRip: boolean; filePath: string } | null {
+): { content: string; isPetscii: boolean; isRip: boolean; filePath: string; petsciiBuffer?: Buffer } | null {
   // BBS directory structure matches original Amiga AmiExpress
   // Use dataDir from config which points to project root
   const { config } = require('../config');
@@ -1534,7 +1534,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
             const petsciiBuffer = readScreenBuffer(securityVariant);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true, isRip: false, filePath: securityVariant };
+            return { content, isPetscii: true, isRip: false, filePath: securityVariant, petsciiBuffer };
           }
           // Check if it's a RIP file - send raw content (express.e:6776-6780)
           if (isRipFile(securityVariant)) {
@@ -1566,7 +1566,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
             try {
               const petsciiBuffer = readScreenBuffer(fileToUse);
               const content = convertPetsciiToPetMe64(petsciiBuffer);
-              return { content, isPetscii: true, isRip: false, filePath: fileToUse };
+              return { content, isPetscii: true, isRip: false, filePath: fileToUse, petsciiBuffer };
             } catch (error) {
               SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${fileToUse}`, { error: (error as Error).message }, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
@@ -1608,7 +1608,7 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
           if (isPetsciiSeqFile(secPath)) {
             const petsciiBuffer = readScreenBuffer(secPath);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true, isRip: false, filePath: secPath };
+            return { content, isPetscii: true, isRip: false, filePath: secPath, petsciiBuffer };
           }
             if (isRipFile(secPath)) {
               return { content: readScreenText(secPath), isPetscii: false, isRip: true, filePath: secPath };
@@ -1638,7 +1638,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
             try {
               const petsciiBuffer = readScreenBuffer(tryPath);
               const content = convertPetsciiToPetMe64(petsciiBuffer);
-              return { content, isPetscii: true, isRip: false, filePath: tryPath };
+              return { content, isPetscii: true, isRip: false, filePath: tryPath, petsciiBuffer };
             } catch (error) {
               SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${tryPath}`, { error: (error as Error).message }, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
@@ -1708,7 +1708,7 @@ console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(erro
         const buffer = readScreenBuffer(petsciiFallback);
         const content = convertPetsciiToPetMe64(buffer);
         screenDebug(`[loadScreenFile]  Using PETSCII fallback screen ${petsciiFallback}`);
-        return { content, isPetscii: true, isRip: false, filePath: petsciiFallback };
+        return { content, isPetscii: true, isRip: false, filePath: petsciiFallback, petsciiBuffer: buffer };
       } catch (error) {
 console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as Error).message})`);
         SysopDebugUtil.debugFileError(
@@ -1741,6 +1741,39 @@ export function addAnsiEscapes(content: string): string {
     // If ESC was already present, preserve a single ESC; otherwise add one
     return `\x1b[${body}`;
   });
+}
+
+/**
+ * Emit a PETSCII screen result (Task 9: raw-byte transport).
+ *
+ * When the loader captured the original `.seq` bytes (`petsciiBuffer` set),
+ * emit them raw over `petscii-bytes` (base64) — the web terminal renders
+ * them through `PetsciiMachine`/`PetsciiCanvas`, and telnet's connection
+ * emitter (`connection-emitter.ts`) forwards the identical bytes to a real
+ * C64 (or degrades them for a non-PETSCII terminal that ended up here).
+ * `result.content` (the legacy Unicode-PUA conversion) is kept only as a
+ * fallback for callers that still produce string-only PETSCII content
+ * (`BBSApi.writePetscii(string)`; older loader results without a buffer).
+ *
+ * PETSCII screens bypass the ANSI MCI/wipe/pagination pipeline entirely
+ * (see the `isPetscii` early-return in `displayScreen`) — that machinery
+ * tokenizes ANSI escapes and splits on `\r\n`, which is meaningless (and
+ * unsafe) applied to raw binary PETSCII. This intentionally drops ~SP
+ * soft-pause / auto-pagination support for PETSCII screens; real .seq art
+ * is authored as a single fixed 40x25 frame, matching the one-shot emit
+ * here.
+ */
+export async function emitPetsciiScreen(
+  socket: any,
+  session: BBSSession,
+  result: { content: string; isPetscii: boolean; isRip: boolean; filePath: string; petsciiBuffer?: Buffer }
+): Promise<void> {
+  if (result.petsciiBuffer) {
+    socket.emit('petscii-bytes', result.petsciiBuffer.toString('base64'));
+  } else {
+    socket.emit('petscii-output', result.content);
+  }
+  session.lastScreenHadPause = false;
 }
 
 /**
@@ -1780,7 +1813,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
-    const { content, isPetscii, isRip, filePath } = screenData;
+    const { content, isPetscii, isRip, filePath, petsciiBuffer } = screenData;
     // Express.e:6567  MENU resets cmdShortcuts/shortcuts before checking for .keys
     session.lastScreenFilePath = filePath;
 
@@ -1789,6 +1822,21 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // (CONF_BULL with ~CC_ dRE!WAll etc.) bypass that path entirely, leaving old door content visible.
     if (shouldClear) {
       socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    }
+
+    // === PETSCII screens with a raw buffer go out as binary (Task 9) ===
+    // The MCI/wipe/pagination pipeline below operates on `content` as ANSI
+    // text (tokenizing escape sequences, splitting on \r\n, etc.) — running
+    // raw PETSCII bytes (converted to a Unicode-PUA string only for the
+    // legacy display path) through that machinery is meaningless at best
+    // and corrupting at worst. When the loader carried the original buffer,
+    // skip straight to the raw transport and let the frontend's
+    // PetsciiMachine render it; when it didn't (defensive: older callers of
+    // loadScreenFile's return shape), fall back to the legacy PUA emit.
+    if (isPetscii) {
+      screenFlowLog(screenName, `PETSCII screen ${filePath}: ${petsciiBuffer ? petsciiBuffer.length + ' raw bytes (petscii-bytes)' : content.length + ' PUA chars (legacy petscii-output)'}`);
+      await emitPetsciiScreen(socket, session, screenData);
+      return true;
     }
 
     // === RIP screens go out raw (express.e:6776-6780) ===

@@ -14,6 +14,45 @@ import { classifyKey } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
+import { PetsciiMachine } from '../petscii/petscii-machine';
+import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
+
+// PETSCII raw-byte transport (Task 9). `MAX_SOFT_CAP_BPS` mirrors
+// modem-emulator.ts's bps=0 soft cap (230400 bps / 10 bits-per-byte =
+// 23040 bytes/sec) so a full-speed connection still paints progressively
+// instead of the whole 40x25 frame landing in one tick.
+const PETSCII_MAX_SOFT_CAP_BPS = 230400;
+
+/**
+ * Inverse of `keyEventToPetscii` (petscii/keymap.ts): translates the
+ * synthetic PETSCII bytes PetsciiCanvas's onKeyDown produced back into the
+ * ASCII string the server's 'command' input path (xterm's term.onData)
+ * already understands. Only the ranges the brief scoped are handled;
+ * cursor keys, function keys, and Home/Clear are dropped for now (documented
+ * limitation - the ASCII command path has no representation for them yet).
+ */
+function petsciiKeyBytesToCommand(bytes: number[]): string {
+  let out = '';
+  for (const b of bytes) {
+    if (b === 0x0d) {
+      out += '\r';
+    } else if (b === 0x14) {
+      out += '\x7f';
+    } else if (b >= 0x41 && b <= 0x5a) {
+      // Unshifted letter key (keyEventToPetscii mapped ascii a-z -> $41-$5A).
+      out += String.fromCharCode(b + 0x20);
+    } else if (b >= 0xc1 && b <= 0xda) {
+      // Shifted letter key (keyEventToPetscii mapped ascii A-Z -> $C1-$DA).
+      out += String.fromCharCode(b - 0x80);
+    } else if (b >= 0x20 && b <= 0x3f) {
+      // Digits/punctuation/space: identical in both encodings.
+      out += String.fromCharCode(b);
+    }
+    // Cursor keys ($11/$91/$1D/$9D), F-keys ($85-$8C), Home/Clear ($13/$93):
+    // dropped until the server input path accepts them.
+  }
+  return out;
+}
 
 // RIP Graphics.
 //
@@ -223,6 +262,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const mediaHandlerRef = useRef<MediaHandler | null>(null);
   const sfxBufferRef = useRef<string>('');
   const modemEmulatorRef = useRef<ModemEmulator | null>(null);
+
+  // PETSCII raw-byte transport state (Task 9). petsciiMachineRef is created
+  // lazily on the first 'petscii-bytes' event; petsciiActive swaps the
+  // hidden xterm container for <PetsciiCanvas>. petsciiBpsRef mirrors the
+  // same 'modem-speed' event ModemEmulator listens to, so the C64 canvas
+  // draws at the same simulated baud rate as the ANSI/xterm path.
+  const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
+  const [petsciiActive, setPetsciiActive] = useState<boolean>(false);
+  const petsciiBpsRef = useRef<number>(0);
+  const petsciiFeedQueue = useRef<number[]>([]);
+  const petsciiDrainActiveRef = useRef<boolean>(false);
+
+  // Classic BBS behaviour: any keypress dumps the rest of the pending
+  // screen instantly instead of making the user wait out the baud rate.
+  // The pacing loop (startPetsciiDrain, set up alongside the socket
+  // listeners below) re-reads petsciiFeedQueue.current on every iteration,
+  // so emptying it here is enough - no separate cancellation flag needed.
+  const flushPetsciiQueue = useCallback(() => {
+    const queue = petsciiFeedQueue.current;
+    if (queue.length === 0) return;
+    const rest = queue.splice(0, queue.length);
+    petsciiMachineRef.current?.feed(Uint8Array.from(rest));
+  }, []);
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
@@ -2055,6 +2117,54 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
     });
 
+    // PETSCII raw-byte transport (Task 9). Unlike 'petscii-output' (a PUA
+    // string written straight to xterm), these are the exact bytes the
+    // server read off a .seq file (or a door's writePetscii(Buffer)),
+    // base64-encoded. Feed them to a PetsciiMachine and render through
+    // PetsciiCanvas instead of xterm - xterm has no concept of C64 screen
+    // codes/color RAM/charset banks, only PUA glyphs.
+    //
+    // Pacing mirrors ModemEmulator.sendThrottled (modem-emulator.ts:170-210):
+    // an elapsed-time token budget rather than a fixed-size interval tick,
+    // so the drain rate tracks bps smoothly instead of stair-stepping.
+    // bps=0 (MAX) soft-caps to PETSCII_MAX_SOFT_CAP_BPS for the same reason
+    // ModemEmulator.enable() does - so a full C64 frame still draws
+    // progressively instead of landing in a single tick.
+    const startPetsciiDrain = () => {
+      if (petsciiDrainActiveRef.current) return; // already draining
+      petsciiDrainActiveRef.current = true;
+      const start = performance.now();
+      let bytesSent = 0;
+      const step = async () => {
+        while (petsciiFeedQueue.current.length > 0) {
+          const bps = petsciiBpsRef.current || PETSCII_MAX_SOFT_CAP_BPS;
+          const bytesPerSecond = Math.max(1, Math.floor(bps / 10)); // 10 bits/byte
+          const elapsedMs = performance.now() - start;
+          const allowed = Math.max(0, Math.floor(bytesPerSecond * (elapsedMs / 1000)) - bytesSent);
+          if (allowed <= 0) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            continue;
+          }
+          const queue = petsciiFeedQueue.current;
+          const toSend = Math.min(allowed, queue.length, 64);
+          const chunk = queue.splice(0, toSend);
+          petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
+          bytesSent += toSend;
+        }
+        petsciiDrainActiveRef.current = false;
+      };
+      void step();
+    };
+    socket.on('petscii-bytes', (b64: string) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      if (!petsciiMachineRef.current) {
+        petsciiMachineRef.current = new PetsciiMachine();
+        setPetsciiActive(true); // swaps the xterm div for <PetsciiCanvas machine=.../>
+      }
+      for (const b of bytes) petsciiFeedQueue.current.push(b);
+      startPetsciiDrain();
+    });
+
     // Modem speed emulation handler.
     // NB: bps === 0 used to mean "disable throttling entirely", which let
     // xterm.js paint a full 80×25 screen in a single ~16ms frame and made
@@ -2067,6 +2177,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (modemEmulatorRef.current) {
         modemEmulatorRef.current.enable(bps);
       }
+      // ModemEmulator.enable() maps bps=0 to its own soft cap; mirror the
+      // same convention for the PETSCII feeder (startPetsciiDrain reads 0
+      // as "use PETSCII_MAX_SOFT_CAP_BPS" too).
+      petsciiBpsRef.current = bps;
     });
 
     // Terminal resize handler (PETSCII mode uses 40x25)
@@ -2730,6 +2844,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Send all other input directly to the backend (doors/commands)
     term.onData((data: string) => {
+      // Classic BBS behaviour: don't make the user wait out the baud rate
+      // for a screen that's still drawing - any keypress dumps the rest
+      // immediately. xterm can still receive focus/onData while a PETSCII
+      // screen is paced (PetsciiCanvas's own onKeyDown is the primary
+      // surface, but this covers focus staying on the hidden xterm div).
+      flushPetsciiQueue();
       if (!socket.connected) {
         console.error('[Terminal] Socket not connected, cannot send data');
         return;
@@ -3194,8 +3314,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // In wide mode: 100% height to fill screen (the wrapper carries
           // the fixed-mode max-width)
           ...(terminalMode === 'fixed' ? {} : { height: '100%' }),
+          // PETSCII raw-byte transport (Task 9): hide, don't unmount, so
+          // xterm's terminal/session state survives a mode swap (out of
+          // scope for this task to leave PETSCII mode mid-session - the
+          // documented path back is a page reload).
+          ...(petsciiActive ? { display: 'none' } : {}),
         }}
       />
+      {petsciiActive && petsciiMachineRef.current && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            backgroundColor: '#000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <PetsciiCanvas
+            machine={petsciiMachineRef.current}
+            onData={(bytes) => {
+              flushPetsciiQueue();
+              const command = petsciiKeyBytesToCommand(bytes);
+              if (command) socketRef.current?.emit('command', command);
+            }}
+          />
+        </div>
+      )}
       {ripMode && (
         // Flush over the terminal box, no frame, no badge: the picture
         // reads as the BBS drawing it inside the terminal, not as a dialog

@@ -270,19 +270,20 @@ export class BBSApi {
 
   /**
    * Write PETSCII content to terminal
-   * Emits 'petscii-output' event which triggers PetMe64 font on frontend
-   * For real C64 terminals, this is converted to raw PETSCII bytes
+   *
+   * Buffer input (raw PETSCII bytes, e.g. from a door emitting native C64
+   * output) goes out over the Task 9 raw-byte transport: 'petscii-bytes'
+   * (base64), rendered by the web terminal's PetsciiMachine/PetsciiCanvas
+   * and forwarded byte-for-byte to real C64 telnet callers by the
+   * connection emitter (server/connection-emitter.ts). String input
+   * (already Unicode-PUA text, e.g. hand-built screens) keeps the legacy
+   * 'petscii-output' PetMe64-font path.
    *
    * @param data String (already in Unicode PUA format) or Buffer (raw PETSCII bytes)
    */
   writePetscii(data: string | Buffer): void {
     if (Buffer.isBuffer(data)) {
-      // Convert raw PETSCII bytes to Unicode PUA for PetMe64 font, carrying
-      // charset/color/reverse state across chunks via the per-instance
-      // streaming converter (doors emit many small chunks, not one screen).
-      this.petsciiConverter = this.petsciiConverter ?? new PetsciiStreamConverter();
-      const converted = this.petsciiConverter.convert(data);
-      this.socket.emit('petscii-output', converted);
+      this.socket.emit('petscii-bytes', data.toString('base64'));
     } else {
       // Already a string - send directly
       this.socket.emit('petscii-output', data);
