@@ -122,6 +122,8 @@ class SpriteStudioDoor {
         this.artText = null;
         this.playing = false;
         this.playTimer = null;
+        /** How to stop playback from somewhere other than a keypress. */
+        this.stopPlay = null;
         this.door = '';
         this.file = '';
         this.exitResolve = null;
@@ -401,6 +403,7 @@ class SpriteStudioDoor {
             showSidebar: true,
             showStatusBar: true,
             extraMenus: this.buildMenus(),
+            extraToolbar: this.doc ? this.buildToolbar() : undefined,
             onSave: async () => { await this.save(); return true; },
             onOpen: async () => { await this.openSpriteRequester(); },
             onExit: () => { void this.close(); },
@@ -418,6 +421,51 @@ class SpriteStudioDoor {
             this.loadFrame();
         this.editor.focus();
         this.screen.render();
+    }
+    /**
+     * The strip under the canvas: what a hand reaches for while animating.
+     *
+     * Playback, frame stepping, onion skin and zoom were all menu items, which
+     * is a dropdown for something you do on every frame. The editor puts this
+     * under the canvas when there is a row spare - a small sprite in a wide
+     * terminal always has one, a full-screen .ans never does - so the strip is
+     * a responsive-mode feature without either side knowing about modes.
+     *
+     * Sprites only. A .ans has no frames, no animation and no cells to
+     * magnify, and a strip of controls that do nothing is worse than none.
+     */
+    buildToolbar() {
+        const frames = () => {
+            if (!this.doc)
+                return 0;
+            return this.doc.sprite.animations[this.doc.animation].frames.length;
+        };
+        return [
+            [
+                { label: '|<', action: () => this.op(d => (0, edit_doc_1.selectFrame)(d, 0)) },
+                { label: '<<', action: () => this.step(-1) },
+                { label: () => (this.playing ? '[]' : '|>'), action: () => this.togglePlay() },
+                { label: '>>', action: () => this.step(+1) },
+                { label: '>|', action: () => this.op(d => (0, edit_doc_1.selectFrame)(d, frames() - 1)) },
+            ],
+            [
+                { label: () => `${(this.doc?.frame ?? 0) + 1}/${frames()}` },
+                { label: '[+]', action: () => this.op(d => (0, edit_doc_1.addFrame)(d, 'duplicate')) },
+                { label: '[-]', action: () => void this.deleteFrameAsked() },
+            ],
+            [
+                {
+                    label: () => `ONION ${this.onionSkin ? 'on' : 'off'}`,
+                    action: () => this.toggleOnionSkin(),
+                },
+            ],
+            [
+                {
+                    label: () => `${this.zoom}x`,
+                    action: () => void this.setZoom(this.zoom === exports.ZOOM_STEPS[exports.ZOOM_STEPS.length - 1] ? exports.ZOOM_STEPS[0] : stepZoom(this.zoom, 1)),
+                },
+            ],
+        ];
     }
     /** Frame and Animation, in the editor's OWN menu bar. */
     buildMenus() {
@@ -504,6 +552,8 @@ class SpriteStudioDoor {
         // work, and left set a freshly opened sprite reads as dirty.
         this.editor.modified = false;
         this.editor.setLabel?.(` ${studioTitle(this.doc, this.door, this.file)} `);
+        // The strip's frame readout is only true until the frame changes.
+        this.editor.refreshExtraToolbar?.();
         this.screen.render();
     }
     /**
@@ -542,6 +592,7 @@ class SpriteStudioDoor {
     toggleOnionSkin() {
         this.onionSkin = !this.onionSkin;
         this.editor?.setUnderlay(this.onionSkinCanvas());
+        this.editor?.refreshExtraToolbar?.();
         this.screen.render();
     }
     /** Commit, run a document op, put the new frame on the canvas. */
@@ -648,6 +699,13 @@ class SpriteStudioDoor {
      * canvas is restored to the frame being edited afterwards, and the work
      * is committed first so playback cannot eat an uncommitted stroke.
      */
+    /** The strip's one play button, which has to be able to stop it too. */
+    togglePlay() {
+        if (this.playing)
+            this.stopPlay?.();
+        else
+            this.playInPlace();
+    }
     playInPlace() {
         if (!this.doc || !this.editor || this.playing)
             return;
@@ -659,6 +717,7 @@ class SpriteStudioDoor {
             return;
         }
         this.playing = true;
+        this.editor.refreshExtraToolbar?.();
         this.editor.setUnderlay(null);
         let i = 0;
         const showFrame = () => {
@@ -676,6 +735,7 @@ class SpriteStudioDoor {
             if (!this.playing)
                 return;
             this.playing = false;
+            this.stopPlay = null;
             if (this.playTimer) {
                 clearInterval(this.playTimer);
                 this.playTimer = null;
@@ -683,6 +743,7 @@ class SpriteStudioDoor {
             this.screen.removeListener('keypress', stop);
             this.loadFrame();
         };
+        this.stopPlay = stop;
         this.screen.on('keypress', stop);
     }
     async newAnimationAsked() {

@@ -85,6 +85,17 @@ export interface ANSIEditorOptions extends ElementOptions {
    * two applications bolted together.
    */
   extraMenus?: HostMenu[];
+  /**
+   * A one-row strip of the host's own controls, under the canvas.
+   *
+   * The place a drawing application puts playback and frame controls: near
+   * the art, reachable with the mouse, out of the menus you would otherwise
+   * open on every frame. It appears only when there is a spare row between
+   * the canvas and the status bar, which is what makes it a WIDE-terminal
+   * feature without knowing anything about terminal modes - at 80x25 with a
+   * full-screen document there is no such row, and the strip stays away.
+   */
+  extraToolbar?: HostToolbarGroup[];
   showSidebar?: boolean;      // Left sidebar with colors & tools
   onSave?: (content: string) => Promise<boolean>;
   onSaveAs?: () => Promise<void>;  // Open save-as dialog
@@ -119,6 +130,21 @@ export interface HostMenu {
   label: string;
   items: DropdownMenuItem[];
 }
+
+/**
+ * One segment of the host's strip under the canvas.
+ *
+ * A function label is re-read on every refreshExtraToolbar(), which is how a
+ * readout ("3/12", "ONION on") stays true without the host rebuilding the
+ * editor. No action means a readout rather than a button.
+ */
+export interface HostToolbarItem {
+  label: string | (() => string);
+  action?: () => void;
+}
+
+/** Segments that belong together; groups are separated by a divider. */
+export type HostToolbarGroup = HostToolbarItem[];
 
 export type EditorMode = 'text' | 'draw';
 
@@ -216,6 +242,10 @@ export class ANSIEditor extends Box {
   /** Host-contributed menus, in bar order after Help. */
   private extraMenus: HostMenu[] = [];
   private extraMenuDropdowns: DropdownMenu[] = [];
+
+  /** Host-contributed strip under the canvas, and the row it sits on. */
+  private extraToolbar: HostToolbarGroup[] = [];
+  private extraToolbarBar?: Box;
 
   // F-key toolbar state
   private fkeySetIndex: number = 0;    // Current character set (0-7)
@@ -441,6 +471,7 @@ export class ANSIEditor extends Box {
     // put the render and the hit-test on different grids, and a negative
     // one would build an empty row - a silently blank canvas.
     this.extraMenus = options.extraMenus ?? [];
+    this.extraToolbar = options.extraToolbar ?? [];
     this.transparencyGuide = options.showTransparencyGuide ?? false;
     this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
     this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
@@ -619,6 +650,9 @@ export class ANSIEditor extends Box {
         (this.screen as any).program.setMouse({ allMotion: false }, true);
       }
     });
+
+    // 5b. The host's strip, on the first free row under the canvas.
+    this.createExtraToolbar(canvasGeom, sidebarWidth, showStatusBar);
 
     // 6. Cursor overlay for draw mode
     this.drawCursor = new Box({
@@ -888,6 +922,129 @@ export class ANSIEditor extends Box {
     if (item?.menu) {
       item.menu.openAt(item.left + this.aleft + 1, this.atop + 2);
     }
+  }
+
+  /**
+   * The host's strip, one row under the canvas.
+   *
+   * Built only if there IS a row: the canvas is centred and sized to the
+   * art, so a small sprite in a wide terminal leaves plenty and a
+   * full-screen document leaves none. Nothing here knows about terminal
+   * modes - room is the whole test, which is also why it survives a resize
+   * without a second rule.
+   *
+   * Segments are separate boxes rather than one line of text because a
+   * segment is clickable, exactly as the F-key toolbar's buttons are.
+   */
+  private createExtraToolbar(
+    canvas: { top: number; left: number; width: number; height: number },
+    sidebarWidth: number,
+    showStatusBar: boolean,
+  ): void {
+    if (this.extraToolbar.length === 0) return;
+
+    const row = canvas.top + canvas.height;
+    const lastUsableRow = (this.height as number) - (showStatusBar ? 1 : 0) - 1;
+    if (row > lastUsableRow) return;
+
+    const bar = new Box({
+      parent: this,
+      top: row,
+      left: canvas.left,
+      width: 1,          // widened to its content by layoutExtraToolbar()
+      height: 1,
+      style: { bg: 'black', fg: 'white' },
+      tags: true,
+      focusable: false,
+    });
+    this.extraToolbarBar = bar;
+    this.layoutExtraToolbar(sidebarWidth);
+    // Text mode has no canvas on screen for it to sit under.
+    if (this.mode !== 'draw') bar.hide();
+  }
+
+  /** Place the segments, and size the strip to what they came to. */
+  private layoutExtraToolbar(sidebarWidth: number): void {
+    const bar = this.extraToolbarBar;
+    if (!bar) return;
+
+    for (const child of bar.children.slice()) child.destroy();
+
+    let x = 0;
+    this.extraToolbar.forEach((group, g) => {
+      if (g > 0) {
+        new Text({
+          parent: bar,
+          top: 0, left: x, width: 3, height: 1,
+          content: '{gray-fg} | {/gray-fg}',
+          style: { bg: 'black' },
+          tags: true,
+        });
+        x += 3;
+      }
+      group.forEach((item, i) => {
+        if (i > 0) x += 1;
+        const text = typeof item.label === 'function' ? item.label() : item.label;
+        const segment = new Box({
+          parent: bar,
+          top: 0, left: x, width: text.length, height: 1,
+          content: item.action ? `{cyan-fg}${text}{/cyan-fg}` : text,
+          style: item.action
+            ? { bg: 'black', fg: 'white', hover: { bg: 'blue' } }
+            : { bg: 'black', fg: 'white' },
+          tags: true,
+          mouse: Boolean(item.action),
+          clickable: Boolean(item.action),
+          focusable: false,
+        });
+        if (item.action) segment.on('click', () => item.action!());
+        x += text.length;
+      });
+    });
+
+    bar.width = x;
+    // A strip wider than the art it sits under would run off the right edge;
+    // slide it left until it fits, never past the sidebar.
+    const maxLeft = Math.max(sidebarWidth, (this.width as number) - x);
+    if ((bar.left as number) > maxLeft) bar.left = maxLeft;
+  }
+
+  /**
+   * Put the strip back under the canvas wherever the canvas is now.
+   *
+   * F2 moves the canvas to the corner and gives it the whole window; the
+   * mode switch hides it entirely. The strip belongs to the canvas in both
+   * cases, so it follows it or goes away with it.
+   */
+  private positionExtraToolbar(): void {
+    const bar = this.extraToolbarBar;
+    if (!bar) return;
+    if (!this.uiVisible || this.mode !== 'draw') { bar.hide(); return; }
+
+    // position.top is the row the canvas was PLACED on; the `top` getter
+    // adds this editor's own border and would push the strip a row down
+    // every time it was consulted.
+    const top = (this.drawCanvas.position.top as number) + (this.drawCanvas.height as number);
+    const lastUsableRow = (this.height as number) - (this.statusBar ? 1 : 0) - 1;
+    if (top > lastUsableRow) { bar.hide(); return; }
+
+    bar.top = top;
+    bar.left = this.drawCanvas.position.left as number;
+    this.layoutExtraToolbar(this.sidebar ? 6 : 0);
+    bar.show();
+  }
+
+  /**
+   * Re-read the strip's labels.
+   *
+   * A host calls this when the state a readout shows has changed - the
+   * frame number, whether it is playing - rather than rebuilding the editor
+   * for a two-character difference.
+   */
+  refreshExtraToolbar(): void {
+    if (!this.extraToolbarBar) return;
+    this.layoutExtraToolbar(this.sidebar ? 6 : 0);
+    this.screen?.render();
   }
 
   /**
@@ -2604,6 +2761,7 @@ BBS Door SDK v2.0{/gray-fg}
     this.drawCursor.top = topOffset;
     this.drawCursor.left = leftOffset;
 
+    this.positionExtraToolbar();
     this.updateDrawCursor();
     this.updateDisplay();
     if (this.screen) {
@@ -2971,6 +3129,7 @@ BBS Door SDK v2.0{/gray-fg}
       this.viewport.show();
       this.viewport.focus();
     }
+    this.positionExtraToolbar();
     this.updateToolbar();
     this.updateStatusBar();
     if (this.screen) {
