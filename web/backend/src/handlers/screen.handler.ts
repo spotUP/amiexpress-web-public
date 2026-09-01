@@ -1494,6 +1494,17 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
         });
       }
     } else if (screenDirType === ScreenDirType.GLOBAL) {
+      // express.e reads a GLOBAL screen from cmds.bbsLoc - the BOARD ROOT -
+      // not from Screens/. SCREEN_BULL is `StringF(screencheck,'\s\s',
+      // cmds.bbsLoc,'BULL')` at express.e:6549, and the same holds for
+      // ONENODE, LOGON24, LANGUAGES, INTERNETNAMES, REALNAMES and MAILSCAN.
+      //
+      // This searched Screens/ ONLY, so a board whose BULL.TXT sits where
+      // express.e wants it would not have displayed one, and a board with it
+      // in Screens/ - which is this one - displays here and shows nothing on
+      // a real Amiga. The board root goes FIRST, which is express.e's answer;
+      // Screens/ stays behind it until the files are moved.
+      searchLocations.push({ dir: baseDir, desc: 'board root' });
       searchLocations.push({ dir: globalScreensDir, desc: 'Screens' });
       // Bulletins/ is intentionally excluded: it holds numbered bulletin DATA files
       // (bull1.txt–bull10.txt etc). findSecurityScreen would misinterpret bull10.txt

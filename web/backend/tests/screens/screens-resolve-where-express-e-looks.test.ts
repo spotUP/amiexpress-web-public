@@ -75,3 +75,39 @@ describe('the await screen', () => {
     expect(strayOnly.join(', ')).toBe('');
   });
 });
+
+describe('a GLOBAL screen', () => {
+  const handler = fs.readFileSync(
+    path.join(REPO, 'web/backend/src/handlers/screen.handler.ts'),
+    'utf8',
+  );
+
+  // express.e:6549 - StringF(screencheck,'\s\s',cmds.bbsLoc,'BULL') - reads a
+  // GLOBAL screen from the BOARD ROOT. The resolver searched `<board>/Screens`
+  // and nothing else, so a board with BULL.TXT where express.e wants it showed
+  // no bulletin, and this board - which had it in Screens/ - showed one here
+  // and would have shown none on a real Amiga.
+  //
+  // Seven screens ride on this: BULL, ONENODE, LOGON24, LANGUAGES,
+  // INTERNETNAMES, REALNAMES, MAILSCAN.
+  it('is looked for at the board root, which is what express.e reads', () => {
+    const globalBranch = handler.slice(
+      handler.indexOf('screenDirType === ScreenDirType.GLOBAL'),
+      handler.indexOf('screenDirType === ScreenDirType.GLOBAL') + 1400,
+    );
+
+    expect(globalBranch).toContain("dir: baseDir");
+  });
+
+  // The board root goes FIRST: it is express.e's answer, and Screens/ is only
+  // there until the files are moved out of it.
+  it('prefers the board root over the Screens directory', () => {
+    const globalBranch = handler.slice(handler.indexOf('screenDirType === ScreenDirType.GLOBAL'));
+    const root = globalBranch.indexOf('dir: baseDir');
+    const screens = globalBranch.indexOf('dir: globalScreensDir');
+
+    expect(root).toBeGreaterThan(-1);
+    expect(screens).toBeGreaterThan(-1);
+    expect(root).toBeLessThan(screens);
+  });
+});
