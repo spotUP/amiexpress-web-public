@@ -28,3 +28,5 @@ export type { Rect, CameraOptions, OffScreenMarker } from './camera';
 
 export { compilePixels, decompilePixels } from './halfblock';
 export type { PixelGrid } from './halfblock';
+
+export { frameToCanvas, canvasToFrame } from './editor-canvas';
