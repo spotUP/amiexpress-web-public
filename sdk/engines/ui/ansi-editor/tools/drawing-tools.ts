@@ -19,14 +19,45 @@ export interface ToolHandler {
 
 /**
  * Undo state management for drawing operations
+ *
+ * Per-instance, not module-global: each EditorState gets its own undo
+ * history via a WeakMap keyed on the state instance. Two editors open in
+ * the same process (e.g. multiple sprite-editor frames) must not undo or
+ * clear each other's history - see
+ * thoughts/shared/research/2026-09-01_ansi-editor-internals.md section 4.
  */
 interface UndoState {
   canvas: Cell[][];
   timestamp: number;
 }
 
-let undoStack: UndoState[] = [];
-let currentUndoChunk: Cell[][] | null = null;
+interface UndoData {
+  undoStack: UndoState[];
+  currentUndoChunk: Cell[][] | null;
+}
+
+const undoDataByState = new WeakMap<EditorState, UndoData>();
+
+/**
+ * Get (creating if absent) the undo data for one editor instance.
+ */
+function getUndoData(state: EditorState): UndoData {
+  let data = undoDataByState.get(state);
+  if (!data) {
+    data = { undoStack: [], currentUndoChunk: null };
+    undoDataByState.set(state, data);
+  }
+  return data;
+}
+
+/**
+ * Peek the canvas at the top of an editor's undo stack (used by shape-tool
+ * previews to repaint from the pre-drag snapshot without popping it).
+ */
+function peekUndoCanvas(state: EditorState): Cell[][] | undefined {
+  const stack = getUndoData(state).undoStack;
+  return stack[stack.length - 1]?.canvas;
+}
 
 /**
  * Save current canvas state to undo stack
@@ -35,21 +66,23 @@ function saveUndoState(state: EditorState, chunked: boolean = false): void {
   const canvas = state.getCanvas();
   if (!canvas) return;
 
+  const data = getUndoData(state);
+
   if (chunked) {
     // For chunked operations (draw tool), save once at start
-    if (!currentUndoChunk) {
-      currentUndoChunk = Canvas.cloneCanvas(canvas);
+    if (!data.currentUndoChunk) {
+      data.currentUndoChunk = Canvas.cloneCanvas(canvas);
     }
   } else {
     // For single operations, save immediately
-    undoStack.push({
+    data.undoStack.push({
       canvas: Canvas.cloneCanvas(canvas),
       timestamp: Date.now()
     });
 
     // Limit undo stack to 50 states
-    if (undoStack.length > 50) {
-      undoStack.shift();
+    if (data.undoStack.length > 50) {
+      data.undoStack.shift();
     }
   }
 }
@@ -58,17 +91,18 @@ function saveUndoState(state: EditorState, chunked: boolean = false): void {
  * Flush chunked undo state
  */
 function flushUndoChunk(state: EditorState): void {
-  if (currentUndoChunk) {
-    undoStack.push({
-      canvas: currentUndoChunk,
+  const data = getUndoData(state);
+  if (data.currentUndoChunk) {
+    data.undoStack.push({
+      canvas: data.currentUndoChunk,
       timestamp: Date.now()
     });
 
-    if (undoStack.length > 50) {
-      undoStack.shift();
+    if (data.undoStack.length > 50) {
+      data.undoStack.shift();
     }
 
-    currentUndoChunk = null;
+    data.currentUndoChunk = null;
   }
 }
 
@@ -76,7 +110,8 @@ function flushUndoChunk(state: EditorState): void {
  * Restore previous canvas state (undo)
  */
 export function undoDrawing(state: EditorState): boolean {
-  const undoState = undoStack.pop();
+  const data = getUndoData(state);
+  const undoState = data.undoStack.pop();
   if (!undoState) return false;
 
   state.setCanvas(undoState.canvas);
@@ -84,11 +119,15 @@ export function undoDrawing(state: EditorState): boolean {
 }
 
 /**
- * Clear undo stack
+ * Clear undo stack for one editor instance. Takes the instance explicitly
+ * (unavoidable signature change from the old zero-arg module-global form -
+ * see task-3-report.md) so clearing one editor's history can never affect
+ * another's.
  */
-export function clearUndoStack(): void {
-  undoStack = [];
-  currentUndoChunk = null;
+export function clearUndoStack(state: EditorState): void {
+  const data = getUndoData(state);
+  data.undoStack = [];
+  data.currentUndoChunk = null;
 }
 
 // ===== TOOL: FREEHAND DRAW =====
@@ -140,7 +179,7 @@ export const lineTool: ToolHandler = {
     if (!startPoint || !canvas || !preview) return;
 
     // Restore original canvas to preview
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setDrawingPreview(Canvas.cloneCanvas(originalCanvas));
     }
@@ -171,7 +210,7 @@ export const lineTool: ToolHandler = {
 
   onCancel(state: EditorState) {
     // Restore original canvas
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setCanvas(Canvas.cloneCanvas(originalCanvas));
     }
@@ -206,7 +245,7 @@ export const boxTool: ToolHandler = {
     if (!startPoint || !canvas || !preview) return;
 
     // Restore original canvas to preview
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setDrawingPreview(Canvas.cloneCanvas(originalCanvas));
     }
@@ -233,7 +272,7 @@ export const boxTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setCanvas(Canvas.cloneCanvas(originalCanvas));
     }
@@ -267,7 +306,7 @@ export const boxFillTool: ToolHandler = {
 
     if (!startPoint || !canvas || !preview) return;
 
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setDrawingPreview(Canvas.cloneCanvas(originalCanvas));
     }
@@ -293,7 +332,7 @@ export const boxFillTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setCanvas(Canvas.cloneCanvas(originalCanvas));
     }
@@ -327,7 +366,7 @@ export const ellipseTool: ToolHandler = {
 
     if (!startPoint || !canvas || !preview) return;
 
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setDrawingPreview(Canvas.cloneCanvas(originalCanvas));
     }
@@ -364,7 +403,7 @@ export const ellipseTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setCanvas(Canvas.cloneCanvas(originalCanvas));
     }
@@ -398,7 +437,7 @@ export const ellipseFillTool: ToolHandler = {
 
     if (!startPoint || !canvas || !preview) return;
 
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setDrawingPreview(Canvas.cloneCanvas(originalCanvas));
     }
@@ -434,7 +473,7 @@ export const ellipseFillTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setCanvas(Canvas.cloneCanvas(originalCanvas));
     }
@@ -468,10 +507,10 @@ export const fillTool: ToolHandler = {
 
   onCancel(state: EditorState) {
     // Restore original canvas
-    const originalCanvas = undoStack[undoStack.length - 1]?.canvas;
+    const originalCanvas = peekUndoCanvas(state);
     if (originalCanvas) {
       state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-      undoStack.pop(); // Remove the undo state we just restored
+      getUndoData(state).undoStack.pop(); // Remove the undo state we just restored
     }
   }
 };
