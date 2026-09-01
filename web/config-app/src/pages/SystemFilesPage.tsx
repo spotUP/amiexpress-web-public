@@ -5,7 +5,13 @@ import { FileCode, Edit2, Save, X, RefreshCw, FolderOpen } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { infoFileNote } from './info-file-notes';
-import { toInfoFileItems, type InfoFileItem } from './info-file-list';
+import {
+  toInfoFileItems,
+  infoFileCategories,
+  filterInfoFiles,
+  groupInfoFilesByCategory,
+  type InfoFileItem,
+} from './info-file-list';
 
 interface Tooltype {
   key: string;
@@ -32,31 +38,16 @@ export function SystemFilesPage() {
     queryFn: () => apiClient.getInfoFiles(),
   });
 
-  // Process and filter files
-  const files: InfoFileItem[] = toInfoFileItems(filesData?.data?.files)
-    .filter((file: InfoFileItem) => {
-      // Filter by search term
-      if (searchTerm && !file.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-        return false;
-      }
-      // Filter by category
-      if (selectedCategory !== 'All' && file.category !== selectedCategory) {
-        return false;
-      }
-      return true;
-    });
+  // Every file the board has, before anything is narrowed.
+  const allFiles: InfoFileItem[] = toInfoFileItems(filesData?.data?.files);
 
-  // Get unique categories
-  const categories = ['All', ...Array.from(new Set(files.map(f => f.category)))].sort();
+  // The chips describe the BOARD, not the current view - see
+  // infoFileCategories. Deriving them from the filtered list left one chip
+  // standing the moment you clicked one.
+  const categories = infoFileCategories(allFiles);
 
-  // Group files by category for display
-  const filesByCategory = files.reduce((acc, file) => {
-    if (!acc[file.category]) {
-      acc[file.category] = [];
-    }
-    acc[file.category].push(file);
-    return acc;
-  }, {} as Record<string, InfoFileItem[]>);
+  const files = filterInfoFiles(allFiles, searchTerm, selectedCategory);
+  const filesByCategory = groupInfoFilesByCategory(files);
 
   /** Escape, the backdrop and the header's close button all end it the same way. */
   const closeModal = () => {
@@ -137,7 +128,7 @@ export function SystemFilesPage() {
         <div className="flex items-center space-x-4">
           <input
             type="text"
-            placeholder="Search files..."
+            placeholder="Search by name or path - try a node, like Node40"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 px-4 py-2 bg-bbs-secondary border border-bbs-border rounded text-bbs-text"

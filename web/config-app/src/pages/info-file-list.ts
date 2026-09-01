@@ -89,3 +89,52 @@ export function toInfoFileItems(files: unknown): InfoFileItem[] {
   }
   return items;
 }
+
+/**
+ * Every category the board has, from the WHOLE list.
+ *
+ * Derived from the filtered list, this collapsed to the one category already
+ * chosen the moment a chip was clicked: there was no way to switch from
+ * Commands to Doors without going back to All first, and typing in the search
+ * box made the chips disappear as the matches narrowed. The chips describe the
+ * board, not the current view.
+ */
+export function infoFileCategories(items: InfoFileItem[]): string[] {
+  return ['All', ...Array.from(new Set(items.map(item => item.category))).sort()];
+}
+
+/**
+ * The files a search term and a chip leave showing.
+ *
+ * The term is matched against the PATH as well as the name, which is what
+ * makes the page usable on a board with forty nodes. Every node holds the same
+ * fifteen files - Modem.info, Serial.info, Work.info - so 441 of this board's
+ * 1111 icons are in the Nodes category under a few names repeated forty times.
+ * Matching the name alone, "Node40" found nothing at all, because no file is
+ * called that; matching the path, it narrows the category to one node.
+ */
+export function filterInfoFiles(
+  items: InfoFileItem[],
+  searchTerm: string,
+  category: string,
+): InfoFileItem[] {
+  const term = searchTerm.trim().toLowerCase();
+
+  return items.filter(item => {
+    if (category !== 'All' && item.category !== category) return false;
+    if (!term) return true;
+    return item.name.toLowerCase().includes(term)
+      || item.path.toLowerCase().includes(term);
+  });
+}
+
+/** The filtered files under their category headings, for rendering. */
+export function groupInfoFilesByCategory(
+  items: InfoFileItem[],
+): Record<string, InfoFileItem[]> {
+  const grouped: Record<string, InfoFileItem[]> = {};
+  for (const item of items) {
+    (grouped[item.category] ??= []).push(item);
+  }
+  return grouped;
+}
