@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { FileImage, AlertTriangle, Download, Share2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2 } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
+import { fanOutOptions, type FanOutOption } from './screen-write-plan';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { ScreenPreview } from '../components/ScreenPreview';
 import {
@@ -27,9 +29,13 @@ function scopeName(scope: string, id: number | null): string {
  * nobody could answer before this page.
  */
 export function ScreenFilesPage() {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
   const [query, setQuery] = useState('');
   const [openScreen, setOpenScreen] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
+  const uploadInput = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
@@ -46,6 +52,62 @@ export function ScreenFilesPage() {
   const visible = useMemo(() => filterScreenRows(rows, query), [rows, query]);
 
   const entry: ScreenIndexEntryShape | undefined = data?.screens.find(s => s.screen === openScreen);
+
+  const options: FanOutOption[] = useMemo(
+    () => (data && openScreen && openFile ? fanOutOptions(data, openScreen, openFile) : []),
+    [data, openScreen, openFile],
+  );
+
+  /** Read the chosen file as base64 - bytes, never text, all the way through. */
+  const readAsBase64 = (chosen: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+      reader.readAsDataURL(chosen);
+    });
+
+  const applyWrite = async (option: FanOutOption) => {
+    if (!pendingUpload || !openFile) return;
+    try {
+      if (option.choice === 'share-then-write') {
+        const nodes = option.targets
+          .map(t => Number(/^Node(\d+)/.exec(t)?.[1]))
+          .filter(n => Number.isFinite(n));
+        await apiClient.shareScreens(nodes, 'Screens/Shared');
+      }
+      const targets = option.choice === 'share-then-write' ? [openFile] : option.targets;
+      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets);
+      showSuccess(`Wrote ${targets.length} file${targets.length === 1 ? '' : 's'}`);
+      setPendingUpload(null);
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      queryClient.invalidateQueries({ queryKey: ['screen-file', openFile] });
+    } catch (error) {
+      showError((error as Error).message);
+    }
+  };
+
+  const removeFile = async (target: string) => {
+    // What a caller stops seeing matters more than the path, so ask with that.
+    const ok = await confirm({
+      title: 'Delete this screen file?',
+      message: `${target} will be backed up beside itself, then removed.`,
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+
+    try {
+      const res = await apiClient.deleteScreenFile(target);
+      const lost: string[] = res.data?.stopsResolving ?? [];
+      showSuccess(lost.length
+        ? `Deleted. These stop resolving: ${lost.join(', ')}`
+        : 'Deleted. Nothing stops resolving.');
+      setOpenFile(null);
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+    } catch (error) {
+      showError((error as Error).message);
+    }
+  };
 
   const columns: DataTableColumn<ScreenRow>[] = [
     { id: 'screen', header: 'Screen', value: row => row.screen, mono: true, sortable: true },
@@ -188,6 +250,55 @@ export function ScreenFilesPage() {
           <p className="text-sm text-bbs-muted">
             {file.bytes} bytes, {file.format}
           </p>
+
+          <div className="flex items-center gap-3">
+            <input
+              ref={uploadInput}
+              type="file"
+              className="hidden"
+              onChange={async e => {
+                const chosen = e.target.files?.[0];
+                if (!chosen) return;
+                setPendingUpload({ bytes: await readAsBase64(chosen), name: chosen.name });
+                e.target.value = '';
+              }}
+            />
+            <button
+              className="inline-flex items-center gap-1 underline"
+              onClick={() => uploadInput.current?.click()}
+            >
+              <Upload size={14} /> Replace
+            </button>
+            <button
+              className="inline-flex items-center gap-1 underline text-red-400"
+              onClick={() => removeFile(openFile)}
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
+
+          {pendingUpload && (
+            <div className="border border-bbs-border p-3 space-y-2">
+              <p className="text-sm text-bbs-text">
+                Replace <span className="font-mono">{openFile}</span> with{' '}
+                <span className="font-mono">{pendingUpload.name}</span>
+              </p>
+              {options.map(option => (
+                <button
+                  key={option.choice}
+                  className="block text-left underline"
+                  onClick={() => applyWrite(option)}
+                >
+                  {option.label}
+                  {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
+                  {option.suggested && <span className="text-bbs-muted"> (suggested)</span>}
+                </button>
+              ))}
+              <button className="block text-left text-bbs-muted underline" onClick={() => setPendingUpload(null)}>
+                cancel
+              </button>
+            </div>
+          )}
 
           {file.format === 'ansi' || file.format === 'text' ? (
             <ScreenPreview content={atob(file.content)} />
