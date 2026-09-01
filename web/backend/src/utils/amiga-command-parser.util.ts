@@ -12,6 +12,7 @@ import * as path from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
+import { isRealInfoFile } from './info-file.util';
 
 // Door/Command types from axenums.e:15
 export enum DoorType {
@@ -210,6 +211,143 @@ function readNullString(buffer: Buffer, offset: number): [string, number] {
 }
 
 /**
+ * Add one raw tooltype string to the map.
+ *
+ * Shared by every reader below so that a tooltype means the same thing however
+ * it was found: parenthesised entries are Workbench's way of commenting one
+ * out, a bare word is a flag worth YES, and everything else splits on the
+ * first '='.
+ */
+function absorbTooltype(tooltypes: Map<string, string>, raw: string): void {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return;
+
+  // Workbench comments a tooltype out by wrapping it in parentheses.
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) return;
+
+  // FindToolType returns the FIRST entry that matches (tooltypes.e:215-218),
+  // so a key written twice resolves to the earlier one. This map used to keep
+  // the later, which is a different answer than the board gives: bbsConfig.info
+  // holds FTPDATAPORT twice, and last-wins turned its port list into a bare
+  // flag. info-file.util's tooltypeMap has always done it this way.
+  const remember = (key: string, value: string): void => {
+    if (key.length === 0 || tooltypes.has(key)) return;
+    tooltypes.set(key, value);
+  };
+
+  const eqIdx = trimmed.indexOf('=');
+  if (eqIdx !== -1) {
+    remember(trimmed.substring(0, eqIdx).toUpperCase().trim(), trimmed.substring(eqIdx + 1));
+    return;
+  }
+
+  const key = trimmed.toUpperCase();
+  if (/^[A-Z][A-Z0-9_.]*$/.test(key)) {
+    remember(key, 'YES');
+  }
+}
+
+/**
+ * Read the ToolTypes array exactly as icon.library wrote it.
+ *
+ * On disk `do_ToolTypes` is a LENGTH-PREFIXED array, not a run of
+ * null-terminated strings: a ULONG holding (entries + 1) * 4, then for every
+ * entry a ULONG byte count followed by that many bytes, the last of which is
+ * the NUL. Reading it as bare strings loses whichever entries the string
+ * scanner cannot tell from the binary around them - and the prefix itself is
+ * the trap, because a 32-character tooltype carries the length byte 0x21,
+ * which prints as '!' and glues itself to the front of the entry.
+ *
+ * Every field is checked against the next: a byte count that does not land on
+ * its own NUL means this is not the array, and the caller is told so rather
+ * than handed a half-read map. That check is what makes it safe to go looking
+ * for the array when the computed offset misses it.
+ *
+ * @returns the entries and the offset just past the array, or null if the
+ *          bytes at `offset` are not a well-formed ToolTypes array
+ */
+function readToolTypeArray(buffer: Buffer, offset: number): { entries: string[]; end: number } | null {
+  if (offset < 0 || offset + 4 > buffer.length) return null;
+
+  const arraySize = readLong(buffer, offset);
+  if (arraySize < 4 || arraySize % 4 !== 0) return null;
+
+  const entryCount = arraySize / 4 - 1;
+  if (entryCount < 1 || entryCount > 500) return null;
+
+  const entries: string[] = [];
+  let cursor = offset + 4;
+
+  for (let i = 0; i < entryCount; i++) {
+    if (cursor + 4 > buffer.length) return null;
+    const length = readLong(buffer, cursor);
+    cursor += 4;
+
+    if (length < 1 || cursor + length > buffer.length) return null;
+    // The declared length includes the terminator, so the last byte must be it
+    // and no byte before it may be one.
+    if (buffer[cursor + length - 1] !== 0) return null;
+    if (buffer.indexOf(0, cursor) !== cursor + length - 1) return null;
+
+    entries.push(buffer.subarray(cursor, cursor + length - 1).toString('latin1'));
+    cursor += length;
+  }
+
+  return { entries, end: cursor };
+}
+
+/**
+ * Are the bytes from `offset` to the end text a tool appended, or an image?
+ *
+ * A tooltype written past the array's end arrives as plain `KEY=VALUE` bytes
+ * and a NUL. A NewIcons or ICONFACE payload is a binary IFF chunk that happens
+ * to contain printable runs, and scraping those invents tooltypes nobody wrote.
+ * Text, and nothing else, is the licence to read past the array.
+ */
+function isAppendedText(buffer: Buffer, offset: number): boolean {
+  const trailing = buffer.subarray(offset);
+  if (trailing.length === 0) return false;
+  // Terminated the way a tooltype is terminated. A run of letters that simply
+  // ends is a bitmap reading as text.
+  if (trailing[trailing.length - 1] !== 0) return false;
+
+  for (const byte of trailing) {
+    if (byte === 0) continue;
+    // Latin-1 and UTF-8 both live above 0x7e in these files; a control byte
+    // does not belong in a tooltype.
+    if (byte < 0x20 || byte === 0x7f) return false;
+  }
+
+  const records = trailing.toString('latin1').split('\0').filter(r => r.length > 0);
+  return records.length > 0 && records.every(record => {
+    const eqIdx = record.indexOf('=');
+    return eqIdx > 0 && /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/.test(record.slice(0, eqIdx).trim());
+  });
+}
+
+/**
+ * Find the ToolTypes array when the computed offset does not land on it.
+ *
+ * The offset is computed by walking optional images whose sizes come from the
+ * icon's own header, and a NewIcons or otherwise unusual icon can put the
+ * walk off by a few bytes. Rather than give up on the real array and fall back
+ * to scanning for printable runs, look for it: `readToolTypeArray` rejects
+ * anything whose lengths do not agree with its own NULs, so a hit is a hit.
+ * At least one entry must look like a KEY=VALUE, which image data will not.
+ */
+function findToolTypeArray(buffer: Buffer, from: number): { entries: string[]; end: number } | null {
+  // Every offset, not every second one: an icon's array is not required to be
+  // word-aligned, and this board's FCheck/LHA.info keeps its array at 439.
+  for (let offset = from; offset + 8 <= buffer.length; offset += 1) {
+    const array = readToolTypeArray(buffer, offset);
+    if (array && array.entries.some(entry => isValidTooltypeString(entry) && entry.includes('='))) {
+      return array;
+    }
+  }
+  return null;
+}
+
+/**
  * Extract tooltypes from Amiga .info file using proper binary structure parsing.
  *
  * NOTE: This function returns Map<string, string> of tooltypes only.
@@ -287,55 +425,35 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
 
     // Now we're at the ToolTypes section
     if (hasToolTypes && offset < buffer.length) {
-      // ToolTypes are stored as sequential null-terminated strings
-      // The section ends when we hit an empty string or run out of valid data
-      let tooltypeCount = 0;
-      const maxTooltypes = 500; // Safety limit
+      const array = readToolTypeArray(buffer, offset) ?? findToolTypeArray(buffer, DISK_OBJECT_SIZE);
 
-      while (offset < buffer.length && tooltypeCount < maxTooltypes) {
-        // Check for null byte at start - end of tooltypes section
-        if (buffer[offset] === 0) {
-          break;
+      if (array) {
+        for (const entry of array.entries) {
+          // Image data that survived the length checks is still not a tooltype.
+          if (!isValidTooltypeString(entry)) continue;
+          absorbTooltype(tooltypes, entry);
         }
 
-        const [tooltypeStr, consumed] = readNullString(buffer, offset);
-        offset += consumed;
-
-        if (tooltypeStr.length === 0) {
-          break;
-        }
-
-        // Skip strings that look like image/garbage data
-        // Valid tooltypes have recognizable ASCII patterns with letters
-        if (!isValidTooltypeString(tooltypeStr)) {
-          continue;
-        }
-
-        // Parse the tooltype string
-        const trimmed = tooltypeStr.trim();
-
-        // Skip commented-out tooltypes (parenthesized)
-        if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
-          tooltypeCount++;
-          continue;
-        }
-
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx !== -1) {
-          const key = trimmed.substring(0, eqIdx).toUpperCase().trim();
-          const value = trimmed.substring(eqIdx + 1);
-          if (key.length > 0) {
-            tooltypes.set(key, value);
-          }
-        } else {
-          // Flag-style tooltype (no value)
-          const key = trimmed.toUpperCase();
-          if (key.length > 0 && /^[A-Z][A-Z0-9_.]*$/.test(key)) {
-            tooltypes.set(key, 'YES');
+        // Anything written past the end of the array was appended by a tool
+        // that did not grow the array's own count - this BBS has done it. A
+        // real Amiga would never see those, but this one has been reading them
+        // for as long as they have been there. They come last, so a key the
+        // array already carries keeps the array's value: FindToolType answers
+        // with the first match, and an appended entry is not a reason to give
+        // a different answer than the board would.
+        //
+        // Only when the tail is TEXT, though. Most icons end in a NewIcons IFF
+        // chunk, and scraping printable runs out of a bitmap invents tooltypes
+        // that were never written: `FCheck/LHA.info` grew an `SOPTIONS` that
+        // exists nowhere in the file, out of the bytes of its ICONFACE image.
+        if (array.end < buffer.length && isAppendedText(buffer, array.end)) {
+          const trailing = parseInfoFileFallback(
+            buffer.subarray(array.end), filePath, session, socket
+          );
+          for (const [key, value] of trailing) {
+            if (!tooltypes.has(key)) tooltypes.set(key, value);
           }
         }
-
-        tooltypeCount++;
       }
     }
 
@@ -382,8 +500,13 @@ function parseInfoFileFallback(buffer: Buffer, filePath: string, session?: any, 
   for (const line of extractedStrings) {
     const trimmed = line.trim();
 
-    // Skip commented tooltypes
-    if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
+    // Skip commented tooltypes. Parentheses are Workbench's comment marker and
+    // the only one: a leading '!' is not a convention, it is the low byte of
+    // the entry's own 32-bit length (0x21 = a 32-character tooltype) printing
+    // as a character and gluing itself to the front of the run. Dropping those
+    // cost this board every command whose LOCATION happened to be that long -
+    // BADD, BS, M, MOSEARCH, mobnup and _s all vanished from the registry.
+    if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
       continue;
     }
 
@@ -399,8 +522,9 @@ function parseInfoFileFallback(buffer: Buffer, filePath: string, session?: any, 
       const keyMatch = rawKey.match(/[A-Z][A-Z0-9_.]*/);
       const key = keyMatch ? keyMatch[0] : '';
       const value = trimmed.substring(eqIdx + 1).trim();
-      // Accept any reasonable KEY=VALUE pair
-      if (key && key.length >= 2 && key.length <= 32) {
+      // Accept any reasonable KEY=VALUE pair, and keep the FIRST of a
+      // repeated key - the answer FindToolType would give.
+      if (key && key.length >= 2 && key.length <= 32 && !tooltypes.has(key)) {
         tooltypes.set(key, value);
       }
     }
@@ -657,6 +781,55 @@ console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.loc
 }
 
 /**
+ * Is there anything behind this registration?
+ *
+ * A <CMD>.info whose LOCATION resolves to nothing cannot run, but it still
+ * OWNS the command name: dispatch finds it in the cache and answers with an
+ * error instead of falling through, and the internal-command router hands
+ * any name present in commandCache.bbscmd straight to the door
+ * (command-handler/internal-commands.ts). On 30 August a Doors/ wipe left 277
+ * such registrations across the Commands tree - `BR`, `BV`, `BADD`,
+ * `BROADCAST`, and `G`, which is 5D-LogOff registered under the internal
+ * goodbye command's name, so logging off was impossible until the .info was
+ * removed by hand.
+ *
+ * This diverges from express.e deliberately. express.e resolves the .info
+ * (configFileExists, express.e:4632) and then LoadSegs whatever LOCATION
+ * names, error and all; a real board's registrations do not go stale behind
+ * the sysop's back, and this one's did.
+ *
+ * The rule is conservative on purpose. A MISSING FILE inside an existing door
+ * directory stays registered: that is exactly what a TypeScript door
+ * replacing an Amiga binary looks like - nothing named Doors/bbslink/bbslink
+ * has ever existed on this board and 24 live commands point at it. Only a
+ * registration whose DIRECTORY is gone as well counts as dead, which is the
+ * shape a wiped door leaves behind.
+ *
+ * @param baseDir absolute path to the BBS data directory
+ * @param cmd a definition from loadCommandFromInfo (its location is already
+ *            normalised: assigns stripped, ':' turned into '/')
+ */
+export function commandLocationIsLive(baseDir: string, cmd: CommandDefinition): boolean {
+  // express.e:4732 - INTERNAL is read and dispatched BEFORE LOCATION is
+  // looked at, so an internal alias needs nothing on disk.
+  if (cmd.internal) return true;
+
+  // express.e:4295 - an MCI command IS its MCI_TEXT; there is no file to find.
+  if (cmd.type === DoorType.MCI) return true;
+
+  if (!cmd.location) return true;
+
+  const resolved = path.isAbsolute(cmd.location)
+    ? cmd.location
+    : path.join(baseDir, cmd.location);
+
+  // amigafs, not fs: an Amiga volume is case-insensitive and a LOCATION is
+  // written in whatever case the sysop's icon carries.
+  if (amigafs.existsSync(resolved)) return true;
+  return amigafs.existsSync(path.dirname(resolved));
+}
+
+/**
  * Scan command directory for available commands
  * Implements express.e:4630-4670 command lookup hierarchy
  *
@@ -700,6 +873,7 @@ export function scanCommandDirectory(
   nodeId?: number
 ): Map<string, CommandDefinition> {
   const commands = new Map<string, CommandDefinition>();
+  const skipped: string[] = [];
 
   // Build search paths in priority order — shared with the freshness check
   // in command-execution.handler.ts, which must watch exactly the
@@ -716,11 +890,21 @@ export function scanCommandDirectory(
 
     const files = amigafs.readdirSync(dirPath);
     for (const file of files) {
-      if (file.endsWith('.info') || file.endsWith('.Info')) {
+      if (isRealInfoFile(file)) {
         const fullPath = path.join(dirPath, file);
         const cmd = loadCommandFromInfo(fullPath);
 
         if (cmd) {
+          // A registration with nothing behind it is not a command. Dropped
+          // here rather than at dispatch so it disappears from the cache,
+          // the door registry and every list built from them at once, and
+          // so the internal command it was shadowing becomes reachable
+          // again. See commandLocationIsLive.
+          if (!commandLocationIsLive(baseDir, cmd)) {
+            skipped.push(`${cmd.name} -> ${cmd.location}`);
+            continue;
+          }
+
           const existing = commands.get(cmd.name);
 
           // First one wins (conference/node commands have higher priority than global)
@@ -730,6 +914,15 @@ export function scanCommandDirectory(
         }
       }
     }
+  }
+
+  // Say what was dropped and where it pointed. A sysop looking for a command
+  // that "just stopped answering" needs to see the LOCATION that no longer
+  // resolves, not silence.
+  if (skipped.length > 0) {
+    console.warn(
+      `  [${commandType}] ${skipped.length} registration(s) skipped - LOCATION missing: ${skipped.join(', ')}`
+    );
   }
 
   return commands;

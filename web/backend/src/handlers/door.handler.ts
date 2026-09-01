@@ -26,12 +26,15 @@ import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.uti
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
+import { doorCategoryAt } from '../doors/door-category';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
 import { joinVoiceChannel, leaveVoiceChannel, setVoiceMute, setVoiceVideo } from './voice-channel.handler';
 import { mintLaunchToken, revokeLaunchToken } from '../doors/door-launch-token';
+import { writeDoorListSnapshot, clearDoorListSnapshot } from '../doors/door-list-snapshot';
+import { applyDoorInstallReports } from '../doors/door-install-reports';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -1638,6 +1641,16 @@ console.log('Executing door:', door.name);
       secLevel: session.user?.secLevel ?? 0,
     });
 
+    // DoorRepo reads the board's door list from a FILE, not over HTTP. A 68K
+    // door cannot synchronously call the BBS it runs inside: it blocks in
+    // WaitSelect, which starves the event loop that would produce the reply,
+    // so the response only lands after the socket times out - a 30-second
+    // freeze on the L key, measured on the live board. Written here, beside
+    // the token, at the same moment and in the same encoding.
+    if (managementToken) {
+      await writeDoorListSnapshot(bbsRoot);
+    }
+
     // Check if this is a client door (needs to detect runtime from manifest)
     const doorManifest = await loadDoorManifestForExecution(door);
 
@@ -1685,6 +1698,8 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
       nodeId: nodeId,
       doorName: door.name,
       action: 'entered',
+      // So the feed can say a game was PLAYED and not say it of DOORMAN.
+      category: doorCategoryAt(door.path),
       timestamp: Date.now()
     });
 
@@ -1763,6 +1778,7 @@ console.error(`Unknown door type: ${door.type}`);
       nodeId: nodeId,
       doorName: door.name,
       action: 'exited',
+      category: doorCategoryAt(door.path),
       timestamp: Date.now()
     });
 
@@ -1845,6 +1861,23 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
     // interactive-prompt returns above, or the crash handled just above.
     // A door that throws must not leave a live token behind.
     releaseLaunchTokenForDoor(managementToken);
+    // The snapshot is as session-scoped as the token: a listing left behind
+    // would be read by the next launch before it is rewritten, and it
+    // describes a board that may have changed since.
+    if (managementToken) {
+      clearDoorListSnapshot(bbsRoot);
+
+      // Anything the door installed, recorded now that it has exited. It
+      // cannot tell us while it runs - a 68K door blocking on our own reply
+      // starves the event loop that would produce it, which is why
+      // report_install_to_bbs never worked and door_installs has no row for
+      // anything DoorRepo installed. It writes a file instead; this reads it.
+      try {
+        applyDoorInstallReports(bbsRoot);
+      } catch (err) {
+        console.log(`[door-install] reports not applied: ${(err as Error).message}`);
+      }
+    }
   }
 }
 
