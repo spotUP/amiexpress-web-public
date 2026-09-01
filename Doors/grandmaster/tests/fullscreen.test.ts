@@ -105,3 +105,45 @@ export async function leavingPutsTheBoardsColumnsBack(): Promise<void> {
     'a player returning to the BBS gets its 80 columns back, whatever they chose');
   assert.strictEqual(a.terminalMode, null, 'and the switch is let go');
 }
+
+export async function theSettingsMenuOffersTheSizeToo(): Promise<void> {
+  // "we also need to add a fullscren toggle in the settings menu"
+  // (2026-09-02). A player who never finds Alt+Enter never finds the room.
+  const { SettingsScreen } = await import('../ui/settings-screen');
+  let mode: 'fixed' | 'wide' = 'fixed';
+  const sw = { mode: () => mode, toggle: () => { mode = mode === 'wide' ? 'fixed' : 'wide'; } };
+  const state: any = { settings: { rotationSystem: 'SRS', das: 100, arr: 20, softDropSpeed: 20,
+    ghostPiece: true, lockDelay: 500, previewCount: 4, musicVolume: 0, sfxVolume: 0,
+    keyBindings: {}, gamepadBindings: {}, blockGlow: false, glowIntensity: 0,
+    clearStyle: 'instant', clearDirection: 'center', placementEffects: false,
+    floatTextMode: 'off', b2bGlowEnabled: false, connectedBlocks: false } };
+  const screen: any = { program: { enableMouse() {} }, render() {} };
+  const settings: any = new (SettingsScreen as any)(screen, state, { playSfx() {} }, null, sw);
+
+  const items = (): string[] => settings.getMenuItems();
+  const line = items().find((i: string) => i.includes('Screen Size'));
+  assert.ok(line, 'the settings list must offer the size');
+  assert.ok(line!.includes('80x25'), 'and say which one is on');
+
+  // The index the handler answers on must BE the line's index, or the
+  // entry toggles something else entirely.
+  const index = items().findIndex((i: string) => i.includes('Screen Size'));
+  await settings.handleSelection(index, { setItems() {}, select() {} });
+  assert.strictEqual(sw.mode(), 'wide', 'choosing it asks for the room');
+  assert.ok(items()[index].includes('RESPONSIVE'), 'and the line says so afterwards');
+}
+
+export async function saveAndExitIsStillTheLastLine(): Promise<void> {
+  // Adding a section moves it; the select handler knows it by index.
+  const { SettingsScreen } = await import('../ui/settings-screen');
+  const state: any = { settings: { rotationSystem: 'SRS', das: 100, arr: 20, softDropSpeed: 20,
+    ghostPiece: true, lockDelay: 500, previewCount: 4, musicVolume: 0, sfxVolume: 0,
+    keyBindings: {}, gamepadBindings: {}, blockGlow: false, glowIntensity: 0,
+    clearStyle: 'instant', clearDirection: 'center', placementEffects: false,
+    floatTextMode: 'off', b2bGlowEnabled: false, connectedBlocks: false } };
+  const settings: any = new (SettingsScreen as any)({}, state, { playSfx() {} }, null, null);
+  const items: string[] = settings.getMenuItems();
+  const index = items.findIndex(i => i.includes('Save & Exit'));
+  assert.strictEqual(index, 33,
+    `the select handler exits on index 33; Save & Exit is at ${index}`);
+}

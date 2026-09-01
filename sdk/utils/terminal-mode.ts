@@ -72,9 +72,15 @@ export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): Te
   askTerminal();
   screen?.on?.('resize', relayout);
 
-  let hotkey: (() => void) | null = null;
+  let hotkey: (() => boolean) | null = null;
   if (options.bindHotkey !== false) {
-    hotkey = () => switchRef.toggle();
+    // TRUE means handled, and it has to: the screen runs registered key
+    // handlers first and then hands the SAME keystroke to whatever has
+    // focus. Alt+Enter is Enter to a focused list, so toggling the size in
+    // GRANDMASTER's menu also picked the highlighted item and started a
+    // game ("fullscren with alt+enter worked now but it also started the
+    // game", 2026-09-02).
+    hotkey = () => { switchRef.toggle(); return true; };
     screen?.key?.([TERMINAL_MODE_HOTKEY], hotkey);
   }
 

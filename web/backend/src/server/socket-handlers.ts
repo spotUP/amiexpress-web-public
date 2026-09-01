@@ -480,7 +480,7 @@ console.log('[socket-handlers] keys:state received:', data);
   });
 
   // Handle individual key-down events (game mode - bypasses OS key repeat delay)
-  socket.on('key-down', (data: { key: string; code: string }) => {
+  socket.on('key-down', (data: { key: string; code: string; alt?: boolean; ctrl?: boolean; shift?: boolean }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
@@ -503,9 +503,14 @@ console.log('[socket-handlers] keys:state received:', data);
       }
     } else if (session.inDoorManager && session.doorInputHandler) {
       // SDK doors: send directly to input handler (no repeat, they handle their own)
-      const char = data.key.length === 1 ? data.key : getSpecialKeyChar(data.key);
-      if (char) {
-        session.doorInputHandler(char);
+      const base = data.key.length === 1 ? data.key : getSpecialKeyChar(data.key);
+      if (base) {
+        // Alt is ESC before the key, which is how a terminal has always
+        // spelled meta. Dropping it meant a door in GAME MODE could never
+        // see Alt+Enter - it arrived as a bare Enter, and in GRANDMASTER's
+        // menu that is "select" (2026-09-02). Ctrl+letter is already a
+        // control byte in `base`, so only Alt needs adding here.
+        session.doorInputHandler(data.alt ? `\x1b${base}` : base);
       }
     }
   });

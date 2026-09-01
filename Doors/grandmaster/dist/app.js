@@ -2696,7 +2696,7 @@ class GrandmasterApp {
         this.currentScreen = 'settings';
         this.inputManager.suspend();
         const nav = createMenuNav(this.session.bbsSession, this.screen, this.state.settings.gamepadBindings ?? {});
-        const settingsScreen = new settings_screen_1.SettingsScreen(this.screen, this.state, this.sounds, this.session.bbsSession);
+        const settingsScreen = new settings_screen_1.SettingsScreen(this.screen, this.state, this.sounds, this.session.bbsSession, this.terminalMode);
         await settingsScreen.show();
         nav.destroy();
         this.inputManager.resume();

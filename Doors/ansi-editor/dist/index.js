@@ -369,6 +369,11 @@ class ANSIEditorDoor {
         this.terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
             bbs: this.ctx.bbs,
             screen: this.screen,
+            // FIXED, like every other door here: "ansi-edit opens in fullscreen in
+            // bbs mode thats wrong" (2026-09-02). A door opens at the size the
+            // board serves and the caller asks for the rest with Alt+Enter - the
+            // SDK's default is 'wide' and taking it was the mistake.
+            start: 'fixed',
             onRelayout: () => { void this.reopenEditorPreservingContent(); },
         });
         this.screen.render();

@@ -180,6 +180,11 @@ class SpriteStudioDoor {
         this.terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
             bbs: this.ctx.bbs,
             screen: this.screen,
+            // FIXED: "sprited alt+enter does nothing it opens in fullscreen in bbs
+            // mode" (2026-09-02). Opening wide hid the toggle - the first press
+            // took the room AWAY, which reads as nothing happening - and a door
+            // should look like the board it opened from until asked otherwise.
+            start: 'fixed',
             onRelayout: () => this.relayout(),
         });
         this.inputManager.enable();

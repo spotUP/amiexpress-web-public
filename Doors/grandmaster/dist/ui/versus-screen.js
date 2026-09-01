@@ -395,7 +395,9 @@ class VersusScreen {
             this.opponentBoards.push(this.createOpponentBoard(this.opponentBoards.length));
         }
         this.opponentBoards.forEach((box, i) => {
-            box.left = (0, versus_layout_1.boardLeft)(i);
+            const at = (0, versus_layout_1.boardPosition)(i, layout.boardRows);
+            box.left = at.left;
+            box.top = at.top;
             box.width = versus_layout_1.OPPONENT_BOARD_COLS;
             box.show();
         });
@@ -410,7 +412,9 @@ class VersusScreen {
         if (layout.minimaps > 0 && layout.minimapWidth > 0) {
             this.minimapPanel.left = layout.minimapLeft;
             this.minimapPanel.width = layout.minimapWidth;
+            this.minimapPanel.height = layout.panelHeight;
             this.minimapContainer.width = Math.max(1, layout.minimapWidth - 2);
+            this.minimapContainer.height = Math.max(1, layout.panelHeight - 2);
             // Say how many are in there. A battle royale fields 98 CPUs and the
             // list shows the most dangerous of them; without the count, the rest
             // are simply missing with nothing to say so.
@@ -423,7 +427,9 @@ class VersusScreen {
         if (layout.listed > 0 && layout.listWidth > 0) {
             this.listPanel.left = layout.listLeft;
             this.listPanel.width = layout.listWidth;
+            this.listPanel.height = layout.panelHeight;
             this.listContainer.width = Math.max(1, layout.listWidth - 2);
+            this.listContainer.height = Math.max(1, layout.panelHeight - 2);
             this.listPanel.setLabel?.(` Standings (${layout.listed}) `);
             this.listPanel.show();
         }
@@ -1043,8 +1049,8 @@ class VersusScreen {
         // countdown and the first update there is nobody - so the 1v1 shell
         // stays up rather than the right side blinking out and back.
         const layout = opponents.length > 0
-            ? (0, versus_layout_1.versusLayout)(this.screen.width, humans.length, bots.length)
-            : (0, versus_layout_1.versusLayout)(this.screen.width, 1, 0);
+            ? (0, versus_layout_1.versusLayout)(this.screen.width, humans.length, bots.length, this.screen.height)
+            : (0, versus_layout_1.versusLayout)(this.screen.width, 1, 0, this.screen.height);
         // Humans first, then the CPUs by danger: when only some of the field
         // gets a board, the ones that get it are the people and then whoever is
         // closest to killing you. `rank` is assigned at sample time, 1 being the

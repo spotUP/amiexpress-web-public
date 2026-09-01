@@ -8,6 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LobbyScreen = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const broker_lobby_adapter_1 = require("../network/broker-lobby-adapter");
+const bot_lobby_1 = require("../network/bot-lobby");
 /**
  * Lobby Screen
  *
@@ -75,7 +76,16 @@ class LobbyScreen {
             modes: {
                 versus_1v1: { name: '1v1 Versus', maxPlayers: 2, minPlayers: 2 },
                 team_2v2: { name: '2v2 Team Battle', maxPlayers: 4, minPlayers: 4 },
-                battle_royale: { name: 'Battle Royale (99)', maxPlayers: 99, minPlayers: 2 },
+                // botFillTarget, not minPlayers: two is what makes the match
+                // STARTABLE and 99 is what the mode IS. Without it "Add Bots" and
+                // the auto-fill both filled to two, so the 99-player battle royale
+                // ran with one CPU ("still only one bot in battle royale",
+                // 2026-09-02) - and the door-side default I fixed first never got a
+                // look in, because the widget always passes a count.
+                battle_royale: {
+                    name: 'Battle Royale (99)', maxPlayers: 99, minPlayers: 2,
+                    botFillTarget: (0, bot_lobby_1.modePlayerTarget)('battle_royale'),
+                },
             },
             onSound: (sound) => {
                 // Map SDK sound names to GRANDMASTER sound effects

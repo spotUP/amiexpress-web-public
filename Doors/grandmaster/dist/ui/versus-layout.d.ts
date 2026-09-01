@@ -32,6 +32,11 @@ export declare const VS_INFO_COLS = 21;
  * as it did.
  */
 export declare const CASCADE_MAX_BOARDS = 3;
+/** An opponent board with its border, in rows - the geometry the screen uses. */
+export declare const OPPONENT_BOARD_ROWS = 22;
+/** Row 0 is the door's own top margin; the last row is the stats line. */
+export declare const BOARD_TOP = 1;
+export declare const STATS_ROWS = 1;
 /** A bucket bar and its separator - the minimap grid's own geometry. */
 export declare const BUCKET_SLOT_COLS = 4;
 /** Bars are not worth a section below three of them, borders included. */
@@ -49,6 +54,8 @@ export declare const CASCADE_MIN_OPPONENTS = 6;
 export interface VersusLayout {
     /** How many opponents to draw as full boards. Zero means the minimap grid. */
     fullBoards: number;
+    /** How many board ROWS the window holds - boards fill a grid, not a row. */
+    boardRows: number;
     /** How many go to the minimap grid instead. */
     minimaps: number;
     /** How many go to the leaderboard, after the boards and the bars. */
@@ -65,6 +72,8 @@ export interface VersusLayout {
     /** Where the leaderboard goes, and how wide. Zero width means none. */
     listLeft: number;
     listWidth: number;
+    /** How tall the right-hand panels may be, in rows. */
+    panelHeight: number;
 }
 /**
  * Humans get the boards; bots get miniatures if that is what it takes.
@@ -80,9 +89,19 @@ export interface VersusLayout {
  * third as a miniature would say something false about the match - the
  * player would read the two as the threats.
  */
-export declare function versusLayout(screenWidth: number, humanCount: number, botCount?: number): VersusLayout;
+export declare function versusLayout(screenWidth: number, humanCount: number, botCount?: number, screenHeight?: number): VersusLayout;
 /** Where the Nth full opponent board starts. */
 export declare function boardLeft(index: number): number;
+/**
+ * Where the Nth board goes when the boards form a grid.
+ *
+ * Down each column, then across, so the first boards - the opponents
+ * closest to killing you - are the leftmost ones, next to your own board.
+ */
+export declare function boardPosition(index: number, rows: number): {
+    left: number;
+    top: number;
+};
 /** The narrowest terminal that shows `count` opponents as full boards. */
 export declare function widthForFullBoards(count: number): number;
 //# sourceMappingURL=versus-layout.d.ts.map
