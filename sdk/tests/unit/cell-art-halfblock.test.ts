@@ -37,6 +37,16 @@ describe('compilePixels', () => {
     expect(() => compilePixels([[9]])).toThrow(/even/);
   });
 
+  it('rejects a ragged row pair - a longer bottom row must not silently truncate', () => {
+    // The column loop used to run over top.length only, so a bottom row
+    // longer than its top row had its extra cells dropped with no error.
+    const pixels: PixelGrid = [
+      [9, 9],
+      [9, 9, 9],
+    ];
+    expect(() => compilePixels(pixels)).toThrow(/ragged/);
+  });
+
   it('keeps painted black distinct from transparency, both orientations', () => {
     const pairs: PixelGrid = [
       [9, 0],
@@ -63,6 +73,19 @@ describe('decompilePixels', () => {
   it('returns null for a frame that is not pure half-blocks', () => {
     const frame: CellBuffer = [[{ char: 'A', fg: 7, bg: 0 } as Cell]];
     expect(decompilePixels(frame)).toBeNull();
+  });
+
+  it('accepts a non-canonical half-block cell instead of returning null', () => {
+    // {char:'▄', fg:5, bg:5} is not the canonical encoding of a solid
+    // colour (compilePixels always emits '█' for fg===bg), but it is
+    // still a valid pair of pixels: decompilePixels must read it, not
+    // reject the whole frame the way a genuinely non-block glyph does.
+    const frame: CellBuffer = [[{ char: '▄', fg: 5, bg: 5 } as Cell]];
+    const pixels = decompilePixels(frame);
+    expect(pixels).toEqual([[5], [5]]);
+    // Re-compiling re-encodes it canonically - same pixels, same visual,
+    // not necessarily the same bytes.
+    expect(compilePixels(pixels!)).toEqual([[{ char: '█', fg: 5, bg: 5 }]]);
   });
 
   it('round-trips the shipped Pengo art, which was authored this way', () => {

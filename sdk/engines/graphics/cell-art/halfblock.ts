@@ -6,9 +6,14 @@
  *
  * The contract that matters is the ROUND TRIP: decompilePixels is the
  * exact inverse of compilePixels for everything compilePixels can emit.
- * A frame containing anything else (letters, shades, arrows) decompiles
- * to null and is edited cell-by-cell instead - lossy conversion is how an
- * editor corrupts art just by opening it, so there is none.
+ * A frame containing anything that is not a block glyph (letters, shades,
+ * arrows) decompiles to null and is edited cell-by-cell instead - lossy
+ * conversion is how an editor corrupts art just by opening it, so there
+ * is none. A frame using the block glyphs in a non-canonical way (say,
+ * {char:'▄', fg:5, bg:5} instead of the canonical {char:'█', fg:5, bg:5})
+ * is NOT rejected: decompilePixels still reads the correct pixels out of
+ * it, and the next compilePixels re-encodes them canonically - same
+ * pixels, same visual, just not necessarily the same bytes it started as.
  */
 
 import { Cell, CellBuffer, CellRow } from './cells';
@@ -25,6 +30,11 @@ export function compilePixels(pixels: PixelGrid): CellBuffer {
   for (let y = 0; y < pixels.length; y += 2) {
     const top = pixels[y];
     const bottom = pixels[y + 1];
+    if (bottom.length !== top.length) {
+      throw new Error(
+        `pixel grid rows ${y}/${y + 1} are ragged: top has ${top.length} pixels, bottom has ${bottom.length}`
+      );
+    }
     const row: CellRow = [];
     for (let x = 0; x < top.length; x++) {
       const t = top[x];
