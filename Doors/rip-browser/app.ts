@@ -7,12 +7,13 @@ import {
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { themeStyles, themeById, type Theme, type ThemeTokens, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeStyles, themeById, attachMasthead, type Theme, type ThemeTokens, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { ripGraphicsDir } from './paths';
 
 /** The caller's colours; every literal here was one of these tokens. */
 let T: ThemeTokens = themeById('classic').tokens;
 let S: ThemeStyles = themeStyles(themeById('classic'));
+let THEME: Theme = themeById('classic');
 
 const RIP_DIR = ripGraphicsDir();
 
@@ -22,6 +23,7 @@ export async function execute(session: any) {
     const theme: Theme = host.getTheme();
     T = theme.tokens;
     S = themeStyles(theme);
+    THEME = theme;
   }
 
   const { socket, bbsSession, user, params } = session;
@@ -83,12 +85,35 @@ export async function execute(session: any) {
     left: 0,
     width: '100%',
     height: 3,
-    content: `{center}{${T.warn}-fg}RIP Graphics Browser{/${T.warn}-fg}{/center}\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}`,
+    content: `\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}`,
     tags: true,
     border: { type: 'ascii' },  // Use ASCII borders to avoid Unicode issues
     style: {
       border: { fg: T.accent }
     }
+  });
+
+  // The animated slash rail, on the header's first row. A child box keeps
+  // it out of the outer geometry - nothing below moves, and a theme with no
+  // rail (classic) gets the plain title it always had.
+  const mastheadRow = blessed.box({
+    parent: header,
+    top: 0,
+    left: 0,
+    width: '100%-2',
+    height: 1,
+    tags: true,
+    content: '',
+    style: S.bar.style,
+  });
+  const stopMasthead = attachMasthead(mastheadRow as any, THEME, {
+    title: 'RIP GRAPHICS BROWSER',
+    // One column short: writing a row's last cell leaves the terminal in a
+    // pending-wrap state and clips the final character.
+    width: Math.max(1, ((screen as any).width || 80) - 3),
+    rail: S.accent,
+    ink: S.ink,
+    render: () => screen.render(),
   });
 
   const list = blessed.list({
@@ -230,6 +255,9 @@ export async function execute(session: any) {
   });
 
   screen.key(['q', 'C-c', 'escape'], () => {
+    // Stop the masthead first: a timer writing to a destroyed screen is how
+    // a door takes the session with it.
+    try { stopMasthead(); } catch { /* leaving anyway */ }
     screen.destroy();
     if (session.close) {
       session.close();

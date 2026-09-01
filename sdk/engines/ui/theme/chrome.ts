@@ -279,3 +279,123 @@ export function attachRail(
     render();
   };
 }
+
+/** What a masthead needs to know about the door that owns it. */
+export interface MastheadOptions {
+  /** The headline, right of the rail. */
+  title: string;
+  /** Columns available. One short of the screen width - see below. */
+  width: number;
+  /** Paint the rail run. Usually `s.accent`. */
+  rail: (text: string) => string;
+  /** Paint the title. Usually `s.ink`. */
+  ink: (text: string) => string;
+  /** Repaint after each frame. */
+  render: () => void;
+  /**
+   * Varies the irregular pattern between nodes, so two people on the same
+   * board are not watching an identical bar. Node id is the usual source.
+   */
+  seed?: number;
+  /** Frames of the draw-in. 0 skips straight to the moving bar. */
+  entryFrames?: number;
+}
+
+/** What a masthead draws into. */
+export interface MastheadTarget {
+  setContent(text: string): void;
+}
+
+/**
+ * The animated masthead: a slash rail that draws itself in, then slides.
+ *
+ * Extracted from DOORS, which is the screen the sysop measured the others
+ * against - "it doesnt look even close to how cool DOORS looks" was said of
+ * a door that had been given the theme's COLOURS and none of its chrome.
+ * Colour was never what made that screen read as designed; the moving rail
+ * was. One implementation here beats six hand-rolled copies that drift.
+ *
+ * Returns the stop function, which also leaves the bar drawn at rest rather
+ * than mid-slide. Does nothing at all for a theme with no rail - classic
+ * starts no timer and pays nothing for this existing.
+ *
+ * Cost: one row redrawn per tick, ~200 bytes, 20 times a second. That is
+ * affordable for a TypeScript door (a socket write and an xterm parse) and
+ * NOT something to copy into a 68K door, which pays ~45ms of emulation per
+ * message. See the cost table at the top of this file.
+ */
+export function attachMasthead(
+  target: MastheadTarget,
+  theme: Theme,
+  options: MastheadOptions
+): () => void {
+  const { title, width, rail, ink, render, seed = 1, entryFrames = 6 } = options;
+
+  // No rail: draw the plain title once and start nothing.
+  if (!theme.rail) {
+    target.setContent(` ${title} `);
+    render();
+    return () => { /* nothing was started */ };
+  }
+
+  // One column short of `width` is the caller's job, but the run is sized
+  // here: writing a row's final cell leaves the terminal in a pending-wrap
+  // state and the last character is clipped or pushed to the next line.
+  const runWidth = Math.max(0, width - title.length - 1);
+
+  let tick = 0;
+  let barWidth: number | null = null;
+
+  const line = (): string => {
+    const shown = barWidth === null ? runWidth : Math.min(barWidth, runWidth);
+    const run = railStream(theme.rail, shown, tick, seed).padEnd(runWidth);
+    return `${rail(run)} ${ink(title)}`;
+  };
+
+  const draw = () => {
+    target.setContent(line());
+    render();
+  };
+
+  let entryTimer: ReturnType<typeof setInterval> | null = null;
+  let slideTimer: ReturnType<typeof setInterval> | null = null;
+
+  const startSliding = () => {
+    barWidth = null;
+    tick = 0;
+    slideTimer = setInterval(() => {
+      tick++;
+      draw();
+      // 20 frames a second. A terminal cannot move less than a whole cell,
+      // so smoothness is entirely frame RATE and an even interval.
+    }, 50);
+  };
+
+  const frames = entryFrames > 0 ? barGrowFrames(theme.rail, runWidth, entryFrames) : [];
+  if (frames.length === 0) {
+    draw();
+    startSliding();
+  } else {
+    let frame = 0;
+    entryTimer = setInterval(() => {
+      barWidth = frames[frame] ? frames[frame].trimEnd().length : runWidth;
+      draw();
+      if (++frame >= frames.length) {
+        if (entryTimer) clearInterval(entryTimer);
+        entryTimer = null;
+        startSliding();
+      }
+    }, 60);
+  }
+
+  return () => {
+    if (entryTimer) clearInterval(entryTimer);
+    if (slideTimer) clearInterval(slideTimer);
+    entryTimer = null;
+    slideTimer = null;
+    // Leave it at rest, not mid-slide.
+    barWidth = null;
+    tick = 0;
+    draw();
+  };
+}

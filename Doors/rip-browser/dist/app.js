@@ -42,6 +42,7 @@ const paths_1 = require("./paths");
 /** The caller's colours; every literal here was one of these tokens. */
 let T = (0, theme_1.themeById)('classic').tokens;
 let S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
+let THEME = (0, theme_1.themeById)('classic');
 const RIP_DIR = (0, paths_1.ripGraphicsDir)();
 async function execute(session) {
     const host = session?.bbs;
@@ -49,6 +50,7 @@ async function execute(session) {
         const theme = host.getTheme();
         T = theme.tokens;
         S = (0, theme_1.themeStyles)(theme);
+        THEME = theme;
     }
     const { socket, bbsSession, user, params } = session;
     console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);
@@ -100,12 +102,34 @@ async function execute(session) {
         left: 0,
         width: '100%',
         height: 3,
-        content: `{center}{${T.warn}-fg}RIP Graphics Browser{/${T.warn}-fg}{/center}\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}`,
+        content: `\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}`,
         tags: true,
         border: { type: 'ascii' }, // Use ASCII borders to avoid Unicode issues
         style: {
             border: { fg: T.accent }
         }
+    });
+    // The animated slash rail, on the header's first row. A child box keeps
+    // it out of the outer geometry - nothing below moves, and a theme with no
+    // rail (classic) gets the plain title it always had.
+    const mastheadRow = bbs_door_sdk_1.blessed.box({
+        parent: header,
+        top: 0,
+        left: 0,
+        width: '100%-2',
+        height: 1,
+        tags: true,
+        content: '',
+        style: S.bar.style,
+    });
+    const stopMasthead = (0, theme_1.attachMasthead)(mastheadRow, THEME, {
+        title: 'RIP GRAPHICS BROWSER',
+        // One column short: writing a row's last cell leaves the terminal in a
+        // pending-wrap state and clips the final character.
+        width: Math.max(1, (screen.width || 80) - 3),
+        rail: S.accent,
+        ink: S.ink,
+        render: () => screen.render(),
     });
     const list = bbs_door_sdk_1.blessed.list({
         parent: mainBox,
@@ -231,6 +255,12 @@ async function execute(session) {
         }
     });
     screen.key(['q', 'C-c', 'escape'], () => {
+        // Stop the masthead first: a timer writing to a destroyed screen is how
+        // a door takes the session with it.
+        try {
+            stopMasthead();
+        }
+        catch { /* leaving anyway */ }
         screen.destroy();
         if (session.close) {
             session.close();

@@ -249,10 +249,27 @@ function resolveArchivePath(archivePath) {
 // A single set of panels that all views update in-place.
 class DoormanLayout {
     constructor(screen, nodeId) {
+        /** Stops the masthead animation; called when the door tears down. */
+        this.stopMasthead = null;
         this.screen = screen;
         this.width = Math.floor(screen.width * 0.35) - 8;
         this.header = new blessed_1.Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3,
             tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
+        // The animated slash rail, on the header's first row. A child keeps it
+        // out of the outer geometry - nothing below moves, and a theme with no
+        // rail (classic) gets the plain title it always had.
+        const mastheadRow = new blessed_1.Box({ parent: this.header, top: 0, left: 0, width: '100%-2',
+            height: 1, tags: true, content: '', focusable: false,
+            style: door_theme_1.S.bar.style });
+        this.stopMasthead = (0, theme_1.attachMasthead)(mastheadRow, door_theme_1.CURRENT, {
+            title: 'DOORMAN',
+            // One column short: writing a row's last cell leaves the terminal in
+            // a pending-wrap state and clips the final character.
+            width: Math.max(1, (screen.width || 80) - 3),
+            rail: door_theme_1.S.accent,
+            ink: door_theme_1.S.ink,
+            render: () => screen.render(),
+        });
         this.footer = new blessed_1.Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
             tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
         this.filterPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: 3,
@@ -611,6 +628,7 @@ Object.defineProperty(exports, "renderFileLines", { enumerable: true, get: funct
 Object.defineProperty(exports, "formatSuggestedTooltypes", { enumerable: true, get: function () { return repo_view_helpers_1.formatSuggestedTooltypes; } });
 const repo_view_helpers_2 = require("./repo-view-helpers");
 const door_theme_1 = require("./door-theme");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 class RepoView extends ViewManager_1.BaseView {
     constructor(layout, bbs) {
         super();
@@ -1888,7 +1906,19 @@ async function createApp(session) {
     // This is the only reliable way since blessed ignores external cursor state.
     screen.on('render', () => { bbs.write('\x1b[?25l'); });
     screen.on('resize', () => { screen.render(); });
-    screen.on('destroy', () => { inputManager.disable(); bbs.write('\x1b[?25h'); });
+    screen.on('destroy', () => {
+        // Stop the masthead before anything else: a timer writing to a
+        // destroyed screen is how a door takes the session with it.
+        if (layout.stopMasthead) {
+            try {
+                layout.stopMasthead();
+            }
+            catch { /* leaving anyway */ }
+            layout.stopMasthead = null;
+        }
+        inputManager.disable();
+        bbs.write('\x1b[?25h');
+    });
     vm.push(new InstalledView(layout, bbs, doors));
     await new Promise(resolve => { screen.on('destroy', resolve); });
 }

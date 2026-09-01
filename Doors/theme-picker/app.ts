@@ -17,7 +17,7 @@ import {
   createBox,
   createList,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { themeStyles, themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeStyles, themeById, attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 
 interface DoorSession {
@@ -46,7 +46,10 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
   input.enable();
 
-  createBox({
+  // The masthead was a STATIC rail here - one `////` printed once - while
+  // DOORS had the animated one. Since this is the screen people judge the
+  // themes from, it should show what a theme actually looks like in motion.
+  const mastheadRow = createBox({
     parent: screen,
     top: 0,
     left: 0,
@@ -54,10 +57,17 @@ export async function createApp(session: DoorSession): Promise<void> {
     height: 1,
     border: undefined,
     focusable: false,
-    content: s.rail
-      ? `${s.accent(s.rail)} ${s.ink('DOOR THEME')} `
-      : ' DOOR THEME ',
+    content: '',
     style: s.bar.style,
+  });
+  const stopMasthead = attachMasthead(mastheadRow as any, theme, {
+    title: 'DOOR THEME',
+    // One column short: writing a row's last cell leaves the terminal in a
+    // pending-wrap state and clips the final character.
+    width: Math.max(1, ((screen as any).width || 80) - 1),
+    rail: s.accent,
+    ink: s.ink,
+    render: () => screen.render(),
   });
 
   const active = theme.id;
@@ -111,6 +121,9 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   await new Promise<void>((resolve) => {
     const done = () => {
+      // Stop the masthead before the screen goes - a timer writing to a
+      // destroyed screen is how a door takes the session with it.
+      try { stopMasthead(); } catch { /* leaving anyway */ }
       try { input.disable(); } catch { /* leaving anyway */ }
       try { screen.destroy(); } catch { /* leaving anyway */ }
       resolve();
