@@ -147,3 +147,67 @@ export async function theStatusBarUsesNoUnsupportedTags(): Promise<void> {
     'the {|} token renders literally in this blessed port - pad by width instead');
 }
 
+/**
+ * Studio 2c: dockable panels. All four browser content panes (doors,
+ * sprites, animations, preview) become DockablePanels built through the
+ * shared panels.ts helper, not bare boxes/lists parented straight onto
+ * the screen - one options block for drag/resize/minimize instead of
+ * four hand-tuned ones.
+ */
+export async function theBrowserPanesAreDockablePanels(): Promise<void> {
+  assert.ok(app.includes("from './panels'") && app.includes('makePanel('),
+    'the browser must build its panes through panels.ts\'s makePanel');
+  for (const key of ['doors', 'sprites', 'animations', 'preview']) {
+    assert.ok(app.includes(`key: '${key}'`),
+      `the ${key} pane must be built via makePanel({ key: '${key}', ... })`);
+  }
+}
+
+/**
+ * Studio 2c fix round: livechat's screen options (the worked DockablePanel
+ * reference) disable fastCSR for stable dockable-panel rendering; this
+ * door's screen must mirror that or dragging/resizing a panel here can
+ * corrupt the terminal the same way it used to in livechat before the fix.
+ */
+export async function theBrowserScreenDisablesFastCSR(): Promise<void> {
+  const idx = app.indexOf('createScreen(');
+  assert.ok(idx >= 0, 'the browser must build its screen through createScreen');
+  const block = app.slice(idx, app.indexOf(');', idx));
+  assert.ok(/fastCSR:\s*false/.test(block),
+    'the browser screen must set fastCSR: false, mirroring livechat/ui/screen.ts');
+}
+
+/**
+ * Studio 2c: hiding/showing PANES while the editor/art session owns the
+ * screen must hide/show the PANELS (the outermost dockable element), not
+ * their nested list/box content - hiding only the content would leave an
+ * empty, still-visible, still-draggable panel shell sitting on screen.
+ */
+export async function theSleepListsHidePanelsNotBareContentWidgets(): Promise<void> {
+  for (const id of ["id: 'studio.edit'", "id: 'studio.artMode'"]) {
+    const idx = app.indexOf(id);
+    assert.ok(idx >= 0, `${id} binding must exist`);
+    const block = app.slice(idx, idx + 1500);
+    const hideLists = block.match(/for \(const w of \[[^\]]*\]\) w\.hide\(\);/g) || [];
+    const showLists = block.match(/for \(const w of \[[^\]]*\]\) w\.show\(\);/g) || [];
+    assert.strictEqual(hideLists.length, 1, `${id} must have exactly one hide list`);
+    assert.strictEqual(showLists.length, 1, `${id} must have exactly one show list`);
+    for (const panel of ['doorsPanel', 'spritesPanel', 'animationsPanel', 'previewPanel']) {
+      assert.ok(hideLists[0].includes(`this.${panel}`), `${id}'s hide list must include this.${panel}`);
+      assert.ok(showLists[0].includes(`this.${panel}`), `${id}'s show list must include this.${panel}`);
+    }
+  }
+}
+
+/** Studio 2c: View -> Reset Layout, wired through the same binding table as every hotkey. */
+export async function theBrowserHasAResetLayoutMenuItem(): Promise<void> {
+  const idx = app.indexOf("id: 'view.resetLayout'");
+  assert.ok(idx >= 0, "app.ts must declare the 'view.resetLayout' binding");
+  const block = app.slice(idx, idx + 400);
+  assert.ok(/keys: \[\]/.test(block), 'Reset Layout has no hotkey - an empty keys array is legal (menu-only)');
+  assert.ok(/menu: 'View'/.test(block), "Reset Layout must live under the 'View' menu");
+  assert.ok(/label: 'Reset Layout'/.test(block));
+  assert.ok(app.includes('resetPanelLayout('),
+    'Reset Layout must restore panels through panels.ts\'s resetPanelLayout, not hand-rolled position math');
+}
+

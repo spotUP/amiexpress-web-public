@@ -81,6 +81,20 @@ function pressKey(screen: any, keyName: string): void {
   }
 }
 
+/**
+ * Studio 2c: canvas/preview/frames/toolbar are now wrapped in a
+ * DockablePanel (panels.ts's makePanel) - the panel itself sits at
+ * screen.children[panelIndex], and the actual paintable box (the one
+ * setContent()/getContent() reflect) is nested one level deeper, as its
+ * content child. DockablePanel.append() (dockable-panel.ts) always calls
+ * bringUIToFront() after a child is appended, which reorders the title
+ * bar to the LAST position - so with exactly one content child appended
+ * (as every pane here does), that content is reliably children[0].
+ */
+function paneContent(screen: any, panelIndex: number): any {
+  return screen.children[panelIndex].children[0];
+}
+
 const frameStrip = (framesBoxContent: string): string => {
   const idx = framesBoxContent.indexOf('\n new animation');
   return idx === -1 ? framesBoxContent : framesBoxContent.slice(0, idx);
@@ -102,7 +116,7 @@ export async function namingSwallowsAnimationNameLettersNotBoundOps(): Promise<v
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
     const statusBar = screen.children[4];
-    const framesBox = screen.children[2];
+    const framesBox = paneContent(screen, 2);
 
     pressKey(screen, '+'); // start naming a new animation
     const statusBefore = statusBar.getContent();
@@ -167,7 +181,7 @@ export async function selectingBackToANonPixelFrameDropsToCellModeAndSpaceNeverT
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const canvasBox = screen.children[0];
+    const canvasBox = paneContent(screen, 0);
 
     pressChar(screen, '.'); // frame 1: pixel-editable
     pressKey(screen, 'tab'); // -> pixel mode
@@ -211,7 +225,7 @@ export async function shiftCommaAndShiftPeriodDoNotTypeIntoTheCell(): Promise<vo
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const canvasBox = screen.children[0];
+    const canvasBox = paneContent(screen, 0);
 
     const beforeComma = canvasBox.getContent();
     pressChar(screen, '<'); // Shift+comma: S-, binding (move frame earlier) + keypress '<'
@@ -255,7 +269,7 @@ export async function typingCapitalSPaintsAGlyphIntentionallyNotExcluded(): Prom
     assert.ok(!(edit as any).bindingSet.excludedGlyphKeys.has('S'),
       "no binding may derive the glyph 'S' - the controller signed off on this being unexcluded");
 
-    const canvasBox = screen.children[0];
+    const canvasBox = paneContent(screen, 0);
     const before = canvasBox.getContent();
 
     pressChar(screen, 'S'); // no S-s binding exists, so only the keypress fires
@@ -291,7 +305,7 @@ export async function spaceExclusionMakesTheKeypressFallbackANoOp(): Promise<voi
   let soloContent: string;
   try {
     pressKey(soloScreen, 'space'); // only the dedicated paint handler fires
-    soloContent = soloScreen.children[0].getContent();
+    soloContent = paneContent(soloScreen, 0).getContent();
   } finally {
     solo.destroy();
   }
@@ -305,7 +319,7 @@ export async function spaceExclusionMakesTheKeypressFallbackANoOp(): Promise<voi
     pressKey(doubleScreen, 'space');
     for (const kp of doubleScreen._keypressHandlers) kp(' ');
 
-    assert.strictEqual(doubleScreen.children[0].getContent(), soloContent,
+    assert.strictEqual(paneContent(doubleScreen, 0).getContent(), soloContent,
       "the keypress fallback for space must be a no-op: space's key is in the derived exclusion " +
       'set precisely so it cannot overwrite the just-painted glyph with a blank cell');
   } finally {
@@ -327,7 +341,7 @@ export async function shiftXDoesNotTypeIntoTheCell(): Promise<void> {
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const canvasBox = screen.children[0];
+    const canvasBox = paneContent(screen, 0);
     const before = canvasBox.getContent();
 
     pressChar(screen, 'X'); // Shift+X: S-x binding (refused) + keypress 'X'
@@ -364,7 +378,7 @@ export async function f1InvokesHelpWithoutTouchingTheDocumentAndLeavesNoStuckSta
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
     const statusBar = screen.children[4];
-    const framesBox = screen.children[2];
+    const framesBox = paneContent(screen, 2);
     const beforeStrip = frameStrip(framesBox.getContent());
     const beforeDirty = (edit as any).doc.dirty;
     const beforeCursorRow = (edit as any).cursorRow;

@@ -114,6 +114,29 @@ export async function browserColumnsSumToEightyColumns(): Promise<void> {
   assert.strictEqual(preview.left, sprites.left + sprites.width);
 }
 
+/**
+ * Studio 2c: every content pane in LAYOUT (everything but the status bar)
+ * now becomes a DockablePanel (panels.ts's makePanel). DockablePanel
+ * enforces an absolute floor during resize - ABS_MIN_WIDTH=5,
+ * ABS_MIN_HEIGHT=3 (dockable-panel.ts) - below which it silently clamps a
+ * panel back up. A LAYOUT rect smaller than that floor would make Reset
+ * Layout (which restores exactly these numbers) immediately fight the
+ * panel's own clamp.
+ */
+export async function everyPaneMeetsTheDockablePanelMinimumSize(): Promise<void> {
+  const ABS_MIN_WIDTH = 5;
+  const ABS_MIN_HEIGHT = 3;
+  for (const screenName of ['edit', 'browser'] as const) {
+    for (const [paneName, rect] of Object.entries(LAYOUT[screenName])) {
+      if (paneName === 'status') continue;
+      assert.ok(rect.width >= ABS_MIN_WIDTH,
+        `LAYOUT.${screenName}.${paneName}.width (${rect.width}) must be at least DockablePanel's minimum (${ABS_MIN_WIDTH})`);
+      assert.ok(rect.height >= ABS_MIN_HEIGHT,
+        `LAYOUT.${screenName}.${paneName}.height (${rect.height}) must be at least DockablePanel's minimum (${ABS_MIN_HEIGHT})`);
+    }
+  }
+}
+
 export async function browserMiddleColumnSumsToTheOuterColumnsHeight(): Promise<void> {
   const { doors, sprites, animations, preview } = LAYOUT.browser;
   assert.strictEqual(sprites.height + animations.height, doors.height,

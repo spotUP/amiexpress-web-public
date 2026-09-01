@@ -140,6 +140,14 @@ export async function theEditScreenHasAMenuBarBuiltFromTheBindingSet(): Promise<
 /**
  * Fix round 1, Critical 1: the edit screen's OWN menu bar must die with
  * everything else it owns - the destroy-chain discipline from studio 2b.
+ *
+ * Studio 2c: the four content panes are now DockablePanels wrapping their
+ * old bare box - destroy() must tear down the PANELS (canvasPanel,
+ * previewPanel, framesPanel, toolbarPanel), not just their nested content
+ * widgets. A panel's own destroy() cascades to its children (element.ts's
+ * destroy() destroys every child), so destroying the panel is sufficient;
+ * destroying only the content and leaving the panel attached would orphan
+ * an empty, still-visible panel shell (title bar and border) on screen.
  */
 export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
   const destroyIdx = code.indexOf('destroy(): void {');
@@ -147,6 +155,37 @@ export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
   const destroyBody = code.slice(destroyIdx, code.indexOf('\n}', destroyIdx));
   assert.ok(/this\.menuBar[\],]/.test(destroyBody),
     'destroy() must include this.menuBar in the widgets it destroys');
+  for (const panel of ['canvasPanel', 'previewPanel', 'framesPanel', 'toolbarPanel']) {
+    assert.ok(new RegExp(`this\\.${panel}[\\],]`).test(destroyBody),
+      `destroy() must include this.${panel} (the panel, not just its nested content) in the widgets it destroys`);
+  }
+}
+
+/**
+ * Studio 2c: dockable panels. All four edit-screen content panes (canvas,
+ * preview, frames, toolbar) become DockablePanels built through the
+ * shared panels.ts helper, not bare boxes parented straight onto the
+ * screen.
+ */
+export async function theEditScreenPanesAreDockablePanels(): Promise<void> {
+  assert.ok(code.includes("from './panels'") && code.includes('makePanel('),
+    'the edit screen must build its panes through panels.ts\'s makePanel');
+  for (const key of ['canvas', 'preview', 'frames', 'toolbar']) {
+    assert.ok(code.includes(`key: '${key}'`),
+      `the ${key} pane must be built via makePanel({ key: '${key}', ... })`);
+  }
+}
+
+/** Studio 2c: View -> Reset Layout, wired through the same binding table as every hotkey. */
+export async function theEditScreenHasAResetLayoutMenuItem(): Promise<void> {
+  const idx = code.indexOf("id: 'view.resetLayout'");
+  assert.ok(idx >= 0, "edit-screen.ts must declare the 'view.resetLayout' binding");
+  const block = code.slice(idx, idx + 400);
+  assert.ok(/keys: \[\]/.test(block), 'Reset Layout has no hotkey - an empty keys array is legal (menu-only)');
+  assert.ok(/menu: 'View'/.test(block), "Reset Layout must live under the 'View' menu");
+  assert.ok(/label: 'Reset Layout'/.test(block));
+  assert.ok(code.includes('resetPanelLayout('),
+    'Reset Layout must restore panels through panels.ts\'s resetPanelLayout, not hand-rolled position math');
 }
 
 /**

@@ -22,6 +22,7 @@ import { previewLines } from './preview';
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
+import { makePanel, resetPanelLayout } from './panels';
 
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
@@ -46,6 +47,10 @@ export class EditScreen {
   private discardArmedAt = 0;
   private naming: string | null = null; // non-null while typing a new animation name
 
+  private canvasPanel: any = null;
+  private previewPanel: any = null;
+  private framesPanel: any = null;
+  private toolbarPanel: any = null;
   private canvasBox: any = null;
   private previewBox: any = null;
   private framesBox: any = null;
@@ -77,41 +82,44 @@ export class EditScreen {
     this.paint();
   }
 
+  /**
+   * Studio 2c: each content pane is now a DockablePanel (panels.ts's
+   * makePanel) at the SAME LAYOUT rect the bare box used to occupy; the
+   * actual content box becomes its child, sized in integers to the
+   * panel's inner area (rect minus the panel's own 1-cell border each
+   * side - see panels.ts's doc comment).
+   */
   private buildLayout(): void {
     const { canvas, preview, frames, toolbar, status } = LAYOUT.edit;
+    this.canvasPanel = makePanel(this.screen, { key: 'canvas', title: ' Canvas ', rect: canvas });
     this.canvasBox = blessed.box({
-      parent: this.screen,
-      top: canvas.top, left: canvas.left, width: canvas.width, height: canvas.height,
-      label: ' Canvas ',
-      border: { type: 'line' }, tags: true,
-      style: { border: { fg: 'lightyellow' } },
+      parent: this.canvasPanel,
+      top: 0, left: 0, width: canvas.width - 2, height: canvas.height - 2,
+      border: { type: 'none' }, tags: true,
     });
+    this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
     this.previewBox = blessed.box({
-      parent: this.screen,
-      top: preview.top, left: preview.left, width: preview.width, height: preview.height,
-      label: ' Preview ',
-      border: { type: 'line' }, tags: true,
-      style: { border: { fg: 'green' } },
+      parent: this.previewPanel,
+      top: 0, left: 0, width: preview.width - 2, height: preview.height - 2,
+      border: { type: 'none' }, tags: true,
     });
+    this.framesPanel = makePanel(this.screen, { key: 'frames', title: ' Frames ', rect: frames });
     this.framesBox = blessed.box({
-      parent: this.screen,
-      top: frames.top, left: frames.left, width: frames.width, height: frames.height,
-      label: ' Frames ',
-      border: { type: 'line' }, tags: true,
-      style: { border: { fg: 'cyan' } },
+      parent: this.framesPanel,
+      top: 0, left: 0, width: frames.width - 2, height: frames.height - 2,
+      border: { type: 'none' }, tags: true,
     });
+    this.toolbarPanel = makePanel(this.screen, { key: 'toolbar', title: ' Paint ', rect: toolbar });
     this.paletteBox = blessed.box({
-      parent: this.screen,
-      top: toolbar.top, left: toolbar.left, width: toolbar.width, height: toolbar.height,
-      label: ' Paint ',
-      border: { type: 'line' }, tags: true,
-      style: { border: { fg: 'cyan' } },
+      parent: this.toolbarPanel,
+      top: 0, left: 0, width: toolbar.width - 2, height: toolbar.height - 2,
+      border: { type: 'none' }, tags: true,
     });
     this.statusBar = blessed.box({
       parent: this.screen,
       top: status.top, left: status.left, width: status.width, height: status.height, tags: true,
     });
-    // Created LAST so the five indices above (canvasBox..statusBar) keep
+    // Created LAST so the five indices above (canvasPanel..statusBar) keep
     // the exact screen.children[N] positions edit-screen-behavior.test.ts
     // pins - the menu bar is purely additive.
     this.menuBar = createStudioMenuBar(this.screen, this.bindingSet.menuItems());
@@ -233,6 +241,17 @@ export class EditScreen {
         handler: () => {
           this.statusFlash = 'g/f/S-f/b/S-b paint  n/c/x/S-,/S-. frames  a/+/t/S-t/l/S-x animation  TAB mode  s save  ESC back';
           this.paint();
+        } },
+
+      // Studio 2c: menu-only (empty keys is legal - see bindings.ts's
+      // anEmptyKeysBindingIsMenuOnly), restores every panel to its LAYOUT
+      // rect and floating state through panels.ts's resetPanelLayout.
+      { id: 'view.resetLayout', keys: [], hotkeyHint: '', menu: 'View', label: 'Reset Layout',
+        handler: () => {
+          resetPanelLayout(this.canvasPanel, LAYOUT.edit.canvas);
+          resetPanelLayout(this.previewPanel, LAYOUT.edit.preview);
+          resetPanelLayout(this.framesPanel, LAYOUT.edit.frames);
+          resetPanelLayout(this.toolbarPanel, LAYOUT.edit.toolbar);
         } },
     ];
   }
@@ -442,10 +461,17 @@ export class EditScreen {
       else this.screen.unkey(keys, handler);
     }
     this.keyHandlers = [];
-    for (const widget of [this.canvasBox, this.previewBox, this.framesBox,
-                          this.paletteBox, this.statusBar, this.menuBar]) {
+    // Destroy the PANELS, not just their nested content boxes: a panel's
+    // destroy() cascades to its children (element.ts's destroy() destroys
+    // every child), so this alone tears down canvasBox/previewBox/
+    // framesBox/paletteBox too. Destroying only the content and leaving
+    // the panel attached would orphan an empty, still-visible, still-
+    // draggable panel shell (border + title bar) on screen.
+    for (const widget of [this.canvasPanel, this.previewPanel, this.framesPanel,
+                          this.toolbarPanel, this.statusBar, this.menuBar]) {
       widget?.destroy();
     }
+    this.canvasPanel = this.previewPanel = this.framesPanel = this.toolbarPanel = null;
     this.canvasBox = this.previewBox = this.framesBox = this.paletteBox = this.statusBar = this.menuBar = null;
   }
 }

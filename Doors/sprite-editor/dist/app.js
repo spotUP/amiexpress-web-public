@@ -34,6 +34,7 @@ const art_screen_1 = require("./art-screen");
 const bindings_1 = require("./bindings");
 const layout_1 = require("./layout");
 const menu_1 = require("./menu");
+const panels_1 = require("./panels");
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
 class StudioApp {
@@ -41,6 +42,10 @@ class StudioApp {
         this.screen = null;
         this.inputManager = null;
         this.state = null;
+        this.doorsPanel = null;
+        this.spritesPanel = null;
+        this.animationsPanel = null;
+        this.previewPanel = null;
         this.doorsList = null;
         this.spritesList = null;
         this.animationsList = null;
@@ -63,6 +68,11 @@ class StudioApp {
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             title: 'Sprite Studio',
             responsive: true,
+            // Mirrors livechat/ui/screen.ts: fastCSR forces the fast
+            // scroll-region optimisation, which corrupts the terminal while a
+            // DockablePanel is being dragged/resized. Disabled for the same
+            // reason livechat disables it - stable dockable-panel rendering.
+            fastCSR: false,
         });
         this.screen.program.write('\x1b[2J');
         this.screen.program.write('\x1b[H');
@@ -101,55 +111,60 @@ class StudioApp {
             this.screen.once('destroy', resolve);
         });
     }
+    /**
+     * Studio 2c: each content pane is now a DockablePanel (panels.ts's
+     * makePanel), built from the SAME LAYOUT rect the bare box used to take
+     * directly - the panel supplies the border/title bar the box used to
+     * draw itself, and the actual widget (list/box) becomes its content
+     * child, sized in integers to the panel's inner area (rect minus the
+     * panel's own 1-cell border each side - see panels.ts's doc comment for
+     * why this is not a percent string).
+     */
     buildLayout() {
         const { doors, sprites, animations, preview, status } = layout_1.LAYOUT.browser;
+        this.doorsPanel = (0, panels_1.makePanel)(this.screen, { key: 'doors', title: ' Doors ', rect: doors });
         this.doorsList = blessed_1.default.list({
-            parent: this.screen,
-            top: doors.top, left: doors.left, width: doors.width, height: doors.height,
-            label: ' Doors ',
-            border: { type: 'line' },
+            parent: this.doorsPanel,
+            top: 0, left: 0, width: doors.width - 2, height: doors.height - 2,
+            border: { type: 'none' },
             // keys stay off: the door drives every key through the screen (see
             // the class comment on buildBindings), so a widget's own keys never
             // fire. mouse:true is new (Studio 2c): click-to-select, wired below
             // in wireMouseSelection() through the SAME handlers as arrow/enter.
             tags: true, keys: false, mouse: true,
             style: {
-                border: { fg: 'cyan' },
                 selected: { bg: 'blue', fg: 'lightyellow', bold: true },
                 item: { fg: 'white' },
             },
         });
+        this.spritesPanel = (0, panels_1.makePanel)(this.screen, { key: 'sprites', title: ' Sprites ', rect: sprites });
         this.spritesList = blessed_1.default.list({
-            parent: this.screen,
-            top: sprites.top, left: sprites.left, width: sprites.width, height: sprites.height,
-            label: ' Sprites ',
-            border: { type: 'line' },
+            parent: this.spritesPanel,
+            top: 0, left: 0, width: sprites.width - 2, height: sprites.height - 2,
+            border: { type: 'none' },
             tags: true, keys: false, mouse: true,
             style: {
-                border: { fg: 'cyan' },
                 selected: { bg: 'blue', fg: 'lightyellow', bold: true },
                 item: { fg: 'white' },
             },
         });
+        this.animationsPanel = (0, panels_1.makePanel)(this.screen, { key: 'animations', title: ' Animations ', rect: animations });
         this.animationsList = blessed_1.default.list({
-            parent: this.screen,
-            top: animations.top, left: animations.left, width: animations.width, height: animations.height,
-            label: ' Animations ',
-            border: { type: 'line' },
+            parent: this.animationsPanel,
+            top: 0, left: 0, width: animations.width - 2, height: animations.height - 2,
+            border: { type: 'none' },
             tags: true, keys: false, mouse: true,
             style: {
-                border: { fg: 'cyan' },
                 selected: { bg: 'blue', fg: 'lightyellow', bold: true },
                 item: { fg: 'white' },
             },
         });
+        this.previewPanel = (0, panels_1.makePanel)(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
         this.previewBox = blessed_1.default.box({
-            parent: this.screen,
-            top: preview.top, left: preview.left, width: preview.width, height: preview.height,
-            label: ' Preview ',
-            border: { type: 'line' },
+            parent: this.previewPanel,
+            top: 0, left: 0, width: preview.width - 2, height: preview.height - 2,
+            border: { type: 'none' },
             tags: true, mouse: true,
-            style: { border: { fg: 'green' } },
         });
         this.statusBar = blessed_1.default.box({
             parent: this.screen,
@@ -263,13 +278,13 @@ class StudioApp {
                     // hover/click listeners otherwise, sitting directly under the
                     // editor's own menu bar - a hovering mouse could open this
                     // browser's "Sprite > Quit" while the editor owns the screen.
-                    for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                        this.previewBox, this.statusBar, this.menuBar])
+                    for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                        this.previewPanel, this.statusBar, this.menuBar])
                         w.hide();
                     this.editScreen = new edit_screen_1.EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
                         this.editScreen = null;
-                        for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                            this.previewBox, this.statusBar, this.menuBar])
+                        for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                            this.previewPanel, this.statusBar, this.menuBar])
                             w.show();
                         this.loaded = null; // the sprite may have been saved - reload it
                         this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
@@ -292,13 +307,13 @@ class StudioApp {
                         this.playback = null;
                     }
                     // menuBar included - same reasoning as the 'e' handler above.
-                    for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                        this.previewBox, this.statusBar, this.menuBar])
+                    for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                        this.previewPanel, this.statusBar, this.menuBar])
                         w.hide();
                     this.artSession = new art_screen_1.ArtSession(this.screen, sel.door, () => {
                         this.artSession = null;
-                        for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                            this.previewBox, this.statusBar, this.menuBar])
+                        for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                            this.previewPanel, this.statusBar, this.menuBar])
                             w.show();
                         this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
                         this.refresh();
@@ -313,6 +328,17 @@ class StudioApp {
                 handler: () => {
                     this.statusBar.setContent('{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}');
                     this.screen.render();
+                } },
+            // Studio 2c: menu-only (empty keys is legal - see bindings.ts's
+            // anEmptyKeysBindingIsMenuOnly), restores every panel to its LAYOUT
+            // rect and floating state through panels.ts's resetPanelLayout -
+            // the same setState() DockablePanel uses to restore a saved layout.
+            { id: 'view.resetLayout', keys: [], hotkeyHint: '', menu: 'View', label: 'Reset Layout',
+                handler: () => {
+                    (0, panels_1.resetPanelLayout)(this.doorsPanel, layout_1.LAYOUT.browser.doors);
+                    (0, panels_1.resetPanelLayout)(this.spritesPanel, layout_1.LAYOUT.browser.sprites);
+                    (0, panels_1.resetPanelLayout)(this.animationsPanel, layout_1.LAYOUT.browser.animations);
+                    (0, panels_1.resetPanelLayout)(this.previewPanel, layout_1.LAYOUT.browser.preview);
                 } },
         ];
     }
@@ -360,8 +386,15 @@ class StudioApp {
         return this.loaded?.sprite ?? null;
     }
     refresh() {
-        const focus = (list, on) => {
-            list.style.border.fg = on ? 'lightyellow' : 'cyan';
+        // Studio 2c: the coloured border that shows which pane has focus now
+        // lives on the PANEL (the content list is borderless - the panel
+        // draws it), so this targets this.doorsPanel/etc, not the list. The
+        // panel's own style.border may not exist yet (DockablePanel only
+        // creates it lazily, in applyBorderHoverStyle(), on first hover), so
+        // it is created here rather than assumed present.
+        const focus = (panel, on) => {
+            panel.style.border = panel.style.border || {};
+            panel.style.border.fg = on ? 'lightyellow' : 'cyan';
         };
         this.doorsList.setItems(this.state.doors);
         this.doorsList.select(this.state.doorIndex);
@@ -374,9 +407,9 @@ class StudioApp {
         this.spritesList.select(this.state.spriteIndex);
         this.animationsList.setItems(this.state.animations);
         this.animationsList.select(this.state.animationIndex);
-        focus(this.doorsList, this.state.pane === 'doors');
-        focus(this.spritesList, this.state.pane === 'sprites');
-        focus(this.animationsList, this.state.pane === 'animations');
+        focus(this.doorsPanel, this.state.pane === 'doors');
+        focus(this.spritesPanel, this.state.pane === 'sprites');
+        focus(this.animationsPanel, this.state.pane === 'animations');
         const sel = (0, browser_model_1.selection)(this.state);
         const left = `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
             `{white-fg}${sel.sprite ?? '-'}{/} / ` +

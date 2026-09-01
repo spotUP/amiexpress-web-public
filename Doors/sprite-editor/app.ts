@@ -33,6 +33,7 @@ import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art'
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
+import { makePanel, resetPanelLayout } from './panels';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
@@ -43,6 +44,10 @@ export class StudioApp {
   private inputManager: any = null;
   private state: BrowserState = null as any;
 
+  private doorsPanel: any = null;
+  private spritesPanel: any = null;
+  private animationsPanel: any = null;
+  private previewPanel: any = null;
   private doorsList: any = null;
   private spritesList: any = null;
   private animationsList: any = null;
@@ -70,6 +75,11 @@ export class StudioApp {
     this.screen = createScreen((this.ctx as any).bbs, {
       title: 'Sprite Studio',
       responsive: true,
+      // Mirrors livechat/ui/screen.ts: fastCSR forces the fast
+      // scroll-region optimisation, which corrupts the terminal while a
+      // DockablePanel is being dragged/resized. Disabled for the same
+      // reason livechat disables it - stable dockable-panel rendering.
+      fastCSR: false,
     });
     this.screen.program.write('\x1b[2J');
     this.screen.program.write('\x1b[H');
@@ -112,55 +122,60 @@ export class StudioApp {
     });
   }
 
+  /**
+   * Studio 2c: each content pane is now a DockablePanel (panels.ts's
+   * makePanel), built from the SAME LAYOUT rect the bare box used to take
+   * directly - the panel supplies the border/title bar the box used to
+   * draw itself, and the actual widget (list/box) becomes its content
+   * child, sized in integers to the panel's inner area (rect minus the
+   * panel's own 1-cell border each side - see panels.ts's doc comment for
+   * why this is not a percent string).
+   */
   private buildLayout(): void {
     const { doors, sprites, animations, preview, status } = LAYOUT.browser;
+    this.doorsPanel = makePanel(this.screen, { key: 'doors', title: ' Doors ', rect: doors });
     this.doorsList = blessed.list({
-      parent: this.screen,
-      top: doors.top, left: doors.left, width: doors.width, height: doors.height,
-      label: ' Doors ',
-      border: { type: 'line' },
+      parent: this.doorsPanel,
+      top: 0, left: 0, width: doors.width - 2, height: doors.height - 2,
+      border: { type: 'none' },
       // keys stay off: the door drives every key through the screen (see
       // the class comment on buildBindings), so a widget's own keys never
       // fire. mouse:true is new (Studio 2c): click-to-select, wired below
       // in wireMouseSelection() through the SAME handlers as arrow/enter.
       tags: true, keys: false, mouse: true,
       style: {
-        border: { fg: 'cyan' },
         selected: { bg: 'blue', fg: 'lightyellow', bold: true },
         item: { fg: 'white' },
       },
     });
+    this.spritesPanel = makePanel(this.screen, { key: 'sprites', title: ' Sprites ', rect: sprites });
     this.spritesList = blessed.list({
-      parent: this.screen,
-      top: sprites.top, left: sprites.left, width: sprites.width, height: sprites.height,
-      label: ' Sprites ',
-      border: { type: 'line' },
+      parent: this.spritesPanel,
+      top: 0, left: 0, width: sprites.width - 2, height: sprites.height - 2,
+      border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
-        border: { fg: 'cyan' },
         selected: { bg: 'blue', fg: 'lightyellow', bold: true },
         item: { fg: 'white' },
       },
     });
+    this.animationsPanel = makePanel(this.screen, { key: 'animations', title: ' Animations ', rect: animations });
     this.animationsList = blessed.list({
-      parent: this.screen,
-      top: animations.top, left: animations.left, width: animations.width, height: animations.height,
-      label: ' Animations ',
-      border: { type: 'line' },
+      parent: this.animationsPanel,
+      top: 0, left: 0, width: animations.width - 2, height: animations.height - 2,
+      border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
-        border: { fg: 'cyan' },
         selected: { bg: 'blue', fg: 'lightyellow', bold: true },
         item: { fg: 'white' },
       },
     });
+    this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
     this.previewBox = blessed.box({
-      parent: this.screen,
-      top: preview.top, left: preview.left, width: preview.width, height: preview.height,
-      label: ' Preview ',
-      border: { type: 'line' },
+      parent: this.previewPanel,
+      top: 0, left: 0, width: preview.width - 2, height: preview.height - 2,
+      border: { type: 'none' },
       tags: true, mouse: true,
-      style: { border: { fg: 'green' } },
     });
     this.statusBar = blessed.box({
       parent: this.screen,
@@ -270,12 +285,12 @@ export class StudioApp {
           // hover/click listeners otherwise, sitting directly under the
           // editor's own menu bar - a hovering mouse could open this
           // browser's "Sprite > Quit" while the editor owns the screen.
-          for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                           this.previewBox, this.statusBar, this.menuBar]) w.hide();
+          for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                           this.previewPanel, this.statusBar, this.menuBar]) w.hide();
           this.editScreen = new EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
             this.editScreen = null;
-            for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                             this.previewBox, this.statusBar, this.menuBar]) w.show();
+            for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                             this.previewPanel, this.statusBar, this.menuBar]) w.show();
             this.loaded = null; // the sprite may have been saved - reload it
             this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
             this.refresh();
@@ -293,12 +308,12 @@ export class StudioApp {
           // the same reasoning the ansi-editor door's showFileBrowser relies on.
           if (this.playback) { clearInterval(this.playback); this.playback = null; }
           // menuBar included - same reasoning as the 'e' handler above.
-          for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                           this.previewBox, this.statusBar, this.menuBar]) w.hide();
+          for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                           this.previewPanel, this.statusBar, this.menuBar]) w.hide();
           this.artSession = new ArtSession(this.screen, sel.door, () => {
             this.artSession = null;
-            for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                             this.previewBox, this.statusBar, this.menuBar]) w.show();
+            for (const w of [this.doorsPanel, this.spritesPanel, this.animationsPanel,
+                             this.previewPanel, this.statusBar, this.menuBar]) w.show();
             this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
             this.refresh();
           });
@@ -315,6 +330,18 @@ export class StudioApp {
             '{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}'
           );
           this.screen.render();
+        } },
+
+      // Studio 2c: menu-only (empty keys is legal - see bindings.ts's
+      // anEmptyKeysBindingIsMenuOnly), restores every panel to its LAYOUT
+      // rect and floating state through panels.ts's resetPanelLayout -
+      // the same setState() DockablePanel uses to restore a saved layout.
+      { id: 'view.resetLayout', keys: [], hotkeyHint: '', menu: 'View', label: 'Reset Layout',
+        handler: () => {
+          resetPanelLayout(this.doorsPanel, LAYOUT.browser.doors);
+          resetPanelLayout(this.spritesPanel, LAYOUT.browser.sprites);
+          resetPanelLayout(this.animationsPanel, LAYOUT.browser.animations);
+          resetPanelLayout(this.previewPanel, LAYOUT.browser.preview);
         } },
     ];
   }
@@ -360,8 +387,15 @@ export class StudioApp {
   }
 
   private refresh(): void {
-    const focus = (list: any, on: boolean) => {
-      list.style.border.fg = on ? 'lightyellow' : 'cyan';
+    // Studio 2c: the coloured border that shows which pane has focus now
+    // lives on the PANEL (the content list is borderless - the panel
+    // draws it), so this targets this.doorsPanel/etc, not the list. The
+    // panel's own style.border may not exist yet (DockablePanel only
+    // creates it lazily, in applyBorderHoverStyle(), on first hover), so
+    // it is created here rather than assumed present.
+    const focus = (panel: any, on: boolean) => {
+      panel.style.border = panel.style.border || {};
+      panel.style.border.fg = on ? 'lightyellow' : 'cyan';
     };
     this.doorsList.setItems(this.state.doors);
     this.doorsList.select(this.state.doorIndex);
@@ -376,9 +410,9 @@ export class StudioApp {
     this.spritesList.select(this.state.spriteIndex);
     this.animationsList.setItems(this.state.animations);
     this.animationsList.select(this.state.animationIndex);
-    focus(this.doorsList, this.state.pane === 'doors');
-    focus(this.spritesList, this.state.pane === 'sprites');
-    focus(this.animationsList, this.state.pane === 'animations');
+    focus(this.doorsPanel, this.state.pane === 'doors');
+    focus(this.spritesPanel, this.state.pane === 'sprites');
+    focus(this.animationsPanel, this.state.pane === 'animations');
 
     const sel = selection(this.state);
     const left =
