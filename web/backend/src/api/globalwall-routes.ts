@@ -96,7 +96,11 @@ export function createGlobalWallRouter(database: Database): ReturnType<typeof ex
       const result = await makeGlobalWallRequest(requestPath, 'GET');
 
       if (result.statusCode === 200) {
-        res.json(JSON.parse(result.data));
+        // Wrapped, because GlobalWallPage reads `commentsData?.data || []`.
+        // Forwarding the upstream array verbatim made the list always empty
+        // with no error, which put Edit and Delete out of reach even though
+        // both of those routes work.
+        res.json({ success: true, data: JSON.parse(result.data) });
       } else {
         res.status(result.statusCode).json({ error: 'Failed to fetch comments' });
       }
@@ -170,9 +174,12 @@ console.error('[GlobalWall API] Error deleting comment:', error);
       if (!fs.existsSync(configPath)) {
         // Return defaults
         return res.json({
-          style: 4,
-          mybbsshortcode: 'AMI',
-          coloursettings: '42626717772363'
+          success: true,
+          data: {
+            style: 4,
+            mybbsshortcode: 'AMI',
+            coloursettings: '42626717772363'
+          }
         });
       }
 
@@ -185,7 +192,15 @@ console.error('[GlobalWall API] Error deleting comment:', error);
         coloursettings: lines[2] || '42626717772363'
       };
 
-      res.json(gwallConfig);
+      // Wrapped for the same reason, and this one did damage rather than
+      // just showing nothing: GlobalWallPage seeds its form with hardcoded
+      // defaults (style 4, "AMI", "42626717772363") and only replaces them
+      // inside `if (configData?.data)`. With the config served bare that
+      // guard never passed, so the Settings tab showed those defaults
+      // whatever GWall.cfg held - and Save wrote them back over the real
+      // style and colour string. Editing one field silently reset the
+      // other two.
+      res.json({ success: true, data: gwallConfig });
     } catch (error) {
 console.error('[GlobalWall API] Error reading config:', error);
       res.status(500).json({ error: (error as Error).message });
