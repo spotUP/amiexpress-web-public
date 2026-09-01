@@ -216,3 +216,89 @@ describe('the flag prompt leaves the cursor on its own line', () => {
     expect(session.subState).toBe('display_menu');
   });
 });
+
+/**
+ * Typing at the flag prompt must flag ONE file, not one per letter.
+ *
+ * The sysop's flag list came back as "W 1 D A Q" - five single characters,
+ * saved to Partdownload/flagged<slot> and reprinted on every later visit.
+ * express.e reads this prompt with lineInput() (express.e:12599), which
+ * blocks until Enter; the web port gets one keystroke per socket message,
+ * and the FLAG_INPUT branch handed each one straight to handleFlagInput as
+ * if it were a finished answer.
+ */
+describe('the flag prompt reads a line, not a keystroke', () => {
+  const { collectLine } = require('../../src/utils/line-input.util');
+
+  const { flushOutput } = require('../../src/utils/output.util');
+  let socketSeq = 0;
+
+  function typing() {
+    const written: string[] = [];
+    // Echo goes through the buffered writer (16ms batching), which wants a
+    // real-ish socket; a fresh id per test keeps their buffers apart.
+    const socket: any = {
+      id: `line-input-test-${socketSeq++}`,
+      on: () => {},
+      emit: (event: string, data: any) => {
+        if (event === 'ansi-output') written.push(String(data));
+      },
+    };
+    const flush = () => flushOutput(socket);
+    return { socket, written, flush };
+  }
+
+  it('hands over nothing until Enter', async () => {
+    const { socket } = typing();
+    const session: any = {};
+    const lines: string[] = [];
+
+    for (const key of ['W', 'O', 'O', 'F']) {
+      const done = await collectLine(socket, session, key, (l: string) => { lines.push(l); });
+      expect(done).toBe(false);
+    }
+
+    // Four keystrokes, four flagged "files" - that was the bug.
+    expect(lines).toEqual([]);
+    expect(session.inputBuffer).toBe('WOOF');
+  });
+
+  it('hands over the whole word on Enter', async () => {
+    const { socket } = typing();
+    const session: any = {};
+    const lines: string[] = [];
+
+    for (const key of ['W', 'O', 'O', 'F', '\r']) {
+      await collectLine(socket, session, key, (l: string) => { lines.push(l); });
+    }
+
+    expect(lines).toEqual(['WOOF']);
+    expect(session.inputBuffer).toBe('');
+  });
+
+  it('erases on backspace instead of flagging a control code', async () => {
+    const { socket, written, flush } = typing();
+    const session: any = {};
+    const lines: string[] = [];
+
+    for (const key of ['W', 'O', '\x7f', 'K', '\r']) {
+      await collectLine(socket, session, key, (l: string) => { lines.push(l); });
+    }
+    flush();
+
+    expect(lines).toEqual(['WK']);
+    expect(written.join('')).toContain('\b \b');
+  });
+
+  it('echoes what was typed so the prompt line reads back', async () => {
+    const { socket, written, flush } = typing();
+    const session: any = {};
+
+    for (const key of ['A', 'B']) {
+      await collectLine(socket, session, key, () => { /* not reached */ });
+    }
+    flush();
+
+    expect(written.join('')).toBe('AB');
+  });
+});
