@@ -219,7 +219,10 @@ async function execute(session) {
     const viewRip = async (filename) => {
         try {
             const filePath = path.join(RIP_DIR, filename);
-            const content = fs.readFileSync(filePath, 'utf8');
+            // latin1, not utf8: a .RIP file is bytes, and its text commands carry
+            // CP437. Read as UTF-8, every high byte became U+FFFD before it ever
+            // reached the renderer, which decodes one byte per character.
+            const content = fs.readFileSync(filePath, 'latin1');
             // 1. Enter RIP mode AND send content in one go
             // We do NOT call screen.render() here because it would send ANSI text 
             // that the terminal would try to interpret as RIP commands.
