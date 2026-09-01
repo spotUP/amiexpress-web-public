@@ -386,7 +386,6 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
       return RESULT_SUCCESS;
 
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
-    case 'DOOR':
     case 'DOORS': // Door Games Menu - lists doors with arrow key navigation
       await displayDoorMenu(socket, session, params);
       return RESULT_SUCCESS;

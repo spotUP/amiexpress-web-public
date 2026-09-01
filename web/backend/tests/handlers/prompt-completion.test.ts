@@ -231,8 +231,12 @@ describe('pressing TAB again when the first guess was wrong', () => {
   it('still works with a completer door that predates cycling', async () => {
     // completeNth and candidates are optional on the interface; an older
     // door just always answers the first candidate rather than failing.
+    // Whatever that first candidate is, every press gives the same answer -
+    // which is the point being pinned, not the name itself.
     __setCompleterForTests({ ghost: fake.ghost, complete: fake.complete } as any);
-    const { line } = await promptCompleteNth('/unused', 'do', 2);
-    expect(line).toBe('DOOR');
+    const first = (await promptCompleteNth('/unused', 'do', 0)).line;
+    const later = (await promptCompleteNth('/unused', 'do', 2)).line;
+    expect(later).toBe(first);
+    expect(first).not.toBe('do');
   });
 });
