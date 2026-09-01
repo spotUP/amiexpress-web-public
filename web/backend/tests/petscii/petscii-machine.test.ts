@@ -99,4 +99,50 @@ describe('PetsciiMachine', () => {
     expect(m.state.cursorX).toBe(0);
     expect(cell(m, 0, 0)).toBe(0x20);
   });
+
+  it('RETURN on a wrapped multi-row logical line lands below the LAST linked row', () => {
+    const m = new PetsciiMachine();
+    m.feed(new Array(41).fill(0x41)); // fills row 0, wraps 1 char onto row 1
+    expect(m.state.cursorY).toBe(1);
+    m.feed([0x0D]);
+    expect(m.state.cursorY).toBe(2); // below row 1 (the logical line's last row), not row 0's next row
+  });
+
+  it('DELETE at column 0 of a linked continuation row joins the previous row, pulling content left across the boundary', () => {
+    const m = new PetsciiMachine();
+    m.feed(new Array(40).fill(0x41)); // fills row 0 with 'A' (0x01), wraps to row 1
+    m.feed([0x42, 0x43]);             // 'B','C' at row1 col0/col1; cursor now at row1 col2
+    m.feed([0x9D, 0x9D]);             // cursor-left x2: back to row1 col0
+    expect(m.state.cursorX).toBe(0);
+    expect(m.state.cursorY).toBe(1);
+    m.feed([0x14]);                   // DELETE: moves to row0 col39, then pulls row1 left across the boundary
+    expect(m.state.cursorX).toBe(39);
+    expect(m.state.cursorY).toBe(0);
+    expect(cell(m, 39, 0)).toBe(0x02); // 'B' pulled into row0's last cell
+    expect(cell(m, 0, 1)).toBe(0x03);  // 'C' pulled into row1 col0
+    expect(cell(m, 1, 1)).toBe(0x20);  // vacated cell is a space
+  });
+
+  it('scrolling a linked line off the top shifts rowLinked flags together with content', () => {
+    const m = new PetsciiMachine();
+    m.feed(new Array(41).fill(0x41)); // row0 full of 'A', row1 col0 = 'A' (linked continuation), cursorY=1
+    m.feed(new Array(24).fill(0x11)); // 23 downs reach row 24, the 24th triggers exactly one scroll
+    expect(m.state.cursorY).toBe(24);
+    m.feed(new Array(24).fill(0x91)); // back up to the now-top row (former row 1)
+    expect(m.state.cursorY).toBe(0);
+    m.feed([0x0D]);
+    // If scroll had failed to shift the rowLinked table with the content,
+    // a stale rowLinked[1]=true would make RETURN skip an extra row (land
+    // on 2 instead of 1).
+    expect(m.state.cursorY).toBe(1);
+  });
+
+  it('0x8E when already on bank 0 does not fire a full repaint', () => {
+    const m = new PetsciiMachine();
+    let repaints = 0;
+    m.onUpdate = (full) => { if (full) repaints++; };
+    m.feed([0x8E]);
+    expect(m.state.charsetBank).toBe(0);
+    expect(repaints).toBe(0);
+  });
 });
