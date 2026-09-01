@@ -302,3 +302,78 @@ describe('the flag prompt reads a line, not a keystroke', () => {
     expect(written.join('')).toBe('AB');
   });
 });
+
+/**
+ * (F)rom must flag from a file ONWARDS, not just add its name.
+ *
+ * express.e:12634 answers the (F)rom prompt with flagFrom(), which walks
+ * the directory listing and flags the matching file and every file after it
+ * (express.e:12563-12592). The interactive branch called addFlag() instead,
+ * so "F" then a filename did exactly what typing the filename does - the
+ * sysop noticed the result looked wrong.
+ */
+describe('the (F)rom prompt flags from the file onwards', () => {
+  function session() {
+    return {
+      user: { slotNumber: 9, username: 'Guest', securityFlags: 'T'.repeat(120), secOverride: '' },
+      currentConf: 0,
+      subState: 'flag_from_input',
+      tempData: { waitingForFlagFrom: true },
+      flagManager: {
+        added: [] as string[],
+        addFlag(name: string) { this.added.push(name); return true; },
+        save: async () => {},
+        getCount: () => 0,
+        getDisplayString: () => '',
+        clearAll() {},
+        removeFlag: () => false,
+        addFlags: () => 0,
+      },
+    } as any;
+  }
+
+  it('goes through flagFrom, not a bare add', async () => {
+    const { AlterFlagsHandler } = require('../../src/handlers/operations/alter-flags.handler');
+    const s = session();
+    const socket: any = { emit: () => {} };
+
+    const calls: string[] = [];
+    const realFlagFrom = AlterFlagsHandler.flagFrom;
+    AlterFlagsHandler.flagFrom = async (_sock: any, _sess: any, name: string) => {
+      calls.push(name);
+    };
+    try {
+      await AlterFlagsHandler.handleFlagInput(socket, s, 'TEST.MOD');
+    } finally {
+      AlterFlagsHandler.flagFrom = realFlagFrom;
+    }
+
+    expect(calls).toEqual(['TEST.MOD']);
+    // The old behaviour: the name added directly and flagFrom never called.
+    expect(s.flagManager.added).toEqual([]);
+  });
+
+  it('ends the command when the from-prompt is answered with Enter', async () => {
+    const { AlterFlagsHandler } = require('../../src/handlers/operations/alter-flags.handler');
+    const s = session();
+    const socket: any = { emit: () => {} };
+
+    // express.e:12631 - IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS.
+    await AlterFlagsHandler.handleFlagInput(socket, s, '');
+
+    expect(s.subState).toBe('display_menu');
+  });
+
+  it('ends the command when the clear-prompt is answered with Enter', async () => {
+    const { AlterFlagsHandler } = require('../../src/handlers/operations/alter-flags.handler');
+    const s = session();
+    s.subState = 'flag_clear_input';
+    s.tempData = { waitingForClear: true };
+    const socket: any = { emit: () => {} };
+
+    // express.e:12618, the same rule at the (C)lear prompt.
+    await AlterFlagsHandler.handleFlagInput(socket, s, '');
+
+    expect(s.subState).toBe('display_menu');
+  });
+});

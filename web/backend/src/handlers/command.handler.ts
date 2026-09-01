@@ -2848,6 +2848,18 @@ console.log(' In file upload state - canceling upload');
       // lineInput echoes the Enter as a line break - see express.e:30376.
       { echoNewline: true }
     );
+
+    // The command may have just ended. Draw the menu now rather than
+    // leaving DISPLAY_MENU pending, which waits for a keypress to redraw -
+    // reported as "it doesnt exit when i press enter, i have to press
+    // enter twice". The Enter DID exit; nothing had repainted yet. This is
+    // what the empty-command path does for the same reason.
+    // The cast is needed because the callback above changed subState and TS
+    // still has it narrowed to the three flag states from the condition above.
+    if ((session.subState as LoggedOnSubState) === LoggedOnSubState.DISPLAY_MENU) {
+      session.menuPause = false;
+      await menuDisplayMainMenu(socket, session);
+    }
     return;
   }
 
