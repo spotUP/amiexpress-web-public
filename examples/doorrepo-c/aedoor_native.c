@@ -33,6 +33,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include "aedoor.h"
 
@@ -95,6 +98,12 @@ int ae_start(int node)
      * Amiga side output goes through AmiExpress, which has no such
      * buffering, so this has no equivalent there. */
     setvbuf(stdout, (char *) 0, _IONBF, 0);
+    /* Unbuffered stdin too, for ae_input_pending(): select() sees the file
+     * descriptor, not stdio's buffer, so a buffered read would hide the
+     * tail of an escape sequence and a lone ESC would be indistinguishable
+     * from an arrow key - the exact question that function exists to
+     * answer. One byte per read() is a price a scripted run never notices. */
+    setvbuf(stdin, (char *) 0, _IONBF, 0);
     return 0;
 }
 
@@ -179,15 +188,9 @@ void ae_get(char *buf, int maxlen)
     } while (c != '\n' && c != EOF);
 }
 
-/* Always "nothing waiting". The native build has no BBS holding an input
- * queue, and its input is usually a pipe or a line-mode terminal, where
- * "has the user already typed the next key" cannot be answered without
- * putting the terminal into raw mode - which this backend deliberately does
- * not do, since it exists to drive the door from scripts.
- *
- * Reporting 0 is the honest answer AND the safe one: a door using this to
- * defer expensive work simply never defers, and behaves exactly as it did
- * before the call existed. */
+/* No wait here: the pending check below carries its own short grace
+ * period, and a scripted run always has its next byte (or its end) ready,
+ * so a sleep would only slow the tests down. */
 void ae_delay_ticks(int ticks)
 {
     /* Nothing to wait for: this backend never reports pending input, so a
@@ -195,9 +198,37 @@ void ae_delay_ticks(int ticks)
     (void) ticks;
 }
 
+/* "Has the next byte already arrived?" - answered the way the BBS answers
+ * GETKEY: without consuming it. This used to report a flat 0, which was
+ * honest for a line-mode terminal but made the native twin diverge from the
+ * Amiga backend the moment the door started reading a lone ESC as a key:
+ * every scripted arrow sequence would have decoded as ESC, ESC, ESC.
+ *
+ * select() waits up to two ticks for the descriptor - the same grace the
+ * door gives the real BBS - then one byte is peeked with getchar()/ungetc()
+ * so that end-of-file reads as "nothing pending" rather than as a byte.
+ * ungetc() of one character is guaranteed by C89, and stdin is unbuffered
+ * (ae_start) so the descriptor and the stream agree. */
 int ae_input_pending(void)
 {
-    return 0;
+    fd_set readable;
+    struct timeval grace;
+    int fd = fileno(stdin);
+    int c;
+
+    FD_ZERO(&readable);
+    FD_SET(fd, &readable);
+    grace.tv_sec = 0;
+    grace.tv_usec = 40000;                     /* 2 ticks of 1/50 s */
+    if (select(fd + 1, &readable, (fd_set *) 0, (fd_set *) 0, &grace) <= 0) {
+        return 0;
+    }
+    c = getchar();
+    if (c == EOF) {
+        return 0;
+    }
+    ungetc(c, stdin);
+    return 1;
 }
 
 int ae_key(void)

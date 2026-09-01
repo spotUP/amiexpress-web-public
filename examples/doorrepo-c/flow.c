@@ -1550,6 +1550,60 @@ int flow_key_ends_session(int key)
     return (key < 0) ? 1 : 0;
 }
 
+int flow_decode_escape(const flow_key_source *src, int *pushback)
+{
+    int c;
+
+    *pushback = -1;
+
+    /* Give the rest of a sequence time to arrive, then ask - without
+     * consuming - whether anything did. Nothing queued means the user
+     * pressed ESC and nothing else. */
+    if (src->settle != (void (*)(void *)) 0) {
+        src->settle(src->ctx);
+    }
+    if (!src->pending(src->ctx)) {
+        return FLOW_KEY_ESC;
+    }
+
+    c = src->next(src->ctx);
+    if (c < 0) {
+        return c;
+    }
+    if (c != '[' && c != 'O') {
+        /* ESC followed by an ordinary key: two keystrokes, not one
+         * sequence. The second one is handed back, not eaten. */
+        *pushback = c;
+        return FLOW_KEY_ESC;
+    }
+
+    c = src->next(src->ctx);
+    if (c < 0) {
+        return c;
+    }
+    switch (c) {
+    case 'A': return FLOW_KEY_UP;
+    case 'B': return FLOW_KEY_DOWN;
+    case 'C': return FLOW_KEY_PGDN;
+    case 'D': return FLOW_KEY_PGUP;
+    case 'H': return FLOW_KEY_HOME;
+    case 'F': return FLOW_KEY_END;
+    case '5': case '6': case '1': case '4': {
+        /* ESC [ n ~ : the tilde is part of the sequence. */
+        int t = src->next(src->ctx);
+        if (t < 0) {
+            return t;
+        }
+        if (c == '5') return FLOW_KEY_PGUP;
+        if (c == '6') return FLOW_KEY_PGDN;
+        if (c == '1') return FLOW_KEY_HOME;
+        return FLOW_KEY_END;
+    }
+    default:
+        return 0;
+    }
+}
+
 /* ---- Install index -----------------------------------------------------
  *
  * See flow.h for why this file exists at all. Pure line formatting and

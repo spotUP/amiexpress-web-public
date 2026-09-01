@@ -3334,9 +3334,137 @@ TEST(the_whole_notice_stream_survives_being_chunked)
     ASSERT_EQ(splits, 0, "no chunk ends part-way through a sequence");
 }
 
+/* ---- flow_decode_escape: a lone ESC is a key, a sequence is a sequence --
+ *
+ * A scripted byte source standing in for the door layer: next() hands out
+ * the script, pending() says whether any of it is left, settle() counts. */
+typedef struct {
+    const int *bytes;
+    int n;
+    int pos;
+    int pending_calls;
+    int settle_calls;
+} fake_keys;
+
+static int fake_keys_next(void *ctx)
+{
+    fake_keys *f = (fake_keys *) ctx;
+    return (f->pos < f->n) ? f->bytes[f->pos++] : -1;
+}
+
+static int fake_keys_pending(void *ctx)
+{
+    fake_keys *f = (fake_keys *) ctx;
+    f->pending_calls++;
+    return (f->pos < f->n) ? 1 : 0;
+}
+
+static void fake_keys_settle(void *ctx)
+{
+    ((fake_keys *) ctx)->settle_calls++;
+}
+
+static flow_key_source fake_source(fake_keys *f, const int *bytes, int n)
+{
+    flow_key_source src;
+    f->bytes = bytes;
+    f->n = n;
+    f->pos = 0;
+    f->pending_calls = 0;
+    f->settle_calls = 0;
+    src.next = fake_keys_next;
+    src.pending = fake_keys_pending;
+    src.settle = fake_keys_settle;
+    src.ctx = f;
+    return src;
+}
+
+static void test_decode_escape_lone_esc_is_the_esc_key(void)
+{
+    fake_keys f;
+    flow_key_source src = fake_source(&f, (const int *) 0, 0);
+    int push = 99;
+    int key = flow_decode_escape(&src, &push);
+    ASSERT_EQ(key, FLOW_KEY_ESC, "nothing after ESC decodes as ESC");
+    ASSERT_EQ(push, -1, "nothing to hand back");
+    ASSERT_EQ(f.settle_calls, 1, "it waited once before deciding");
+    ASSERT_EQ(f.pending_calls, 1, "it asked once, and did not block on next()");
+}
+
+static void test_decode_escape_reads_csi_arrows(void)
+{
+    static const int up[] = { '[', 'A' };
+    static const int down[] = { '[', 'B' };
+    static const int ss3_right[] = { 'O', 'C' };
+    fake_keys f;
+    flow_key_source src;
+    int push;
+
+    src = fake_source(&f, up, 2);
+    ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_UP, "ESC [ A is up");
+    ASSERT_EQ(f.pos, 2, "both bytes consumed");
+    src = fake_source(&f, down, 2);
+    ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_DOWN, "ESC [ B is down");
+    src = fake_source(&f, ss3_right, 2);
+    ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_PGDN, "ESC O C is right/page down");
+    ASSERT_EQ(push, -1, "a sequence hands nothing back");
+}
+
+static void test_decode_escape_reads_tilde_sequences(void)
+{
+    static const int pgup[] = { '[', '5', '~' };
+    static const int end[] = { '[', '4', '~' };
+    fake_keys f;
+    flow_key_source src;
+    int push;
+
+    src = fake_source(&f, pgup, 3);
+    ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_PGUP, "ESC [ 5 ~ is page up");
+    ASSERT_EQ(f.pos, 3, "the tilde is consumed with the sequence");
+    src = fake_source(&f, end, 3);
+    ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_END, "ESC [ 4 ~ is end");
+}
+
+static void test_decode_escape_hands_back_the_key_after_a_fast_esc(void)
+{
+    static const int esc_q[] = { 'q' };
+    fake_keys f;
+    flow_key_source src = fake_source(&f, esc_q, 1);
+    int push = -1;
+    int key = flow_decode_escape(&src, &push);
+    ASSERT_EQ(key, FLOW_KEY_ESC, "ESC then q is ESC first");
+    ASSERT_EQ(push, 'q', "and the q is handed back, not swallowed");
+}
+
+static void test_decode_escape_reports_a_lost_user(void)
+{
+    static const int half[] = { '[' };
+    fake_keys f;
+    flow_key_source src = fake_source(&f, half, 1);
+    int push;
+    ASSERT_TRUE(flow_key_ends_session(flow_decode_escape(&src, &push)),
+                "carrier loss mid-sequence ends the session, not the sequence");
+}
+
+static void test_decode_escape_unknown_sequence_is_no_key(void)
+{
+    static const int odd[] = { '[', 'Z' };
+    fake_keys f;
+    flow_key_source src = fake_source(&f, odd, 2);
+    int push;
+    ASSERT_EQ(flow_decode_escape(&src, &push), 0, "an unknown CSI final byte is no key");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
+
+    RUN_TEST(decode_escape_lone_esc_is_the_esc_key);
+    RUN_TEST(decode_escape_reads_csi_arrows);
+    RUN_TEST(decode_escape_reads_tilde_sequences);
+    RUN_TEST(decode_escape_hands_back_the_key_after_a_fast_esc);
+    RUN_TEST(decode_escape_reports_a_lost_user);
+    RUN_TEST(decode_escape_unknown_sequence_is_no_key);
 
     RUN_TEST(index_line_round_trips);
     RUN_TEST(index_line_handles_real_archive_names);

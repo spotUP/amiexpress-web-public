@@ -111,6 +111,9 @@ static void feed_stdin(const char *content)
     fflush(stdin);
     saved_stdin_fd = dup(fileno(stdin));
     freopen(STDIN_FEED_PATH, "r", stdin);
+    /* freopen() resets buffering; ae_start() makes stdin unbuffered so that
+     * ae_input_pending()'s select() sees what the stream sees. Mirror it. */
+    setvbuf(stdin, (char *) 0, _IONBF, 0);
 }
 
 static void restore_stdin(void)
@@ -485,6 +488,28 @@ TEST(fatal_exits_process_with_given_code)
     ASSERT_EQ(WEXITSTATUS(status), 7, "ae_fatal's code reaches the process exit status");
 }
 
+/* ae_input_pending() is the door's clock for telling a lone ESC from an
+ * arrow sequence, so the native twin must answer it like the BBS does:
+ * truthfully, and without consuming anything. */
+static void test_input_pending_sees_a_queued_byte_without_eating_it(void)
+{
+    feed_stdin("\033[A");
+    ASSERT_EQ(ae_key(), 27, "the ESC is read");
+    ASSERT_EQ(ae_input_pending(), 1, "the rest of the sequence is pending");
+    ASSERT_EQ(ae_key(), '[', "pending did not consume the bracket");
+    ASSERT_EQ(ae_key(), 'A', "nor the final byte");
+    restore_stdin();
+}
+
+static void test_input_pending_is_quiet_after_a_lone_esc(void)
+{
+    feed_stdin("\033");
+    ASSERT_EQ(ae_key(), 27, "the ESC is read");
+    ASSERT_EQ(ae_input_pending(), 0, "nothing follows a lone ESC");
+    ASSERT_EQ(ae_key(), -1, "and the stream is at its end");
+    restore_stdin();
+}
+
 int main(void)
 {
     printf("\n====== aedoor_native Tests ======\n\n");
@@ -507,6 +532,8 @@ int main(void)
     RUN_TEST(get_on_eof_yields_empty_string);
     RUN_TEST(key_reads_single_char);
     RUN_TEST(key_returns_minus1_on_eof);
+    RUN_TEST(input_pending_sees_a_queued_byte_without_eating_it);
+    RUN_TEST(input_pending_is_quiet_after_a_lone_esc);
     RUN_TEST(raw_arrows_is_a_harmless_noop_natively);
     RUN_TEST(check_is_always_zero_natively);
     RUN_TEST(start_returns_zero);

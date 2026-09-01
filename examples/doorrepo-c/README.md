@@ -463,10 +463,14 @@ detail pane mark a door installed as a BBS command; `*` and `[downloaded]`
 mark an archive merely present in `DownloadDir`. The header counts the
 installed ones.
 
-`ESC` is deliberately not a binding. A lone ESC cannot be told apart from the
-start of an arrow-key sequence without a timer, and arrow keys reach a door as
-single bytes anyway under AmiExpress (2/3/4/5, per `express.e:7514-7528`) --
-so `Q` is the one documented way out.
+`ESC` is "back" on every sub-screen (installed doors, board, history, files,
+help, the filter box) and "quit" on the catalog list; `Q` still does the same.
+A lone ESC is told apart from the start of an arrow-key sequence by waiting
+two ticks and asking the BBS whether more bytes are queued (`GETKEY`, which
+does not consume) - `flow_decode_escape()` in `flow.c`, unit-tested in
+`tests/test_flow.c`. Before that clock existed the door had no ESC binding
+and blocked on the byte after an ESC, so pressing ESC swallowed the next key
+and delivered that instead: ESC then `Q` on a sub-screen fell out of the door.
 
 **Terminals that cannot do ANSI:** set `Ansi=no` in `DoorRepo.cfg` and the
 door falls back to the original line-at-a-time listing, which needs nothing

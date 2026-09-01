@@ -91,8 +91,10 @@ int ae_key(void);
  * every queued key before redrawing, so the screen never moved while the user
  * was pressing keys.
  *
- * The native backend always reports 0: there is no BBS holding an input
- * queue, so a door simply never defers anything. */
+ * The native backend answers from stdin itself: select() with a two-tick
+ * grace, then a one-byte peek that is put back. It has to be real, not a
+ * flat 0, because the door reads a lone ESC as a key and tells it from an
+ * arrow sequence with exactly this call (flow_decode_escape). */
 int ae_input_pending(void);
 
 /* Sleep for `ticks` fiftieths of a second (dos.library Delay()).
@@ -103,8 +105,9 @@ int ae_input_pending(void);
  * is the AmigaOS way to wait without burning the CPU, and this project's
  * emulator honours it (the door is descheduled rather than spun).
  *
- * The native backend returns immediately: it has no BBS, reports no pending
- * input, and exists to be driven by scripts that should not be slowed. */
+ * The native backend returns immediately: its ae_input_pending() carries
+ * its own grace period, and it exists to be driven by scripts that should
+ * not be slowed. */
 void ae_delay_ticks(int ticks);
 
 /* CheckMessage equivalent (AEDoor.c CheckMessage(), lines 154-183), but
