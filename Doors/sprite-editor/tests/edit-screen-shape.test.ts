@@ -112,3 +112,27 @@ export async function theTypingExclusionListIncludesShiftedDeleteAnimation(): Pr
   assert.ok(code.includes("keys: ['S-x']"),
     "the delete-animation binding must still bind S-x, whose derived glyph 'X' keeps it out of cell-typing");
 }
+
+/**
+ * Studio 2c: percent geometry is gone, replaced by layout.ts's integer
+ * LAYOUT.edit - see layout.test.ts / app-shape.test.ts for the same pin
+ * on the browser screen, and the task-2 report for the double-border
+ * root-cause arithmetic this eliminates.
+ */
+export async function theEditScreenUsesIntegerLayoutNotPercent(): Promise<void> {
+  const percents = (code.match(/width: '\d+%'/g) || []).length +
+                   (code.match(/height: '\d+%'/g) || []).length +
+                   (code.match(/top: '\d+%'/g) || []).length +
+                   (code.match(/left: '\d+%'/g) || []).length +
+                   (code.match(/bottom:\s*0/g) || []).length;
+  assert.strictEqual(percents, 0, `no pane may use percent geometry or bottom:0 any more, found ${percents}`);
+  assert.ok(code.includes("from './layout'") && code.includes('LAYOUT.edit'),
+    'the edit screen must source its pane geometry from layout.ts\'s LAYOUT');
+}
+
+/** Studio 2c: a menu bar on the edit screen too, from the same binding table. */
+export async function theEditScreenHasAMenuBarBuiltFromTheBindingSet(): Promise<void> {
+  assert.ok(code.includes('createStudioMenuBar(this.screen, this.bindingSet.menuItems())'),
+    'the edit screen menu bar must be built from the same BindingSet the hotkeys use - ' +
+    'one dispatch path, not two');
+}

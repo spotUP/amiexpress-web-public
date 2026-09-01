@@ -19,6 +19,8 @@ const edit_doc_1 = require("./edit-doc");
 const assets_1 = require("./assets");
 const preview_1 = require("./preview");
 const bindings_1 = require("./bindings");
+const layout_1 = require("./layout");
+const menu_1 = require("./menu");
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
 const DISCARD_WINDOW_MS = 3000;
@@ -40,14 +42,21 @@ class EditScreen {
         this.framesBox = null;
         this.paletteBox = null;
         this.statusBar = null;
+        this.menuBar = null;
         this.keyHandlers = [];
         this.screen = screen;
         this.door = door;
         this.file = file;
         this.onExit = onExit;
         this.doc = (0, edit_doc_1.openDoc)(sprite);
-        this.buildLayout();
+        // bindKeys() first: it builds this.bindingSet, which buildLayout()
+        // needs to hand the menu bar its items. Neither touches a widget at
+        // call time (handlers are closures, evaluated only once invoked), so
+        // the reorder is safe - screen.children order (and every index the
+        // behavior tests pin) is decided solely by buildLayout()'s own
+        // box-creation order, which is unchanged.
         this.bindKeys();
+        this.buildLayout();
         this.playback = setInterval(() => {
             this.tick++;
             this.paintPreview();
@@ -55,38 +64,43 @@ class EditScreen {
         this.paint();
     }
     buildLayout() {
+        const { canvas, preview, frames, toolbar, status } = layout_1.LAYOUT.edit;
         this.canvasBox = blessed_1.default.box({
             parent: this.screen,
-            top: 0, left: 0, width: '55%', height: '90%',
+            top: canvas.top, left: canvas.left, width: canvas.width, height: canvas.height,
             label: ' Canvas ',
             border: { type: 'line' }, tags: true,
             style: { border: { fg: 'lightyellow' } },
         });
         this.previewBox = blessed_1.default.box({
             parent: this.screen,
-            top: 0, left: '55%', width: '45%', height: '45%',
+            top: preview.top, left: preview.left, width: preview.width, height: preview.height,
             label: ' Preview ',
             border: { type: 'line' }, tags: true,
             style: { border: { fg: 'green' } },
         });
         this.framesBox = blessed_1.default.box({
             parent: this.screen,
-            top: '45%', left: '55%', width: '45%', height: '30%',
+            top: frames.top, left: frames.left, width: frames.width, height: frames.height,
             label: ' Frames ',
             border: { type: 'line' }, tags: true,
             style: { border: { fg: 'cyan' } },
         });
         this.paletteBox = blessed_1.default.box({
             parent: this.screen,
-            top: '75%', left: '55%', width: '45%', height: '15%',
+            top: toolbar.top, left: toolbar.left, width: toolbar.width, height: toolbar.height,
             label: ' Paint ',
             border: { type: 'line' }, tags: true,
             style: { border: { fg: 'cyan' } },
         });
         this.statusBar = blessed_1.default.box({
             parent: this.screen,
-            bottom: 0, left: 0, width: '100%', height: 1, tags: true,
+            top: status.top, left: status.left, width: status.width, height: status.height, tags: true,
         });
+        // Created LAST so the five indices above (canvasBox..statusBar) keep
+        // the exact screen.children[N] positions edit-screen-behavior.test.ts
+        // pins - the menu bar is purely additive.
+        this.menuBar = (0, menu_1.createStudioMenuBar)(this.screen, this.bindingSet.menuItems());
     }
     /** Bind one screen-key group, remembered so destroy can remove it. */
     key(keys, handler) {
@@ -123,15 +137,20 @@ class EditScreen {
      */
     buildOpBindings() {
         return [
-            { id: 'cursor.up', keys: ['up'], hotkeyHint: 'up', menu: 'View', label: 'Move Up',
+            // Cursor movement, cell/pixel mode, and the paint tool's own
+            // glyph/fg/bg settings all group under one 'Mode' menu: they are
+            // the controls for what happens when the paint key runs next,
+            // which is the same reason the studio-2c menu plan names it
+            // 'Mode' rather than splitting it into a 'View' and a 'Paint'.
+            { id: 'cursor.up', keys: ['up'], hotkeyHint: 'up', menu: 'Mode', label: 'Move Up',
                 handler: () => this.moveCursor(-1, 0) },
-            { id: 'cursor.down', keys: ['down'], hotkeyHint: 'down', menu: 'View', label: 'Move Down',
+            { id: 'cursor.down', keys: ['down'], hotkeyHint: 'down', menu: 'Mode', label: 'Move Down',
                 handler: () => this.moveCursor(1, 0) },
-            { id: 'cursor.left', keys: ['left'], hotkeyHint: 'left', menu: 'View', label: 'Move Left',
+            { id: 'cursor.left', keys: ['left'], hotkeyHint: 'left', menu: 'Mode', label: 'Move Left',
                 handler: () => this.moveCursor(0, -1) },
-            { id: 'cursor.right', keys: ['right'], hotkeyHint: 'right', menu: 'View', label: 'Move Right',
+            { id: 'cursor.right', keys: ['right'], hotkeyHint: 'right', menu: 'Mode', label: 'Move Right',
                 handler: () => this.moveCursor(0, 1) },
-            { id: 'view.toggleMode', keys: ['tab'], hotkeyHint: 'tab', menu: 'View', label: 'Toggle Cell/Pixel Mode',
+            { id: 'view.toggleMode', keys: ['tab'], hotkeyHint: 'tab', menu: 'Mode', label: 'Toggle Cell/Pixel Mode',
                 handler: () => {
                     if (this.mode === 'cell' && (0, edit_doc_1.frameIsPixelEditable)(this.doc)) {
                         this.mode = 'pixel';
@@ -144,15 +163,15 @@ class EditScreen {
                     }
                     this.paint();
                 } },
-            { id: 'paint.nextGlyph', keys: ['g'], hotkeyHint: 'g', menu: 'Paint', label: 'Next Glyph',
+            { id: 'paint.nextGlyph', keys: ['g'], hotkeyHint: 'g', menu: 'Mode', label: 'Next Glyph',
                 handler: () => { this.glyph = (this.glyph + 1) % GLYPHS.length; this.paint(); } },
-            { id: 'paint.nextFg', keys: ['f'], hotkeyHint: 'f', menu: 'Paint', label: 'Next Foreground',
+            { id: 'paint.nextFg', keys: ['f'], hotkeyHint: 'f', menu: 'Mode', label: 'Next Foreground',
                 handler: () => { this.fg = (this.fg + 1) % 16; this.paint(); } },
-            { id: 'paint.prevFg', keys: ['S-f'], hotkeyHint: 'S-f', menu: 'Paint', label: 'Previous Foreground',
+            { id: 'paint.prevFg', keys: ['S-f'], hotkeyHint: 'S-f', menu: 'Mode', label: 'Previous Foreground',
                 handler: () => { this.fg = (this.fg + 15) % 16; this.paint(); } },
-            { id: 'paint.nextBg', keys: ['b'], hotkeyHint: 'b', menu: 'Paint', label: 'Next Background',
+            { id: 'paint.nextBg', keys: ['b'], hotkeyHint: 'b', menu: 'Mode', label: 'Next Background',
                 handler: () => { this.bg = (this.bg + 1) % 16; this.paint(); } },
-            { id: 'paint.prevBg', keys: ['S-b'], hotkeyHint: 'S-b', menu: 'Paint', label: 'Previous Background',
+            { id: 'paint.prevBg', keys: ['S-b'], hotkeyHint: 'S-b', menu: 'Mode', label: 'Previous Background',
                 handler: () => { this.bg = (this.bg + 15) % 16; this.paint(); } },
             { id: 'frame.prev', keys: [','], hotkeyHint: ',', menu: 'Frame', label: 'Previous Frame',
                 handler: () => this.apply((0, edit_doc_1.selectFrame)(this.doc, this.doc.frame - 1)) },
@@ -186,6 +205,15 @@ class EditScreen {
                 handler: () => this.tryOp(() => (0, edit_doc_1.deleteAnimation)(this.doc)) },
             { id: 'file.save', keys: ['s'], hotkeyHint: 's', menu: 'File', label: 'Save',
                 handler: () => this.save() },
+            // Menu-only (keys: [] - the pattern bindings.ts/anEmptyKeysBindingIsMenuOnly
+            // pins): reuses the existing statusFlash+paint plumbing every other
+            // op's refusal already uses, so there is no new display mechanism,
+            // just a Help menu entry that fills it in.
+            { id: 'studio.help', keys: [], hotkeyHint: '', menu: 'Help', label: 'Keyboard Shortcuts',
+                handler: () => {
+                    this.statusFlash = 'g/f/S-f/b/S-b paint  n/c/x/S-,/S-. frames  a/+/t/S-t/l/S-x animation  TAB mode  s save  ESC back';
+                    this.paint();
+                } },
         ];
     }
     bindKeys() {
@@ -395,10 +423,10 @@ class EditScreen {
         }
         this.keyHandlers = [];
         for (const widget of [this.canvasBox, this.previewBox, this.framesBox,
-            this.paletteBox, this.statusBar]) {
+            this.paletteBox, this.statusBar, this.menuBar]) {
             widget?.destroy();
         }
-        this.canvasBox = this.previewBox = this.framesBox = this.paletteBox = this.statusBar = null;
+        this.canvasBox = this.previewBox = this.framesBox = this.paletteBox = this.statusBar = this.menuBar = null;
     }
 }
 exports.EditScreen = EditScreen;

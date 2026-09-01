@@ -1,17 +1,19 @@
 /**
  * Sprite Studio - the browser + preview UI.
  *
- * Layout (percentage-based, reflowing on the backend's screen:resize the
- * way livechat does):
+ * Layout (Studio 2c: integer rows/cols from layout.ts's LAYOUT.browser -
+ * no percent strings; see layout.ts's comment for why the old percent
+ * layout was unsafe):
  *
+ *   row 0:  menu bar
  *   +----------------+----------------+--------------------------------+
- *   | DOORS 25%      | SPRITES 25%    | PREVIEW (rest)                 |
+ *   | DOORS          | SPRITES        | PREVIEW (rest)                 |
  *   |                +----------------+  the selected animation,       |
  *   |                | ANIMATIONS     |  playing at its own speed,     |
  *   |                |                |  fat pixels (scale 2)          |
  *   +----------------+----------------+--------------------------------+
- *   | status: door/sprite/animation | TAB panes  ARROWS move  Q quit   |
- *   +-------------------------------------------------------------------+
+ *   rows 20-23: reserved headroom (future floating/minimized panels)
+ *   row 24: status: door/sprite/animation | TAB panes  ARROWS move  Q quit
  *
  * All selection logic lives in browser-model (tested); all pixels live in
  * preview (tested). This file is glue and stays that way.
@@ -29,6 +31,8 @@ import { EditScreen } from './edit-screen';
 import { ArtSession } from './art-screen';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
+import { LAYOUT } from './layout';
+import { createStudioMenuBar } from './menu';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
@@ -44,6 +48,9 @@ export class StudioApp {
   private animationsList: any = null;
   private previewBox: any = null;
   private statusBar: any = null;
+  private menuBar: any = null;
+  /** Double-click gate for the sprites list - see wireMouseSelection(). */
+  private lastSpriteClick: { index: number; at: number } = { index: -1, at: 0 };
 
   private playback: ReturnType<typeof setInterval> | null = null;
   /** Resolves start()'s stay-alive promise; the door exits when it fires. */
@@ -78,8 +85,12 @@ export class StudioApp {
     this.inputManager.enable();
 
     this.state = initialState();
-    this.buildLayout();
+    // bindKeys() first: it builds this.bindingSet, which buildLayout()
+    // needs for the menu bar's items. See EditScreen's constructor for
+    // the identical reasoning (neither call touches a widget).
     this.bindKeys();
+    this.buildLayout();
+    this.wireMouseSelection();
     this.refresh();
 
     // The playback loop only advances the tick; previewLines owns what a
@@ -102,12 +113,17 @@ export class StudioApp {
   }
 
   private buildLayout(): void {
+    const { doors, sprites, animations, preview, status } = LAYOUT.browser;
     this.doorsList = blessed.list({
       parent: this.screen,
-      top: 0, left: 0, width: '25%', height: '90%',
+      top: doors.top, left: doors.left, width: doors.width, height: doors.height,
       label: ' Doors ',
       border: { type: 'line' },
-      tags: true, keys: false, mouse: false,
+      // keys stay off: the door drives every key through the screen (see
+      // the class comment on buildBindings), so a widget's own keys never
+      // fire. mouse:true is new (Studio 2c): click-to-select, wired below
+      // in wireMouseSelection() through the SAME handlers as arrow/enter.
+      tags: true, keys: false, mouse: true,
       style: {
         border: { fg: 'cyan' },
         selected: { bg: 'blue', fg: 'lightyellow', bold: true },
@@ -116,10 +132,10 @@ export class StudioApp {
     });
     this.spritesList = blessed.list({
       parent: this.screen,
-      top: 0, left: '25%', width: '25%', height: '45%',
+      top: sprites.top, left: sprites.left, width: sprites.width, height: sprites.height,
       label: ' Sprites ',
       border: { type: 'line' },
-      tags: true, keys: false, mouse: false,
+      tags: true, keys: false, mouse: true,
       style: {
         border: { fg: 'cyan' },
         selected: { bg: 'blue', fg: 'lightyellow', bold: true },
@@ -128,10 +144,10 @@ export class StudioApp {
     });
     this.animationsList = blessed.list({
       parent: this.screen,
-      top: '45%', left: '25%', width: '25%', height: '45%',
+      top: animations.top, left: animations.left, width: animations.width, height: animations.height,
       label: ' Animations ',
       border: { type: 'line' },
-      tags: true, keys: false, mouse: false,
+      tags: true, keys: false, mouse: true,
       style: {
         border: { fg: 'cyan' },
         selected: { bg: 'blue', fg: 'lightyellow', bold: true },
@@ -140,16 +156,68 @@ export class StudioApp {
     });
     this.previewBox = blessed.box({
       parent: this.screen,
-      top: 0, left: '50%', width: '50%', height: '90%',
+      top: preview.top, left: preview.left, width: preview.width, height: preview.height,
       label: ' Preview ',
       border: { type: 'line' },
-      tags: true,
+      tags: true, mouse: true,
       style: { border: { fg: 'green' } },
     });
     this.statusBar = blessed.box({
       parent: this.screen,
-      bottom: 0, left: 0, width: '100%', height: 1,
+      top: status.top, left: status.left, width: status.width, height: status.height,
       tags: true,
+    });
+    // Created LAST, purely additive - no existing screen.children[N]
+    // index shifts under it.
+    this.menuBar = createStudioMenuBar(this.screen, this.bindingSet.menuItems());
+  }
+
+  /**
+   * Browser mouse selection (Studio 2c). No new selection logic: a click
+   * on a row reuses moveSelection/cyclePane through this.apply(), the
+   * exact path arrow keys already take, and a double-click on a sprite
+   * calls the SAME 'studio.edit' binding handler 'e' invokes - found by
+   * id in this.bindingSet.bindings, not a second copy of the handler.
+   */
+  private wireMouseSelection(): void {
+    const PANE_ORDER: BrowserState['pane'][] = ['doors', 'sprites', 'animations'];
+
+    /** Step this.state to the target pane using ONLY cyclePane, forward. */
+    const focusPane = (pane: BrowserState['pane']): void => {
+      const steps = (PANE_ORDER.indexOf(pane) - PANE_ORDER.indexOf(this.state.pane) + 3) % 3;
+      for (let i = 0; i < steps; i++) this.apply(cyclePane(this.state, 1));
+    };
+
+    const wirePane = (list: any, pane: BrowserState['pane'], indexOf: (s: BrowserState) => number): void => {
+      list.on('select', (_item: string, clickedIndex: number) => {
+        if (this.editScreen || this.artSession) return;
+        focusPane(pane);
+        const indexDelta = clickedIndex - indexOf(this.state);
+        if (indexDelta !== 0) this.apply(moveSelection(this.state, indexDelta));
+      });
+    };
+    wirePane(this.doorsList, 'doors', (s) => s.doorIndex);
+    wirePane(this.animationsList, 'animations', (s) => s.animationIndex);
+
+    // Sprites gets the same click-to-select PLUS a hand-rolled double-
+    // click gate (this SDK's List has no built-in dblclick - see
+    // dockable-panel.ts's identical closure-timestamp pattern) that opens
+    // the editor through the exact 'e' binding handler (found by id, the
+    // same function reference the 'e' key already dispatches - not a
+    // second copy of it).
+    this.spritesList.on('select', (_item: string, clickedIndex: number) => {
+      if (this.editScreen || this.artSession) return;
+      focusPane('sprites');
+      const indexDelta = clickedIndex - this.state.spriteIndex;
+      if (indexDelta !== 0) this.apply(moveSelection(this.state, indexDelta));
+
+      const now = Date.now();
+      const isDoubleClick = clickedIndex === this.lastSpriteClick.index &&
+        now - this.lastSpriteClick.at < 400;
+      this.lastSpriteClick = { index: clickedIndex, at: now };
+      if (isDoubleClick) {
+        this.bindingSet.bindings.find(b => b.id === 'studio.edit')?.handler();
+      }
     });
   }
 
@@ -163,6 +231,13 @@ export class StudioApp {
    */
   private buildBindings(): StudioBinding[] {
     return [
+      // Pane/selection movement - how every door, sprite, and animation
+      // gets reached - groups under 'Sprite' below alongside the two
+      // things you actually DO with the current selection (studio-2c's
+      // menu plan asked for 'Sprite'/'Animation'/'Help'; there is no
+      // animation-only action distinct from these, so a 'Navigate' menu
+      // is the honest label rather than an 'Animation' menu whose only
+      // items are generic cursor movement).
       { id: 'nav.up', keys: ['up', 'k'], hotkeyHint: 'up/k', menu: 'Navigate', label: 'Move Up',
         handler: () => this.apply(moveSelection(this.state, -1)) },
       { id: 'nav.down', keys: ['down', 'j'], hotkeyHint: 'down/j', menu: 'Navigate', label: 'Move Down',
@@ -175,13 +250,13 @@ export class StudioApp {
         handler: () => this.apply(cyclePane(this.state, 1)) },
       { id: 'nav.panePrev', keys: ['S-tab', 'left'], hotkeyHint: 'S-tab', menu: 'Navigate', label: 'Previous Pane',
         handler: () => this.apply(cyclePane(this.state, -1)) },
-      { id: 'studio.quit', keys: ['q', 'escape', 'C-c'], hotkeyHint: 'q', menu: 'Studio', label: 'Quit',
+      { id: 'studio.quit', keys: ['q', 'escape', 'C-c'], hotkeyHint: 'q', menu: 'Sprite', label: 'Quit',
         handler: () => {
           if (this.editScreen || this.artSession) return;
           this.destroy();
           void this.ctx.close();
         } },
-      { id: 'studio.edit', keys: ['e'], hotkeyHint: 'e', menu: 'Studio', label: 'Edit Sprite',
+      { id: 'studio.edit', keys: ['e'], hotkeyHint: 'e', menu: 'Sprite', label: 'Edit Sprite',
         handler: () => {
           const sel = selection(this.state);
           const sprite = this.currentSprite();
@@ -202,7 +277,7 @@ export class StudioApp {
             this.refresh();
           });
         } },
-      { id: 'studio.artMode', keys: ['m'], hotkeyHint: 'm', menu: 'Studio', label: 'Art Mode',
+      { id: 'studio.artMode', keys: ['m'], hotkeyHint: 'm', menu: 'Sprite', label: 'Art Mode',
         handler: () => {
           const sel = selection(this.state);
           if (!sel.door || this.editScreen || this.artSession) return;
@@ -222,6 +297,17 @@ export class StudioApp {
             this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
             this.refresh();
           });
+        } },
+
+      // Menu-only (keys: []): writes straight to the existing status bar
+      // widget, the same way refresh() already does, rather than adding a
+      // new flash/state mechanism this browser doesn't otherwise have.
+      { id: 'studio.help', keys: [], hotkeyHint: '', menu: 'Help', label: 'Keyboard Shortcuts',
+        handler: () => {
+          this.statusBar.setContent(
+            '{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}'
+          );
+          this.screen.render();
         } },
     ];
   }
