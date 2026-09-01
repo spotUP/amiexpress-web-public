@@ -1408,36 +1408,13 @@ console.log('[handleCommand] ANSI prompt input ignored until screen command comp
         const answer = (session.tempData?.inputBuffer || '').toUpperCase();
 console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
 
-        // express.e:29538-29546 - Check for specific letters in the string
-        // Default (empty/just Enter) = ANSI enabled
-        const hasN = answer.includes('N'); // No graphics
-        const hasR = answer.includes('R'); // RIP mode
-        const hasP = answer.includes('P'); // PETSCII mode
-        const hasQ = answer.includes('Q'); // Quick logon
+        // express.e:29538-29546 - one shared implementation; the copy that
+        // used to live here set only tempData.ripMode "for future use", so
+        // answering R never reached the screen loader.
+        const { applyGraphicsAnswer } = require('./command-handler/pre-login');
+        applyGraphicsAnswer(socket, session, answer);
 
-        // express.e:29538-29539 - If 'N' in string, disable ANSI
-        session.ansiEnabled = !hasN;
-
-        // express.e:29543-29544 - Quick logon flag (for future use)
-        if (hasQ) {
-          session.tempData.quickLogon = true;
-        }
-
-        // express.e:29545 - RIP mode flag (for future use)
-        if (hasR) {
-          session.tempData.ripMode = true;
-        }
-
-        // PETSCII mode - C64/128 terminal mode (40x25 display, .seq files)
-        if (hasP) {
-          session.petsciiMode = true;
-          session.ansiEnabled = true; // PETSCII needs ANSI codes
-          session.tempData.termWidth = 40;
-          session.tempData.termHeight = 25;
-console.log(' PETSCII mode enabled: 40x25 terminal');
-        }
-
-console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ansiEnabled ? 'ANSI/RIP' : 'None');
+console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
 
         // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE.
         // STEALTH_MODE is a per-node tooltype (Node{N}.info) that suppresses the

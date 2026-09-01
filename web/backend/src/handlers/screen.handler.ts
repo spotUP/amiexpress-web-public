@@ -1868,7 +1868,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
-    const { content, isPetscii, filePath } = screenData;
+    const { content, isPetscii, isRip, filePath } = screenData;
     // Express.e:6567  MENU resets cmdShortcuts/shortcuts before checking for .keys
     session.lastScreenFilePath = filePath;
 
@@ -1877,6 +1877,19 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // (CONF_BULL with ~CC_ dRE!WAll etc.) bypass that path entirely, leaving old door content visible.
     if (shouldClear) {
       socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    }
+
+    // === RIP screens go out raw (express.e:6776-6780) ===
+    // express.e's displayFile jumps past MCI, pauses and line handling for
+    // a .rip file and puts the bytes on the wire as they are - a RIPscrip
+    // terminal parses the !| commands inline. The web terminal needs the
+    // explicit \x1b[1!..\x1b[2! pixel-mode framing instead (WEB_ deviation
+    // modeled on internalCommandV, express.e:25679-25684): it arms the RIP
+    // canvas overlay and drops back to text when the picture is done.
+    if (isRip && session.ripMode) {
+      screenFlowLog(screenName, `RIP screen ${filePath}: ${content.length} bytes framed raw`);
+      socket.emit('ansi-output', '\x1b[1!' + content + '\x1b[2!\r\n');
+      return true;
     }
 
     // [NEWLINE-DEBUG] Log raw content newlines

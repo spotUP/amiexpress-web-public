@@ -117,6 +117,64 @@ console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
 }
 
 /**
+ * The one place the graphics answer becomes session state
+ * (express.e:29538-29546). Three dispatchers used to carry their own
+ * copies of this block, and only the dead one set session.ripMode - so
+ * answering R at the prompt logged "RIP" and then served .TXT screens
+ * ("we need rip fully supported ... it loads the rip screen files
+ * instead", the sysop, 2026-09-01).
+ *
+ * WEB_ deviations, both deliberate:
+ * - express.e:29086 gives RIP text mode 43 lines; the web terminal stays
+ *   at its visible 80x24, because pagination must match what xterm shows.
+ * - No 'rip-mode' socket emit here: the terminal arms its RIP canvas on
+ *   the \x1b[1! framing displayScreen sends around .rip content, exactly
+ *   as it does for the RIP door. Arming at the prompt would swallow the
+ *   ANSI between the answer and the first picture.
+ */
+export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: string): void {
+  const hasN = answer.includes('N'); // No graphics
+  const hasR = answer.includes('R'); // RIP mode
+  const hasP = answer.includes('P'); // PETSCII mode
+  const hasQ = answer.includes('Q'); // Quick logon
+
+  if (hasP) {
+    // PETSCII mode takes priority (40x25, .seq screens)
+    session.petsciiMode = true;
+    session.ripMode = false;
+    session.ansiEnabled = true; // PETSCII still needs ANSI color codes
+    session.screenWidth = 40;
+    session.screenHeight = 25;
+console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
+    socket.emit('terminal-resize', { cols: 40, rows: 25 });
+  } else if (hasR) {
+    // express.e:29545 - RIP mode: .rip screens served first, framed by
+    // displayScreen with \x1b[1!..\x1b[2! for the web terminal's canvas.
+    session.ripMode = true;
+    session.petsciiMode = false;
+    session.ansiEnabled = true; // RIP includes ANSI support
+    session.screenWidth = 80;
+    session.screenHeight = 24;
+console.log('[RIP] RIP graphics mode enabled - .rip screens preferred');
+  } else {
+    // express.e:29538-29539 - If 'N' in string, disable ANSI
+    session.ansiEnabled = !hasN;
+    session.petsciiMode = false;
+    session.ripMode = false;
+    session.screenWidth = 80;
+    session.screenHeight = 24;
+  }
+
+  // express.e:29545 quickFlag - skip bulletins during login
+  if (hasQ) {
+    session.quickFlag = true;
+    session.tempData = session.tempData || {};
+    session.tempData.quickLogon = true;
+console.log('[QUICK] Quick logon enabled - will skip bulletins per express.e:29545');
+  }
+}
+
+/**
  * Handle ANSI prompt input (express.e:29530-29546)
  * Line input for ANSI prompt (not single keypress!)
  */
@@ -127,46 +185,8 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
     const answer = (session.tempData?.inputBuffer || '').toUpperCase();
 console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
 
-    // express.e:29538-29546 - Check for specific letters in the string
-    // Default (empty/just Enter) = ANSI enabled
-    const hasN = answer.includes('N'); // No graphics
-    const hasR = answer.includes('R'); // RIP mode
-    const hasP = answer.includes('P'); // PETSCII mode
-    const hasQ = answer.includes('Q'); // Quick logon
-
-    // PETSCII mode takes priority (sets 40x25, uses .seq files)
-    if (hasP) {
-      session.petsciiMode = true;
-      session.ripMode = false;
-      session.ansiEnabled = true; // PETSCII still needs ANSI color codes
-      session.screenWidth = 40;  // C64 terminal width
-      session.screenHeight = 25; // C64 terminal height
-console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
-      socket.emit('terminal-resize', { cols: 40, rows: 25 });
-    } else if (hasR) {
-      // express.e:29086 - RIP mode (640x350 EGA graphics, uses .rip files)
-      session.ripMode = true;
-      session.petsciiMode = false;
-      session.ansiEnabled = true; // RIP includes ANSI support
-      session.screenWidth = 80;  // RIP uses 80 column text mode
-      session.screenHeight = 43; // RIP uses 43 line text mode (EGA)
-console.log('[RIP] RIP graphics mode enabled - 640x350 EGA');
-      socket.emit('rip-mode', { enabled: true, width: 640, height: 350 });
-    } else {
-      // express.e:29538-29539 - If 'N' in string, disable ANSI
-      session.ansiEnabled = !hasN;
-      session.petsciiMode = false;
-      session.ripMode = false;
-      session.screenWidth = 80;  // Standard terminal width
-      session.screenHeight = 24; // Standard terminal height
-    }
-
-    // express.e:29545 - IF (InStr(tempStr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
-    // Quick logon flag - skip bulletins during login
-    if (hasQ) {
-      session.quickFlag = true;
-console.log('[QUICK] Quick logon enabled - will skip bulletins per express.e:29545');
-    }
+    // express.e:29538-29546 - the shared semantics; see applyGraphicsAnswer.
+    applyGraphicsAnswer(socket, session, answer);
 
     // Determine graphics mode string for logging
     let graphicsMode = 'None';
