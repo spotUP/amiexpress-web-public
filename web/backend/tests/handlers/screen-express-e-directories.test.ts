@@ -29,6 +29,7 @@ let loadScreenFile: (
   nodeId?: number,
   session?: any,
 ) => { content: string; filePath: string } | null;
+let resolveNodeScreenDir: (baseDir: string, nodeId: number) => string;
 
 function write(relPath: string, content: string): void {
   const abs = path.join(fixtureDir, relPath);
@@ -71,10 +72,20 @@ beforeAll(() => {
   // GLOBAL screen at the board root.
   write('BULL.txt', 'board-root bull\n');
 
+  // A node with no directory of its own, pointed at a shared screen set by
+  // its SCREENS tooltype (ACP.e:2666-2673). Node<N>.info is a plain-text
+  // tooltype file here; readTooltypeMap reads both that and a real icon.
+  write('Screens/Shared/BBSTITLE.txt', 'shared bbstitle\n');
+  write('Node200.info', 'SCREENS=BBS:Screens/Shared/\n');
+  // A node whose tooltype names a directory relative to the board root.
+  write('Node201.info', 'SCREENS=Screens/Shared\n');
+
   process.env.BBS_DATA_DIR = fixtureDir;
   process.env.SKIP_DB_INIT = '1';
   jest.resetModules();
-  loadScreenFile = require('../../src/handlers/screen.handler').loadScreenFile;
+  const handler = require('../../src/handlers/screen.handler');
+  loadScreenFile = handler.loadScreenFile;
+  resolveNodeScreenDir = handler.resolveNodeScreenDir;
 });
 
 afterAll(() => {
@@ -110,5 +121,33 @@ describe('loadScreenFile — express.e directory, no invented fallback', () => {
     const result = loadScreenFile('BULL', 3, 7, session());
     expect(result).not.toBeNull();
     expect(relative(result!.filePath)).toBe('bull.txt');
+  });
+});
+
+describe('resolveNodeScreenDir - the SCREENS tooltype (ACP.e:2666-2673)', () => {
+  test('a node with no icon uses express.e default, <bbsLoc>/Node<N>/', () => {
+    expect(resolveNodeScreenDir(fixtureDir, 7)).toBe(path.join(fixtureDir, 'Node7'));
+  });
+
+  test('an Amiga path in SCREENS is resolved against the board', () => {
+    expect(resolveNodeScreenDir(fixtureDir, 200))
+      .toBe(path.join(fixtureDir, 'Screens', 'Shared'));
+  });
+
+  test('a board-relative SCREENS is resolved too', () => {
+    expect(resolveNodeScreenDir(fixtureDir, 201))
+      .toBe(path.join(fixtureDir, 'Screens', 'Shared'));
+  });
+
+  test('a node with no directory of its own still gets its screens', () => {
+    const result = loadScreenFile('BBSTITLE', undefined, 200, session());
+    expect(result).not.toBeNull();
+    expect(relative(result!.filePath)).toBe(path.join('screens', 'shared', 'bbstitle.txt'));
+  });
+
+  test('the tooltype does NOT reopen a fallback for a node that has its own', () => {
+    // Node7 has BBSTITLE.txt of its own and no tooltype; JOIN exists only in
+    // Node7/Screens/, and must stay unreachable.
+    expect(loadScreenFile('JOIN', undefined, 7, session())).toBeNull();
   });
 });

@@ -28,6 +28,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime, formatLongDate, formatLongTime, formatLongDateTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
+import { readTooltypeMap } from '../utils/info-file.util';
 import { checkConfAccess } from './message/message-scan.handler';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -139,6 +140,60 @@ const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
   'REALNAMES': ScreenDirType.GLOBAL,   // SCREEN_REALNAMES: cmds.bbsLoc + 'RealNames'
   'MAILSCAN': ScreenDirType.GLOBAL,    // SCREEN_MAILSCAN: cmds.bbsLoc + 'MailScan'
 };
+
+/**
+ * express.e's `nodeScreenDir` (express.e:96, assigned at :31995 from
+ * `sopt.nodeScreens`).
+ *
+ * ACP.e:2666-2673 fills that field: the node's `SCREENS` tooltype when
+ * `Node<N>.info` declares one, and `<bbsLoc>/Node<N>/` when it does not.
+ * That tooltype is how a board with more nodes than screen directories works
+ * on a real Amiga - many nodes point at ONE directory instead of each
+ * carrying a copy. Without it, this port could only serve the nodes that had
+ * a directory of their own, which on a 255-node board is most of them
+ * missing.
+ *
+ * The result is cached against the icon's mtime: a screen load must not read
+ * and parse an .info file every time, and a sysop who edits the tooltype
+ * gets the new directory on the next load without a restart.
+ */
+const nodeScreenDirCache = new Map<string, { stamp: number; dir: string }>();
+
+export function resolveNodeScreenDir(baseDir: string, nodeId: number): string {
+  const defaultDir = path.join(baseDir, `Node${nodeId}`);
+  const infoPath = path.join(baseDir, `Node${nodeId}.info`);
+
+  let stamp: number;
+  try {
+    stamp = fs.statSync(infoPath).mtimeMs;
+  } catch {
+    return defaultDir; // no icon, so no tooltype - express.e's ELSE branch
+  }
+
+  const cached = nodeScreenDirCache.get(infoPath);
+  if (cached && cached.stamp === stamp) return cached.dir;
+
+  let dir = defaultDir;
+  try {
+    const declared = (readTooltypeMap(infoPath).get('SCREENS') || '').trim();
+    if (declared) {
+      // checkPathSlash() in ACP.e guarantees a trailing slash on the Amiga
+      // side; path.join here does its own separators, so strip it.
+      const cleaned = declared.replace(/[\/]+$/, '');
+      dir = cleaned.includes(':')
+        ? new BBSPaths(baseDir).resolveAmigaPath(cleaned, nodeId)
+        : path.resolve(baseDir, cleaned);
+    }
+  } catch (error) {
+    // A corrupt icon must not take the node's screens away: fall back to the
+    // directory express.e would have used with no tooltype at all.
+console.error(`[loadScreenFile] could not read SCREENS from ${infoPath}: ${(error as Error).message}`);
+    dir = defaultDir;
+  }
+
+  nodeScreenDirCache.set(infoPath, { stamp, dir });
+  return dir;
+}
 
 /**
  * Get the actual screen file name for special screen types
@@ -1482,11 +1537,13 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
 
     // Add prioritized location based on screen type
     if (screenDirType === ScreenDirType.NODE) {
-      // express.e:6546 - nodeScreenDir is the node's SCREENS tooltype and
-      // defaults to <bbsLoc>/Node<N>/. It is ONE directory; there is no
-      // Node<N>/Screens/ in express.e and no node on this board declares a
-      // SCREENS tooltype.
-      searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
+      // express.e:6546 - ONE directory, nodeScreenDir. There is no
+      // Node<N>/Screens/ in express.e and no cross-directory fallback.
+      const nodeScreenDir = resolveNodeScreenDir(baseDir, nodeId);
+      searchLocations.push({
+        dir: nodeScreenDir,
+        desc: nodeScreenDir === nodeDir ? `Node${nodeId}` : `Node${nodeId} SCREENS tooltype`,
+      });
     } else if (screenDirType === ScreenDirType.CONF) {
       // Use provided ID or fallback to session relative conference number
       const actualConfId = conferenceId || session?.relConfNum;
@@ -1761,7 +1818,7 @@ console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
   // display it (returns FALSE from displayScreen). No cross-directory fallbacks.
   const upper = screenName.toUpperCase();
   const screenDirType = getScreenDirType(screenName);
-  const expectedDir = screenDirType === ScreenDirType.NODE ? `Node${nodeId}/Screens/` :
+  const expectedDir = screenDirType === ScreenDirType.NODE ? resolveNodeScreenDir(baseDir, nodeId) :
                       screenDirType === ScreenDirType.CONF ? `Conf${conferenceId || session?.relConfNum}/Screens/` :
                       'Screens/';
 console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);

@@ -384,6 +384,11 @@ export interface NodeConfig {
   priority: number;  // -1 to 20
 
   // Display Settings
+  // ACP.e:2666-2673 - the directory this node's screens are read from. Empty
+  // means express.e's default, `<bbsLoc>/Node<N>/`. Set it to share one
+  // screen set across many nodes (a board with more nodes than screen
+  // directories has no other way).
+  screens: string;
   capitol_files: boolean;
   def_screens: boolean;
   no_mci_msg: boolean;

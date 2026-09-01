@@ -42,6 +42,7 @@ export class NodeConfigService {
           node_start: toolTypes.get('NODESTART') || 'BBS:Express',
           priority: parseInt(toolTypes.get('PRIORITY') || '0', 10),
           capitol_files: toolTypes.has('CAPITOL_FILES'),
+          screens: toolTypes.get('SCREENS') || '',
           def_screens: toolTypes.has('DEF_SCREENS'),
           no_mci_msg: false,
           sysop_chat_color: parseInt(toolTypes.get('SYSOP_CHAT_COLOR') || '33', 10),
@@ -99,6 +100,7 @@ console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
         node_start: toolTypes.get('NODESTART') || 'BBS:Express',
         priority: parseInt(toolTypes.get('PRIORITY') || '0', 10),
         capitol_files: toolTypes.has('CAPITOL_FILES'),
+        screens: toolTypes.get('SCREENS') || '',
         def_screens: toolTypes.has('DEF_SCREENS'),
         no_mci_msg: false,
         sysop_chat_color: parseInt(toolTypes.get('SYSOP_CHAT_COLOR') || '33', 10),
@@ -289,6 +291,9 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       // the file rather than left behind from the previous save. Everything
       // else a node's icon carries is left untouched.
       const OWNED_FLAGS = [
+        // SCREENS is owned too: clearing it in the form has to REMOVE the
+        // tooltype, or the node keeps reading the directory it used to name.
+        'SCREENS',
         'CAPITOL_FILES', 'DEF_SCREENS', 'SENTBY_FILES', 'CALLERS_LOG', 'START_LOG',
         // NO_TELNET is not a tooltype AmiExpress has ever read; it is dropped
         // so a node written by the previous admin stops carrying it.
@@ -298,6 +303,12 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       const toolTypes = new Map<string, string>();
 
       if (config.node_start) toolTypes.set('NODESTART', config.node_start);
+      // ACP.e:2668 runs checkPathSlash over the value, so a real board's
+      // tooltype carries the trailing slash.
+      if (config.screens && config.screens.trim()) {
+        const dir = config.screens.trim();
+        toolTypes.set('SCREENS', dir.endsWith('/') || dir.endsWith(':') ? dir : `${dir}/`);
+      }
       if (config.priority !== undefined) toolTypes.set('PRIORITY', config.priority.toString());
       if (config.sysop_chat_color !== undefined) toolTypes.set('SYSOP_CHAT_COLOR', config.sysop_chat_color.toString());
       if (config.user_chat_color !== undefined) toolTypes.set('USER_CHAT_COLOR', config.user_chat_color.toString());

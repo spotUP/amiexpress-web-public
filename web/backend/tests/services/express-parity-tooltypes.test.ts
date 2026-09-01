@@ -135,6 +135,39 @@ describe('a node enables telnet by the PRESENCE of TELNET', () => {
     expect((await service.getNodeConfig(2))!.telnet).toBe(false);
   });
 
+  // ACP.e:2666-2673 - the node's screen directory, and the ELSE branch that
+  // makes `<bbsLoc>/Node<N>/` the default. A board with more nodes than
+  // screen directories has no other way to serve them.
+  it('writes SCREENS with the trailing slash checkPathSlash guarantees', async () => {
+    seed(path.join(root, 'Node1.info'), { NODESTART: 'BBS:Express' });
+
+    await new NodeConfigService(mirror()).updateNodeConfig(
+      2, { node_number: 1, screens: 'BBS:Screens/Node' } as never, CONTEXT
+    );
+
+    expect(readTooltypeMap(path.join(root, 'Node1.info')).get('SCREENS'))
+      .toBe('BBS:Screens/Node/');
+  });
+
+  it('removes SCREENS when the field is cleared, so the node falls back to its own directory', async () => {
+    seed(path.join(root, 'Node1.info'), { NODESTART: 'BBS:Express', SCREENS: 'BBS:Screens/Node/' });
+
+    await new NodeConfigService(mirror()).updateNodeConfig(
+      2, { node_number: 1, screens: '' } as never, CONTEXT
+    );
+
+    expect(readTooltypeMap(path.join(root, 'Node1.info')).has('SCREENS')).toBe(false);
+  });
+
+  it('reads SCREENS back, and answers empty for a node that declares none', async () => {
+    seed(path.join(root, 'Node0.info'), { NODESTART: 'BBS:Express', SCREENS: 'BBS:Screens/Node/' });
+    seed(path.join(root, 'Node1.info'), { NODESTART: 'BBS:Express' });
+
+    const service = new NodeConfigService(mirror());
+    expect((await service.getNodeConfig(1))!.screens).toBe('BBS:Screens/Node/');
+    expect((await service.getNodeConfig(2))!.screens).toBe('');
+  });
+
   it('drops a NO_TELNET the previous admin wrote', async () => {
     seed(path.join(root, 'Node1.info'), { NODESTART: 'BBS:Express', NO_TELNET: '1' });
 

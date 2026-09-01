@@ -194,6 +194,10 @@ export const NodeConfigSchema = z.object({
   // well past 200 characters, so the cap rejected every node that had one.
   node_start: z.string().max(4000).optional(),
   priority: z.number().int().min(-1).max(20).optional(),
+  // ACP.e:2666-2673 - the node's screen directory. An Amiga path (BBS:...,
+  // NODE3:...) or one relative to the board root; empty means express.e's
+  // default of `<bbsLoc>/Node<N>/`.
+  screens: z.string().max(200).optional(),
   capitol_files: z.boolean().optional(),
   def_screens: z.boolean().optional(),
   no_mci_msg: z.boolean().optional(),

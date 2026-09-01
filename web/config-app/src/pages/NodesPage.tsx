@@ -162,6 +162,24 @@ export function NodesPage() {
         ),
     },
     {
+      key: 'screens',
+      header: 'Screens Directory',
+      render: (row) =>
+        editingNode === row.nodeNumber ? (
+          <input
+            type="text"
+            value={formData.screens ?? row.config?.screens ?? ''}
+            onChange={(e) => setFormData({ ...formData, screens: e.target.value })}
+            placeholder={`Node${row.nodeNumber}/`}
+            className="input-field w-full font-mono"
+          />
+        ) : (
+          <span className="text-bbs-text font-mono">
+            {row.config?.screens || `Node${row.nodeNumber}/ (default)`}
+          </span>
+        ),
+    },
+    {
       key: 'telnet',
       header: 'Telnet',
       render: (row) =>

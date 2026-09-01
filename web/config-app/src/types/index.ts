@@ -155,6 +155,9 @@ export interface NodeConfig {
   node_number: number;
   node_start: string;
   priority: number;
+  /** ACP.e:2666-2673 - the node's SCREENS tooltype. Empty means express.e's
+   *  default, `<bbsLoc>/Node<N>/`. Many nodes can share one directory. */
+  screens: string;
   capitol_files: boolean;
   telnet: boolean;
   ftp: boolean;

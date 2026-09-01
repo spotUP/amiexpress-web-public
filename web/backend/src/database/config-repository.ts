@@ -1094,6 +1094,9 @@ export class ConfigRepository extends BaseRepository<any> {
       node_number: row.node_number,
       node_start: row.node_start,
       priority: row.priority,
+      // The mirror has no column for it and does not need one: the loader
+      // reads SCREENS off Node<N>.info, which is where express.e reads it.
+      screens: row.screens || '',
       capitol_files: Boolean(row.capitol_files),
       def_screens: Boolean(row.def_screens),
       no_mci_msg: Boolean(row.no_mci_msg),
