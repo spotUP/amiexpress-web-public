@@ -1,0 +1,65 @@
+# Delete rules, as cases both implementations are tested against.
+#
+# DOORREPO deletes doors on a real Amiga board, where there is no server to
+# ask; amiexpress-web deletes them in TypeScript, for DOORMAN and the admin
+# UI. The same rules therefore exist twice, in two languages, and cannot be
+# collapsed into one implementation. What keeps them from drifting is this
+# file: examples/doorrepo-c/tests/test_flow.c and
+# web/backend/tests/doors/delete-rule-parity.test.ts both read it, so a rule
+# corrected on one side and forgotten on the other fails a test here rather
+# than eating a door on someone's board six months later.
+#
+# The incident these encode: on 2026-08-31, deleting a door removed six
+# others. Doors/emp_tools holds two unrelated doors (Joincnf, registered as
+# J, and Bulls, registered as B), and the delete treated the whole directory
+# as the door's own; BestConf's LOCATION names a DIRECTORY, whose parent is
+# Doors: itself, so every registration on the board looked like part of it.
+#
+# Paths are written in the physical form, rooted at /bbs, with /bbs/Doors as
+# the Doors: assign.
+#
+# owndir|LOCATION|IS_DIR|EXPECTED     EXPECTED "-" means the door owns no
+#                                     directory and only its own files go.
+# class|DOOR_LOCATION|DOOR_DIR|OTHER_LOCATION|EXPECTED
+#                                     EXPECTED is alias, cotenant or unrelated.
+
+# --- which directory a door owns ---------------------------------------
+
+# The ordinary door: a binary inside its own directory.
+owndir|/bbs/Doors/5D-LogOff/5D-LogOff|0|/bbs/Doors/5D-LogOff
+# A LOCATION that IS a directory owns THAT directory, not its parent. Taking
+# the parent here is what aimed a delete at Doors/ itself.
+owndir|/bbs/Doors/BestConf|1|/bbs/Doors/BestConf
+# A binary directly under Doors: owns nothing - its parent is the assign.
+owndir|/bbs/Doors/scan.x|0|-
+# A door whose directory is already gone: still nothing to remove wholesale.
+owndir|/bbs/Doors/GoneDoor|0|-
+# Deep inside its own tree: the directory the binary sits in.
+owndir|/bbs/Doors/CALC/VCLCALC/DOORS/CALCULATOR/CALC.rexx|0|/bbs/Doors/CALC/VCLCALC/DOORS/CALCULATOR
+# The roots themselves are never a door's directory.
+owndir|/bbs/Doors|1|-
+owndir|/bbs|1|-
+owndir|/bbs/Commands|1|-
+
+# --- what another registration means ------------------------------------
+
+# The same binary under a second name: 5D-LogOff is registered as G. Both go.
+class|/bbs/Doors/5D-LogOff/5D-LogOff|/bbs/Doors/5D-LogOff|/bbs/Doors/5D-LogOff/5D-LogOff|alias
+# An alias written in another casing is still an alias. B.info on the live
+# board says DOORS:EmP_Tools/Bulls where J.info says Doors:emp_tools/...
+class|/bbs/Doors/emp_tools/Joincnf|/bbs/Doors/emp_tools|/bbs/DOORS/EmP_Tools/Joincnf|alias
+# A DIFFERENT binary in the same directory is another door. Keep it, and keep
+# the directory it lives in.
+class|/bbs/Doors/emp_tools/Joincnf|/bbs/Doors/emp_tools|/bbs/Doors/emp_tools/Bulls|cotenant
+class|/bbs/Doors/emp_tools/Joincnf|/bbs/Doors/emp_tools|/bbs/DOORS/EmP_Tools/Bulls|cotenant
+# Deeper in the same directory is still the same directory's business.
+class|/bbs/Doors/FILEID/FILEID|/bbs/Doors/FILEID|/bbs/Doors/FILEID/extra/OTHER|cotenant
+# Another door entirely: not this delete's concern.
+class|/bbs/Doors/5D-LogOff/5D-LogOff|/bbs/Doors/5D-LogOff|/bbs/Doors/KEEPER/keeper|unrelated
+# A door whose name merely starts the same. A prefix compare would call this
+# a co-tenant and take its directory with the first door's.
+class|/bbs/Doors/CALC/calc|/bbs/Doors/CALC|/bbs/Doors/CALCULATOR/calculator|unrelated
+# The door's own directory, named as a LOCATION by another registration:
+# that registration points at the directory, not at this binary, so it is a
+# co-tenant and the directory stays.
+class|/bbs/Doors/BestConf/BestConf.XIM|/bbs/Doors/BestConf|/bbs/Doors/BestConf|cotenant
