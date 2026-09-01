@@ -382,10 +382,12 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   if (!checkSecurity(session.user, ACSPermission.FULL_EDIT)) {
     emitText(socket, '\x1b[34m[\x1b[0m 12\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    const editorType = currentUser.editorType || 0;
-    let editorName = 'PROMPT';
-    if (editorType === 1) editorName = 'LINE EDITOR';
-    else if (editorType === 2) editorName = 'FULLSCREEN EDITOR';
+    // From `editor`, the column that is actually stored - 'Prompt', 'Line'
+    // or 'Full', the same three the disk record encodes
+    // (UserFileManager.editorTypeToInt). `editorType` is a runtime-only
+    // number with no column behind it, so reading it here showed PROMPT to
+    // everyone whatever they had chosen.
+    const editorName = EDITOR_DISPLAY[editorValue(currentUser)] ?? 'PROMPT';
 
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, ' 12');
@@ -666,9 +668,15 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      const currentEditor = session.user.editorType || 0;
-      session.user.editorType = (currentEditor + 1) % 3;
-      await db.updateUser(session.user.id, { editorType: session.user.editorType });
+      // `editor`, not `editorType`. There is no editortype column:
+      // fieldToColumn falls back to the lower-cased field name, so this
+      // UPDATE named a column that does not exist, SQLite threw, and the W
+      // command answered "[ERROR] Command processing failed" - reported from
+      // the board on 2026-09-01. The setting had never persisted either.
+      const nextEditor = EDITOR_ORDER[(EDITOR_ORDER.indexOf(editorValue(session.user)) + 1) % EDITOR_ORDER.length];
+      session.user.editor = nextEditor;
+      session.user.editorType = EDITOR_ORDER.indexOf(nextEditor);
+      await db.updateUser(session.user.id, { editor: nextEditor });
       _displayWCommandMenu(socket, session);
       break;
 
@@ -1053,6 +1061,24 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
  * Display numbered computer list and prompt (chooseComputer - express.e:11319-11346)
  * Two-column layout: \d[2]> \l\s[34]
  */
+/**
+ * The three editors, in the order W cycles them, spelled the way the `editor`
+ * column and the disk record spell them (UserFileManager.editorTypeToInt).
+ */
+const EDITOR_ORDER: string[] = ['Prompt', 'Line', 'Full'];
+const EDITOR_DISPLAY: Record<string, string> = {
+  Prompt: 'PROMPT',
+  Line: 'LINE EDITOR',
+  Full: 'FULLSCREEN EDITOR',
+};
+
+/** A user's editor as one of EDITOR_ORDER, whatever the record carries. */
+function editorValue(user: { editor?: string; editorType?: number }): string {
+  if (user.editor && EDITOR_ORDER.includes(user.editor)) return user.editor;
+  // A session that only carries the runtime number still answers correctly.
+  return EDITOR_ORDER[user.editorType ?? 0] ?? EDITOR_ORDER[0];
+}
+
 async function _displayComputerList(socket: any, session: BBSSession): Promise<void> {
   let choices: string[] = [];
 
