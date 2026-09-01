@@ -21,7 +21,7 @@ import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 // single pixel. There are zero getContext calls in this file's history.
 // The module moved here so the half that draws can meet the half that
 // receives, which is what "the rip door never displayed rip graphics" was.
-import RIPRenderer, { type RIPRendererRef } from '../rip/RIPRenderer';
+import RIPRenderer, { shouldDismissRipClick, type RIPRendererRef } from '../rip/RIPRenderer';
 
 const RIP_WIDTH = 640;
 const RIP_HEIGHT = 350;
@@ -242,6 +242,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const overlayBufferRef = useRef<string>('');
   const ripRendererRef = useRef<RIPRendererRef | null>(null);
   const ripBuffer = useRef<string>(''); // Buffer for RIP commands
+  // When a RIP button last sent a host command - a click that produced none
+  // is a click on plain picture, and acts as a dismiss key instead.
+  const ripCommandAt = useRef<number>(0);
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
   // When the server emits `transfer-raw:init` with direction='upload'
@@ -3114,6 +3117,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }),
       }}
     >
+      {/* The terminal box and the RIP overlay share this wrapper so that
+          "absolute, inset 0" means THE TERMINAL, not the viewport - a RIP
+          picture used to fill the whole browser instead of matching the
+          terminal ("the images fill the entire browser"). The fixed-mode
+          max-width moves up here so the overlay is bounded by it too. */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
+        }}
+      >
       <div
         ref={terminalRef}
         onClick={handleClick}
@@ -3128,11 +3143,61 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           position: 'relative',
           outline: 'none',
           width: '100%',
-          // In fixed mode: auto height for centering, max-width constraint
-          // In wide mode: 100% height to fill screen
-          ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
+          // In wide mode: 100% height to fill screen (the wrapper carries
+          // the fixed-mode max-width)
+          ...(terminalMode === 'fixed' ? {} : { height: '100%' }),
         }}
       />
+      {ripMode && (
+        // Flush over the terminal box, no frame, no badge: the picture
+        // reads as the BBS drawing it inside the terminal, not as a dialog
+        // parked on top. The sysop asked for exactly this.
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            backgroundColor: '#000',
+            // Centre the proportionally-scaled canvas; the leftover strips
+            // are this div's black, so the picture sits letterboxed in the
+            // terminal box rather than stretched across it.
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          // The canvas is not focusable; without this, clicking the picture
+          // moves focus off xterm's textarea and every later keypress dies
+          // in the page instead of reaching the BBS ("i cant close images
+          // with mouse or keys").
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            // RIPtermJS's own mouseup handler has already run: a button hit
+            // fired onCommand below. A click that produced no command hit
+            // plain picture - deliver it as the any-key the door waits for.
+            if (shouldDismissRipClick(ripCommandAt.current, Date.now())) {
+              socketRef.current?.emit('command', '\r');
+            }
+          }}
+        >
+          <RIPRenderer
+            ref={ripRendererRef}
+            width={RIP_WIDTH}
+            height={RIP_HEIGHT}
+            onCommand={(command: string) => {
+              // A RIP button or mouse region sends its command back as if
+              // the user had typed it. 'terminal-input' is the channel the
+              // backend's AmigaGuideViewer listens on for RIP buttons.
+              ripCommandAt.current = Date.now();
+              socketRef.current?.emit('terminal-input', command);
+            }}
+            onExitRipMode={() => {
+              ripModeRef.current = false;
+              setRipMode(false);
+            }}
+          />
+        </div>
+      )}
+      </div>
       {/* Web Transparency Overlays - CSS-based overlays for web connections */}
       {Array.from(overlays.entries()).map(([id, overlay]) => {
         // Calculate pixel position from terminal cell coordinates
@@ -3206,34 +3271,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         );
       })}
       {/* RIP Graphics Canvas Overlay */}
-      {ripMode && (
-        // Flush over the terminal, no frame, no badge: the picture should
-        // read as the BBS drawing it inside the terminal, not as a dialog
-        // parked on top. The sysop asked for exactly this.
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 10,
-            backgroundColor: '#000',
-          }}
-        >
-          <RIPRenderer
-            ref={ripRendererRef}
-            width={RIP_WIDTH}
-            height={RIP_HEIGHT}
-            onCommand={(command: string) => {
-              // A RIP button or mouse region sends its command back as if
-              // the user had typed it.
-              socketRef.current?.emit('terminal-input', command);
-            }}
-            onExitRipMode={() => {
-              ripModeRef.current = false;
-              setRipMode(false);
-            }}
-          />
-        </div>
-      )}
       <input
         ref={fileInputRef}
         type="file"
