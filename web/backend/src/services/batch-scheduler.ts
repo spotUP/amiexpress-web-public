@@ -840,7 +840,16 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
     }
     console.log(`[BatchScheduler] spawn env DOOR_OVERCLOCK=${spawnEnv.DOOR_OVERCLOCK ?? '(unset)'} for ${path.basename(doorPath)}`);
     const child: any = require('child_process').spawn(command, execArgs, {
-      cwd: cwd || path.dirname(doorPath),
+      // The TS runner MUST run from web/backend: tsx resolves tsconfig by
+      // walking up from cwd, and from a door's own directory it finds the
+      // repo root's config, which has no experimentalDecorators - the
+      // runner then dies on chat.handler.ts before doing anything, on
+      // every scheduler tick ("[runner:mtop] ... Parameter decorators only
+      // work when experimental decorators are enabled"). Dev-only in
+      // practice: the container ships dist/ and takes the node branch.
+      // Every path the runner receives is absolute, so cwd carries no
+      // meaning for it beyond config resolution.
+      cwd: useTsRunner ? path.join(appRootPath, 'web', 'backend') : (cwd || path.dirname(doorPath)),
       env: spawnEnv,
       detached: true, // Create new process group so we can kill the entire tree
     });
