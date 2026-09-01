@@ -245,6 +245,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // When a RIP button last sent a host command - a click that produced none
   // is a click on plain picture, and acts as a dismiss key instead.
   const ripCommandAt = useRef<number>(0);
+  // A finished RIP SCREEN (BBSTITLE and friends) lingers until the user's
+  // first key or click; the backend has already moved on to the next text
+  // prompt underneath. Door pictures never linger - the door itself waits
+  // for the dismiss key before sending [2!.
+  const ripLinger = useRef<boolean>(false);
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
   // When the server emits `transfer-raw:init` with direction='upload'
@@ -1958,6 +1963,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
 
         console.log('[RIP] Entering RIP graphics mode');
+        // A new picture while the last one lingers: the linger's dismiss
+        // key must not close the incoming picture.
+        if (ripLinger.current) {
+          ripLinger.current = false;
+          window.removeEventListener('keydown', ripLingerKeyRef.current, true);
+        }
         ripModeRef.current = true;
         setRipMode(true);
         ripBuffer.current = '';
@@ -1974,7 +1985,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             // for a beat: the buffer is the whole picture, and dropping out
             // of rip mode without painting it is what used to happen.
             drawRipBuffer(true);
-            setRipMode(false);
+            finishRipPictureRef.current();
             data = ripParts[1] || '';
           } else {
             ripBuffer.current += ripContent;
@@ -1992,7 +2003,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           console.log('[RIP] Exiting RIP graphics mode');
           ripModeRef.current = false;
           drawRipBuffer(true);
-          setRipMode(false);
+          finishRipPictureRef.current();
           data = parts[1] || '';
           if (!data) return;
         } else {
@@ -3076,6 +3087,39 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   }, []);
 
+  // Linger machinery, as function refs: the socket handler that calls them
+  // is registered once at mount and must not capture stale closures.
+  const ripLingerKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  const closeRipOverlayRef = useRef<() => void>(() => {});
+  const finishRipPictureRef = useRef<() => void>(() => {});
+  ripLingerKeyRef.current = (e: KeyboardEvent) => {
+    // Swallow the dismiss key so it does not also type into the prompt
+    // waiting underneath the picture.
+    e.preventDefault();
+    e.stopPropagation();
+    closeRipOverlayRef.current();
+  };
+  closeRipOverlayRef.current = () => {
+    ripLinger.current = false;
+    window.removeEventListener('keydown', ripLingerKeyRef.current, true);
+    setRipMode(false);
+  };
+  finishRipPictureRef.current = () => {
+    if (doorActive.current) {
+      // The door already waited for the user's key before sending [2! -
+      // lingering here would demand a second keypress.
+      setRipMode(false);
+      return;
+    }
+    // A screen picture (BBSTITLE and friends): the backend moves straight
+    // on to the next text prompt, which replaced the picture before the
+    // eye caught it ("i tried R but saw no rip title"). Keep the canvas up
+    // until the user's first key or click; the prompt is drawn underneath
+    // in the meantime.
+    ripLinger.current = true;
+    window.addEventListener('keydown', ripLingerKeyRef.current, true);
+  };
+
   // Draw once the renderer has actually mounted.
   //
   // The door sends ESC[1! and the WHOLE file in one emit. The socket handler
@@ -3171,6 +3215,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // with mouse or keys").
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
+            // A lingering screen picture closes locally - the backend has
+            // already moved on to the next prompt underneath it.
+            if (ripLinger.current) {
+              closeRipOverlayRef.current();
+              return;
+            }
             // RIPtermJS's own mouseup handler has already run: a button hit
             // fired onCommand below. A click that produced no command hit
             // plain picture - deliver it as the any-key the door waits for.
