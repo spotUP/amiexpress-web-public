@@ -1,4 +1,7 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.installedFooter = installedFooter;
+const door_theme_1 = require("./door-theme");
 /**
  * The installed-doors footer.
  *
@@ -6,17 +9,15 @@
  * 2000-line ceiling and a key list is the least view-dependent thing in it.
  * Pure, so the key list can be asserted without a terminal.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.installedFooter = installedFooter;
 /**
  * @param enabled whether the SELECTED door is enabled; the E key offers the
  *                opposite of the current state, and reads wrong otherwise.
  */
 function installedFooter(enabled) {
     const en = enabled ? 'Dis' : 'En';
-    return (`{center}{yellow-fg}ENTER{/yellow-fg}=Run {yellow-fg}U{/yellow-fg}pload ` +
-        `{yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles ` +
-        `{yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} ` +
-        `{yellow-fg}S{/yellow-fg}trip {yellow-fg}Tab{/yellow-fg}=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
+    return (`{center}{${door_theme_1.T.warn}-fg}ENTER{/${door_theme_1.T.warn}-fg}=Run {${door_theme_1.T.warn}-fg}U{/${door_theme_1.T.warn}-fg}pload ` +
+        `{${door_theme_1.T.warn}-fg}I{/${door_theme_1.T.warn}-fg}nfo {${door_theme_1.T.warn}-fg}F{/${door_theme_1.T.warn}-fg}iles ` +
+        `{${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}el {${door_theme_1.T.warn}-fg}V{/${door_theme_1.T.warn}-fg}iew doc {${door_theme_1.T.warn}-fg}E{/${door_theme_1.T.warn}-fg}=${en} ` +
+        `{${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}trip {${door_theme_1.T.warn}-fg}Tab{/${door_theme_1.T.warn}-fg}=Repo {${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}uit{/center}`);
 }
 //# sourceMappingURL=installed-footer.js.map

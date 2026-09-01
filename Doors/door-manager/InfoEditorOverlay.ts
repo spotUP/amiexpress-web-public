@@ -8,6 +8,7 @@ import {
   Panel,
   List,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from './door-theme';
 
 interface InfoEditorOptions {
   screen: any;
@@ -53,7 +54,7 @@ export class InfoEditorOverlay {
     this.overlay = new Box({
       parent: this.screen,
       top: 0, left: 0, width: '100%', height: '100%',
-      style: { bg: 'black' },
+      style: { bg: T.ground },
       tags: true, keys: true, focusable: true,
     } as any);
 
@@ -61,8 +62,8 @@ export class InfoEditorOverlay {
       parent: this.overlay,
       top: 0, left: 0, width: '100%', height: 3,
       tags: true,
-      content: `  {cyan-fg}EDIT: ${this.command}.info{/cyan-fg}  `,
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+      content: `  {${T.accent}-fg}EDIT: ${this.command}.info{/${T.accent}-fg}  `,
+      style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } },
       focusable: false,
     } as any);
 
@@ -70,8 +71,8 @@ export class InfoEditorOverlay {
       parent: this.overlay,
       bottom: 0, left: 0, width: '100%', height: 3,
       tags: true,
-      content: `{center}{yellow-fg}Enter{/yellow-fg}=Edit  {yellow-fg}!{/yellow-fg}=Toggle  {yellow-fg}S{/yellow-fg}=Save+Close  {yellow-fg}ESC{/yellow-fg}=Cancel{/center}`,
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+      content: `{center}{${T.warn}-fg}Enter{/${T.warn}-fg}=Edit  {${T.warn}-fg}!{/${T.warn}-fg}=Toggle  {${T.warn}-fg}S{/${T.warn}-fg}=Save+Close  {${T.warn}-fg}ESC{/${T.warn}-fg}=Cancel{/center}`,
+      style: { fg: T.ink, bg: T.bar, border: { fg: T.accentAlt } },
       focusable: false,
     } as any);
 
@@ -81,8 +82,8 @@ export class InfoEditorOverlay {
       keys: true, vi: true, mouse: true,
       tags: true,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
-        item: { fg: 'white' },
+        selected: { bg: T.bar, fg: T.ink },
+        item: { fg: T.ink },
       },
     } as any);
 
@@ -113,7 +114,7 @@ export class InfoEditorOverlay {
     const tooltypes = await this.bbs.readInfoFile(this.infoPath);
     if (!tooltypes) {
       this.tooltypes = [];
-      (this.listWidget as any).setItems(['{red-fg}Cannot read .info file{/red-fg}']);
+      (this.listWidget as any).setItems([`{${T.alert}-fg}Cannot read .info file{/${T.alert}-fg}`]);
       return;
     }
     this.tooltypes = tooltypes;
@@ -122,12 +123,12 @@ export class InfoEditorOverlay {
 
   private renderList(): void {
     const items = this.tooltypes.map(tt => {
-      const prefix = tt.commented ? '{gray-fg}!' : '{yellow-fg}';
-      const suffix = tt.commented ? '{/gray-fg}' : '{/yellow-fg}';
+      const prefix = tt.commented ? `{${T.dim}-fg}!` : `{${T.warn}-fg}`;
+      const suffix = tt.commented ? `{/${T.dim}-fg}` : `{/${T.warn}-fg}`;
       const kv = tt.value ? `${tt.key}=${tt.value}` : tt.key;
       return `${prefix}${kv}${suffix}`;
     });
-    if (items.length === 0) items.push('{gray-fg}(empty){/gray-fg}');
+    if (items.length === 0) items.push(`{${T.dim}-fg}(empty){/${T.dim}-fg}`);
     (this.listWidget as any).setItems(items);
   }
 
@@ -155,7 +156,7 @@ export class InfoEditorOverlay {
     const editPanel = new Box({
       parent: this.overlay, top: 3 + idx, left: 1, width: '100%-2', height: 1,
       tags: false, border: false,
-      style: { fg: 'yellow', bg: 'blue' },
+      style: { fg: T.warn, bg: T.bar },
     } as any);
     renderEdit();
     this.screen.render();

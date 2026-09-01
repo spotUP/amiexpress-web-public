@@ -1,3 +1,4 @@
+import { T } from './door-theme';
 /**
  * The installed-doors footer.
  *
@@ -13,9 +14,9 @@
 export function installedFooter(enabled: boolean): string {
   const en = enabled ? 'Dis' : 'En';
   return (
-    `{center}{yellow-fg}ENTER{/yellow-fg}=Run {yellow-fg}U{/yellow-fg}pload ` +
-    `{yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles ` +
-    `{yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} ` +
-    `{yellow-fg}S{/yellow-fg}trip {yellow-fg}Tab{/yellow-fg}=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`
+    `{center}{${T.warn}-fg}ENTER{/${T.warn}-fg}=Run {${T.warn}-fg}U{/${T.warn}-fg}pload ` +
+    `{${T.warn}-fg}I{/${T.warn}-fg}nfo {${T.warn}-fg}F{/${T.warn}-fg}iles ` +
+    `{${T.warn}-fg}D{/${T.warn}-fg}el {${T.warn}-fg}V{/${T.warn}-fg}iew doc {${T.warn}-fg}E{/${T.warn}-fg}=${en} ` +
+    `{${T.warn}-fg}S{/${T.warn}-fg}trip {${T.warn}-fg}Tab{/${T.warn}-fg}=Repo {${T.warn}-fg}Q{/${T.warn}-fg}uit{/center}`
   );
 }

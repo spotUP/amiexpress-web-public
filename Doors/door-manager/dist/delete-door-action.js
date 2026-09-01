@@ -18,6 +18,7 @@ exports.deleteIdentifierFor = deleteIdentifierFor;
 exports.performDoorDelete = performDoorDelete;
 const action_log_1 = require("./action-log");
 const delete_outcome_1 = require("./delete-outcome");
+const door_theme_1 = require("./door-theme");
 /** Escapes blessed's own tag syntax in text that came from disk. */
 function sanitizeForTags(text) {
     return String(text ?? '').replace(/[{}]/g, '');
@@ -52,7 +53,7 @@ async function performDoorDelete(deps) {
     };
     deps.setStatus(`Deleting ${d.name}...`, 'yellow', 30000);
     log.ok(`${d.command}: ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
-    paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+    paint(`\n\n{${door_theme_1.T.warn}-fg}Working...{/${door_theme_1.T.warn}-fg}\n`);
     try {
         // Each step is painted AS it happens. DOORMAN runs in the backend's own
         // process, so this callback is a direct call from the delete - and
@@ -61,7 +62,7 @@ async function performDoorDelete(deps) {
         // after the pause.
         const onStep = (step) => {
             log.add(step.kind, step.text);
-            paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+            paint(`\n\n{${door_theme_1.T.warn}-fg}Working...{/${door_theme_1.T.warn}-fg}\n`);
         };
         const result = await bbs.deleteDoor(id, isTS, onStep);
         if (!result.success) {
@@ -82,7 +83,7 @@ async function performDoorDelete(deps) {
         // stale registry here left deleted doors visible with no feedback
         // (2026-08-15). Refresh again from our side, re-fetch, and confirm.
         log.ok('reloading the door registry');
-        paint('\n\n{yellow-fg}Reloading...{/yellow-fg}\n');
+        paint(`\n\n{${door_theme_1.T.warn}-fg}Reloading...{/${door_theme_1.T.warn}-fg}\n`);
         await deps.refreshRegistry();
         const doors = await deps.fetchDoors();
         deps.onDoorsChanged(doors, Math.max(0, deps.selectedIndex - 1));
@@ -113,7 +114,7 @@ async function performDoorDelete(deps) {
     catch (e) {
         log.fail(e?.message ?? String(e));
         deps.setStatus(`Error: ${e?.message ?? e}`, 'red', 8000);
-        paint('\n\n{red-fg}Delete failed{/red-fg}\n');
+        paint(`\n\n{${door_theme_1.T.alert}-fg}Delete failed{/${door_theme_1.T.alert}-fg}\n`);
         console.log(`[DOORMAN] delete error: ${d.name}: ${e?.message ?? e}`);
     }
 }

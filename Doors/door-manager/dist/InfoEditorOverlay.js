@@ -6,6 +6,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InfoEditorOverlay = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const door_theme_1 = require("./door-theme");
 class InfoEditorOverlay {
     constructor(opts) {
         this.tooltypes = [];
@@ -26,23 +27,23 @@ class InfoEditorOverlay {
         this.overlay = new blessed_1.Box({
             parent: this.screen,
             top: 0, left: 0, width: '100%', height: '100%',
-            style: { bg: 'black' },
+            style: { bg: door_theme_1.T.ground },
             tags: true, keys: true, focusable: true,
         });
         this.header = new blessed_1.Panel({
             parent: this.overlay,
             top: 0, left: 0, width: '100%', height: 3,
             tags: true,
-            content: `  {cyan-fg}EDIT: ${this.command}.info{/cyan-fg}  `,
-            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+            content: `  {${door_theme_1.T.accent}-fg}EDIT: ${this.command}.info{/${door_theme_1.T.accent}-fg}  `,
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } },
             focusable: false,
         });
         this.footer = new blessed_1.Panel({
             parent: this.overlay,
             bottom: 0, left: 0, width: '100%', height: 3,
             tags: true,
-            content: `{center}{yellow-fg}Enter{/yellow-fg}=Edit  {yellow-fg}!{/yellow-fg}=Toggle  {yellow-fg}S{/yellow-fg}=Save+Close  {yellow-fg}ESC{/yellow-fg}=Cancel{/center}`,
-            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+            content: `{center}{${door_theme_1.T.warn}-fg}Enter{/${door_theme_1.T.warn}-fg}=Edit  {${door_theme_1.T.warn}-fg}!{/${door_theme_1.T.warn}-fg}=Toggle  {${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}=Save+Close  {${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Cancel{/center}`,
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } },
             focusable: false,
         });
         this.listWidget = new blessed_1.List({
@@ -51,8 +52,8 @@ class InfoEditorOverlay {
             keys: true, vi: true, mouse: true,
             tags: true,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         // List vi-mode intercepts Enter and emits 'select' before key() fires
@@ -90,7 +91,7 @@ class InfoEditorOverlay {
         const tooltypes = await this.bbs.readInfoFile(this.infoPath);
         if (!tooltypes) {
             this.tooltypes = [];
-            this.listWidget.setItems(['{red-fg}Cannot read .info file{/red-fg}']);
+            this.listWidget.setItems([`{${door_theme_1.T.alert}-fg}Cannot read .info file{/${door_theme_1.T.alert}-fg}`]);
             return;
         }
         this.tooltypes = tooltypes;
@@ -98,13 +99,13 @@ class InfoEditorOverlay {
     }
     renderList() {
         const items = this.tooltypes.map(tt => {
-            const prefix = tt.commented ? '{gray-fg}!' : '{yellow-fg}';
-            const suffix = tt.commented ? '{/gray-fg}' : '{/yellow-fg}';
+            const prefix = tt.commented ? `{${door_theme_1.T.dim}-fg}!` : `{${door_theme_1.T.warn}-fg}`;
+            const suffix = tt.commented ? `{/${door_theme_1.T.dim}-fg}` : `{/${door_theme_1.T.warn}-fg}`;
             const kv = tt.value ? `${tt.key}=${tt.value}` : tt.key;
             return `${prefix}${kv}${suffix}`;
         });
         if (items.length === 0)
-            items.push('{gray-fg}(empty){/gray-fg}');
+            items.push(`{${door_theme_1.T.dim}-fg}(empty){/${door_theme_1.T.dim}-fg}`);
         this.listWidget.setItems(items);
     }
     editSelected() {
@@ -129,7 +130,7 @@ class InfoEditorOverlay {
         const editPanel = new Box({
             parent: this.overlay, top: 3 + idx, left: 1, width: '100%-2', height: 1,
             tags: false, border: false,
-            style: { fg: 'yellow', bg: 'blue' },
+            style: { fg: door_theme_1.T.warn, bg: door_theme_1.T.bar },
         });
         renderEdit();
         this.screen.render();

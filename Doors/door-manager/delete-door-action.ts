@@ -15,6 +15,7 @@
 
 import { ActionLog } from './action-log';
 import { deleteOutcomeView } from './delete-outcome';
+import { T } from './door-theme';
 
 /** Only the fields the delete needs; the view passes its richer object. */
 export interface DeletableDoor {
@@ -79,7 +80,7 @@ export async function performDoorDelete<T extends DeletableDoor>(
 
   deps.setStatus(`Deleting ${d.name}...`, 'yellow', 30000);
   log.ok(`${d.command}: ${isTS ? `Doors/${id}` : `${id} (${d.type})`}`);
-  paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+  paint(`\n\n{${T.warn}-fg}Working...{/${T.warn}-fg}\n`);
 
   try {
     // Each step is painted AS it happens. DOORMAN runs in the backend's own
@@ -89,7 +90,7 @@ export async function performDoorDelete<T extends DeletableDoor>(
     // after the pause.
     const onStep = (step: { kind: 'ok' | 'skip' | 'fail'; text: string }) => {
       log.add(step.kind, step.text);
-      paint('\n\n{yellow-fg}Working...{/yellow-fg}\n');
+      paint(`\n\n{${T.warn}-fg}Working...{/${T.warn}-fg}\n`);
     };
 
     const result = await bbs.deleteDoor(id, isTS, onStep);
@@ -112,7 +113,7 @@ export async function performDoorDelete<T extends DeletableDoor>(
     // stale registry here left deleted doors visible with no feedback
     // (2026-08-15). Refresh again from our side, re-fetch, and confirm.
     log.ok('reloading the door registry');
-    paint('\n\n{yellow-fg}Reloading...{/yellow-fg}\n');
+    paint(`\n\n{${T.warn}-fg}Reloading...{/${T.warn}-fg}\n`);
     await deps.refreshRegistry();
     const doors = await deps.fetchDoors();
     deps.onDoorsChanged(doors, Math.max(0, deps.selectedIndex - 1));
@@ -145,7 +146,7 @@ export async function performDoorDelete<T extends DeletableDoor>(
   } catch (e: any) {
     log.fail(e?.message ?? String(e));
     deps.setStatus(`Error: ${e?.message ?? e}`, 'red', 8000);
-    paint('\n\n{red-fg}Delete failed{/red-fg}\n');
+    paint(`\n\n{${T.alert}-fg}Delete failed{/${T.alert}-fg}\n`);
     console.log(`[DOORMAN] delete error: ${d.name}: ${e?.message ?? e}`);
   }
 }

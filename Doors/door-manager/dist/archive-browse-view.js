@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ArchiveBrowseView = void 0;
 const ViewManager_1 = require("./ViewManager");
+const door_theme_1 = require("./door-theme");
 // ── Archive Browser (from catalog, no lha needed) ────────────────────────────
 class ArchiveBrowseView extends ViewManager_1.BaseView {
     constructor(layout, archiveName, files) {
@@ -40,11 +41,11 @@ class ArchiveBrowseView extends ViewManager_1.BaseView {
         this.layout.setListLabel(` ${this.archiveName} (${visible.length} files) `);
         this.layout.setListItems(items);
         this.layout.setListSelect(0);
-        this.layout.setInfo(`{yellow-fg}${this.archiveName}{/yellow-fg}\n\n` +
-            `{white-fg}${visible.length} files{/white-fg}` +
-            (junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}') +
-            '\n\n{grey-fg}! = flagged as ad file{/grey-fg}');
-        this.layout.setFooter('{center}{yellow-fg}↑/↓{/yellow-fg} Navigate  {yellow-fg}ESC/Q{/yellow-fg} Back{/center}');
+        this.layout.setInfo(`{${door_theme_1.T.warn}-fg}${this.archiveName}{/${door_theme_1.T.warn}-fg}\n\n` +
+            `{${door_theme_1.T.ink}-fg}${visible.length} files{/${door_theme_1.T.ink}-fg}` +
+            (junk > 0 ? `  {${door_theme_1.T.alert}-fg}${junk} ad files{/${door_theme_1.T.alert}-fg}` : `  {${door_theme_1.T.ok}-fg}clean{/${door_theme_1.T.ok}-fg}`) +
+            `\n\n{${door_theme_1.T.dim}-fg}! = flagged as ad file{/${door_theme_1.T.dim}-fg}`);
+        this.layout.setFooter(`{center}{${door_theme_1.T.warn}-fg}↑/↓{/${door_theme_1.T.warn}-fg} Navigate  {${door_theme_1.T.warn}-fg}ESC/Q{/${door_theme_1.T.warn}-fg} Back{/center}`);
         this.layout.focusList();
         this.layout.render();
         this.keys.key(['q', 'Q'], () => this.vm.pop());

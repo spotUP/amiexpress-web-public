@@ -14,6 +14,7 @@
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { themeStyles, themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { Text } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -36,6 +37,15 @@ interface NodeInfo {
 
 class BBSDashboard {
   private ctx!: DoorContext;
+  /**
+   * The caller's theme, resolved once.
+   *
+   * Every colour on this screen used to be a literal - three panels in
+   * yellow, cyan and green, a white-on-blue bar, three progress bars in
+   * three more hues. That is six colours competing before any data is on
+   * screen, and none of them move when the user picks a theme.
+   */
+  private s = themeStyles(themeById('classic'));
   private screen!: Screen;
   private inputManager!: DoorInputManager;
   private systemPanel!: any;  // Box widget
@@ -86,6 +96,9 @@ class BBSDashboard {
   }
 
   private createUI(): void {
+    const bbsTheme = (this.ctx.bbs as any)?.getTheme;
+    this.s = themeStyles(bbsTheme ? (this.ctx.bbs as any).getTheme() : themeById('classic'));
+
     this.screen = createScreen(this.ctx.bbs, {
       smartCSR: false,   // Prevent layout corruption in BBS environment
       dockBorders: false, // Not needed for fixed panels
@@ -109,8 +122,7 @@ class BBSDashboard {
       focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
       mouse: false,      // Don't listen for mouse events
-      border: { type: 'line' },
-      style: { border: { fg: 'yellow' } },
+      ...this.s.panel,
     });
 
     this.systemText = new Text({
@@ -135,8 +147,7 @@ class BBSDashboard {
       focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
       mouse: false,      // Don't listen for mouse events
-      border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      ...this.s.panel,
     });
 
     this.statsText = new Text({
@@ -161,8 +172,7 @@ class BBSDashboard {
       focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
       mouse: false,      // Don't listen for mouse events
-      border: { type: 'line' },
-      style: { border: { fg: 'green' } },
+      ...this.s.panel,
     });
 
     this.nodesText = new Text({
@@ -183,7 +193,7 @@ class BBSDashboard {
       right: 0,
       height: 1,
       content: '',
-      style: { fg: 'white', bg: 'blue' },
+      ...this.s.bar,
       tags: true,
     });
 
@@ -268,11 +278,11 @@ class BBSDashboard {
     const diskUsage = sysStats.disk;
 
     systemLines.push('');
-    systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, 20, 'cyan')}`);
+    systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, 20, this.s.accent)}`);
     systemLines.push('');
-    systemLines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, 20, 'magenta')}`);
+    systemLines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, 20, this.s.accentAlt)}`);
     systemLines.push('');
-    systemLines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, 20, 'yellow')}`);
+    systemLines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, 20, this.s.warn)}`);
 
     this.systemText.setContent(systemLines.join('\n'));
 
@@ -304,8 +314,9 @@ class BBSDashboard {
 
     for (const node of nodes) {
       const userName = node.user || 'Waiting';
-      const color = node.status === 'Active' ? 'green' : 'white';
-      nodesLines.push(`{${color}-fg}  ${node.id}       ${this.padRight(userName, 16)}  ${this.padRight(node.status, 10)}  ${node.location}{/${color}-fg}`);
+      // Active is the theme's "good" role; anything else is ordinary text.
+      const paint = node.status === 'Active' ? this.s.ok : this.s.ink;
+      nodesLines.push(paint(`  ${node.id}       ${this.padRight(userName, 16)}  ${this.padRight(node.status, 10)}  ${node.location}`));
     }
 
     this.nodesText.setContent(nodesLines.join('\n'));
@@ -317,10 +328,18 @@ class BBSDashboard {
     this.screen.render();
   }
 
-  private makeProgressBar(percent: number, width: number, color: string): string {
+  /**
+   * A progress bar, painted by a theme role rather than a colour name.
+   *
+   * CPU, memory and disk were cyan, magenta and yellow - three hues chosen
+   * for variety, which a one-hue theme has no way to honour. They take
+   * three ROLES now, so they still read as three different things and a
+   * theme decides how far apart they look.
+   */
+  private makeProgressBar(percent: number, width: number, paint: (t: string) => string): string {
     const filled = Math.floor((width * percent) / 100);
     const bar = '[' + '='.repeat(filled) + ' '.repeat(width - filled) + ']';
-    return `{${color}-fg}${bar}{/${color}-fg}`;
+    return paint(bar);
   }
 
   private padRight(text: string, width: number): string {

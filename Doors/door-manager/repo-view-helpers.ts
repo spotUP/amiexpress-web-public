@@ -10,6 +10,7 @@
  */
 import type { KeyBinder } from './ViewManager';
 import type { DoorRepoMode } from './repoDataSource';
+import { T } from './door-theme';
 
 /**
  * Wraps text to the info pane's real width, breaking on spaces.
@@ -70,15 +71,15 @@ export function repoViewFooterParts(
   // "Quit") - which is invisible on plenty of real terminals, and led to
   // "it doesn't say anywhere that S is used to strip".
   const parts = [
-    `{yellow-fg}R{/yellow-fg}=${inst}`,
-    (opts.hasJunk && curationAllowed) ? `{yellow-fg}S{/yellow-fg}=Strip` : null,
-    opts.hasDoc  ? `{yellow-fg}V{/yellow-fg}=Doc` : null,
-    `{yellow-fg}A{/yellow-fg}=Archive`,
-    curationAllowed ? `{yellow-fg}D{/yellow-fg}=Delete` : null,
-    `{yellow-fg}F{/yellow-fg}=Filter`,
-    `{yellow-fg}C{/yellow-fg}=System`,
-    `{yellow-fg}ESC{/yellow-fg}=Back`,
-    `{yellow-fg}Q{/yellow-fg}=Quit`,
+    `{${T.warn}-fg}R{/${T.warn}-fg}=${inst}`,
+    (opts.hasJunk && curationAllowed) ? `{${T.warn}-fg}S{/${T.warn}-fg}=Strip` : null,
+    opts.hasDoc  ? `{${T.warn}-fg}V{/${T.warn}-fg}=Doc` : null,
+    `{${T.warn}-fg}A{/${T.warn}-fg}=Archive`,
+    curationAllowed ? `{${T.warn}-fg}D{/${T.warn}-fg}=Delete` : null,
+    `{${T.warn}-fg}F{/${T.warn}-fg}=Filter`,
+    `{${T.warn}-fg}C{/${T.warn}-fg}=System`,
+    `{${T.warn}-fg}ESC{/${T.warn}-fg}=Back`,
+    `{${T.warn}-fg}Q{/${T.warn}-fg}=Quit`,
   ].filter(Boolean).join('  ');
   return `{center}${parts}{/center}`;
 }
@@ -122,15 +123,15 @@ function isJunkRow(file: ArchiveFileRow): boolean {
 export function renderFileLines(files: ArchiveFileRow[], limit = 25): string {
   if (files.length === 0) return '';
   const junk = files.filter(isJunkRow).length;
-  const junkTag = junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}';
-  let out = `\n\n{grey-fg}─── ${files.length} files${junkTag}{/grey-fg}  {grey-fg}──────────────────────{/grey-fg}\n`;
+  const junkTag = junk > 0 ? `  {${T.alert}-fg}${junk} ad files{/${T.alert}-fg}` : `  {${T.ok}-fg}clean{/${T.ok}-fg}`;
+  let out = `\n\n{${T.dim}-fg}─── ${files.length} files${junkTag}{/${T.dim}-fg}  {${T.dim}-fg}──────────────────────{/${T.dim}-fg}\n`;
   for (const f of files.slice(0, limit)) {
     const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
-    const junkMark = isJunkRow(f) ? '{red-fg}!{/red-fg}' : ' ';
+    const junkMark = isJunkRow(f) ? `{${T.alert}-fg}!{/${T.alert}-fg}` : ' ';
     const name = f.path.length > 34 ? '<' + f.path.slice(f.path.length - 33) : f.path;
     out += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
   }
-  if (files.length > limit) out += `{grey-fg}  ... and ${files.length - limit} more{/grey-fg}\n`;
+  if (files.length > limit) out += `{${T.dim}-fg}  ... and ${files.length - limit} more{/${T.dim}-fg}\n`;
   return out;
 }
 

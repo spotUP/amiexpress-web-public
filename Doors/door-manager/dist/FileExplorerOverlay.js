@@ -45,6 +45,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const ViewManager_1 = require("./ViewManager");
+const door_theme_1 = require("./door-theme");
 /**
  * What a door's path means, from the BBS root.
  *
@@ -199,7 +200,7 @@ class FileExplorerOverlay {
             left: 0,
             width: '100%',
             height: '100%',
-            style: { bg: 'black' },
+            style: { bg: door_theme_1.T.ground },
             tags: true,
             keys: true,
             focusable: true,
@@ -212,7 +213,7 @@ class FileExplorerOverlay {
             height: 3,
             tags: true,
             content: '',
-            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } },
             focusable: false,
         });
         this.footer = new blessed_1.Panel({
@@ -222,8 +223,8 @@ class FileExplorerOverlay {
             width: '100%',
             height: 3,
             tags: true,
-            content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp/B{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
-            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+            content: `{center}{${door_theme_1.T.warn}-fg}Enter{/${door_theme_1.T.warn}-fg}=Open  {${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}el  {${door_theme_1.T.warn}-fg}R{/${door_theme_1.T.warn}-fg}ename  {${door_theme_1.T.warn}-fg}Bksp/B{/${door_theme_1.T.warn}-fg}=Up  {${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Close{/center}`,
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } },
             focusable: false,
         });
         this.listWidget = new blessed_1.List({
@@ -237,8 +238,8 @@ class FileExplorerOverlay {
             mouse: true,
             tags: true,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         // All keys via screen.on('keypress') — widget.key() only fires when that
@@ -352,9 +353,9 @@ class FileExplorerOverlay {
             const code = e?.code ?? 'ERR';
             const msg = e?.message ?? String(err);
             this.listWidget.setItems([
-                `{red-fg}Cannot read directory: ${code}{/red-fg}`,
-                `{gray-fg}${absDir}{/gray-fg}`,
-                `{gray-fg}${msg}{/gray-fg}`,
+                `{${door_theme_1.T.alert}-fg}Cannot read directory: ${code}{/${door_theme_1.T.alert}-fg}`,
+                `{${door_theme_1.T.dim}-fg}${absDir}{/${door_theme_1.T.dim}-fg}`,
+                `{${door_theme_1.T.dim}-fg}${msg}{/${door_theme_1.T.dim}-fg}`,
             ]);
             this.screen.render();
             return;
@@ -369,22 +370,22 @@ class FileExplorerOverlay {
             .sort((a, b) => a.name.localeCompare(b.name));
         const items = [];
         if (absDir !== this.doorRoot) {
-            items.push('{blue-fg}.. (parent){/blue-fg}');
+            items.push(`{${door_theme_1.T.accentAlt}-fg}.. (parent){/${door_theme_1.T.accentAlt}-fg}`);
         }
         for (const d of dirs) {
-            items.push(`{cyan-fg}[${d}/]{/cyan-fg}`);
+            items.push(`{${door_theme_1.T.accent}-fg}[${d}/]{/${door_theme_1.T.accent}-fg}`);
         }
         for (const f of files) {
             const size = formatFileSize(getFileSize(path.join(absDir, f.name)));
             if (isReadable(f.name)) {
-                items.push(`${f.name.padEnd(36)} {white-fg}${size}{/white-fg}`);
+                items.push(`${f.name.padEnd(36)} {${door_theme_1.T.ink}-fg}${size}{/${door_theme_1.T.ink}-fg}`);
             }
             else {
-                items.push(`{gray-fg}${f.name.padEnd(36)} ${size}{/gray-fg}`);
+                items.push(`{${door_theme_1.T.dim}-fg}${f.name.padEnd(36)} ${size}{/${door_theme_1.T.dim}-fg}`);
             }
         }
         if (items.length === 0) {
-            items.push('{gray-fg}(empty directory){/gray-fg}');
+            items.push(`{${door_theme_1.T.dim}-fg}(empty directory){/${door_theme_1.T.dim}-fg}`);
         }
         this.listWidget.setItems(items);
         this.listWidget.select(0);
@@ -474,7 +475,7 @@ class FileExplorerOverlay {
                 width: '100%',
                 height: '100%-6',
                 tags: false,
-                style: { fg: 'white', bg: 'black' },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
                 keys: true,
                 focusable: true,
             });
@@ -518,22 +519,22 @@ class FileExplorerOverlay {
             const breadcrumb = this.isGuide && this.guideCurrentNode
                 ? `${this.viewerFilename} > ${this.guideCurrentNode}`
                 : this.viewerFilename;
-            this.header.setContent(`  {cyan-fg}${breadcrumb}{/cyan-fg}  |  {yellow-fg}B{/yellow-fg}=back  {yellow-fg}ESC{/yellow-fg}=close  `);
+            this.header.setContent(`  {${door_theme_1.T.accent}-fg}${breadcrumb}{/${door_theme_1.T.accent}-fg}  |  {${door_theme_1.T.warn}-fg}B{/${door_theme_1.T.warn}-fg}=back  {${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=close  `);
         }
         else {
-            this.header.setContent(`  {cyan-fg}FILES: ${relDir}/{/cyan-fg}  |  {yellow-fg}ESC{/yellow-fg}=close  `);
+            this.header.setContent(`  {${door_theme_1.T.accent}-fg}FILES: ${relDir}/{/${door_theme_1.T.accent}-fg}  |  {${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=close  `);
         }
     }
     updateFooterBrowser() {
-        this.footer.setContent(`{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`);
+        this.footer.setContent(`{center}{${door_theme_1.T.warn}-fg}Enter{/${door_theme_1.T.warn}-fg}=Open  {${door_theme_1.T.warn}-fg}Bksp{/${door_theme_1.T.warn}-fg}=Up  {${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Close{/center}`);
     }
     updateFooterViewer() {
         const line1 = this.viewerScrollOffset + 1;
         const lineN = Math.min(this.viewerScrollOffset + this.getViewerHeight(), this.viewerTotalLines);
         const guideHint = this.isGuide
-            ? `  {yellow-fg}1-9{/yellow-fg}=link  {yellow-fg}P{/yellow-fg}/{yellow-fg}N{/yellow-fg}=prev/next`
+            ? `  {${door_theme_1.T.warn}-fg}1-9{/${door_theme_1.T.warn}-fg}=link  {${door_theme_1.T.warn}-fg}P{/${door_theme_1.T.warn}-fg}/{${door_theme_1.T.warn}-fg}N{/${door_theme_1.T.warn}-fg}=prev/next`
             : '';
-        this.footer.setContent(`{center}Lines ${line1}-${lineN}/${this.viewerTotalLines}  {yellow-fg}up/dn{/yellow-fg}=scroll${guideHint}  {yellow-fg}B{/yellow-fg}=back{/center}`);
+        this.footer.setContent(`{center}Lines ${line1}-${lineN}/${this.viewerTotalLines}  {${door_theme_1.T.warn}-fg}up/dn{/${door_theme_1.T.warn}-fg}=scroll${guideHint}  {${door_theme_1.T.warn}-fg}B{/${door_theme_1.T.warn}-fg}=back{/center}`);
     }
     getSelectedFilename() {
         const idx = this.listWidget.selected ?? 0;
@@ -591,7 +592,7 @@ class FileExplorerOverlay {
     }
     promptInFooter(prompt, onSubmit) {
         let buf = '';
-        this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+        this.footer.setContent(`{center}{${door_theme_1.T.warn}-fg}${prompt}{/${door_theme_1.T.warn}-fg}${buf}_`);
         this.screen.render();
         const handler = (ch, key) => {
             const kn = key?.name ?? '';
@@ -607,12 +608,12 @@ class FileExplorerOverlay {
             }
             else if (kn === 'backspace' || ch === '\x7f' || ch === '\b') {
                 buf = buf.slice(0, -1);
-                this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+                this.footer.setContent(`{center}{${door_theme_1.T.warn}-fg}${prompt}{/${door_theme_1.T.warn}-fg}${buf}_`);
                 this.screen.render();
             }
             else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
                 buf += ch;
-                this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+                this.footer.setContent(`{center}{${door_theme_1.T.warn}-fg}${prompt}{/${door_theme_1.T.warn}-fg}${buf}_`);
                 this.screen.render();
             }
         };
@@ -620,11 +621,11 @@ class FileExplorerOverlay {
         this.screen.on('keypress', handler);
     }
     restoreFooter() {
-        this.footer.setContent(`{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`);
+        this.footer.setContent(`{center}{${door_theme_1.T.warn}-fg}Enter{/${door_theme_1.T.warn}-fg}=Open  {${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}el  {${door_theme_1.T.warn}-fg}R{/${door_theme_1.T.warn}-fg}ename  {${door_theme_1.T.warn}-fg}Bksp{/${door_theme_1.T.warn}-fg}=Up  {${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Close{/center}`);
         this.screen.render();
     }
     showFooterMsg(msg, ms = 2000) {
-        this.footer.setContent(`{center}{red-fg}${msg}{/red-fg}{/center}`);
+        this.footer.setContent(`{center}{${door_theme_1.T.alert}-fg}${msg}{/${door_theme_1.T.alert}-fg}{/center}`);
         this.screen.render();
         setTimeout(() => this.restoreFooter(), ms);
     }

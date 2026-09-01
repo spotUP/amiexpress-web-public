@@ -1,3 +1,4 @@
+import { T } from './door-theme';
 /**
  * What the info panel shows once a delete has finished.
  *
@@ -35,7 +36,7 @@ export function deleteOutcomeView(outcome: DeleteOutcome): DeleteOutcomeView {
   if (!outcome.success) {
     return {
       kind: 'message',
-      text: `\n\n{red-fg}Delete failed{/red-fg}\n\n${outcome.message ?? 'unknown error'}\n`,
+      text: `\n\n{${T.alert}-fg}Delete failed{/${T.alert}-fg}\n\n${outcome.message ?? 'unknown error'}\n`,
     };
   }
 
@@ -44,7 +45,7 @@ export function deleteOutcomeView(outcome: DeleteOutcome): DeleteOutcomeView {
     // door that is still on screen is the report this check came from.
     return {
       kind: 'message',
-      text: `\n\n{red-fg}Still registered{/red-fg}\n\n` +
+      text: `\n\n{${T.alert}-fg}Still registered{/${T.alert}-fg}\n\n` +
         `The files were removed but ${outcome.command} is still in the door list.\n`,
     };
   }
