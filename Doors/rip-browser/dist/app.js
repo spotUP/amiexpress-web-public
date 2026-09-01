@@ -37,7 +37,8 @@ exports.execute = execute;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const RIP_DIR = '~/Code/amiexpress-web/RIPgraphics';
+const paths_1 = require("./paths");
+const RIP_DIR = (0, paths_1.ripGraphicsDir)();
 async function execute(session) {
     const { socket, bbsSession, user, params } = session;
     console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);

@@ -7,8 +7,9 @@ import {
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ripGraphicsDir } from './paths';
 
-const RIP_DIR = '~/Code/amiexpress-web/RIPgraphics';
+const RIP_DIR = ripGraphicsDir();
 
 export async function execute(session: any) {
   const { socket, bbsSession, user, params } = session;

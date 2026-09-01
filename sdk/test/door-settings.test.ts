@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readDoorSettings, readDoorSettingOverrides, readManifest, resolveDoorRoot, DoorSettingsError } from '../core/settings';
+import { readDoorSettings, readDoorSettingOverrides, readManifest, resolveDoorRoot, resolveBbsRoot, DoorSettingsError } from '../core/settings';
 
 const MANIFEST = {
   command: 'TESTDOOR',
@@ -168,6 +168,55 @@ describe('door settings', () => {
       writeValues({ password: '', server: 'wall.uprough.net' });
 
       expect(readDoorSettingOverrides(doorDir)).toEqual({ server: 'wall.uprough.net' });
+    });
+  });
+
+  // A door needs the BBS root as often as its own directory: RIPgraphics,
+  // Screens and Bulletins all live there and none of them are inside a door.
+  describe('the BBS root', () => {
+    let bbsRoot: string;
+    let doorDist: string;
+    const previousEnv = { ...process.env };
+
+    beforeEach(() => {
+      bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bbs-root-'));
+      fs.mkdirSync(path.join(bbsRoot, 'Commands', 'BBSCmd'), { recursive: true });
+      doorDist = path.join(bbsRoot, 'Doors', 'a-door', 'dist');
+      fs.mkdirSync(doorDist, { recursive: true });
+      fs.writeFileSync(path.join(bbsRoot, 'Doors', 'a-door', 'package.json'), '{"name":"a-door"}');
+      delete process.env.BBS_DATA_DIR;
+      delete process.env.BBS_ROOT;
+    });
+
+    afterEach(() => {
+      process.env = { ...previousEnv };
+      fs.rmSync(bbsRoot, { recursive: true, force: true });
+    });
+
+    it('walks up from a compiled door to the board', () => {
+      expect(resolveBbsRoot(doorDist)).toBe(bbsRoot);
+    });
+
+    it('takes BBS_DATA_DIR when the container sets it', () => {
+      process.env.BBS_DATA_DIR = bbsRoot;
+
+      expect(resolveBbsRoot('/nowhere')).toBe(bbsRoot);
+    });
+
+    it('ignores an environment variable pointing at something that is not a board', () => {
+      process.env.BBS_DATA_DIR = os.tmpdir();
+
+      expect(resolveBbsRoot(doorDist)).toBe(bbsRoot);
+    });
+
+    it('falls back to the door root rather than climbing to the filesystem root', () => {
+      const orphanDoor = fs.mkdtempSync(path.join(os.tmpdir(), 'orphan-door-'));
+      fs.writeFileSync(path.join(orphanDoor, 'package.json'), '{"name":"orphan"}');
+      const orphanDist = path.join(orphanDoor, 'dist');
+      fs.mkdirSync(orphanDist);
+
+      expect(resolveBbsRoot(orphanDist)).toBe(orphanDoor);
+      fs.rmSync(orphanDoor, { recursive: true, force: true });
     });
   });
 });

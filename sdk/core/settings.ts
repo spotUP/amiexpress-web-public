@@ -65,6 +65,35 @@ export function resolveDoorRoot(startDir: string): string {
   return path.resolve(startDir);
 }
 
+/** How far above a door the BBS root may sit: Doors/<door>/dist is three. */
+const BBS_ROOT_SEARCH_DEPTH = 6;
+
+/**
+ * The BBS root - the directory holding Commands, Doors, Access and the rest.
+ *
+ * A door needs this as often as it needs its own directory: RIPgraphics,
+ * Screens, Bulletins and the conference tree all live here, and none of them
+ * are inside the door. The container sets BBS_DATA_DIR (BBS_ROOT is empty
+ * there, which is how new users came to be written to a file nothing reads),
+ * so the environment is asked first and the walk is the fallback.
+ *
+ * `Commands/BBSCmd` is what identifies it: every board has one, and no door
+ * does. Nothing found means the door's own root, which at least exists.
+ */
+export function resolveBbsRoot(startDir: string): string {
+  const fromEnv = process.env.BBS_DATA_DIR || process.env.BBS_ROOT;
+  if (fromEnv && fs.existsSync(path.join(fromEnv, 'Commands', 'BBSCmd'))) return fromEnv;
+
+  let dir = path.resolve(startDir);
+  for (let depth = 0; depth <= BBS_ROOT_SEARCH_DEPTH; depth++) {
+    if (fs.existsSync(path.join(dir, 'Commands', 'BBSCmd'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return resolveDoorRoot(startDir);
+}
+
 function assertSetting(doorDir: string, setting: unknown, index: number): DoorSetting {
   const where = `settings[${index}]`;
   if (!setting || typeof setting !== 'object') {

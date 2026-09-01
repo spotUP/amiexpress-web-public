@@ -14,6 +14,7 @@ export {
   readManifest,
   readValues,
   resolveDoorRoot,
+  resolveBbsRoot,
   DoorSettingsError,
   MANIFEST_FILE,
   VALUES_FILE,
