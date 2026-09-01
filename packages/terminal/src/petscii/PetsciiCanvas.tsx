@@ -8,7 +8,12 @@ export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
   /** VIC-II color palette, indexed 0-15. Defaults to Colodore. */
   palette?: readonly string[];
-  /** Integer zoom factor. 320x200 native -> 640x400 at the default scale of 2. */
+  /**
+   * Upper bound on the integer zoom factor. The actual render scale is
+   * auto-fit to the parent container (see `fitScale` below) and will only
+   * ever be this value or smaller - it is a maximum, not a fixed size.
+   * Defaults to 2 (320x200 native -> 640x400 at that cap).
+   */
   scale?: number;
   /** Keyboard input, already translated to PETSCII bytes. */
   onData?: (bytes: number[]) => void;
@@ -19,6 +24,12 @@ const ROWS = 25;
 const CELL_PX = 8; // native C64 character cell, both axes (320x200 / 40x25)
 const ATLAS_PX_SIZE = 8; // atlas built 1:1 with the native cell; `scale` does the zoom
 const CURSOR_BLINK_MS = 500;
+const BORDER_PER_SCALE = 16; // px of border per axis, per unit of scale - matches `border = 16 * scale` below
+// Bordered screen footprint per unit of integer scale: 40*8 + 2*16 = 352
+// wide, 25*8 + 2*16 = 232 tall. Derived from the same constants `border`/
+// `width`/`height` use below so the two can never drift apart.
+const UNIT_W = COLS * CELL_PX + 2 * BORDER_PER_SCALE;
+const UNIT_H = ROWS * CELL_PX + 2 * BORDER_PER_SCALE;
 
 /**
  * Renders a `PetsciiMachine`'s screen/color-RAM state onto a `<canvas>` via a
@@ -32,13 +43,41 @@ const CURSOR_BLINK_MS = 500;
 export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
   machine,
   palette = C64_PALETTE_COLODORE,
-  scale = 2,
+  scale: maxScale = 2,
   onData,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const atlasCacheRef = useRef<TintedAtlasCache | null>(null);
   const [atlasReady, setAtlasReady] = useState(false);
   const [cursorOn, setCursorOn] = useState(true);
+  // The largest integer scale whose full bordered screen (352x232 at scale 1)
+  // fits inside the parent container, measured below. Starts at 1 so the
+  // very first paint never overflows before the initial measurement runs.
+  const [fitScale, setFitScale] = useState(1);
+
+  // Measure the parent container (ResizeObserver + an initial synchronous
+  // measure) and recompute the largest integer scale that fits without
+  // overflowing. `maxScale` (the `scale` prop) is a ceiling on this, not a
+  // fixed value - a roomy container still won't zoom past it.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const availW = el.clientWidth;
+      const availH = el.clientHeight;
+      if (availW <= 0 || availH <= 0) return;
+      const fit = Math.max(1, Math.floor(Math.min(availW / UNIT_W, availH / UNIT_H)));
+      setFitScale(fit);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const scale = Math.max(1, Math.min(maxScale, fitScale));
 
   const border = 16 * scale;
   const width = COLS * CELL_PX * scale + 2 * border;
@@ -141,13 +180,38 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
   }, [onData]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={width}
-      height={height}
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-      style={{ imageRendering: 'pixelated', width, height }}
-    />
+    <div
+      ref={containerRef}
+      style={{
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        style={{
+          imageRendering: 'pixelated',
+          // `width`/`height` set the backing-store resolution via the
+          // attributes above; leaving the CSS size on 'auto' lets the
+          // canvas's own intrinsic size (that resolution) drive layout like
+          // an <img>. max-width/max-height only bite when the container is
+          // smaller than even scale 1 (352x232) - see `fitScale` above -
+          // proportionally shrinking the crisp pixel art instead of letting
+          // it overflow.
+          width: 'auto',
+          height: 'auto',
+          maxWidth: '100%',
+          maxHeight: '100%',
+        }}
+      />
+    </div>
   );
 };

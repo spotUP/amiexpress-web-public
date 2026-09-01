@@ -270,6 +270,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // draws at the same simulated baud rate as the ANSI/xterm path.
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
   const [petsciiActive, setPetsciiActive] = useState<boolean>(false);
+  // Pixel box of the (still-visible) xterm terminal, snapshotted at the
+  // moment PETSCII mode is entered. terminalRef gets display:none once
+  // petsciiActive flips, which drops it out of layout flow - in 'fixed'
+  // mode its parent has no explicit height of its own (it sizes off
+  // xterm's rendered content), so without this snapshot the PetsciiCanvas
+  // overlay's box would collapse to 0 height right when it's needed.
+  const [petsciiFrameSize, setPetsciiFrameSize] = useState<{ width: number; height: number } | null>(null);
   const petsciiBpsRef = useRef<number>(0);
   const petsciiFeedQueue = useRef<number[]>([]);
   const petsciiDrainActiveRef = useRef<boolean>(false);
@@ -2159,6 +2166,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       if (!petsciiMachineRef.current) {
         petsciiMachineRef.current = new PetsciiMachine();
+        // Snapshot xterm's current box before hiding it (display:none drops
+        // it out of flow) so the PetsciiCanvas overlay inherits the real
+        // terminal-frame dimensions instead of collapsing - see
+        // petsciiFrameSize's declaration for why.
+        if (terminalRef.current) {
+          setPetsciiFrameSize({
+            width: terminalRef.current.clientWidth,
+            height: terminalRef.current.clientHeight,
+          });
+        }
         setPetsciiActive(true); // swaps the xterm div for <PetsciiCanvas machine=.../>
       }
       for (const b of bytes) petsciiFeedQueue.current.push(b);
@@ -3295,6 +3312,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           position: 'relative',
           width: '100%',
           ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
+          // In 'fixed' mode this div normally has no explicit height of its
+          // own - it sizes off terminalRef's rendered content (xterm has no
+          // height style either; see below). Once petsciiActive hides
+          // terminalRef with display:none, that content contribution
+          // disappears and this wrapper would collapse to 0 height right
+          // when the PetsciiCanvas overlay below needs a real box to fit
+          // and center in. petsciiFrameSize snapshots that box's pixel size
+          // from the moment PETSCII mode was entered (terminalRef was still
+          // visible then) so the wrapper - and the flex centering the root
+          // above does around it - keeps behaving exactly as it did with
+          // xterm visible. 'wide' mode is unaffected: it already gets an
+          // explicit height:100% here, a real percentage of a sized
+          // ancestor that stays responsive to resizes.
+          ...(terminalMode === 'fixed' && petsciiActive && petsciiFrameSize
+            ? { height: `${petsciiFrameSize.height}px` }
+            : {}),
         }}
       >
       <div
@@ -3327,6 +3360,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             position: 'absolute',
             inset: 0,
             zIndex: 10,
+            // Fills the wrapper above, which now always has a real size
+            // (see petsciiFrameSize's declaration for the 'fixed'-mode
+            // collapse this guards against).
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
             backgroundColor: '#000',
             display: 'flex',
             alignItems: 'center',
