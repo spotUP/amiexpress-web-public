@@ -998,6 +998,25 @@ try {
 
 // ===== Exported Functions =====
 export const displayMainMenu = menuDisplayMainMenu;
+
+/**
+ * Draw the menu if a command just ended, instead of leaving it pending.
+ *
+ * DISPLAY_MENU only repaints when the NEXT keystroke arrives (see the
+ * transition near the bottom of handleCommand). A command that finishes
+ * inside processCommand is fine - the after-command flow draws it - but one
+ * that finishes inside an INPUT branch, as the flag and download prompts
+ * do, leaves the user looking at a screen with no prompt on it.
+ *
+ * Reported twice: "i have to press enter twice" at the flag prompt, and
+ * "i downloaded two files now i have to press enter to return to the bbs
+ * prompt... it was stuck with no prompt".
+ */
+async function repaintMenuIfPending(socket: any, session: BBSSession): Promise<void> {
+  if ((session.subState as LoggedOnSubState) !== LoggedOnSubState.DISPLAY_MENU) return;
+  session.menuPause = false;
+  await menuDisplayMainMenu(socket, session);
+}
 export const displayMenuPrompt = menuDisplayMenuPrompt;
 
 /**
@@ -2332,6 +2351,7 @@ console.log(' [DOWNLOAD] User entering filename (line-buffered)');
       const { DownloadHandler } = require('./file/download.handler');
       await DownloadHandler.handleFilenameInput(socket, session, input);
     });
+    await repaintMenuIfPending(socket, session);
     return;
   }
 
@@ -2341,6 +2361,9 @@ console.log(' [DOWNLOAD] User confirming download');
     // Y/N confirmation can be hotkey mode
     const { DownloadHandler } = require('./file/download.handler');
     await DownloadHandler.handleConfirmInput(socket, session, data);
+    // Confirming is what starts the transfer, so this is where a finished
+    // batch download lands.
+    await repaintMenuIfPending(socket, session);
     return;
   }
 
@@ -2348,6 +2371,8 @@ console.log(' [DOWNLOAD] User confirming download');
   if (session.subState === LoggedOnSubState.DOWNLOAD_PGOODBYE) {
     const { DownloadHandler } = require('./file/download.handler');
     await DownloadHandler.handlePGoodbyeInput(socket, session, data);
+    // Answering "no" to the goodbye countdown returns to the menu.
+    await repaintMenuIfPending(socket, session);
     return;
   }
 
@@ -2849,17 +2874,7 @@ console.log(' In file upload state - canceling upload');
       { echoNewline: true }
     );
 
-    // The command may have just ended. Draw the menu now rather than
-    // leaving DISPLAY_MENU pending, which waits for a keypress to redraw -
-    // reported as "it doesnt exit when i press enter, i have to press
-    // enter twice". The Enter DID exit; nothing had repainted yet. This is
-    // what the empty-command path does for the same reason.
-    // The cast is needed because the callback above changed subState and TS
-    // still has it narrowed to the three flag states from the condition above.
-    if ((session.subState as LoggedOnSubState) === LoggedOnSubState.DISPLAY_MENU) {
-      session.menuPause = false;
-      await menuDisplayMainMenu(socket, session);
-    }
+    await repaintMenuIfPending(socket, session);
     return;
   }
 
