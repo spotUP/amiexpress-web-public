@@ -77,6 +77,23 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
     session.shortcuts.clear();
   }
 
+  // Put the terminal's attributes back before drawing anything.
+  //
+  // A door that exits without resetting leaves whatever it last set still
+  // in effect, and ESC[2J erases in the CURRENT background - so the next
+  // clear paints the WHOLE screen in that colour. Reported as "some of our
+  // telnet doors do this when they exit, they set the bg to blue", with a
+  // screenshot of an entirely blue board.
+  //
+  // The reset belongs here rather than in each door's teardown: there are
+  // eight places a door session ends, doors are written by other people,
+  // and a 68K door cannot be made to promise anything. This is the one
+  // point every door returns through. Four bytes, once per menu.
+  //
+  // Same lesson the C door's ansi.c carries, where clearing defends itself
+  // for exactly this reason.
+  emitText(socket, '\x1b[0m');
+
   if (shouldDisplayMenu && session.menuPause) {
     doPause(socket, session);
     session.menuPause = false;
