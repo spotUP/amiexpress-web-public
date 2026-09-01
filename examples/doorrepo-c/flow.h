@@ -207,6 +207,28 @@ int flow_build_local_path(char *out, unsigned long outsize,
 #define FLOW_INSTALL_REFUSE_ARCHIVER_AND_MISSING 4
 #define FLOW_INSTALL_REFUSE_NOTHING_EXTRACTED    5
 
+/* Why a strip did or did not happen.
+ *
+ * The footer only offers S when the door is installed AND its archive
+ * carries ads, so the KEY could return in silence and be honest about it.
+ * The command bar offers /strip whatever is selected - and answered with
+ * nothing at all, which reads as a broken command. Same gate, but now it
+ * has to be able to SAY which case it hit. */
+#define FLOW_STRIP_OK             0
+#define FLOW_STRIP_NOT_INSTALLED  1
+#define FLOW_STRIP_NO_ADS         2
+
+/* @param installed non-zero when this board has the door on disk
+ * @param junk      ad files the repository counted; -1 when the server is
+ *                  too old to report one, which counts as "might have some"
+ *                  exactly as the footer treats it */
+int flow_strip_verdict(int installed, long junk);
+
+/* How many bytes ae_put() may put in one JH_SM message without tearing an
+ * ANSI escape sequence across two of them. See flow.c. */
+unsigned long flow_safe_chunk(const char *text, unsigned long len,
+                              unsigned long budget);
+
 int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
                          int listed_checked, int listed_present);
 
@@ -504,6 +526,25 @@ int flow_is_plain_alnum(const char *value);
  * second ad-hoc check. */
 int flow_validate_access_level(const char *input, long *value_out);
 
+/* Validates a sysop-typed STACK size. Digits only, 1-7 characters, and
+ * within 1024-1048576: below a kilobyte no 68K door starts, and a value
+ * past a megabyte is a typo rather than an intention on a machine whose
+ * whole address space this door already fills 500 KB of. On success returns
+ * 0 and writes the parsed value; on failure returns non-zero and leaves
+ * *value_out untouched. */
+int flow_validate_stack_size(const char *input, long *value_out);
+
+/* Validates a sysop-typed tooltype VALUE - the right-hand side of a
+ * KEY=value line, for the fields the .info editor lets a sysop change that
+ * are not numbers (TYPE, MENUNAME).
+ *
+ * Rejects: an empty value, anything longer than `max_len`, a '=' (which
+ * would make the BBS's parser read a second key), and any control
+ * character including CR and LF (which would split one tooltype into two,
+ * or truncate the file's remaining lines into a value). Returns 0 when the
+ * value is usable, non-zero otherwise. */
+int flow_validate_tooltype_value(const char *input, unsigned long max_len);
+
 /* ---- Install support ---------------------------------------------------
  *
  * Installing means three things a download does not: the archive is
@@ -703,6 +744,35 @@ long flow_compute_prior_access(long current_access, long new_access,
 int flow_rewrite_access_lines(const char *content, char *out, unsigned long outsize,
                               long new_access, long prior_access);
 
+/* Sets ONE tooltype in an existing .info's raw text, in place.
+ *
+ * The general form of flow_rewrite_access_lines() above, and it keeps that
+ * function's central promise: every other line is copied through
+ * byte-for-byte, including its original line ending, because a production
+ * .info carries tooltypes this door has never heard of and an editor is not
+ * a licence to rewrite the file's shape.
+ *
+ *   - the first line whose key matches `key` (case-insensitively - a board
+ *     writes `Stack=` as readily as `STACK=`) is replaced with
+ *     "<key>=<value>\n" at its original position, in the door's own
+ *     canonical spelling of the key;
+ *   - any FURTHER line with that key is dropped, so the result never
+ *     carries two;
+ *   - if no such line exists, one is appended at the end;
+ *   - a `value` of NULL removes the tooltype instead of setting it, which
+ *     is how a field is cleared without leaving `KEY=` behind for the BBS's
+ *     parser to read as an empty string.
+ *
+ * ACCESS keeps its own function: disabling a door has to write ACCESS and
+ * DRACCESS as one decision (see flow_compute_prior_access), which a
+ * single-key setter cannot express.
+ *
+ * Bounded to FLOW_INFO_MAX_LINES like its sibling. Returns the length
+ * written to `out`, or -1 if the input has too many lines, the key is empty,
+ * or the result would not fit `outsize`. */
+int flow_rewrite_tooltype(const char *content, char *out, unsigned long outsize,
+                           const char *key, const char *value);
+
 /* ---- /files listing helpers ----
  *
  * The archive-contents listing (GET /files/<archive>, section 6 of the API
@@ -735,6 +805,20 @@ int flow_doors_parse_row(const char *line,
                          char *name_out, unsigned long name_outsize,
                          char *archive_out, unsigned long archive_outsize,
                          unsigned long *size_out);
+
+/* Reads just the ENABLED flag out of a "DOORS|" row - field 3, "1" or "0"
+ * (door-list-snapshot.ts renders command, type, size, enabled, access,
+ * archive, name, category, description in that order).
+ *
+ * Its own accessor rather than another out-param on flow_doors_parse_row:
+ * only the run decision needs this, and every existing caller of that
+ * function would have had to grow an argument it ignores.
+ *
+ * Returns 0 and writes 1 or 0 to *enabled_out; non-zero when the row has no
+ * such field, leaving *enabled_out untouched. A row whose flag cannot be
+ * read is the caller's decision to make - board_load treats it as enabled,
+ * since every door the BBS listed is one it was willing to run. */
+int flow_doors_row_enabled(const char *line, int *enabled_out);
 
 /* Chooses which extracted file is the door's executable, from the /files
  * body. Preference order:
@@ -953,5 +1037,174 @@ int flow_build_footer_bar(char *out, unsigned long outcap, int cols,
                            const char *mandatory_prefix,
                            const char *const *optional_parts, int optional_count,
                            const char *mandatory_suffix);
+
+/* ---------------------------------------------------------------------
+ * Uninstall: what a door owns, and what everything else is
+ *
+ * These rules exist TWICE - here, because DOORREPO deletes doors on a real
+ * AmiExpress board where there is no server to ask, and in TypeScript
+ * (web/backend/src/doors/door-registration-paths.ts) for DOORMAN and the
+ * admin UI. Neither can be removed: one runs on an Amiga, the other in
+ * Node. What keeps them from drifting is tests/delete-rule-cases.txt, which
+ * both test suites read.
+ *
+ * What they encode, from the live board on 2026-08-31: deleting one door
+ * removed six others. The delete took dirname(LOCATION) as "the door's
+ * directory", so deleting Joincnf out of Doors/emp_tools took Bulls - a
+ * different door in the same directory - and every registration pointing
+ * into it. Where a LOCATION named a DIRECTORY (BestConf is
+ * LOCATION=Doors:BestConf) dirname() reached Doors: itself, and the whole
+ * board looked like part of that one door.
+ */
+
+/* Writes the comparable form of an Amiga path: lower-cased, with any
+ * trailing slash removed, so `Doors:emp_tools/Joincnf` and
+ * `DOORS:EmP_Tools/Joincnf` compare equal. An Amiga volume is
+ * case-insensitive; comparing these as written is what hid a co-tenant from
+ * the scan. Truncates at `cap` (always NUL-terminated). */
+void flow_path_comparable(const char *path, char *out, unsigned long cap);
+
+/* The directory a door owns, given its RESOLVED physical LOCATION.
+ *
+ * `location_is_dir` is 1 when that path is itself a directory (the caller
+ * stats it; on a path that no longer exists, pass 0). `bbs_root` and
+ * `doors_root` are the physical roots - a candidate equal to either, or to
+ * <bbs_root>/Commands, is not a door's directory.
+ *
+ * Returns 1 and writes the directory to `out`, or 0 when the door owns no
+ * directory of its own and only its own files may be removed. */
+int flow_own_directory(const char *location, int location_is_dir,
+                        const char *bbs_root, const char *doors_root,
+                        char *out, unsigned long cap);
+
+/* What another registration is, relative to the door being uninstalled. */
+#define FLOW_REG_UNRELATED 0   /* another door elsewhere - not this delete's business */
+#define FLOW_REG_ALIAS     1   /* the SAME binary under another name - remove it too */
+#define FLOW_REG_COTENANT  2   /* a DIFFERENT door in the same directory - keep it,
+                                * and keep the directory */
+
+/* Classifies `other_location` against the door being deleted.
+ *
+ * `door_dir` may be NULL or "" when the door owns no directory, in which
+ * case nothing can be a co-tenant and only an exact match is an alias. */
+int flow_registration_class(const char *other_location,
+                             const char *door_location,
+                             const char *door_dir);
+
+/* 1 when `name` ends in ".info", in any casing - the Commands tree holds
+ * `vsys.info` beside `WHO.info`, and a walk that only matched one spelling
+ * would miss half the registrations. */
+int flow_path_has_info_suffix(const char *name);
+
+/* Resolves a LOCATION tooltype to a physical path under `doors_dir`.
+ *
+ * The tooltype is written in whatever form the sysop's board uses:
+ * `Doors:AquaScan/AquaScan.020`, `BBS:Doors/X/y`, `Doors/X/y`, or an
+ * absolute path. The uninstall needs them in one form to tell an alias of
+ * the door being removed from another door that merely lives beside it.
+ *
+ * Returns 1 on success, 0 when the result would not fit `cap` or the inputs
+ * are missing. An absolute LOCATION is returned unchanged - a board that
+ * points a command outside Doors: is describing something this door does not
+ * own, and the caller's own checks decide what to do about that. */
+int flow_resolve_location(const char *location, const char *doors_dir,
+                           char *out, unsigned long cap);
+
+/* ---- The door's own action log ------------------------------------------
+ *
+ * log_line() appends one line per action to LogFile: INSTALL, UNINSTALL,
+ * STRIP, ACCESS, TOOLTYPE, each followed by what it did. The history screen
+ * shows those back, so a sysop can see what a delete actually removed after
+ * the screen it scrolled past is gone.
+ */
+
+/* 1 when this log line records an action on a door, rather than one of the
+ * door's own diagnostics. Matched on the leading verb, case-insensitively,
+ * so a line's own wording can change without the screen losing it. */
+int flow_log_line_is_action(const char *line);
+
+/* ---- Running a door from the installed list -------------------------------
+ *
+ * The installed screen can hand a command back to the BBS to run once this
+ * door exits (ae_return_command, RETURNCOMMAND). Two doors cannot share a
+ * node, so queue-then-exit is the only order that works - DOORMAN's
+ * run-door.ts says the same about the TypeScript side, and decideRun() there
+ * is the rule this mirrors.
+ */
+
+#define FLOW_RUN_OK        0   /* hand it back and exit */
+#define FLOW_RUN_NONE      1   /* nothing selected */
+#define FLOW_RUN_DISABLED  2   /* the sysop took this door out of service */
+#define FLOW_RUN_NOCOMMAND 3   /* the row carries no command to run */
+
+/* Whether the selected row can be started. `enabled` is 0 for a door the
+ * sysop has disabled, `command` may be NULL or empty for a phantom row -
+ * every list is built from <CMD>.info, so that should not happen, but a
+ * blank command would hand the BBS an empty command line. */
+int flow_run_decision(const char *command, int enabled);
+
+/* ---- The command bar ------------------------------------------------------
+ *
+ * "/" opens a line where a command can be typed out in full, with an
+ * argument. It exists because the footer cannot advertise this door: the
+ * catalog screen answers sixteen keys and eighty columns fit four of them,
+ * so `T` was live and advertised nowhere until a sysop asked what it did.
+ * A bar also takes arguments the keys need a second prompt for - "find
+ * dungeon", "stack 65536", "type XIM" - and gives "help" somewhere to live.
+ *
+ * The keys stay. One keypress beats typing for the things done constantly;
+ * this is for the rest, and for anyone who cannot see the footer at all
+ * (the non-ANSI screen).
+ */
+
+#define FLOW_CMD_UNKNOWN    0   /* not a command - treat the line as a search */
+#define FLOW_CMD_HELP       1
+#define FLOW_CMD_GET        2
+#define FLOW_CMD_INSTALL    3
+#define FLOW_CMD_UNINSTALL  4
+#define FLOW_CMD_FILES      5
+#define FLOW_CMD_DOC        6
+#define FLOW_CMD_ARCHIVE    7
+#define FLOW_CMD_STRIP      8
+#define FLOW_CMD_ACCESS     9
+#define FLOW_CMD_CONFIG    10
+#define FLOW_CMD_HISTORY   11
+#define FLOW_CMD_INSTALLED 12
+#define FLOW_CMD_FIND      13
+#define FLOW_CMD_TYPE      14
+#define FLOW_CMD_RESET     15
+#define FLOW_CMD_HIDE      16
+#define FLOW_CMD_OWNER     17
+#define FLOW_CMD_PATTERNS  18
+#define FLOW_CMD_QUIT      19
+
+/* Parses one typed line into a command and its argument.
+ *
+ * A leading "/" is optional (the bar is already open by the time this is
+ * called, but a sysop who types it anyway is not wrong). The verb is matched
+ * case-insensitively, and an UNAMBIGUOUS PREFIX is accepted - "inst" is
+ * install, "i" is not, because install and installed both start with it.
+ *
+ * An unrecognised first word is NOT an error: FLOW_CMD_UNKNOWN is returned
+ * with the WHOLE line in `arg_out`, so the caller can treat it as a search
+ * term. Typing "/dungeon" finds dungeon, which is what a person expects
+ * from a bar that opened on "/".
+ *
+ * `arg_out` receives the rest of the line with surrounding blanks removed,
+ * or "" when there is none. Returns the command id. */
+int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap);
+
+/* The command's canonical name, for the help screen and for echoing back
+ * what was understood. Returns "" for FLOW_CMD_UNKNOWN. */
+const char *flow_command_name(int command);
+
+/* The command bar's autocomplete: which commands match what has been typed,
+ * most relevant first, and the tail of the best match. See flow.c.
+ *
+ * FLOW_CMD_MAX_SUGGESTIONS is every command there is - the bar opens with
+ * the whole list, which is the point of it. */
+#define FLOW_CMD_MAX_SUGGESTIONS 24
+int flow_command_suggest(const char *typed, int *ids, int cap);
+const char *flow_command_ghost(const char *typed);
 
 #endif /* DOORREPO_FLOW_H */

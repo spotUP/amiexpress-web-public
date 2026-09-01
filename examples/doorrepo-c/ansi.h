@@ -51,6 +51,15 @@ typedef struct {
     long len;
     long cap;
     int overflow;
+    /* What ansi_color() last wrote, so it can skip repeating itself. A
+     * captured session showed 19 of 25 colour sequences in one screen
+     * paint asking for the colour already in effect. -1 means "unknown",
+     * which is the state at the start of every frame and after any reset:
+     * the terminal may have been changed by something else in between, so
+     * the next colour is always written. */
+    int last_fg;
+    int last_bg;
+    int last_bold;
 } ansi_buf;
 
 /* Binds a buffer to caller storage and empties it. */
@@ -96,6 +105,11 @@ void ansi_fill(ansi_buf *b, int row, int col, int width, int fg, int bg);
 /* Draws a single-line ASCII box. `label`, when non-NULL and non-empty, is
  * written into the top edge as " label ", where blessed puts a panel label. */
 void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, const char *label);
+
+/* ansi_box that paints its interior first, so a dialog drawn over the
+ * browser hides what is behind it instead of letting it read through. */
+void ansi_panel(ansi_buf *b, int top, int left, int height, int width,
+                int fg, int bg, const char *label);
 
 /* Writes `text` centred within `width` columns starting at (row, col). */
 void ansi_center(ansi_buf *b, int row, int col, int width, const char *text);

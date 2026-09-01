@@ -717,16 +717,35 @@ int flow_build_info_content(char *out, unsigned long outsize,
         return -1;
     }
 
-    sprintf(access_buf, "%ld", access);
+    /* A NEGATIVE access means "write no ACCESS tooltype at all", which is
+     * not the same as ACCESS=0 and is the only correct way to install a
+     * door everyone may run. express.e:4703 reads
+     *
+     *     IF access=0 THEN RETURN TRUE
+     *
+     * and that TRUE is RESULT_NOT_ALLOWED (axenums.e:23), so ACCESS=0
+     * DENIES a door to everyone. This function used to write it on every
+     * install, which made every door DoorRepo installed invisible in the
+     * doors listing while still runnable by typing its command. Observed
+     * on the live board with CALC, 2026-08-31. The 255 end of the range is
+     * unaffected: express.e:4704 is `IF (access>acsLevel)`, so 255 still
+     * means sysop-only, which is what the disable path relies on. */
+    if (access >= 0) {
+        sprintf(access_buf, "%ld", access);
+    } else {
+        access_buf[0] = '\0';
+    }
     if (prior_access >= 0) {
         sprintf(prior_access_buf, "%ld", prior_access);
     } else {
         prior_access_buf[0] = '\0';
     }
 
-    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\nACCESS=\n")
-                            + strlen(type) + strlen(cmd) + strlen(binary_rel)
-                            + strlen(access_buf));
+    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\n")
+                            + strlen(type) + strlen(cmd) + strlen(binary_rel));
+    if (access >= 0) {
+        need += (unsigned long) (strlen("ACCESS=\n") + strlen(access_buf));
+    }
     if (prior_access >= 0) {
         need += (unsigned long) (strlen("DRACCESS=\n") + strlen(prior_access_buf));
     }
@@ -749,9 +768,12 @@ int flow_build_info_content(char *out, unsigned long outsize,
     strcat(out, cmd);
     strcat(out, "/");
     strcat(out, binary_rel);
-    strcat(out, "\nSTACK=65536\nACCESS=");
-    strcat(out, access_buf);
-    strcat(out, "\n");
+    strcat(out, "\nSTACK=65536\n");
+    if (access >= 0) {
+        strcat(out, "ACCESS=");
+        strcat(out, access_buf);
+        strcat(out, "\n");
+    }
     if (prior_access >= 0) {
         strcat(out, "DRACCESS=");
         strcat(out, prior_access_buf);
@@ -1192,6 +1214,24 @@ int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
  * the header line, a malformed row, or an empty command - the same
  * tolerance flow_files_parse_row() applies, since a hand-edited or
  * truncated body must skip a line rather than abandon the screen. */
+int flow_doors_row_enabled(const char *line, int *enabled_out)
+{
+    char field[8];
+
+    if (line == (const char *) 0 || enabled_out == (int *) 0) {
+        return 1;
+    }
+    if (files_field(line, 3, field, sizeof(field)) != 0) {
+        return 1;
+    }
+    if (field[0] == '\0') {
+        return 1;
+    }
+
+    *enabled_out = (field[0] == '0') ? 0 : 1;
+    return 0;
+}
+
 int flow_doors_parse_row(const char *line,
                          char *cmd_out, unsigned long cmd_outsize,
                          char *name_out, unsigned long name_outsize,
@@ -1668,6 +1708,80 @@ int flow_build_extract_command(char *out, unsigned long outsize,
     return (int) need;
 }
 
+/* How many bytes may be sent in one message without tearing an escape
+ * sequence in half.
+ *
+ * ae_put() gives the BBS at most AE_MAX_LINE bytes per JH_SM message and
+ * used to cut wherever the count ran out. Measured on the "Not installed"
+ * dialog: 1127 bytes, six messages, and the fourth ended "ESC [ 1" while
+ * the fifth began "3;72H|" - one cursor-position sequence torn in half.
+ * The BBS writes each message on its own, so the halves do not reliably
+ * meet, and the character lands wherever the cursor happened to be. That
+ * is a dialog with pieces of its frame missing (screenshot, 2026-08-31).
+ *
+ * The tear was always possible; the dialog only grew big enough to hit a
+ * boundary once its interior started being painted.
+ *
+ * Returns the byte count to send: `budget`, unless that would end inside a
+ * sequence, in which case the cut moves back to just before the ESC. A
+ * sequence longer than the whole budget cannot be helped - taking the full
+ * budget at least makes progress, where backing off to zero would leave a
+ * door spinning forever sending nothing.
+ *
+ * @param text   bytes about to be sent
+ * @param len    how many there are
+ * @param budget most that fit in one message
+ */
+unsigned long flow_safe_chunk(const char *text, unsigned long len,
+                              unsigned long budget)
+{
+    unsigned long take;
+    unsigned long i;
+    long esc = -1;
+
+    if (text == (const char *) 0 || len == 0 || budget == 0) {
+        return 0;
+    }
+    take = (len < budget) ? len : budget;
+
+    /* The last ESC in what is about to be sent. Anything earlier has been
+     * terminated already, or this one would not be the last. */
+    for (i = 0; i < take; i++) {
+        if (text[i] == '\033') {
+            esc = (long) i;
+        }
+    }
+    if (esc < 0) {
+        return take;
+    }
+
+    /* Terminated inside the chunk? A CSI sequence ends on its final byte,
+     * anything in 0x40..0x7e after the '['. */
+    for (i = (unsigned long) esc + 2; i < take; i++) {
+        unsigned char c = (unsigned char) text[i];
+        if (c >= 0x40 && c <= 0x7e) {
+            return take;
+        }
+    }
+
+    /* Unterminated: cut before it and let the next message carry it whole. */
+    if (esc == 0) {
+        return take;                 /* longer than a whole message: send on */
+    }
+    return (unsigned long) esc;
+}
+
+int flow_strip_verdict(int installed, long junk)
+{
+    if (!installed) {
+        return FLOW_STRIP_NOT_INSTALLED;
+    }
+    if (junk == 0) {
+        return FLOW_STRIP_NO_ADS;
+    }
+    return FLOW_STRIP_OK;
+}
+
 int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
                          int listed_checked, int listed_present)
 {
@@ -1813,4 +1927,769 @@ int flow_build_footer_bar(char *out, unsigned long outcap, int cols,
 
     out[pos] = '\0';
     return (int) pos;
+}
+
+/* ---------------------------------------------------------------------
+ * Uninstall: what a door owns, and what everything else is
+ *
+ * See flow.h for why these rules exist twice, and tests/delete-rule-cases.txt
+ * for the cases both implementations answer identically.
+ */
+
+void flow_path_comparable(const char *path, char *out, unsigned long cap)
+{
+    unsigned long pos = 0;
+
+    if (out == (char *) 0 || cap == 0) {
+        return;
+    }
+    if (path == (const char *) 0) {
+        out[0] = '\0';
+        return;
+    }
+
+    while (path[pos] != '\0' && pos + 1 < cap) {
+        out[pos] = (char) tolower((unsigned char) path[pos]);
+        pos++;
+    }
+    out[pos] = '\0';
+
+    /* A trailing slash is the same directory written differently. The root
+     * itself is left alone: "/" truncated is nothing at all. */
+    while (pos > 1 && out[pos - 1] == '/') {
+        pos--;
+        out[pos] = '\0';
+    }
+}
+
+/* Writes everything before the last '/' of `path`. Returns 0 when there is
+ * no separator to cut at, which means the caller has nothing to reason
+ * about. */
+static int flow_parent_of(const char *path, char *out, unsigned long cap)
+{
+    unsigned long len;
+    unsigned long cut;
+
+    if (path == (const char *) 0 || out == (char *) 0 || cap == 0) {
+        return 0;
+    }
+
+    len = (unsigned long) strlen(path);
+    while (len > 1 && path[len - 1] == '/') {
+        len--;                       /* ignore a trailing slash while cutting */
+    }
+
+    cut = len;
+    while (cut > 0 && path[cut - 1] != '/') {
+        cut--;
+    }
+    if (cut == 0) {
+        return 0;                    /* no separator: not a path we can climb */
+    }
+    cut--;                           /* drop the separator itself */
+    if (cut == 0) {
+        cut = 1;                     /* the root stays "/" */
+    }
+    if (cut + 1 > cap) {
+        return 0;
+    }
+
+    memcpy(out, path, (size_t) cut);
+    out[cut] = '\0';
+    return 1;
+}
+
+int flow_own_directory(const char *location, int location_is_dir,
+                        const char *bbs_root, const char *doors_root,
+                        char *out, unsigned long cap)
+{
+    char candidate[512];
+    char candidate_cmp[512];
+    char root_cmp[512];
+    char commands[512];
+
+    if (location == (const char *) 0 || location[0] == '\0'
+        || out == (char *) 0 || cap == 0) {
+        return 0;
+    }
+
+    if (location_is_dir) {
+        /* A LOCATION that IS a directory owns THAT directory. Climbing to
+         * its parent is what pointed a delete at Doors: itself. */
+        if ((unsigned long) strlen(location) + 1 > sizeof(candidate)) {
+            return 0;
+        }
+        strcpy(candidate, location);
+    } else if (!flow_parent_of(location, candidate, (unsigned long) sizeof(candidate))) {
+        return 0;
+    }
+
+    flow_path_comparable(candidate, candidate_cmp, (unsigned long) sizeof(candidate_cmp));
+
+    /* None of the roots is a door's directory: a door sitting directly under
+     * Doors: owns no directory, and only its own files may be removed. */
+    if (bbs_root != (const char *) 0) {
+        flow_path_comparable(bbs_root, root_cmp, (unsigned long) sizeof(root_cmp));
+        if (strcmp(candidate_cmp, root_cmp) == 0) {
+            return 0;
+        }
+
+        if ((unsigned long) strlen(bbs_root) + 10 < sizeof(commands)) {
+            strcpy(commands, bbs_root);
+            if (commands[0] != '\0' && commands[strlen(commands) - 1] != '/') {
+                strcat(commands, "/");
+            }
+            strcat(commands, "Commands");
+            flow_path_comparable(commands, root_cmp, (unsigned long) sizeof(root_cmp));
+            if (strcmp(candidate_cmp, root_cmp) == 0) {
+                return 0;
+            }
+        }
+    }
+    if (doors_root != (const char *) 0) {
+        flow_path_comparable(doors_root, root_cmp, (unsigned long) sizeof(root_cmp));
+        if (strcmp(candidate_cmp, root_cmp) == 0) {
+            return 0;
+        }
+    }
+
+    if ((unsigned long) strlen(candidate) + 1 > cap) {
+        return 0;
+    }
+    strcpy(out, candidate);
+    return 1;
+}
+
+int flow_registration_class(const char *other_location,
+                             const char *door_location,
+                             const char *door_dir)
+{
+    char other_cmp[512];
+    char door_cmp[512];
+    char dir_cmp[512];
+    unsigned long dir_len;
+
+    if (other_location == (const char *) 0 || other_location[0] == '\0') {
+        return FLOW_REG_UNRELATED;
+    }
+
+    flow_path_comparable(other_location, other_cmp, (unsigned long) sizeof(other_cmp));
+
+    /* The same binary under a second name - 5D-LogOff is registered as G.
+     * That registration IS this door and goes with it. */
+    if (door_location != (const char *) 0) {
+        flow_path_comparable(door_location, door_cmp, (unsigned long) sizeof(door_cmp));
+        if (strcmp(other_cmp, door_cmp) == 0) {
+            return FLOW_REG_ALIAS;
+        }
+    }
+
+    if (door_dir == (const char *) 0 || door_dir[0] == '\0') {
+        return FLOW_REG_UNRELATED;   /* no directory: nothing can share it */
+    }
+
+    flow_path_comparable(door_dir, dir_cmp, (unsigned long) sizeof(dir_cmp));
+    dir_len = (unsigned long) strlen(dir_cmp);
+    if (dir_len == 0) {
+        return FLOW_REG_UNRELATED;
+    }
+
+    /* Inside the door's directory, or the directory itself: a DIFFERENT door
+     * living alongside this one. It stays, and so does the directory.
+     * The separator check is what keeps Doors/CALCULATOR from looking like
+     * part of Doors/CALC. */
+    if (strcmp(other_cmp, dir_cmp) == 0) {
+        return FLOW_REG_COTENANT;
+    }
+    if (strncmp(other_cmp, dir_cmp, (size_t) dir_len) == 0
+        && other_cmp[dir_len] == '/') {
+        return FLOW_REG_COTENANT;
+    }
+
+    return FLOW_REG_UNRELATED;
+}
+
+/* Case-insensitive prefix test - the tooltype's spelling is the sysop's,
+ * not this door's. */
+static int flow_prefix_ci(const char *s, const char *prefix)
+{
+    unsigned long i = 0;
+
+    while (prefix[i] != '\0') {
+        if (s[i] == '\0') {
+            return 0;
+        }
+        if (tolower((unsigned char) s[i]) != tolower((unsigned char) prefix[i])) {
+            return 0;
+        }
+        i++;
+    }
+    return 1;
+}
+
+int flow_resolve_location(const char *location, const char *doors_dir,
+                           char *out, unsigned long cap)
+{
+    const char *rest;
+    unsigned long need;
+
+    if (location == (const char *) 0 || location[0] == '\0'
+        || out == (char *) 0 || cap == 0) {
+        return 0;
+    }
+
+    if (location[0] == '/') {
+        /* Already physical. A board pointing a command outside Doors: is
+         * describing something this door does not own; say so faithfully
+         * rather than rewriting it into the tree. */
+        need = (unsigned long) strlen(location) + 1;
+        if (need > cap) {
+            return 0;
+        }
+        strcpy(out, location);
+        return 1;
+    }
+
+    rest = location;
+    if (flow_prefix_ci(rest, "bbs:")) {
+        rest += 4;
+    }
+    if (flow_prefix_ci(rest, "doors:")) {
+        rest += 6;
+    } else if (flow_prefix_ci(rest, "doors/")) {
+        rest += 6;
+    }
+    while (*rest == '/') {
+        rest++;
+    }
+
+    if (doors_dir == (const char *) 0 || doors_dir[0] == '\0') {
+        return 0;
+    }
+
+    need = (unsigned long) strlen(doors_dir) + 1 + (unsigned long) strlen(rest) + 1;
+    if (need > cap) {
+        return 0;
+    }
+
+    strcpy(out, doors_dir);
+    if (out[0] != '\0' && out[strlen(out) - 1] != '/') {
+        strcat(out, "/");
+    }
+    strcat(out, rest);
+
+    /* An Amiga LOCATION separates with ':' after an assign only; anything
+     * left is a plain path. Colons deeper in would be a second assign,
+     * which this door does not resolve - leave them alone rather than
+     * inventing a path. */
+    return 1;
+}
+
+int flow_path_has_info_suffix(const char *name)
+{
+    unsigned long len;
+
+    if (name == (const char *) 0) {
+        return 0;
+    }
+    len = (unsigned long) strlen(name);
+    if (len < 5) {
+        return 0;
+    }
+    return flow_prefix_ci(name + len - 5, ".info");
+}
+
+/* Case-insensitive key match. A board writes `Stack=` as readily as
+ * `STACK=`, and flow_parse_tooltype_line hands back the key as written. */
+static int flow_key_equals_ci(const char *a, const char *b)
+{
+    unsigned long i = 0;
+
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (tolower((unsigned char) a[i]) != tolower((unsigned char) b[i])) {
+            return 0;
+        }
+        i++;
+    }
+    return a[i] == '\0' && b[i] == '\0';
+}
+
+int flow_rewrite_tooltype(const char *content, char *out, unsigned long outsize,
+                           const char *key, const char *value)
+{
+    char new_line[FLOW_REWRITE_LINE_MAX];
+    const char *p;
+    unsigned long pos;
+    int line_count;
+    int emitted;
+
+    if (content == (const char *) 0 || out == (char *) 0 || outsize == 0
+        || key == (const char *) 0 || key[0] == '\0') {
+        return -1;
+    }
+
+    if (value != (const char *) 0) {
+        if ((unsigned long) strlen(key) + (unsigned long) strlen(value) + 3
+            > sizeof(new_line)) {
+            return -1;
+        }
+        strcpy(new_line, key);
+        strcat(new_line, "=");
+        strcat(new_line, value);
+        strcat(new_line, "\n");
+    } else {
+        new_line[0] = '\0';          /* NULL value means remove the tooltype */
+    }
+
+    pos = 0;
+    line_count = 0;
+    emitted = 0;
+    p = content;
+
+    while (*p != '\0') {
+        const char *q = p;
+        unsigned long span_len;
+        int is_target = 0;
+
+        while (*q != '\0' && *q != '\n') {
+            q++;
+        }
+        if (*q == '\n') {
+            q++;
+        }
+        span_len = (unsigned long) (q - p);
+
+        line_count++;
+        if (line_count > FLOW_INFO_MAX_LINES) {
+            return -1;
+        }
+
+        {
+            char linebuf[FLOW_REWRITE_LINE_MAX];
+
+            if (span_len + 1 <= sizeof(linebuf)) {
+                char parsed_key[32];
+                char parsed_value[256];
+
+                memcpy(linebuf, p, (size_t) span_len);
+                linebuf[span_len] = '\0';
+                if (flow_parse_tooltype_line(linebuf, parsed_key, sizeof(parsed_key),
+                                             parsed_value, sizeof(parsed_value)) == 0) {
+                    if (flow_key_equals_ci(parsed_key, key)) {
+                        is_target = 1;
+                    }
+                }
+
+                if (is_target) {
+                    if (!emitted && new_line[0] != '\0') {
+                        if (rewrite_append(out, outsize, &pos, new_line) != 0) {
+                            return -1;
+                        }
+                    }
+                    emitted = 1;
+                    /* A further line with this key is dropped: the result
+                     * must never carry two, the same rule ACCESS follows. */
+                } else if (rewrite_append(out, outsize, &pos, linebuf) != 0) {
+                    return -1;
+                }
+            } else {
+                /* Longer than the parse buffer: passed through unidentified
+                 * rather than risking a truncated key being misread as the
+                 * one being set. */
+                if (pos + span_len >= outsize) {
+                    return -1;
+                }
+                memcpy(out + pos, p, (size_t) span_len);
+                pos += span_len;
+            }
+        }
+
+        p = q;
+    }
+
+    if (!emitted && new_line[0] != '\0') {
+        if (rewrite_append(out, outsize, &pos, new_line) != 0) {
+            return -1;
+        }
+    }
+
+    if (pos >= outsize) {
+        return -1;
+    }
+    out[pos] = '\0';
+    return (int) pos;
+}
+
+int flow_validate_stack_size(const char *input, long *value_out)
+{
+    unsigned long len;
+    unsigned long i;
+    long value;
+
+    if (input == (const char *) 0 || value_out == (long *) 0) {
+        return 1;
+    }
+
+    len = (unsigned long) strlen(input);
+    if (len < 1 || len > 7) {
+        return 1;
+    }
+    for (i = 0; i < len; i++) {
+        if (!isdigit((unsigned char) input[i])) {
+            return 1;
+        }
+    }
+
+    value = atol(input);
+    if (value < 1024 || value > 1048576) {
+        return 1;
+    }
+
+    *value_out = value;
+    return 0;
+}
+
+int flow_validate_tooltype_value(const char *input, unsigned long max_len)
+{
+    unsigned long len;
+    unsigned long i;
+
+    if (input == (const char *) 0) {
+        return 1;
+    }
+
+    len = (unsigned long) strlen(input);
+    if (len == 0 || len > max_len) {
+        return 1;
+    }
+
+    for (i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) input[i];
+
+        /* '=' would make the BBS's parser read a second key out of one
+         * line; a control character would split the tooltype in two or
+         * swallow the lines after it. */
+        if (c == '=' || c < 32 || c == 127) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int flow_log_line_is_action(const char *line)
+{
+    static const char *verbs[] = {
+        "INSTALL", "UNINSTALL", "STRIP", "ACCESS", "TOOLTYPE", "DELETE"
+    };
+    unsigned long i;
+
+    if (line == (const char *) 0) {
+        return 0;
+    }
+    while (*line == ' ' || *line == '\t') {
+        line++;
+    }
+
+    for (i = 0; i < sizeof(verbs) / sizeof(verbs[0]); i++) {
+        unsigned long len = (unsigned long) strlen(verbs[i]);
+
+        if (flow_prefix_ci(line, verbs[i])) {
+            /* The verb must be the whole first word: "INSTALLER FAILED" is
+             * not an INSTALL record. */
+            char next = line[len];
+            if (next == '\0' || next == ' ' || next == ':') {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int flow_run_decision(const char *command, int enabled)
+{
+    if (command == (const char *) 0) {
+        return FLOW_RUN_NONE;
+    }
+
+    /* A disabled door is one the sysop has deliberately taken out of
+     * service. Handing it back would end with the BBS refusing it after
+     * this door has already exited, where the refusal reads as DoorRepo
+     * having crashed. */
+    if (!enabled) {
+        return FLOW_RUN_DISABLED;
+    }
+
+    while (*command == ' ' || *command == '\t') {
+        command++;
+    }
+    if (*command == '\0') {
+        return FLOW_RUN_NOCOMMAND;
+    }
+
+    return FLOW_RUN_OK;
+}
+
+/* ---- The command bar ---------------------------------------------------- */
+
+typedef struct {
+    const char *name;
+    int id;
+} flow_command_entry;
+
+/* Ordered as the help screen prints them: what a sysop does most, first. */
+static const flow_command_entry flow_commands[] = {
+    { "help",      FLOW_CMD_HELP },
+    { "get",       FLOW_CMD_GET },
+    { "install",   FLOW_CMD_INSTALL },
+    { "uninstall", FLOW_CMD_UNINSTALL },
+    { "files",     FLOW_CMD_FILES },
+    { "doc",       FLOW_CMD_DOC },
+    { "archive",   FLOW_CMD_ARCHIVE },
+    { "strip",     FLOW_CMD_STRIP },
+    { "access",    FLOW_CMD_ACCESS },
+    { "config",    FLOW_CMD_CONFIG },
+    { "history",   FLOW_CMD_HISTORY },
+    { "installed", FLOW_CMD_INSTALLED },
+    { "find",      FLOW_CMD_FIND },
+    { "type",      FLOW_CMD_TYPE },
+    { "reset",     FLOW_CMD_RESET },
+    { "hide",      FLOW_CMD_HIDE },
+    { "owner",     FLOW_CMD_OWNER },
+    { "patterns",  FLOW_CMD_PATTERNS },
+    { "quit",      FLOW_CMD_QUIT }
+};
+
+#define FLOW_COMMAND_COUNT ((int) (sizeof(flow_commands) / sizeof(flow_commands[0])))
+
+const char *flow_command_name(int command)
+{
+    int i;
+
+    for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+        if (flow_commands[i].id == command) {
+            return flow_commands[i].name;
+        }
+    }
+    return "";
+}
+
+/* The command bar's autocomplete.
+ *
+ * "The / commands in the doorrepo door have no auto complete so I have no
+ * idea what commands there are" - the bar was a bare line prompt, so the
+ * nineteen commands it answers were discoverable only by finding /help,
+ * which is itself one of the nineteen. LIVECHAT has had this for a while
+ * and is the model: a list that appears the moment the bar opens, narrows
+ * as you type, and can be walked with the arrow keys.
+ *
+ * The matching lives here rather than in the drawing code so it can be
+ * tested, and so the door and any future front end cannot disagree about
+ * what "in" means.
+ *
+ * Order matters and is deliberate: everything the typed text STARTS a name
+ * with comes first, in table order, then everything that merely contains
+ * it. Someone typing "in" wants install before uninstall.
+ *
+ * @param typed  what is on the line, with or without the leading slash
+ * @param ids    filled with FLOW_CMD_* values, most relevant first
+ * @param cap    how many ids will fit
+ * @return       how many were written
+ */
+int flow_command_suggest(const char *typed, int *ids, int cap)
+{
+    char word[24];
+    unsigned long len = 0;
+    int count = 0;
+    int i;
+
+    if (ids == (int *) 0 || cap <= 0) {
+        return 0;
+    }
+    if (typed == (const char *) 0) {
+        typed = "";
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+    if (*typed == '/') {
+        typed++;
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+
+    /* Only the verb is completed. Once there is a space the argument is
+     * being typed - "find dung" is a search for dung, and offering to
+     * complete it to a command name there would be noise. */
+    while (typed[len] != '\0' && typed[len] != ' ' && typed[len] != '\t'
+           && len + 1 < sizeof(word)) {
+        word[len] = (char) tolower((unsigned char) typed[len]);
+        len++;
+    }
+    word[len] = '\0';
+    if (typed[len] == ' ' || typed[len] == '\t') {
+        return 0;
+    }
+
+    /* Nothing typed yet: the whole list. This is the case the report was
+     * actually about - opening the bar has to SHOW what there is. */
+    for (i = 0; i < FLOW_COMMAND_COUNT && count < cap; i++) {
+        if (len == 0
+            || strncmp(word, flow_commands[i].name, (size_t) len) == 0) {
+            ids[count++] = flow_commands[i].id;
+        }
+    }
+    if (len == 0) {
+        return count;
+    }
+
+    for (i = 0; i < FLOW_COMMAND_COUNT && count < cap; i++) {
+        const char *name = flow_commands[i].name;
+
+        if (strncmp(word, name, (size_t) len) == 0) {
+            continue;                        /* already in, as a prefix */
+        }
+        if (strstr(name, word) != (const char *) 0) {
+            ids[count++] = flow_commands[i].id;
+        }
+    }
+
+    return count;
+}
+
+/* What is left of the best match after what has been typed.
+ *
+ * The grey tail LIVECHAT draws after the cursor, and what TAB and RIGHT
+ * accept. Empty when the typed text is not the start of any command - there
+ * is nothing honest to offer, and offering the rest of a command the letters
+ * only appear in the middle of would complete to something never asked for.
+ */
+const char *flow_command_ghost(const char *typed)
+{
+    char word[24];
+    unsigned long len = 0;
+    int i;
+
+    if (typed == (const char *) 0) {
+        return "";
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+    if (*typed == '/') {
+        typed++;
+    }
+    while (*typed == ' ' || *typed == '\t') {
+        typed++;
+    }
+    while (typed[len] != '\0' && typed[len] != ' ' && typed[len] != '\t'
+           && len + 1 < sizeof(word)) {
+        word[len] = (char) tolower((unsigned char) typed[len]);
+        len++;
+    }
+    word[len] = '\0';
+    if (len == 0 || typed[len] != '\0') {
+        return "";
+    }
+
+    for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+        if (strncmp(word, flow_commands[i].name, (size_t) len) == 0) {
+            return flow_commands[i].name + len;
+        }
+    }
+    return "";
+}
+
+int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap)
+{
+    char verb[24];
+    const char *p;
+    const char *rest;
+    unsigned long vlen = 0;
+    int i;
+    int match = -1;
+    int matches = 0;
+
+    if (arg_out != (char *) 0 && arg_cap > 0) {
+        arg_out[0] = '\0';
+    }
+    if (line == (const char *) 0) {
+        return FLOW_CMD_UNKNOWN;
+    }
+
+    p = line;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p == '/') {
+        p++;                         /* the bar opened on it; typing it is fine */
+    }
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p == '\0') {
+        return FLOW_CMD_UNKNOWN;
+    }
+
+    /* The verb is the first word. */
+    while (p[vlen] != '\0' && p[vlen] != ' ' && p[vlen] != '\t'
+           && vlen + 1 < sizeof(verb)) {
+        verb[vlen] = (char) tolower((unsigned char) p[vlen]);
+        vlen++;
+    }
+    verb[vlen] = '\0';
+
+    rest = p + vlen;
+    while (*rest == ' ' || *rest == '\t') {
+        rest++;
+    }
+
+    /* Exact first, then an unambiguous prefix. "install" must not be
+     * ambiguous with "installed" when it is typed in full. */
+    for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+        if (strcmp(verb, flow_commands[i].name) == 0) {
+            match = i;
+            matches = 1;
+            break;
+        }
+    }
+    if (matches != 1) {
+        matches = 0;
+        for (i = 0; i < FLOW_COMMAND_COUNT; i++) {
+            if (strncmp(verb, flow_commands[i].name, (size_t) vlen) == 0) {
+                match = i;
+                matches++;
+            }
+        }
+    }
+
+    if (matches != 1) {
+        /* Not a command, or too short to tell which. The whole line is a
+         * search term - "/dungeon" finds dungeon, which is what a bar that
+         * opened on "/" should do. */
+        if (arg_out != (char *) 0 && arg_cap > 0) {
+            unsigned long n = 0;
+            while (p[n] != '\0' && n + 1 < arg_cap) {
+                arg_out[n] = p[n];
+                n++;
+            }
+            arg_out[n] = '\0';
+        }
+        return FLOW_CMD_UNKNOWN;
+    }
+
+    if (arg_out != (char *) 0 && arg_cap > 0) {
+        unsigned long n = 0;
+        while (rest[n] != '\0' && n + 1 < arg_cap) {
+            arg_out[n] = rest[n];
+            n++;
+        }
+        while (n > 0 && (arg_out[n - 1] == ' ' || arg_out[n - 1] == '\t')) {
+            n--;
+        }
+        arg_out[n] = '\0';
+    }
+
+    return flow_commands[match].id;
 }

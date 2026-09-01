@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include "../flow.h"
 
@@ -1106,6 +1107,43 @@ TEST(build_info_content_no_prior_access_omits_draccess)
     flow_build_info_content(out, sizeof(out), "XIM", "GVS", "5D-GetVersion", 0, -1);
     ASSERT_TRUE(strstr(out, "DRACCESS") == (char *) 0, "no DRACCESS line when prior_access is -1");
     ASSERT_TRUE(strstr(out, "ACCESS=0") != (char *) 0, "ACCESS=0 still present");
+}
+
+TEST(build_info_content_negative_access_omits_the_tooltype)
+{
+    /* express.e:4703 - `IF access=0 THEN RETURN TRUE`, and that TRUE is
+     * RESULT_NOT_ALLOWED (axenums.e:23). So ACCESS=0 DENIES a door to
+     * everyone, and a door meant for everyone must carry no ACCESS line at
+     * all. Writing 0 is what made every door DoorRepo installed invisible
+     * in the doors listing while still runnable by typing its command -
+     * caught on the live board with CALC, 2026-08-31. */
+    char out[320];
+
+    flow_build_info_content(out, sizeof(out), "XIM", "CALC", "CALC.rexx", -1, -1);
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:CALC/CALC.rexx\nSTACK=65536\n",
+                  "no ACCESS line at all");
+    ASSERT_TRUE(strstr(out, "ACCESS") == (char *) 0, "not even a commented one");
+}
+
+TEST(build_info_content_negative_access_still_appends_draccess)
+{
+    char out[320];
+
+    flow_build_info_content(out, sizeof(out), "XIM", "CALC", "CALC.rexx", -1, 20);
+    /* "\nACCESS=", not "ACCESS=" - the latter also matches inside
+     * "DRACCESS=20", which is exactly the line this case expects to find. */
+    ASSERT_TRUE(strstr(out, "\nACCESS=") == (char *) 0, "no ACCESS line of its own");
+    ASSERT_TRUE(strstr(out, "DRACCESS=20") != (char *) 0, "prior access still remembered");
+}
+
+TEST(build_info_content_255_still_denies_all_but_sysop)
+{
+    /* express.e:4704 is `IF (access>acsLevel)`, so 255 stays the disable
+     * sentinel the M-key path relies on. */
+    char out[320];
+
+    flow_build_info_content(out, sizeof(out), "XIM", "CALC", "CALC.rexx", 255, -1);
+    ASSERT_TRUE(strstr(out, "ACCESS=255") != (char *) 0, "255 still written");
 }
 
 TEST(build_info_content_with_prior_access_appends_draccess)
@@ -2544,6 +2582,758 @@ TEST(doors_row_tolerates_crlf)
     ASSERT_STR_EQ(name, "AE Help", "name clean of CR");
 }
 
+
+/* ---------------------------------------------------------------------
+ * Uninstall rules, driven by tests/delete-rule-cases.txt
+ *
+ * The same table is read by web/backend/tests/doors/delete-rule-parity.test.ts.
+ * DOORREPO deletes doors on a real Amiga board, where there is no server to
+ * ask, and amiexpress-web deletes them in TypeScript for DOORMAN and the
+ * admin UI: two implementations that cannot be collapsed into one, so they
+ * are held to one set of answers here. A rule corrected on one side and
+ * forgotten on the other fails this test rather than eating a door.
+ */
+
+static int class_from_name(const char *name)
+{
+    if (strcmp(name, "alias") == 0) {
+        return FLOW_REG_ALIAS;
+    }
+    if (strcmp(name, "cotenant") == 0) {
+        return FLOW_REG_COTENANT;
+    }
+    return FLOW_REG_UNRELATED;
+}
+
+/* Splits `line` on '|' into at most `cap` fields, in place. Returns the
+ * count. */
+static int split_fields(char *line, char **fields, int cap)
+{
+    int count = 0;
+    char *p = line;
+
+    fields[count++] = p;
+    while (*p != '\0' && count < cap) {
+        if (*p == '|') {
+            *p = '\0';
+            fields[count++] = p + 1;
+        }
+        p++;
+    }
+    return count;
+}
+
+TEST(delete_rules_match_the_shared_case_table)
+{
+    FILE *f;
+    char line[512];
+    int cases = 0;
+    int failures = 0;
+
+    f = fopen("tests/delete-rule-cases.txt", "r");
+    if (f == (FILE *) 0) {
+        tests_failed++;
+        tests_run++;
+        printf("[FAIL] tests/delete-rule-cases.txt not found\n");
+        return;
+    }
+
+    while (fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        char *fields[6];
+        int count;
+        unsigned long len;
+
+        len = (unsigned long) strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (line[0] == '#' || line[0] == '\0') {
+            continue;
+        }
+
+        count = split_fields(line, fields, 6);
+
+        if (strcmp(fields[0], "owndir") == 0 && count == 4) {
+            char got[512];
+            int owns;
+
+            cases++;
+            owns = flow_own_directory(fields[1], atoi(fields[2]),
+                                      "/bbs", "/bbs/Doors",
+                                      got, (unsigned long) sizeof(got));
+            if (strcmp(fields[3], "-") == 0) {
+                if (owns != 0) {
+                    failures++;
+                    printf("\n  owndir %s: expected none, got %s", fields[1], got);
+                }
+            } else if (owns == 0) {
+                failures++;
+                printf("\n  owndir %s: expected %s, got none", fields[1], fields[3]);
+            } else if (strcmp(got, fields[3]) != 0) {
+                failures++;
+                printf("\n  owndir %s: expected %s, got %s", fields[1], fields[3], got);
+            }
+        } else if (strcmp(fields[0], "class") == 0 && count == 5) {
+            int got;
+            int want;
+
+            cases++;
+            got = flow_registration_class(fields[3], fields[1], fields[2]);
+            want = class_from_name(fields[4]);
+            if (got != want) {
+                failures++;
+                printf("\n  class %s vs %s: expected %s, got %d",
+                       fields[3], fields[1], fields[4], got);
+            }
+        }
+    }
+    fclose(f);
+
+    if (cases == 0) {
+        failures++;
+        printf("\n  the case table produced no cases");
+    }
+
+    ASSERT_EQ(failures, 0, "shared delete-rule cases");
+}
+
+TEST(delete_rules_keep_a_shared_directory_whole)
+{
+    /* The incident, stated directly: Doors/emp_tools holds Joincnf (J) and
+     * Bulls (B). Deleting J must not make B's registration part of it. */
+    char dir[512];
+    int owns;
+
+    owns = flow_own_directory("/bbs/Doors/emp_tools/Joincnf", 0,
+                              "/bbs", "/bbs/Doors", dir, (unsigned long) sizeof(dir));
+    ASSERT_EQ(owns, 1, "Joincnf owns its directory");
+    ASSERT_STR_EQ(dir, "/bbs/Doors/emp_tools", "the directory it sits in");
+    ASSERT_EQ(flow_registration_class("/bbs/Doors/emp_tools/Bulls",
+                                      "/bbs/Doors/emp_tools/Joincnf", dir),
+              FLOW_REG_COTENANT, "Bulls is another door, not an alias");
+}
+
+TEST(delete_rules_never_hand_back_a_root)
+{
+    /* BestConf is LOCATION=Doors:BestConf. Its parent is the Doors: assign,
+     * and treating that as the door's directory aimed a delete at every
+     * door on the board. */
+    char dir[512];
+
+    ASSERT_EQ(flow_own_directory("/bbs/Doors/scan.x", 0, "/bbs", "/bbs/Doors",
+                                 dir, (unsigned long) sizeof(dir)),
+              0, "a binary directly under Doors: owns no directory");
+    ASSERT_EQ(flow_own_directory("/bbs/Doors", 1, "/bbs", "/bbs/Doors",
+                                 dir, (unsigned long) sizeof(dir)),
+              0, "the Doors: assign is never a door directory");
+    ASSERT_EQ(flow_own_directory("/bbs/Doors/BestConf", 1, "/bbs", "/bbs/Doors",
+                                 dir, (unsigned long) sizeof(dir)),
+              1, "a LOCATION that is a directory owns itself");
+    ASSERT_STR_EQ(dir, "/bbs/Doors/BestConf", "itself, not its parent");
+}
+
+
+
+TEST(resolve_location_handles_every_spelling_a_board_uses)
+{
+    char out[320];
+
+    ASSERT_EQ(flow_resolve_location("Doors:AquaScan/AquaScan.020", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "assign form");
+    ASSERT_STR_EQ(out, "/bbs/Doors/AquaScan/AquaScan.020", "assign resolved");
+
+    ASSERT_EQ(flow_resolve_location("DOORS:EmP_Tools/Bulls", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "upper-case assign");
+    ASSERT_STR_EQ(out, "/bbs/Doors/EmP_Tools/Bulls", "casing preserved in the tail");
+
+    ASSERT_EQ(flow_resolve_location("BBS:Doors/X/y", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "BBS: prefix");
+    ASSERT_STR_EQ(out, "/bbs/Doors/X/y", "BBS: stripped with the Doors/ that follows");
+
+    ASSERT_EQ(flow_resolve_location("Doors/X/y", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "plain relative");
+    ASSERT_STR_EQ(out, "/bbs/Doors/X/y", "relative resolved once, not twice");
+
+    ASSERT_EQ(flow_resolve_location("/somewhere/else/door", "/bbs/Doors",
+                                    out, (unsigned long) sizeof(out)), 1, "absolute");
+    ASSERT_STR_EQ(out, "/somewhere/else/door", "absolute left alone");
+}
+
+TEST(resolve_location_refuses_what_it_cannot_hold)
+{
+    char small[8];
+
+    ASSERT_EQ(flow_resolve_location("Doors:AquaScan/AquaScan.020", "/bbs/Doors",
+                                    small, (unsigned long) sizeof(small)), 0,
+              "a buffer too small is a refusal, not a truncation");
+    ASSERT_EQ(flow_resolve_location("", "/bbs/Doors", small, (unsigned long) sizeof(small)), 0,
+              "an empty LOCATION resolves to nothing");
+}
+
+
+
+/* ---------------------------------------------------------------------
+ * flow_rewrite_tooltype - setting one field without reshaping the file
+ *
+ * The M-key editor's promise, and the reason it does not rebuild from a
+ * template: a production .info carries tooltypes this door has never heard
+ * of, and every one of them must survive an edit byte-for-byte.
+ */
+
+TEST(rewrite_tooltype_replaces_a_value_in_place)
+{
+    const char *raw = "TYPE=XIM\nLOCATION=Doors:X/y\nSTACK=20000\nNAME=Old\n";
+    char out[512];
+    int n;
+
+    n = flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "65536");
+    ASSERT_TRUE(n > 0, "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:X/y\nSTACK=65536\nNAME=Old\n",
+                  "only STACK changed, and in its own position");
+}
+
+TEST(rewrite_tooltype_appends_a_field_that_was_missing)
+{
+    const char *raw = "TYPE=XIM\nLOCATION=Doors:X/y\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "MENUNAME", "File Scan") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\nLOCATION=Doors:X/y\nMENUNAME=File Scan\n",
+                  "appended at the end");
+}
+
+TEST(rewrite_tooltype_keeps_tooltypes_the_door_never_heard_of)
+{
+    /* The corruption this replaced the template rebuild to avoid. */
+    const char *raw = "BBSCMD=FS\nTYPE=XIM\nCATEGORY=Utilities\nMULTINODE=YES\n"
+                      "PRIORITY=SAME\nSTACK=20000\nDESCRIPTION=Scans files\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "40000") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "BBSCMD=FS\nTYPE=XIM\nCATEGORY=Utilities\nMULTINODE=YES\n"
+                       "PRIORITY=SAME\nSTACK=40000\nDESCRIPTION=Scans files\n",
+                  "every other tooltype survives byte-for-byte");
+}
+
+TEST(rewrite_tooltype_matches_the_key_whatever_its_casing)
+{
+    const char *raw = "Type=XIM\nStack=20000\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "8192") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "Type=XIM\nSTACK=8192\n",
+                  "matched Stack=, wrote the door's own spelling");
+}
+
+TEST(rewrite_tooltype_never_leaves_two_lines_with_one_key)
+{
+    /* A hand-edited or corrupted .info can carry a duplicate. */
+    const char *raw = "STACK=20000\nTYPE=XIM\nSTACK=99999\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "40000") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "STACK=40000\nTYPE=XIM\n", "the duplicate is dropped");
+}
+
+TEST(rewrite_tooltype_removes_a_field_when_the_value_is_null)
+{
+    /* Clearing a field must not leave KEY= behind, which the BBS's parser
+     * reads as an empty string rather than as absent. */
+    const char *raw = "TYPE=XIM\nBANNER=Screens:Old\nSTACK=20000\n";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "BANNER", (const char *) 0) > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\nSTACK=20000\n", "the line is gone entirely");
+}
+
+TEST(rewrite_tooltype_tolerates_crlf_and_a_missing_final_newline)
+{
+    const char *raw = "TYPE=XIM\r\nSTACK=20000";
+    char out[512];
+
+    ASSERT_TRUE(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "1024") > 0,
+                "rewrite succeeded");
+    ASSERT_STR_EQ(out, "TYPE=XIM\r\nSTACK=1024\n",
+                  "the untouched line keeps its CRLF; the rewritten one is canonical");
+}
+
+TEST(rewrite_tooltype_refuses_rather_than_truncating)
+{
+    const char *raw = "TYPE=XIM\nSTACK=20000\n";
+    char out[8];
+
+    ASSERT_EQ(flow_rewrite_tooltype(raw, out, sizeof(out), "STACK", "65536"), -1,
+              "a buffer that cannot hold the result is a refusal");
+    ASSERT_EQ(flow_rewrite_tooltype(raw, out, sizeof(out), "", "x"), -1,
+              "an empty key is refused");
+}
+
+
+
+TEST(stack_size_accepts_what_a_door_can_start_with)
+{
+    long v = 0;
+
+    ASSERT_EQ(flow_validate_stack_size("65536", &v), 0, "an ordinary door stack");
+    ASSERT_EQ(v, 65536L, "parsed");
+    ASSERT_EQ(flow_validate_stack_size("1024", &v), 0, "the floor");
+    ASSERT_EQ(flow_validate_stack_size("1048576", &v), 0, "the ceiling");
+}
+
+TEST(stack_size_rejects_what_would_not_start_or_is_a_typo)
+{
+    long v = 4242;
+
+    ASSERT_EQ(flow_validate_stack_size("512", &v), 1, "below a kilobyte no door starts");
+    ASSERT_EQ(flow_validate_stack_size("99999999", &v), 1, "past a megabyte is a typo");
+    ASSERT_EQ(flow_validate_stack_size("64k", &v), 1, "digits only");
+    ASSERT_EQ(flow_validate_stack_size("-4096", &v), 1, "no sign");
+    ASSERT_EQ(flow_validate_stack_size("", &v), 1, "no empty value");
+    ASSERT_EQ(v, 4242L, "the caller's value is untouched on every refusal");
+}
+
+TEST(tooltype_value_rejects_what_would_break_the_line)
+{
+    ASSERT_EQ(flow_validate_tooltype_value("File Scan", 40), 0, "an ordinary menu name");
+    ASSERT_EQ(flow_validate_tooltype_value("XIM", 8), 0, "a door type");
+    ASSERT_EQ(flow_validate_tooltype_value("", 40), 1, "empty is not a value");
+    ASSERT_EQ(flow_validate_tooltype_value("NAME=OTHER", 40), 1,
+              "an '=' would be read as a second key");
+    ASSERT_EQ(flow_validate_tooltype_value("two\nlines", 40), 1,
+              "a newline would split one tooltype into two");
+    ASSERT_EQ(flow_validate_tooltype_value("carriage\rreturn", 40), 1, "CR too");
+    ASSERT_EQ(flow_validate_tooltype_value("way too long for this field", 8), 1,
+              "over the field's length");
+}
+
+
+
+TEST(log_filter_keeps_the_actions_a_sysop_asks_about)
+{
+    ASSERT_EQ(flow_log_line_is_action("UNINSTALL OK cmd=HDRDROP files=3 aliases=1 shared=0"), 1,
+              "an uninstall record");
+    ASSERT_EQ(flow_log_line_is_action("INSTALL OK archive=CALC.LHA cmd=CALC binary=CALC/calc"), 1,
+              "an install record");
+    ASSERT_EQ(flow_log_line_is_action("TOOLTYPE OK cmd=FS STACK=65536"), 1, "a tooltype edit");
+    ASSERT_EQ(flow_log_line_is_action("ACCESS OK cmd=FS 0 -> 255"), 1, "an access edit");
+    ASSERT_EQ(flow_log_line_is_action("STRIP OK archive=X.LHA removed=4"), 1, "an ad strip");
+    ASSERT_EQ(flow_log_line_is_action("UNINSTALL FAILED: could not remove the .info"), 1,
+              "a failure is an action too - it is the one worth reading");
+}
+
+TEST(log_filter_drops_the_door_own_chatter)
+{
+    ASSERT_EQ(flow_log_line_is_action("fetching catalog page 2"), 0, "ordinary chatter");
+    ASSERT_EQ(flow_log_line_is_action(""), 0, "an empty line");
+    ASSERT_EQ(flow_log_line_is_action("INSTALLER FAILED to start"), 0,
+              "the verb must be the whole first word, not a prefix of one");
+    ASSERT_EQ(flow_log_line_is_action((const char *) 0), 0, "a NULL line");
+}
+
+TEST(log_filter_reads_the_verb_whatever_its_case_or_indent)
+{
+    ASSERT_EQ(flow_log_line_is_action("  uninstall ok cmd=X"), 1, "indented and lower-case");
+    ASSERT_EQ(flow_log_line_is_action("Install: CALC"), 1, "a colon ends the verb too");
+}
+
+
+
+TEST(run_decision_mirrors_doormans_rule)
+{
+    ASSERT_EQ(flow_run_decision("FS", 1), FLOW_RUN_OK, "an enabled door with a command");
+    ASSERT_EQ(flow_run_decision("FS", 0), FLOW_RUN_DISABLED,
+              "a disabled door is out of service, not startable");
+    ASSERT_EQ(flow_run_decision("", 1), FLOW_RUN_NOCOMMAND, "a phantom row with no command");
+    ASSERT_EQ(flow_run_decision("   ", 1), FLOW_RUN_NOCOMMAND, "whitespace is not a command");
+    ASSERT_EQ(flow_run_decision((const char *) 0, 1), FLOW_RUN_NONE, "nothing selected");
+}
+
+TEST(run_decision_checks_disabled_before_the_command)
+{
+    /* A disabled phantom is disabled: the sysop's own decision is the more
+     * useful thing to say back. */
+    ASSERT_EQ(flow_run_decision("", 0), FLOW_RUN_DISABLED, "disabled wins over empty");
+}
+
+
+
+TEST(doors_row_enabled_reads_the_flag_the_snapshot_writes)
+{
+    int enabled = -1;
+
+    ASSERT_EQ(flow_doors_row_enabled("FS|XIM|31744|1|0|X.LHA|File Scan|Utils|Scans", &enabled), 0,
+              "an enabled row");
+    ASSERT_EQ(enabled, 1, "1 means enabled");
+
+    ASSERT_EQ(flow_doors_row_enabled("FS|XIM|31744|0|255|X.LHA|File Scan|Utils|Scans", &enabled), 0,
+              "a disabled row");
+    ASSERT_EQ(enabled, 0, "0 means disabled");
+}
+
+TEST(doors_row_enabled_refuses_a_row_without_the_field)
+{
+    int enabled = 42;
+
+    ASSERT_EQ(flow_doors_row_enabled("DOORS|17", &enabled), 1, "the header is not a row");
+    ASSERT_EQ(flow_doors_row_enabled("FS|XIM", &enabled), 1, "a truncated row");
+    ASSERT_EQ(flow_doors_row_enabled((const char *) 0, &enabled), 1, "a NULL line");
+    ASSERT_EQ(enabled, 42, "the caller's value is untouched on every refusal");
+}
+
+
+
+/* ---------------------------------------------------------------------
+ * The command bar
+ *
+ * It exists because the footer cannot advertise this door - sixteen keys on
+ * the catalog screen, four of them visible at eighty columns.
+ */
+
+TEST(command_bar_reads_a_verb_and_its_argument)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("find dungeon", arg, sizeof(arg)), FLOW_CMD_FIND, "find");
+    ASSERT_STR_EQ(arg, "dungeon", "the argument");
+
+    ASSERT_EQ(flow_parse_command("install", arg, sizeof(arg)), FLOW_CMD_INSTALL, "no argument");
+    ASSERT_STR_EQ(arg, "", "empty argument");
+
+    ASSERT_EQ(flow_parse_command("  type   XIM  ", arg, sizeof(arg)), FLOW_CMD_TYPE,
+              "blanks around it all");
+    ASSERT_STR_EQ(arg, "XIM", "argument trimmed both ends");
+}
+
+TEST(command_bar_takes_the_slash_it_opened_on)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("/help", arg, sizeof(arg)), FLOW_CMD_HELP, "leading slash");
+    ASSERT_EQ(flow_parse_command("help", arg, sizeof(arg)), FLOW_CMD_HELP, "without one");
+    ASSERT_EQ(flow_parse_command("HELP", arg, sizeof(arg)), FLOW_CMD_HELP, "any case");
+}
+
+TEST(command_bar_accepts_an_unambiguous_prefix)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("unin", arg, sizeof(arg)), FLOW_CMD_UNINSTALL, "unin");
+    ASSERT_EQ(flow_parse_command("hist", arg, sizeof(arg)), FLOW_CMD_HISTORY, "hist");
+    /* install and installed share a prefix, so a short one is not a command
+     * and falls through to the search - it must never guess between two. */
+    ASSERT_EQ(flow_parse_command("inst", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "ambiguous");
+    /* ...but typed in full it is exact, even though it prefixes the other. */
+    ASSERT_EQ(flow_parse_command("install", arg, sizeof(arg)), FLOW_CMD_INSTALL, "exact wins");
+    ASSERT_EQ(flow_parse_command("installed", arg, sizeof(arg)), FLOW_CMD_INSTALLED, "the longer one");
+}
+
+TEST(command_bar_treats_anything_else_as_a_search)
+{
+    char arg[64];
+
+    /* A bar that opened on "/" should find what you type into it. */
+    ASSERT_EQ(flow_parse_command("dungeon", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "not a command");
+    ASSERT_STR_EQ(arg, "dungeon", "the whole line is the search term");
+
+    ASSERT_EQ(flow_parse_command("/two words", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "two words");
+    ASSERT_STR_EQ(arg, "two words", "both of them");
+}
+
+TEST(command_bar_survives_nothing_at_all)
+{
+    char arg[64];
+
+    ASSERT_EQ(flow_parse_command("", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "empty");
+    ASSERT_STR_EQ(arg, "", "no argument");
+    ASSERT_EQ(flow_parse_command("/", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "just the slash");
+    ASSERT_EQ(flow_parse_command("   ", arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "blanks");
+    ASSERT_EQ(flow_parse_command((const char *) 0, arg, sizeof(arg)), FLOW_CMD_UNKNOWN, "NULL");
+}
+
+TEST(command_bar_names_every_command_it_answers)
+{
+    /* The help screen prints these, so a command with no name would print a
+     * blank line and look like a bug. */
+    ASSERT_STR_EQ(flow_command_name(FLOW_CMD_GET), "get", "get");
+    ASSERT_STR_EQ(flow_command_name(FLOW_CMD_UNINSTALL), "uninstall", "uninstall");
+    ASSERT_STR_EQ(flow_command_name(FLOW_CMD_UNKNOWN), "", "unknown has no name");
+    {
+        int id;
+        int missing = 0;
+        for (id = FLOW_CMD_HELP; id <= FLOW_CMD_QUIT; id++) {
+            if (flow_command_name(id)[0] == '\0') {
+                missing++;
+            }
+        }
+        ASSERT_EQ(missing, 0, "every id in the range has a name");
+    }
+}
+
+
+
+/* --- The command bar's autocomplete ---------------------------------- */
+
+static int suggest_has(const int *ids, int count, int wanted)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (ids[i] == wanted) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+TEST(autocomplete_shows_everything_before_a_letter_is_typed)
+{
+    /* The report: "no auto complete so I have no idea what commands there
+     * are". Opening the bar has to answer that question by itself. */
+    int ids[40];
+    int count = flow_command_suggest("", ids, 40);
+
+    ASSERT_EQ(count, 19, "every command is offered");
+    ASSERT_TRUE(suggest_has(ids, count, FLOW_CMD_HELP), "help among them");
+    ASSERT_TRUE(suggest_has(ids, count, FLOW_CMD_QUIT), "and quit");
+}
+
+TEST(autocomplete_narrows_as_the_letters_arrive)
+{
+    int ids[40];
+    int count = flow_command_suggest("in", ids, 40);
+
+    ASSERT_TRUE(count >= 2, "install and installed at least");
+    ASSERT_EQ(ids[0], FLOW_CMD_INSTALL, "install leads");
+    ASSERT_TRUE(suggest_has(ids, count, FLOW_CMD_INSTALLED), "installed offered too");
+    ASSERT_TRUE(!suggest_has(ids, count, FLOW_CMD_QUIT), "quit is not a match");
+}
+
+TEST(autocomplete_puts_what_a_name_starts_with_first)
+{
+    /* Someone typing "in" wants install, not uninstall - even though both
+     * contain the letters. */
+    /* "install" is the case that tells the two rules apart: uninstall
+     * CONTAINS it and sits earlier in the table than installed, which
+     * STARTS with it. A plain contains-match would offer uninstall second
+     * and bury the command actually being typed towards. */
+    int ids[40];
+    int count = flow_command_suggest("install", ids, 40);
+    int installed_at = -1;
+    int uninstall_at = -1;
+    int i;
+
+    ASSERT_EQ(ids[0], FLOW_CMD_INSTALL, "the exact word leads");
+    for (i = 0; i < count; i++) {
+        /* FIRST occurrence of each - where the eye lands. Taking the last
+         * one hid a version that offered uninstall second and repeated it
+         * at the end. */
+        if (ids[i] == FLOW_CMD_INSTALLED && installed_at < 0) {
+            installed_at = i;
+        }
+        if (ids[i] == FLOW_CMD_UNINSTALL && uninstall_at < 0) {
+            uninstall_at = i;
+        }
+    }
+
+    ASSERT_TRUE(installed_at >= 0, "installed is offered");
+    ASSERT_TRUE(uninstall_at >= 0, "uninstall is offered as well");
+    ASSERT_TRUE(installed_at < uninstall_at, "what it STARTS comes before what merely contains it");
+}
+
+TEST(autocomplete_ignores_the_slash_and_the_case)
+{
+    int ids[40];
+
+    ASSERT_EQ(flow_command_suggest("/HE", ids, 40), 1, "one match");
+    ASSERT_EQ(ids[0], FLOW_CMD_HELP, "help, however it was typed");
+}
+
+TEST(autocomplete_stops_once_an_argument_is_being_typed)
+{
+    /* "find dung" is a search for dung. Completing the word after the space
+     * to a command name would be noise, and would fight the typing. */
+    int ids[40];
+
+    ASSERT_EQ(flow_command_suggest("find ", ids, 40), 0, "nothing after the space");
+    ASSERT_EQ(flow_command_suggest("find dung", ids, 40), 0, "nor mid-argument");
+}
+
+TEST(autocomplete_offers_nothing_for_a_word_no_command_contains)
+{
+    int ids[40];
+
+    ASSERT_EQ(flow_command_suggest("dungeon", ids, 40), 0, "a search, not a command");
+}
+
+TEST(autocomplete_never_writes_past_the_callers_array)
+{
+    int ids[4];
+    int count;
+
+    ids[3] = -1;
+    count = flow_command_suggest("", ids, 3);
+    ASSERT_EQ(count, 3, "stops at the cap");
+    ASSERT_EQ(ids[3], -1, "and does not touch what is past it");
+    ASSERT_EQ(flow_command_suggest("", ids, 0), 0, "no room at all");
+    ASSERT_EQ(flow_command_suggest("", (int *) 0, 4), 0, "nowhere to write");
+}
+
+TEST(the_ghost_is_the_rest_of_the_best_match)
+{
+    ASSERT_STR_EQ(flow_command_ghost("in"), "stall", "in -> install");
+    ASSERT_STR_EQ(flow_command_ghost("/un"), "install", "the slash it opened on");
+    ASSERT_STR_EQ(flow_command_ghost("HEL"), "p", "any case");
+    ASSERT_STR_EQ(flow_command_ghost("help"), "", "nothing left to add");
+}
+
+TEST(the_ghost_stays_empty_when_it_would_be_a_guess)
+{
+    /* "stall" appears inside install, but nobody typing it asked for
+     * install - completing there would put a command on the line that was
+     * never asked for. */
+    ASSERT_STR_EQ(flow_command_ghost("stall"), "", "a middle match is not a completion");
+    ASSERT_STR_EQ(flow_command_ghost(""), "", "nothing typed");
+    ASSERT_STR_EQ(flow_command_ghost("find dung"), "", "an argument is not a command");
+    ASSERT_STR_EQ(flow_command_ghost((const char *) 0), "", "no line at all");
+}
+
+
+TEST(strip_says_why_it_did_nothing)
+{
+    /* "/strip seems to do nothing when i browse an archive." It returned in
+     * silence in three places. The footer only offers the S KEY when the
+     * door is installed and has ads, so silence there was at least
+     * consistent - but the command bar lists /strip always, and a command
+     * typed on purpose that answers with nothing reads as broken. */
+    ASSERT_EQ(flow_strip_verdict(0, 3), FLOW_STRIP_NOT_INSTALLED,
+              "no directory on this board to strip from");
+    ASSERT_EQ(flow_strip_verdict(1, 0), FLOW_STRIP_NO_ADS,
+              "installed, but the repository counted no ads");
+    ASSERT_EQ(flow_strip_verdict(1, 3), FLOW_STRIP_OK, "installed and dirty");
+}
+
+TEST(strip_treats_an_unknown_ad_count_as_worth_a_look)
+{
+    /* -1 is an older server that reports no count. The footer already
+     * treats that as "might have some" rather than hiding the key, and the
+     * listing is fetched before anything is deleted, so the worst case is
+     * a screen saying there was nothing after all. */
+    ASSERT_EQ(flow_strip_verdict(1, -1), FLOW_STRIP_OK, "unknown is not zero");
+}
+
+
+/* --- Never split an escape sequence across two XIM messages ---------- */
+
+TEST(a_chunk_never_ends_inside_an_escape_sequence)
+{
+    /* ae_put() hands the BBS at most AE_MAX_LINE bytes per JH_SM message
+     * and used to cut wherever the count ran out. Measured on the "Not
+     * installed" dialog: 1127 bytes, six chunks, and the fourth ended
+     * "ESC [ 1" with the next one starting "3;72H|" - one cursor-position
+     * sequence torn in half. The BBS writes each message separately, so the
+     * halves do not necessarily meet, and the character lands wherever the
+     * cursor happened to be. That is the missing dialog frame reported with
+     * a screenshot on 2026-08-31.
+     *
+     * The dialog only got big enough to hit this when its interior started
+     * being painted; the tear was always possible.
+     */
+    const char *text = "AB\033[13;72HX";
+    unsigned long n;
+
+    /* A budget that would cut after "AB\033[13" must stop before the ESC. */
+    n = flow_safe_chunk(text, (unsigned long) strlen(text), 7);
+    ASSERT_EQ((int) n, 2, "stops before the escape rather than inside it");
+
+    /* Enough room for the whole sequence: take it all. */
+    n = flow_safe_chunk(text, (unsigned long) strlen(text), 11);
+    ASSERT_EQ((int) n, 11, "a complete sequence is not broken up");
+}
+
+TEST(a_chunk_that_splits_nothing_is_left_alone)
+{
+    const char *plain = "just some text with no escapes at all";
+    unsigned long len = (unsigned long) strlen(plain);
+
+    ASSERT_EQ((int) flow_safe_chunk(plain, len, 10), 10, "plain text cuts anywhere");
+    ASSERT_EQ((int) flow_safe_chunk(plain, len, len + 50), (int) len,
+              "a budget larger than the text takes the text");
+}
+
+TEST(a_chunk_ending_exactly_on_a_finished_sequence_is_kept)
+{
+    /* The boundary case: the sequence ends on the last byte of the budget.
+     * Backing off here would shrink every chunk for nothing. */
+    const char *text = "\033[2JHELLO";
+
+    ASSERT_EQ((int) flow_safe_chunk(text, (unsigned long) strlen(text), 4), 4,
+              "a sequence that finishes inside the budget stays");
+}
+
+TEST(a_sequence_too_long_for_the_budget_still_makes_progress)
+{
+    /* Pathological: a single escape sequence longer than one message. Backing
+     * off to zero would loop forever sending nothing, so the byte count wins
+     * over the tear. Cannot happen with the sequences this door writes -
+     * the longest is nine bytes - but a chunker that can hang is not one to
+     * leave in a door that runs unattended. */
+    const char *text = "\033[111111111111111111111m";
+    unsigned long n = flow_safe_chunk(text, (unsigned long) strlen(text), 6);
+
+    ASSERT_EQ((int) n, 6, "progress beats purity when they conflict");
+}
+
+TEST(the_whole_notice_stream_survives_being_chunked)
+{
+    /* End to end on the shape that broke: build a long run of gotos, chunk
+     * it the way ae_put does, and assert no piece ends mid-sequence. */
+    char stream[1400];
+    unsigned long len = 0;
+    unsigned long off;
+    int row;
+    int splits = 0;
+
+    for (row = 1; row <= 60 && len + 16 < sizeof(stream); row++) {
+        sprintf(stream + len, "\033[%d;72H|", row);
+        len += (unsigned long) strlen(stream + len);
+    }
+
+    off = 0;
+    while (off < len) {
+        unsigned long take = flow_safe_chunk(stream + off, len - off, 198);
+        unsigned long i;
+        long esc = -1;
+
+        ASSERT_TRUE(take > 0, "the chunker always makes progress");
+        for (i = 0; i < take; i++) {
+            if (stream[off + i] == '\033') {
+                esc = (long) i;
+            }
+        }
+        if (esc >= 0) {
+            int terminated = 0;
+            for (i = (unsigned long) esc + 2; i < take; i++) {
+                unsigned char c = (unsigned char) stream[off + i];
+                if (c >= 0x40 && c <= 0x7e) {
+                    terminated = 1;
+                    break;
+                }
+            }
+            if (!terminated) {
+                splits++;
+            }
+        }
+        off += take;
+    }
+
+    ASSERT_EQ(splits, 0, "no chunk ends part-way through a sequence");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -2794,6 +3584,57 @@ int main(void)
     RUN_TEST(doors_row_rejects_an_empty_command);
     RUN_TEST(doors_row_ignores_extra_trailing_columns);
     RUN_TEST(doors_row_tolerates_crlf);
+
+        RUN_TEST(build_info_content_negative_access_omits_the_tooltype);
+    RUN_TEST(build_info_content_negative_access_still_appends_draccess);
+    RUN_TEST(build_info_content_255_still_denies_all_but_sysop);
+
+
+        RUN_TEST(delete_rules_match_the_shared_case_table);
+    RUN_TEST(delete_rules_keep_a_shared_directory_whole);
+    RUN_TEST(delete_rules_never_hand_back_a_root);
+    RUN_TEST(resolve_location_handles_every_spelling_a_board_uses);
+    RUN_TEST(resolve_location_refuses_what_it_cannot_hold);
+    RUN_TEST(rewrite_tooltype_replaces_a_value_in_place);
+    RUN_TEST(rewrite_tooltype_appends_a_field_that_was_missing);
+    RUN_TEST(rewrite_tooltype_keeps_tooltypes_the_door_never_heard_of);
+    RUN_TEST(rewrite_tooltype_matches_the_key_whatever_its_casing);
+    RUN_TEST(rewrite_tooltype_never_leaves_two_lines_with_one_key);
+    RUN_TEST(rewrite_tooltype_removes_a_field_when_the_value_is_null);
+    RUN_TEST(rewrite_tooltype_tolerates_crlf_and_a_missing_final_newline);
+    RUN_TEST(rewrite_tooltype_refuses_rather_than_truncating);
+    RUN_TEST(stack_size_accepts_what_a_door_can_start_with);
+    RUN_TEST(stack_size_rejects_what_would_not_start_or_is_a_typo);
+    RUN_TEST(tooltype_value_rejects_what_would_break_the_line);
+    RUN_TEST(log_filter_keeps_the_actions_a_sysop_asks_about);
+    RUN_TEST(log_filter_drops_the_door_own_chatter);
+    RUN_TEST(log_filter_reads_the_verb_whatever_its_case_or_indent);
+    RUN_TEST(run_decision_mirrors_doormans_rule);
+    RUN_TEST(run_decision_checks_disabled_before_the_command);
+    RUN_TEST(doors_row_enabled_reads_the_flag_the_snapshot_writes);
+    RUN_TEST(doors_row_enabled_refuses_a_row_without_the_field);
+    RUN_TEST(command_bar_reads_a_verb_and_its_argument);
+    RUN_TEST(command_bar_takes_the_slash_it_opened_on);
+    RUN_TEST(command_bar_accepts_an_unambiguous_prefix);
+    RUN_TEST(command_bar_treats_anything_else_as_a_search);
+    RUN_TEST(command_bar_survives_nothing_at_all);
+    RUN_TEST(command_bar_names_every_command_it_answers);
+    RUN_TEST(autocomplete_shows_everything_before_a_letter_is_typed);
+    RUN_TEST(autocomplete_narrows_as_the_letters_arrive);
+    RUN_TEST(autocomplete_puts_what_a_name_starts_with_first);
+    RUN_TEST(autocomplete_ignores_the_slash_and_the_case);
+    RUN_TEST(autocomplete_stops_once_an_argument_is_being_typed);
+    RUN_TEST(autocomplete_offers_nothing_for_a_word_no_command_contains);
+    RUN_TEST(autocomplete_never_writes_past_the_callers_array);
+    RUN_TEST(the_ghost_is_the_rest_of_the_best_match);
+    RUN_TEST(the_ghost_stays_empty_when_it_would_be_a_guess);
+    RUN_TEST(strip_says_why_it_did_nothing);
+    RUN_TEST(strip_treats_an_unknown_ad_count_as_worth_a_look);
+    RUN_TEST(a_chunk_never_ends_inside_an_escape_sequence);
+    RUN_TEST(a_chunk_that_splits_nothing_is_left_alone);
+    RUN_TEST(a_chunk_ending_exactly_on_a_finished_sequence_is_kept);
+    RUN_TEST(a_sequence_too_long_for_the_budget_still_makes_progress);
+    RUN_TEST(the_whole_notice_stream_survives_being_chunked);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

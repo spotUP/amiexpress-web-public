@@ -40,6 +40,7 @@
 #include <ctype.h>
 
 #include "aedoor.h"
+#include "flow.h"
 
 /* struct Process is only ever held here as an opaque pointer (JHMessage's
  * "task" field, BB_GETTASK result) -- never dereferenced -- so a forward
@@ -137,6 +138,10 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
  * unnoticed here because this project's emulator delivers arrows to a door
  * whether or not rawArrow is set. */
 #define RAWARROW  501
+
+/* RETURNCOMMAND: hand a command back for the BBS to run once this door has
+ * exited (express.e:3492-3493; xim/types.ts RETURNCOMMAND = 136). */
+#define RETURNCOMMAND 136
 
 /* AmiExpress doors sometimes deliberately send "bbs:" device/volume paths
  * via JH_SM to trigger file display instead of a printed line: our emulator
@@ -316,6 +321,22 @@ void ae_put(const char *text, int newline)
         if (chunk > budget) {
             chunk = budget;
         }
+        /* Do not cut an ANSI escape sequence in half.
+         *
+         * The BBS writes each JH_SM message on its own, so the two halves
+         * of a torn sequence do not reliably meet: the terminal sees a
+         * partial sequence, and the character that followed it lands
+         * wherever the cursor happened to be. Measured on DoorRepo's "Not
+         * installed" dialog - 1127 bytes, six messages, the fourth ending
+         * "ESC [ 1" and the fifth starting "3;72H|" - which is a dialog
+         * with pieces of its frame missing (screenshot, 2026-08-31).
+         *
+         * flow_safe_chunk() moves the cut back to just before the ESC, and
+         * the sequence goes whole in the next message. */
+        chunk = flow_safe_chunk(text + offset, remaining, chunk);
+        if (chunk == 0) {
+            break;                  /* nothing sendable: do not spin */
+        }
 
         if (prefixed) {
             msg->String[0] = '.'; /* guard byte: breaks the trimmed "bbs:" prefix match, see would_reroute_to_file_display() above */
@@ -434,6 +455,19 @@ void ae_raw_arrows(int on)
     msg->String[0] = '\0';
     xim_call();
     raw_arrows_on = on ? 1 : 0;
+}
+
+
+void ae_return_command(const char *command)
+{
+    if (msg == NULL || bbs_port == NULL || command == NULL || command[0] == '\0') {
+        return;
+    }
+    msg->Command = RETURNCOMMAND;
+    msg->Data = 0;
+    strncpy(msg->String, command, sizeof(msg->String) - 1);
+    msg->String[sizeof(msg->String) - 1] = '\0';
+    xim_call();
 }
 
 /* Shared tail of ae_shutdown()/ae_fatal(): notify the BBS (JH_SHUTDOWN is
