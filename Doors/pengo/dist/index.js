@@ -268,8 +268,25 @@ function handleInput(key) {
         case "enterName":
             handleNameEntryInput(inputKey);
             break;
-        default:
-            showMenu();
+        case "dying":
+        case "levelComplete":
+            // Timed animation hand-overs: the game loop drives these itself
+            // (death via pengo.isDead/deathFrame in PengoGame.update(); level
+            // transition via the setTimeout in update() that flips state back to
+            // 'playing' after 2000ms). A keypress here must be a no-op - routing
+            // it to showMenu() was the bug ("the game ends after level 1").
+            break;
+        default: {
+            // Exhaustiveness guard: every GameState member above is handled
+            // explicitly, so gameData.state narrows to `never` here. Adding a
+            // state to the union without adding a case above fails this
+            // assignment at compile time instead of silently falling through to
+            // a runtime default. No runtime action is taken for an unrecognized
+            // value - a no-op is safe; dumping the player to showMenu() mid-game
+            // is exactly the destructive fallback this fix removes.
+            const _exhaustive = gameData.state;
+            void _exhaustive;
+        }
     }
     syncMusicState();
 }

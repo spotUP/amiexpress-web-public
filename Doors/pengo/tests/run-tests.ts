@@ -14,6 +14,7 @@ const TEST_MODULES = [
   './sprites-assets.test',
   './layout.test',
   './render.test',
+  './state-routing.test',
 ];
 
 (async () => {

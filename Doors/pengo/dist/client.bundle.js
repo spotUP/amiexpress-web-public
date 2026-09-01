@@ -214,6 +214,15 @@ function bg(color) {
     return `${CSI}48;5;${code}m`;
   }
 }
+function isExplicitColour(name) {
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(name))
+    return true;
+  if (/^\d{1,3}$/.test(name)) {
+    const n = Number(name);
+    return n >= 0 && n <= 255;
+  }
+  return false;
+}
 function parseTags(text) {
   const cached = _parseTagsCache.get(text);
   if (cached !== void 0) {
@@ -302,6 +311,12 @@ function parseTags(text) {
         case "bg":
           return defaultBg;
         default:
+          if (name.endsWith("-fg") && isExplicitColour(name.slice(0, -3))) {
+            return defaultFg;
+          }
+          if (name.endsWith("-bg") && isExplicitColour(name.slice(0, -3))) {
+            return defaultBg;
+          }
           return attrs.reset;
       }
     }
@@ -424,8 +439,15 @@ function parseTags(text) {
         return "{";
       case "close":
         return "}";
-      default:
+      default: {
+        if (name.endsWith("-fg") || name.endsWith("-bg")) {
+          const colour = name.slice(0, -3);
+          if (isExplicitColour(colour)) {
+            return name.endsWith("-fg") ? fg(colour) : bg(colour);
+          }
+        }
         return match2;
+      }
     }
   });
   if (_parseTagsCache.size >= _parseTagsCacheLimit) {
@@ -776,7 +798,7 @@ var init_colors = __esm({
       setScrollRegion: (top, bottom) => `${CSI}${top + 1};${bottom + 1}r`,
       resetScrollRegion: `${CSI}r`
     };
-    tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
+    tagRegex = /\{(\/?)([\w#-]*)(?::([\w-]+))?\}/g;
     defaultFg = `${CSI}39m`;
     defaultBg = `${CSI}49m`;
     _parseTagsCache = /* @__PURE__ */ new Map();
@@ -5450,14 +5472,14 @@ var init_dockable_panel = __esm({
         if (this.screenListenersBound || !this.screen)
           return;
         this.screenListenersBound = true;
-        this.screen.on("mousemove", (data) => {
+        this.onScreenEvent("mousemove", (data) => {
           if (this.isResizing && this.currentResizeEdge) {
             this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
           } else if (this.isDragging) {
             this.handleDrag(data.x, data.y);
           }
         });
-        this.screen.on("mouseup", () => {
+        this.onScreenEvent("mouseup", () => {
           if (this.isDragging) {
             this.stopDrag();
           }
@@ -5465,7 +5487,7 @@ var init_dockable_panel = __esm({
             this.stopResize();
           }
         });
-        this.screen.on("resize", () => {
+        this.onScreenEvent("resize", () => {
           const breakpoint = this.screen.responsiveLayout.getBreakpoint();
           const isMobile = breakpoint === "xs";
           if (isMobile) {
