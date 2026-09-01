@@ -90,7 +90,22 @@ export async function runPreLoginConnect(
   // is exactly what a board with no FRONTEND does. Say which of the two it
   // was.
   try {
-    const handler = await import("../handlers/command-execution.handler");
+    // require, NOT await import. The backend compiles to CommonJS, and a
+    // dynamic import of a TS module under tsx yields a SECOND instance with
+    // its own module state: this call read a syscmd cache holding 0 entries
+    // while the board's startup had loaded 16 into the copy that
+    // initialization.ts populates through a static import. Every syscmd
+    // failed as "not registered" here and nowhere else, so the Who's-Online
+    // screen vanished from the connect flow while typed commands kept
+    // working. Same registry, same cache.
+    //
+    // Static import would be tidier still, but command-execution.handler
+    // imports BBSSession from ../index, and index.ts loads this service - a
+    // cycle at module-evaluation time. Lazy require inside the function
+    // avoids it, and is the pattern door-list.ts already uses for
+    // door.handler.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const handler = require("../handlers/command-execution.handler");
     const result = await handler.runSysCommand(emitter as any, session, "FRONTEND", "");
     if (result !== 0) {
       // The cache size comes from THIS module instance. A dynamic import that
