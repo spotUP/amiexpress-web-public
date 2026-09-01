@@ -48,6 +48,20 @@ const CREDIT = 'RIP graphics by RIPtermJS - https://github.com/cgorringe/RIPterm
 let creditShown = false;
 
 /**
+ * Should a click on the RIP surface act as a dismiss key?
+ *
+ * RIPtermJS handles canvas clicks itself: a hit on a RIP button fires
+ * onHostCommand synchronously from its own mouseup listener, which runs
+ * before the host's React click handler. A click that produced no host
+ * command within this window hit plain picture, and the natural reading of
+ * that - "the sysop clicking the image to close it" - is a keypress.
+ */
+export const RIP_BUTTON_CLICK_WINDOW_MS = 150;
+export function shouldDismissRipClick(lastHostCommandAt: number, now: number): boolean {
+  return now - lastHostCommandAt > RIP_BUTTON_CLICK_WINDOW_MS;
+}
+
+/**
  * RIP text as bytes, one byte per character.
  *
  * TextEncoder would turn anything above 0x7F into UTF-8 pairs, and RIPtermJS
@@ -176,10 +190,15 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
         width={width}
         height={height}
         style={{
-          // Fill the host. The terminal lays this flush over itself so the
-          // picture reads as the BBS drawing it, not as a dialog on top.
+          // As large as the host allows WITHOUT changing shape: the canvas
+          // is a replaced element with an intrinsic 640x350, so width 100%
+          // plus height auto plus max-height 100% scales it proportionally
+          // both ways ("it needs to scale proportionally" - the sysop). The
+          // host centres it; keeping the element box equal to the bitmap
+          // box is also what keeps RIPtermJS's own mouse math exact.
           width: '100%',
-          height: '100%',
+          height: 'auto',
+          maxHeight: '100%',
           display: 'block',
           imageRendering: 'pixelated',
           backgroundColor: '#000',

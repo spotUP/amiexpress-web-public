@@ -83,3 +83,22 @@ describe('RIPRenderer starting RIPtermJS', () => {
     expect(Array.from(value ?? [])).toEqual([0x21, 0x7c, 0x2a]);
   });
 });
+
+describe('shouldDismissRipClick', () => {
+  // "i cant close images with mouse or keys": a click that no RIP button
+  // consumed must act as the any-key the door waits for - but a click that
+  // DID fire a button command (RIPtermJS's own listener runs first) must
+  // not also send a phantom Enter.
+  it('a click with no recent button command dismisses', async () => {
+    const { shouldDismissRipClick, RIP_BUTTON_CLICK_WINDOW_MS } =
+      await import('@amiexpress/terminal/rip/RIPRenderer');
+    expect(shouldDismissRipClick(0, 10_000)).toBe(true);
+    expect(shouldDismissRipClick(10_000 - RIP_BUTTON_CLICK_WINDOW_MS - 1, 10_000)).toBe(true);
+  });
+
+  it('a click that just fired a button command does not double as Enter', async () => {
+    const { shouldDismissRipClick } = await import('@amiexpress/terminal/rip/RIPRenderer');
+    expect(shouldDismissRipClick(10_000 - 5, 10_000)).toBe(false);
+    expect(shouldDismissRipClick(10_000, 10_000)).toBe(false);
+  });
+});
