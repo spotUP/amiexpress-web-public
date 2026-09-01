@@ -32,6 +32,26 @@ export declare class InputHandler {
     private downPressed;
     private dasTimer;
     private arrTimer;
+    /**
+     * Soft drop has its own clock.
+     *
+     * It used to share `arrTimer` with the sideways auto-repeat. Held
+     * together - which is how the game is played from about level 300, where
+     * soft drop is down more or less permanently - each reset the other's
+     * timer and the piece managed ONE sideways cell per second against the
+     * twelve the settings asked for. Measured, not guessed:
+     * tests/input-repeat.test.ts.
+     */
+    private softDropTimer;
+    /**
+     * Most repeats one update() may deliver.
+     *
+     * A repeat is a rate in milliseconds, so a slow frame owes the player
+     * several - but a frame that ran a whole second late must not empty the
+     * backlog into one tick and throw the piece across the board. Four cells
+     * is a wide slow frame; beyond that the debt is dropped rather than paid.
+     */
+    private readonly MAX_REPEATS_PER_UPDATE;
     private lastLeftPress;
     private lastRightPress;
     private lastDownPress;
@@ -82,6 +102,14 @@ export declare class InputHandler {
      * Update input state (call every frame)
      */
     update(deltaTime: number): void;
+    /**
+     * Pay out one repeat per elapsed period, capped.
+     *
+     * Shared by the sideways repeat and the soft drop so the two cannot drift
+     * apart again - they were one piece of code precisely because they behave
+     * the same way; what they must NOT share is the accumulator.
+     */
+    private repeatWhileHeld;
     /**
      * Clear held keys (simulate key release)
      */

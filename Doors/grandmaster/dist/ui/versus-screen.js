@@ -8,6 +8,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VersusScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const board_effects_1 = require("./board-effects");
 const minimap_1 = require("./minimap");
 const bot_player_1 = require("../ai/bot-player");
 const board_1 = require("../core/board");
@@ -1020,19 +1021,17 @@ class VersusScreen {
             }
         };
         // Layer 4 (lowest): Lock glow
+        // Same flash as the single-player board, from the same function - the
+        // curve this used to sample was shorter than one painted frame, so the
+        // landing flashed or did not depending on the phase.
         const lockGlowAnims = this.animations.getAnimationsByType('lockGlow');
         for (const anim of lockGlowAnims) {
-            const intensity = animations_1.AnimationRenderer.getLockGlowIntensity(anim);
-            if (intensity > 0.3) {
-                const data = anim.data;
-                for (const cell of data.cells) {
-                    if (intensity > 0.7) {
-                        setCell(cell.x, cell.y, '{white-fg}{bold}██{/bold}{/white-fg}');
-                    }
-                    else {
-                        setCell(cell.x, cell.y, '{white-fg}░░{/white-fg}');
-                    }
-                }
+            const char = (0, board_effects_1.lockFlashChar)(anim.elapsed);
+            if (!char)
+                continue;
+            const data = anim.data;
+            for (const cell of data.cells) {
+                setCell(cell.x, cell.y, char);
             }
         }
         // Layer 3: Particles

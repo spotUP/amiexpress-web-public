@@ -33,6 +33,14 @@ export declare class GameEngine {
     private frameAccumulator;
     private readonly TARGET_FPS;
     private readonly FRAME_TIME;
+    /**
+     * Most game frames one update() may run.
+     *
+     * Eight frames is 133ms - a wide allowance for a slow repaint, and far
+     * short of the lock delay a stall used to be able to burn through in one
+     * uninterruptible burst.
+     */
+    private readonly MAX_CATCHUP_FRAMES;
     private gravityAccumulator;
     private pauseTime;
     private devilNextRise;

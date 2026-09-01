@@ -33,14 +33,40 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         this.gameEngine = null;
         this.network = new network_engine_1.NetworkEngine();
         // Get player info from session
-        this.localPlayerId = bbsSession.user?.id || `player-${Date.now()}`;
+        // A BBSSession calls it `nodeId`; only the Amiga door session wrapper
+        // calls it `nodeNumber`. Reading just the latter meant every session
+        // fell through to 1 - so "one node per session" was a fiction and two
+        // windows of one account still collided. Both spellings, then the
+        // fallback, and the fallback is now unique per construction rather than
+        // a constant.
+        const nodeId = bbsSession.bbsSession?.nodeNumber
+            ?? bbsSession.bbsSession?.nodeId
+            ?? bbsSession.nodeNumber
+            ?? bbsSession.nodeId
+            ?? 1;
+        // A PLAYER IS A SESSION, not an account.
+        //
+        // This used to be the BBS user id alone, and two sessions of one account
+        // - two browsers, which is what anybody testing multiplayer reaches for
+        // first - came out as the same player. The broker then kept them apart
+        // on purpose ("don't match against yourself") and each sat in a lobby of
+        // their own, seeing nobody. Reported live 2026-08-31.
+        //
+        // The node is what makes a session: this board gives each connection its
+        // own node, so <user>@<node> is one seat at one keyboard. It stays
+        // stable for as long as that session lives, which is what the lobby, the
+        // scores and the reconnect all need.
+        this.localPlayerId = bbsSession.user?.id
+            ? `${bbsSession.user.id}@${nodeId}`
+            // No user and no node: still two players, so the fallback carries a
+            // counter as well as a clock. Date.now() alone gave two managers
+            // built in the same millisecond the same identity, which is the very
+            // collision this id exists to avoid.
+            : `player-${nodeId}-${Date.now()}-${++GrandmasterNetworkManager.anonymousSeq}`;
+        console.log(`[GrandmasterNetworkManager] local player ${this.localPlayerId} on node ${nodeId}`);
         this.localPlayerName = bbsSession.user?.username || 'Player';
-        // Generate a stable numeric ID from user ID for SDK lobby system
-        this.localPlayerNumericId = typeof bbsSession.user?.id === 'number'
-            ? bbsSession.user.id
-            : this.hashStringToNumber(this.localPlayerId || 'unknown');
+        this.localPlayerNumericId = this.hashStringToNumber(this.localPlayerId);
         // Connect via in-process broker for BBS multiplayer
-        const nodeId = bbsSession.bbsSession?.nodeNumber ?? bbsSession.nodeNumber ?? 1;
         this.network.connectBroker({
             playerId: this.localPlayerNumericId,
             playerName: this.localPlayerName,
@@ -332,12 +358,34 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         this.network.setReady(ready);
     }
     /**
+     * Report that the match is over, so the lobby can host another.
+     *
+     * The broker sets a lobby to 'playing' when the game begins and nothing
+     * ever set it back - so a second game in the same room was impossible and
+     * matchmaking would not offer the room to anybody else. Any player may
+     * send this, not just the host: in a 1v1 the host is as likely to be the
+     * one who lost.
+     */
+    endMatch() {
+        console.log('[GrandmasterNetworkManager] endMatch called');
+        this.network.lobby.endGame();
+    }
+    /**
      * Start match (host only)
-     * Uses SDK lobby system's countdown mechanism
+     *
+     * Starts the game outright rather than running the lobby's own countdown.
+     * There were TWO: the lobby counted 3 and then the game screen counted
+     * 3-2-1-GO, so every match began with six seconds of waiting and two
+     * different clocks (reported 2026-08-31). The game screen's is the one
+     * worth keeping - it is on the screen the player is about to play on,
+     * and it is where "GO!" belongs.
+     *
+     * The broker's countdown path still exists and is still what a host's
+     * explicit "start in N seconds" would use; nothing here removes it.
      */
     async startMatch() {
         console.log(`[GrandmasterNetworkManager] startMatch called`);
-        this.network.lobby.startCountdown(3);
+        this.network.lobby.startGame();
     }
     /**
      * Send game state update
@@ -562,4 +610,6 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
     }
 }
 exports.GrandmasterNetworkManager = GrandmasterNetworkManager;
+/** Distinguishes sessions that have neither a user nor a node. */
+GrandmasterNetworkManager.anonymousSeq = 0;
 //# sourceMappingURL=network-manager.js.map
