@@ -200,6 +200,19 @@ export function paintCell(state: EditorState, x: number, y: number, cell: Cell, 
   state.setCanvasCell(x, y, cell);
 }
 
+/**
+ * Push an explicit undo snapshot of the current canvas, with no tool-driven
+ * mutation attached. For a widget-level canvas mutator that has no
+ * dedicated ToolHandler and no single-cell/pasted-region shape to route
+ * through paintCell()/pasteSelection() - e.g. insert/delete row, flip
+ * horizontal/vertical - call this BEFORE mutating the canvas in place.
+ * Symmetric with those two: one Ctrl+Z undoes exactly the mutation that
+ * follows this call, no more.
+ */
+export function snapshotUndoState(state: EditorState): void {
+  saveUndoState(state);
+}
+
 // ===== TOOL: FREEHAND DRAW =====
 
 export const drawTool: ToolHandler = {
@@ -264,13 +277,23 @@ export const lineTool: ToolHandler = {
 
   onEnd(state: EditorState, x: number, y: number) {
     const startPoint = state.getDrawingStartPoint();
-    const canvas = state.getCanvas();
+    if (!startPoint) return;
 
-    if (!startPoint || !canvas) return;
+    // Commit onto the PRE-DRAG snapshot, not the live canvas: onMove has
+    // been overwriting the live canvas with a fresh preview on every call,
+    // so if the last reported move landed on a different cell than this
+    // commit point (e.g. a coalesced mousemove under load), drawing onto
+    // the live canvas would leave that stale preview's cells painted AND
+    // draw the final shape on top - two shapes from one gesture. Drawing
+    // onto a clone of the snapshot onStart saved makes the commit
+    // idempotent with respect to however many preview repaints happened.
+    const original = peekUndoCanvas(state);
+    const canvas = original ? Canvas.cloneCanvas(original) : state.getCanvas();
+    if (!canvas) return;
 
-    // Draw final line
     const cell = state.getCurrentCell();
     Canvas.drawLine(canvas, startPoint.col, startPoint.line, x, y, cell);
+    state.setCanvas(canvas);
 
     // Clear preview
     state.setDrawingPreview(null);
@@ -325,12 +348,18 @@ export const boxTool: ToolHandler = {
 
   onEnd(state: EditorState, x: number, y: number) {
     const startPoint = state.getDrawingStartPoint();
-    const canvas = state.getCanvas();
+    if (!startPoint) return;
 
-    if (!startPoint || !canvas) return;
+    // See lineTool.onEnd - commit onto the pre-drag snapshot, not the
+    // live (preview-mutated) canvas, so a non-colinear drag can't leave a
+    // stale preview trail AND the committed shape both painted.
+    const original = peekUndoCanvas(state);
+    const canvas = original ? Canvas.cloneCanvas(original) : state.getCanvas();
+    if (!canvas) return;
 
     const cell = state.getCurrentCell();
     Canvas.drawBox(canvas, startPoint.col, startPoint.line, x, y, cell);
+    state.setCanvas(canvas);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -382,12 +411,17 @@ export const boxFillTool: ToolHandler = {
 
   onEnd(state: EditorState, x: number, y: number) {
     const startPoint = state.getDrawingStartPoint();
-    const canvas = state.getCanvas();
+    if (!startPoint) return;
 
-    if (!startPoint || !canvas) return;
+    // See lineTool.onEnd - commit onto the pre-drag snapshot, not the
+    // live (preview-mutated) canvas.
+    const original = peekUndoCanvas(state);
+    const canvas = original ? Canvas.cloneCanvas(original) : state.getCanvas();
+    if (!canvas) return;
 
     const cell = state.getCurrentCell();
     Canvas.drawBoxFilled(canvas, startPoint.col, startPoint.line, x, y, cell);
+    state.setCanvas(canvas);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -445,9 +479,13 @@ export const ellipseTool: ToolHandler = {
 
   onEnd(state: EditorState, x: number, y: number) {
     const startPoint = state.getDrawingStartPoint();
-    const canvas = state.getCanvas();
+    if (!startPoint) return;
 
-    if (!startPoint || !canvas) return;
+    // See lineTool.onEnd - commit onto the pre-drag snapshot, not the
+    // live (preview-mutated) canvas.
+    const original = peekUndoCanvas(state);
+    const canvas = original ? Canvas.cloneCanvas(original) : state.getCanvas();
+    if (!canvas) return;
 
     const cx = Math.floor((startPoint.col + x) / 2);
     const cy = Math.floor((startPoint.line + y) / 2);
@@ -456,6 +494,7 @@ export const ellipseTool: ToolHandler = {
 
     const cell = state.getCurrentCell();
     Canvas.drawEllipse(canvas, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+    state.setCanvas(canvas);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -512,9 +551,13 @@ export const ellipseFillTool: ToolHandler = {
 
   onEnd(state: EditorState, x: number, y: number) {
     const startPoint = state.getDrawingStartPoint();
-    const canvas = state.getCanvas();
+    if (!startPoint) return;
 
-    if (!startPoint || !canvas) return;
+    // See lineTool.onEnd - commit onto the pre-drag snapshot, not the
+    // live (preview-mutated) canvas.
+    const original = peekUndoCanvas(state);
+    const canvas = original ? Canvas.cloneCanvas(original) : state.getCanvas();
+    if (!canvas) return;
 
     const cx = Math.floor((startPoint.col + x) / 2);
     const cy = Math.floor((startPoint.line + y) / 2);
@@ -523,6 +566,7 @@ export const ellipseFillTool: ToolHandler = {
 
     const cell = state.getCurrentCell();
     Canvas.drawEllipseFilled(canvas, cx, cy, Math.floor(rx), Math.floor(ry), cell);
+    state.setCanvas(canvas);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
