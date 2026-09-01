@@ -108,9 +108,15 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           if (cancelled) return;
           await term.setupStream(stream);
           if (cancelled) return;
-          // Runs until the stream closes on unmount. Not awaited: it IS
-          // the render loop.
-          void term.playStream();
+          // play(), NOT playStream(). BGI draws every command into an
+          // offscreen ImageData buffer, and the only thing that copies that
+          // buffer onto the visible canvas is bgi.refresh(), on a timer that
+          // play() starts (isRunning + refreshCanvas). Calling playStream()
+          // directly ran every command and painted nothing - "RIP shows
+          // black images" on the live board. play() runs playStream itself
+          // and keeps going until the stream closes on unmount. Not awaited:
+          // it IS the render loop.
+          void term.play();
           readyRef.current = true;
           for (const text of pendingRef.current.splice(0)) {
             controllerRef.current?.enqueue(toBytes(text));
