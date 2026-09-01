@@ -283,3 +283,15 @@ export async function responsiveAsksTheTerminalNotJustTheEditor(): Promise<void>
   assert.ok(destroy.includes('disableWideMode'),
     'the board gets its 80 columns back when the door closes');
 }
+
+export async function theWheelStepsTheZoomLadder(): Promise<void> {
+  // "can we add support for scrollwheel for zooming?" The editor reports
+  // the turn; the door owns the ladder, so the door decides what it means.
+  assert.ok(source.includes("this.editor.on('canvas-wheel'"),
+    'the studio must listen for the wheel the editor reports');
+  assert.ok(source.includes("stepZoom(this.zoom, d.direction === 'up' ? 1 : -1)"),
+    'up zooms in, down zooms out, along the same clamped ladder the menu uses');
+  // And the ladder itself already refuses to run off either end.
+  assert.strictEqual(stepZoom(1, -1), 1);
+  assert.strictEqual(stepZoom(8, 1), 8);
+}

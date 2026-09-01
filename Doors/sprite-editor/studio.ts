@@ -446,6 +446,15 @@ export class SpriteStudioDoor {
       onExit: () => { void this.close(); },
     } as any);
 
+    // The wheel over the canvas steps the zoom ladder. The editor reports
+    // the turn; this decides what it means, because this is the only place
+    // that knows there IS a ladder. Sprites only - a .ans has no cells to
+    // magnify and is always drawn 1:1.
+    this.editor.on('canvas-wheel', (d: any) => {
+      if (!this.doc) return;
+      void this.setZoom(stepZoom(this.zoom, d.direction === 'up' ? 1 : -1));
+    });
+
     if (this.doc) this.loadFrame();
     this.editor.focus();
     this.screen.render();
