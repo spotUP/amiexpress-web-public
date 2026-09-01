@@ -104,6 +104,8 @@ class SpriteStudioDoor {
         this.zoom = exports.DEFAULT_ZOOM;
         /** Onion skin: the previous frame, ghosted under the empty cells. */
         this.onionSkin = false;
+        /** The dim dot on a transparent cell. Off by default - it annotates art. */
+        this.guide = false;
         /** One frame on the clipboard, for copying artwork between frames. */
         this.frameClipboard = null;
         /** 80x25 like the board, or the caller's real terminal. */
@@ -390,6 +392,7 @@ class SpriteStudioDoor {
             // A sprite's erased cell is a HOLE; a .ans has no such concept and
             // erasing there means a black space, as every other ANSI editor does.
             transparentBackground: Boolean(sprite),
+            showTransparencyGuide: this.guide,
             showLineNumbers: false,
             showMenuBar: true,
             showToolbar: true,
@@ -425,6 +428,7 @@ class SpriteStudioDoor {
                     { label: 'Paste Frame     C-v', action: () => this.pasteFrame() },
                     { label: '────────────────', separator: true },
                     { label: 'Onion Skin      C-o', action: () => this.toggleOnionSkin() },
+                    { label: 'Transparency Guide  C-g', action: () => this.toggleGuide() },
                 ],
             },
             {
@@ -511,6 +515,18 @@ class SpriteStudioDoor {
         if (prev < 0)
             return null;
         return (0, cell_art_1.frameToCanvas)(anim.frames[prev]);
+    }
+    /**
+     * Show or hide the marks on transparent cells.
+     *
+     * Off by default, on the sysop's call: a hole and an opaque black cell
+     * look identical without it, but the marks sit on top of the art and the
+     * art is what you are judging. Turn it on when a hole is in question.
+     */
+    toggleGuide() {
+        this.guide = !this.guide;
+        this.editor?.setTransparencyGuide(this.guide);
+        this.flash(this.guide ? 'Transparency guide on' : 'Transparency guide off');
     }
     toggleOnionSkin() {
         this.onionSkin = !this.onionSkin;
@@ -827,6 +843,7 @@ class SpriteStudioDoor {
         key(['C-e'], () => this.cycleAnimation());
         key(['C-p'], () => this.playInPlace());
         key(['C-o'], () => this.toggleOnionSkin());
+        key(['C-g'], () => this.toggleGuide());
         key(['C-c'], () => this.copyFrame());
         key(['C-v'], () => this.pasteFrame());
     }

@@ -223,6 +223,9 @@ describe('ANSIEditor transparency guide when magnified', () => {
       parent: screen, canvasWidth: 1, canvasHeight: 1,
       cellScaleX: scale, cellScaleY: scale,
       initialMode: 'draw', transparentBackground: true,
+      // Explicitly on: the guide is OFF by default now, because it
+      // annotates the art and the art is what you are judging.
+      showTransparencyGuide: true,
     } as any);
     return (editor.buildCanvasContent(
       () => ({ char: ' ', fg: 7, bg: 0, transparent: true })
@@ -253,5 +256,38 @@ describe('ANSIEditor transparency guide when magnified', () => {
     for (const row of rows) {
       expect(row.replace(/\{[^}]*\}/g, '').length).toBe(4);
     }
+  });
+});
+
+describe('ANSIEditor transparency guide is off by default', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const rows = (guide: boolean): string => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      cellScaleX: 4, cellScaleY: 4, initialMode: 'draw',
+      transparentBackground: true, showTransparencyGuide: guide,
+    } as any);
+    return editor.buildCanvasContent(() => ({ char: ' ', fg: 7, bg: 0, transparent: true }));
+  };
+
+  it('marks nothing unless asked', () => {
+    expect(rows(false).includes('.')).toBe(false);
+  });
+
+  it('marks when asked', () => {
+    expect(rows(true).includes('.')).toBe(true);
+  });
+
+  it('can be turned on and off after construction', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      initialMode: 'draw', transparentBackground: true,
+    } as any);
+    expect(editor.isTransparencyGuideOn()).toBe(false);
+    editor.setTransparencyGuide(true);
+    expect(editor.isTransparencyGuideOn()).toBe(true);
   });
 });

@@ -64,6 +64,13 @@ export interface ANSIEditorOptions extends ElementOptions {
   // Default: false (existing hosts are unaffected - erasing still resets
   // to fg:7,bg:0 with no transparent marker).
   transparentBackground?: boolean;
+  /**
+   * Mark transparent cells with a dim dot so a HOLE can be told from an
+   * opaque black cell. Default FALSE: the guide annotates the art and the
+   * art is what you are judging, so it is something you turn on when you
+   * need it rather than something you look past.
+   */
+  showTransparencyGuide?: boolean;
   showLineNumbers?: boolean;
   showToolbar?: boolean;      // F-key character toolbar
   showStatusBar?: boolean;
@@ -204,6 +211,7 @@ export class ANSIEditor extends Box {
    * no idea what a frame is.
    */
   private underlayCanvas: Cell[][] | null = null;
+  private transparencyGuide = false;
 
   /** Host-contributed menus, in bar order after Help. */
   private extraMenus: HostMenu[] = [];
@@ -336,6 +344,19 @@ export class ANSIEditor extends Box {
    * Show (or clear) a ghost canvas beneath the empty cells of this one.
    * Pass null to remove it. Cells outside its bounds simply have no ghost.
    */
+  /** Show or hide the dim dot that marks a transparent cell. */
+  setTransparencyGuide(on: boolean): void {
+    this.transparencyGuide = on;
+    if (this.mode === 'draw') {
+      this.syncCoreCanvasToDisplay();
+      this.screen?.render();
+    }
+  }
+
+  isTransparencyGuideOn(): boolean {
+    return this.transparencyGuide;
+  }
+
   setUnderlay(canvas: Cell[][] | null): void {
     this.underlayCanvas = canvas;
     if (this.mode === 'draw') {
@@ -420,6 +441,7 @@ export class ANSIEditor extends Box {
     // put the render and the hit-test on different grids, and a negative
     // one would build an empty row - a silently blank canvas.
     this.extraMenus = options.extraMenus ?? [];
+    this.transparencyGuide = options.showTransparencyGuide ?? false;
     this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
     this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
     this.transparentBackground = options.transparentBackground ?? false;
@@ -3514,6 +3536,10 @@ BBS Door SDK v2.0{/gray-fg}
     // dots that competed with the art - "dotted artefacts". One dot, in the
     // middle of the cell, says the same thing.
     if (cell.transparent) {
+      if (!this.transparencyGuide) {
+        // A hole reads as the background it will actually let through.
+        return `{black-fg}{black-bg}${' '.repeat(this.scaleX)}{/black-bg}{/black-fg}`;
+      }
       if (this.scaleX === 1 && this.scaleY === 1) {
         return this.cellToDisplayTag(cell, 1);
       }
@@ -3556,7 +3582,9 @@ BBS Door SDK v2.0{/gray-fg}
     // the whole tagged run N times: same pixels, a third of the content
     // string at scale 3, and one colour switch per cell instead of three.
     if (cell.transparent) {
-      return `{gray-fg}{black-bg}${'.'.repeat(repeat)}{/black-bg}{/gray-fg}`;
+      return this.transparencyGuide
+        ? `{gray-fg}{black-bg}${'.'.repeat(repeat)}{/black-bg}{/gray-fg}`
+        : `{black-fg}{black-bg}${' '.repeat(repeat)}{/black-bg}{/black-fg}`;
     }
     const fgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.fg] || 'white';
     const bgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.bg] || 'black';

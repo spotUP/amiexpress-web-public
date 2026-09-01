@@ -124,7 +124,12 @@ describe('ANSIEditor transparentBackground:true', () => {
 
   beforeEach(() => {
     screen = makeScreen();
-    editor = new ANSIEditor({ parent: screen, transparentBackground: true } as any);
+    // The guide is OFF by default as of the sysop's call ("the guide should
+    // be togglabe default off"), so a suite about how a transparent cell
+    // LOOKS has to ask for it.
+    editor = new ANSIEditor({
+      parent: screen, transparentBackground: true, showTransparencyGuide: true,
+    } as any);
   });
 
   afterEach(() => screen?.destroy());
@@ -154,6 +159,12 @@ describe('ANSIEditor transparentBackground:true', () => {
     const content = editor.drawCanvas.getContent();
     expect(content).toContain(GUIDE_TOKEN);
     expect(content).not.toContain(OPAQUE_BLACK_SPACE_TOKEN);
+  });
+
+  it('and reads as plain background once the guide is turned off', () => {
+    editor.setTransparencyGuide(false);
+    const content = editor.drawCanvas.getContent();
+    expect(content).not.toContain(GUIDE_TOKEN);
   });
 
   it('painting a character clears transparent on that cell', () => {

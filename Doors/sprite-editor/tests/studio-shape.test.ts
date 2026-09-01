@@ -254,3 +254,16 @@ export async function theEditorFollowsTheTerminalWhenItResizes(): Promise<void> 
   assert.ok(source.includes("this.screen.removeListener('resize'"),
     'and the listener goes when the door does');
 }
+
+export async function theTransparencyGuideIsOffUntilAskedFor(): Promise<void> {
+  // "the guide should be togglabe default off" - a hole and an opaque black
+  // cell look identical without it, but the marks sit on top of the art.
+  assert.ok(source.includes('private guide = false;'), 'the guide starts off');
+  assert.ok(source.includes('showTransparencyGuide: this.guide'),
+    'and the editor is built with whatever it currently is');
+  assert.ok(source.includes("key(['C-g']"), 'with a hotkey');
+  const studio: any = new SpriteStudioDoor();
+  const sprite = studio.buildMenus().find((m: any) => m.label === 'Frame');
+  assert.ok(sprite.items.some((i: any) => i.label.startsWith('Transparency Guide')),
+    'and a menu entry, since every hotkey has one');
+}
