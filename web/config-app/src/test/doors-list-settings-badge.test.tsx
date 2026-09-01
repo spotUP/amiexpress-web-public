@@ -8,7 +8,7 @@
  * the same no settings badge".
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -48,6 +48,7 @@ vi.mock('../api/client', () => ({
     getInfoFile: vi.fn(async () => ({ success: true, data: { tooltypes: [] } })),
     getDoorSettings: vi.fn(async (_command: string) => ({ success: true, data: SETTINGS_VIEW })),
     saveDoorSettings: vi.fn(async (_command: string, _values: Record<string, unknown>) => ({ success: true, data: SETTINGS_VIEW })),
+    updateDoor: vi.fn(async (_id: number, _updates: unknown) => ({ success: true, data: {} })),
   },
 }));
 
@@ -68,6 +69,10 @@ function renderPage() {
 }
 
 describe('the doors list', () => {
+  // Calls, not implementations: the mocks are module-level and one test's
+  // save would otherwise count as the next one's.
+  beforeEach(() => vi.clearAllMocks());
+
   it('badges the door that describes its own settings', async () => {
     renderPage();
 
@@ -134,5 +139,38 @@ describe('the doors list', () => {
       expect(form.querySelector('form')).toBeNull();
     }
     expect(container).toBeTruthy();
+  });
+
+  // Two save buttons in one dialog is a trap, and the first sysop to use the
+  // feature fell in it: typed a board address, pressed Update Door, and the
+  // value never reached the disk.
+  it('saves the door settings when the sysop presses Update Door', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit BBSLink'));
+    const channel = await screen.findByLabelText('Default channel');
+    await user.clear(channel);
+    await user.type(channel, 'uprough');
+
+    await user.click(screen.getByRole('button', { name: /update door/i }));
+
+    const { apiClient } = await import('../api/client');
+    await waitFor(() => expect(apiClient.saveDoorSettings).toHaveBeenCalled());
+    const [command, values] = (apiClient.saveDoorSettings as any).mock.calls[0];
+    expect(command).toBe('BBSLINK');
+    expect(values.defaultChannel).toBe('uprough');
+  });
+
+  it('leaves the door settings alone when the sysop changed none of them', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit BBSLink'));
+    await screen.findByText('Door settings');
+    await user.click(screen.getByRole('button', { name: /update door/i }));
+
+    const { apiClient } = await import('../api/client');
+    expect(apiClient.saveDoorSettings).not.toHaveBeenCalled();
   });
 });

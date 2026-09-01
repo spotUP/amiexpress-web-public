@@ -29,11 +29,21 @@ export interface DoorSetting {
 
 export interface DoorSettingsFormProps {
   command: string;
+  /**
+   * Handed a function that saves whatever the sysop has typed here, or null
+   * when there is nothing unsaved.
+   *
+   * The dialog this sits in has its own Update Door button, and a sysop who
+   * types an address and presses THAT loses it - two save buttons in one
+   * dialog is a trap, and the first sysop to use this feature fell in it.
+   * The page saves the settings alongside the door instead.
+   */
+  onPendingChange?: (save: (() => Promise<unknown>) | null) => void;
 }
 
 type Values = Record<string, string | number | boolean>;
 
-export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
+export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [values, setValues] = useState<Values>({});
@@ -65,6 +75,13 @@ export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
     // setting this door declares: nosuchkey" - so it is worth showing whole.
     onError: (error: Error) => showError(error.message),
   });
+
+  // Tell the page whether there is anything to save, and how.
+  useEffect(() => {
+    if (!onPendingChange) return;
+    onPendingChange(dirty ? () => saveMutation.mutateAsync() : null);
+    return () => onPendingChange(null);
+  }, [dirty, onPendingChange, saveMutation]);
 
   if (settingsQuery.isLoading) {
     return <div className="p-4 text-content-secondary text-sm">Reading what this door declares...</div>;

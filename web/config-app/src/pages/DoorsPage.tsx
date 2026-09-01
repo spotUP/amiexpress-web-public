@@ -156,8 +156,30 @@ export function DoorsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  /**
+   * Whatever the door-settings section has unsaved, if anything.
+   *
+   * The dialog has two save buttons - Update Door for the registration, Save
+   * settings for the door's own settings - and the first sysop to use the
+   * feature typed an address, pressed Update Door, and lost it. Update Door
+   * saves both now; the settings button stays for saving those alone.
+   */
+  const pendingSettingsSave = useRef<(() => Promise<unknown>) | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Settings first: if they fail, the message names the setting, and the
+    // door's own fields have not been touched yet.
+    const saveSettings = pendingSettingsSave.current;
+    if (saveSettings) {
+      try {
+        await saveSettings();
+      } catch {
+        return; // The form has already reported which setting the API refused.
+      }
+    }
+
     if (editingDoor) {
       updateMutation.mutate({ id: editingDoor.id, updates: formData });
     } else {
@@ -566,7 +588,10 @@ export function DoorsPage() {
                   <p className="text-bbs-muted text-sm">
                     What this door says it can be configured with. Saved to the door, not to its registration.
                   </p>
-                  <DoorSettingsForm command={editingDoor.door_command} />
+                  <DoorSettingsForm
+                    command={editingDoor.door_command}
+                    onPendingChange={save => { pendingSettingsSave.current = save; }}
+                  />
                 </div>
               )}
 
