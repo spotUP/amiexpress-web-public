@@ -36,6 +36,22 @@ export interface BlessedStyle {
 export interface ThemeStyles {
   /** A bordered panel: the default container. */
   panel: { border: { type: BlessedBorderType }; style: BlessedStyle };
+  /**
+   * A surface that must read as SEPARATE from whatever is behind it:
+   * modals, dialogs, overlays, anything drawn on top of existing content.
+   *
+   * Identical to `panel` in every theme that draws borders. The difference
+   * is the two phosphor themes, which sink a panel's rule into the ground
+   * on purpose - "no borders, hierarchy by brightness alone". That is the
+   * right answer for a box that merely groups rows, and the wrong one for a
+   * dialog: with no frame and the same background, the dialog's text lands
+   * amongst the text underneath it.
+   *
+   * So a door says which it means, and the theme decides how to draw it. A
+   * door written against `frame` is correct in all seven themes without
+   * knowing which one is running.
+   */
+  frame: { border: { type: BlessedBorderType }; style: BlessedStyle };
   /** A header or footer bar. */
   bar: { style: BlessedStyle };
   /** A list, with its selection and its focus border. */
@@ -101,6 +117,19 @@ export function themeStyles(theme: Theme): ThemeStyles {
         fg: t.ink,
         bg: t.ground,
         border: { fg: theme.border === 'none' ? t.ground : t.chrome },
+        label: { fg: t.accent, bg: t.ground },
+        focus: { border: { fg: t.accent } },
+      },
+    },
+    frame: {
+      border: { type: borderType },
+      style: {
+        fg: t.ink,
+        bg: t.ground,
+        // Never `ground`. This is the whole point of the role: a frame
+        // that sank into the background would put a dialog's text on top of
+        // the screen it is covering.
+        border: { fg: t.chrome },
         label: { fg: t.accent, bg: t.ground },
         focus: { border: { fg: t.accent } },
       },

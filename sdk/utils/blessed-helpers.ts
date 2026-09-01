@@ -1285,8 +1285,40 @@ export function createModalManager(screen: Screen, returnFocusElement?: any) {
  * showPromptDialog('Enter your name:', 'Guest', (err, name) => { ... });
  * showConfirmDialog('Delete this file?', (confirmed) => { ... });
  */
-export function createDialogs(screen: Screen, returnFocusElement?: any) {
+/** Enough of a theme for the dialogs to colour themselves from. */
+export interface DialogThemeStyles {
+  frame: { style: { fg?: string; bg?: string; border?: { fg?: string } } };
+  ok?: unknown;
+}
+
+export function createDialogs(
+  screen: Screen,
+  returnFocusElement?: any,
+  /**
+   * The caller's theme styles, from `themeStyles(bbs.getTheme())`.
+   *
+   * These dialogs are drawn on top of whatever the door has on screen, so
+   * they take the `frame` role, which every theme keeps visible - including
+   * the two phosphor ones, where a plain panel's rule is deliberately sunk
+   * into the background.
+   *
+   * Without it they keep their old white-on-blue, which was a colour no
+   * theme ever chose: the same hardcoded-blue problem as the list widget's
+   * hover, in the one place where blending in does the most damage.
+   */
+  themeStyles?: DialogThemeStyles
+) {
   const { modalOverlay, showModal, hideModal } = createModalManager(screen, returnFocusElement);
+
+  const frame = themeStyles?.frame?.style;
+  const surface = {
+    fg: frame?.fg || 'white',
+    bg: frame?.bg || 'blue',
+  };
+  // One accent per dialog kind is how these have always read - message,
+  // prompt and question are told apart by their border. A theme collapses
+  // them onto its frame colour rather than inventing three of its own.
+  const rule = frame?.border?.fg;
 
   const messageDialog = blessed.message({
     parent: screen,
@@ -1296,7 +1328,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     tags: true,
     zIndex: 600, // Above overlay
     ch: ' ',     // Ensure solid background
-    style: { fg: 'white', bg: 'blue', transparent: true, border: { fg: 'cyan' } }
+    style: { ...surface, transparent: true, border: { fg: rule || 'cyan' } }
   });
 
   const promptDialog = blessed.prompt({
@@ -1307,7 +1339,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     tags: true,
     zIndex: 600, // Above overlay
     ch: ' ',     // Ensure solid background
-    style: { fg: 'white', bg: 'blue', transparent: true, border: { fg: 'green' } }
+    style: { ...surface, transparent: true, border: { fg: rule || 'green' } }
   });
 
   const questionDialog = blessed.question({
@@ -1319,7 +1351,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     tags: true,
     zIndex: 600, // Above overlay
     ch: ' ',     // Ensure solid background
-    style: { fg: 'white', bg: 'blue', transparent: true, border: { fg: 'yellow' } }
+    style: { ...surface, transparent: true, border: { fg: rule || 'yellow' } }
   });
 
   function showMessageDialog(text: string, callback?: () => void) {

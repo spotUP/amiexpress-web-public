@@ -87,8 +87,23 @@ export interface ConfirmModalOptions extends ElementOptions {
   confirmColor?: string;
   /** Cancel button color (default: "red") */
   cancelColor?: string;
-  /** Border color (default: "cyan") */
+  /** Border color (default: "cyan", or the theme's frame when one is given) */
   borderColor?: string;
+  /**
+   * The caller's theme styles, from `themeStyles(bbs.getTheme())`.
+   *
+   * A modal is drawn ON TOP of existing content, so it is the one widget
+   * that must never blend into what it covers. Passing this takes the
+   * modal's colours from the theme's `frame` role, which is guaranteed
+   * visible in every theme - including the two phosphor ones, where a
+   * plain panel's border is deliberately sunk into the background.
+   *
+   * Without it the modal keeps its old cyan-on-black, so existing callers
+   * are unaffected.
+   */
+  themeStyles?: {
+    frame: { style: { fg?: string; bg?: string; border?: { fg?: string } } };
+  };
   /** Enable overlay dimming (default: true) */
   overlay?: boolean;
   /** Overlay opacity (default: 0.5) */
@@ -119,7 +134,11 @@ export class ConfirmModal extends Box {
     // sits in front of all ANSI content and makes the dialog look invisible/dimmed.
     // Callers can still opt in explicitly with overlay: true.
     const useOverlay = options.overlay === true;
-    const borderColor = options.borderColor || 'cyan';
+    // Explicit borderColor wins; then the theme's frame; then the old default.
+    const frame = options.themeStyles?.frame?.style;
+    const borderColor = options.borderColor || frame?.border?.fg || 'cyan';
+    const surfaceFg = frame?.fg || 'white';
+    const surfaceBg = frame?.bg || 'black';
     // Accept content as an alias for message so callers who pass the raw Box
     // property by mistake still get their text displayed correctly.
     if (!options.message && typeof (options as any).content === 'string') {
@@ -142,8 +161,8 @@ export class ConfirmModal extends Box {
       trapFocus: true,
       ch: ' ',
       style: {
-        fg: 'white',
-        bg: 'black',
+        fg: surfaceFg,
+        bg: surfaceBg,
         border: { fg: borderColor },
         ...options.style,
       },
