@@ -25,14 +25,38 @@ import {
 describe('DOORMAN: buildDoorInfoContent', () => {
   it('writes the catalog door_type into TYPE= instead of hardcoding XIM', () => {
     expect(buildDoorInfoContent('FIM', 'SYSOP', '5d!sysop')).toBe(
-      'TYPE=FIM\nLOCATION=Doors:SYSOP/5d!sysop\nSTACK=65536\nACCESS=0\n'
+      'TYPE=FIM\nLOCATION=Doors:SYSOP/5d!sysop\nSTACK=65536\n'
     );
   });
 
   it('still supports XIM (the historical default)', () => {
     expect(buildDoorInfoContent('XIM', 'TRIVIA', 'TRIVIA')).toBe(
-      'TYPE=XIM\nLOCATION=Doors:TRIVIA/TRIVIA\nSTACK=65536\nACCESS=0\n'
+      'TYPE=XIM\nLOCATION=Doors:TRIVIA/TRIVIA\nSTACK=65536\n'
     );
+  });
+
+  it('writes NO ACCESS tooltype for a door everyone may run', () => {
+    // express.e:4703 is `IF access=0 THEN RETURN TRUE`, and that TRUE is
+    // RESULT_NOT_ALLOWED - so ACCESS=0 DENIES the door to everybody on a
+    // real AmiExpress. Absent is the only correct way to say "anyone".
+    // These two assertions are what the first two used to get wrong: every
+    // .info DOORMAN wrote carried ACCESS=0.
+    expect(buildDoorInfoContent('XIM', 'CALC', 'calc')).not.toContain('ACCESS');
+    expect(buildDoorInfoContent('XIM', 'CALC', 'calc', -1)).not.toContain('ACCESS');
+  });
+
+  it('writes the level when one is actually asked for', () => {
+    // 255 is unaffected by the rule above and still means sysop-only:
+    // express.e:4704 is `IF (access>acsLevel)`, which the disable path
+    // relies on.
+    expect(buildDoorInfoContent('XIM', 'SYSOP', 'sysop', 255)).toContain('ACCESS=255\n');
+    expect(buildDoorInfoContent('XIM', 'HALF', 'half', 100)).toContain('ACCESS=100\n');
+  });
+
+  it('writes ACCESS=0 only when a caller explicitly asks for it', () => {
+    // Not reachable from the install path, but the value is expressible and
+    // must mean what it says rather than being silently rewritten.
+    expect(buildDoorInfoContent('XIM', 'ZERO', 'zero', 0)).toContain('ACCESS=0\n');
   });
 });
 

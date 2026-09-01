@@ -103,6 +103,53 @@ describe('what a deploy does to a file the sysop can edit', () => {
     expect(out).toContain('updated=1');
   });
 
+  it('does not resurrect a file the sysop deleted after a deploy placed it', () => {
+    // Observed on the live board, 2026-08-31: DOORMAN deleted a door, and
+    // Commands/BBSCmd/vsys.info was back on the volume after the next
+    // deploy. sync_tracked read "missing on the volume" as "never placed
+    // yet" and created it again, so every door deletion silently reverted
+    // on the next push. The manifest already knows the difference: an entry
+    // means a previous deploy put the file there, so its absence now is a
+    // deletion, not a gap.
+    fs.mkdirSync(path.join(root, 'image', 'Commands', 'BBSCmd'), { recursive: true });
+    write(img('Commands/BBSCmd/VSYS.info'), 'DOOR');
+    deploy(root);
+    expect(read(vol('Commands/BBSCmd/VSYS.info'))).toBe('DOOR');
+
+    fs.rmSync(vol('Commands/BBSCmd/VSYS.info'));
+    const out = deploy(root);
+
+    expect(fs.existsSync(vol('Commands/BBSCmd/VSYS.info'))).toBe(false);
+    expect(out).toContain('kept=1');
+  });
+
+  it('keeps it deleted across later deploys, even when the image changes it', () => {
+    // The deletion has to outlast a new image, or the door comes back the
+    // first time anything upstream touches that file.
+    write(img('a.info'), 'v1');
+    deploy(root);
+    fs.rmSync(vol('a.info'));
+    deploy(root);
+
+    write(img('a.info'), 'v2');
+    deploy(root);
+
+    expect(fs.existsSync(vol('a.info'))).toBe(false);
+  });
+
+  it('still creates a file the image ships for the first time', () => {
+    // The deletion rule must not stop genuinely new files arriving - that
+    // is the whole point of a tracked sync.
+    write(img('a.info'), 'v1');
+    deploy(root);
+
+    write(img('b.info'), 'v1');
+    const out = deploy(root);
+
+    expect(read(vol('b.info'))).toBe('v1');
+    expect(out).toContain('created=1');
+  });
+
   it('goes on keeping it, deploy after deploy', () => {
     write(img('a.info'), 'v1');
     write(vol('a.info'), 'SYSOP EDIT');

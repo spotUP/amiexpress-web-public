@@ -23,6 +23,7 @@ import * as amigafs from '../utils/amigafs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { isAllowed, resolveDoorDir, resolveDoorFile, walkDoorDir } from '../doors/door-path-guard';
 import { deleteDoorAndRefresh } from '../doors/door-delete';
+import { reloadDoorRegistry } from '../doors/reload-door-registry';
 import { FIELD_CAPS, renderRows, sanitizeField } from './door-admin-text';
 
 export const doorAdminRouter = express.Router();
@@ -294,12 +295,10 @@ doorAdminRouter.post('/installed/:cmd/rescan', async (req: Request, res: Respons
     return;
   }
 
-  try {
-    const { refreshDoorCache } = await import('../doors/amigaDoorManager');
-    await refreshDoorCache();
-    const { initializeDoors } = require('../handlers/door.handler');
-    await initializeDoors();
-  } catch {
+  // Every cache between the .info files and the door list. Refreshing only
+  // amigaDoorManager's scan left the registry rebuilt from stale command
+  // definitions - see reload-door-registry.ts.
+  if (!(await reloadDoorRegistry())) {
     res.status(500).type('text/plain').send('ERROR\r\n');
     return;
   }

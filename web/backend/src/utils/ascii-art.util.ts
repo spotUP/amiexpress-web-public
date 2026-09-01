@@ -2,6 +2,35 @@
  * ASCII art detection heuristic
  * Reused by DIR file writer and listing output to ignore purely decorative lines
  */
+/**
+ * Is this output PAINTING a screen rather than printing a line?
+ *
+ * A door that moves the cursor to a row and column is composing a display
+ * at absolute coordinates. It has no lines to wrap: breaking its output
+ * moves everything after the break to a place the door never asked for, and
+ * the rest of the screen it was drawing lands one row down and shifted.
+ *
+ * That is exactly what happened to DOORREPO's /help screen (screenshot,
+ * 2026-09-01) - "browse a doo" on one row and "r doc ..." starting the
+ * next. The door's own bytes were captured and replayed and were perfect;
+ * the break came from the line-wrap treating each 198-byte XIM message as
+ * a line.
+ *
+ * looksLikeAsciiArt() was the only exemption and asks a different question
+ * - whether the text LOOKS like art, by punctuation ratio. A help row of
+ * ordinary words does not, so it was wrapped. Looking like art was never
+ * the point.
+ *
+ * Deliberately NOT matched: SGR (colour). Colour moves nothing, so a
+ * coloured line is still a line and still needs wrapping.
+ */
+export function positionsCursorAbsolutely(line: string): boolean {
+  // CUP/HVP (ESC[row;colH, ESC[row;colf), cursor up/down/forward/back
+  // (ABCD), column and line positioning (GdE F), and the parameterless
+  // home (ESC[H).
+  return /\x1b\[[0-9;]*[HfABCDGdEF]/.test(line);
+}
+
 export function looksLikeAsciiArt(line: string): boolean {
   const trimmed = line.trim();
   if (trimmed.length === 0) {
