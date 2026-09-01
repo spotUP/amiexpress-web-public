@@ -873,6 +873,8 @@ let telnetPort = parseInt(process.env.TELNET_PORT || "64128");
 let sshPort = parseInt(process.env.SSH_PORT || "31337");
 let telnetServer: TelnetServer | null = null;
 let sshServer: SSHServerImpl | null = null;
+// Task 10: dedicated PETSCII port, disabled unless TELNET_PETSCII_PORT is set.
+let telnetPetsciiServer: TelnetServer | null = null;
 
 // Store active sessions (in production, use Redis/database)
 // NOTE: sessions, userSessions, and socketToUser are imported from session-manager module
@@ -1768,6 +1770,43 @@ console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
 console.error("[WS-Terminal] Failed to attach:", err);
     }
 
+    // Shared c64-detected handler (skip graphics prompt, show BBSTITLE
+    // directly) — used by both the primary telnet server and, when
+    // configured, the dedicated PETSCII port (task 10) below. Extracted
+    // so the second listener reuses this exact session-init logic
+    // instead of carrying its own hand-rolled copy.
+    const handleC64Detected = async (connection: TelnetConnection) => {
+      if (connection.session) {
+console.log(
+          "[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE"
+        );
+        const { displayScreen } = await import("./handlers/screen.handler");
+        // Create a telnet-compatible emitter for displayScreen
+        const emitter = {
+          emit: (event: string, data: any) => {
+            if (event === "petscii-output" || event === "ansi-output") {
+              // For C64, convert to raw PETSCII if needed
+              if (typeof data === "string") {
+                const petsciiData = convertUnicodePuaToPetscii(data);
+                connection.write(petsciiData);
+              } else {
+                connection.write(data);
+              }
+            }
+          },
+        };
+        await displayScreen(emitter as any, connection.session, "BBSTITLE");
+        // Transition to login
+        connection.session.state = BBSState.LOGON;
+        connection.session.subState = undefined;
+        connection.session.tempData = connection.session.tempData || {};
+        connection.session.tempData.loginPhase = "username";
+        connection.write(Buffer.from([0x0d, 0x0d])); // Two CR for spacing
+        // Send Username: prompt in proper PETSCII (uppercase displays correctly)
+        connection.write(convertAsciiToPetsciiOutput("Username: "));
+      }
+    };
+
     // Start telnet server
     try {
       telnetServer = new TelnetServer(telnetPort);
@@ -1775,43 +1814,39 @@ console.error("[WS-Terminal] Failed to attach:", err);
         setupTelnetSSHHandler(connection, "telnet", io);
       });
       // Handle C64 terminal auto-detection (skip graphics prompt, show BBSTITLE directly)
-      telnetServer.on("c64-detected", async (connection: TelnetConnection) => {
-        if (connection.session) {
-console.log(
-            "[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE"
-          );
-          const { displayScreen } = await import("./handlers/screen.handler");
-          // Create a telnet-compatible emitter for displayScreen
-          const emitter = {
-            emit: (event: string, data: any) => {
-              if (event === "petscii-output" || event === "ansi-output") {
-                // For C64, convert to raw PETSCII if needed
-                if (typeof data === "string") {
-                  const petsciiData = convertUnicodePuaToPetscii(data);
-                  connection.write(petsciiData);
-                } else {
-                  connection.write(data);
-                }
-              }
-            },
-          };
-          await displayScreen(emitter as any, connection.session, "BBSTITLE");
-          // Transition to login
-          connection.session.state = BBSState.LOGON;
-          connection.session.subState = undefined;
-          connection.session.tempData = connection.session.tempData || {};
-          connection.session.tempData.loginPhase = "username";
-          connection.write(Buffer.from([0x0d, 0x0d])); // Two CR for spacing
-          // Send Username: prompt in proper PETSCII (uppercase displays correctly)
-          connection.write(convertAsciiToPetsciiOutput("Username: "));
-        }
-      });
+      telnetServer.on("c64-detected", handleC64Detected);
       await telnetServer.start();
 console.log(`[OK] Telnet Server ready on port ${telnetPort}`);
 console.log(`[TELNET] Connect: telnet localhost ${telnetPort}`);
     } catch (error) {
 console.error(`[WARNING] Failed to start Telnet server:`, error);
 console.log("   BBS will continue without telnet support");
+    }
+
+    // Start dedicated PETSCII telnet server (task 10), disabled unless
+    // TELNET_PETSCII_PORT is set. Synchronet convention: a port whose
+    // connections are PETSCII from byte one — the strongest autodetect for
+    // real C64s, whose WiFi modems negotiate no telnet options at all.
+    // Feeds the SAME connection handler and c64-detected handler as the
+    // primary telnet server above; only the port and the petsciiDefault
+    // flag differ.
+    const telnetPetsciiPort = process.env.TELNET_PETSCII_PORT
+      ? parseInt(process.env.TELNET_PETSCII_PORT, 10)
+      : undefined;
+    if (telnetPetsciiPort) {
+      try {
+        telnetPetsciiServer = new TelnetServer(telnetPetsciiPort, { petsciiDefault: true });
+        telnetPetsciiServer.on("connection", (connection: TelnetConnection) => {
+          setupTelnetSSHHandler(connection, "telnet", io);
+        });
+        telnetPetsciiServer.on("c64-detected", handleC64Detected);
+        await telnetPetsciiServer.start();
+console.log(`[OK] PETSCII Telnet Server ready on port ${telnetPetsciiPort}`);
+console.log(`[TELNET] PETSCII connect: telnet localhost ${telnetPetsciiPort}`);
+      } catch (error) {
+console.error(`[WARNING] Failed to start PETSCII Telnet server:`, error);
+console.log("   BBS will continue without the dedicated PETSCII port");
+      }
     }
 
     // Start SSH server

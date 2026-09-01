@@ -163,12 +163,33 @@ export class TelnetConnection extends EventEmitter {
   public sessionId: string;
   public nodeId: number;
   public session: BBSSession | null = null;
+  /**
+   * Task 10 (dedicated PETSCII port): once true, a real TTYPE response
+   * arriving later is parsed for wire-protocol correctness (the option
+   * negotiation still completes normally) but its classification is
+   * discarded — handleTerminalType() returns before touching
+   * `terminalType` or emitting 'terminal-type'. Without this, a client
+   * that DOES negotiate on this "C64 from byte one" port (unlike a real
+   * C64 over a WiFi modem) could downgrade a session already committed to
+   * PETSCII 40x25 back to 80x24 ANSI mid-connection.
+   */
+  private terminalTypeLocked: boolean = false;
 
-  constructor(socket: Socket) {
+  constructor(socket: Socket, options?: { petsciiDefault?: boolean }) {
     super();
     this.socket = socket;
     this.nodeId = getNextAvailableNodeId();
     this.sessionId = `telnet-${this.nodeId}-${Date.now()}`;
+
+    if (options?.petsciiDefault) {
+      // Synchronet convention: connections on this port are PETSCII from
+      // byte one. `terminalType` matches what a real handleTerminalType()
+      // TTYPE parse would produce (contains "PETSCII" so showPrompt()'s
+      // existing C64 detection below fires unchanged), and is locked so
+      // later negotiation can't override it.
+      this.terminalType = 'PETSCII-PORT';
+      this.terminalTypeLocked = true;
+    }
 
     // Set up socket event handlers
     this.socket.on('data', this.handleData.bind(this));
@@ -335,6 +356,15 @@ export class TelnetConnection extends EventEmitter {
    * Detects C64 vs modern terminals based on reported type
    */
   private handleTerminalType(): void {
+    if (this.terminalTypeLocked) {
+      // Task 10: dedicated PETSCII port already committed this connection
+      // to C64 at connect time — a real TTYPE reply arriving afterward
+      // (negotiation itself still completed normally in handleNegotiation)
+      // must not reclassify it.
+console.log(`[Telnet] Node ${this.nodeId} TTYPE response ignored - connection is locked to PETSCII-port defaults`);
+      return;
+    }
+
     // First byte should be TTYPE_IS (0)
     if (this.ttypeData.length < 2 || this.ttypeData[0] !== TTYPE_IS) {
 console.log(`[Telnet] Invalid TTYPE response on node ${this.nodeId}`);
@@ -525,10 +555,18 @@ export class TelnetServer extends EventEmitter {
   private server: NetServer;
   private port: number;
   private connections: Map<string, TelnetConnection> = new Map();
+  /**
+   * Task 10: dedicated PETSCII port. When set, every connection accepted
+   * by this server is treated as C64 from byte one (Synchronet
+   * convention) — the strongest autodetect for real C64s, whose WiFi
+   * modems negotiate no telnet options at all.
+   */
+  private petsciiDefault: boolean;
 
-  constructor(port: number = 2323) {
+  constructor(port: number = 2323, options?: { petsciiDefault?: boolean }) {
     super();
     this.port = port;
+    this.petsciiDefault = !!options?.petsciiDefault;
     this.server = new NetServer();
 
     this.server.on('connection', this.handleConnection.bind(this));
@@ -637,7 +675,7 @@ console.log('[Telnet Server] Stopped');
     }
 
     // Create telnet connection with IAC processing
-    const connection = new TelnetConnection(socket);
+    const connection = new TelnetConnection(socket, { petsciiDefault: this.petsciiDefault });
 
     // Store connection
     this.connections.set(connection.sessionId, connection);
@@ -703,6 +741,13 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
         connection.session.ansiEnabled = false;
         connection.session.screenWidth = 40;
         connection.session.screenHeight = 25;
+        // One-shot flag (task 4 / audit E4, task 10): a power-on/reset C64
+        // boots in unshifted/graphics mode, so the very first PETSCII write
+        // must be preceded by the $0E charset prelude. pre-login.ts sets
+        // this same flag for the ANSI-prompt "P" answer and the ANSI_PROMPT
+        // real-C64 branch; this is the third caller of the identical
+        // contract (DEL-probe / dedicated-PETSCII-port fast path).
+        (connection.session as any).needsCharsetPrelude = true;
         connection.session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
         connection.session.tempData = { inputBuffer: '' };
         // Emit terminal detection event for index.ts to handle BBSTITLE display
@@ -746,6 +791,27 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
       }
       showPrompt();
     });
+
+    if (this.petsciiDefault) {
+      // Task 10: dedicated PETSCII port. Emit the identical event shape
+      // handleTerminalType() produces for a real TTYPE C64 response, so
+      // this flows through the SAME session-application code every other
+      // telnet C64 detection uses — the once('terminal-type', ...)
+      // listener above (unicodeCapable/isAmigaTerminal/detectedTerminalType
+      // + showPrompt()) and, once setupTelnetSSHHandler attaches its own
+      // listener in index.ts, that applier too — instead of a second
+      // hand-rolled copy of session init. terminalTypeLocked (set in the
+      // TelnetConnection constructor) ensures a later real TTYPE reply
+      // can't re-fire this event and downgrade the session.
+      connection.emit('terminal-type', {
+        terminalType: 'PETSCII-PORT',
+        isC64: true,
+        isAmiga: false,
+        unicodeCapable: false,
+        width: 40,
+        height: 25
+      });
+    }
 
     // Timeout after 500ms if no TTYPE response - show prompt anyway
     setTimeout(() => {
