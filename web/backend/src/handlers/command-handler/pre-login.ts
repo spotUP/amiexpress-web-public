@@ -22,7 +22,7 @@ function getOutputEvent(session: BBSSession): 'ansi-output' | 'petscii-output' {
  * express.e:29329 — cmds.sysPass; ACP.e:2630 — SYSTEM_PASSWORD tooltype.
  * Returns empty string if not configured (no gate active).
  */
-function getSystemPassword(): string {
+export function getSystemPassword(): string {
   try {
     const { loadBBSConfig } = require('../../services/bbs-config-file.service');
     // BBS root: from env or calculated relative to this compiled file's location

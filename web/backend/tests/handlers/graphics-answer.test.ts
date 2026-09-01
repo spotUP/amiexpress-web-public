@@ -104,4 +104,29 @@ describe('every live dispatcher uses the shared implementation (source pins)', (
     expect(src).toContain('applyGraphicsAnswer(socket, session, answer)');
     expect(src).not.toMatch(/tempData as any\)\.ripMode/);
   });
+
+  // Sysop addendum (2026-09-02): the connect-screen prompt must not
+  // word-wrap mid-word on an 80-col terminal (worse on a real C64's
+  // 40-col screen). Source-pin the literal so it can't silently regress
+  // back to one long line — this deliberately reads source text (not a
+  // runtime require of core.ts, which needs the same heavy dependency
+  // mocks as command.handler.ts) and unescapes the literal "\r\n"
+  // sequences before the lowercase check, so escape-sequence letters
+  // (backslash r / backslash n) don't false-positive it.
+  test('command-handler/core.ts CONNECT_GRAPHICS_PROMPT is multi-line, <=40 cols/line, uppercase, DEL invite', () => {
+    const src = read('command-handler/core.ts');
+    const match = src.match(/CONNECT_GRAPHICS_PROMPT\s*=\s*\n?\s*"([^"]+)"/);
+    expect(match).not.toBeNull();
+
+    const rendered = match![1].replace(/\\r\\n/g, '\n');
+    expect(rendered).toContain('<DEL>');
+    expect(rendered).not.toMatch(/[a-z]/);
+
+    const lines = rendered.split('\n').filter((l: string) => l.length > 0);
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(40);
+    }
+    expect(lines[lines.length - 1]).toMatch(/\? $/);
+  });
 });

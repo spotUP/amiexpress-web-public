@@ -54,8 +54,24 @@ export interface PreLoginConnectResult {
   passwordResetActive?: boolean;
 }
 
-const ANSI_GRAPHICS_PROMPT =
-  "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?";
+// Task 6 / audit F1-F3: uppercase-only ASCII. A power-on/reset real C64
+// renders unshifted PETSCII $41-$5A as uppercase in its default up/gfx
+// charset; lowercase ASCII bytes land on PETSCII graphics glyphs instead
+// of letters there, so this string must stay all-caps to be legible on an
+// undetected C64 sitting at this prompt. The DEL invite doubles as the
+// probe: PETSCII DEL is $14 (vs ASCII BS $08 / DEL $7F) - see
+// c64-detect.util.ts's classifyFirstKeypress, which the raw-byte
+// classification hook in index.ts's connection.on('data') runs on this
+// very keypress (both at DISPLAY_CONNECT and, for slower typers, at
+// ANSI_PROMPT — see command.handler.ts). The A/R/P/N graphics question
+// itself is unchanged; only its casing and the DEL invite are new.
+//
+// Explicit multi-line, each visible line <=40 columns (sysop addendum,
+// 2026-09-02): a single long line word-wraps mid-word on an 80-col
+// terminal and worse on a real C64's 40-col screen. The question comes
+// last with a trailing space so the input cursor sits right after it.
+export const ANSI_GRAPHICS_PROMPT =
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS\r\n(A/R/P/N) [Q=SKIP BULLETINS]? ";
 
 export async function runPreLoginConnect(
   emitter: LoginEmitter,

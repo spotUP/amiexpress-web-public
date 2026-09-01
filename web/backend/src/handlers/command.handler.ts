@@ -12,6 +12,7 @@ import { validateFilename, checkForFile } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { setEnvStat } from '../utils/acs.util';
 import { beginLogoff } from '../server/logoff';
+import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
@@ -1037,6 +1038,42 @@ function showMenuAfterCommand(socket: any, session: BBSSession, menuPauseDefault
   }
 }
 
+/**
+ * Shared tail of the real-C64 fast path (task 6 / audit F1-F3): honour the
+ * system-password gate, then either park at SYSTEM_PASSWORD_INPUT or go
+ * straight to BBSTITLE -> LOGON. Mirrors the dead pre-login.ts:54-84
+ * branch (handlePreLoginInput is never called from the live dispatcher).
+ * Called from both the DISPLAY_CONNECT short-circuit (fast typers,
+ * classified within telnet-server.ts's 500ms TTYPE window) and the
+ * ANSI_PROMPT short-circuit (slower typers, classified once the graphics
+ * prompt is already on screen) so there is exactly one copy of this
+ * sequence instead of a third hand-rolled duplicate.
+ */
+async function completeRealC64Connect(socket: any, session: BBSSession): Promise<void> {
+  session.tempData = { inputBuffer: '' };
+  const { getSystemPassword } = require('./command-handler/pre-login');
+  const sysPassC64 = getSystemPassword();
+  if (sysPassC64.length > 0) {
+    session.tempData.systemPasswordAttempts = 0;
+    session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
+    socket.emit('petscii-output', '\r\n');
+    await displayScreen(socket, session, 'PRIVATE');
+    socket.emit('petscii-output', '>: ');
+    socket.emit('mask-input', true);
+    return;
+  }
+
+  await displayScreen(socket, session, 'BBSTITLE');
+  session.paginatedScreen = undefined;
+  session.lastScreenHadPause = false;
+  session.state = BBSState.LOGON;
+  session.subState = undefined;
+  session.tempData = session.tempData || {};
+  session.tempData.loginPhase = 'username';
+  socket.emit('petscii-output', '\r\n\r\n');
+  socket.emit('prompt-login');
+}
+
 // Handle user commands (processCommand equivalent)
 export async function handleCommand(socket: any, session: BBSSession, data: string, io?: any) {
 console.log('=== handleCommand called ===');
@@ -1350,6 +1387,27 @@ console.error('[handleCommand] Screen command failed:', error);
   // Handle pre-login connection flow (AWAIT state)
   if (!allowScreenCommand && session.state === BBSState.AWAIT) {
     if (session.subState === LoggedOnSubState.DISPLAY_CONNECT) {
+      // Task 6 / audit F1-F3: real C64 detected via TTYPE (telnet-server.ts)
+      // or the DEL-probe (index.ts's connection.on('data') hook, before
+      // this handler ever runs — see c64-detect.util.ts). Skip the
+      // graphics prompt entirely and go straight to PETSCII mode. Mirrors
+      // the dead pre-login.ts:54-84 branch (this is the LIVE dispatcher;
+      // handlePreLoginInput in pre-login.ts is never called).
+      if (session.terminalType === 'c64') {
+console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
+        session.petsciiMode = true;
+        session.ansiEnabled = false; // C64 uses raw PETSCII, not ANSI
+        session.screenWidth = 40;
+        session.screenHeight = 25;
+        // One-shot flag: a power-on/reset C64 boots in unshifted/graphics
+        // mode. index.ts's ansi-output C64 branch consumes this to send
+        // the PETSCII $0E charset prelude before the first output, then
+        // clears it (task 4 / audit E4).
+        (session as any).needsCharsetPrelude = true;
+        await completeRealC64Connect(socket, session);
+        return;
+      }
+
       // User pressed key after connection screen (welcome + node list)
       // reference-board BBS layout: everything shown on connect, now just show ANSI prompt
       // express.e:29528 - ANSI prompt
@@ -1360,19 +1418,40 @@ console.log(' Connection screen viewed, showing ANSI prompt');
 console.log('[handleCommand] Await screen command still running, deferring prompt');
         session.pendingScreenCommand.then(() => {
           if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-            emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
+            emitPrompt(socket, ANSI_GRAPHICS_PROMPT);
           }
         }).catch(error => {
 console.error('[handleCommand] Pending screen command rejected:', error);
-          emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
+          emitPrompt(socket, ANSI_GRAPHICS_PROMPT);
         });
       } else {
-        emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
+        emitPrompt(socket, ANSI_GRAPHICS_PROMPT);
       }
       return;
     }
 
     if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
+      // Task 6 / audit F1-F3: a slower human C64 caller lands here once
+      // telnet-server.ts's 500ms TTYPE window has already expired and
+      // shown the graphics prompt. That prompt's first keypress doubles
+      // as the DEL-probe too — index.ts's connection.on('data') hook runs
+      // classifyFirstKeypress on the raw byte before this handler ever
+      // sees it, and may have just flipped terminalType to 'c64'. Apply
+      // PETSCII immediately instead of treating the probe byte as part of
+      // the graphics-answer buffer.
+      if (session.terminalType === 'c64' && !session.petsciiMode) {
+console.log('[C64] DEL-probe classified caller as C64 at ANSI_PROMPT - auto-enabling PETSCII mode');
+        const { applyGraphicsAnswer } = require('./command-handler/pre-login');
+        applyGraphicsAnswer(socket, session, 'P');
+        // applyGraphicsAnswer's PETSCII branch leaves ansiEnabled=true
+        // (SyncTERM-style PETSCII clients still want ANSI color codes) —
+        // a real C64 needs raw PETSCII with no ANSI escape parsing at all.
+        session.ansiEnabled = false;
+        (session as any).needsCharsetPrelude = true;
+        await completeRealC64Connect(socket, session);
+        return;
+      }
+
       if (session.pendingScreenCommand) {
 console.log('[handleCommand] ANSI prompt input ignored until screen command completes');
         return;
@@ -1413,6 +1492,16 @@ console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
         // answering R never reached the screen loader.
         const { applyGraphicsAnswer } = require('./command-handler/pre-login');
         applyGraphicsAnswer(socket, session, answer);
+
+        // Sysop addendum (task 6 fix round): a web/modern-terminal caller
+        // answering P gets ANSI-simulated PETSCII, not real C64 hardware —
+        // say so explicitly. Real C64s (terminalType === 'c64') never reach
+        // this Enter-path: they take the ANSI_PROMPT short-circuit above on
+        // their very first keypress, so this line is web/modern-terminal
+        // only by construction — it must never fire for a genuine C64.
+        if (session.petsciiMode && session.terminalType !== 'c64') {
+          emitText(socket, 'PETSCII: SIMULATING C64 DISPLAY (40X25)\r\n');
+        }
 
 console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
 

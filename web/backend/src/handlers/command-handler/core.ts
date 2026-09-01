@@ -37,9 +37,15 @@ let SCREEN_MENU: string = "MENU";
  * is $14, distinct from ASCII BS $08 / DEL $7F - which the raw-byte
  * classifier in index.ts's connection.on('data') handler (see
  * c64-detect.util.ts) reads before any PETSCII->ASCII conversion runs.
+ *
+ * Explicit multi-line, each visible line <=40 columns (sysop addendum,
+ * 2026-09-02): a single long line word-wraps mid-word on an 80-col
+ * terminal and worse on a real C64's 40-col screen. The question comes
+ * last with a trailing space so the input cursor sits right after it.
+ * Kept identical to login-connect.service.ts's ANSI_GRAPHICS_PROMPT.
  */
 const CONNECT_GRAPHICS_PROMPT =
-  "\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/N) [ADD Q TO SKIP BULLETINS] -- OR PRESS <DEL> OR <RETURN> TO CONTINUE?";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS\r\n(A/R/P/N) [Q=SKIP BULLETINS]? ";
 
 /**
  * Command Handler - Main Entry Point

@@ -1243,11 +1243,24 @@ console.log(
     // PETSCII DEL/shifted letters classify the caller as a C64 before the
     // PETSCII->ASCII conversion below runs. telnet-server.ts's showPrompt()
     // consults this flag (in addition to TTYPE) to skip the graphics
-    // prompt and jump straight to PETSCII/BBSTITLE. Guarded tightly to the
-    // connect screen so it can never misfire post-login.
+    // prompt and jump straight to PETSCII/BBSTITLE for callers fast enough
+    // to hit DISPLAY_CONNECT within the 500ms TTYPE window.
+    //
+    // Design ruling (2026-09-02): keep the 500ms timing model as-is - no
+    // DISPLAY_CONNECT parking redesign. A slower human C64 caller lands
+    // at ANSI_PROMPT once showPrompt()'s timer fires and shows the
+    // graphics prompt; THAT keypress (still unclassified) is just as
+    // valid a probe byte, so the guard below also covers ANSI_PROMPT
+    // while terminalType is still unset. command.handler.ts's ANSI_PROMPT
+    // handler applies PETSCII mode immediately once it sees terminalType
+    // flip to 'c64' with petsciiMode not yet set.
+    //
+    // Guarded tightly to these two pre-login states so it can never
+    // misfire post-login.
     if (
       connection.session?.state === BBSState.AWAIT &&
-      connection.session.subState === LoggedOnSubState.DISPLAY_CONNECT &&
+      (connection.session.subState === LoggedOnSubState.DISPLAY_CONNECT ||
+        connection.session.subState === LoggedOnSubState.ANSI_PROMPT) &&
       (!connection.session.terminalType ||
         connection.session.terminalType === "unknown")
     ) {

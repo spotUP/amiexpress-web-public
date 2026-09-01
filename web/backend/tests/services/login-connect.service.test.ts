@@ -33,7 +33,7 @@ describe('runPreLoginConnect — connect-time unification', () => {
       expect(serviceSrc).toMatch(/runSysCommand[\s\S]*?["']FRONTEND["']/);
       // Graphics prompt + parked state.
       expect(serviceSrc).toMatch(/ANSI_PROMPT/);
-      expect(serviceSrc).toMatch(/ANSI, RIP, PETSCII or No graphics/);
+      expect(serviceSrc).toMatch(/ANSI, RIP, PETSCII OR NO GRAPHICS/);
       // AREXX login trigger fires on every transport (was web-only).
       expect(serviceSrc).toMatch(/arexxEngine[\s\S]*?executeTrigger[\s\S]*?["']login["']/);
     });
@@ -42,6 +42,48 @@ describe('runPreLoginConnect — connect-time unification', () => {
       expect(serviceSrc).toMatch(
         /if\s*\(\s*session\.passwordResetState\s*\)[\s\S]*?passwordResetActive:\s*true/,
       );
+    });
+
+    // Task 6 / audit F1-F3: this is the prompt real telnet/SSH/web callers
+    // actually see at connect time (runPreLoginConnect emits it directly,
+    // independent of any keypress) — so it, not command-handler/core.ts's
+    // copy, is what a real C64 caller needs to be legible and to invite
+    // the DEL-probe.
+    it('graphics prompt is uppercase-only ASCII and invites <DEL>', () => {
+      // Read the actual runtime string value, not the source text — the
+      // source text's own "\r\n" escape sequence contains lowercase r/n
+      // as characters, which would false-positive a source-regex check.
+      const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
+      expect(typeof ANSI_GRAPHICS_PROMPT).toBe('string');
+
+      expect(ANSI_GRAPHICS_PROMPT).toContain('<DEL>');
+      // No lowercase ASCII letters anywhere in the actual (post-escape) string.
+      expect(ANSI_GRAPHICS_PROMPT).not.toMatch(/[a-z]/);
+    });
+
+    // Sysop addendum (2026-09-02): a single long line word-wraps mid-word
+    // on an 80-col terminal, worse on a real C64's 40-col screen. Assert
+    // the shape (multi-line, every visible line <=40 cols, question last
+    // with the input cursor sitting right after it) rather than pinning
+    // one giant string.
+    it('graphics prompt is explicit multi-line, each line <=40 columns, question last', () => {
+      const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
+
+      // Leading "\r\n" is just a blank-line separator from prior screen
+      // content, not a "line" with visible width — strip it before splitting.
+      const body = (ANSI_GRAPHICS_PROMPT as string).replace(/^\r\n/, '');
+      const lines = body.split('\r\n');
+
+      expect(lines.length).toBeGreaterThanOrEqual(2);
+      for (const line of lines) {
+        expect(line.length).toBeLessThanOrEqual(40);
+      }
+
+      const lastLine = lines[lines.length - 1];
+      // Question mark comes last, followed only by a trailing space for
+      // the input cursor — no CRLF after it.
+      expect(lastLine).toMatch(/\? $/);
+      expect(ANSI_GRAPHICS_PROMPT.endsWith('\r\n')).toBe(false);
     });
   });
 
