@@ -30,3 +30,13 @@ export const ANSI_PALETTE: readonly string[] = [
 export function ansiColor(index: number): string {
   return ANSI_PALETTE[index] ?? ANSI_PALETTE[0];
 }
+
+/**
+ * What each colour is called, for the pickers. Full words: a sysop choosing a
+ * colour should read "Bright magenta", not "BMag".
+ */
+export const ANSI_COLOR_NAMES: readonly string[] = [
+  'Black', 'Red', 'Green', 'Yellow', 'Blue', 'Magenta', 'Cyan', 'White',
+  'Bright black', 'Bright red', 'Bright green', 'Bright yellow',
+  'Bright blue', 'Bright magenta', 'Bright cyan', 'Bright white',
+];

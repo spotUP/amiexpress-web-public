@@ -1,12 +1,15 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2 } from 'lucide-react';
+import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { ScreenPreview } from '../components/ScreenPreview';
+import { ScreenEditor } from '../components/ScreenEditor';
+import { screenToCanvas } from './screen-bytes';
+import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
@@ -41,6 +44,7 @@ export function ScreenFilesPage() {
   const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [editing, setEditing] = useState<EditorSurface | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
@@ -408,6 +412,14 @@ export function ScreenFilesPage() {
             >
               <Upload size={14} /> Replace
             </button>
+            {(file.format === 'ansi' || file.format === 'text') && (
+              <button
+                className="inline-flex items-center gap-1 underline"
+                onClick={async () => setEditing(createSurface(await screenToCanvas(file.content)))}
+              >
+                <Pencil size={14} /> Edit
+              </button>
+            )}
             <button
               className="inline-flex items-center gap-1 underline text-red-400"
               onClick={() => removeFile(openFile)}
@@ -437,6 +449,21 @@ export function ScreenFilesPage() {
                 cancel
               </button>
             </div>
+          )}
+
+          {editing && (
+            <ScreenEditor
+              surface={editing}
+              onChange={setEditing}
+              // An edit produces bytes, and bytes go out the way an uploaded
+              // file does - through the same fan-out choice, the same backup
+              // and the same refusals. The editor is not a second write path.
+              onSave={bytes => {
+                setPendingUpload({ bytes, name: 'the edited screen' });
+                setEditing(null);
+              }}
+              onCancel={() => setEditing(null)}
+            />
           )}
 
           {file.format === 'ansi' || file.format === 'text' ? (
