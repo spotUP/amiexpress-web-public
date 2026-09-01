@@ -27,6 +27,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpriteStudioDoor = exports.WHEEL_NOTCHES_PER_STEP = exports.ZOOM_STEPS = exports.CELL_ASPECT = exports.DEFAULT_ZOOM = exports.SIDEBAR_COLS = void 0;
 exports.zoomScales = zoomScales;
 exports.stepZoom = stepZoom;
+exports.canvasRoom = canvasRoom;
+exports.zoomThatFits = zoomThatFits;
 exports.studioTitle = studioTitle;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_2 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
@@ -98,6 +100,33 @@ function stepZoom(current, delta) {
     const i = exports.ZOOM_STEPS.indexOf(current);
     const from = i === -1 ? 0 : i;
     return exports.ZOOM_STEPS[Math.max(0, Math.min(exports.ZOOM_STEPS.length - 1, from + delta))];
+}
+/**
+ * The room the artwork has, in characters: the editor minus its chrome.
+ *
+ * Menu bar, F-key toolbar and status bar take a row each; the colour and
+ * tool sidebar takes SIDEBAR_COLS.
+ */
+function canvasRoom(width, height) {
+    return { w: Math.max(1, width - exports.SIDEBAR_COLS), h: Math.max(1, height - 3) };
+}
+/**
+ * The biggest zoom on the ladder at which a sprite still FITS.
+ *
+ * A canvas larger than the room it is drawn in cannot be centred and
+ * cannot be scrolled - it just runs off the right edge, which is what a
+ * sprite loaded at the previous sprite's magnification looked like
+ * ("it doesnt resize the canvas to the new anim loaded"). 1:1 is always
+ * allowed: if the art does not fit even at actual size, clipping it is
+ * still better than refusing to open it.
+ */
+function zoomThatFits(cellW, cellH, room) {
+    let best = exports.ZOOM_STEPS[0];
+    for (const z of exports.ZOOM_STEPS) {
+        if (cellW * z * exports.CELL_ASPECT <= room.w && cellH * z <= room.h)
+            best = z;
+    }
+    return best;
 }
 /** The title line: what is open, which animation, which frame. */
 function studioTitle(doc, door, file) {
@@ -284,6 +313,7 @@ class SpriteStudioDoor {
         this.file = sprites[s];
         this.artText = null;
         this.doc = (0, edit_doc_1.openDoc)((0, assets_1.readSprite)(this.door, this.file));
+        this.resetZoomForDocument();
         await this.openEditor();
     }
     /**
@@ -315,6 +345,7 @@ class SpriteStudioDoor {
         this.file = files[f];
         this.doc = null;
         this.artText = (0, assets_1.readArt)(this.door, this.file).toString('latin1');
+        this.resetZoomForDocument();
         await this.openEditor();
     }
     /**
@@ -759,11 +790,39 @@ class SpriteStudioDoor {
             ? '80x25 (as the board serves it)'
             : 'Responsive (your terminal)');
     }
+    /**
+     * The room this door's editor has for artwork, right now.
+     *
+     * 80x25 when pinned to what the board serves, the caller's real terminal
+     * otherwise - the same two sizes openEditor builds the editor at.
+     */
+    room() {
+        const fixed = this.terminalMode?.mode() === 'fixed';
+        return canvasRoom(fixed ? 80 : (this.screen?.width ?? 80), fixed ? 25 : (this.screen?.height ?? 25));
+    }
+    /**
+     * A newly opened document opens at actual size, like the first one did.
+     *
+     * Zoom is something you ask for, and you asked for it about the sprite
+     * you were looking at - carrying it to the next one drew a 20-cell log at
+     * the 8x you had chosen for a 5-cell egg, which runs off the screen.
+     */
+    resetZoomForDocument() {
+        this.zoom = this.doc
+            ? Math.min(exports.DEFAULT_ZOOM, zoomThatFits(this.doc.sprite.cellW, this.doc.sprite.cellH, this.room()))
+            : exports.DEFAULT_ZOOM;
+        this.wheelNotches = 0;
+    }
     async setZoom(zoom) {
-        if (zoom === this.zoom)
+        // Never past what fits: the canvas cannot scroll, so a step too far
+        // just pushes the artwork off the right-hand side.
+        const capped = this.doc
+            ? Math.min(zoom, zoomThatFits(this.doc.sprite.cellW, this.doc.sprite.cellH, this.room()))
+            : zoom;
+        if (capped === this.zoom)
             return;
         this.commit();
-        this.zoom = zoom;
+        this.zoom = capped;
         await this.openEditor();
     }
     step(delta) {
@@ -944,6 +1003,7 @@ class SpriteStudioDoor {
         this.door = doors[d];
         this.file = `${name}.sprite.json`;
         this.doc = (0, edit_doc_1.openDoc)(sprite);
+        this.resetZoomForDocument();
         await this.openEditor();
         await this.save();
     }

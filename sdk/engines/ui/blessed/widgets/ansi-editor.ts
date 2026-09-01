@@ -1029,6 +1029,27 @@ export class ANSIEditor extends Box {
   }
 
   /**
+   * Take the menus down with the editor.
+   *
+   * The dropdowns are parented to the SCREEN, not to this widget, because a
+   * menu must paint over everything - so Element.destroy()'s sweep of its
+   * own children never reached them. A host that REBUILDS the editor (a
+   * zoom step, a resize, opening another document - the sprite studio does
+   * all three) left eleven hidden dropdowns behind every time, each holding
+   * an action closing over the editor that had just been destroyed.
+   */
+  destroy(): void {
+    for (const menu of [
+      this.fileMenu, this.editMenu, this.selectionMenu, this.colorsMenu,
+      this.layerMenu, this.viewMenu, this.helpMenu, ...this.extraMenuDropdowns,
+    ]) {
+      menu?.destroy();
+    }
+    this.extraMenuDropdowns = [];
+    super.destroy();
+  }
+
+  /**
    * Re-read the strip's labels.
    *
    * A host calls this when the state a readout shows has changed - the

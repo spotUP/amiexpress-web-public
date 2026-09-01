@@ -15,7 +15,7 @@ import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
-import { SpriteStudioDoor, ZOOM_STEPS } from '../studio';
+import { SpriteStudioDoor, ZOOM_STEPS, canvasRoom, zoomThatFits } from '../studio';
 import { openDoc } from '../edit-doc';
 
 const source = readFileSync(join(__dirname, '..', 'studio.ts'), 'utf8');
@@ -182,4 +182,59 @@ export async function turningTheWheelBackStartsCountingAgain(): Promise<void> {
   assert.deepStrictEqual(asked, [], 'the direction change resets the count');
   studio.wheelZoom(-1);
   assert.deepStrictEqual(asked, [ZOOM_STEPS[0]], 'two down from 1:1 stays at 1:1 (clamped)');
+}
+
+/**
+ * A new document opens at a size that fits it.
+ *
+ * "it doesnt resize the canvas to the new anim loaded" - the canvas widget
+ * did take the new sprite's cell size (proven headless through the real
+ * open path), but the MAGNIFICATION came from the sprite before it. A
+ * 20-cell log drawn at the 8x chosen for a 5-cell egg is 160 characters
+ * wide in a 74-character room, so it ran off the side and read as a canvas
+ * that had not resized.
+ */
+export async function theRoomIsTheEditorMinusItsChrome(): Promise<void> {
+  // Sidebar 6 columns; menu bar, F-key toolbar and status bar a row each.
+  assert.deepStrictEqual(canvasRoom(80, 25), { w: 74, h: 22 });
+  assert.deepStrictEqual(canvasRoom(120, 40), { w: 114, h: 37 });
+}
+
+export async function theLadderStopsWhereTheArtStopsFitting(): Promise<void> {
+  const room = canvasRoom(80, 25);
+  assert.strictEqual(zoomThatFits(5, 2, room), 8, 'a small sprite reaches the top of the ladder');
+  assert.strictEqual(zoomThatFits(20, 2, room), 2, '20 cells fit twice over, not four times');
+  assert.strictEqual(zoomThatFits(40, 20, room), 1, 'and a big one only at actual size');
+  assert.strictEqual(zoomThatFits(200, 100, room), 1,
+    'art bigger than the room still opens - clipped beats refused');
+}
+
+export async function openingAnotherSpriteGoesBackToActualSize(): Promise<void> {
+  const studio = studioWithSprite();
+  studio.zoom = 8;
+  studio.doc = openDoc({
+    name: 'log', cellW: 20, cellH: 2,
+    animations: { idle: { ticksPerFrame: 4, loop: true, frames: [[[null], [null]]] } },
+  } as Sprite);
+  studio.resetZoomForDocument();
+  assert.strictEqual(studio.zoom, 1, 'the new sprite opens at 1:1, not at the last one’s zoom');
+}
+
+export async function zoomingIsCappedAtWhatFits(): Promise<void> {
+  const studio = studioWithSprite();
+  studio.doc = openDoc({
+    name: 'log', cellW: 20, cellH: 2,
+    animations: { idle: { ticksPerFrame: 4, loop: true, frames: [[[null], [null]]] } },
+  } as Sprite);
+  studio.terminalMode = { mode: () => 'fixed' };
+
+  const asked: number[] = [];
+  const openEditor = studio.openEditor;
+  studio.openEditor = async () => { asked.push(studio.zoom); };
+
+  await studio.setZoom(8);
+  assert.deepStrictEqual(asked, [2], '8:1 on a 20-cell sprite is capped to the 2:1 that fits');
+  await studio.setZoom(4);
+  assert.deepStrictEqual(asked, [2], 'and asking again for something too big changes nothing');
+  assert.strictEqual(typeof openEditor, 'function');
 }
