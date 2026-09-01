@@ -342,7 +342,14 @@ console.log('[ENV] Files');
   ): Promise<void> {
     const config = require('../../config').config;
     const bbsDataPath = config.get('dataDir');
-    const confNum = session.currentConf || 1;
+    // `?? 1`, NOT `|| 1`: conference 0 is a real conference, and `|| 1`
+    // silently sent it to conference 1 - so flagging "from" a file while in
+    // [0:General] scanned a DIFFERENT conference's listing and could flag
+    // files the user cannot even see. express.e uses currentConfDir with no
+    // fallback (express.e:12568), and the file list this is supposed to
+    // agree with passes session.currentConf straight through
+    // (file-listing.handler.ts:157).
+    const confNum = session.currentConf ?? 1;
     const { readDirFile } = require('../../utils/dir-file-reader.util');
     const { getMaxDirs } = require('../../utils/max-dirs.util');
     const { getConferenceDir } = require('../../utils/file-hold.util');
