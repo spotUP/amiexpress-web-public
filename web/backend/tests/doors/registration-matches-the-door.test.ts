@@ -92,4 +92,25 @@ describe('door registrations', () => {
 
     expect(stale.map(r => r.file)).toEqual([]);
   });
+
+  // The pair that was broken by a sweep.
+  //
+  // Doors/mail-composer was deleted on 2026-05-29 by a commit that removed 801
+  // corpus-extracted directories and kept "all TypeScript doors with BBSCmd
+  // .info entries" - this one had no registration YET, so 448 lines of ANSI
+  // message editor went with the junk. The registration arrived later, and
+  // typing AE on the board answered "Door not found:
+  // /app/data/bbs/Doors/mail-composer".
+  //
+  // Not a general rule: a registration may point at a door installed on the
+  // board and absent from git - Doors/tic-tac-toe (TTT), BestConf, scan.x.
+  // This pins the one pair that has already been broken once.
+  it('ships the mail composer that AE registers', () => {
+    const ae = registrations().find(r => r.file.toLowerCase() === 'ae.info');
+
+    expect(ae).toBeDefined();
+    expect(ae!.location).toBe('Doors/mail-composer');
+    expect(fs.existsSync(path.join(ROOT, 'Doors', 'mail-composer', 'index.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(ROOT, 'Doors', 'mail-composer', 'dist', 'index.js'))).toBe(true);
+  });
 });
