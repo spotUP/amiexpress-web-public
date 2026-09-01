@@ -13,7 +13,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = [
+const TEST_MODULES = ['./versus-layout.test', 
   './attack-routing.test',
   './network-wiring.test',
   './board-clear.test',
@@ -23,6 +23,8 @@ const TEST_MODULES = [
   './tetrinet-line-clear.test',
   './tetrinet-cell-width.test',
   './das-arr-timing.test',
+  './input-repeat.test',
+  './lock-flash.test',
   './gamepad-every-mode.test',
   './saved-settings-merge.test',
   './input-hints.test',
