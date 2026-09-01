@@ -224,6 +224,14 @@ class ApiClient {
     return { data };
   }
 
+  /** A PUT that answers the envelope directly, like `request` does. */
+  async putJson<T>(url: string, body?: any): Promise<T> {
+    return this.request<T>(url, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
   async put<T>(url: string, body?: any): Promise<{ data: T }> {
     const data = await this.request<T>(url, {
       method: 'PUT',
@@ -237,33 +245,36 @@ class ApiClient {
   // Content crosses as base64 in both directions: a screen carries Amiga
   // high-bit bytes, and a UTF-8 round trip turns one into U+FFFD.
   async getScreenIndex() {
-    return this.get<any>(`${API_BASE}/screens`);
+    return this.request<ApiResponse>(`${API_BASE}/screens`);
   }
 
   async getScreenFile(filePath: string) {
-    return this.get<any>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
+    return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
   }
 
   async putScreenFile(filePath: string, contentBase64: string, targets?: string[]) {
-    return this.put<any>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, {
+    return this.putJson<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, {
       content: contentBase64,
       targets,
     });
   }
 
   async deleteScreenFile(filePath: string) {
-    return this.delete<any>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
+    return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' });
   }
 
   async shareScreens(nodes: number[], sharedDir: string, dryRun = false) {
-    return this.post<any>(`${API_BASE}/screens/share`, { nodes, sharedDir, dryRun });
+    return this.request<ApiResponse>(`${API_BASE}/screens/share`, {
+      method: 'POST',
+      body: JSON.stringify({ nodes, sharedDir, dryRun }),
+    });
   }
 
   async resolveScreen(screen: string, node?: number, conf?: number) {
     const params = new URLSearchParams({ screen });
     if (node !== undefined) params.set('node', String(node));
     if (conf !== undefined) params.set('conf', String(conf));
-    return this.get<any>(`${API_BASE}/screens/resolve?${params.toString()}`);
+    return this.request<ApiResponse>(`${API_BASE}/screens/resolve?${params.toString()}`);
   }
 
   // System Configuration

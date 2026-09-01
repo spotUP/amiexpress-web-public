@@ -44,6 +44,7 @@ export function ScreenFilesPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
+    // The routes answer `{ success, data, ... }`; every admin page reads `.data`.
     queryFn: async () => (await apiClient.getScreenIndex()).data as ScreenIndexShape,
   });
 
