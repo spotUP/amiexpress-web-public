@@ -13,7 +13,16 @@ import { ModemEmulator } from '../utils/modem-emulator';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 
-// RIP Graphics types (inline to avoid package dependency)
+// RIP Graphics.
+//
+// The parser and renderer used to live in web/frontend/src/components/rip
+// and were imported by nothing at all - the terminal carried its own
+// canvas, its own mode detection and its own buffer, and never drew a
+// single pixel. There are zero getContext calls in this file's history.
+// The module moved here so the half that draws can meet the half that
+// receives, which is what "the rip door never displayed rip graphics" was.
+import RIPRenderer, { type RIPRendererRef } from '../rip/RIPRenderer';
+
 const RIP_WIDTH = 640;
 const RIP_HEIGHT = 350;
 
@@ -231,7 +240,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     exclude?: { x: number; y: number; width: number; height: number };
   }>>(new Map());
   const overlayBufferRef = useRef<string>('');
-  const ripCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ripRendererRef = useRef<RIPRendererRef | null>(null);
   const ripBuffer = useRef<string>(''); // Buffer for RIP commands
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
@@ -1949,6 +1958,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         ripModeRef.current = true;
         setRipMode(true);
         ripBuffer.current = '';
+        ripDrawn.current = 0;
+        try { ripRendererRef.current?.reset(); } catch { /* fresh screen anyway */ }
         
         const ripContent = parts.slice(1).join('\x1b[1!');
         if (ripContent) {
@@ -1957,6 +1968,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             ripBuffer.current += ripParts[0];
             console.log('[RIP] Exiting RIP graphics mode (within same chunk)');
             ripModeRef.current = false;
+            // Draw BEFORE clearing the flag's render, and keep the canvas up
+            // for a beat: the buffer is the whole picture, and dropping out
+            // of rip mode without painting it is what used to happen.
+            drawRipBuffer();
             setRipMode(false);
             data = ripParts[1] || '';
           } else {
@@ -1974,11 +1989,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           ripBuffer.current += parts[0];
           console.log('[RIP] Exiting RIP graphics mode');
           ripModeRef.current = false;
+          drawRipBuffer();
           setRipMode(false);
           data = parts[1] || '';
           if (!data) return;
         } else {
           ripBuffer.current += data;
+          drawRipBuffer();
           return;
         }
       }
@@ -3019,21 +3036,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   };
 
-  // Handle RIP canvas click to send commands back to BBS
-  const handleRipCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = ripCanvasRef.current;
-    const socket = socketRef.current;
-    if (!canvas || !socket) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = RIP_WIDTH / rect.width;
-    const scaleY = RIP_HEIGHT / rect.height;
-    const x = Math.floor((event.clientX - rect.left) * scaleX);
-    const y = Math.floor((event.clientY - rect.top) * scaleY);
-
-    console.log(`[RIP] Canvas click at ${x}, ${y}`);
-    // In a full implementation, we would check mouse regions here
-    // For now, just log the click
+  /**
+   * Paint whatever RIP commands have arrived so far.
+   *
+   * The renderer keeps its own state, so feeding it the WHOLE buffer each
+   * time would re-run every command and redraw from scratch. Only the part
+   * that has not been drawn yet is handed over.
+   */
+  const ripDrawn = useRef<number>(0);
+  const drawRipBuffer = useCallback(() => {
+    const renderer = ripRendererRef.current;
+    if (!renderer) return;
+    const pending = ripBuffer.current.slice(ripDrawn.current);
+    if (!pending) return;
+    ripDrawn.current = ripBuffer.current.length;
+    try {
+      renderer.render(pending);
+    } catch (err) {
+      // A malformed script must not take the terminal down with it - the
+      // door is still streaming and the session has to survive.
+      console.warn('[RIP] render failed:', err);
+    }
   }, []);
 
   return (
@@ -3163,15 +3186,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             boxShadow: '0 0 20px rgba(0,0,0,0.8)',
           }}
         >
-          <canvas
-            ref={ripCanvasRef}
+          {/*
+            * The renderer owns its own canvas and every draw command. What
+            * used to be here was a bare <canvas> that nothing ever painted
+            * to - the buffer filled, the box appeared, and the picture never
+            * arrived.
+            */}
+          <RIPRenderer
+            ref={ripRendererRef}
             width={RIP_WIDTH}
             height={RIP_HEIGHT}
-            onClick={handleRipCanvasClick}
-            style={{
-              imageRendering: 'pixelated',
-              cursor: 'pointer',
-              display: 'block',
+            onCommand={(command: string) => {
+              // A RIP button or mouse region sends its command back as if
+              // the user had typed it.
+              socketRef.current?.emit('terminal-input', command);
+            }}
+            onExitRipMode={() => {
+              ripModeRef.current = false;
+              setRipMode(false);
             }}
           />
           <div

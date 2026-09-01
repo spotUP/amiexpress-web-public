@@ -44,6 +44,16 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./rip": {
+      "types": "./dist/rip/index.d.ts",
+      "import": "./dist/rip/index.js",
+      "require": "./dist/rip/index.js"
+    },
+    "./rip/*": {
+      "types": "./dist/rip/*.d.ts",
+      "import": "./dist/rip/*.js",
+      "require": "./dist/rip/*.js"
+    }
   }
 }
