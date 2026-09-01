@@ -136,3 +136,29 @@ export async function theEditScreenHasAMenuBarBuiltFromTheBindingSet(): Promise<
     'the edit screen menu bar must be built from the same BindingSet the hotkeys use - ' +
     'one dispatch path, not two');
 }
+
+/**
+ * Fix round 1, Critical 1: the edit screen's OWN menu bar must die with
+ * everything else it owns - the destroy-chain discipline from studio 2b.
+ */
+export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
+  const destroyIdx = code.indexOf('destroy(): void {');
+  assert.ok(destroyIdx >= 0, 'destroy() must exist');
+  const destroyBody = code.slice(destroyIdx, code.indexOf('\n}', destroyIdx));
+  assert.ok(/this\.menuBar[\],]/.test(destroyBody),
+    'destroy() must include this.menuBar in the widgets it destroys');
+}
+
+/**
+ * Fix round 1, Important 2: studio.help shipped keyboard-unreachable
+ * (empty keys, no tab stop). F1 is a standard, non-printable help key -
+ * it contributes nothing to the glyph exclusion set (glyphForKey('f1')
+ * is null: length !== 1, no 'S-' prefix, not 'space').
+ */
+export async function studioHelpBindsF1(): Promise<void> {
+  const idx = code.indexOf("id: 'studio.help'");
+  assert.ok(idx >= 0, 'studio.help binding must exist');
+  const block = code.slice(idx, idx + 200);
+  assert.ok(/keys: \['f1'\]/.test(block), 'studio.help must bind F1, not ship keyboard-unreachable');
+  assert.ok(/hotkeyHint: 'F1'/.test(block), "studio.help's hotkeyHint must read 'F1' so the menu label shows it");
+}

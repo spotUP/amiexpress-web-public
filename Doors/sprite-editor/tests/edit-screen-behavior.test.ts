@@ -338,3 +338,56 @@ export async function shiftXDoesNotTypeIntoTheCell(): Promise<void> {
     edit.destroy();
   }
 }
+
+/**
+ * Fix round 1, Important 3: F1 is the studio.help binding's hotkey (it
+ * shipped keyboard-unreachable - empty keys, no tab stop - in the
+ * original commit). This help is a one-shot status-bar flash (reusing
+ * the existing statusFlash+paint plumbing, not a modal/overlay), so
+ * "closes cleanly" here means exactly that: it never enters a mode that
+ * swallows the next keypress. Pins both halves - the hint appears AND
+ * the document is untouched - then proves the door is not stuck by
+ * moving the cursor immediately afterward.
+ */
+export async function f1InvokesHelpWithoutTouchingTheDocumentAndLeavesNoStuckState(): Promise<void> {
+  // cellH: 2 so 'down' has somewhere to move the cursor to - the "not
+  // stuck" proof below needs an observable move.
+  const sprite: Sprite = {
+    name: 'fixture',
+    cellW: 1,
+    cellH: 2,
+    animations: {
+      only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }], [{ char: '@', fg: 7, bg: 0 }]]] },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const statusBar = screen.children[4];
+    const framesBox = screen.children[2];
+    const beforeStrip = frameStrip(framesBox.getContent());
+    const beforeDirty = (edit as any).doc.dirty;
+    const beforeCursorRow = (edit as any).cursorRow;
+
+    pressKey(screen, 'f1');
+
+    // 'S-x animation' is distinctive to the F1 help text - unlike 'save'
+    // or 'TAB mode', it does not already appear in the default status
+    // line, so this actually proves F1's own handler ran rather than
+    // passing on the permanent hint that was already there.
+    assert.ok(statusBar.getContent().includes('S-x animation'),
+      'F1 must render the keyboard-shortcuts hint onto the status bar');
+    assert.strictEqual(frameStrip(framesBox.getContent()), beforeStrip,
+      'F1 must not touch frames');
+    assert.strictEqual((edit as any).doc.dirty, beforeDirty,
+      'F1 must not mark the document dirty - it only reads the binding table');
+
+    // Closes cleanly: no overlay/modal state was entered, so the very
+    // next key still reaches its ordinary handler.
+    pressKey(screen, 'down');
+    assert.strictEqual((edit as any).cursorRow, beforeCursorRow + 1,
+      'a normal key immediately after F1 must still move the cursor - F1 must not leave the door stuck');
+  } finally {
+    edit.destroy();
+  }
+}

@@ -266,12 +266,16 @@ export class StudioApp {
           // render() and apply() ignores keys while the editor is open, so
           // the browser's own bindings cannot drift the selection underneath it.
           if (this.playback) { clearInterval(this.playback); this.playback = null; }
+          // menuBar included: it stays mounted at top:0 with live
+          // hover/click listeners otherwise, sitting directly under the
+          // editor's own menu bar - a hovering mouse could open this
+          // browser's "Sprite > Quit" while the editor owns the screen.
           for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                           this.previewBox, this.statusBar]) w.hide();
+                           this.previewBox, this.statusBar, this.menuBar]) w.hide();
           this.editScreen = new EditScreen(this.screen, sel.door, sel.sprite, sprite, () => {
             this.editScreen = null;
             for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                             this.previewBox, this.statusBar]) w.show();
+                             this.previewBox, this.statusBar, this.menuBar]) w.show();
             this.loaded = null; // the sprite may have been saved - reload it
             this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
             this.refresh();
@@ -288,21 +292,24 @@ export class StudioApp {
           // there is no black-screen risk in hiding before the list paints -
           // the same reasoning the ansi-editor door's showFileBrowser relies on.
           if (this.playback) { clearInterval(this.playback); this.playback = null; }
+          // menuBar included - same reasoning as the 'e' handler above.
           for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                           this.previewBox, this.statusBar]) w.hide();
+                           this.previewBox, this.statusBar, this.menuBar]) w.hide();
           this.artSession = new ArtSession(this.screen, sel.door, () => {
             this.artSession = null;
             for (const w of [this.doorsList, this.spritesList, this.animationsList,
-                             this.previewBox, this.statusBar]) w.show();
+                             this.previewBox, this.statusBar, this.menuBar]) w.show();
             this.playback = setInterval(() => { this.tick++; this.paintPreview(); }, PLAYBACK_MS);
             this.refresh();
           });
         } },
 
-      // Menu-only (keys: []): writes straight to the existing status bar
+      // F1 - standard help key, non-printable (contributes nothing to the
+      // glyph exclusion set - see edit-screen.ts's studio.help for the
+      // same reasoning). Writes straight to the existing status bar
       // widget, the same way refresh() already does, rather than adding a
       // new flash/state mechanism this browser doesn't otherwise have.
-      { id: 'studio.help', keys: [], hotkeyHint: '', menu: 'Help', label: 'Keyboard Shortcuts',
+      { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
         handler: () => {
           this.statusBar.setContent(
             '{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}'

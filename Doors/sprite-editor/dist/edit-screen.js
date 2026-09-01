@@ -205,11 +205,12 @@ class EditScreen {
                 handler: () => this.tryOp(() => (0, edit_doc_1.deleteAnimation)(this.doc)) },
             { id: 'file.save', keys: ['s'], hotkeyHint: 's', menu: 'File', label: 'Save',
                 handler: () => this.save() },
-            // Menu-only (keys: [] - the pattern bindings.ts/anEmptyKeysBindingIsMenuOnly
-            // pins): reuses the existing statusFlash+paint plumbing every other
-            // op's refusal already uses, so there is no new display mechanism,
-            // just a Help menu entry that fills it in.
-            { id: 'studio.help', keys: [], hotkeyHint: '', menu: 'Help', label: 'Keyboard Shortcuts',
+            // F1 - standard help key, non-printable (contributes nothing to the
+            // glyph exclusion set: glyphForKey('f1') is null, key.length !== 1
+            // and no 'S-' prefix). Reuses the existing statusFlash+paint
+            // plumbing every other op's refusal already uses, so there is no
+            // new display mechanism, just a Help menu entry that fills it in.
+            { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
                 handler: () => {
                     this.statusFlash = 'g/f/S-f/b/S-b paint  n/c/x/S-,/S-. frames  a/+/t/S-t/l/S-x animation  TAB mode  s save  ESC back';
                     this.paint();

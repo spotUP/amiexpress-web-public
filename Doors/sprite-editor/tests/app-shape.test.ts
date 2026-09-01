@@ -83,6 +83,42 @@ export async function theThreeListsAndPreviewHaveMouseEnabled(): Promise<void> {
 }
 
 /**
+ * Fix round 1, Critical 1: the browser's menu bar stayed mounted at
+ * top:0 with live hover/click listeners while EditScreen (or ArtSession)
+ * owned the screen - a hovering mouse could open "Sprite > Quit" directly
+ * under the editor's own menu bar. Both hide lists (before opening) and
+ * both show lists (on the exit callback) must include this.menuBar,
+ * exactly like every other pane that sleeps around the editor/art
+ * session.
+ */
+export async function theMenuBarSleepsWithTheEditorAndArtSession(): Promise<void> {
+  for (const id of ["id: 'studio.edit'", "id: 'studio.artMode'"]) {
+    const idx = app.indexOf(id);
+    assert.ok(idx >= 0, `${id} binding must exist`);
+    const block = app.slice(idx, idx + 1500);
+    const hideLists = block.match(/for \(const w of \[[^\]]*\]\) w\.hide\(\);/g) || [];
+    const showLists = block.match(/for \(const w of \[[^\]]*\]\) w\.show\(\);/g) || [];
+    assert.strictEqual(hideLists.length, 1, `${id} must have exactly one hide list`);
+    assert.strictEqual(showLists.length, 1, `${id} must have exactly one show list`);
+    assert.ok(hideLists[0].includes('this.menuBar'), `${id}'s hide list must include this.menuBar`);
+    assert.ok(showLists[0].includes('this.menuBar'), `${id}'s show list must include this.menuBar`);
+  }
+}
+
+/**
+ * Fix round 1, Important 2: studio.help shipped keyboard-unreachable
+ * (empty keys, no tab stop, Tab already claimed by pane-cycling). F1 is
+ * a standard, non-printable help key.
+ */
+export async function studioHelpBindsF1(): Promise<void> {
+  const idx = app.indexOf("id: 'studio.help'");
+  assert.ok(idx >= 0, 'studio.help binding must exist');
+  const block = app.slice(idx, idx + 200);
+  assert.ok(/keys: \['f1'\]/.test(block), 'studio.help must bind F1, not ship keyboard-unreachable');
+  assert.ok(/hotkeyHint: 'F1'/.test(block), "studio.help's hotkeyHint must read 'F1' so the menu label shows it");
+}
+
+/**
  * The door holds itself open.
  *
  * CoreDoor.execute() awaits its input loop ONLY for doors that register
