@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.toolLabels = toolLabels;
-exports.tokenAtColumn = tokenAtColumn;
 exports.createToolbar = createToolbar;
 /**
  * The paint toolbar: 16 colour swatches, four tool buttons, one status
@@ -32,6 +31,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const layout_1 = require("./layout");
 const panels_1 = require("./panels");
+const token_strip_1 = require("./token-strip");
 const TOOLS = ['paint', 'erase', 'pick', 'fill'];
 const TOOL_LABEL = {
     paint: 'Paint', erase: 'Erase', pick: 'Pick', fill: 'Fill',
@@ -44,24 +44,6 @@ const TOOL_LABEL = {
  */
 function toolLabels() {
     return TOOLS.map(t => `[${TOOL_LABEL[t]}]`);
-}
-/**
- * Which token (by index) a screen column falls in, for `tokens` joined by
- * a single space when rendered - the shared hit-test math for every
- * variable-width, space-joined strip this door renders (this toolbar's
- * tool row here; the frames strip in edit-screen.ts reuses this same
- * function so its click handler and its paint() rendering can never
- * disagree about where one token ends and the next begins). Returns -1
- * for a click landing in a gap between tokens or past the last one.
- */
-function tokenAtColumn(tokens, col) {
-    let pos = 0;
-    for (let i = 0; i < tokens.length; i++) {
-        if (col >= pos && col < pos + tokens[i].length)
-            return i;
-        pos += tokens[i].length + 1; // +1 for the single-space separator
-    }
-    return -1;
 }
 function createToolbar(screen, panel, state, onChange) {
     const content = (0, panels_1.panelContentRect)(layout_1.LAYOUT.edit.toolbar);
@@ -96,7 +78,7 @@ function createToolbar(screen, panel, state, onChange) {
         const x = data.x - coords.xi;
         const y = data.y - coords.yi;
         if (y === 0) {
-            const index = tokenAtColumn(toolLabels(), x);
+            const index = (0, token_strip_1.tokenAtColumn)(toolLabels(), x);
             if (index === -1)
                 return;
             onChange({ tool: TOOLS[index], colour: state.colour });

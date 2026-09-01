@@ -9,7 +9,8 @@
  */
 
 import assert from 'assert';
-import { createToolbar, toolLabels, tokenAtColumn, ToolbarState } from '../toolbar';
+import { createToolbar, toolLabels, ToolbarState } from '../toolbar';
+import { tokenAtColumn } from '../token-strip';
 import { makePanel, panelContentRect } from '../panels';
 import { LAYOUT } from '../layout';
 

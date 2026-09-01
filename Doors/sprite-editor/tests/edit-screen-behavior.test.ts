@@ -16,8 +16,8 @@
 
 import assert from 'assert';
 import { Sprite, compilePixels, decompilePixels, PixelGrid } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
-import { EditScreen } from '../edit-screen';
-import { tokenAtColumn } from '../toolbar';
+import { EditScreen, CELL_CHAR_WIDTH } from '../edit-screen';
+import { tokenAtColumn } from '../token-strip';
 
 function makeFakeScreen(): any {
   const screen: any = {
@@ -490,10 +490,16 @@ export async function canvasClickColumnMappingMatchesTheRenderedGridOnEveryRow()
   try {
     const canvasBox = paneContent(screen, 0);
     const row1 = canvasBox.getContent().split('\n')[1].replace(/\{[^}]*\}/g, '');
-    assert.strictEqual(row1.slice(0, 4), 'CCDD',
-      'row 1 must render flush-left, two characters per cell, exactly like row 0 - no phantom left margin');
+    // Fix round 1, Important 2: built from the SAME exported
+    // CELL_CHAR_WIDTH canvasHitTest divides by, not a hand-typed '4' -
+    // if paintCanvas's `char.repeat(CELL_CHAR_WIDTH)` and
+    // canvasHitTest's `Math.floor(localX / CELL_CHAR_WIDTH)` ever
+    // desync (one gets edited, the other doesn't), this expectation and
+    // the click below stop lining up and the test fails.
+    assert.strictEqual(row1.slice(0, 2 * CELL_CHAR_WIDTH), 'C'.repeat(CELL_CHAR_WIDTH) + 'D'.repeat(CELL_CHAR_WIDTH),
+      'row 1 must render flush-left, CELL_CHAR_WIDTH characters per cell, exactly like row 0 - no phantom left margin');
 
-    clickBox(canvasBox, 2, 1); // local column 2, row 1 - the column 'D' actually renders at
+    clickBox(canvasBox, CELL_CHAR_WIDTH, 1); // local column CELL_CHAR_WIDTH, row 1 - the column 'D' actually renders at
     assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][1],
       { char: '▀', fg: 11, bg: 0 },
       'the click must repaint cell (1,1) - the SAME cell the rendered text shows at that column');
@@ -502,6 +508,35 @@ export async function canvasClickColumnMappingMatchesTheRenderedGridOnEveryRow()
       'cell (1,0) must stay untouched - a phantom left margin on row 1 would have made THIS the one hit instead');
   } finally {
     edit.destroy();
+  }
+}
+
+/**
+ * Fix round 1, Important 2 (companion pin): the render side and the hit-
+ * test side must be reading the literal SAME constant, not two separate
+ * '2's. Clicks at every column across a 3-cell-wide row must each land on
+ * exactly the cell CELL_CHAR_WIDTH says it should, including the boundary
+ * columns (col*CELL_CHAR_WIDTH and col*CELL_CHAR_WIDTH + CELL_CHAR_WIDTH - 1).
+ */
+export async function everyColumnOfACellMapsToTheSameCellViaCellCharWidth(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 3, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null, null]]] } },
+  };
+  for (let cellCol = 0; cellCol < 3; cellCol++) {
+    for (let offset = 0; offset < CELL_CHAR_WIDTH; offset++) {
+      const screen = makeFakeScreen();
+      const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+      try {
+        const canvasBox = paneContent(screen, 0);
+        clickBox(canvasBox, cellCol * CELL_CHAR_WIDTH + offset, 0);
+        assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][cellCol],
+          { char: '▀', fg: 11, bg: 0 },
+          `column ${cellCol * CELL_CHAR_WIDTH + offset} must map to cell ${cellCol}`);
+      } finally {
+        edit.destroy();
+      }
+    }
   }
 }
 
@@ -750,6 +785,50 @@ export async function clickingAFrameNumberWhileNamingDoesNothing(): Promise<void
     clickBox(framesBox, targetColumn, 0);
 
     assert.strictEqual((edit as any).doc.frame, 0, 'a click on a frame number while naming must be ignored');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Fix round 1, Important 1: every keyboard op is naming-guarded (opKey())
+ * and the sibling handleFramesClick already had this check - canvas mouse
+ * painting was the one path that bypassed it, so pressing '+' and then
+ * clicking the canvas painted the live document mid name-entry.
+ */
+export async function clickingTheCanvasWhileNamingDoesNothing(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 2, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    pressKey(screen, '+'); // start naming a new animation
+    const canvasBox = paneContent(screen, 0);
+    clickBox(canvasBox, 0, 0);
+
+    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
+      'a click on the canvas while naming must not paint the document');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function draggingOnTheCanvasWhileNamingDoesNothing(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 2, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    pressKey(screen, '+'); // start naming a new animation
+    const canvasBox = paneContent(screen, 0);
+    dragBox(canvasBox, 0, 0, 'left');
+
+    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
+      'a drag over the canvas while naming must not paint the document');
   } finally {
     edit.destroy();
   }

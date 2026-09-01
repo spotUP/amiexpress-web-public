@@ -24,11 +24,21 @@ import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
 import { makePanel, panelContentRect, resetPanelLayout } from './panels';
-import { createToolbar, tokenAtColumn, Tool, ToolbarState } from './toolbar';
+import { createToolbar, Tool, ToolbarState } from './toolbar';
+import { tokenAtColumn } from './token-strip';
 
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
 const DISCARD_WINDOW_MS = 3000;
+// Fix round 1, Important 2: the ONE place that says a cell renders as two
+// characters wide. paintCanvas() (the render side) and canvasHitTest()
+// (the click side) both read this constant instead of each carrying its
+// own literal '2' - two independently-written copies of the same number
+// are a defect even while they happen to agree; this makes disagreement
+// impossible instead of merely unlikely. Exported so a test can pin both
+// sides against the SAME imported value, not two hand-typed '2's of its
+// own that would happily desync from a future source change.
+export const CELL_CHAR_WIDTH = 2;
 
 export class EditScreen {
   private screen: any;
@@ -57,8 +67,8 @@ export class EditScreen {
   private canvasBox: any = null;
   private previewBox: any = null;
   private framesBox: any = null;
-  private toolbarState!: ToolbarState;
-  private toolbar!: { refresh(): void; destroy(): void };
+  private toolbarState: ToolbarState | null = null;
+  private toolbar: { refresh(): void; destroy(): void } | null = null;
   private statusBar: any = null;
   private menuBar: any = null;
   private keyHandlers: Array<[string[], (...args: any[]) => void]> = [];
@@ -412,7 +422,7 @@ export class EditScreen {
         const char = cell ? cell.char : ' ';
         const fg = cell ? PALETTE[cell.fg] : 'gray';
         const bg = cell ? PALETTE[cell.bg] : 'black';
-        const body = `${char}${char}`;
+        const body = char.repeat(CELL_CHAR_WIDTH);
         line += isCursor
           ? `{${bg}-fg}{${fg}-bg}${body}{/}`   // inverted = the cursor
           : `{${fg}-fg}{${bg}-bg}${body}{/}`;
@@ -451,10 +461,11 @@ export class EditScreen {
    * absolute position - the exact numbers blessed itself used to place
    * paintCanvas()'s content on screen - so this reuses that placement
    * rather than re-deriving it from LAYOUT (which would drift the moment
-   * a sysop drags the canvas panel elsewhere). The column math (one cell
-   * is two characters wide, flush from column 0 on every row now that the
-   * join-separator stagger above is fixed) is paintCanvas()'s own layout,
-   * not a second copy of it.
+   * a sysop drags the canvas panel elsewhere). The column math divides by
+   * the SAME `CELL_CHAR_WIDTH` constant paintCanvas() builds each cell's
+   * body from (flush from column 0 on every row now that the join-
+   * separator stagger above is fixed) - one shared number, not two
+   * independently-written literals that happen to agree.
    */
   private canvasHitTest(data: { x: number; y: number }): { row: number; col: number } | null {
     const coords = (this.canvasBox as any)._getCoords();
@@ -463,7 +474,7 @@ export class EditScreen {
     const localY = data.y - coords.yi;
     const frame = currentFrame(this.doc);
     if (localY < 0 || localY >= frame.length || localX < 0) return null;
-    const col = Math.floor(localX / 2);
+    const col = Math.floor(localX / CELL_CHAR_WIDTH);
     if (col >= frame[localY].length) return null;
     return { row: localY, col };
   }
@@ -508,6 +519,12 @@ export class EditScreen {
   }
 
   private handleCanvasClick(data: { x: number; y: number }): void {
+    // Fix round 1, Important 1: every keyboard op is naming-guarded
+    // (opKey()) and the sibling handleFramesClick already has this same
+    // check - mouse painting must not be the one path that bypasses it,
+    // or "+", click-paint, click-paint... mutates the live document while
+    // an animation name is mid-entry.
+    if (this.naming !== null) return;
     const hit = this.canvasHitTest(data);
     if (!hit) return;
     this.applyToolAt(hit.row, hit.col);
@@ -515,6 +532,7 @@ export class EditScreen {
 
   /** Drag (mousemove with a button held) paints continuously - paint/erase only, never pick/fill. */
   private handleCanvasDrag(data: { x: number; y: number; button?: string }): void {
+    if (this.naming !== null) return; // same naming guard as handleCanvasClick
     if (!data.button) return;
     if (this.tool !== 'paint' && this.tool !== 'erase') return;
     const hit = this.canvasHitTest(data);
@@ -557,8 +575,8 @@ export class EditScreen {
    * The frames strip's plain (untagged) per-frame tokens, in display
    * order - one source both paintFrames() (which wraps the active one in
    * colour tags) and handleFramesClick() (which walks them via
-   * toolbar.ts's tokenAtColumn) read, so a click can never disagree with
-   * what is actually on screen.
+   * token-strip.ts's tokenAtColumn) read, so a click can never disagree
+   * with what is actually on screen.
    */
   private frameTokens(): string[] {
     const anim = this.doc.sprite.animations[this.doc.animation];
@@ -583,9 +601,9 @@ export class EditScreen {
     // the keyboard's p/e/k/u and f/S-f keys write), refreshed into
     // toolbarState every render so the palette highlight can never drift
     // from what a keyboard-driven change just did.
-    this.toolbarState.tool = this.tool;
-    this.toolbarState.colour = this.fg;
-    this.toolbar.refresh();
+    this.toolbarState!.tool = this.tool;
+    this.toolbarState!.colour = this.fg;
+    this.toolbar!.refresh();
     const dirty = this.doc.dirty ? '{lightred-fg}*{/} ' : '';
     const flash = this.statusFlash ? `  {lightyellow-fg}${this.statusFlash}{/}` : '';
     this.statusFlash = '';
@@ -618,7 +636,7 @@ export class EditScreen {
     // `if (this.destroyed) return`), but toolbar.ts is the module that
     // created that box, so it is the one that should also be the one to
     // let it go.
-    this.toolbar.destroy();
+    this.toolbar?.destroy();
     // Destroy the PANELS, not just their nested content boxes: a panel's
     // destroy() cascades to its children (element.ts's destroy() destroys
     // every child), so this alone tears down canvasBox/previewBox/
@@ -631,5 +649,9 @@ export class EditScreen {
     }
     this.canvasPanel = this.previewPanel = this.framesPanel = this.toolbarPanel = null;
     this.canvasBox = this.previewBox = this.framesBox = this.statusBar = this.menuBar = null;
+    // Fix round 1, minor: nulled for the same reason every sibling widget
+    // ref above is - a destroyed screen shouldn't leave a stale live
+    // reference reachable off `this`.
+    this.toolbar = this.toolbarState = null;
   }
 }

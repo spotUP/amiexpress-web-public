@@ -27,6 +27,7 @@ import { Screen, Box, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/
 import { PALETTE } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { LAYOUT } from './layout';
 import { panelContentRect } from './panels';
+import { tokenAtColumn } from './token-strip';
 
 export type Tool = 'paint' | 'erase' | 'pick' | 'fill';
 
@@ -48,24 +49,6 @@ const TOOL_LABEL: Record<Tool, string> = {
  */
 export function toolLabels(): string[] {
   return TOOLS.map(t => `[${TOOL_LABEL[t]}]`);
-}
-
-/**
- * Which token (by index) a screen column falls in, for `tokens` joined by
- * a single space when rendered - the shared hit-test math for every
- * variable-width, space-joined strip this door renders (this toolbar's
- * tool row here; the frames strip in edit-screen.ts reuses this same
- * function so its click handler and its paint() rendering can never
- * disagree about where one token ends and the next begins). Returns -1
- * for a click landing in a gap between tokens or past the last one.
- */
-export function tokenAtColumn(tokens: string[], col: number): number {
-  let pos = 0;
-  for (let i = 0; i < tokens.length; i++) {
-    if (col >= pos && col < pos + tokens[i].length) return i;
-    pos += tokens[i].length + 1; // +1 for the single-space separator
-  }
-  return -1;
 }
 
 export function createToolbar(

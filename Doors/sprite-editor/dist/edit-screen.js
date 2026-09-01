@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EditScreen = void 0;
+exports.EditScreen = exports.CELL_CHAR_WIDTH = void 0;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const edit_doc_1 = require("./edit-doc");
@@ -23,9 +23,19 @@ const layout_1 = require("./layout");
 const menu_1 = require("./menu");
 const panels_1 = require("./panels");
 const toolbar_1 = require("./toolbar");
+const token_strip_1 = require("./token-strip");
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
 const DISCARD_WINDOW_MS = 3000;
+// Fix round 1, Important 2: the ONE place that says a cell renders as two
+// characters wide. paintCanvas() (the render side) and canvasHitTest()
+// (the click side) both read this constant instead of each carrying its
+// own literal '2' - two independently-written copies of the same number
+// are a defect even while they happen to agree; this makes disagreement
+// impossible instead of merely unlikely. Exported so a test can pin both
+// sides against the SAME imported value, not two hand-typed '2's of its
+// own that would happily desync from a future source change.
+exports.CELL_CHAR_WIDTH = 2;
 class EditScreen {
     constructor(screen, door, file, sprite, onExit) {
         this.mode = 'cell';
@@ -47,6 +57,8 @@ class EditScreen {
         this.canvasBox = null;
         this.previewBox = null;
         this.framesBox = null;
+        this.toolbarState = null;
+        this.toolbar = null;
         this.statusBar = null;
         this.menuBar = null;
         this.keyHandlers = [];
@@ -398,7 +410,7 @@ class EditScreen {
                 const char = cell ? cell.char : ' ';
                 const fg = cell ? cell_art_1.PALETTE[cell.fg] : 'gray';
                 const bg = cell ? cell_art_1.PALETTE[cell.bg] : 'black';
-                const body = `${char}${char}`;
+                const body = char.repeat(exports.CELL_CHAR_WIDTH);
                 line += isCursor
                     ? `{${bg}-fg}{${fg}-bg}${body}{/}` // inverted = the cursor
                     : `{${fg}-fg}{${bg}-bg}${body}{/}`;
@@ -436,10 +448,11 @@ class EditScreen {
      * absolute position - the exact numbers blessed itself used to place
      * paintCanvas()'s content on screen - so this reuses that placement
      * rather than re-deriving it from LAYOUT (which would drift the moment
-     * a sysop drags the canvas panel elsewhere). The column math (one cell
-     * is two characters wide, flush from column 0 on every row now that the
-     * join-separator stagger above is fixed) is paintCanvas()'s own layout,
-     * not a second copy of it.
+     * a sysop drags the canvas panel elsewhere). The column math divides by
+     * the SAME `CELL_CHAR_WIDTH` constant paintCanvas() builds each cell's
+     * body from (flush from column 0 on every row now that the join-
+     * separator stagger above is fixed) - one shared number, not two
+     * independently-written literals that happen to agree.
      */
     canvasHitTest(data) {
         const coords = this.canvasBox._getCoords();
@@ -450,7 +463,7 @@ class EditScreen {
         const frame = (0, edit_doc_1.currentFrame)(this.doc);
         if (localY < 0 || localY >= frame.length || localX < 0)
             return null;
-        const col = Math.floor(localX / 2);
+        const col = Math.floor(localX / exports.CELL_CHAR_WIDTH);
         if (col >= frame[localY].length)
             return null;
         return { row: localY, col };
@@ -497,6 +510,13 @@ class EditScreen {
         }
     }
     handleCanvasClick(data) {
+        // Fix round 1, Important 1: every keyboard op is naming-guarded
+        // (opKey()) and the sibling handleFramesClick already has this same
+        // check - mouse painting must not be the one path that bypasses it,
+        // or "+", click-paint, click-paint... mutates the live document while
+        // an animation name is mid-entry.
+        if (this.naming !== null)
+            return;
         const hit = this.canvasHitTest(data);
         if (!hit)
             return;
@@ -504,6 +524,8 @@ class EditScreen {
     }
     /** Drag (mousemove with a button held) paints continuously - paint/erase only, never pick/fill. */
     handleCanvasDrag(data) {
+        if (this.naming !== null)
+            return; // same naming guard as handleCanvasClick
         if (!data.button)
             return;
         if (this.tool !== 'paint' && this.tool !== 'erase')
@@ -523,7 +545,7 @@ class EditScreen {
         const localY = data.y - coords.yi;
         if (localY !== 0)
             return; // row 1+ is the "new animation" naming line, not a frame
-        const index = (0, toolbar_1.tokenAtColumn)(this.frameTokens(), localX);
+        const index = (0, token_strip_1.tokenAtColumn)(this.frameTokens(), localX);
         if (index === -1)
             return;
         // The exact same op the ,/. bindings call - selectFrame, not a
@@ -547,8 +569,8 @@ class EditScreen {
      * The frames strip's plain (untagged) per-frame tokens, in display
      * order - one source both paintFrames() (which wraps the active one in
      * colour tags) and handleFramesClick() (which walks them via
-     * toolbar.ts's tokenAtColumn) read, so a click can never disagree with
-     * what is actually on screen.
+     * token-strip.ts's tokenAtColumn) read, so a click can never disagree
+     * with what is actually on screen.
      */
     frameTokens() {
         const anim = this.doc.sprite.animations[this.doc.animation];
@@ -604,7 +626,7 @@ class EditScreen {
         // `if (this.destroyed) return`), but toolbar.ts is the module that
         // created that box, so it is the one that should also be the one to
         // let it go.
-        this.toolbar.destroy();
+        this.toolbar?.destroy();
         // Destroy the PANELS, not just their nested content boxes: a panel's
         // destroy() cascades to its children (element.ts's destroy() destroys
         // every child), so this alone tears down canvasBox/previewBox/
@@ -617,6 +639,10 @@ class EditScreen {
         }
         this.canvasPanel = this.previewPanel = this.framesPanel = this.toolbarPanel = null;
         this.canvasBox = this.previewBox = this.framesBox = this.statusBar = this.menuBar = null;
+        // Fix round 1, minor: nulled for the same reason every sibling widget
+        // ref above is - a destroyed screen shouldn't leave a stale live
+        // reference reachable off `this`.
+        this.toolbar = this.toolbarState = null;
     }
 }
 exports.EditScreen = EditScreen;
