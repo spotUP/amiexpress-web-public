@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { MessageSquare, Bot, Bell, Clock, Shield, Webhook, BellRing, Smartphone, AlertCircle, CheckCircle, Key, RefreshCw, Save, Eye, EyeOff, Server } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { securityLevelOptions } from './security-level-options';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { readAdminToken } from '../api/auth-token';
@@ -29,24 +30,6 @@ interface OperatorChatConfig {
   };
 }
 
-// Standard AmiExpress security levels (0-255 range)
-const SECURITY_LEVELS = [
-  { value: 1, label: '1 - Guest' },
-  { value: 10, label: '10 - Unvalidated' },
-  { value: 20, label: '20 - New User' },
-  { value: 30, label: '30 - Regular User' },
-  { value: 40, label: '40 - Validated' },
-  { value: 50, label: '50 - Trusted' },
-  { value: 60, label: '60 - VIP' },
-  { value: 70, label: '70 - Elite' },
-  { value: 80, label: '80 - Moderator' },
-  { value: 90, label: '90 - Sub-Sysop' },
-  { value: 100, label: '100 - Co-Sysop' },
-  { value: 150, label: '150 - Senior Sysop' },
-  { value: 200, label: '200 - High Sysop' },
-  { value: 255, label: '255 - Full Sysop' },
-];
-
 export function OperatorChatSettingsPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
@@ -59,6 +42,14 @@ export function OperatorChatSettingsPage() {
       const response = await apiClient.getOperatorChatConfig();
       return (response as any).data;
     },
+  });
+
+  // The levels this board has, not a list typed into this file: it offered
+  // 70 and 150, which nobody here holds, and called 20 the new user level on
+  // a board whose new users are 30.
+  const { data: acsLevels } = useQuery({
+    queryKey: ['acs-levels'],
+    queryFn: () => apiClient.getAcsLevels(),
   });
 
   const { register, watch, getValues } = useForm<OperatorChatConfig>({
@@ -343,7 +334,13 @@ export function OperatorChatSettingsPage() {
               Allowed Security Levels
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {SECURITY_LEVELS.map((level) => (
+              {securityLevelOptions(
+                acsLevels?.data?.levels ?? [],
+                acsLevels?.data?.inUse ?? [],
+                // Levels already allowed stay listed, so a saved choice cannot
+                // disappear from the form that owns it.
+                config?.allowedSecLevels?.map(Number) ?? [],
+              ).map((level) => (
                 <label key={level.value} className="flex items-center gap-2 text-bbs-text">
                   <input
                     type="checkbox"

@@ -36,6 +36,10 @@ export default defineConfig({
       // copy in the admin would be a third parser to keep in step. The module
       // is pure - no fs, no path - so it bundles like any other source file.
       '@bbs/screens': path.resolve(__dirname, '../backend/src/screens'),
+      // Same rule, same reason: which ACS file serves a level is express.e's
+      // (findAcsLevel, express.e:3025), and the admin has to apply it in a
+      // browser. acs-level-serving.ts is the disk-free half of that service.
+      '@bbs/config-services': path.resolve(__dirname, '../backend/src/services/config-services'),
     },
   },
   server: {

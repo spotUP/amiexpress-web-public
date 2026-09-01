@@ -51,25 +51,15 @@ export function listAcsLevels(bbsRoot: string): number[] {
 /**
  * Which ACS file actually serves a user at this level.
  *
- * express.e:3025-3034 - findAcsLevel rounds the user's secStatus DOWN to a
- * multiple of five and then walks down in fives until a file exists, falling
- * back to 0. So a board whose Access/ directory holds 10, 20, 50 and 255
- * serves a level-30 user out of ACS.20.info.
+ * The rule itself lives in acs-level-serving.ts, with no disk in it, because
+ * the admin has to apply the same rule in a browser. Re-exported here so
+ * callers that already read this service keep one import.
  *
  * The Security page listed the FILES and nothing else, so a sysop whose new
  * users are level 30 saw four levels, none of them 30, and no way to tell
- * which one their users were actually getting. Returns null when nothing
- * matches, which is express.e's fall back to 0.
+ * which one their users were actually getting.
  */
-export function acsLevelServing(level: number, available: number[]): number | null {
-  let candidate = Math.floor(level / 5) * 5;
-  const have = new Set(available);
-  while (candidate > 0) {
-    if (have.has(candidate)) return candidate;
-    candidate -= 5;
-  }
-  return have.has(0) ? 0 : null;
-}
+export { acsLevelServing } from './acs-level-serving';
 
 /**
  * Which permissions a level grants.

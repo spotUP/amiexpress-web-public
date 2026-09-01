@@ -27,7 +27,8 @@
       "@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/*": [
         "../../sdk/engines/ui/ansi-editor/*"
       ],
-      "@bbs/screens/*": ["../backend/src/screens/*"]
+      "@bbs/screens/*": ["../backend/src/screens/*"],
+      "@bbs/config-services/*": ["../backend/src/services/config-services/*"]
     }
   },
   "include": ["src"],

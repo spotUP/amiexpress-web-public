@@ -6,24 +6,7 @@ import { TooltypeKey } from '../components/ui/TooltypeKey';
 import type { SystemConfig, Language, ScreenType } from '../types';
 import { useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
-
-// Standard AmiExpress security levels
-const SECURITY_LEVELS = [
-  { value: 1, label: '1 - Guest' },
-  { value: 10, label: '10 - Unvalidated' },
-  { value: 20, label: '20 - New User' },
-  { value: 30, label: '30 - Regular User' },
-  { value: 40, label: '40 - Validated' },
-  { value: 50, label: '50 - Trusted' },
-  { value: 60, label: '60 - VIP' },
-  { value: 70, label: '70 - Elite' },
-  { value: 80, label: '80 - Moderator' },
-  { value: 90, label: '90 - Sub-Sysop' },
-  { value: 100, label: '100 - Co-Sysop' },
-  { value: 200, label: '200 - Sysop' },
-  { value: 250, label: '250 - Senior Sysop' },
-  { value: 255, label: '255 - Super User' },
-];
+import { securityLevelOptions } from './security-level-options';
 
 // AmiExpress editor types (express.e:31745+)
 const EDITOR_TYPES = [
@@ -112,6 +95,14 @@ export function SystemConfigPage() {
   });
 
   // SSH Key Info Query
+  // The levels this board actually has: the ACS files that exist plus the
+  // levels users hold. There used to be a typed-in table here that said
+  // "20 - New User" on a board whose new users are 30.
+  const { data: acsLevels } = useQuery({
+    queryKey: ['acs-levels'],
+    queryFn: () => apiClient.getAcsLevels(),
+  });
+
   const { data: sshKeyData, refetch: refetchSSHKey } = useQuery({
     queryKey: ['sshKeyInfo'],
     queryFn: () => apiClient.getSSHKeyInfo(),
@@ -637,7 +628,13 @@ export function SystemConfigPage() {
                 {...register('new_user_sec_level', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
-                {SECURITY_LEVELS.map((level) => (
+                {securityLevelOptions(
+                  acsLevels?.data?.levels ?? [],
+                  acsLevels?.data?.inUse ?? [],
+                  // Whatever is configured stays selectable, even if the board
+                  // has no such level - a setting must not vanish from a form.
+                  data?.data?.new_user_sec_level ? [Number(data.data.new_user_sec_level)] : [],
+                ).map((level) => (
                   <option key={level.value} value={level.value}>
                     {level.label}
                   </option>
