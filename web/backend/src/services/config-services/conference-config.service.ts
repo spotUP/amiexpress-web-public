@@ -121,6 +121,10 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
           id: i,
           conference_id: i,
           name: confConfig.entries[i - 1]?.name || `Conference ${i}`,
+          // The directory this conference reads. The admin derives its default
+          // file-area paths from it, and on a renumbered board it is not
+          // `Conf<n>` - conference 1 can live in Conf2/.
+          location: confConfig.entries[i - 1]?.location || `BBS:Conf${i}/`,
           ndirs: fromDisk.ndirs,
           dlpath_1: fromDisk.dlpaths[1],
           dlpath_2: fromDisk.dlpaths[2],

@@ -1127,6 +1127,10 @@ export class ConfigRepository extends BaseRepository<any> {
       id: row.id,
       conference_id: row.conference_id,
       name: row.name || `Conference ${row.conference_id}`,
+      // The mirror has no column for it: LOCATION.n lives in ConfConfig.info,
+      // which is where the service reads it. This fallback is only reached
+      // when the mirror answers instead of the disk.
+      location: row.location || `BBS:Conf${row.conference_id}/`,
       ndirs: row.ndirs,
       dlpath_1: row.dlpath_1,
       dlpath_2: row.dlpath_2,

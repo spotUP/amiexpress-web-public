@@ -435,6 +435,12 @@ export interface ConferenceConfig {
   id: number;
   conference_id: number;
   name: string;
+  /**
+   * LOCATION.n from ConfConfig.info - the directory this conference reads,
+   * which is NOT derivable from its number on a renumbered board. The admin
+   * derives its default file-area paths from this.
+   */
+  location: string;
 
   // Directory Settings (1-16)
   ndirs: number;

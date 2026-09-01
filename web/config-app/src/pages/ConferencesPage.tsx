@@ -6,13 +6,17 @@ import { apiClient } from '../api/client';
 import type { ConferenceConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+import { pathRows, applyPathEdit, resetPathToDerived, rowsToFormFields } from './conference-path-rows';
 
 interface ConferenceFormData {
   conference_id: number;
   name: string;
   ndirs: number;
+  /** LOCATION.n - what the file-area paths derive from. Not edited here. */
+  location: string;
   dlpath_1: string;
   ulpath_1: string;
+  [key: string]: string | number | boolean;
   min_access_level: number;
   max_access_level: number;
   force_newscan: boolean;
@@ -33,6 +37,7 @@ export function ConferencesPage() {
     conference_id: 1,
     name: '',
     ndirs: 1,
+    location: '',
     dlpath_1: '',
     ulpath_1: '',
     min_access_level: 0,
@@ -97,6 +102,7 @@ export function ConferencesPage() {
       conference_id: 1,
       name: '',
       ndirs: 1,
+      location: '',
       dlpath_1: '',
       ulpath_1: '',
       min_access_level: 0,
@@ -121,7 +127,13 @@ export function ConferencesPage() {
     // POSITION, so a new one goes on the end - typing 7 on a 12-conference
     // board asks for something the format cannot hold, and typing 14 asks the
     // BBS to walk past two conferences that are not there.
-    setFormData((current) => ({ ...current, conference_id: conferences.length + 1 }));
+    setFormData((current) => ({
+      ...current,
+      conference_id: conferences.length + 1,
+      // A new conference gets the directory its number implies; an existing one
+      // keeps whatever LOCATION.n says, which after a renumber is not `Conf<n>`.
+      location: `BBS:Conf${conferences.length + 1}/`,
+    }));
     setEditingConference(null);
     setIsModalOpen(true);
   };
@@ -131,8 +143,17 @@ export function ConferencesPage() {
       conference_id: conf.conference_id,
       name: conf.name || '',
       ndirs: conf.ndirs,
+      location: conf.location || `BBS:Conf${conf.conference_id}/`,
       dlpath_1: conf.dlpath_1 || '',
       ulpath_1: conf.ulpath_1 || '',
+      // Every directory, not just the first: a conference can declare sixteen,
+      // and the other fifteen were unreachable from here.
+      ...Object.fromEntries(
+        Array.from({ length: 16 }, (_, i) => i + 1).flatMap(dir => [
+          [`dlpath_${dir}`, (conf as unknown as Record<string, string>)[`dlpath_${dir}`] || ''],
+          [`ulpath_${dir}`, (conf as unknown as Record<string, string>)[`ulpath_${dir}`] || ''],
+        ]),
+      ),
       min_access_level: conf.min_access_level,
       max_access_level: conf.max_access_level,
       force_newscan: conf.force_newscan,
@@ -146,10 +167,15 @@ export function ConferencesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // A following row is sent as its derived value rather than the empty string
+    // it may be stored as, so DLPATH.n/ULPATH.n in the icon carry the path the
+    // board is actually using - a door reading them directly finds it there.
+    const payload = rowsToFormFields(formData as never) as unknown as ConferenceFormData;
+
     if (editingConference) {
-      updateMutation.mutate({ confNumber: editingConference.conference_id, updates: formData });
+      updateMutation.mutate({ confNumber: editingConference.conference_id, updates: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
@@ -373,28 +399,58 @@ export function ConferencesPage() {
                   <p className="text-xs text-bbs-muted mt-1">Max 16 directories per conference</p>
                 </div>
 
-                <div className="md:col-span-2">
-                  <label htmlFor="dlpath_1" className="label">Download Path</label>
-                  <input
-                    id="dlpath_1"
-                    type="text"
-                    value={formData.dlpath_1}
-                    onChange={(e) => setFormData({ ...formData, dlpath_1: e.target.value })}
-                    className="input-field w-full font-mono"
-                    placeholder="/path/to/downloads"
-                  />
-                </div>
+                <div className="md:col-span-2 space-y-3">
+                  <p className="text-xs text-bbs-muted">
+                    File area paths follow{' '}
+                    <span className="font-mono">{formData.location || 'this conference'}</span>{' '}
+                    until you change one. A changed path is yours and is never rewritten.
+                  </p>
 
-                <div className="md:col-span-2">
-                  <label htmlFor="ulpath_1" className="label">Upload Path</label>
-                  <input
-                    id="ulpath_1"
-                    type="text"
-                    value={formData.ulpath_1}
-                    onChange={(e) => setFormData({ ...formData, ulpath_1: e.target.value })}
-                    className="input-field w-full font-mono"
-                    placeholder="/path/to/uploads"
-                  />
+                  {pathRows(formData as never).map((row) => (
+                    <div key={row.dir} className="grid grid-cols-2 gap-3">
+                      {(['download', 'upload'] as const).map((side) => {
+                        const cell = row[side];
+                        const field = `${side === 'download' ? 'dlpath' : 'ulpath'}_${row.dir}`;
+                        return (
+                          <div key={side}>
+                            {/* The reset control sits BESIDE the label, not inside it:
+                                a button within a label steals the label's click and
+                                muddies the field's accessible name. */}
+                            <div className="flex items-center justify-between">
+                              <label htmlFor={field} className="label mb-0">
+                                Dir {row.dir} {side === 'download' ? 'download' : 'upload'}
+                              </label>
+                              {cell.following ? (
+                                <span className="text-xs text-bbs-muted">follows</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="text-xs underline text-bbs-muted"
+                                  aria-label={`Reset directory ${row.dir} ${side} path to the default`}
+                                  onClick={() =>
+                                    setFormData((current) =>
+                                      resetPathToDerived(current as never, row.dir, side) as never)
+                                  }
+                                >
+                                  custom - reset
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              id={field}
+                              type="text"
+                              value={cell.value}
+                              onChange={(e) =>
+                                setFormData((current) =>
+                                  applyPathEdit(current as never, row.dir, side, e.target.value) as never)
+                              }
+                              className="input-field w-full font-mono"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
 
                 <div>

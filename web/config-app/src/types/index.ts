@@ -172,6 +172,8 @@ export interface ConferenceConfig {
   id: number;
   conference_id: number;
   name: string;
+  /** LOCATION.n - the directory this conference reads, and what its file-area paths derive from. */
+  location: string;
 
   // Directory Settings (1-16)
   ndirs: number;

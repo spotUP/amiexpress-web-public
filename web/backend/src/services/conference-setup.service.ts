@@ -8,6 +8,7 @@
  * manual setup of all directories and files.
  */
 
+import { deriveConferencePaths } from '../conferences/derive-conference-paths';
 import * as fs from 'fs';
 import { applyTooltypes, readTooltypeMap } from '../utils/info-file.util';
 import * as path from 'path';
@@ -282,10 +283,13 @@ console.log(`[ConferenceSetup] Conf${conferenceId}.info already exists, skipping
       `MAX_ACCESS=${maxAccessLevel}`
     ];
 
-    // Add file area paths (DLPATH.n, ULPATH.n)
+    // Add file area paths (DLPATH.n, ULPATH.n). The same derivation the admin
+    // form follows, so a conference created here and one edited there cannot
+    // disagree about what the default is.
+    const derived = deriveConferencePaths(location, ndirs);
     for (let i = 1; i <= ndirs; i++) {
-      tooltypes.push(`DLPATH.${i}=${location}/Files`);
-      tooltypes.push(`ULPATH.${i}=${location}/Upload`);
+      tooltypes.push(`DLPATH.${i}=${derived.dlpaths[i]}`);
+      tooltypes.push(`ULPATH.${i}=${derived.ulpaths[i]}`);
     }
 
     // Add optional flags

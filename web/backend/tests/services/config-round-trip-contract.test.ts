@@ -79,7 +79,15 @@ const NOT_WRITTEN_BACK: Record<string, string[]> = {
   // Served for display; the door's identity on disk is its command.
   Doors: ['runtime_env'],
   // Derived from the file area count, not set directly.
-  Conferences: ['file_areas', 'message_bases'],
+  //
+  // `location` is LOCATION.n from ConfConfig.info - served because the form
+  // derives each file area's default paths from it, and deliberately not
+  // writable: a conference's directory holds every message posted there and
+  // every file uploaded to it, so changing the value alone would point the
+  // conference at a directory with none of its content. Moving a conference is
+  // a data migration, not a text box. Renumbering, which is the only thing that
+  // legitimately changes it, is conference-removal.service.ts's job.
+  Conferences: ['file_areas', 'message_bases', 'location'],
 };
 
 function exempt(domain: string, field: string): boolean {
