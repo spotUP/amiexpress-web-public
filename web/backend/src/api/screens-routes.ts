@@ -17,6 +17,7 @@
 
 import express, { Request, Response } from 'express';
 import multer from 'multer';
+import AdmZip from 'adm-zip';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
@@ -27,6 +28,7 @@ import { checkShare } from '../screens/share-preconditions';
 import { applyTooltypes } from '../utils/info-file.util';
 import {
   getScreenIndex, invalidateScreenIndex, screenFileFacts, buildScreenIndex,
+  listScreenDirectories,
 } from '../screens/screen-index.service';
 
 export const screensRouter = express.Router();
@@ -384,4 +386,115 @@ screensRouter.post('/share', (req: Request, res: Response) => {
 
   return sendOk(res, { written: wouldWrite, tooltype: amigaPath },
     `${nodes.length} node${nodes.length === 1 ? '' : 's'} now read ${sharedDirRel}`);
+});
+
+const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+
+function isScreenFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return !lower.endsWith('.backup') && SCREEN_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
+/**
+ * GET /api/screens/export?scope=all|Screens|Node<N>|Conf<N>
+ *
+ * A sysop on a release package has no git and no shell on the volume; an
+ * archive is how screens are backed up and carried between hosts.
+ */
+screensRouter.get('/export', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const scope = String(req.query.scope || 'all');
+
+  const dirs = listScreenDirectories(baseDir).filter(dir => {
+    if (scope === 'all') return true;
+    const rel = path.relative(baseDir, dir);
+    return rel === scope || rel.startsWith(`${scope}${path.sep}`);
+  });
+
+  if (!dirs.length) {
+    return res.status(404).json({ success: false, error: `Nothing to export for scope ${scope}` });
+  }
+
+  const zip = new AdmZip();
+  for (const dir of dirs) {
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      try {
+        if (!fs.statSync(full).isFile() || !isScreenFileName(name)) continue;
+      } catch {
+        continue;
+      }
+      // Zip paths are always forward-slashed, whatever this host uses.
+      zip.addFile(path.relative(baseDir, full).split(path.sep).join('/'), fs.readFileSync(full));
+    }
+  }
+
+  const stamp = getSystemTime().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="screens-${scope}-${stamp}.zip"`);
+  return res.end(zip.toBuffer());
+});
+
+/**
+ * POST /api/screens/import
+ * multipart: `archive`, optional `dryRun`.
+ *
+ * The whole archive is validated before ANY of it is written: an archive that
+ * half-applies is worse than one that is rejected, because the sysop cannot
+ * see which half landed.
+ */
+screensRouter.post('/import', upload.single('archive'), (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const file = (req as Request & { file?: { buffer: Buffer } }).file;
+  if (!file) return res.status(400).json({ success: false, error: 'No archive uploaded' });
+
+  let entries: { entryName: string; getData: () => Buffer; isDirectory: boolean }[];
+  try {
+    entries = new AdmZip(file.buffer).getEntries() as never;
+  } catch (error) {
+    return res.status(400).json({ success: false, error: `Not a readable archive: ${(error as Error).message}` });
+  }
+
+  const plan: { path: string; action: 'create' | 'replace'; bytes: number }[] = [];
+  const payloads: { rel: string; buf: Buffer }[] = [];
+
+  for (const entry of entries) {
+    if (entry.isDirectory) continue;
+    const rel = entry.entryName.split('/').join(path.sep);
+
+    if (!isScreenFileName(path.basename(rel))) {
+      return res.status(400).json({
+        success: false,
+        error: `${entry.entryName} is not a screen file - the extension is what the loader routes on`,
+      });
+    }
+
+    const full = resolveScreenPathAllowingNew(rel);
+    if (!full) {
+      return res.status(400).json({
+        success: false,
+        error: `${entry.entryName} would land outside the board root; nothing was written`,
+      });
+    }
+
+    const buf = entry.getData();
+    payloads.push({ rel, buf });
+    plan.push({
+      path: path.relative(baseDir, full),
+      action: fs.existsSync(full) ? 'replace' : 'create',
+      bytes: buf.length,
+    });
+  }
+
+  if (req.body?.dryRun === 'true' || req.body?.dryRun === true) {
+    return sendOk(res, { plan }, 'Nothing written - this was a dry run');
+  }
+
+  try {
+    for (const { rel, buf } of payloads) writeToTargets([rel], buf);
+  } catch (error) {
+    return res.status(400).json({ success: false, error: (error as Error).message });
+  }
+
+  return sendOk(res, { plan }, `Imported ${plan.length} file${plan.length === 1 ? '' : 's'}`);
 });
