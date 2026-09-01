@@ -22,6 +22,20 @@ interface FileExplorerOptions {
  * whose registration carries a relative path.
  */
 export declare function doorPathFrom(bbsRoot: string, doorPath: string): string;
+/**
+ * Where the backend's AmigaGuide parser might be, in the order to try.
+ *
+ * This one IS relative to the working directory - the backend is what cwd
+ * points at (Dockerfile WORKDIR /app/web/backend), the same way
+ * livechat/chat-only-login.ts reaches the backend's database. What was wrong
+ * was the path from there: `web/backend/dist/amigaguide/AmigaGuideParser`
+ * assumed a compiled backend one directory tree further down, and the board
+ * runs the backend from SOURCE under tsx - there is no dist/ at all. Every
+ * .guide opened as plain text, silently, because the require sat in a catch.
+ */
+export declare function guideParserCandidates(cwd?: string): string[];
+/** The first candidate that loads, or null - a guide then opens as text. */
+export declare function loadGuideParser(cwd?: string): any;
 export declare class FileExplorerOverlay {
     private screen;
     private onClose;

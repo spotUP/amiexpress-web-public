@@ -53,3 +53,42 @@ describe("DOORMAN's file explorer", () => {
     expect(doorPathFrom(fromEnv, 'Doors/livechat')).toBe(path.join(bbsRoot, 'Doors', 'livechat'));
   });
 });
+
+/**
+ * A .guide opened as plain text on the board, silently.
+ *
+ * The overlay required the backend's AmigaGuide parser from
+ * cwd + web/backend/dist/amigaguide/AmigaGuideParser. cwd IS the backend
+ * (/app/web/backend), so that path pointed a directory tree too deep, and the
+ * board runs the backend from SOURCE under tsx - there is no dist/ to find
+ * even at the right depth. The require sat inside a catch, so the viewer just
+ * fell back to plain text with no error anywhere.
+ */
+describe('the AmigaGuide parser lookup', () => {
+  const { guideParserCandidates } = require('../../../../Doors/door-manager/FileExplorerOverlay');
+  const path = require('path');
+
+  it('looks for the running backend first, which is the source tree', () => {
+    const [first] = guideParserCandidates('/app/web/backend');
+
+    expect(first).toBe(path.join('/app/web/backend', 'src', 'amigaguide', 'AmigaGuideParser'));
+  });
+
+  it('still tries a compiled backend, and the path it used to use', () => {
+    const candidates = guideParserCandidates('/app/web/backend');
+
+    expect(candidates).toContain(path.join('/app/web/backend', 'dist', 'amigaguide', 'AmigaGuideParser'));
+    expect(candidates).toContain(
+      path.join('/app/web/backend', 'web', 'backend', 'dist', 'amigaguide', 'AmigaGuideParser'));
+  });
+
+  it('finds the parser this repo actually ships', () => {
+    const backend = path.resolve(__dirname, '../..');
+    const candidates = guideParserCandidates(backend);
+    const found = candidates.find((c: string) => {
+      try { return Boolean(require(c).AmigaGuideParser); } catch { return false; }
+    });
+
+    expect(found).toBe(path.join(backend, 'src', 'amigaguide', 'AmigaGuideParser'));
+  });
+});

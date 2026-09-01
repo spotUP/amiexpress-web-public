@@ -37,6 +37,41 @@ export function doorPathFrom(bbsRoot: string, doorPath: string): string {
   return path.isAbsolute(doorPath) ? doorPath : path.resolve(bbsRoot, doorPath);
 }
 
+/**
+ * Where the backend's AmigaGuide parser might be, in the order to try.
+ *
+ * This one IS relative to the working directory - the backend is what cwd
+ * points at (Dockerfile WORKDIR /app/web/backend), the same way
+ * livechat/chat-only-login.ts reaches the backend's database. What was wrong
+ * was the path from there: `web/backend/dist/amigaguide/AmigaGuideParser`
+ * assumed a compiled backend one directory tree further down, and the board
+ * runs the backend from SOURCE under tsx - there is no dist/ at all. Every
+ * .guide opened as plain text, silently, because the require sat in a catch.
+ */
+export function guideParserCandidates(cwd: string = process.cwd()): string[] {
+  return [
+    path.join(cwd, 'src', 'amigaguide', 'AmigaGuideParser'),
+    path.join(cwd, 'dist', 'amigaguide', 'AmigaGuideParser'),
+    // Where it looked before, kept in case a board runs a compiled backend
+    // from the repo root.
+    path.join(cwd, 'web', 'backend', 'dist', 'amigaguide', 'AmigaGuideParser'),
+  ];
+}
+
+/** The first candidate that loads, or null - a guide then opens as text. */
+export function loadGuideParser(cwd: string = process.cwd()): any {
+  for (const candidate of guideParserCandidates(cwd)) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require(candidate);
+      if (mod?.AmigaGuideParser) return mod.AmigaGuideParser;
+    } catch {
+      // Next candidate.
+    }
+  }
+  return null;
+}
+
 const READABLE_EXTS = new Set(['.txt', '.nfo', '.guide', '.readme', '.doc', '.me', '.1st']);
 
 function isReadable(filename: string): boolean {
@@ -364,16 +399,8 @@ export class FileExplorerOverlay {
 
   private openGuide(content: string): void {
     try {
-      const parserPath = path.join(
-        process.cwd(),
-        'web',
-        'backend',
-        'dist',
-        'amigaguide',
-        'AmigaGuideParser'
-      );
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { AmigaGuideParser } = require(parserPath);
+      const AmigaGuideParser = loadGuideParser();
+      if (!AmigaGuideParser) throw new Error('no AmigaGuide parser');
       this.guideParser = new AmigaGuideParser();
       const doc = this.guideParser.parse(content);
       this.guideNodeHistory = [];

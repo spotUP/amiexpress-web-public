@@ -14,7 +14,15 @@ export const metadata = {
   command: 'GWALL',
 };
 
-const PROJECT_ROOT = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+// BBS_DATA_DIR is what the live container sets; BBS_ROOT is empty there, and
+// reading it alone is how new users came to be written to a file nothing reads
+// (2026-08-31). The cwd fallback is for a dev run from the repo root - the
+// backend's cwd is web/backend, so it is a last resort, not the answer.
+//
+// GWALL is uninstalled: its registration pointed at a 68K binary that is not
+// on the board, and was removed on 2026-08-31. The sources are kept, so this
+// is corrected rather than left as a trap for whoever revives it.
+const PROJECT_ROOT = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
 function resolveGlobalWallDir(): string {
   return path.join(PROJECT_ROOT, 'doors', 'gwall');
