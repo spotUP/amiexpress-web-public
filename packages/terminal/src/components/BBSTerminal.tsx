@@ -22,6 +22,7 @@ import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 // The module moved here so the half that draws can meet the half that
 // receives, which is what "the rip door never displayed rip graphics" was.
 import RIPRenderer, { shouldDismissRipClick, type RIPRendererRef } from '../rip/RIPRenderer';
+import { armRipLinger, type RipLinger } from '../rip/rip-linger';
 
 const RIP_WIDTH = 640;
 const RIP_HEIGHT = 350;
@@ -1967,7 +1968,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // key must not close the incoming picture.
         if (ripLinger.current) {
           ripLinger.current = false;
-          window.removeEventListener('keydown', ripLingerKeyRef.current, true);
+          ripLingerHandle.current?.disarm();
+          ripLingerHandle.current = null;
         }
         ripModeRef.current = true;
         setRipMode(true);
@@ -3088,21 +3090,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   }, []);
 
   // Linger machinery, as function refs: the socket handler that calls them
-  // is registered once at mount and must not capture stale closures.
-  const ripLingerKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  // is registered once at mount and must not capture stale closures. The
+  // armed key listener itself lives in armRipLinger() as ONE stable
+  // instance - a per-render ref here once left the armed copy installed
+  // forever, swallowing every keystroke after dismissal.
+  const ripLingerHandle = useRef<RipLinger | null>(null);
   const closeRipOverlayRef = useRef<() => void>(() => {});
   const finishRipPictureRef = useRef<() => void>(() => {});
-  ripLingerKeyRef.current = (e: KeyboardEvent) => {
-    // Swallow the dismiss key so it does not also type into the prompt
-    // waiting underneath the picture.
-    e.preventDefault();
-    e.stopPropagation();
-    closeRipOverlayRef.current();
-  };
   closeRipOverlayRef.current = () => {
     ripLinger.current = false;
-    window.removeEventListener('keydown', ripLingerKeyRef.current, true);
+    ripLingerHandle.current?.disarm();
+    ripLingerHandle.current = null;
     setRipMode(false);
+    // Typing continues at the prompt the picture was covering.
+    terminalInstance.current?.focus();
   };
   finishRipPictureRef.current = () => {
     if (doorActive.current) {
@@ -3117,7 +3118,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // until the user's first key or click; the prompt is drawn underneath
     // in the meantime.
     ripLinger.current = true;
-    window.addEventListener('keydown', ripLingerKeyRef.current, true);
+    ripLingerHandle.current?.disarm();
+    ripLingerHandle.current = armRipLinger(window, () => closeRipOverlayRef.current());
   };
 
   // Draw once the renderer has actually mounted.
