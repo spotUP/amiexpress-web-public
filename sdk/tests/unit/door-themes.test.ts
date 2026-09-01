@@ -1093,3 +1093,78 @@ describe('a door hands the terminal back', () => {
     expect(out.trimEnd().endsWith('\x1b[H')).toBe(true);
   });
 });
+
+/**
+ * A frame must be visible in every theme.
+ *
+ * The sysop, on the new themes: "they removed all panel borders? some apps
+ * rely on those." They are not removed - a `border: 'none'` theme paints the
+ * rule in the GROUND colour, so it is there but invisible. That is the
+ * intended look for a box that groups rows, and wrong for anything drawn ON
+ * TOP of other content: a dialog with no frame and the same background puts
+ * its text amongst the text it is covering.
+ *
+ * `frame` is the role for those. This is its whole invariant.
+ */
+describe('the frame role stays visible', () => {
+  const { themeStyles, THEMES } = require('../../engines/ui/theme');
+
+  it('covers every theme the board ships', () => {
+    // A loop over an empty list would pass every assertion below.
+    expect(THEMES.length).toBeGreaterThanOrEqual(7);
+  });
+
+  for (const theme of require('../../engines/ui/theme').THEMES) {
+    it(`draws a visible frame border under ${theme.id}`, () => {
+      const s = themeStyles(theme);
+      const border = s.frame.style.border?.fg;
+      expect(border).toBeTruthy();
+      expect(border).not.toBe(s.frame.style.bg);
+      expect(border).not.toBe(theme.tokens.ground);
+    });
+
+    it(`keeps ${theme.id}'s panel free to be borderless`, () => {
+      // panel is NOT frame: the phosphor themes are still allowed to sink a
+      // decorative box into the ground. Losing that would delete the look
+      // the themes were liked for.
+      const s = themeStyles(theme);
+      const expected = theme.border === 'none' ? theme.tokens.ground : theme.tokens.chrome;
+      expect(s.panel.style.border?.fg).toBe(expected);
+    });
+  }
+});
+
+/**
+ * A modal must not blend into the screen it covers.
+ *
+ * This is the case the frame role exists for. Under quiet-phosphor a plain
+ * panel's border is painted in the ground colour on purpose; a dialog
+ * inheriting that would put its text amongst the text underneath it, with
+ * nothing to say where one ends and the other begins.
+ */
+describe('dialogs under a borderless theme', () => {
+  const { themeStyles, themeById } = require('../../engines/ui/theme');
+  const { ConfirmModal } = require('../../engines/ui/blessed/widgets/confirm-modal');
+
+  for (const id of ['quiet-phosphor', 'phosphor-muted', 'classic']) {
+    it(`gives a modal a border distinct from its own surface under ${id}`, () => {
+      const s = themeStyles(themeById(id));
+      const modal: any = new ConfirmModal({ themeStyles: s, message: 'Delete this file?' });
+
+      // Not merely "different from the background" - cyan-on-black passes
+      // that while ignoring the theme entirely. The colours must BE the
+      // theme's frame.
+      expect(modal.style.border.fg).toBe(s.frame.style.border.fg);
+      expect(modal.style.bg).toBe(s.frame.style.bg);
+      expect(modal.style.border.fg).not.toBe(modal.style.bg);
+      expect(modal.style.border.fg).not.toBe(themeById(id).tokens.ground);
+    });
+  }
+
+  it('leaves a modal that was given no theme exactly as it was', () => {
+    // Existing callers pass no theme and must not change.
+    const modal: any = new ConfirmModal({ message: 'Delete this file?' });
+    expect(modal.style.border.fg).toBe('cyan');
+    expect(modal.style.bg).toBe('black');
+  });
+});
