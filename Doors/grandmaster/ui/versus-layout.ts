@@ -57,6 +57,9 @@ export const MIN_LIST_COLS = LIST_COLUMN_COLS + 2;
 /** Bars stop being readable past this many, however wide the panel is. */
 export const MAX_BUCKETS = 10;
 
+/** Fewer rows than this under the player's board is not a standings list. */
+export const MIN_LIST_ROWS = 6;
+
 /**
  * A field this size cannot be shown in full at any width, so the cascade
  * is honest about ranking it rather than pretending to be the whole field.
@@ -81,9 +84,11 @@ export interface VersusLayout {
   /** Where the bucket-bar panel goes, and how wide. Zero width means none. */
   minimapLeft: number;
   minimapWidth: number;
-  /** Where the leaderboard goes, and how wide. Zero width means none. */
+  /** Where the leaderboard goes. Zero width means none. */
   listLeft: number;
+  listTop: number;
   listWidth: number;
+  listHeight: number;
   /** How tall the right-hand panels may be, in rows. */
   panelHeight: number;
 }
@@ -126,7 +131,9 @@ export function versusLayout(
       minimapLeft: rest > 0 ? left : 0,
       minimapWidth: rest > 0 ? Math.max(0, screenWidth - left - (showInfo ? VS_INFO_COLS : 0)) : 0,
       listLeft: 0,
+      listTop: BOARD_TOP,
       listWidth: 0,
+      listHeight: 0,
       panelHeight: OPPONENT_BOARD_ROWS,
     };
   };
@@ -169,65 +176,74 @@ function cascade(screenWidth: number, total: number, screenHeight: number): Vers
   if (total < CASCADE_MIN_OPPONENTS) return null;
 
   const available = Math.max(0, screenWidth - LEFT_PANEL_COLS);
-  const reserved = MIN_BUCKETS_COLS + MIN_LIST_COLS;
-  if (available < OPPONENT_BOARD_COLS + reserved) return null;
-
-  // Boards fill a GRID, not a row. "we have shitloads of space left for
-  // full playfields in gmaster battle royale" - with a 55-row window the
-  // old single row used 22 of them and left the rest black, while three
-  // boards was a cap rather than a measurement.
   const rows = Math.max(1, Math.floor((screenHeight - BOARD_TOP - STATS_ROWS) / OPPONENT_BOARD_ROWS));
-  let columns = 0;
-  while (
-    (columns + 1) * OPPONENT_BOARD_COLS + reserved <= available
-    && columns * rows < total - 1
-  ) {
-    columns++;
+  const maxColumns = Math.floor(available / OPPONENT_BOARD_COLS);
+  if (maxColumns < 1) return null;
+
+  // Room under the player's own board, once the stats line has its row.
+  const belowTop = BOARD_TOP + OPPONENT_BOARD_ROWS + STATS_ROWS;
+  const belowRows = screenHeight - belowTop;
+  const belowFits = belowRows >= MIN_LIST_ROWS;
+
+  // As many playfields as the window holds, and the standings wherever
+  // they still fit. Boards first and boards always: "the minimaps made no
+  // sense in gmaster battle royal, replace them with full players and the
+  // list can be moved under the players playfield" (2026-09-02).
+  for (let columns = maxColumns; columns >= 0; columns--) {
+    const boards = Math.min(columns * rows, total);
+    const leftover = total - boards;
+    const boardsEnd = LEFT_PANEL_COLS + columns * OPPONENT_BOARD_COLS;
+
+    const base: VersusLayout = {
+      fullBoards: boards,
+      boardRows: rows,
+      minimaps: 0,
+      listed: leftover,
+      showInfo: false,
+      left: LEFT_PANEL_COLS,
+      boardWidth: OPPONENT_BOARD_COLS,
+      minimapLeft: 0,
+      minimapWidth: 0,
+      listLeft: 0,
+      listTop: BOARD_TOP,
+      listWidth: 0,
+      listHeight: 0,
+      panelHeight: rows * OPPONENT_BOARD_ROWS,
+    };
+
+    if (boards <= 0 && leftover > 0 && columns > 0) continue;
+
+    if (leftover === 0) {
+      if (boards <= 0) continue;
+      return base;
+    }
+
+    // Under the player's board is the calm place for it: the field stays
+    // one uninterrupted grid of playfields.
+    if (belowFits) {
+      return {
+        ...base,
+        listLeft: 0,
+        listTop: belowTop,
+        listWidth: LEFT_PANEL_COLS,
+        listHeight: belowRows,
+      };
+    }
+
+    // No room below - the standings take whatever width the boards left.
+    const rightWidth = available - columns * OPPONENT_BOARD_COLS;
+    if (rightWidth >= MIN_LIST_COLS) {
+      return {
+        ...base,
+        listLeft: boardsEnd,
+        listTop: BOARD_TOP,
+        listWidth: rightWidth,
+        listHeight: rows * OPPONENT_BOARD_ROWS,
+      };
+    }
   }
-  const boards = Math.min(columns * rows, Math.max(0, total - 1));
-  if (boards <= 0) return null;
-  // A part-filled last column would leave a ragged hole in the middle of
-  // the field; the columns that are drawn are drawn full.
-  const usedColumns = Math.ceil(boards / rows);
 
-  const afterBoards = available - usedColumns * OPPONENT_BOARD_COLS;
-  // The bars take what they can hold, up to the point where a bar stops
-  // saying anything; whatever remains is the leaderboard's.
-  const barsFor = Math.min(
-    MAX_BUCKETS,
-    total - boards,
-    Math.floor((afterBoards - MIN_LIST_COLS - 2) / BUCKET_SLOT_COLS),
-  );
-  const buckets = Math.max(0, barsFor);
-  if (buckets <= 0) return null;
-
-  const listed = total - boards - buckets;
-  // A list only when there is somebody left for it. A field that boards and
-  // bars between them cover completely is still a cascade - it is simply
-  // one that ran out of opponents before it ran out of room, and the bars
-  // take what the list would have had. (Twelve opponents at 160 columns hit
-  // this, and the layout fell all the way back to a single grid panel.)
-  const bucketWidth = listed > 0
-    ? buckets * BUCKET_SLOT_COLS + 2
-    : afterBoards;
-  const listWidth = listed > 0 ? afterBoards - bucketWidth : 0;
-  if (listed > 0 && listWidth < MIN_LIST_COLS) return null;
-
-  const boardsEnd = LEFT_PANEL_COLS + usedColumns * OPPONENT_BOARD_COLS;
-  return {
-    fullBoards: boards,
-    boardRows: rows,
-    minimaps: buckets,
-    listed,
-    showInfo: false,
-    left: LEFT_PANEL_COLS,
-    boardWidth: OPPONENT_BOARD_COLS,
-    minimapLeft: boardsEnd,
-    minimapWidth: bucketWidth,
-    listLeft: listed > 0 ? boardsEnd + bucketWidth : 0,
-    listWidth,
-    panelHeight: rows * OPPONENT_BOARD_ROWS,
-  };
+  return null;
 }
 
 /** Where the Nth full opponent board starts. */

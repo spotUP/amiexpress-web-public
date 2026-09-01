@@ -155,3 +155,42 @@ export function deleteAnimation(doc: EditDoc): EditDoc {
 export function toSprite(doc: EditDoc): Sprite {
   return cloneSprite(doc.sprite);
 }
+
+/**
+ * Change a sprite's cell size, keeping the artwork that still fits.
+ *
+ * "there seem be no way to change canvas size for loaded projects"
+ * (2026-09-02) - a sprite was whatever size it was created as, for ever.
+ * Every frame of every animation is resized together, because the sprite's
+ * cellW/cellH describe all of them and setFrame refuses anything else.
+ *
+ * Cells outside the new bounds are dropped and new ones are HOLES rather
+ * than black, so growing a sprite does not put a box of opaque background
+ * around the art.
+ */
+export function resizeSprite(doc: EditDoc, cellW: number, cellH: number): EditDoc {
+  const w = Math.floor(cellW);
+  const h = Math.floor(cellH);
+  if (w < 1 || h < 1) throw new Error('A sprite is at least 1x1 cells.');
+  if (w > 80 || h > 25) throw new Error('A sprite is at most 80x25 cells.');
+  if (w === doc.sprite.cellW && h === doc.sprite.cellH) return doc;
+
+  const resize = (frame: CellBuffer): CellBuffer =>
+    Array.from({ length: h }, (_unusedRow, y) =>
+      Array.from({ length: w }, (_unusedCol, x) => {
+        const cell = frame[y]?.[x];
+        return cell ? { ...cell } : null;
+      }));
+
+  const sprite = JSON.parse(JSON.stringify(doc.sprite)) as Sprite;
+  sprite.cellW = w;
+  sprite.cellH = h;
+  for (const name of Object.keys(sprite.animations)) {
+    sprite.animations[name] = {
+      ...sprite.animations[name],
+      frames: doc.sprite.animations[name].frames.map(resize),
+    };
+  }
+
+  return { ...doc, sprite, dirty: true };
+}

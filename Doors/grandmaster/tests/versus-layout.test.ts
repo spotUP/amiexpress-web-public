@@ -50,9 +50,9 @@ export async function humansGetTheBoardsAndBotsTakeTheMiniatures(): Promise<void
   assert.strictEqual(veryWide.minimaps, 0);
 
   // And when even the humans do not fit, nobody does.
-  const narrow = versusLayout(80, 2, 6);
+  const narrow = versusLayout(80, 2, 6, 25);
   assert.strictEqual(narrow.fullBoards, 0);
-  assert.strictEqual(narrow.minimaps, 8);
+  assert.strictEqual(narrow.minimaps + narrow.listed, 8);
 }
 
 export async function anAllBotMatchStillBehavesAsItDidAtEighty(): Promise<void> {
@@ -137,36 +137,48 @@ export async function oneOpponentClaimsRoomForTheInfoPanelToo(): Promise<void> {
  * board, so the question stops being "who fits" and becomes "what is the
  * most each column can say about the players closest to killing you".
  */
-export async function aHugeFieldCascadesInsteadOfBecomingOneList(): Promise<void> {
-  const wide = versusLayout(160, 0, 98);
-  assert.strictEqual(wide.fullBoards, 3, 'the top few get playfields');
-  assert.ok(wide.minimaps > 0, 'the next handful get danger bars');
+export async function aHugeFieldFillsTheWindowWithPlayfields(): Promise<void> {
+  // "the minimaps made no sense in gmaster battle royal, replace them with
+  // full players and the list can be moved under the players playfield"
+  // (2026-09-02). Boards first and boards always; the standings take the
+  // room under the player's own board.
+  const wide = versusLayout(160, 0, 98, 50);
+  assert.ok(wide.fullBoards >= 10, `the window fills with playfields, saw ${wide.fullBoards}`);
+  assert.strictEqual(wide.minimaps, 0, 'no danger bars anywhere');
   assert.ok(wide.listed > 0, 'and the rest are a ranked list');
-  assert.strictEqual(wide.fullBoards + wide.minimaps + wide.listed, 98,
+  assert.strictEqual(wide.fullBoards + wide.listed, 98,
     'everyone is somewhere - nobody is silently dropped');
+  assert.strictEqual(wide.listLeft, 0, 'the list sits under the player, not beside the field');
+  assert.strictEqual(wide.listTop, 24);
+  assert.strictEqual(wide.listWidth, LEFT_PANEL_COLS);
 }
 
-export async function theCascadesSectionsDoNotOverlap(): Promise<void> {
+export async function nothingRunsOffTheEdgeAtAnySize(): Promise<void> {
   for (const width of [95, 100, 120, 160, 200, 240]) {
-    const l = versusLayout(width, 0, 98);
-    if (l.listed === 0) continue;   // not cascading at this width
-    const boardsEnd = LEFT_PANEL_COLS + l.fullBoards * OPPONENT_BOARD_COLS;
-    assert.strictEqual(l.minimapLeft, boardsEnd, `${width}: bars start after the boards`);
-    assert.strictEqual(l.listLeft, l.minimapLeft + l.minimapWidth,
-      `${width}: the list starts after the bars`);
-    assert.ok(l.listLeft + l.listWidth <= width,
-      `${width}: nothing runs off the right edge (ends at ${l.listLeft + l.listWidth})`);
+    for (const height of [25, 30, 50, 73]) {
+      const l = versusLayout(width, 0, 98, height);
+      const columns = Math.ceil(l.fullBoards / Math.max(1, l.boardRows));
+      assert.ok(LEFT_PANEL_COLS + columns * OPPONENT_BOARD_COLS <= width,
+        `${width}x${height}: the board grid fits`);
+      assert.ok(l.listLeft + l.listWidth <= width,
+        `${width}x${height}: the list fits (ends at ${l.listLeft + l.listWidth})`);
+      assert.ok(l.listTop + l.listHeight <= height,
+        `${width}x${height}: the list fits vertically`);
+      assert.strictEqual(l.fullBoards + l.minimaps + l.listed, 98,
+        `${width}x${height}: everyone is somewhere`);
+    }
   }
 }
 
-export async function eightyColumnsNeverCascades(): Promise<void> {
-  // All three sections need 37 + 22 + 14 + 22 before the first board is
-  // worth drawing, so the caller on a board-sized terminal sees exactly
-  // what they saw before any of this.
-  const narrow = versusLayout(80, 0, 98);
+export async function eightyColumnsIsStillOnePanel(): Promise<void> {
+  // 43 columns hold one board and nothing else, and 25 rows leave nothing
+  // under the player's own - so the caller on a board-sized terminal gets
+  // the single ranked panel they always had.
+  const narrow = versusLayout(80, 0, 98, 25);
   assert.strictEqual(narrow.fullBoards, 0);
-  assert.strictEqual(narrow.listed, 0, 'one grid panel, as always');
-  assert.strictEqual(narrow.minimaps, 98);
+  assert.strictEqual(narrow.listLeft, LEFT_PANEL_COLS, 'beside the player, as always');
+  assert.strictEqual(narrow.listWidth, 80 - LEFT_PANEL_COLS);
+  assert.strictEqual(narrow.listed + narrow.minimaps, 98);
 }
 
 export async function aSmallFieldIsNeverCascaded(): Promise<void> {
@@ -182,12 +194,11 @@ export async function aSmallFieldIsNeverCascaded(): Promise<void> {
   assert.strictEqual(five.listed, 0);
 }
 
-export async function theBarsStopWhereTheyStopSayingAnything(): Promise<void> {
-  // Ten is the readable limit for bars however wide the panel is; the room
-  // past that belongs to the list.
-  const enormous = versusLayout(400, 0, 98);
-  assert.ok(enormous.minimaps <= 10, `bars are capped, saw ${enormous.minimaps}`);
-  assert.ok(enormous.listed > 0);
+export async function anEnormousWindowIsAllPlayfields(): Promise<void> {
+  // At some point the whole field fits and there is nothing left to list.
+  const enormous = versusLayout(400, 0, 98, 100);
+  assert.ok(enormous.fullBoards >= 60, `saw ${enormous.fullBoards} playfields`);
+  assert.strictEqual(enormous.minimaps, 0);
 }
 
 export async function theHumansAreStillFirstInLine(): Promise<void> {

@@ -13,7 +13,7 @@
  * widgets and timers, and the interesting decision here is arithmetic.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CASCADE_MIN_OPPONENTS = exports.MAX_BUCKETS = exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS = exports.MIN_BUCKETS_COLS = exports.BUCKET_SLOT_COLS = exports.STATS_ROWS = exports.BOARD_TOP = exports.OPPONENT_BOARD_ROWS = exports.CASCADE_MAX_BOARDS = exports.VS_INFO_COLS = exports.OPPONENT_BOARD_COLS = exports.LEFT_PANEL_COLS = void 0;
+exports.CASCADE_MIN_OPPONENTS = exports.MIN_LIST_ROWS = exports.MAX_BUCKETS = exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS = exports.MIN_BUCKETS_COLS = exports.BUCKET_SLOT_COLS = exports.STATS_ROWS = exports.BOARD_TOP = exports.OPPONENT_BOARD_ROWS = exports.CASCADE_MAX_BOARDS = exports.VS_INFO_COLS = exports.OPPONENT_BOARD_COLS = exports.LEFT_PANEL_COLS = void 0;
 exports.versusLayout = versusLayout;
 exports.boardLeft = boardLeft;
 exports.boardPosition = boardPosition;
@@ -53,6 +53,8 @@ exports.LIST_COLUMN_COLS = 20;
 exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS + 2;
 /** Bars stop being readable past this many, however wide the panel is. */
 exports.MAX_BUCKETS = 10;
+/** Fewer rows than this under the player's board is not a standings list. */
+exports.MIN_LIST_ROWS = 6;
 /**
  * A field this size cannot be shown in full at any width, so the cascade
  * is honest about ranking it rather than pretending to be the whole field.
@@ -90,7 +92,9 @@ function versusLayout(screenWidth, humanCount, botCount = 0, screenHeight = 25) 
             minimapLeft: rest > 0 ? left : 0,
             minimapWidth: rest > 0 ? Math.max(0, screenWidth - left - (showInfo ? exports.VS_INFO_COLS : 0)) : 0,
             listLeft: 0,
+            listTop: exports.BOARD_TOP,
             listWidth: 0,
+            listHeight: 0,
             panelHeight: exports.OPPONENT_BOARD_ROWS,
         };
     };
@@ -130,59 +134,69 @@ function cascade(screenWidth, total, screenHeight) {
     if (total < exports.CASCADE_MIN_OPPONENTS)
         return null;
     const available = Math.max(0, screenWidth - exports.LEFT_PANEL_COLS);
-    const reserved = exports.MIN_BUCKETS_COLS + exports.MIN_LIST_COLS;
-    if (available < exports.OPPONENT_BOARD_COLS + reserved)
-        return null;
-    // Boards fill a GRID, not a row. "we have shitloads of space left for
-    // full playfields in gmaster battle royale" - with a 55-row window the
-    // old single row used 22 of them and left the rest black, while three
-    // boards was a cap rather than a measurement.
     const rows = Math.max(1, Math.floor((screenHeight - exports.BOARD_TOP - exports.STATS_ROWS) / exports.OPPONENT_BOARD_ROWS));
-    let columns = 0;
-    while ((columns + 1) * exports.OPPONENT_BOARD_COLS + reserved <= available
-        && columns * rows < total - 1) {
-        columns++;
+    const maxColumns = Math.floor(available / exports.OPPONENT_BOARD_COLS);
+    if (maxColumns < 1)
+        return null;
+    // Room under the player's own board, once the stats line has its row.
+    const belowTop = exports.BOARD_TOP + exports.OPPONENT_BOARD_ROWS + exports.STATS_ROWS;
+    const belowRows = screenHeight - belowTop;
+    const belowFits = belowRows >= exports.MIN_LIST_ROWS;
+    // As many playfields as the window holds, and the standings wherever
+    // they still fit. Boards first and boards always: "the minimaps made no
+    // sense in gmaster battle royal, replace them with full players and the
+    // list can be moved under the players playfield" (2026-09-02).
+    for (let columns = maxColumns; columns >= 0; columns--) {
+        const boards = Math.min(columns * rows, total);
+        const leftover = total - boards;
+        const boardsEnd = exports.LEFT_PANEL_COLS + columns * exports.OPPONENT_BOARD_COLS;
+        const base = {
+            fullBoards: boards,
+            boardRows: rows,
+            minimaps: 0,
+            listed: leftover,
+            showInfo: false,
+            left: exports.LEFT_PANEL_COLS,
+            boardWidth: exports.OPPONENT_BOARD_COLS,
+            minimapLeft: 0,
+            minimapWidth: 0,
+            listLeft: 0,
+            listTop: exports.BOARD_TOP,
+            listWidth: 0,
+            listHeight: 0,
+            panelHeight: rows * exports.OPPONENT_BOARD_ROWS,
+        };
+        if (boards <= 0 && leftover > 0 && columns > 0)
+            continue;
+        if (leftover === 0) {
+            if (boards <= 0)
+                continue;
+            return base;
+        }
+        // Under the player's board is the calm place for it: the field stays
+        // one uninterrupted grid of playfields.
+        if (belowFits) {
+            return {
+                ...base,
+                listLeft: 0,
+                listTop: belowTop,
+                listWidth: exports.LEFT_PANEL_COLS,
+                listHeight: belowRows,
+            };
+        }
+        // No room below - the standings take whatever width the boards left.
+        const rightWidth = available - columns * exports.OPPONENT_BOARD_COLS;
+        if (rightWidth >= exports.MIN_LIST_COLS) {
+            return {
+                ...base,
+                listLeft: boardsEnd,
+                listTop: exports.BOARD_TOP,
+                listWidth: rightWidth,
+                listHeight: rows * exports.OPPONENT_BOARD_ROWS,
+            };
+        }
     }
-    const boards = Math.min(columns * rows, Math.max(0, total - 1));
-    if (boards <= 0)
-        return null;
-    // A part-filled last column would leave a ragged hole in the middle of
-    // the field; the columns that are drawn are drawn full.
-    const usedColumns = Math.ceil(boards / rows);
-    const afterBoards = available - usedColumns * exports.OPPONENT_BOARD_COLS;
-    // The bars take what they can hold, up to the point where a bar stops
-    // saying anything; whatever remains is the leaderboard's.
-    const barsFor = Math.min(exports.MAX_BUCKETS, total - boards, Math.floor((afterBoards - exports.MIN_LIST_COLS - 2) / exports.BUCKET_SLOT_COLS));
-    const buckets = Math.max(0, barsFor);
-    if (buckets <= 0)
-        return null;
-    const listed = total - boards - buckets;
-    // A list only when there is somebody left for it. A field that boards and
-    // bars between them cover completely is still a cascade - it is simply
-    // one that ran out of opponents before it ran out of room, and the bars
-    // take what the list would have had. (Twelve opponents at 160 columns hit
-    // this, and the layout fell all the way back to a single grid panel.)
-    const bucketWidth = listed > 0
-        ? buckets * exports.BUCKET_SLOT_COLS + 2
-        : afterBoards;
-    const listWidth = listed > 0 ? afterBoards - bucketWidth : 0;
-    if (listed > 0 && listWidth < exports.MIN_LIST_COLS)
-        return null;
-    const boardsEnd = exports.LEFT_PANEL_COLS + usedColumns * exports.OPPONENT_BOARD_COLS;
-    return {
-        fullBoards: boards,
-        boardRows: rows,
-        minimaps: buckets,
-        listed,
-        showInfo: false,
-        left: exports.LEFT_PANEL_COLS,
-        boardWidth: exports.OPPONENT_BOARD_COLS,
-        minimapLeft: boardsEnd,
-        minimapWidth: bucketWidth,
-        listLeft: listed > 0 ? boardsEnd + bucketWidth : 0,
-        listWidth,
-        panelHeight: rows * exports.OPPONENT_BOARD_ROWS,
-    };
+    return null;
 }
 /** Where the Nth full opponent board starts. */
 function boardLeft(index) {

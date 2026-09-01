@@ -246,3 +246,35 @@ export async function theDoorOpensAtTheSizeTheBoardServes(): Promise<void> {
   assert.ok(source.includes("start: 'fixed'"),
     'the size switch must start fixed, and the caller asks for the rest');
 }
+
+/**
+ * The File menu offers only what this door actually wired.
+ *
+ * "most entries seem dead in the file menu and many other menus"
+ * (2026-09-02). Save As and New called host callbacks the studio never
+ * supplied, so choosing them did nothing at all - and the widget's own
+ * "new document" would have blanked the canvas while leaving the door's
+ * sprite open behind it.
+ */
+export async function theEditorIsGivenTheDoorsOwnFileOperations(): Promise<void> {
+  for (const wired of ['onNew:', 'onSaveAs:', 'onResize:', 'onOpen:', 'onSave:']) {
+    assert.ok(source.includes(wired),
+      `the editor must be handed ${wired.replace(':', '')} - an unwired menu item is a dead one`);
+  }
+}
+
+export async function playbackTakesTheCaretOffTheArt(): Promise<void> {
+  // "when anims play the cursor/caret must be hidden" (2026-09-02).
+  assert.ok(source.includes('this.editor.setCursorVisible?.(false)'),
+    'playback hides the drawing cursor');
+  assert.ok(source.includes('this.editor?.setCursorVisible?.(true)'),
+    'and stopping puts it back');
+}
+
+export async function theSpriteCanBeResizedAfterItIsOpen(): Promise<void> {
+  const studio = studioWithSprite();
+  const cmd = studio.commands();
+  assert.ok(cmd.resize, 'Sprite Size... must be in the door’s own menu');
+  assert.ok(source.includes('resizeSprite(this.doc'),
+    'and it goes through the document op, not the editor canvas alone');
+}

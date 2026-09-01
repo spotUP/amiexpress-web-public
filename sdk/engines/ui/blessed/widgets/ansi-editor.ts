@@ -99,6 +99,20 @@ export interface ANSIEditorOptions extends ElementOptions {
   showSidebar?: boolean;      // Left sidebar with colors & tools
   onSave?: (content: string) => Promise<boolean>;
   onSaveAs?: () => Promise<void>;  // Open save-as dialog
+  /**
+   * The host's own "new document", for a door whose document is not a bare
+   * canvas. Without it File > New wiped the canvas and left the DOOR's
+   * document behind it - a sprite studio with a blank editor and a sprite
+   * still open ("most entries seem dead in the file menu", audited
+   * 2026-09-02).
+   */
+  onNew?: () => void | Promise<void>;
+  /**
+   * Change the document's size. The widget can resize its own canvas, but a
+   * door that owns a document (a sprite has cells, frames and animations)
+   * has to resize THAT, so it is asked first.
+   */
+  onResize?: () => void | Promise<void>;
   onOpen?: () => Promise<void>;    // Open file browser dialog
   onOpenBBS?: () => Promise<void>; // Open BBS files (sysop only)
   onExit?: () => void;
@@ -385,6 +399,8 @@ export class ANSIEditor extends Box {
   private showLineNumbers: boolean;
   private onSaveCallback?: (content: string) => Promise<boolean>;
   private onSaveAsCallback?: () => Promise<void>;
+  private onNewCallback?: () => void | Promise<void>;
+  private onResizeCallback?: () => void | Promise<void>;
   private onOpenCallback?: () => Promise<void>;
   private onOpenBBSCallback?: () => Promise<void>;
   private onExitCallback?: () => void;
@@ -442,6 +458,25 @@ export class ANSIEditor extends Box {
       this.syncCoreCanvasToDisplay();
       this.screen?.render();
     }
+  }
+
+  /**
+   * Show or hide the drawing cursor.
+   *
+   * A host that animates the canvas has to be able to take the caret off
+   * it: playback in the sprite studio drew frame after frame with the
+   * cursor sitting on top of the art - "when anims play the cursor/caret
+   * must be hidden" (2026-09-02).
+   */
+  setCursorVisible(visible: boolean): void {
+    if (!this.drawCursor) return;
+    if (visible) {
+      this.drawCursor.show();
+      this.updateDrawCursor();
+    } else {
+      this.drawCursor.hide();
+    }
+    this.screen?.render();
   }
 
   /** Get the current magnification, in characters per cell. */
@@ -528,6 +563,8 @@ export class ANSIEditor extends Box {
     this.showLineNumbers = options.showLineNumbers ?? true;
     this.onSaveCallback = options.onSave;
     this.onSaveAsCallback = options.onSaveAs;
+    this.onNewCallback = options.onNew;
+    this.onResizeCallback = options.onResize;
     this.onOpenCallback = options.onOpen;
     this.onOpenBBSCallback = options.onOpenBBS;
     this.onExitCallback = options.onExit;
@@ -838,10 +875,15 @@ export class ANSIEditor extends Box {
     }));
 
     // File menu - build items dynamically based on available callbacks
+    // Only what is WIRED. An item whose host callback is missing does
+    // nothing when chosen, which is indistinguishable from a broken editor
+    // - and File > Save As was exactly that in the sprite studio.
     const fileMenuItems: any[] = [
-      { label: 'New', action: () => this.newDocument() },
-      { label: 'Open...', action: () => this.onOpenCallback?.() },
+      { label: 'New', action: () => { void (this.onNewCallback ? this.onNewCallback() : this.newDocument()); } },
     ];
+    if (this.onOpenCallback) {
+      fileMenuItems.push({ label: 'Open...', action: () => this.onOpenCallback?.() });
+    }
 
     // Add BBS files option for sysops (only if callback provided)
     if (this.onOpenBBSCallback) {
@@ -851,8 +893,13 @@ export class ANSIEditor extends Box {
     fileMenuItems.push(
       { label: '────────────────', separator: true },
       { label: menuItemLabel('Save', 'C-s'), action: () => this.save() },
-      { label: 'Save As...', action: () => this.onSaveAsCallback?.() },
+    );
+    if (this.onSaveAsCallback) {
+      fileMenuItems.push({ label: 'Save As...', action: () => this.onSaveAsCallback?.() });
+    }
+    fileMenuItems.push(
       { label: '────────────────', separator: true },
+      { label: 'Canvas Size...', action: () => { void this.changeCanvasSize(); } },
       { label: 'SAUCE Info...', action: () => this.showSauceEditor() },
       { label: '────────────────', separator: true },
       { label: menuItemLabel('Exit', 'ESC'), action: () => this.onExitCallback?.() },
@@ -2136,6 +2183,167 @@ BBS Door SDK v2.0{/gray-fg}
 
     const focusTarget = this.mode === 'draw' ? this.drawCanvas : this.viewport;
     aboutModal.display(focusTarget);
+  }
+
+  /**
+   * Ask for one line of text, in the editor's own style.
+   *
+   * Modelled on the SAUCE dialog's field editor, which was the only text
+   * input this widget had and was welded inside it.
+   */
+  private promptForText(title: string, initial = ''): Promise<string | null> {
+    return new Promise((resolve) => {
+      if (!this.screen) { resolve(null); return; }
+
+      const box = new Box({
+        parent: this.screen,
+        top: 'center', left: 'center',
+        width: 44, height: 5,
+        border: { type: 'line' },
+        label: ` ${title} `,
+        tags: true, keys: true, focusable: true,
+        style: { bg: 'black', fg: 'white', border: { fg: 'yellow' } },
+      });
+      const line = new Text({
+        parent: box, top: 1, left: 2, width: 38, tags: true, content: '',
+      });
+      const hint = new Text({
+        parent: box, bottom: 0, left: 2, tags: true,
+        content: '{gray-fg}Enter: accept   ESC: cancel{/gray-fg}',
+      });
+
+      let value = initial;
+      const paint = () => {
+        line.setContent(`{inverse}${value.padEnd(34)}{/inverse}`);
+        this.screen?.render();
+      };
+      paint();
+
+      const finish = (answer: string | null) => {
+        box.removeListener('keypress', onKey);
+        hint.destroy();
+        box.destroy();
+        this.restoreFocusAfterDialog();
+        resolve(answer);
+      };
+
+      const onKey = (_ch: string, key: any) => {
+        if (key?.name === 'escape') { finish(null); return; }
+        if (key?.name === 'enter') { finish(value.trim()); return; }
+        if (key?.name === 'backspace') { value = value.slice(0, -1); paint(); return; }
+        const ch = key?.ch ?? _ch;
+        if (ch && ch.length === 1 && !key?.ctrl && !key?.meta && value.length < 34) {
+          value += ch;
+          paint();
+        }
+      };
+
+      this.modalOpen = true;
+      box.on('keypress', onKey);
+      this.takeModalFocus(box);
+      this.screen.render();
+    });
+  }
+
+  /** A one-line notice that goes away on any key. */
+  private showMessage(title: string, text: string, colour: string = 'cyan'): void {
+    if (!this.screen) return;
+    const box = new Box({
+      parent: this.screen,
+      top: 'center', left: 'center',
+      width: Math.max(24, text.length + 6), height: 5,
+      border: { type: 'line' },
+      label: ` ${title} `,
+      content: text,
+      padding: { left: 2, right: 2, top: 1, bottom: 1 },
+      tags: true, keys: true, focusable: true,
+      style: { bg: 'black', fg: 'white', border: { fg: colour } },
+    });
+    const close = () => {
+      box.destroy();
+      this.restoreFocusAfterDialog();
+    };
+    this.modalOpen = true;
+    box.key(['escape', 'enter', 'space', 'q'], close);
+    this.takeModalFocus(box);
+    this.screen.render();
+  }
+
+  /**
+   * Grow or crop the canvas, keeping the artwork that still fits.
+   *
+   * There was no way to change the size of a document once it was open -
+   * "there seem be no way to change canvas size for loaded projects"
+   * (2026-09-02) - so a canvas was whatever it happened to be created as.
+   * Cells outside the new bounds are dropped, new ones start empty, and
+   * every layer is resized with it or the stack would go ragged.
+   */
+  resizeCanvas(width: number, height: number): void {
+    const w = Math.max(1, Math.floor(width));
+    const h = Math.max(1, Math.floor(height));
+    if (!this.cellCanvas) return;
+    if (w === this.canvasW && h === this.canvasH) return;
+
+    const resize = (canvas: Cell[][]): Cell[][] => {
+      const next: Cell[][] = [];
+      for (let y = 0; y < h; y++) {
+        next[y] = [];
+        for (let x = 0; x < w; x++) {
+          next[y][x] = canvas[y]?.[x] ?? { char: ' ', fg: 7, bg: 0 };
+        }
+      }
+      return next;
+    };
+
+    for (const layer of this.layers) {
+      if (layer.canvas) layer.canvas = resize(layer.canvas);
+    }
+    this.adoptCellCanvas(this.layers[this.activeLayerIndex]?.canvas ?? resize(this.cellCanvas));
+
+    this.optCanvasWidth = w;
+    this.optCanvasHeight = h;
+    this.cursor.line = Math.min(this.cursor.line, h - 1);
+    this.cursor.col = Math.min(this.cursor.col, w - 1);
+    this.selection = null;
+    this.modified = true;
+
+    // The canvas box is sized to the art and centred in the room it has, so
+    // a resize is a re-layout, not just a bigger array.
+    const topOffset = (this.menuBar ? 1 : 0) + (this.fkeyToolbar ? 1 : 0);
+    const geom = this.centredCanvasGeometry(topOffset, this.sidebar ? 6 : 0, !!this.statusBar);
+    this.drawCanvas.top = geom.top;
+    this.drawCanvas.left = geom.left;
+    this.drawCanvas.width = geom.width;
+    this.drawCanvas.height = geom.height;
+
+    this.syncCoreCanvasToDisplay();
+    this.updateDisplay();
+    this.screen?.render();
+  }
+
+  /**
+   * Ask for a new canvas size.
+   *
+   * A host that owns the document answers this itself - a sprite has cells,
+   * frames and animations, and resizing only the editor's canvas would
+   * leave the door's document behind. Without such a host the widget asks
+   * for WxH and resizes its own canvas.
+   */
+  private async changeCanvasSize(): Promise<void> {
+    if (this.onResizeCallback) {
+      await this.onResizeCallback();
+      return;
+    }
+    const answer = await this.promptForText(
+      'Canvas Size', `${this.canvasW}x${this.canvasH}`,
+    );
+    if (!answer) return;
+    const match = /^\s*(\d+)\s*[xX*]\s*(\d+)\s*$/.exec(answer);
+    if (!match) {
+      this.showMessage('Canvas Size', 'Give it as WIDTHxHEIGHT, like 80x25.', 'yellow');
+      return;
+    }
+    this.resizeCanvas(Number(match[1]), Number(match[2]));
   }
 
   /**

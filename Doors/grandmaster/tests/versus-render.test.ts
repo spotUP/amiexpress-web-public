@@ -39,12 +39,12 @@ function emptyBoard(): any {
 
 interface Opp { id: string; name: string; isBot: boolean }
 
-function harness(width: number, opponents: Opp[]) {
+function harness(width: number, opponents: Opp[], height = 25) {
   const screen: any = new Screen({
     title: 'versus-render',
-    responsive: width !== 80,
+    responsive: width !== 80 || height !== 25,
     width,
-    height: 25,
+    height,
   });
   const attacks = new AttackManager();
   const engine: any = new GameEngine('versus', settings, sounds, attacks);
@@ -280,24 +280,23 @@ function bigField(): Opp[] {
   }));
 }
 
-export async function aBattleRoyaleGetsBoardsBarsAndAList(): Promise<void> {
+export async function aBattleRoyaleIsPlayfieldsAndAListBelow(): Promise<void> {
+  // "the minimaps made no sense in gmaster battle royal, replace them with
+  // full players and the list can be moved under the players playfield"
+  // (2026-09-02).
   const field = bigField();
-  const h = harness(160, field);
+  const h = harness(160, field, 50);
   try {
     const boards = h.boards();
-    assert.strictEqual(boards.length, 3, 'the top few get playfields');
-    assert.strictEqual(h.minimap.hidden, false, 'the next handful get bars');
-    assert.strictEqual(h.list.hidden, false, 'and the rest a leaderboard');
+    assert.ok(boards.length >= 10, `the window fills with playfields, saw ${boards.length}`);
+    assert.strictEqual(h.minimap.hidden, true, 'and no danger bars anywhere');
+    assert.strictEqual(h.list.hidden, false, 'the rest are a leaderboard');
 
-    // Left to right, in that order, with nothing overlapping.
-    assert.strictEqual(h.minimap.left, 37 + 3 * OPPONENT_BOARD_COLS);
-    assert.strictEqual(h.list.left, h.minimap.left + h.minimap.width);
-    assert.ok(h.list.left + h.list.width <= 160);
-
-    // And the panels say how many they hold, because the field is bigger
-    // than any of them.
-    assert.ok(String(h.minimap.getLabel?.() ?? '').includes('('));
-    assert.ok(String(h.list.getLabel?.() ?? '').includes('('));
+    // Under the player's own board, not beside the field.
+    assert.strictEqual(h.list.left, 0);
+    assert.strictEqual(h.list.top, 24);
+    assert.strictEqual(h.list.width, LEFT_PANEL_COLS);
+    assert.ok(String(h.list.getLabel?.() ?? '').includes('('), 'labelled with how many it holds');
   } finally { h.destroy(); }
 }
 
@@ -315,14 +314,18 @@ export async function nobodyIsInTwoPlacesAtOnce(): Promise<void> {
   } finally { h.destroy(); }
 }
 
-export async function eightyColumnsKeepsTheSingleGrid(): Promise<void> {
+export async function eightyColumnsKeepsOnePanelBesideThePlayer(): Promise<void> {
+  // 43 columns hold one board and nothing else, and 25 rows leave nothing
+  // under the player's own - so the standings take the whole right side,
+  // exactly where the grid panel always was.
   const field = bigField();
   const h = harness(80, field);
   try {
     assert.strictEqual(h.boards().length, 0);
-    assert.strictEqual(h.minimap.hidden, false);
-    assert.strictEqual(h.list.hidden, true, 'no room for a third section at 80');
-    assert.strictEqual(h.minimap.width, 80 - LEFT_PANEL_COLS);
+    assert.strictEqual(h.list.hidden, false);
+    assert.strictEqual(h.list.left, LEFT_PANEL_COLS);
+    assert.strictEqual(h.list.width, 80 - LEFT_PANEL_COLS);
+    assert.strictEqual(h.minimap.hidden, true);
   } finally { h.destroy(); }
 }
 

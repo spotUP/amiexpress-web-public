@@ -46,6 +46,8 @@ export declare const LIST_COLUMN_COLS = 20;
 export declare const MIN_LIST_COLS: number;
 /** Bars stop being readable past this many, however wide the panel is. */
 export declare const MAX_BUCKETS = 10;
+/** Fewer rows than this under the player's board is not a standings list. */
+export declare const MIN_LIST_ROWS = 6;
 /**
  * A field this size cannot be shown in full at any width, so the cascade
  * is honest about ranking it rather than pretending to be the whole field.
@@ -69,9 +71,11 @@ export interface VersusLayout {
     /** Where the bucket-bar panel goes, and how wide. Zero width means none. */
     minimapLeft: number;
     minimapWidth: number;
-    /** Where the leaderboard goes, and how wide. Zero width means none. */
+    /** Where the leaderboard goes. Zero width means none. */
     listLeft: number;
+    listTop: number;
     listWidth: number;
+    listHeight: number;
     /** How tall the right-hand panels may be, in rows. */
     panelHeight: number;
 }

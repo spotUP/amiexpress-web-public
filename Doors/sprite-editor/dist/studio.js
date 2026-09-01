@@ -481,6 +481,13 @@ class SpriteStudioDoor {
             extraToolbar: this.doc ? this.buildToolbar() : undefined,
             onSave: async () => { await this.save(); return true; },
             onOpen: async () => { await this.openSpriteRequester(); },
+            // File > New and File > Save As used to call callbacks this door
+            // never supplied, so they did nothing at all; and the widget's own
+            // "new document" would have blanked the canvas while leaving this
+            // door's sprite open behind it.
+            onNew: () => { void this.newSpriteAsked(); },
+            onSaveAs: async () => { await this.saveAsAsked(); },
+            onResize: () => { void this.resizeSpriteAsked(); },
             onExit: () => { void this.close(); },
         });
         // The wheel over the canvas steps the zoom ladder. The editor reports
@@ -550,6 +557,7 @@ class SpriteStudioDoor {
             },
             newSprite: { label: 'New Sprite...', run: () => void this.newSpriteAsked() },
             saveAs: { label: 'Save As...', run: () => void this.saveAsAsked() },
+            resize: { label: 'Sprite Size...', run: () => void this.resizeSpriteAsked() },
             openArt: { label: 'Open Art (.ans)...', run: () => void this.openArtRequester() },
         };
     }
@@ -649,6 +657,7 @@ class SpriteStudioDoor {
                 items: [
                     this.menuItem('newSprite'),
                     this.menuItem('saveAs'),
+                    this.menuItem('resize'),
                     line,
                     this.menuItem('openArt'),
                     line,
@@ -922,6 +931,9 @@ class SpriteStudioDoor {
         }
         this.playing = true;
         this.editor.refreshExtraToolbar?.();
+        // "when anims play the cursor/caret must be hidden" - it sat on the art
+        // through every frame otherwise.
+        this.editor.setCursorVisible?.(false);
         this.editor.setUnderlay(null);
         let i = 0;
         const showFrame = () => {
@@ -945,6 +957,7 @@ class SpriteStudioDoor {
                 this.playTimer = null;
             }
             this.screen.removeListener('keypress', stop);
+            this.editor?.setCursorVisible?.(true);
             this.loadFrame();
         };
         this.stopPlay = stop;
@@ -1011,6 +1024,35 @@ class SpriteStudioDoor {
         this.resetZoomForDocument();
         await this.openEditor();
         await this.save();
+    }
+    /**
+     * Change the sprite's cell size.
+     *
+     * The door owns this, not the editor: a sprite's size is a property of
+     * the DOCUMENT - every frame of every animation shares it - so resizing
+     * the editor's canvas alone would leave the sprite behind.
+     */
+    async resizeSpriteAsked() {
+        if (!this.doc)
+            return;
+        this.commit();
+        const answer = await (0, dialogs_1.promptText)(this.screen, 'Size in cells, WxH', `${this.doc.sprite.cellW}x${this.doc.sprite.cellH}`);
+        if (!answer)
+            return;
+        const match = /^\s*(\d+)\s*[xX*]\s*(\d+)\s*$/.exec(answer);
+        if (!match) {
+            await this.message('Refused', 'Size must look like 5x2 - width by height, in cells.');
+            return;
+        }
+        try {
+            this.doc = (0, edit_doc_1.resizeSprite)(this.doc, Number(match[1]), Number(match[2]));
+            this.resetZoomForDocument();
+            await this.openEditor();
+            this.flash(`Sprite is now ${this.doc.sprite.cellW}x${this.doc.sprite.cellH}`);
+        }
+        catch (error) {
+            await this.message('Refused', String(error.message));
+        }
     }
     /** Save under another name, in the same door. */
     async saveAsAsked() {

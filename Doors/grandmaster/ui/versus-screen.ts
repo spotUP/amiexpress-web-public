@@ -514,10 +514,11 @@ export class VersusScreen {
 
     if (layout.listed > 0 && layout.listWidth > 0) {
       this.listPanel.left = layout.listLeft;
+      this.listPanel.top = layout.listTop;
       this.listPanel.width = layout.listWidth;
-      this.listPanel.height = layout.panelHeight;
+      this.listPanel.height = layout.listHeight;
       this.listContainer.width = Math.max(1, layout.listWidth - 2);
-      this.listContainer.height = Math.max(1, layout.panelHeight - 2);
+      this.listContainer.height = Math.max(1, layout.listHeight - 2);
       this.listPanel.setLabel?.(` Standings (${layout.listed}) `);
       this.listPanel.show();
     } else {

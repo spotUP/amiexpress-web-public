@@ -13,7 +13,7 @@ import {
   openDoc, currentFrame, selectAnimation, selectFrame, addFrame,
   deleteFrame, moveFrame, setFrame,
   setTicksPerFrame, toggleLoop, addAnimation, deleteAnimation, toSprite,
-  floodFill,
+  floodFill, resizeSprite,
 } from '../edit-doc';
 import {
   parseSprite, Sprite, compilePixels, decompilePixels, PixelGrid,
@@ -124,3 +124,60 @@ export async function selectionMovesKeepIdentityWhenClamped(): Promise<void> {
   assert.strictEqual(doc.dirty, false, 'and selection never dirties');
 }
 
+
+/**
+ * A sprite can change size after it is made.
+ *
+ * "there seem be no way to change canvas size for loaded projects"
+ * (2026-09-02) - a sprite was whatever it was created as, for ever.
+ */
+export async function resizingKeepsTheArtworkThatStillFits(): Promise<void> {
+  // pengo is 5x2; paint its own shape, then crop to the top-left 2x1.
+  const doc = pengo();
+  const painted = { char: '█', fg: 2, bg: 0 };
+  const row = (cells: Array<typeof painted | null>) => cells;
+  let next = setFrame(doc, [
+    row([painted, painted, null, null, null]),
+    row([null, painted, null, null, null]),
+  ]);
+
+  next = resizeSprite(next, 2, 1);
+  assert.strictEqual(next.sprite.cellW, 2);
+  assert.strictEqual(next.sprite.cellH, 1);
+  const frame = next.sprite.animations[next.animation].frames[next.frame];
+  assert.strictEqual(frame.length, 1, 'one row now');
+  assert.strictEqual(frame[0].length, 2, 'two columns now');
+  assert.deepStrictEqual(frame[0][0], painted, 'and the art inside them survives');
+}
+
+export async function growingASpriteAddsHolesNotBlackness(): Promise<void> {
+  const doc = pengo();
+  const bigger = resizeSprite(doc, 5, 4);
+  const frame = bigger.sprite.animations[bigger.animation].frames[0];
+  assert.strictEqual(frame.length, 4);
+  assert.strictEqual(frame[3].length, 5);
+  assert.strictEqual(frame[3][4], null,
+    'a new cell is a HOLE - growing a sprite must not box the art in opaque black');
+}
+
+export async function everyAnimationIsResizedTogether(): Promise<void> {
+  // cellW/cellH describe every frame of every animation; setFrame refuses
+  // anything else, so a half-resized sprite would be unusable.
+  const doc = pengo();
+  const bigger = resizeSprite(doc, 4, 3);
+  for (const name of Object.keys(bigger.sprite.animations)) {
+    for (const frame of bigger.sprite.animations[name].frames) {
+      assert.strictEqual(frame.length, 3, `${name} frames are 3 rows`);
+      assert.strictEqual(frame[0].length, 4, `${name} frames are 4 columns`);
+    }
+  }
+  assert.strictEqual(bigger.dirty, true, 'and the document is dirty afterwards');
+}
+
+export async function aRefusedSizeIsRefusedLoudly(): Promise<void> {
+  const doc = pengo();
+  assert.throws(() => resizeSprite(doc, 0, 4), /at least 1x1/);
+  assert.throws(() => resizeSprite(doc, 200, 4), /at most 80x25/);
+  assert.strictEqual(resizeSprite(doc, doc.sprite.cellW, doc.sprite.cellH), doc,
+    'and asking for the size it already is changes nothing');
+}
