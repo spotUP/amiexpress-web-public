@@ -22,7 +22,10 @@ function logTrap(message: string): void {
   if (!TRAP_DEBUG_ENABLED) return;
 
   try {
-    const bbsRoot = process.env.BBS_DATA_DIR || '~/Code/amiexpress-web';
+    // BBS_DATA_DIR, or this checkout's root - not one developer's
+    // absolute path, which on any other machine names a directory that
+    // does not exist and sends the debug log nowhere.
+    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../../..');
     const logFile = path.join(bbsRoot, "logs", "backend.log");
     const line = `[TrapDebug] ${getSystemTime().toISOString()} ${message}\n`;
     fs.appendFileSync(logFile, line, { encoding: "utf8" });

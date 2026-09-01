@@ -60,7 +60,11 @@ export function findAssign(assignName: string): string | null {
   // Map of Amiga assigns to actual paths
   const assigns: Record<string, string> = {
     // BBS: points to BBS data directory
-    'BBS:': process.env.BBS_DATA_DIR || process.env.BBS_ROOT || '~/Code/amiexpress-web',
+    // config's dataDir, which is BBS_DATA_DIR or this checkout's root. It used
+    // to end in one developer's absolute path, which resolves to nothing
+    // anywhere else and is not a fallback so much as a wrong answer with a
+    // straight face.
+    'BBS:': process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(__dirname, '../../../..'),
 
     // SYS: points to system directory (Amiga OS root)
     'SYS:': process.env.AMIGA_SYS_DIR || '/usr/local/amiexpress',
