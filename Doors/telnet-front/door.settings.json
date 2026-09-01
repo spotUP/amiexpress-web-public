@@ -1,0 +1,21 @@
+{
+  "command": "FRONTEND",
+  "settings": [
+    {
+      "key": "bbsAddress",
+      "label": "Board address",
+      "type": "string",
+      "default": "",
+      "help": "What users type to reach this board - bbs.example.net, or an IP. Blank falls back to BBS_IP, then to the machine's own address, which inside a container is a private one nobody can dial."
+    },
+    {
+      "key": "maxNodes",
+      "label": "Nodes shown",
+      "type": "number",
+      "default": 8,
+      "min": 1,
+      "max": 32,
+      "help": "How many node lines the login screen lists. AmiExpress allows at most 32 (axconsts.e:43); this board's bbsConfig says MAX_NODES."
+    }
+  ]
+}

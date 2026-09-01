@@ -16,6 +16,7 @@
  */
 
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { loadConfig, boardAddress } from './config';
 import * as os from 'os';
 
 // Metadata
@@ -36,33 +37,7 @@ interface NodeInfo {
 }
 
 /**
- * Get BBS IP address
- */
-function getBBSIp(): string {
-  // Try environment variable first
-  if (process.env.BBS_IP) {
-    return process.env.BBS_IP;
-  }
-
-  // Try to get primary network interface IP
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    const iface = interfaces[name];
-    if (!iface) continue;
-
-    for (const addr of iface) {
-      // Skip internal and non-IPv4 addresses
-      if (addr.family === 'IPv4' && !addr.internal) {
-        return addr.address;
-      }
-    }
-  }
-
-  return 'UNKNOWN';
-}
-
-/**
- * Center text within a fixed width
+ * Pad a string to width, a space at a time from each side.
  */
 function centre(text: string, width: number): string {
   let result = text.substring(0, width);
@@ -84,7 +59,9 @@ function centre(text: string, width: number): string {
  */
 async function getNodes(socket: any, currentNodeNumber: number, currentUserIp: string): Promise<NodeInfo[]> {
   return new Promise((resolve) => {
-    const maxNodes = parseInt(process.env.MAX_NODES || '8');
+    // Defaults, then BBS_IP/MAX_NODES, then what the sysop set in the admin
+    // (Doors -> FRONTEND -> Door settings). See config.ts.
+    const maxNodes = loadConfig(__dirname).maxNodes;
 
     // Set up listener BEFORE emitting to avoid race condition
     const responseHandler = (data: { users: NodeInfo[] }) => {
@@ -203,7 +180,10 @@ async function displayFrontend(socket: any, user: any): Promise<void> {
   userIp = userIp || 'NOT AVAILABLE';
 
   const nodeNumber = user?.nodeNumber || 0;
-  const bbsIp = getBBSIp();
+  // What users can actually dial: the sysop's answer, then BBS_IP, then this
+  // machine's own address - which inside a container is a docker-bridge
+  // address nobody outside can reach.
+  const bbsIp = boardAddress(loadConfig(__dirname));
 
   // Clear screen and show header
   socket.emit('ansi-output', '\x1b[2J\x1b[H');

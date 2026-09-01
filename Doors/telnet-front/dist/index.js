@@ -15,43 +15,10 @@
  *
  * Original: dev/docs/AmiExpressEDoorSources/TelnetFront/telnetfront.e
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.metadata = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
-const os = __importStar(require("os"));
+const config_1 = require("./config");
 // Metadata
 exports.metadata = {
     name: 'Telnet Frontend',
@@ -61,30 +28,7 @@ exports.metadata = {
     command: 'FRONTEND',
 };
 /**
- * Get BBS IP address
- */
-function getBBSIp() {
-    // Try environment variable first
-    if (process.env.BBS_IP) {
-        return process.env.BBS_IP;
-    }
-    // Try to get primary network interface IP
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        const iface = interfaces[name];
-        if (!iface)
-            continue;
-        for (const addr of iface) {
-            // Skip internal and non-IPv4 addresses
-            if (addr.family === 'IPv4' && !addr.internal) {
-                return addr.address;
-            }
-        }
-    }
-    return 'UNKNOWN';
-}
-/**
- * Center text within a fixed width
+ * Pad a string to width, a space at a time from each side.
  */
 function centre(text, width) {
     let result = text.substring(0, width);
@@ -103,7 +47,9 @@ function centre(text, width) {
  */
 async function getNodes(socket, currentNodeNumber, currentUserIp) {
     return new Promise((resolve) => {
-        const maxNodes = parseInt(process.env.MAX_NODES || '8');
+        // Defaults, then BBS_IP/MAX_NODES, then what the sysop set in the admin
+        // (Doors -> FRONTEND -> Door settings). See config.ts.
+        const maxNodes = (0, config_1.loadConfig)(__dirname).maxNodes;
         // Set up listener BEFORE emitting to avoid race condition
         const responseHandler = (data) => {
             clearTimeout(timeout);
@@ -210,7 +156,10 @@ async function displayFrontend(socket, user) {
     hostname = hostname || 'NOT AVAILABLE';
     userIp = userIp || 'NOT AVAILABLE';
     const nodeNumber = user?.nodeNumber || 0;
-    const bbsIp = getBBSIp();
+    // What users can actually dial: the sysop's answer, then BBS_IP, then this
+    // machine's own address - which inside a container is a docker-bridge
+    // address nobody outside can reach.
+    const bbsIp = (0, config_1.boardAddress)((0, config_1.loadConfig)(__dirname));
     // Clear screen and show header
     socket.emit('ansi-output', '\x1b[2J\x1b[H');
     socket.emit('ansi-output', '                   \x1b[32m/\x1b[33m-\x1b[34m/\x1b[37m kOOL fRONTEND V1.1 bY: rEBEL/QTX \x1b[34m\\\x1b[33m-\x1b[32m\\\r\n');
