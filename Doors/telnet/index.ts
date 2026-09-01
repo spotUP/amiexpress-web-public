@@ -13,6 +13,7 @@
  */
 
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { TelnetConfig, loadConfig } from './config';
 import * as net from 'net';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -26,107 +27,11 @@ export const metadata = {
   command: 'TELNET',
 };
 
-interface TelnetConfig {
-  serverHost: string;
-  telnetPort: number;
-  usernamePrompt?: string;
-  passwordPrompt?: string;
-  username?: string;
-  password?: string;
-  autoLogin?: boolean;
-}
-
 interface TelnetConnection {
   socket: net.Socket;
   buffer: string;
   connected: boolean;
   loginSent: boolean;
-}
-
-/**
- * Load telnet configuration
- */
-function loadConfig(): TelnetConfig[] {
-  const configPath = path.join(process.cwd(), 'Doors', 'telnet', 'telnetdoor.cfg');
-  const configs: TelnetConfig[] = [];
-
-  try {
-    if (fs.existsSync(configPath)) {
-      const fileContent = fs.readFileSync(configPath, 'utf-8');
-      const lines = fileContent.split('\n');
-      let currentConfig: Partial<TelnetConfig> = {};
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-
-        if (trimmed.startsWith('#') || trimmed.startsWith(';') || !trimmed) {
-          continue;
-        }
-
-        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-          if (currentConfig.serverHost) {
-            configs.push({
-              serverHost: currentConfig.serverHost,
-              telnetPort: currentConfig.telnetPort || 23,
-              usernamePrompt: currentConfig.usernamePrompt,
-              passwordPrompt: currentConfig.passwordPrompt,
-              username: currentConfig.username,
-              password: currentConfig.password,
-              autoLogin: currentConfig.autoLogin !== false
-            });
-          }
-          currentConfig = {};
-          continue;
-        }
-
-        if (!trimmed.includes('=')) continue;
-
-        const [key, ...valueParts] = trimmed.split('=');
-        const value = valueParts.join('=').trim();
-        const upperKey = key.trim().toUpperCase();
-
-        switch (upperKey) {
-          case 'SERVERHOST':
-            currentConfig.serverHost = value;
-            break;
-          case 'TELNETPORT':
-            currentConfig.telnetPort = parseInt(value) || 23;
-            break;
-          case 'USERNAMEPROMPT':
-            currentConfig.usernamePrompt = value;
-            break;
-          case 'PASSWORDPROMPT':
-            currentConfig.passwordPrompt = value;
-            break;
-          case 'USERNAME':
-            currentConfig.username = value;
-            break;
-          case 'PASSWORD':
-            currentConfig.password = value;
-            break;
-          case 'AUTOLOGIN':
-            currentConfig.autoLogin = value.toUpperCase() === 'YES' || value === '1';
-            break;
-        }
-      }
-
-      if (currentConfig.serverHost) {
-        configs.push({
-          serverHost: currentConfig.serverHost,
-          telnetPort: currentConfig.telnetPort || 23,
-          usernamePrompt: currentConfig.usernamePrompt,
-          passwordPrompt: currentConfig.passwordPrompt,
-          username: currentConfig.username,
-          password: currentConfig.password,
-          autoLogin: currentConfig.autoLogin !== false
-        });
-      }
-    }
-  } catch (err) {
-    console.error('[TelnetConnect] Error loading config:', err);
-  }
-
-  return configs;
 }
 
 /**

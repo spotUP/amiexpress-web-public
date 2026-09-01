@@ -48,9 +48,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.metadata = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const config_1 = require("./config");
 const net = __importStar(require("net"));
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
 // Metadata
 exports.metadata = {
     name: 'Telnet Connect',
@@ -59,84 +58,6 @@ exports.metadata = {
     author: 'REBEL/QTX',
     command: 'TELNET',
 };
-/**
- * Load telnet configuration
- */
-function loadConfig() {
-    const configPath = path.join(process.cwd(), 'Doors', 'telnet', 'telnetdoor.cfg');
-    const configs = [];
-    try {
-        if (fs.existsSync(configPath)) {
-            const fileContent = fs.readFileSync(configPath, 'utf-8');
-            const lines = fileContent.split('\n');
-            let currentConfig = {};
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('#') || trimmed.startsWith(';') || !trimmed) {
-                    continue;
-                }
-                if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-                    if (currentConfig.serverHost) {
-                        configs.push({
-                            serverHost: currentConfig.serverHost,
-                            telnetPort: currentConfig.telnetPort || 23,
-                            usernamePrompt: currentConfig.usernamePrompt,
-                            passwordPrompt: currentConfig.passwordPrompt,
-                            username: currentConfig.username,
-                            password: currentConfig.password,
-                            autoLogin: currentConfig.autoLogin !== false
-                        });
-                    }
-                    currentConfig = {};
-                    continue;
-                }
-                if (!trimmed.includes('='))
-                    continue;
-                const [key, ...valueParts] = trimmed.split('=');
-                const value = valueParts.join('=').trim();
-                const upperKey = key.trim().toUpperCase();
-                switch (upperKey) {
-                    case 'SERVERHOST':
-                        currentConfig.serverHost = value;
-                        break;
-                    case 'TELNETPORT':
-                        currentConfig.telnetPort = parseInt(value) || 23;
-                        break;
-                    case 'USERNAMEPROMPT':
-                        currentConfig.usernamePrompt = value;
-                        break;
-                    case 'PASSWORDPROMPT':
-                        currentConfig.passwordPrompt = value;
-                        break;
-                    case 'USERNAME':
-                        currentConfig.username = value;
-                        break;
-                    case 'PASSWORD':
-                        currentConfig.password = value;
-                        break;
-                    case 'AUTOLOGIN':
-                        currentConfig.autoLogin = value.toUpperCase() === 'YES' || value === '1';
-                        break;
-                }
-            }
-            if (currentConfig.serverHost) {
-                configs.push({
-                    serverHost: currentConfig.serverHost,
-                    telnetPort: currentConfig.telnetPort || 23,
-                    usernamePrompt: currentConfig.usernamePrompt,
-                    passwordPrompt: currentConfig.passwordPrompt,
-                    username: currentConfig.username,
-                    password: currentConfig.password,
-                    autoLogin: currentConfig.autoLogin !== false
-                });
-            }
-        }
-    }
-    catch (err) {
-        console.error('[TelnetConnect] Error loading config:', err);
-    }
-    return configs;
-}
 /**
  * Display BBS selection menu
  */
@@ -165,7 +86,7 @@ function displayMenu(socket, configs) {
 const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
 door.onStart(async (ctx) => {
     const { socket, user, bbsSession } = ctx;
-    const configs = loadConfig();
+    const configs = (0, config_1.loadConfig)();
     let running = true;
     while (running) {
         displayMenu(socket, configs);

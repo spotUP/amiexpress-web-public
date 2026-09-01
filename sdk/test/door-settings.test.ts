@@ -127,6 +127,14 @@ describe('door settings', () => {
       expect(resolveDoorRoot(distDir)).toBe(distDir);
     });
 
+    it('finds the door root by its package.json when it declares no settings', () => {
+      // Doors keep files of their own - a .cfg, a database - beside their
+      // package.json, and read them relative to __dirname or, worse, cwd.
+      fs.writeFileSync(path.join(doorDir, 'package.json'), '{"name":"a-door"}');
+
+      expect(resolveDoorRoot(distDir)).toBe(doorDir);
+    });
+
     it('prefers a declaration in the directory it was given', () => {
       writeManifest(MANIFEST);
       fs.writeFileSync(path.join(distDir, 'door.settings.json'), JSON.stringify({

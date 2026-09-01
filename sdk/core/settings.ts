@@ -34,22 +34,30 @@ export class DoorSettingsError extends Error {
 const DOOR_ROOT_SEARCH_DEPTH = 3;
 
 /**
- * The directory a door's settings actually live in.
+ * The door's own directory - where its files are, wherever it was loaded from.
  *
  * `__dirname` is not the same place in development as it is on the board: the
  * backend imports `index.ts` in development and `dist/index.js` in production
  * (`door.handler.ts`), so a compiled door asks from `Doors/<door>/dist` while
- * the admin writes to `Doors/<door>`. Walking up for the declaration makes
- * both ask the same question, and makes `readDoorSettings(__dirname)` - what
- * every door is told to call - correct in both.
+ * the admin, the sysop and the door's own data files are in `Doors/<door>`.
+ * Walking up makes both ask the same question, and makes
+ * `readDoorSettings(__dirname)` - what every door is told to call - correct in
+ * both.
  *
- * The declaration is what identifies the root. A door without one has no
- * settings anywhere, so the directory it asked about comes back unchanged.
+ * A door's declaration marks the root, and so does its package.json: doors
+ * without settings still keep files of their own beside it, and every one of
+ * them had the same bug. `process.cwd()` is worse than `__dirname` and was
+ * used for the same purpose - the backend's cwd on the board is
+ * /app/web/backend, so a door reading cwd + 'Doors/<door>/<file>' named a
+ * path that has never existed.
+ *
+ * Nothing found means the directory asked about comes back unchanged.
  */
 export function resolveDoorRoot(startDir: string): string {
   let dir = path.resolve(startDir);
   for (let depth = 0; depth <= DOOR_ROOT_SEARCH_DEPTH; depth++) {
     if (fs.existsSync(path.join(dir, MANIFEST_FILE))) return dir;
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
