@@ -46,6 +46,69 @@ const TTYPE_SEND = 1;         // Request terminal type
 const TTYPE_IS = 0;           // Terminal type response
 
 /**
+ * Result of classifying a reported TTYPE string.
+ */
+export interface TerminalTypeClassification {
+  isC64: boolean;
+  isAmiga: boolean;
+  unicodeCapable: boolean;
+}
+
+/**
+ * Classify a TTYPE (RFC 1091) string into C64/Amiga/unicode-capable flags.
+ * Pure function extracted from handleTerminalType so the classification
+ * logic can be unit-tested without a live telnet negotiation.
+ *
+ * `terminalTypeString` is expected to already be upper-cased, as
+ * handleTerminalType does before calling this.
+ *
+ * Regression (audit F1/F2): `isAmiga` used to match on `.includes('TERM')`,
+ * which also matched 'XTERM', 'XTERM-256COLOR', etc. XTERM is a modern
+ * Unicode-capable terminal, not an Amiga one - it was being forced into
+ * Amiga-compat (no Unicode) mode. Amiga's own Term.app reports the bare
+ * string "TERM" with nothing else, so the fix is an exact-equality check
+ * for 'TERM' plus a prefix check for 'AMIGA*' instead of a substring match.
+ */
+export function classifyTerminalType(terminalTypeString: string): TerminalTypeClassification {
+  // Detect C64 based on terminal type string
+  const isC64 = terminalTypeString.includes('C64') ||
+                terminalTypeString.includes('COMMODORE') ||
+                terminalTypeString.includes('PETSCII');
+
+  // Detect Amiga terminals - these need Amiga compatibility mode (no Unicode)
+  // Common Amiga terminal programs: Term, NComm, JRComm, DCTelnet, AmiTCP telnet
+  const isAmiga = terminalTypeString.startsWith('AMIGA') ||
+                  terminalTypeString === 'TERM' ||          // bare "TERM" = Amiga Term; must not match XTERM
+                  terminalTypeString.includes('NCOMM') ||
+                  terminalTypeString.includes('JRCOMM') ||
+                  terminalTypeString.includes('VT52') ||  // Amiga often reports VT52
+                  terminalTypeString === 'UNKNOWN';       // Amiga terminals often don't negotiate
+
+  // Modern terminals that support Unicode (xterm, vt100, etc.)
+  // These get full Unicode support even over telnet
+  const isModernTerminal = terminalTypeString.includes('XTERM') ||
+                           terminalTypeString.includes('VT100') ||
+                           terminalTypeString.includes('VT220') ||
+                           terminalTypeString.includes('LINUX') ||
+                           terminalTypeString.includes('SCREEN') ||
+                           terminalTypeString.includes('TMUX') ||
+                           terminalTypeString.includes('PUTTY') ||
+                           terminalTypeString.includes('KONSOLE') ||
+                           terminalTypeString.includes('GNOME') ||
+                           terminalTypeString.includes('ITERM') ||
+                           terminalTypeString.includes('ALACRITTY') ||
+                           terminalTypeString.includes('KITTY') ||
+                           terminalTypeString.includes('WINDOWS') ||
+                           terminalTypeString.includes('MINTTY') ||
+                           terminalTypeString.includes('RXVT');
+
+  // Unicode capable if it's a modern terminal and NOT an Amiga/C64
+  const unicodeCapable = isModernTerminal && !isAmiga && !isC64;
+
+  return { isC64, isAmiga, unicodeCapable };
+}
+
+/**
  * IAC Protocol State Machine
  * Based on express.e:370-374, 2389-2508
  */
@@ -285,43 +348,10 @@ console.log(`[Telnet] Invalid TTYPE response on node ${this.nodeId}`);
     this.terminalType = terminalTypeString;
 console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"`);
 
-    // Detect C64 based on terminal type string
-    const isC64 = terminalTypeString.includes('C64') ||
-                  terminalTypeString.includes('COMMODORE') ||
-                  terminalTypeString.includes('PETSCII');
-
-    // Detect Amiga terminals - these need Amiga compatibility mode (no Unicode)
-    // Common Amiga terminal programs: Term, NComm, JRComm, DCTelnet, AmiTCP telnet
-    const isAmiga = terminalTypeString.includes('AMIGA') ||
-                    terminalTypeString.includes('TERM') ||
-                    terminalTypeString.includes('NCOMM') ||
-                    terminalTypeString.includes('JRCOMM') ||
-                    terminalTypeString.includes('VT52') ||  // Amiga often reports VT52
-                    terminalTypeString === 'UNKNOWN';       // Amiga terminals often don't negotiate
-
-    // Modern terminals that support Unicode (xterm, vt100, etc.)
-    // These get full Unicode support even over telnet
-    const isModernTerminal = terminalTypeString.includes('XTERM') ||
-                             terminalTypeString.includes('VT100') ||
-                             terminalTypeString.includes('VT220') ||
-                             terminalTypeString.includes('LINUX') ||
-                             terminalTypeString.includes('SCREEN') ||
-                             terminalTypeString.includes('TMUX') ||
-                             terminalTypeString.includes('PUTTY') ||
-                             terminalTypeString.includes('KONSOLE') ||
-                             terminalTypeString.includes('GNOME') ||
-                             terminalTypeString.includes('ITERM') ||
-                             terminalTypeString.includes('ALACRITTY') ||
-                             terminalTypeString.includes('KITTY') ||
-                             terminalTypeString.includes('WINDOWS') ||
-                             terminalTypeString.includes('MINTTY') ||
-                             terminalTypeString.includes('RXVT');
-
-    // Unicode capable if it's a modern terminal and NOT an Amiga/C64
-    const unicodeCapable = isModernTerminal && !isAmiga && !isC64;
+    const { isC64, isAmiga, unicodeCapable } = classifyTerminalType(terminalTypeString);
 
     console.log(`[Telnet] Node ${this.nodeId} terminal "${terminalTypeString}" - ` +
-                `isAmiga: ${isAmiga}, isModern: ${isModernTerminal}, unicodeCapable: ${unicodeCapable}`);
+                `isAmiga: ${isAmiga}, isC64: ${isC64}, unicodeCapable: ${unicodeCapable}`);
 
     // Emit terminal-type event for session configuration
     this.emit('terminal-type', {
@@ -655,12 +685,19 @@ console.error(`[Telnet] Error on node ${connection.nodeId}:`, error.message);
       if (promptShown) return;
       promptShown = true;
 
-      // Check if C64 was detected - skip graphics prompt and go straight to PETSCII mode
-      if (connection.session && connection.terminalType &&
+      // Check if C64 was detected via TTYPE, OR via the DEL-probe
+      // (task 6 / audit F1-F3): real C64s behind a WiFi modem negotiate no
+      // telnet options, so TTYPE never fires for them, but the connect
+      // screen's first keypress lands on connection.on('data') in index.ts
+      // before this timer runs and classifies it there (c64-detect.util.ts),
+      // stamping connection.session.terminalType = 'c64'. Either signal
+      // skips the graphics prompt and goes straight to PETSCII mode.
+      const delProbeDetectedC64 = connection.session?.terminalType === 'c64';
+      if (connection.session && (delProbeDetectedC64 || (connection.terminalType &&
           (connection.terminalType.includes('C64') ||
            connection.terminalType.includes('COMMODORE') ||
-           connection.terminalType.includes('PETSCII'))) {
-console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-enabling PETSCII mode`);
+           connection.terminalType.includes('PETSCII'))))) {
+console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe' : connection.terminalType}) - auto-enabling PETSCII mode`);
         connection.session.terminalType = 'c64';
         connection.session.petsciiMode = true;
         connection.session.ansiEnabled = false;

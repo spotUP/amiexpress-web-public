@@ -29,6 +29,19 @@ let doorsList: any[] = [];
 let SCREEN_MENU: string = "MENU";
 
 /**
+ * Connect-screen graphics prompt (task 6 / audit F1-F3). Uppercase-only
+ * ASCII: a power-on/reset real C64 renders unshifted PETSCII $41-$5A as
+ * uppercase in graphics mode, so this string displays correctly on both
+ * ASCII terminals and an undetected C64 sitting at this prompt. Inviting
+ * <DEL> gives a real C64 caller something natural to press - PETSCII DEL
+ * is $14, distinct from ASCII BS $08 / DEL $7F - which the raw-byte
+ * classifier in index.ts's connection.on('data') handler (see
+ * c64-detect.util.ts) reads before any PETSCII->ASCII conversion runs.
+ */
+const CONNECT_GRAPHICS_PROMPT =
+  "\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/N) [ADD Q TO SKIP BULLETINS] -- OR PRESS <DEL> OR <RETURN> TO CONTINUE?";
+
+/**
  * Command Handler - Main Entry Point
  * Central command router and menu system
  * Handles all BBS command processing and routing
@@ -289,7 +302,7 @@ console.log(
             if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
               socket.emit(
                 "ansi-output",
-                "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
+                CONNECT_GRAPHICS_PROMPT
               );
             }
           })
@@ -300,13 +313,13 @@ console.error(
             );
             socket.emit(
               "ansi-output",
-              "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
+              CONNECT_GRAPHICS_PROMPT
             );
           });
       } else {
         socket.emit(
           "ansi-output",
-          "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
+          CONNECT_GRAPHICS_PROMPT
         );
       }
       return;

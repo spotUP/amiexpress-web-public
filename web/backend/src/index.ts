@@ -52,6 +52,7 @@ import {
   convertAsciiToPetsciiOutput,
 } from "./utils/petscii.util";
 import { writeUploadToDirFile } from "./utils/dir-file.util";
+import { classifyFirstKeypress } from "./utils/c64-detect.util";
 import {
   updateSysopUploadStats,
   doUploadNotify,
@@ -1233,6 +1234,28 @@ console.log(
         sink(Buffer.from(data));
         return;
       }
+    }
+
+    // Real C64s dialing in through a WiFi modem negotiate no telnet
+    // options, so the TTYPE fast path in telnet-server.ts never fires for
+    // them and terminalType stays 'unknown'. The connect screen's first
+    // keypress doubles as a passive DEL-probe (see c64-detect.util.ts):
+    // PETSCII DEL/shifted letters classify the caller as a C64 before the
+    // PETSCII->ASCII conversion below runs. telnet-server.ts's showPrompt()
+    // consults this flag (in addition to TTYPE) to skip the graphics
+    // prompt and jump straight to PETSCII/BBSTITLE. Guarded tightly to the
+    // connect screen so it can never misfire post-login.
+    if (
+      connection.session?.state === BBSState.AWAIT &&
+      connection.session.subState === LoggedOnSubState.DISPLAY_CONNECT &&
+      (!connection.session.terminalType ||
+        connection.session.terminalType === "unknown")
+    ) {
+      const firstKeyClass = classifyFirstKeypress(data);
+      if (firstKeyClass === "petscii") {
+        connection.session.terminalType = "c64";
+      }
+      // 'ascii' / 'ambiguous': leave terminalType as-is (ANSI prompt path).
     }
 
     // Convert telnet/SSH data to string
