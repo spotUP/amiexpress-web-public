@@ -62,6 +62,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.promptText = promptText;
 exports.confirm = confirm;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const door_theme_1 = require("./door-theme");
 /**
  * A centred, bordered single-line text prompt.
  *
@@ -90,14 +91,14 @@ function promptText(screen, title, initial = '') {
             label: ` ${title} `,
             tags: true,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' }, fg: 'white', bg: 'black' },
+            style: { border: { fg: door_theme_1.T.accent }, fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
         });
         const input = new blessed_1.Textbox({
             parent: box,
             top: 0, left: 1, width: '100%-2', height: 1,
             value: initial,
             mouse: true,
-            style: { fg: 'white', focus: { fg: 'lightyellow' } },
+            style: { fg: door_theme_1.T.ink, focus: { fg: 'lightyellow' } },
         });
         const finish = (value) => {
             input.destroy();
@@ -161,7 +162,7 @@ function confirm(screen, message) {
             message,
             confirmColor: 'red',
             cancelColor: 'green',
-            style: { border: { fg: 'yellow' } },
+            style: { border: { fg: door_theme_1.T.warn } },
             onConfirm: () => finish(true),
             onCancel: () => finish(false),
         });

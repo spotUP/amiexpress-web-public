@@ -35,6 +35,7 @@ const bindings_1 = require("./bindings");
 const layout_1 = require("./layout");
 const menu_1 = require("./menu");
 const panels_1 = require("./panels");
+const door_theme_1 = require("./door-theme");
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
 class StudioApp {
@@ -65,6 +66,7 @@ class StudioApp {
         this.ctx = ctx;
     }
     async start() {
+        (0, door_theme_1.applyTheme)(this.ctx.bbs); // chrome only; see door-theme.ts
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             title: 'Sprite Studio',
             responsive: true,
@@ -134,8 +136,8 @@ class StudioApp {
             // in wireMouseSelection() through the SAME handlers as arrow/enter.
             tags: true, keys: false, mouse: true,
             style: {
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.spritesPanel = (0, panels_1.makePanel)(this.screen, { key: 'sprites', title: ' Sprites ', rect: sprites });
@@ -146,8 +148,8 @@ class StudioApp {
             border: { type: 'none' },
             tags: true, keys: false, mouse: true,
             style: {
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.animationsPanel = (0, panels_1.makePanel)(this.screen, { key: 'animations', title: ' Animations ', rect: animations });
@@ -159,8 +161,8 @@ class StudioApp {
             border: { type: 'none' },
             tags: true, keys: false, mouse: true,
             style: {
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.previewPanel = (0, panels_1.makePanel)(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
@@ -331,7 +333,7 @@ class StudioApp {
             // new flash/state mechanism this browser doesn't otherwise have.
             { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
                 handler: () => {
-                    this.statusBar.setContent('{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}');
+                    this.statusBar.setContent(`{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`);
                     this.screen.render();
                 } },
             // Studio 2c: menu-only (empty keys is legal - see bindings.ts's
@@ -427,9 +429,9 @@ class StudioApp {
         focus(this.animationsPanel, this.state.pane === 'animations');
         const sel = (0, browser_model_1.selection)(this.state);
         const left = `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
-            `{white-fg}${sel.sprite ?? '-'}{/} / ` +
+            `{${door_theme_1.T.ink}-fg}${sel.sprite ?? '-'}{/} / ` +
             `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
-        const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
+        const right = `{${door_theme_1.T.dim}-fg}TAB panes  ARROWS move  Q quit{/}`;
         const visible = (tagged) => tagged.replace(/\{[^}]*\}/g, '').length;
         // Clamp to the real width: if the two segments cannot fit on one row,
         // drop the hint rather than let the row wrap into the panes above.
@@ -447,7 +449,7 @@ class StudioApp {
         const sel = (0, browser_model_1.selection)(this.state);
         const sprite = this.currentSprite();
         if (!sprite || !sel.animation) {
-            this.previewBox.setContent('{gray-fg}nothing to preview{/}');
+            this.previewBox.setContent(`{${door_theme_1.T.dim}-fg}nothing to preview{/}`);
             this.screen.render();
             return;
         }
@@ -457,7 +459,7 @@ class StudioApp {
         const pad = ' '.repeat(Math.max(0, Math.floor((inner - sprite.cellW * 2) / 2)));
         // ASCII separators, short words: the middle dot rendered as a quote
         // on the live terminal, and the long form wrapped inside the pane.
-        const meta = `{gray-fg}${sprite.name} - ${sel.animation} - ` +
+        const meta = `{${door_theme_1.T.dim}-fg}${sprite.name} - ${sel.animation} - ` +
             `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
             `${anim.loop ? 'loop' : 'hold'}{/}`;
         // Fix round 1, Important 2: no leading '\n' - see panels.ts's

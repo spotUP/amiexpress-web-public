@@ -59,6 +59,7 @@
  */
 
 import { Box, Textbox, ConfirmModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from './door-theme';
 
 /**
  * A centred, bordered single-line text prompt.
@@ -88,14 +89,14 @@ export function promptText(screen: any, title: string, initial = ''): Promise<st
       label: ` ${title} `,
       tags: true,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' }, fg: 'white', bg: 'black' },
+      style: { border: { fg: T.accent }, fg: T.ink, bg: T.ground },
     });
     const input = new Textbox({
       parent: box,
       top: 0, left: 1, width: '100%-2', height: 1,
       value: initial,
       mouse: true,
-      style: { fg: 'white', focus: { fg: 'lightyellow' } },
+      style: { fg: T.ink, focus: { fg: 'lightyellow' } },
     });
 
     const finish = (value: string | null): void => {
@@ -163,7 +164,7 @@ export function confirm(screen: any, message: string): Promise<boolean> {
       message,
       confirmColor: 'red',
       cancelColor: 'green',
-      style: { border: { fg: 'yellow' } },
+      style: { border: { fg: T.warn } },
       onConfirm: () => finish(true),
       onCancel: () => finish(false),
     } as any);

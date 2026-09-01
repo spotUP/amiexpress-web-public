@@ -53,6 +53,7 @@ const assets_1 = require("./assets");
 const dialogs_1 = require("./dialogs");
 const bindings_1 = require("./bindings");
 const menu_1 = require("./menu");
+const door_theme_1 = require("./door-theme");
 /**
  * The content to open for a typed new-file name.
  *
@@ -177,8 +178,8 @@ class ArtSession {
             tags: true, keys: false, mouse: false,
             style: {
                 border: { fg: 'lightyellow' },
-                selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                item: { fg: door_theme_1.T.ink },
             },
         });
         this.selected = 0;

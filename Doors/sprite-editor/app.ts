@@ -34,6 +34,7 @@ import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
 import { makePanel, panelContentRect, resetPanelLayout } from './panels';
+import { T, applyTheme } from './door-theme';
 
 /** Preview frame advance, in ms - matches the arcade doors' tick feel. */
 const PLAYBACK_MS = 100;
@@ -72,6 +73,8 @@ export class StudioApp {
   }
 
   async start(): Promise<void> {
+    applyTheme((this.ctx as any).bbs);   // chrome only; see door-theme.ts
+
     this.screen = createScreen((this.ctx as any).bbs, {
       title: 'Sprite Studio',
       responsive: true,
@@ -145,8 +148,8 @@ export class StudioApp {
       // in wireMouseSelection() through the SAME handlers as arrow/enter.
       tags: true, keys: false, mouse: true,
       style: {
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        item: { fg: T.ink },
       },
     });
     this.spritesPanel = makePanel(this.screen, { key: 'sprites', title: ' Sprites ', rect: sprites });
@@ -157,8 +160,8 @@ export class StudioApp {
       border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        item: { fg: T.ink },
       },
     });
     this.animationsPanel = makePanel(this.screen, { key: 'animations', title: ' Animations ', rect: animations });
@@ -170,8 +173,8 @@ export class StudioApp {
       border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        item: { fg: T.ink },
       },
     });
     this.previewPanel = makePanel(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
@@ -332,7 +335,7 @@ export class StudioApp {
       { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
         handler: () => {
           this.statusBar.setContent(
-            '{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}'
+            `{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`
           );
           this.screen.render();
         } },
@@ -432,9 +435,9 @@ export class StudioApp {
     const sel = selection(this.state);
     const left =
       `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
-      `{white-fg}${sel.sprite ?? '-'}{/} / ` +
+      `{${T.ink}-fg}${sel.sprite ?? '-'}{/} / ` +
       `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
-    const right = '{gray-fg}TAB panes  ARROWS move  Q quit{/}';
+    const right = `{${T.dim}-fg}TAB panes  ARROWS move  Q quit{/}`;
     const visible = (tagged: string) => tagged.replace(/\{[^}]*\}/g, '').length;
     // Clamp to the real width: if the two segments cannot fit on one row,
     // drop the hint rather than let the row wrap into the panes above.
@@ -452,7 +455,7 @@ export class StudioApp {
     const sel = selection(this.state);
     const sprite = this.currentSprite();
     if (!sprite || !sel.animation) {
-      this.previewBox.setContent('{gray-fg}nothing to preview{/}');
+      this.previewBox.setContent(`{${T.dim}-fg}nothing to preview{/}`);
       this.screen.render();
       return;
     }
@@ -463,7 +466,7 @@ export class StudioApp {
     // ASCII separators, short words: the middle dot rendered as a quote
     // on the live terminal, and the long form wrapped inside the pane.
     const meta =
-      `{gray-fg}${sprite.name} - ${sel.animation} - ` +
+      `{${T.dim}-fg}${sprite.name} - ${sel.animation} - ` +
       `${anim.frames.length}f ${anim.ticksPerFrame}tpf ` +
       `${anim.loop ? 'loop' : 'hold'}{/}`;
     // Fix round 1, Important 2: no leading '\n' - see panels.ts's

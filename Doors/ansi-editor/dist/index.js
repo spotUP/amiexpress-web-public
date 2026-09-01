@@ -10,6 +10,7 @@ exports.ANSIEditorDoor = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 // File prefix for storage keys
 const FILE_PREFIX = 'ansi:';
 // Sysop access level threshold
@@ -25,6 +26,13 @@ const BBS_SCREEN_DIRS = [
 ];
 // Exported for the regression tests; the door instance below stays the
 // default export the BBS loads.
+/**
+ * The caller's colours. Every literal in this door was the token below it -
+ * `{cyan-fg}` was the accent, `{gray-fg}` the dim - so classic renders as
+ * before and other themes are followed instead of ignored.
+ */
+let T = (0, theme_1.themeById)('classic').tokens;
+let S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
 class ANSIEditorDoor {
     constructor() {
         this.currentFilename = null;
@@ -173,16 +181,16 @@ class ANSIEditorDoor {
             width: '70%',
             height: '60%',
             fixed: true, // Static modal dialog
-            border: { type: 'line', fg: 'yellow' },
+            border: { type: 'line', fg: T.warn },
             label: ' {bold}BBS Screen Directories{/bold} ',
             tags: true,
             keys: true,
             mouse: true,
             vi: true,
             style: {
-                selected: { bg: 'yellow', fg: 'black', bold: true },
-                item: { fg: 'white' },
-                border: { fg: 'yellow' },
+                selected: { bg: T.warn, fg: T.selectionInk, bold: true },
+                item: { fg: T.ink },
+                border: { fg: T.warn },
             },
             items: dirItems,
         });
@@ -190,7 +198,7 @@ class ANSIEditorDoor {
             parent: dirList,
             bottom: 0,
             left: 2,
-            content: '{gray-fg}Enter: Browse | ESC: Cancel{/gray-fg}',
+            content: `{${T.dim}-fg}Enter: Browse | ESC: Cancel{/${T.dim}-fg}`,
             tags: true,
         });
         const closeDialog = () => {
@@ -230,16 +238,16 @@ class ANSIEditorDoor {
             width: '80%',
             height: '80%',
             fixed: true, // Static modal dialog
-            border: { type: 'line', fg: 'yellow' },
+            border: { type: 'line', fg: T.warn },
             label: ` {bold}${label}{/bold} `,
             tags: true,
             keys: true,
             mouse: true,
             vi: true,
             style: {
-                selected: { bg: 'yellow', fg: 'black', bold: true },
-                item: { fg: 'white' },
-                border: { fg: 'yellow' },
+                selected: { bg: T.warn, fg: T.selectionInk, bold: true },
+                item: { fg: T.ink },
+                border: { fg: T.warn },
             },
             items: files.map((f, idx) => `${(idx + 1).toString().padStart(3)}. ${f.filename}`),
         });
@@ -247,7 +255,7 @@ class ANSIEditorDoor {
             parent: fileList,
             bottom: 0,
             left: 2,
-            content: '{gray-fg}Enter: Open | B: Back | ESC: Cancel{/gray-fg}',
+            content: `{${T.dim}-fg}Enter: Open | B: Back | ESC: Cancel{/${T.dim}-fg}`,
             tags: true,
         });
         const closeDialog = () => {
@@ -291,6 +299,12 @@ class ANSIEditorDoor {
     // ============================================
     createUI() {
         // Create screen using helper (sets up proper input/output)
+        const host = this.ctx.bbs;
+        if (typeof host?.getTheme === 'function') {
+            const theme = host.getTheme();
+            T = theme.tokens;
+            S = (0, theme_1.themeStyles)(theme);
+        }
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             dockBorders: false, // Not needed for fixed panels
             title: 'ANSI Art Editor',
@@ -331,16 +345,16 @@ class ANSIEditorDoor {
             width: '80%',
             height: '80%',
             fixed: true, // Static modal dialog
-            border: { type: 'line', fg: 'cyan' },
+            border: { type: 'line', fg: T.accent },
             label: ' {bold}Your ANSI Files{/bold} ',
             tags: true,
             keys: true,
             mouse: true,
             vi: true,
             style: {
-                selected: { bg: 'blue', fg: 'white', bold: true },
-                item: { fg: 'white' },
-                border: { fg: 'cyan' },
+                selected: { bg: T.bar, fg: T.ink, bold: true },
+                item: { fg: T.ink },
+                border: { fg: T.accent },
             },
             items: files.map((f, idx) => {
                 const sizeStr = this.formatFileSize(f.size);
@@ -353,7 +367,7 @@ class ANSIEditorDoor {
             parent: fileList,
             bottom: 0,
             left: 2,
-            content: '{gray-fg}Enter: Open | D: Delete | ESC: Cancel{/gray-fg}',
+            content: `{${T.dim}-fg}Enter: Open | D: Delete | ESC: Cancel{/${T.dim}-fg}`,
             tags: true,
         });
         const closeDialog = () => {
@@ -515,13 +529,13 @@ class ANSIEditorDoor {
                 width: 50,
                 height: 9,
                 fixed: true, // Static modal dialog
-                border: { type: 'line', fg: 'yellow' },
+                border: { type: 'line', fg: T.warn },
                 label: ` {bold}${title}{/bold} `,
                 tags: true,
                 style: {
-                    fg: 'white',
-                    bg: 'blue',
-                    border: { fg: 'yellow' }
+                    fg: T.ink,
+                    bg: T.bar,
+                    border: { fg: T.warn }
                 },
             });
             new blessed_1.Text({
@@ -538,9 +552,9 @@ class ANSIEditorDoor {
                 width: 44,
                 height: 1,
                 style: {
-                    fg: 'white',
-                    bg: 'black',
-                    focus: { bg: 'black', fg: 'white' },
+                    fg: T.ink,
+                    bg: T.ground,
+                    focus: { bg: T.ground, fg: T.ink },
                 },
                 inputOnFocus: true,
                 keys: true,
@@ -550,7 +564,7 @@ class ANSIEditorDoor {
                 parent: dialog,
                 top: 5,
                 left: 2,
-                content: '{gray-fg}Enter: Save | Escape: Cancel{/gray-fg}',
+                content: `{${T.dim}-fg}Enter: Save | Escape: Cancel{/${T.dim}-fg}`,
                 tags: true,
             });
             const closeDialog = (result) => {
@@ -577,13 +591,13 @@ class ANSIEditorDoor {
                 width: 50,
                 height: 10,
                 fixed: true, // Static modal dialog
-                border: { type: 'line', fg: 'red' },
+                border: { type: 'line', fg: T.alert },
                 label: ` {bold}${title}{/bold} `,
                 tags: true,
                 style: {
-                    fg: 'white',
-                    bg: 'blue',
-                    border: { fg: 'red' }
+                    fg: T.ink,
+                    bg: T.bar,
+                    border: { fg: T.alert }
                 },
             });
             new blessed_1.Text({
@@ -597,7 +611,7 @@ class ANSIEditorDoor {
                 parent: dialog,
                 top: 6,
                 left: 2,
-                content: '{yellow-fg}Y{/yellow-fg}: Yes  {yellow-fg}N{/yellow-fg}/ESC: No',
+                content: `{${T.warn}-fg}Y{/${T.warn}-fg}: Yes  {${T.warn}-fg}N{/${T.warn}-fg}/ESC: No`,
                 tags: true,
             });
             const closeDialog = (result) => {
@@ -626,8 +640,8 @@ class ANSIEditorDoor {
             focusable: true,
             padding: { left: 2, right: 2, top: 1, bottom: 1 },
             style: {
-                fg: 'white',
-                bg: 'blue',
+                fg: T.ink,
+                bg: T.bar,
                 border: { fg: color }
             },
         });
@@ -635,9 +649,9 @@ class ANSIEditorDoor {
             parent: msgBox,
             top: 0,
             left: 0,
-            content: message + '\n\n{gray-fg}Press any key...{/gray-fg}',
+            content: message + `\n\n{${T.dim}-fg}Press any key...{/${T.dim}-fg}`,
             tags: true,
-            style: { bg: 'blue', fg: 'white' },
+            style: { bg: T.bar, fg: T.ink },
         });
         let closed = false;
         const close = () => {
@@ -665,7 +679,7 @@ class ANSIEditorDoor {
         this.screen.render();
     }
     showHelp() {
-        const helpText = `{cyan-fg}{bold}Main Menu:{/bold}{/cyan-fg}
+        const helpText = `{${T.accent}-fg}{bold}Main Menu:{/bold}{/${T.accent}-fg}
 
   N              New file - create blank canvas
   O              Open file - load from your files
@@ -673,7 +687,7 @@ class ANSIEditorDoor {
   Q / ESC        Quit - exit editor
 
 
-{yellow-fg}{bold}Moebius-Style Interface:{/bold}{/yellow-fg}
+{${T.warn}-fg}{bold}Moebius-Style Interface:{/bold}{/${T.warn}-fg}
 
   Menu Bar       File/Edit/Layer/Select/Colors/View/Help
   F-Key Toolbar  F1-F12 character sets
@@ -681,14 +695,14 @@ class ANSIEditorDoor {
   Status Bar     Position, colors, current tool
 
 
-{cyan-fg}{bold}Your Files:{/bold}{/cyan-fg}
+{${T.accent}-fg}{bold}Your Files:{/bold}{/${T.accent}-fg}
 
   Files are stored in your personal storage.
   Each user has their own private file space.
   Files are preserved between sessions.
 
 
-{cyan-fg}{bold}Quick Keys in Editor:{/bold}{/cyan-fg}
+{${T.accent}-fg}{bold}Quick Keys in Editor:{/bold}{/${T.accent}-fg}
 
   Ctrl+S         Save file
   Ctrl+Z         Undo
@@ -704,9 +718,9 @@ class ANSIEditorDoor {
             closeKeys: ['escape', 'q', '?', 'enter', 'space'],
             footerText: '{bold} Scroll: Arrows/PgUp/PgDn | Close: ESC/Q/?/Enter {/bold}',
             style: {
-                fg: 'white',
-                bg: 'blue',
-                border: { fg: 'cyan' },
+                fg: T.ink,
+                bg: T.bar,
+                border: { fg: T.accent },
             },
             onClose: () => {
                 helpModal.destroy();

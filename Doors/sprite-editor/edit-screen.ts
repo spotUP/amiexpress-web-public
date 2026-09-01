@@ -27,6 +27,7 @@ import { createStudioMenuBar } from './menu';
 import { makePanel, panelContentRect, resetPanelLayout } from './panels';
 import { createToolbar, Tool, ToolbarState } from './toolbar';
 import { tokenAtColumn } from './token-strip';
+import { T } from './door-theme';
 
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
@@ -623,7 +624,7 @@ export class EditScreen {
     const lines = previewLines(this.doc.sprite, this.doc.animation, this.tick, 2);
     this.previewBox.setContent(
       lines.join('\n') +
-      `\n\n {gray-fg}${this.doc.animation} - ${anim.frames.length}f ` +
+      `\n\n {${T.dim}-fg}${this.doc.animation} - ${anim.frames.length}f ` +
       `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}`
     );
     this.screen.render();
@@ -643,7 +644,7 @@ export class EditScreen {
 
   private paintFrames(): void {
     const strip = this.frameTokens()
-      .map((text, i) => (i === this.doc.frame ? `{blue-bg}{lightyellow-fg}${text}{/}` : text))
+      .map((text, i) => (i === this.doc.frame ? `{${T.bar}-bg}{lightyellow-fg}${text}{/}` : text))
       .join(' ');
     this.framesBox.setContent(strip);
   }
@@ -659,13 +660,13 @@ export class EditScreen {
     this.toolbarState!.tool = this.tool;
     this.toolbarState!.colour = this.fg;
     this.toolbar!.refresh();
-    const dirty = this.doc.dirty ? '{lightred-fg}*{/} ' : '';
+    const dirty = this.doc.dirty ? `{lightred-fg}*{/} ` : '';
     const flash = this.statusFlash ? `  {lightyellow-fg}${this.statusFlash}{/}` : '';
     this.statusFlash = '';
     this.statusBar.setContent(
-      `${dirty}{white-fg}${this.doc.sprite.name}{/} ${this.doc.animation} ` +
+      `${dirty}{${T.ink}-fg}${this.doc.sprite.name}{/} ${this.doc.animation} ` +
       `f${this.doc.frame + 1}${flash}` +
-      '  {gray-fg}SPACE paint  DEL clear  TAB mode  s save  ESC back{/}'
+      `  {${T.dim}-fg}SPACE paint  DEL clear  TAB mode  s save  ESC back{/}`
     );
     this.paintPreview();
   }

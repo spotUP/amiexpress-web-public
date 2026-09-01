@@ -17,6 +17,7 @@ import { listArt, readArt, writeArt } from './assets';
 import { promptText } from './dialogs';
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { createStudioMenuBar } from './menu';
+import { T } from './door-theme';
 
 /**
  * The content to open for a typed new-file name.
@@ -136,8 +137,8 @@ export class ArtSession {
       tags: true, keys: false, mouse: false,
       style: {
         border: { fg: 'lightyellow' },
-        selected: { bg: 'blue', fg: 'lightyellow', bold: true },
-        item: { fg: 'white' },
+        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        item: { fg: T.ink },
       },
     });
     this.selected = 0;
