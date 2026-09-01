@@ -611,6 +611,68 @@ describe('ANSIEditor draw-mode undo/redo (via real key/mouse dispatch)', () => {
       expect(canvas[1][5].char).toBe('A');  // the whole flip reverted - back at the original spot
       expect(canvas[23][5].char).toBe(' '); // and not left behind at the mirrored spot too
     });
+
+    /**
+     * Fix round 2 (final-fix-wave-report.md). moveBlock() calling the
+     * now-undoable pasteClipboard() AFTER clearing the source split one
+     * logical move into an undo entry that snapshots the ALREADY-CLEARED
+     * canvas. One Ctrl+Z left the source blank and the paste gone - a
+     * synthetic state the user never created, looking like a clean undo
+     * while silently dropping the moved block. The whole clear-plus-paste
+     * sequence must now collapse onto exactly ONE pre-move undo entry.
+     */
+    it('moveBlock is undoable as ONE action - one Ctrl+Z restores the block to its original position with nothing left at the destination, and the prior stroke survives', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 1 };
+      editor.drawAtCursor(false); // unrelated prior stroke
+
+      editor.currentChar = 'M';
+      editor.cursor = { line: 5, col: 5 };
+      editor.drawAtCursor(false); // the block's own content - a 1-cell marker
+
+      editor.selection = { x1: 5, y1: 5, x2: 5, y2: 5 };
+      editor.cursor = { line: 10, col: 10 }; // move destination
+      editor.moveBlock();
+
+      const moved = editor.getCoreCanvas();
+      expect(moved[10][10].char).toBe('M'); // landed at the destination
+      expect(moved[5][5].char).toBe(' ');   // source cleared
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[5][5].char).toBe('M');   // block restored to its ORIGINAL position
+      expect(canvas[10][10].char).toBe(' '); // nothing left at the destination
+      expect(canvas[1][1].char).toBe('A');   // the prior stroke survives this same keypress
+    });
+
+    /**
+     * Fix round 2 - cutSelection() rides along, identical treatment
+     * (reviewer classed it as pre-existing rather than regressed, but the
+     * same class of bug deserves the same fix).
+     */
+    it('cutSelection is undoable - one Ctrl+Z undoes exactly the cut, not the stroke before it', () => {
+      switchToTool(editor, 'draw');
+      editor.currentChar = 'A';
+      editor.cursor = { line: 1, col: 1 };
+      editor.drawAtCursor(false); // unrelated prior stroke
+
+      editor.currentChar = 'M';
+      editor.cursor = { line: 5, col: 5 };
+      editor.drawAtCursor(false); // the marker that will be cut
+
+      editor.selection = { x1: 5, y1: 5, x2: 5, y2: 5 };
+      editor.cutSelection();
+
+      expect(editor.getCoreCanvas()[5][5].char).toBe(' '); // cut - removed
+
+      pressCtrl(editor, 'z');
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[5][5].char).toBe('M'); // cut reverted
+      expect(canvas[1][1].char).toBe('A'); // prior stroke survives this same keypress
+    });
   });
 });
 
