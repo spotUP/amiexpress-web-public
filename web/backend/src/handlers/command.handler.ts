@@ -2844,7 +2844,7 @@ console.log(' In file upload state - canceling upload');
   if (session.subState === LoggedOnSubState.FLAG_INPUT ||
       session.subState === LoggedOnSubState.FLAG_CLEAR_INPUT ||
       session.subState === LoggedOnSubState.FLAG_FROM_INPUT) {
-    const { AlterFlagsHandler } = require('./alter-flags.handler');
+    const { AlterFlagsHandler } = require('./operations/alter-flags.handler');
     await AlterFlagsHandler.handleFlagInput(socket, session, data.trim());
     return;
   }
@@ -3790,7 +3790,30 @@ console.log('[CommandHistory] History cleared by user (Ctrl-B)');
 
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
+      let input = (session.inputBuffer || '').trim();
+
+      // ENTER accepts the grey suggestion, so `doo` + RETURN runs the
+      // command that was being offered rather than failing on a half-typed
+      // word. Only when a ghost was actually SHOWN - what fires is what was
+      // on screen, never a completion nobody could see.
+      //
+      // This cannot hijack a command typed in full: candidates are ordered
+      // shortest-first, so an exact command is always the first candidate
+      // and its ghost is empty. Typing `J` where `JM` also exists shows
+      // nothing and runs J.
+      if ((session as any)._promptGhostShown && input.length > 0) {
+        const { promptComplete } = require('./command-handler/prompt-completion');
+        const completed = (await promptComplete(config.get('dataDir'), input)).trim();
+        if (completed && completed !== input) {
+          // Repaint the line so what runs is what is left on screen, in
+          // normal colour rather than as a grey offer.
+          emitText(socket, '\b'.repeat(input.length) + '\x1b[K' + completed);
+          input = completed;
+        }
+      }
+      (session as any)._promptGhostShown = false;
+      (session as any)._promptCycle = undefined;
+
       session.inputBuffer = '';
 
       // Check for pending input handlers
@@ -3847,6 +3870,38 @@ console.log(' Empty command, redisplaying menu');
       }
       return;
     }
+    // TAB accepts the grey suggestion, if a completer door is installed and
+    // is offering one. TAB does nothing at this prompt otherwise, here and
+    // on a real Amiga alike (express.e's lineInput has no TAB case), so
+    // this adds a meaning rather than changing one.
+    if (data === '\t') {
+      const { promptCompleteNth, promptGhost, renderGhost } = require('./command-handler/prompt-completion');
+
+      // Pressing TAB again on the SAME word advances to the next candidate
+      // rather than repeating the first. "do" is ambiguous between DOOR,
+      // DOORREPO and DOORS, so the first answer cannot always be the wanted
+      // one; the state resets the moment the line is edited.
+      const cycle = (session as any)._promptCycle;
+      const sameWord = cycle && cycle.result === session.inputBuffer;
+      const press = sameWord ? cycle.press + 1 : 0;
+      const from = sameWord ? cycle.from : (session.inputBuffer || '');
+
+      const { line: completed } = await promptCompleteNth(config.get('dataDir'), from, press);
+      (session as any)._promptCycle = { from, press, result: completed };
+      if (completed !== session.inputBuffer) {
+        // Redraw the WHOLE word rather than appending the tail: the
+        // completion uses the command's own spelling, so accepting "do"
+        // gives "DOOR", not "doOR". Back over what was typed, erase the
+        // grey suggestion with it, and write the command out.
+        const typed = session.inputBuffer || '';
+        session.inputBuffer = completed;
+        (session as any)._readCommandCurpos = completed.length;
+        emitText(socket, '\b'.repeat(typed.length) + '\x1b[K' + completed);
+        emitText(socket, renderGhost(await promptGhost(config.get('dataDir'), completed)));
+      }
+      return;
+    }
+
     if (data === '\x7f' || data === '\b') { // Backspace at cursor
       if (curpos > 0) {
         const buf = session.inputBuffer;
@@ -3875,6 +3930,26 @@ console.log(' Empty command, redisplaying menu');
     // Reset curpos when buffer is empty (e.g., after submit)
     if (session.inputBuffer.length === 0) {
       (session as any)._readCommandCurpos = 0;
+    }
+
+    // Any edit that is not TAB ends the cycle: the candidate list is about
+    // the word that was typed, and the word just changed.
+    (session as any)._promptCycle = undefined;
+
+    // The grey tail, redrawn after every change to the line. Only when the
+    // cursor is at the END: mid-line editing has text to the right of the
+    // cursor, and a suggestion drawn there would overwrite it.
+    //
+    // Costs nothing when no completer door is installed - promptGhost
+    // returns '' and renderGhost emits a bare erase-to-end-of-line, which
+    // is what the prompt would look like anyway.
+    if ((session as any)._readCommandCurpos === session.inputBuffer.length) {
+      const { promptGhost, renderGhost } = require('./command-handler/prompt-completion');
+      const ghost = await promptGhost(config.get('dataDir'), session.inputBuffer);
+      if (ghost || (session as any)._promptGhostShown) {
+        emitText(socket, renderGhost(ghost));
+        (session as any)._promptGhostShown = ghost.length > 0;
+      }
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
@@ -4433,7 +4508,6 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
-    case 'DOOR':
     case 'DOORS': // Door Games Menu - lists doors with arrow key navigation
       await displayDoorMenu(socket, session, params);
       return;

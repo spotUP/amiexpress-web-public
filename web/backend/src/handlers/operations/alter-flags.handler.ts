@@ -276,12 +276,12 @@ console.log('[ENV] Files');
     filename: string,
     manager: any
   ): Promise<void> {
-    const config = require('../config').config;
+    const config = require('../../config').config;
     const bbsDataPath = config.get('dataDir');
     const confNum = session.currentConf || 1;
-    const { readDirFile } = require('../utils/dir-file-reader.util');
-    const { getMaxDirs } = require('../utils/max-dirs.util');
-    const { getConferenceDir } = require('../utils/file-hold.util');
+    const { readDirFile } = require('../../utils/dir-file-reader.util');
+    const { getMaxDirs } = require('../../utils/max-dirs.util');
+    const { getConferenceDir } = require('../../utils/file-hold.util');
     const path = require('path');
 
     // Get max dirs for current conference
