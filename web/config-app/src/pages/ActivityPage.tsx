@@ -23,7 +23,8 @@ import type { LucideIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { useBbsEvents, useRealtime } from '../realtime/RealtimeProvider';
-import { useLastCallers, useLastDownloads, useLastUploads } from '../hooks/useBoardData';
+import { useLastCallers, useLastDownloads, useLastUploads, useNodeStatus } from '../hooks/useBoardData';
+import { whoIsDoingWhat } from './who-is-doing-what';
 import { formatBytes, formatClockTime, formatRelativeTime } from '../lib/format';
 import { StatusDot } from '../components/ui/StatusDot';
 import { EmptyState } from '../components/ui/states';
@@ -221,6 +222,14 @@ export function ActivityPage() {
       .sort((a, b) => b.timestamp - a.timestamp);
   }, [callers.data, uploads.data, downloads.data]);
 
+  // Who is on, joined with the last thing each of them did. Both halves are
+  // already on this page; nothing new is fetched.
+  const nodeStatus = useNodeStatus();
+  const onBoardNow = useMemo(
+    () => whoIsDoingWhat(nodeStatus.data?.data, [...live, ...seeded]),
+    [nodeStatus.data, live, seeded],
+  );
+
   const entries = useMemo(
     () => [...live, ...seeded].filter((entry) => filter === 'all' || entry.type === filter).slice(0, MAX_ENTRIES),
     [live, seeded, filter]
@@ -228,6 +237,41 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-4">
+      {/* Who is on, and what each of them is doing.
+
+          The feed below answers "what happened"; this answers "what is
+          Phantasm doing", which is the question actually being asked and the
+          one a scrolling feed makes harder the more it carries. Nothing is
+          fetched for it - it joins the node status the admin already polls
+          with the events already on screen. */}
+      {onBoardNow.length > 0 && (
+        <div className="rounded border border-border bg-surface-2">
+          <div className="border-b border-border px-3 py-2 text-xs uppercase tracking-wide text-content-secondary">
+            On the board now ({onBoardNow.length})
+          </div>
+          <ul className="divide-y divide-border">
+            {onBoardNow.map((caller) => (
+              <li key={caller.nodeId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                <span className="w-10 shrink-0 font-mono text-xs text-content-secondary">
+                  {caller.nodeId}
+                </span>
+                <span className="font-medium text-content-primary">{caller.username}</span>
+                <span className="text-content-secondary">{caller.doing}</span>
+                {caller.lastDetail && (
+                  <span className="text-xs text-content-secondary">
+                    &middot; last: {caller.lastDetail}
+                    {caller.lastAt ? ` (${formatRelativeTime(caller.lastAt)})` : ''}
+                  </span>
+                )}
+                {caller.location && (
+                  <span className="ml-auto text-xs text-content-secondary">{caller.location}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1">
           {FILTERS.map((option) => (
