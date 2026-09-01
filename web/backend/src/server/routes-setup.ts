@@ -33,6 +33,7 @@ import { createNodeControlRouter } from '../api/node-control-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
+import { webTerminalGate, isReservedPath } from './web-terminal-gate';
 
 // Initialize handlers
 const authHandler = new AuthHandler(db);
@@ -221,6 +222,7 @@ console.error(`[Static] ${name} index.html not found: ${indexPath}`);
   // Serve BBS Terminal Frontend at / (fallback)
   const bbsFrontendPath = join(projectRoot, 'web/frontend/dist');
 
+
 console.log(`[Static] Project root: ${projectRoot}`);
 console.log(`[Static] Process cwd: ${process.cwd()}`);
 console.log(`[Static] Frontend path: ${bbsFrontendPath}`);
@@ -250,7 +252,7 @@ console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
     // Serve hashed assets with long-term caching
     const assetsDir = join(bbsFrontendPath, 'assets');
     if (fs.existsSync(assetsDir)) {
-      app.use('/assets', express.static(assetsDir, {
+      app.use('/assets', webTerminalGate, express.static(assetsDir, {
         maxAge: '1y',
         immutable: true,
       }));
@@ -259,22 +261,19 @@ console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
     // Serve fonts with long-term caching
     const fontsDir = join(bbsFrontendPath, 'fonts');
     if (fs.existsSync(fontsDir)) {
-      app.use('/fonts', express.static(fontsDir, {
+      app.use('/fonts', webTerminalGate, express.static(fontsDir, {
         maxAge: '1y',
         immutable: true,
       }));
     }
 
     // Serve remaining files (index.html etc) with no caching
-    app.use(express.static(bbsFrontendPath, { maxAge: 0 }));
+    app.use(webTerminalGate, express.static(bbsFrontendPath, { maxAge: 0 }));
 
-    app.use((req: Request, res: Response, next: NextFunction) => {
-      // Skip API routes
-      if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/socket.io')) {
-        return next();
-      }
-      // Skip sub-app routes
-      if (req.path.startsWith('/sdk') || req.path.startsWith('/admin')) {
+    app.use(webTerminalGate, (req: Request, res: Response, next: NextFunction) => {
+      // Skip the API, the auth routes, the sockets and the sub-apps - the
+      // same list the gate above refuses to switch off.
+      if (isReservedPath(req.path)) {
         return next();
       }
       // Skip asset files - let them 404 naturally

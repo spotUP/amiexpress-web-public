@@ -1542,16 +1542,22 @@ export function SystemConfigPage() {
               <p className="text-xs text-bbs-muted mt-1">Default 3001 in this stack; adjust if port conflicts arise.</p>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <input
-                id="http_enabled"
-                type="checkbox"
-                {...register('http_enabled')}
-                className="w-4 h-4"
-              />
-              <label htmlFor="http_enabled" className="text-sm text-bbs-text">
-                HTTP Server Enabled
-              </label>
+            <div>
+              <div className="flex items-center space-x-3">
+                <input
+                  id="http_enabled"
+                  type="checkbox"
+                  {...register('http_enabled')}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="http_enabled" className="text-sm text-bbs-text">
+                  Web Terminal Enabled
+                </label>
+              </div>
+              <p className="text-xs text-bbs-muted mt-1">
+                Serves the browser terminal at /. Unticking it takes the board off
+                the web without a restart; telnet, SSH and this admin keep running.
+              </p>
             </div>
           </div>
         </div>

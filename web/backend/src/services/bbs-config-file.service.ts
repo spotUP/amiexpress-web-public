@@ -853,7 +853,10 @@ function getDefaultConfig(): BBSConfigData {
     ftp_host: '',
     ftp_port: 21,
     ftp_data_ports: '',
-    http_enabled: false,
+    // A board with no configuration file yet serves its web terminal. The
+    // switch exists to turn it off, and a default of false meant a fresh
+    // install came up dark on the web with no clue why.
+    http_enabled: true,
     http_port: 80,
     telnet_port: 2323,
     ssh_port: 2222,
