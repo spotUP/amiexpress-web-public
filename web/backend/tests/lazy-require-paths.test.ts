@@ -28,20 +28,15 @@ const SRC = path.resolve(__dirname, '../src');
 /**
  * Paths with no module to point at.
  *
- * These are NOT path typos, so there is nothing to correct - the target does
- * not exist anywhere in the tree, which makes each one a missing
- * implementation rather than a broken reference. Listed so the sweep stays
- * green and the debt stays visible; the list must only ever shrink.
+ * These would NOT be path typos - the target does not exist anywhere in the
+ * tree, which makes each one a missing implementation rather than a broken
+ * reference. The list must only ever shrink.
+ *
+ * It is empty: the one entry, system-commands.handler requiring
+ * ../login.handler for handleLoginPrompt, was the broken relogon path and
+ * is fixed - it enters the login state directly now.
  */
-const KNOWN_MISSING: ReadonlyArray<{ file: string; spec: string; why: string }> = [
-  {
-    file: 'handlers/commands/system-commands.handler.ts',
-    spec: '../login.handler',
-    why: 'handleLoginPrompt is exported nowhere. The relogon path after LOGOFF '
-       + 'sets state to LOGON and then throws here, so re-login never runs. '
-       + 'Needs the real re-login entry point, not a corrected path.',
-  },
-];
+const KNOWN_MISSING: ReadonlyArray<{ file: string; spec: string; why: string }> = [];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];

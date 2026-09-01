@@ -165,9 +165,27 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
     console.log('[LOGOFF] Relogon complete - returning to login state');
     socket.emit('ansi-output', '\r\n');
 
-    // Return to login flow (don't disconnect)
-    const { handleLoginPrompt } = require('../login.handler');
-    await handleLoginPrompt(socket, session);
+    // Return to login flow (don't disconnect).
+    //
+    // This used to require('../login.handler') for handleLoginPrompt, which
+    // is exported nowhere in the tree - so relogon threw here every time and
+    // the re-login it exists to perform never ran. There is no such module
+    // to point at; the login state is entered directly, the way a fresh
+    // connection enters it (index.ts:1863).
+    session.subState = undefined;
+    session.tempData = session.tempData || {};
+    session.tempData.loginPhase = 'username';
+    session.tempData.inputBuffer = '';
+
+    // Telnet and SSH are served by the LOGON branch in handleCommand, which
+    // buffers the username itself and needs the prompt on screen. Web
+    // clients drive login through their own events - that branch returns
+    // immediately for them - so they are told to show it instead.
+    if (session.connectionType === 'web') {
+      socket.emit('retry-login', { prefillUsername: '' });
+    } else {
+      socket.emit('ansi-output', '\r\nUsername: ');
+    }
     return;
   }
 
