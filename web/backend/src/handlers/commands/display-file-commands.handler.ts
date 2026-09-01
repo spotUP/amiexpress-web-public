@@ -292,7 +292,7 @@ const formatDate = formatDateSlash;
  */
 export async function handleAlterFlagsCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Use the new AlterFlagsHandler
-  const { AlterFlagsHandler } = require('./alter-flags.handler');
+  const { AlterFlagsHandler } = require('../operations/alter-flags.handler');
   await AlterFlagsHandler.handleAlterFlagsCommand(socket, session, params);
 }
 

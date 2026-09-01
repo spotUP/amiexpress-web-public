@@ -2844,7 +2844,7 @@ console.log(' In file upload state - canceling upload');
   if (session.subState === LoggedOnSubState.FLAG_INPUT ||
       session.subState === LoggedOnSubState.FLAG_CLEAR_INPUT ||
       session.subState === LoggedOnSubState.FLAG_FROM_INPUT) {
-    const { AlterFlagsHandler } = require('./alter-flags.handler');
+    const { AlterFlagsHandler } = require('./operations/alter-flags.handler');
     await AlterFlagsHandler.handleFlagInput(socket, session, data.trim());
     return;
   }
