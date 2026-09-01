@@ -12,6 +12,9 @@
  */
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import {
+  createTerminalModeSwitch, type TerminalModeSwitch,
+} from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import {
@@ -73,6 +76,7 @@ class BBSDashboard {
   private stopGlitches: (() => void) | null = null;
   private theme: Theme = themeById('classic');
   private updateInterval: NodeJS.Timeout | null = null;
+  private terminalMode: TerminalModeSwitch | null = null;
   private exitResolve: (() => void) | null = null;
   private resizeHandler: ((width: number, height: number) => void) | null = null;
   private hasExited = false;
@@ -124,6 +128,17 @@ class BBSDashboard {
       dockBorders: false, // Not needed for fixed panels
       title: 'BBS SysOp Dashboard',
       responsive: true,
+    });
+
+    // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+    // This dashboard is written in percentages, so following a resize is a
+    // repaint; asking the terminal to grow at all is the part no door gets
+    // for free (sdk/utils/terminal-mode.ts).
+    this.terminalMode = createTerminalModeSwitch({
+      bbs: this.ctx.bbs,
+      screen: this.screen,
+      start: 'fixed',
+      onRelayout: () => { this.screen?.render(); },
     });
     this.screen.program.write('\x1b[2J');
     this.screen.program.write('\x1b[H');
@@ -555,6 +570,9 @@ class BBSDashboard {
   }
 
   private cleanup(): void {
+    // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
+    this.terminalMode?.dispose();
+    this.terminalMode = null;
     try {
       // Clear auto-refresh interval
       if (this.updateInterval) {

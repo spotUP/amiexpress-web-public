@@ -16,6 +16,7 @@ exports.runDoor = runDoor;
  * than asking them to re-enter it. The door says so rather than leaving
  * anyone wondering why nothing changed.
  */
+const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
@@ -29,6 +30,16 @@ async function createApp(session) {
         return;
     }
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: 'Theme' });
+    // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+    // The layout is written in percentages, so following a resize is a
+    // repaint; asking the terminal to grow at all is the part no door gets
+    // for free (sdk/utils/terminal-mode.ts).
+    const terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
+        bbs,
+        screen,
+        start: 'fixed',
+        onRelayout: () => { screen.render(); },
+    });
     const input = new door_input_manager_1.DoorInputManager(session, screen, {
         enableGameMode: false,
         enableGrabKeys: false,
@@ -131,6 +142,8 @@ async function createApp(session) {
                 input.disable();
             }
             catch { /* leaving anyway */ }
+            // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
+            terminalMode.dispose();
             try {
                 screen.destroy();
             }

@@ -8,6 +8,7 @@
 import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createTerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 
 /** Door metadata */
 export const metadata = {
@@ -265,6 +266,16 @@ door.onStart(async (ctx: DoorContext) => {
   });
   screen.program.write('\x1b[2J');
   screen.program.write('\x1b[H');
+  // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+  // The layout is written in percentages, so following a resize is a
+  // repaint; asking the terminal to grow at all is the part no door gets
+  // for free (sdk/utils/terminal-mode.ts).
+  const terminalMode = createTerminalModeSwitch({
+    bbs,
+    screen,
+    start: 'fixed',
+    onRelayout: () => { screen.render(); },
+  });
   screen.clearRegion(0, screen.width, 0, screen.height);
   screen.alloc();
 
@@ -329,6 +340,8 @@ door.onStart(async (ctx: DoorContext) => {
     syncLineAcrossParticipants(lineIndex);
     syncStatusBars();
     if ((bbs as any)?.disableGameMode) (bbs as any).disableGameMode();
+    // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
+    terminalMode.dispose();
     screen.destroy();
     stopCursorTimerIfIdle();
   };

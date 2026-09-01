@@ -13,6 +13,9 @@
  * anyone wondering why nothing changed.
  */
 import {
+  createTerminalModeSwitch,
+} from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
+import {
   createScreen,
   createBox,
   createList,
@@ -39,6 +42,18 @@ export async function createApp(session: DoorSession): Promise<void> {
   }
 
   const screen = createScreen(bbs, { title: 'Theme' });
+
+  // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+  // The layout is written in percentages, so following a resize is a
+  // repaint; asking the terminal to grow at all is the part no door gets
+  // for free (sdk/utils/terminal-mode.ts).
+  const terminalMode = createTerminalModeSwitch({
+    bbs,
+    screen,
+    start: 'fixed',
+    onRelayout: () => { screen.render(); },
+  });
+
   const input = new DoorInputManager(session as any, screen, {
     enableGameMode: false,
     enableGrabKeys: false,
@@ -147,6 +162,8 @@ export async function createApp(session: DoorSession): Promise<void> {
       // destroyed screen is how a door takes the session with it.
       try { stopMasthead(); } catch { /* leaving anyway */ }
       try { input.disable(); } catch { /* leaving anyway */ }
+      // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
+      terminalMode.dispose();
       try { screen.destroy(); } catch { /* leaving anyway */ }
       resolve();
     };

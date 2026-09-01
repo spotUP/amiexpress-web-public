@@ -33,6 +33,11 @@ function applyTheme(bbs) {
   }
 }
 
+// app.ts
+import {
+  createTerminalModeSwitch
+} from "@amiexpress/bbs-door-sdk/utils/terminal-mode";
+
 // dialogs.ts
 import {
   createBox,
@@ -557,6 +562,7 @@ var BugTrackerApp = class {
   // UI elements
   headerBox;
   stopMasthead = null;
+  terminalMode = null;
   mainContainer;
   footerBox;
   // Public for the same reason, and it must stay a live reference: the
@@ -593,6 +599,14 @@ var BugTrackerApp = class {
     screen.program.write("\x1B[H");
     screen.clearRegion(0, screen.width, 0, screen.height);
     screen.alloc();
+    this.terminalMode = createTerminalModeSwitch({
+      bbs: this.session.bbs,
+      screen,
+      start: "fixed",
+      onRelayout: () => {
+        screen.render();
+      }
+    });
     return screen;
   }
   // Key handler management to prevent accumulation
@@ -2134,6 +2148,8 @@ var BugTrackerApp = class {
       }
       this.stopMasthead = null;
     }
+    this.terminalMode?.dispose();
+    this.terminalMode = null;
     this.inputManager.disable();
     this.screen.destroy();
   }

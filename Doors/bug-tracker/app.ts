@@ -17,6 +17,9 @@ import {
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Screen, Box, List, Textbox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { T, S, applyTheme, THEME } from './door-theme-bugs';
+import {
+  createTerminalModeSwitch, type TerminalModeSwitch,
+} from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import * as dialogs from './dialogs';
 import { attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
@@ -55,6 +58,7 @@ export class BugTrackerApp {
   // UI elements
   private headerBox!: Box;
   private stopMasthead: (() => void) | null = null;
+  private terminalMode: TerminalModeSwitch | null = null;
   private mainContainer!: Box;
   private footerBox!: Box;
   // Public for the same reason, and it must stay a live reference: the
@@ -97,6 +101,17 @@ export class BugTrackerApp {
     screen.program.write('\x1b[H');
     screen.clearRegion(0, screen.width, 0, screen.height);
     screen.alloc();
+
+    // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+    // This door's panels are written in percentages, so following a resize
+    // is a repaint; asking the terminal to grow at all is the part no door
+    // gets for free (sdk/utils/terminal-mode.ts).
+    this.terminalMode = createTerminalModeSwitch({
+      bbs: this.session.bbs,
+      screen,
+      start: 'fixed',
+      onRelayout: () => { screen.render(); },
+    });
 
     // Mouse tracking handled by DoorInputManager
     return screen;
@@ -1900,6 +1915,9 @@ export class BugTrackerApp {
       try { this.stopMasthead(); } catch { /* leaving anyway */ }
       this.stopMasthead = null;
     }
+    // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
+    this.terminalMode?.dispose();
+    this.terminalMode = null;
     this.inputManager.disable();
     this.screen.destroy();
   }

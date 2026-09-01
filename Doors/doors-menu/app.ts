@@ -6,6 +6,9 @@
  */
 
 import {
+  createTerminalModeSwitch,
+} from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
+import {
   createScreen,
   createBox,
   createList,
@@ -203,6 +206,7 @@ export async function createApp(session: DoorSession) {
 
   // Create screen using SDK helper
   let screen: ReturnType<typeof createScreen>;
+  let terminalMode: ReturnType<typeof createTerminalModeSwitch> | null = null;
   try {
     screen = createScreen(bbs, {
       smartCSR: false,    // Prevent layout corruption
@@ -213,6 +217,17 @@ export async function createApp(session: DoorSession) {
     screen.program.write('\x1b[H');
     screen.clearRegion(0, screen.width, 0, screen.height);
     screen.alloc();
+
+    // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+    // The listing is written in percentages, so following a resize is a
+    // repaint; asking the terminal to grow at all is the part no door gets
+    // for free (sdk/utils/terminal-mode.ts).
+    terminalMode = createTerminalModeSwitch({
+      bbs,
+      screen,
+      start: 'fixed',
+      onRelayout: () => { screen.render(); },
+    });
   } catch (error) {
     bbs.write('\r\n\x1b[31mError creating door interface\x1b[0m\r\n');
     throw error;
@@ -725,6 +740,8 @@ export async function createApp(session: DoorSession) {
     const selectedDoor = sortedDoors[index - 1];
 
     if (selectedDoor) {
+      terminalMode?.dispose();
+      terminalMode = null;
       screen.destroy();
       bbs.write('\x1b[2J\x1b[H');
       if (bbs.executeCommand) {
@@ -786,6 +803,8 @@ export async function createApp(session: DoorSession) {
     if (currentPath.length > 0 || viewMode === 'doors') {
       goBack();
     } else {
+      terminalMode?.dispose();
+      terminalMode = null;
       screen.destroy();
     }
   });
@@ -883,7 +902,9 @@ export async function createApp(session: DoorSession) {
             screen.removeAllListeners('keypress');
           }
           if (!screen.destroyed) {
-            screen.destroy();
+            terminalMode?.dispose();
+      terminalMode = null;
+      screen.destroy();
           }
         } catch (err) {
           // Silently handle cleanup errors

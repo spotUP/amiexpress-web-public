@@ -7,6 +7,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
+const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 // Colours come from the user's theme, never from this file. `classic` is
 // the default and reproduces exactly what this door drew before, so the
@@ -153,6 +154,7 @@ async function createApp(session) {
     let currentTypeFilter = 'ALL';
     // Create screen using SDK helper
     let screen;
+    let terminalMode = null;
     try {
         screen = (0, blessed_helpers_1.createScreen)(bbs, {
             smartCSR: false, // Prevent layout corruption
@@ -163,6 +165,16 @@ async function createApp(session) {
         screen.program.write('\x1b[H');
         screen.clearRegion(0, screen.width, 0, screen.height);
         screen.alloc();
+        // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+        // The listing is written in percentages, so following a resize is a
+        // repaint; asking the terminal to grow at all is the part no door gets
+        // for free (sdk/utils/terminal-mode.ts).
+        terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
+            bbs,
+            screen,
+            start: 'fixed',
+            onRelayout: () => { screen.render(); },
+        });
     }
     catch (error) {
         bbs.write('\r\n\x1b[31mError creating door interface\x1b[0m\r\n');
@@ -630,6 +642,8 @@ async function createApp(session) {
         const sortedDoors = filteredDoors.sort((a, b) => a.name.localeCompare(b.name));
         const selectedDoor = sortedDoors[index - 1];
         if (selectedDoor) {
+            terminalMode?.dispose();
+            terminalMode = null;
             screen.destroy();
             bbs.write('\x1b[2J\x1b[H');
             if (bbs.executeCommand) {
@@ -692,6 +706,8 @@ async function createApp(session) {
             goBack();
         }
         else {
+            terminalMode?.dispose();
+            terminalMode = null;
             screen.destroy();
         }
     });
@@ -785,6 +801,8 @@ async function createApp(session) {
                         screen.removeAllListeners('keypress');
                     }
                     if (!screen.destroyed) {
+                        terminalMode?.dispose();
+                        terminalMode = null;
                         screen.destroy();
                     }
                 }
