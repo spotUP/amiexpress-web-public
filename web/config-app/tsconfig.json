@@ -23,7 +23,10 @@
     /* Paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/*": [
+        "../../sdk/engines/ui/ansi-editor/*"
+      ]
     }
   },
   "include": ["src"],

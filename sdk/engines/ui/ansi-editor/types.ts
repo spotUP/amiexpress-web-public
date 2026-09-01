@@ -2,8 +2,6 @@
  * Type definitions for ANSI Editor SDK
  */
 
-import type * as Blessed from 'blessed';
-
 /**
  * Minimal session interface for editor
  * Can be a full BBSSession or any session-like object
