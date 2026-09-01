@@ -2490,6 +2490,20 @@ BBS Door SDK v2.0{/gray-fg}
 
       if (x < 0 || y < 0) return;
 
+      // The wheel is REPORTED, never acted on. Zoom belongs to whatever is
+      // hosting this editor - the widget has no zoom of its own, only the
+      // scale it was built with - so it says which way the wheel turned and
+      // over which cell, and returns before anything else. Returning here
+      // also keeps the drawing cursor still: scrolling is not pointing.
+      if (data.action === 'wheelup' || data.action === 'wheeldown') {
+        this.emit('canvas-wheel', {
+          direction: data.action === 'wheelup' ? 'up' : 'down',
+          col: this.screenToCanvasX(x),
+          line: this.screenToCanvasY(y),
+        });
+        return;
+      }
+
       // Clamp to canvas bounds
       this.cursor.col = this.screenToCanvasX(x);
       this.cursor.line = this.screenToCanvasY(y);
