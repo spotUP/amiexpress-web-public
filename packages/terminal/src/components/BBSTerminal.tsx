@@ -1958,8 +1958,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         ripModeRef.current = true;
         setRipMode(true);
         ripBuffer.current = '';
-        ripDrawn.current = 0;
-        try { ripRendererRef.current?.reset(); } catch { /* fresh screen anyway */ }
+        ripDrawn.current = 0;   // the mount effect resets the renderer
         
         const ripContent = parts.slice(1).join('\x1b[1!');
         if (ripContent) {
@@ -3053,11 +3052,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     let pending = ripBuffer.current.slice(ripDrawn.current);
     if (!pending) return;
 
-    if (!final) {
-      // Socket chunks fall wherever the network puts them, which is happily
-      // in the middle of a command. Everything from the last '!|' onwards
-      // may be half of one, so it waits for the rest rather than being
-      // parsed as garbage and skipped.
+    // Socket chunks fall wherever the network puts them, which is happily
+    // in the middle of a command. Every RIP command ends in a newline, so a
+    // buffer that ends in one is whole and can go over as it is; otherwise
+    // everything from the last '!|' onwards may be half a command and waits
+    // for the rest, rather than being parsed as garbage and skipped.
+    if (!final && !/\r?\n$/.test(pending)) {
       const lastStart = pending.lastIndexOf('!|');
       if (lastStart <= 0) return;
       pending = pending.slice(0, lastStart);
@@ -3072,6 +3072,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.warn('[RIP] render failed:', err);
     }
   }, []);
+
+  // Draw once the renderer has actually mounted.
+  //
+  // The door sends ESC[1! and the WHOLE file in one emit. The socket handler
+  // sets ripMode and calls drawRipBuffer in the same tick - but the
+  // <RIPRenderer> only mounts on React's next render, so the ref was still
+  // null, nothing was consumed, and nothing called draw again until the
+  // ESC[2! arrived on the user's keypress. That drew everything and
+  // unmounted in the same breath: a black box while open, the picture for
+  // one frame on the way out. Reported as "rip graphics they dont display".
+  //
+  // Effects run after commit, when the ref is populated, so this is the
+  // first moment the buffered content can reach a canvas.
+  useEffect(() => {
+    if (!ripMode) return;
+    try { ripRendererRef.current?.reset(); } catch { /* fresh canvas anyway */ }
+    ripDrawn.current = 0;
+    drawRipBuffer();
+  }, [ripMode, drawRipBuffer]);
 
   return (
     <div
