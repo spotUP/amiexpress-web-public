@@ -22,6 +22,7 @@ const bindings_1 = require("./bindings");
 const layout_1 = require("./layout");
 const menu_1 = require("./menu");
 const panels_1 = require("./panels");
+const toolbar_1 = require("./toolbar");
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
 const DISCARD_WINDOW_MS = 3000;
@@ -33,6 +34,7 @@ class EditScreen {
         this.fg = 11;
         this.bg = 0;
         this.glyph = 0;
+        this.tool = 'paint';
         this.tick = 0;
         this.playback = null;
         this.statusFlash = '';
@@ -45,7 +47,6 @@ class EditScreen {
         this.canvasBox = null;
         this.previewBox = null;
         this.framesBox = null;
-        this.paletteBox = null;
         this.statusBar = null;
         this.menuBar = null;
         this.keyHandlers = [];
@@ -62,6 +63,7 @@ class EditScreen {
         // box-creation order, which is unchanged.
         this.bindKeys();
         this.buildLayout();
+        this.wireMouse();
         this.playback = setInterval(() => {
             this.tick++;
             this.paintPreview();
@@ -82,7 +84,7 @@ class EditScreen {
         this.canvasBox = blessed_1.default.box({
             parent: this.canvasPanel,
             top: canvasContent.top, left: canvasContent.left, width: canvasContent.width, height: canvasContent.height,
-            border: { type: 'none' }, tags: true,
+            border: { type: 'none' }, tags: true, mouse: true,
         });
         this.previewPanel = (0, panels_1.makePanel)(this.screen, { key: 'preview', title: ' Preview ', rect: preview });
         const previewContent = (0, panels_1.panelContentRect)(preview);
@@ -96,14 +98,19 @@ class EditScreen {
         this.framesBox = blessed_1.default.box({
             parent: this.framesPanel,
             top: framesContent.top, left: framesContent.left, width: framesContent.width, height: framesContent.height,
-            border: { type: 'none' }, tags: true,
+            border: { type: 'none' }, tags: true, mouse: true,
         });
         this.toolbarPanel = (0, panels_1.makePanel)(this.screen, { key: 'toolbar', title: ' Paint ', rect: toolbar });
-        const toolbarContent = (0, panels_1.panelContentRect)(toolbar);
-        this.paletteBox = blessed_1.default.box({
-            parent: this.toolbarPanel,
-            top: toolbarContent.top, left: toolbarContent.left, width: toolbarContent.width, height: toolbarContent.height,
-            border: { type: 'none' }, tags: true,
+        // toolbar.ts owns its own content child (sized off LAYOUT.edit.toolbar
+        // itself, via the same panelContentRect every other pane uses) - it is
+        // the one pane whose content construction moved out of this file, per
+        // the brief's fixed `createToolbar(screen, panel, state, onChange)`
+        // signature.
+        this.toolbarState = { tool: this.tool, colour: this.fg };
+        this.toolbar = (0, toolbar_1.createToolbar)(this.screen, this.toolbarPanel, this.toolbarState, (next) => {
+            this.tool = next.tool;
+            this.fg = next.colour;
+            this.paint();
         });
         this.statusBar = blessed_1.default.box({
             parent: this.screen,
@@ -217,6 +224,20 @@ class EditScreen {
                 handler: () => this.tryOp(() => (0, edit_doc_1.deleteAnimation)(this.doc)) },
             { id: 'file.save', keys: ['s'], hotkeyHint: 's', menu: 'File', label: 'Save',
                 handler: () => this.save() },
+            // Studio 2c task 4: which tool a canvas click/drag applies. Keys
+            // checked against every table entry above (task-4-report.md has the
+            // full conflict trace) - p/e/k/u are all free; each is a single
+            // printable char, so each lands in the derived glyph-exclusion set
+            // the same way g/f/b/n/c/x/a/t/l/s already do (one more letter each
+            // that cell mode can no longer type literally).
+            { id: 'tool.paint', keys: ['p'], hotkeyHint: 'p', menu: 'Tools', label: 'Paint Tool',
+                handler: () => { this.tool = 'paint'; this.paint(); } },
+            { id: 'tool.erase', keys: ['e'], hotkeyHint: 'e', menu: 'Tools', label: 'Erase Tool',
+                handler: () => { this.tool = 'erase'; this.paint(); } },
+            { id: 'tool.pick', keys: ['k'], hotkeyHint: 'k', menu: 'Tools', label: 'Pick Tool',
+                handler: () => { this.tool = 'pick'; this.paint(); } },
+            { id: 'tool.fill', keys: ['u'], hotkeyHint: 'u', menu: 'Tools', label: 'Fill Tool',
+                handler: () => { this.tool = 'fill'; this.paint(); } },
             // F1 - standard help key, non-printable (contributes nothing to the
             // glyph exclusion set: glyphForKey('f1') is null, key.length !== 1
             // and no 'S-' prefix). Reuses the existing statusFlash+paint
@@ -393,7 +414,126 @@ class EditScreen {
         // already skips the panel's title-bar row, so a literal leading
         // newline here would double-blank it (one row lost to the panel's
         // geometry, a second lost to this string).
-        this.canvasBox.setContent(rows.join('\n ') + '\n\n ' + modeLine);
+        //
+        // Studio 2c task 4: `rows.join('\n')`, not `rows.join('\n ')`. The
+        // one-space SEPARATOR (distinct from the leading-newline hack fix
+        // round 1 already removed) put a phantom one-column left margin on
+        // every row EXCEPT the first - `['a','b'].join('\n ')` is `'a\n b'`,
+        // not `'a\nb'`. Harmless-looking on a two-char-per-cell canvas until
+        // mouse painting needed to map a click's screen column back to a cell
+        // column: with the stray space, row 0's cell c sits at local columns
+        // [2c, 2c+1] but every row below it sits one column further right,
+        // an inconsistency no keyboard-only editor could ever have surfaced.
+        // Found while building `canvasHitTest` below and fixed here rather
+        // than replicating the stagger in a second, "matching" but equally
+        // wrong transform - see task-4-report.md.
+        this.canvasBox.setContent(rows.join('\n') + '\n\n ' + modeLine);
+    }
+    /**
+     * Map an absolute mouse-event (x, y) to a cell in the CURRENT frame, or
+     * null when the click landed outside the grid (e.g. on the mode-line
+     * row below it). box._getCoords() gives the canvas box's own live
+     * absolute position - the exact numbers blessed itself used to place
+     * paintCanvas()'s content on screen - so this reuses that placement
+     * rather than re-deriving it from LAYOUT (which would drift the moment
+     * a sysop drags the canvas panel elsewhere). The column math (one cell
+     * is two characters wide, flush from column 0 on every row now that the
+     * join-separator stagger above is fixed) is paintCanvas()'s own layout,
+     * not a second copy of it.
+     */
+    canvasHitTest(data) {
+        const coords = this.canvasBox._getCoords();
+        if (!coords)
+            return null;
+        const localX = data.x - coords.xi;
+        const localY = data.y - coords.yi;
+        const frame = (0, edit_doc_1.currentFrame)(this.doc);
+        if (localY < 0 || localY >= frame.length || localX < 0)
+            return null;
+        const col = Math.floor(localX / 2);
+        if (col >= frame[localY].length)
+            return null;
+        return { row: localY, col };
+    }
+    /**
+     * Run the active tool at a clicked/dragged CELL (row, col are cell-mode
+     * coordinates - the grid paintCanvas() itself renders one row per cell
+     * regardless of cell/pixel mode). In pixel mode the click also moves the
+     * cursor's cell, but PRESERVES which pixel half (top/bottom) it was
+     * already on: a terminal mouse event has cell resolution, not half-cell,
+     * so there is no click position that could disambiguate top vs bottom -
+     * only the keyboard's up/down (which halves cursorRow) can select that.
+     */
+    applyToolAt(cellRow, cellCol) {
+        // Two row numberings, never mixed: setCell/a cell-mode fg-read want
+        // CELL space (0..cellH-1, what cellRow already is); setPixel/
+        // floodFill/a pixel-mode fg-read want PIXEL space (0..cellH*2-1).
+        // floodFill has no cell-space equivalent - Fill always runs in pixel
+        // space regardless of `this.mode`, defaulting to the TOP half when
+        // clicked from cell mode (there is no half to preserve there).
+        const pixelRow = cellRow * 2 + (this.mode === 'pixel' ? this.cursorRow % 2 : 0);
+        this.cursorRow = this.mode === 'pixel' ? pixelRow : cellRow;
+        this.cursorCol = cellCol;
+        if (this.tool === 'paint') {
+            this.tryOp(() => this.mode === 'pixel'
+                ? (0, edit_doc_1.setPixel)(this.doc, pixelRow, cellCol, this.fg)
+                : (0, edit_doc_1.setCell)(this.doc, cellRow, cellCol, { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg }));
+        }
+        else if (this.tool === 'erase') {
+            this.tryOp(() => this.mode === 'pixel'
+                ? (0, edit_doc_1.setPixel)(this.doc, pixelRow, cellCol, null)
+                : (0, edit_doc_1.setCell)(this.doc, cellRow, cellCol, null));
+        }
+        else if (this.tool === 'fill') {
+            this.tryOp(() => (0, edit_doc_1.floodFill)(this.doc, pixelRow, cellCol, this.fg));
+        }
+        else { // pick - reads a colour into ToolbarState, never touches the doc
+            const picked = this.mode === 'pixel'
+                ? ((0, cell_art_1.decompilePixels)((0, edit_doc_1.currentFrame)(this.doc)) ?? [])[pixelRow]?.[cellCol] ?? null
+                : (0, edit_doc_1.currentFrame)(this.doc)[cellRow][cellCol]?.fg ?? null;
+            if (picked !== null)
+                this.fg = picked;
+            this.paint(); // tryOp's branches already repaint on success/failure; this one must do it itself
+        }
+    }
+    handleCanvasClick(data) {
+        const hit = this.canvasHitTest(data);
+        if (!hit)
+            return;
+        this.applyToolAt(hit.row, hit.col);
+    }
+    /** Drag (mousemove with a button held) paints continuously - paint/erase only, never pick/fill. */
+    handleCanvasDrag(data) {
+        if (!data.button)
+            return;
+        if (this.tool !== 'paint' && this.tool !== 'erase')
+            return;
+        const hit = this.canvasHitTest(data);
+        if (!hit)
+            return;
+        this.applyToolAt(hit.row, hit.col);
+    }
+    handleFramesClick(data) {
+        if (this.naming !== null)
+            return; // don't reinterpret a click while typing a name
+        const coords = this.framesBox._getCoords();
+        if (!coords)
+            return;
+        const localX = data.x - coords.xi;
+        const localY = data.y - coords.yi;
+        if (localY !== 0)
+            return; // row 1+ is the "new animation" naming line, not a frame
+        const index = (0, toolbar_1.tokenAtColumn)(this.frameTokens(), localX);
+        if (index === -1)
+            return;
+        // The exact same op the ,/. bindings call - selectFrame, not a
+        // second copy of frame-selection logic.
+        this.apply((0, edit_doc_1.selectFrame)(this.doc, index));
+    }
+    wireMouse() {
+        this.canvasBox.on('click', (data) => this.handleCanvasClick(data));
+        this.canvasBox.on('mousemove', (data) => this.handleCanvasDrag(data));
+        this.framesBox.on('click', (data) => this.handleFramesClick(data));
     }
     paintPreview() {
         const anim = this.doc.sprite.animations[this.doc.animation];
@@ -403,30 +543,37 @@ class EditScreen {
             `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}`);
         this.screen.render();
     }
-    paintFrames() {
+    /**
+     * The frames strip's plain (untagged) per-frame tokens, in display
+     * order - one source both paintFrames() (which wraps the active one in
+     * colour tags) and handleFramesClick() (which walks them via
+     * toolbar.ts's tokenAtColumn) read, so a click can never disagree with
+     * what is actually on screen.
+     */
+    frameTokens() {
         const anim = this.doc.sprite.animations[this.doc.animation];
-        const strip = anim.frames
-            .map((_, i) => (i === this.doc.frame ? `{blue-bg}{lightyellow-fg}[${i + 1}]{/}` : ` ${i + 1} `))
+        return anim.frames.map((_, i) => (i === this.doc.frame ? `[${i + 1}]` : ` ${i + 1} `));
+    }
+    paintFrames() {
+        const strip = this.frameTokens()
+            .map((text, i) => (i === this.doc.frame ? `{blue-bg}{lightyellow-fg}${text}{/}` : text))
             .join(' ');
         const naming = this.naming !== null
             ? `\n new animation: {lightyellow-fg}${this.naming}{/}_ (enter/escape)`
             : '';
         this.framesBox.setContent(`${strip}${naming}`);
     }
-    paintPalette() {
-        const swatches = cell_art_1.PALETTE
-            .map((name, i) => {
-            const marker = i === this.fg ? 'F' : i === this.bg ? 'B' : ' ';
-            return `{${name}-bg}{${i === 0 ? 'white' : 'black'}-fg}${marker}{/}`;
-        })
-            .join('');
-        this.paletteBox.setContent(`${swatches}\n glyph: ${GLYPHS[this.glyph]}  ` +
-            `fg {${cell_art_1.PALETTE[this.fg]}-fg}${this.fg}{/}  bg {${cell_art_1.PALETTE[this.bg]}-fg}${this.bg}{/}`);
-    }
     paint() {
         this.paintCanvas();
         this.paintFrames();
-        this.paintPalette();
+        // The toolbar's own copy of tool/colour is a mirror, not a second
+        // source of truth - this.tool/this.fg are canonical (the same fields
+        // the keyboard's p/e/k/u and f/S-f keys write), refreshed into
+        // toolbarState every render so the palette highlight can never drift
+        // from what a keyboard-driven change just did.
+        this.toolbarState.tool = this.tool;
+        this.toolbarState.colour = this.fg;
+        this.toolbar.refresh();
         const dirty = this.doc.dirty ? '{lightred-fg}*{/} ' : '';
         const flash = this.statusFlash ? `  {lightyellow-fg}${this.statusFlash}{/}` : '';
         this.statusFlash = '';
@@ -451,18 +598,25 @@ class EditScreen {
                 this.screen.unkey(keys, handler);
         }
         this.keyHandlers = [];
+        // this.toolbar.destroy() first: it owns a Box parented on
+        // toolbarPanel, which the panel-destroy loop below would also tear
+        // down via cascade (element.ts's destroy() is idempotent - guarded by
+        // `if (this.destroyed) return`), but toolbar.ts is the module that
+        // created that box, so it is the one that should also be the one to
+        // let it go.
+        this.toolbar.destroy();
         // Destroy the PANELS, not just their nested content boxes: a panel's
         // destroy() cascades to its children (element.ts's destroy() destroys
         // every child), so this alone tears down canvasBox/previewBox/
-        // framesBox/paletteBox too. Destroying only the content and leaving
-        // the panel attached would orphan an empty, still-visible, still-
-        // draggable panel shell (border + title bar) on screen.
+        // framesBox too. Destroying only the content and leaving the panel
+        // attached would orphan an empty, still-visible, still-draggable
+        // panel shell (border + title bar) on screen.
         for (const widget of [this.canvasPanel, this.previewPanel, this.framesPanel,
             this.toolbarPanel, this.statusBar, this.menuBar]) {
             widget?.destroy();
         }
         this.canvasPanel = this.previewPanel = this.framesPanel = this.toolbarPanel = null;
-        this.canvasBox = this.previewBox = this.framesBox = this.paletteBox = this.statusBar = this.menuBar = null;
+        this.canvasBox = this.previewBox = this.framesBox = this.statusBar = this.menuBar = null;
     }
 }
 exports.EditScreen = EditScreen;

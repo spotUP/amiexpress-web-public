@@ -15,8 +15,9 @@
  */
 
 import assert from 'assert';
-import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { Sprite, compilePixels, decompilePixels, PixelGrid } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { EditScreen } from '../edit-screen';
+import { tokenAtColumn } from '../toolbar';
 
 function makeFakeScreen(): any {
   const screen: any = {
@@ -99,6 +100,31 @@ const frameStrip = (framesBoxContent: string): string => {
   const idx = framesBoxContent.indexOf('\n new animation');
   return idx === -1 ? framesBoxContent : framesBoxContent.slice(0, idx);
 };
+
+/**
+ * Fire a real 'click'/'mousemove' event at a box's OWN computed absolute
+ * coordinates - the exact translation `canvasHitTest`/`handleFramesClick`
+ * expect from a real terminal, driving the REAL registered handlers
+ * (`wireMouse()`'s `box.on('click', ...)`), not a source-shape grep.
+ */
+function clickBox(box: any, localX: number, localY: number, button = 'left'): void {
+  const coords = box._getCoords();
+  box.emit('click', { x: coords.xi + localX, y: coords.yi + localY, button });
+}
+function dragBox(box: any, localX: number, localY: number, button = 'left'): void {
+  const coords = box._getCoords();
+  box.emit('mousemove', { x: coords.xi + localX, y: coords.yi + localY, button });
+}
+
+/** A one-animation, one-frame sprite whose frame is exactly this PixelGrid. */
+function pixelSprite(pixels: PixelGrid): Sprite {
+  return {
+    name: 'fixture',
+    cellW: pixels[0].length,
+    cellH: pixels.length / 2,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [compilePixels(pixels)] } },
+  };
+}
 
 export async function namingSwallowsAnimationNameLettersNotBoundOps(): Promise<void> {
   // Two animations so 'a' (cycle animation) has somewhere to go, one frame
@@ -401,6 +427,329 @@ export async function f1InvokesHelpWithoutTouchingTheDocumentAndLeavesNoStuckSta
     pressKey(screen, 'down');
     assert.strictEqual((edit as any).cursorRow, beforeCursorRow + 1,
       'a normal key immediately after F1 must still move the cursor - F1 must not leave the door stuck');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Studio 2c task 4: mouse painting. The default tool is 'paint' and the
+ * default fg/glyph/bg (11, GLYPHS[0]='▀', 0) are the same ones the
+ * spacebar paints with - a click is a second input surface for the exact
+ * same op, not a parallel painting path.
+ */
+export async function clickingTheCanvasPaintsTheClickedCellWithTheActiveTool(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 3, cellH: 2,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[null, null, null], [null, null, null]]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const canvasBox = paneContent(screen, 0);
+    clickBox(canvasBox, 2, 1); // 2 chars/cell: local column 2 is cell column 1; row 1 is cell row 1
+    assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][1],
+      { char: '▀', fg: 11, bg: 0 },
+      'the clicked cell must be painted with the default glyph/fg/bg, exactly like pressing space would');
+    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
+      'only the clicked cell may change');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Studio 2c task 4: paintCanvas() used to join rows with '\n ' (a leading
+ * SPACE, not just a newline) - `['a','b'].join('\n ')` is `'a\n b'`, so
+ * every row except the first rendered one column further right than row
+ * 0. Invisible to any keyboard-only test (the cursor overlay is picked by
+ * array index, never by screen column), but fatal to a click: this pins
+ * that the column a click lands on for row 1+ is the SAME column the
+ * rendered text actually shows there, not one off.
+ */
+export async function canvasClickColumnMappingMatchesTheRenderedGridOnEveryRow(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 2, cellH: 2,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[
+          [{ char: 'A', fg: 7, bg: 0 }, { char: 'B', fg: 7, bg: 0 }],
+          [{ char: 'C', fg: 7, bg: 0 }, { char: 'D', fg: 7, bg: 0 }],
+        ]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const canvasBox = paneContent(screen, 0);
+    const row1 = canvasBox.getContent().split('\n')[1].replace(/\{[^}]*\}/g, '');
+    assert.strictEqual(row1.slice(0, 4), 'CCDD',
+      'row 1 must render flush-left, two characters per cell, exactly like row 0 - no phantom left margin');
+
+    clickBox(canvasBox, 2, 1); // local column 2, row 1 - the column 'D' actually renders at
+    assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][1],
+      { char: '▀', fg: 11, bg: 0 },
+      'the click must repaint cell (1,1) - the SAME cell the rendered text shows at that column');
+    assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][0],
+      { char: 'C', fg: 7, bg: 0 },
+      'cell (1,0) must stay untouched - a phantom left margin on row 1 would have made THIS the one hit instead');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function draggingWithThePaintToolPaintsEveryCellItCrosses(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 3, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null, null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const canvasBox = paneContent(screen, 0);
+    clickBox(canvasBox, 0, 0);              // cell 0: an ordinary click
+    dragBox(canvasBox, 4, 0, 'left');       // cell 2: a mousemove WITH the button held
+
+    const frame = (edit as any).doc.sprite.animations['only'].frames[0][0];
+    assert.notStrictEqual(frame[0], null, 'the clicked cell must be painted');
+    assert.notStrictEqual(frame[2], null, 'the dragged-over cell must be painted too');
+    assert.strictEqual(frame[1], null, 'the cell the drag jumped over (never visited) stays untouched');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function draggingWithoutAHeldButtonDoesNotPaint(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const canvasBox = paneContent(screen, 0);
+    // A plain mouse-move with no button - real terminals only ever send
+    // this for hover, and it must never paint.
+    const coords = canvasBox._getCoords();
+    canvasBox.emit('mousemove', { x: coords.xi, y: coords.yi });
+    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null);
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function pressingToolHotkeysSwitchesTheActiveTool(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    assert.strictEqual((edit as any).tool, 'paint', 'paint is the default tool');
+    pressChar(screen, 'e');
+    assert.strictEqual((edit as any).tool, 'erase');
+    pressChar(screen, 'k');
+    assert.strictEqual((edit as any).tool, 'pick');
+    pressChar(screen, 'u');
+    assert.strictEqual((edit as any).tool, 'fill');
+    pressChar(screen, 'p');
+    assert.strictEqual((edit as any).tool, 'paint');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * The four tool hotkeys are single printable chars, so like every other
+ * one (g/f/b/n/c/x/a/t/l/s) they must be excluded from ordinary cell
+ * typing AND still only reach the tool switch while naming is active -
+ * the same naming guard opKey() already gives every op binding.
+ */
+export async function toolHotkeysAreExcludedFromCellTypingAndGuardedWhileNaming(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }]]] },
+      other: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '@', fg: 7, bg: 0 }]]] },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    for (const ch of ['p', 'e', 'k', 'u']) {
+      assert.ok((edit as any).bindingSet.excludedGlyphKeys.has(ch),
+        `'${ch}' must be excluded from cell typing - it is a bound tool hotkey`);
+    }
+
+    pressKey(screen, '+'); // start naming a new animation
+    const toolBefore = (edit as any).tool;
+    for (const ch of 'pku') pressChar(screen, ch);
+    assert.strictEqual((edit as any).tool, toolBefore, 'typing a name must not switch tools');
+    const framesBox = paneContent(screen, 2);
+    assert.ok(framesBox.getContent().includes('new animation: {lightyellow-fg}pku{/}'),
+      'the typed letters must still land in the name');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function pickToolReadsTheClickedColourWithoutChangingTheDocument(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: 'Z', fg: 5, bg: 2 }]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    pressChar(screen, 'k'); // pick tool
+    const docBefore = (edit as any).doc;
+    const canvasBox = paneContent(screen, 0);
+    clickBox(canvasBox, 0, 0);
+
+    assert.strictEqual((edit as any).fg, 5, 'pick must read the clicked cell\'s fg into the active colour');
+    assert.strictEqual((edit as any).doc, docBefore, 'pick must never touch the document - same EditDoc reference');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function fillToolFloodFillsTheConnectedPixelRegionOnAHalfBlockFrame(): Promise<void> {
+  // A 2x4 pixel grid: colour 1 on the left half, colour 2 on the right -
+  // filling from the left half must repaint only that half.
+  const pixels: PixelGrid = [
+    [1, 1, 2, 2],
+    [1, 1, 2, 2],
+  ];
+  const sprite = pixelSprite(pixels);
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    pressChar(screen, 'u'); // fill tool
+    const canvasBox = paneContent(screen, 0);
+    clickBox(canvasBox, 0, 0); // cell (row 0, col 0) - within the 1-coloured half
+
+    const frame = (edit as any).doc.sprite.animations[(edit as any).doc.animation].frames[0];
+    assert.deepStrictEqual(decompilePixels(frame), [
+      [11, 11, 2, 2],
+      [11, 11, 2, 2],
+    ], 'fill must use the active colour (default fg 11) and stop at the 2-coloured half');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function fillDoesNotHappenOnDragOnlyOnClick(): Promise<void> {
+  const pixels: PixelGrid = [
+    [1, 1],
+    [1, 1],
+  ];
+  const sprite = pixelSprite(pixels);
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    pressChar(screen, 'u'); // fill tool
+    const canvasBox = paneContent(screen, 0);
+    const docBefore = (edit as any).doc;
+    dragBox(canvasBox, 0, 0, 'left'); // a drag, not a click - fill must not run
+
+    assert.strictEqual((edit as any).doc, docBefore,
+      'drag painting is restricted to paint/erase - fill must not fire on mousemove');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function clickingAFrameNumberSelectsThatFrameThroughSelectFrame(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [
+          [[{ char: '1', fg: 7, bg: 0 }]],
+          [[{ char: '2', fg: 7, bg: 0 }]],
+          [[{ char: '3', fg: 7, bg: 0 }]],
+        ],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    assert.strictEqual((edit as any).doc.frame, 0, 'frame 0 starts selected');
+
+    // The column for frame index 2, computed via the SAME plain tokens
+    // paintFrames()/handleFramesClick() both read from frameTokens() -
+    // not a hand-guessed offset.
+    const tokens: string[] = (edit as any).frameTokens();
+    const targetColumn = tokens.slice(0, 2).reduce((sum, t) => sum + t.length + 1, 0);
+    assert.strictEqual(tokenAtColumn(tokens, targetColumn), 2,
+      'precondition: this column must land on frame token index 2');
+
+    const framesBox = paneContent(screen, 2);
+    clickBox(framesBox, targetColumn, 0);
+
+    assert.strictEqual((edit as any).doc.frame, 2, 'clicking frame 3\'s token must select it');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function clickingInTheGapBetweenFrameTokensDoesNotChangeTheSelection(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const tokens: string[] = (edit as any).frameTokens();
+    const gapColumn = tokens[0].length; // the single space between the two tokens
+    assert.strictEqual(tokenAtColumn(tokens, gapColumn), -1, 'precondition: this column is the gap');
+
+    const framesBox = paneContent(screen, 2);
+    clickBox(framesBox, gapColumn, 0);
+
+    assert.strictEqual((edit as any).doc.frame, 0, 'a click in the gap must not change the frame selection');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function clickingAFrameNumberWhileNamingDoesNothing(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    pressKey(screen, '+'); // start naming - the frames strip now also shows the typed name below
+    const tokens: string[] = (edit as any).frameTokens();
+    const targetColumn = tokens[0].length + 1; // start of frame token index 1
+
+    const framesBox = paneContent(screen, 2);
+    clickBox(framesBox, targetColumn, 0);
+
+    assert.strictEqual((edit as any).doc.frame, 0, 'a click on a frame number while naming must be ignored');
   } finally {
     edit.destroy();
   }

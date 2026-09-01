@@ -20,7 +20,7 @@ const appCode = appRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '
 export async function theScreenUsesTheDocumentModel(): Promise<void> {
   for (const op of ['openDoc', 'addFrame', 'deleteFrame', 'moveFrame',
                     'setCell', 'setPixel', 'setTicksPerFrame', 'toggleLoop',
-                    'addAnimation', 'toSprite']) {
+                    'addAnimation', 'toSprite', 'floodFill']) {
     assert.ok(code.includes(op), `edit-screen must use ${op} from edit-doc`);
   }
 }
@@ -76,7 +76,8 @@ export async function opBindingsRouteThroughTheNamingGuard(): Promise<void> {
   assert.ok(/for \(const binding of opBindings\) this\.opKey\(binding\.keys, binding\.handler\);/.test(code),
     'the op table must be wired through opKey by one loop, not per-key call sites');
   for (const key of ["'g'", "'f'", "'S-f'", "'b'", "'S-b'", "','", "'.'", "'n'", "'c'", "'x'",
-                     "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'"]) {
+                     "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'",
+                     "'p'", "'e'", "'k'", "'u'"]) {
     assert.ok(code.includes(`keys: [${key}]`),
       `[${key}] must have a table entry, wired through the op loop into opKey`);
   }
@@ -91,8 +92,14 @@ export async function opBindingsRouteThroughTheNamingGuard(): Promise<void> {
 export async function spaceAndDeleteRouteSetPixelThroughTryOp(): Promise<void> {
   assert.ok(/this\.tryOp\(\(\) => this\.mode === 'pixel'\s*\n\s*\? setPixel/.test(code),
     'space and delete must route setPixel/setCell through tryOp, not apply() directly');
+  // Studio 2c task 4: mouse paint/erase (applyToolAt) reuse this EXACT
+  // guarded form too - not a parallel, unguarded copy - so the count grew
+  // from 2 (space, delete) to 4 (space, delete, mouse paint, mouse erase)
+  // by design. A regression back toward a bespoke, unguarded mouse path
+  // would drop this below 4.
   const count = (code.match(/this\.tryOp\(\(\) => this\.mode === 'pixel'/g) || []).length;
-  assert.strictEqual(count, 2, 'both space and delete must use the guarded form');
+  assert.strictEqual(count, 4,
+    'space, delete, and mouse paint/erase must all use the guarded tryOp form');
 }
 
 /**
@@ -187,7 +194,13 @@ export async function theEditScreenPanesAreDockablePanels(): Promise<void> {
 export async function theEditScreenContentChildrenSitAtTop1ViaPanelContentRect(): Promise<void> {
   assert.ok(code.includes('panelContentRect') && code.includes("from './panels'"),
     'the edit screen must position its panes\' content through panels.ts\'s panelContentRect');
-  for (const box of ['canvasBox', 'previewBox', 'framesBox', 'paletteBox']) {
+  // Studio 2c task 4: the toolbar pane's content box moved out of this
+  // file into toolbar.ts's createToolbar() (the brief's fixed
+  // `createToolbar(screen, panel, state, onChange)` signature takes no
+  // rect, so it computes its own panelContentRect(LAYOUT.edit.toolbar)) -
+  // toolbar.test.ts pins the same top:1/no-literal-top:0 invariant there,
+  // against a REAL constructed box's geometry, instead of here.
+  for (const box of ['canvasBox', 'previewBox', 'framesBox']) {
     const idx = code.indexOf(`this.${box} = blessed.box({`);
     assert.ok(idx >= 0, `${box} must exist`);
     const block = code.slice(idx, code.indexOf('});', idx));
