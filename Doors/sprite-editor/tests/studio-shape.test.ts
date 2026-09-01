@@ -13,7 +13,7 @@ import assert from 'assert';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
-import { SpriteStudioDoor, studioTitle, DEFAULT_ZOOM, ZOOM_STEPS, stepZoom } from '../studio';
+import { SpriteStudioDoor, studioTitle, DEFAULT_ZOOM, ZOOM_STEPS, stepZoom, zoomScales, CELL_ASPECT } from '../studio';
 import { openDoc } from '../edit-doc';
 
 const source = readFileSync(join(__dirname, '..', 'studio.ts'), 'utf8')
@@ -114,8 +114,14 @@ export async function theDefaultIsOneToOne(): Promise<void> {
   // "its super magnified make it 1:1 as default" - the door must not decide
   // a magnification for the artist by fitting the sprite to the screen.
   assert.strictEqual(DEFAULT_ZOOM, 1, 'a sprite opens at actual size');
-  assert.ok(source.includes('cellScaleX: this.zoom, cellScaleY: this.zoom'),
+  assert.ok(source.includes('cellScaleX: zoomScales(this.zoom).x'),
     'the editor must be built at the current zoom, not at a fitted one');
+  assert.deepStrictEqual(zoomScales(1), { x: 2, y: 1 },
+    'actual size is one character ROW per cell row, two characters ACROSS - ' +
+    'a terminal character is twice as tall as it is wide, so one character ' +
+    'per cell draws every pixel as a tall rectangle');
+  assert.deepStrictEqual(zoomScales(4), { x: 8, y: 4 }, 'the aspect holds at every level');
+  assert.strictEqual(CELL_ASPECT, 2);
   assert.ok(!source.includes('canvasScale('),
     'the auto-fit must be gone, not merely unused');
 }

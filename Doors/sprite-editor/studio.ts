@@ -55,8 +55,28 @@ export const SIDEBAR_COLS = 6;
  */
 export const DEFAULT_ZOOM = 1;
 
-/** What the Zoom menu offers, in characters per cell. */
+/**
+ * Characters per cell ACROSS, at every zoom level.
+ *
+ * A terminal character is about twice as tall as it is wide, so a sprite
+ * cell drawn as one character is a tall rectangle - reported looking at a
+ * 5x1 sprite: "the blocks are very tall something seems wrong". Drawing
+ * each cell two characters wide makes a pixel roughly square, which is what
+ * the door's old hand-written painter did with its CELL_CHAR_WIDTH = 2 and
+ * what was lost when the editor took over the canvas.
+ *
+ * This is aspect correction, not magnification: at zoom 1 the sprite is
+ * still one character ROW per cell row - actual size.
+ */
+export const CELL_ASPECT = 2;
+
+/** What the Zoom menu offers, in cell rows per cell. */
 export const ZOOM_STEPS = [1, 2, 3, 4, 6, 8];
+
+/** The two scales the editor is built with at a given zoom level. */
+export function zoomScales(zoom: number): { x: number; y: number } {
+  return { x: zoom * CELL_ASPECT, y: zoom };
+}
 
 /** The next step up or down, clamped - never off the end of the list. */
 export function stepZoom(current: number, delta: 1 | -1): number {
@@ -302,7 +322,7 @@ export class SpriteStudioDoor {
       initialMode: 'draw',
       canvasWidth: sprite.cellW,
       canvasHeight: sprite.cellH,
-      cellScaleX: this.zoom, cellScaleY: this.zoom,
+      cellScaleX: zoomScales(this.zoom).x, cellScaleY: zoomScales(this.zoom).y,
       // An erased sprite cell is a HOLE - compositing skips it and the
       // game's background shows through. Without this every sprite saved
       // here would carry a black box around its artwork.
