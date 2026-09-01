@@ -570,15 +570,6 @@ export class EditorState {
       return false;
     }
 
-    // Store inverse operation for redo
-    const inverseOperation: EditorOperation = {
-      type: operation.type,
-      position: operation.position,
-      content: operation.previousContent || '',
-      previousContent: operation.content,
-      timestamp: Date.now(),
-    };
-
     // Apply inverse operation
     switch (operation.type) {
       case 'insert':

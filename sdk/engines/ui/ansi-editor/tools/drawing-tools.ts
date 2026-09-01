@@ -227,7 +227,7 @@ export const drawTool: ToolHandler = {
     state.setCanvasCell(x, y, cell);
   },
 
-  onEnd(state: EditorState, x: number, y: number) {
+  onEnd(state: EditorState, _x: number, _y: number) {
     flushUndoChunk(state);
   },
 
@@ -595,11 +595,11 @@ export const fillTool: ToolHandler = {
     Canvas.floodFill(canvas, x, y, cell);
   },
 
-  onMove(state: EditorState, x: number, y: number) {
+  onMove(_state: EditorState, _x: number, _y: number) {
     // Flood fill doesn't use move
   },
 
-  onEnd(state: EditorState, x: number, y: number) {
+  onEnd(_state: EditorState, _x: number, _y: number) {
     // Nothing to do
   },
 
@@ -628,15 +628,15 @@ export const pickTool: ToolHandler = {
     }
   },
 
-  onMove(state: EditorState, x: number, y: number) {
+  onMove(_state: EditorState, _x: number, _y: number) {
     // Pick tool doesn't use move
   },
 
-  onEnd(state: EditorState, x: number, y: number) {
+  onEnd(_state: EditorState, _x: number, _y: number) {
     // Nothing to do
   },
 
-  onCancel(state: EditorState) {
+  onCancel(_state: EditorState) {
     // Pick never mutates the canvas or pushes undo state - nothing to undo.
   }
 };
