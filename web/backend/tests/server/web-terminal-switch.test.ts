@@ -26,7 +26,11 @@ import {
   isWebTerminalEnabled,
   NOT_THE_WEB_TERMINAL,
 } from '../../src/server/web-terminal-gate';
-import { saveBBSConfig, invalidateBoardConfig } from '../../src/services/bbs-config-file.service';
+import {
+  saveBBSConfig,
+  loadBBSConfig,
+  invalidateBoardConfig,
+} from '../../src/services/bbs-config-file.service';
 import { config as appConfig } from '../../src/config';
 
 describe('the web terminal switch', () => {
@@ -156,6 +160,50 @@ describe('the web terminal switch', () => {
       else process.env.BBS_ROOT = previousBbsRoot;
       fs.rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  // The reason the flag is stored as HTTP_DISABLED rather than HTTP_ENABLED.
+  // Every board on the board's own live config was written before this field
+  // meant anything, so its file has no key either way - and under plain
+  // presence semantics that reads as OFF and takes the board off the web on
+  // upgrade.
+  it('serves a board whose config file predates the switch', async () => {
+    // A real pre-upgrade file: settings, and nothing about the terminal.
+    saveBBSConfig(root, { bbs_name: 'Uptown', sysop_name: 'Spot', http_port: 80 });
+    const raw = fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8');
+    expect(raw).not.toContain('HTTP_DISABLED');
+    expect(raw).not.toContain('HTTP_ENABLED');
+
+    expect((await request(appServing('terminal')).get('/')).status).toBe(200);
+  });
+
+  it('writes the key only to switch off, and removes it to switch back on', () => {
+    saveBBSConfig(root, { http_enabled: false });
+    expect(fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8')).toContain('HTTP_DISABLED');
+
+    saveBBSConfig(root, { http_enabled: true });
+    expect(fs.readFileSync(path.join(root, 'bbsConfig.info.txt'), 'utf8')).not.toContain('HTTP_DISABLED');
+  });
+
+  it('round-trips the switch through the file both ways', () => {
+    saveBBSConfig(root, { http_enabled: false });
+    invalidateBoardConfig();
+    expect(loadBBSConfig(root).http_enabled).toBe(false);
+
+    saveBBSConfig(root, { http_enabled: true });
+    invalidateBoardConfig();
+    expect(loadBBSConfig(root).http_enabled).toBe(true);
+  });
+
+  it('leaves a board carrying the retired HTTP_ENABLED key alone', () => {
+    // No longer a known tooltype: preserved in the file, read by nothing, and
+    // it must not be mistaken for the switch being off.
+    saveBBSConfig(root, { bbs_name: 'Uptown' });
+    const file = path.join(root, 'bbsConfig.info.txt');
+    fs.appendFileSync(file, 'HTTP_ENABLED\n');
+    invalidateBoardConfig();
+
+    expect(loadBBSConfig(root).http_enabled).toBe(true);
   });
 
   it('reserves exactly the paths the SPA fallback skips', () => {

@@ -293,7 +293,8 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'FTPDATAPORT': 'ftp_data_ports',
 
   // HTTP Server
-  'HTTP_ENABLED': 'http_enabled',
+  // Stored as its NEGATIVE - see INVERTED_BOOLEAN_TOOLTYPES.
+  'HTTP_DISABLED': 'http_enabled',
   // HTTP_HOST was never a bbsConfig tooltype. express.e:15002 reads HTTPHOST
   // out of the PROTOCOL icon (TOOLTYPE_XFERLIB), per protocol, which is the
   // Protocols page's business and cannot be one board-wide field.
@@ -338,6 +339,41 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'FILEDIZ_SYSCMD': 'filediz_syscmd',   // express.e:19258, :19567
   'MAX_DESCLINES': 'max_desclines',     // express.e:348
 };
+
+/**
+ * Boolean tooltypes stored as their NEGATIVE.
+ *
+ * A tooltype means what AmiExpress means by it: present is on, absent is off.
+ * That cannot express a flag whose default is ON, because turning it off
+ * REMOVES the key and the next read cannot tell "switched off" from "this
+ * board's file predates the field". `http_enabled` is exactly that flag: it
+ * gates the web terminal, every existing board's file was written before it
+ * meant anything, and defaulting absent-to-off would have taken every one of
+ * them off the web on upgrade. A startup migration that added the key would
+ * have re-added it every boot after the sysop switched it off.
+ *
+ * Storing the negative removes the problem instead of guarding it. Absent -
+ * every board today - is ON. The key is only ever written when the sysop
+ * asks for the non-default state, which is what presence semantics are for.
+ *
+ * The negation lives here, at the tooltype boundary, and nowhere else: the
+ * schema, the column, the API and the admin checkbox all still speak
+ * `http_enabled`.
+ *
+ * A board carrying the old `HTTP_ENABLED` key is unaffected - it is no longer
+ * a known tooltype, so it is preserved untouched and read by nothing.
+ */
+const INVERTED_BOOLEAN_TOOLTYPES = new Set(['HTTP_DISABLED']);
+
+function isInvertedTooltype(tooltypeName: string): boolean {
+  return INVERTED_BOOLEAN_TOOLTYPES.has(tooltypeName);
+}
+
+/** Whether this FIELD is stored as its negative. */
+function isInvertedField(fieldName: string): boolean {
+  const tooltypeName = REVERSE_TOOLTYPE_MAP[fieldName];
+  return tooltypeName !== undefined && isInvertedTooltype(tooltypeName);
+}
 
 /**
  * Reverse mapping (internal field name → AmiExpress tooltype name)
@@ -524,7 +560,9 @@ console.log('[BBSConfig] bbsConfig.info not found, using defaults');
     const defaults = getDefaultConfig() as Record<string, unknown>;
     for (const [field, value] of Object.entries(defaults)) {
       if (typeof value === 'boolean') {
-        (config as any)[field] = false;
+        // A field stored as its negative starts ON: absent means the sysop
+        // never asked for the non-default state.
+        (config as any)[field] = isInvertedField(field);
       }
     }
 
@@ -540,8 +578,9 @@ console.log('[BBSConfig] bbsConfig.info not found, using defaults');
 
       // Parse value based on field type
       if (typeof getDefaultConfig()[fieldName] === 'boolean') {
-        // Boolean flag (presence = true)
-        (config as any)[fieldName] = true;
+        // Boolean flag: presence = true, or = FALSE for the handful stored
+        // as their negative.
+        (config as any)[fieldName] = !isInvertedTooltype(key);
       } else if (typeof getDefaultConfig()[fieldName] === 'number') {
         // Numeric value
         const num = parseInt(rawValue, 10);
@@ -627,8 +666,10 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       if (!tooltypeName) continue;
 
       if (typeof value === 'boolean') {
-        // Boolean: present = true, absent = false
-        if (value) {
+        // Boolean: present = true, absent = false - inverted for the handful
+        // stored as their negative, where the key is written to switch OFF.
+        const present = isInvertedTooltype(tooltypeName) ? !value : value;
+        if (present) {
           existing.set(tooltypeName, '');
           if (infoFile) {
             updateTooltype(infoFile, tooltypeName, '', false);
