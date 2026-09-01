@@ -136,8 +136,8 @@ export class ArtSession {
       border: { type: 'line' },
       tags: true, keys: false, mouse: false,
       style: {
-        border: { fg: 'lightyellow' },
-        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        border: { fg: T.accent },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });

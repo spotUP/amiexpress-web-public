@@ -177,8 +177,8 @@ class ArtSession {
             border: { type: 'line' },
             tags: true, keys: false, mouse: false,
             style: {
-                border: { fg: 'lightyellow' },
-                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                border: { fg: door_theme_1.T.accent },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
                 item: { fg: door_theme_1.T.ink },
             },
         });

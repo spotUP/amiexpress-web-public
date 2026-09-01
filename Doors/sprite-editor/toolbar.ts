@@ -26,6 +26,7 @@
 import { Screen, Box, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PALETTE } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { LAYOUT } from './layout';
+import { T } from './door-theme';
 import { panelContentRect } from './panels';
 import { tokenAtColumn } from './token-strip';
 
@@ -66,7 +67,7 @@ export function createToolbar(
 
   function render(): void {
     const tools = toolLabels()
-      .map((label, i) => (TOOLS[i] === state.tool ? `{blue-bg}{lightyellow-fg}${label}{/}` : label))
+      .map((label, i) => (TOOLS[i] === state.tool ? `{${T.bar}-bg}{${T.accent}-fg}${label}{/}` : label))
       .join(' ');
     const swatches = PALETTE
       .map((name, i) => {

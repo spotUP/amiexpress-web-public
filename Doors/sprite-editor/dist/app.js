@@ -136,7 +136,7 @@ class StudioApp {
             // in wireMouseSelection() through the SAME handlers as arrow/enter.
             tags: true, keys: false, mouse: true,
             style: {
-                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
                 item: { fg: door_theme_1.T.ink },
             },
         });
@@ -148,7 +148,7 @@ class StudioApp {
             border: { type: 'none' },
             tags: true, keys: false, mouse: true,
             style: {
-                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
                 item: { fg: door_theme_1.T.ink },
             },
         });
@@ -161,7 +161,7 @@ class StudioApp {
             border: { type: 'none' },
             tags: true, keys: false, mouse: true,
             style: {
-                selected: { bg: door_theme_1.T.bar, fg: 'lightyellow', bold: true },
+                selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.accent, bold: true },
                 item: { fg: door_theme_1.T.ink },
             },
         });
@@ -333,7 +333,7 @@ class StudioApp {
             // new flash/state mechanism this browser doesn't otherwise have.
             { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
                 handler: () => {
-                    this.statusBar.setContent(`{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`);
+                    this.statusBar.setContent(`{${door_theme_1.T.accent}-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`);
                     this.screen.render();
                 } },
             // Studio 2c: menu-only (empty keys is legal - see bindings.ts's
@@ -428,9 +428,9 @@ class StudioApp {
         focus(this.spritesPanel, this.state.pane === 'sprites');
         focus(this.animationsPanel, this.state.pane === 'animations');
         const sel = (0, browser_model_1.selection)(this.state);
-        const left = `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
+        const left = `{${door_theme_1.T.accent}-fg}${sel.door ?? '-'}{/} / ` +
             `{${door_theme_1.T.ink}-fg}${sel.sprite ?? '-'}{/} / ` +
-            `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
+            `{${door_theme_1.T.accentAlt}-fg}${sel.animation ?? '-'}{/}`;
         const right = `{${door_theme_1.T.dim}-fg}TAB panes  ARROWS move  Q quit{/}`;
         const visible = (tagged) => tagged.replace(/\{[^}]*\}/g, '').length;
         // Clamp to the real width: if the two segments cannot fit on one row,

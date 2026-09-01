@@ -473,8 +473,8 @@ class EditScreen {
             rows.push(line);
         }
         const modeLine = this.mode === 'pixel'
-            ? `{lightgreen-fg}PIXEL{/} row ${this.cursorRow} col ${this.cursorCol}`
-            : `{lightyellow-fg}CELL{/} row ${this.cursorRow} col ${this.cursorCol}`;
+            ? `{${door_theme_1.T.ok}-fg}PIXEL{/} row ${this.cursorRow} col ${this.cursorCol}`
+            : `{${door_theme_1.T.accent}-fg}CELL{/} row ${this.cursorRow} col ${this.cursorCol}`;
         // Fix round 1, Important 2: no leading '\n ' any more - that blank
         // line used to push content below the box's own label/border; now
         // the CONTENT CHILD's position (panels.ts's panelContentRect, top:1)
@@ -633,7 +633,7 @@ class EditScreen {
     }
     paintFrames() {
         const strip = this.frameTokens()
-            .map((text, i) => (i === this.doc.frame ? `{${door_theme_1.T.bar}-bg}{lightyellow-fg}${text}{/}` : text))
+            .map((text, i) => (i === this.doc.frame ? `{${door_theme_1.T.bar}-bg}{${door_theme_1.T.accent}-fg}${text}{/}` : text))
             .join(' ');
         this.framesBox.setContent(strip);
     }
@@ -648,8 +648,8 @@ class EditScreen {
         this.toolbarState.tool = this.tool;
         this.toolbarState.colour = this.fg;
         this.toolbar.refresh();
-        const dirty = this.doc.dirty ? `{lightred-fg}*{/} ` : '';
-        const flash = this.statusFlash ? `  {lightyellow-fg}${this.statusFlash}{/}` : '';
+        const dirty = this.doc.dirty ? `{${door_theme_1.T.alert}-fg}*{/} ` : '';
+        const flash = this.statusFlash ? `  {${door_theme_1.T.accent}-fg}${this.statusFlash}{/}` : '';
         this.statusFlash = '';
         this.statusBar.setContent(`${dirty}{${door_theme_1.T.ink}-fg}${this.doc.sprite.name}{/} ${this.doc.animation} ` +
             `f${this.doc.frame + 1}${flash}` +

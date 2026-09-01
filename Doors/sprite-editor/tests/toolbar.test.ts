@@ -13,6 +13,7 @@ import { createToolbar, toolLabels, ToolbarState } from '../toolbar';
 import { tokenAtColumn } from '../token-strip';
 import { makePanel, panelContentRect } from '../panels';
 import { LAYOUT } from '../layout';
+import { T } from '../door-theme';
 
 function makeFakeScreen(): any {
   const screen: any = {
@@ -167,9 +168,13 @@ export async function activeToolAndColourAreIndicatedInTheRenderedContent(): Pro
   const { panel, handle, box } = buildToolbar({ tool: 'fill', colour: 9 });
   try {
     const content = box.getContent();
-    assert.ok(content.includes('{blue-bg}{lightyellow-fg}[Fill]{/}'),
+    // Built from the TOKENS, not from colour names: the toolbar highlight
+    // follows the caller's theme now, so an assertion naming a hue would
+    // only hold for whichever theme happened to be active.
+    const active = (label: string) => `{${T.bar}-bg}{${T.accent}-fg}[${label}]{/}`;
+    assert.ok(content.includes(active('Fill')),
       'the active tool must be tag-highlighted in the rendered content');
-    assert.ok(!content.includes('{blue-bg}{lightyellow-fg}[Paint]{/}'),
+    assert.ok(!content.includes(active('Paint')),
       'an inactive tool must not carry the active-tool highlight');
     assert.ok(content.includes('Fill 9'), 'the status line must show the active tool and colour');
   } finally {
@@ -190,7 +195,7 @@ export async function refreshRepaintsAfterAnExternalStateChange(): Promise<void>
     state.colour = 4;
     handle.refresh();
     const content = box.getContent();
-    assert.ok(content.includes('{blue-bg}{lightyellow-fg}[Pick]{/}'));
+    assert.ok(content.includes(`{${T.bar}-bg}{${T.accent}-fg}[Pick]{/}`));
     assert.ok(content.includes('Pick 4'));
   } finally {
     handle.destroy();

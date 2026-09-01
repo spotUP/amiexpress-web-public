@@ -30,6 +30,7 @@ exports.createToolbar = createToolbar;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const layout_1 = require("./layout");
+const door_theme_1 = require("./door-theme");
 const panels_1 = require("./panels");
 const token_strip_1 = require("./token-strip");
 const TOOLS = ['paint', 'erase', 'pick', 'fill'];
@@ -54,7 +55,7 @@ function createToolbar(screen, panel, state, onChange) {
     });
     function render() {
         const tools = toolLabels()
-            .map((label, i) => (TOOLS[i] === state.tool ? `{blue-bg}{lightyellow-fg}${label}{/}` : label))
+            .map((label, i) => (TOOLS[i] === state.tool ? `{${door_theme_1.T.bar}-bg}{${door_theme_1.T.accent}-fg}${label}{/}` : label))
             .join(' ');
         const swatches = cell_art_1.PALETTE
             .map((name, i) => {

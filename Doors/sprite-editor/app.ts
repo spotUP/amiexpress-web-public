@@ -148,7 +148,7 @@ export class StudioApp {
       // in wireMouseSelection() through the SAME handlers as arrow/enter.
       tags: true, keys: false, mouse: true,
       style: {
-        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });
@@ -160,7 +160,7 @@ export class StudioApp {
       border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
-        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });
@@ -173,7 +173,7 @@ export class StudioApp {
       border: { type: 'none' },
       tags: true, keys: false, mouse: true,
       style: {
-        selected: { bg: T.bar, fg: 'lightyellow', bold: true },
+        selected: { bg: T.bar, fg: T.accent, bold: true },
         item: { fg: T.ink },
       },
     });
@@ -335,7 +335,7 @@ export class StudioApp {
       { id: 'studio.help', keys: ['f1'], hotkeyHint: 'F1', menu: 'Help', label: 'Keyboard Shortcuts',
         handler: () => {
           this.statusBar.setContent(
-            `{lightyellow-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`
+            `{${T.accent}-fg}up/down/j/k move  pageup/pagedown  tab panes  e edit  m art mode  q quit{/}`
           );
           this.screen.render();
         } },
@@ -434,9 +434,9 @@ export class StudioApp {
 
     const sel = selection(this.state);
     const left =
-      `{lightyellow-fg}${sel.door ?? '-'}{/} / ` +
+      `{${T.accent}-fg}${sel.door ?? '-'}{/} / ` +
       `{${T.ink}-fg}${sel.sprite ?? '-'}{/} / ` +
-      `{lightcyan-fg}${sel.animation ?? '-'}{/}`;
+      `{${T.accentAlt}-fg}${sel.animation ?? '-'}{/}`;
     const right = `{${T.dim}-fg}TAB panes  ARROWS move  Q quit{/}`;
     const visible = (tagged: string) => tagged.replace(/\{[^}]*\}/g, '').length;
     // Clamp to the real width: if the two segments cannot fit on one row,

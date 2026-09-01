@@ -98,7 +98,7 @@ function promptText(screen, title, initial = '') {
             top: 0, left: 1, width: '100%-2', height: 1,
             value: initial,
             mouse: true,
-            style: { fg: door_theme_1.T.ink, focus: { fg: 'lightyellow' } },
+            style: { fg: door_theme_1.T.ink, focus: { fg: door_theme_1.T.accent } },
         });
         const finish = (value) => {
             input.destroy();

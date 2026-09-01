@@ -15,6 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
+/** The caller's tokens, for the stats lines' inline tags. */
+let T = (0, theme_1.themeById)('classic').tokens;
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 class BBSDashboard {
@@ -64,7 +66,9 @@ class BBSDashboard {
     }
     createUI() {
         const bbsTheme = this.ctx.bbs?.getTheme;
-        this.s = (0, theme_1.themeStyles)(bbsTheme ? this.ctx.bbs.getTheme() : (0, theme_1.themeById)('classic'));
+        const resolved = bbsTheme ? this.ctx.bbs.getTheme() : (0, theme_1.themeById)('classic');
+        this.s = (0, theme_1.themeStyles)(resolved);
+        T = resolved.tokens;
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             smartCSR: false, // Prevent layout corruption in BBS environment
             dockBorders: false, // Not needed for fixed panels
@@ -237,23 +241,23 @@ class BBSDashboard {
         // Render BBS Statistics Panel
         const statsLines = [];
         statsLines.push('');
-        statsLines.push(`Total Users:    {white-fg}${this.stats.totalUsers.toLocaleString()}{/white-fg}`);
+        statsLines.push(`Total Users:    {${T.ink}-fg}${this.stats.totalUsers.toLocaleString()}{/${T.ink}-fg}`);
         statsLines.push('');
-        statsLines.push(`Active Now:     {green-fg}${this.stats.activeUsers}{/green-fg}`);
+        statsLines.push(`Active Now:     {${T.ok}-fg}${this.stats.activeUsers}{/${T.ok}-fg}`);
         statsLines.push('');
-        statsLines.push(`Total Calls:    {white-fg}${this.stats.totalCalls.toLocaleString()}{/white-fg}`);
+        statsLines.push(`Total Calls:    {${T.ink}-fg}${this.stats.totalCalls.toLocaleString()}{/${T.ink}-fg}`);
         statsLines.push('');
-        statsLines.push(`Messages:       {white-fg}${this.stats.totalMessages.toLocaleString()}{/white-fg}`);
+        statsLines.push(`Messages:       {${T.ink}-fg}${this.stats.totalMessages.toLocaleString()}{/${T.ink}-fg}`);
         statsLines.push('');
-        statsLines.push(`Files:          {white-fg}${this.stats.totalFiles.toLocaleString()}{/white-fg}`);
+        statsLines.push(`Files:          {${T.ink}-fg}${this.stats.totalFiles.toLocaleString()}{/${T.ink}-fg}`);
         statsLines.push('');
-        statsLines.push(`Uptime:         {white-fg}${this.formatUptime(this.stats.systemUptime)}{/white-fg}`);
+        statsLines.push(`Uptime:         {${T.ink}-fg}${this.formatUptime(this.stats.systemUptime)}{/${T.ink}-fg}`);
         this.statsText.setContent(statsLines.join('\n'));
         // Render Node Status Panel
         const nodesLines = [];
         nodesLines.push('');
         nodesLines.push(`{bold}  Node    User              Status      Location{/bold}`);
-        nodesLines.push('{cyan-fg}' + '─'.repeat(60) + '{/cyan-fg}');
+        nodesLines.push(`{${T.accent}-fg}` + '─'.repeat(60) + `{/${T.accent}-fg}`);
         // Fetch real node status
         const nodes = await this.fetchNodeStatus();
         for (const node of nodes) {
@@ -265,7 +269,7 @@ class BBSDashboard {
         this.nodesText.setContent(nodesLines.join('\n'));
         // Update status line
         const now = new Date().toLocaleTimeString();
-        this.statusText.setContent(` {green-fg}Last Update: ${now}{/green-fg}  {yellow-fg}Q: Quit  R/Space: Refresh{/yellow-fg} `);
+        this.statusText.setContent(` {${T.ok}-fg}Last Update: ${now}{/${T.ok}-fg}  {${T.warn}-fg}Q: Quit  R/Space: Refresh{/${T.warn}-fg} `);
         this.screen.render();
     }
     /**
