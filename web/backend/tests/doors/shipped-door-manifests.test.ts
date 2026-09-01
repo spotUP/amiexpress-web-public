@@ -43,6 +43,12 @@ describe('shipped door manifests', () => {
     }
   });
 
+  // A door's package.json is what a FUTURE install would register; the board
+  // runs what Commands/BBSCmd already holds. When they disagree the board
+  // wins - BBSLink said LINKMENU where the board runs BBSLINK, the wall said
+  // BBSLINKWALL where it runs LINKWALL, and the front end said FRONTEND for a
+  // registration whose filename is Telnet-Front and which carries no BBSCMD
+  // tooltype at all.
   it.each(doorsWithManifests)('%s declares the command its package.json registers', doorName => {
     const doorDir = path.join(DOORS_DIR, doorName);
     const manifest = JSON.parse(fs.readFileSync(path.join(doorDir, 'door.settings.json'), 'utf8'));

@@ -25,7 +25,10 @@ exports.metadata = {
     version: '1.1.0',
     description: 'Who\'s Online Login Display',
     author: 'REBEL/QTX',
-    command: 'FRONTEND',
+    // What the board registers: Commands/BBSCmd/Telnet-Front.info carries no
+    // BBSCMD tooltype, so the command is its filename. Nothing on this board
+    // registers FRONTEND.
+    command: 'TELNET-FRONT',
 };
 /**
  * Pad a string to width, a space at a time from each side.
@@ -48,7 +51,7 @@ function centre(text, width) {
 async function getNodes(socket, currentNodeNumber, currentUserIp) {
     return new Promise((resolve) => {
         // Defaults, then BBS_IP/MAX_NODES, then what the sysop set in the admin
-        // (Doors -> FRONTEND -> Door settings). See config.ts.
+        // (Doors -> Telnet-Front -> Door settings). See config.ts.
         const maxNodes = (0, config_1.loadConfig)(__dirname).maxNodes;
         // Set up listener BEFORE emitting to avoid race condition
         const responseHandler = (data) => {

@@ -2,7 +2,7 @@
   "name": "telnet-front-door",
   "version": "1.0.0",
   "description": "Telnet Frontend - Who's Online Login Display",
-  "bbsCommand": "FRONTEND",
+  "bbsCommand": "TELNET-FRONT",
   "main": "dist/index.js",
   "author": "AmiExpress Team",
   "license": "MIT",
