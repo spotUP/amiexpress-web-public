@@ -51,6 +51,8 @@ exports.newFileContent = newFileContent;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const assets_1 = require("./assets");
 const dialogs_1 = require("./dialogs");
+const bindings_1 = require("./bindings");
+const menu_1 = require("./menu");
 /**
  * The content to open for a typed new-file name.
  *
@@ -80,6 +82,7 @@ class ArtSession {
         this.files = [];
         this.selected = 0;
         this.keyHandlers = [];
+        this.menuBar = null;
         this.screen = screen;
         this.door = door;
         this.onExit = onExit;
@@ -103,6 +106,67 @@ class ArtSession {
     items() {
         return [...this.files, '[new file]'];
     }
+    /**
+     * The picker's table - Task 7 (controller audit gap 3): this list used
+     * to bind up/k, down/j, enter, escape directly via this.key(), with NO
+     * menu at all. Handler bodies below are moved verbatim from that old
+     * this.key() wiring (same dialogOpen guard, same behaviour) - only WHERE
+     * they are declared changed. dialogOpen (dialogs.ts) is the same guard
+     * edit-screen.ts's opKey() uses: screen.key() bindings are GLOBAL (fire
+     * regardless of focus - see this file's own module doc comment), so the
+     * physical keystrokes a promptText dialog's own Textbox is consuming
+     * would otherwise ALSO reach these handlers.
+     */
+    buildListBindings() {
+        return [
+            { id: 'file.openSelected', keys: ['enter'], hotkeyHint: 'enter', menu: 'File', label: 'Open Selected',
+                handler: async () => {
+                    if (this.screen.dialogOpen)
+                        return;
+                    const isNewFile = this.selected === this.items().length - 1;
+                    if (isNewFile) {
+                        const name = await (0, dialogs_1.promptText)(this.screen, 'New file name');
+                        if (name === null)
+                            return; // ESC cancelled
+                        this.openEditor(`${name}.ans`, newFileContent(this.door, this.files, name));
+                        return;
+                    }
+                    const file = this.files[this.selected];
+                    let content = '';
+                    try {
+                        content = (0, assets_1.readArt)(this.door, file).toString('latin1');
+                    }
+                    catch {
+                        content = '';
+                    }
+                    this.openEditor(file, content);
+                } },
+            // 'q' is NOT bound here (unlike the browser's own quit key): a typed
+            // filename must be free to contain the letter q, and the promptText
+            // dialog owns its own text field's keystrokes anyway. Escape alone
+            // exits the list.
+            { id: 'file.cancel', keys: ['escape'], hotkeyHint: 'esc', menu: 'File', label: 'Cancel',
+                handler: () => {
+                    if (this.screen.dialogOpen)
+                        return; // the dialog's own ESC handles its own cancel
+                    this.exit();
+                } },
+            { id: 'nav.up', keys: ['up', 'k'], hotkeyHint: 'up/k', menu: 'Navigate', label: 'Up',
+                handler: () => {
+                    if (this.screen.dialogOpen)
+                        return;
+                    this.selected = Math.max(0, this.selected - 1);
+                    this.paint();
+                } },
+            { id: 'nav.down', keys: ['down', 'j'], hotkeyHint: 'down/j', menu: 'Navigate', label: 'Down',
+                handler: () => {
+                    if (this.screen.dialogOpen)
+                        return;
+                    this.selected = Math.min(this.items().length - 1, this.selected + 1);
+                    this.paint();
+                } },
+        ];
+    }
     showList() {
         this.files = (0, assets_1.listArt)(this.door);
         this.listBox = blessed_1.default.list({
@@ -119,64 +183,44 @@ class ArtSession {
         });
         this.selected = 0;
         this.paint();
-        // dialogOpen (dialogs.ts) is the same guard edit-screen.ts's opKey()
-        // uses: screen.key() bindings are GLOBAL (fire regardless of focus -
-        // see this file's own module doc comment), so the physical keystrokes
-        // a promptText dialog's own Textbox is consuming would otherwise ALSO
-        // reach these handlers.
-        this.key(['up', 'k'], () => {
-            if (this.screen.dialogOpen)
-                return;
-            this.selected = Math.max(0, this.selected - 1);
-            this.paint();
-        });
-        this.key(['down', 'j'], () => {
-            if (this.screen.dialogOpen)
-                return;
-            this.selected = Math.min(this.items().length - 1, this.selected + 1);
-            this.paint();
-        });
-        this.key(['enter'], async () => {
-            if (this.screen.dialogOpen)
-                return;
-            const isNewFile = this.selected === this.items().length - 1;
-            if (isNewFile) {
-                const name = await (0, dialogs_1.promptText)(this.screen, 'New file name');
-                if (name === null)
-                    return; // ESC cancelled
-                this.openEditor(`${name}.ans`, newFileContent(this.door, this.files, name));
-                return;
-            }
-            const file = this.files[this.selected];
-            let content = '';
-            try {
-                content = (0, assets_1.readArt)(this.door, file).toString('latin1');
-            }
-            catch {
-                content = '';
-            }
-            this.openEditor(file, content);
-        });
-        // 'q' is NOT bound here (unlike the browser's own quit key): a typed
-        // filename must be free to contain the letter q, and the promptText
-        // dialog owns its own text field's keystrokes anyway. Escape alone
-        // exits the list.
-        this.key(['escape'], () => {
-            if (this.screen.dialogOpen)
-                return; // the dialog's own ESC handles its own cancel
-            this.exit();
-        });
+        // Same isBlocked wiring as edit-screen.ts/app.ts's own bindKeys(): the
+        // guard lives in bindings.ts's buildBindingSet so screen.key()
+        // registration (this loop) and a future menu-mouse dispatch share the
+        // identical guarded handler - see bindings.ts's module doc comment.
+        this.bindingSet = (0, bindings_1.buildBindingSet)(this.buildListBindings(), () => this.screen.dialogOpen);
+        for (const binding of this.bindingSet.bindings)
+            this.key(binding.keys, binding.handler);
+        // Studio 2c menu bar, same pattern as EditScreen/StudioApp - built from
+        // the identical guarded bindingSet the keys above wire from, so there
+        // is one dispatch path, not two.
+        this.menuBar = (0, menu_1.createStudioMenuBar)(this.screen, this.bindingSet.menuItems());
     }
     paint() {
         this.listBox.setItems(this.items());
         this.listBox.select(this.selected);
         this.screen.render();
     }
-    /** List phase -> editor phase: the list's keys die before the editor's own take over. */
+    /**
+     * List phase -> editor phase: the list's keys die before the editor's
+     * own take over. The picker's OWN menu bar must die here too, not just
+     * hide - the ANSIEditor is opened with `showMenuBar: true` of its own,
+     * and this ArtSession never returns to the list phase once the editor is
+     * open (the editor's only onExit path is a full session exit - see
+     * exit() below), so there is nothing to restore it FOR. Destroying it
+     * (rather than merely hiding it) is the strongest form of "not live
+     * underneath the editor's own bar": a destroyed element is detached from
+     * the screen tree entirely, so it can never be found by the real mouse
+     * hit-test path either - proven in art-screen.test.ts's
+     * thePickerMenuBarDoesNotOutliveTheListPhase against a REAL Screen, the
+     * same hit-test proof app-shape.test.ts uses for the browser's own menu
+     * bar sleeping under EditScreen/ArtSession.
+     */
     openEditor(file, content) {
         this.unbindKeys();
         this.listBox?.destroy();
         this.listBox = null;
+        this.menuBar?.destroy();
+        this.menuBar = null;
         this.editor = new blessed_1.ANSIEditor({
             parent: this.screen,
             top: 0, left: 0, width: '100%', height: '100%',
@@ -220,6 +264,14 @@ class ArtSession {
         this.unbindKeys();
         this.listBox?.destroy();
         this.listBox = null;
+        // Idempotent: openEditor() already destroys/nulls this.menuBar before
+        // the editor phase begins, so this is a no-op by then - but the
+        // ordinary "File > Cancel"/escape exit from the LIST phase (never
+        // having opened the editor at all) reaches destroy() with the picker's
+        // menu bar still alive, and it must die with everything else this
+        // session owns.
+        this.menuBar?.destroy();
+        this.menuBar = null;
         this.editor?.destroy();
         this.editor = null;
     }

@@ -15,6 +15,7 @@
  */
 
 import assert from 'assert';
+import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { Sprite, compilePixels, decompilePixels, PixelGrid } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { EditScreen, CELL_CHAR_WIDTH } from '../edit-screen';
 import { tokenAtColumn } from '../token-strip';
@@ -1190,4 +1191,217 @@ export async function escapeOnACleanDocumentExitsImmediatelyWithNoDialog(): Prom
 
   assert.strictEqual(exited, true, 'a clean document must exit on the first ESC, no confirmation needed');
   assert.strictEqual(screen.dialogOpen, undefined, 'no dialog should ever have opened');
+}
+
+/**
+ * Live user report, 2026-09-01, while this task was already in flight:
+ * "cannot leave the sprite editor via menu or keys". Confirmed diagnosis:
+ * bare ESC was the ONLY way out (no other key, no menu entry beyond File >
+ * Save). C-q is added as a second hotkey on the SAME 'file.closeEditor'
+ * binding (keys: ['escape', 'C-q']) - it must exit a CLEAN document
+ * immediately, exactly like escape.
+ */
+export async function cqClosesACleanEditorTheSameWayEscapeDoes(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  let exited = false;
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  assert.strictEqual((edit as any).doc.dirty, false, 'precondition: freshly opened, not dirty');
+
+  pressKey(screen, 'C-q');
+
+  assert.strictEqual(exited, true, 'C-q on a clean document must exit immediately, exactly like escape');
+  assert.strictEqual(screen.dialogOpen, undefined, 'no dialog should ever have opened');
+}
+
+/**
+ * The other half of the live user report: ESC-ESC on a dirty document
+ * looked "stuck" because ESC cancels the confirm dialog rather than
+ * confirming it. C-q is the SAME binding, not a shortcut around the
+ * dirty-confirm flow - it must open the identical discard dialog.
+ */
+export async function cqOnADirtyDocumentAsksToDiscardJustLikeEscape(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  let exited = false;
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  try {
+    pressKey(screen, 'space'); // dirty it
+    assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
+
+    const pending = keyHandler(screen, 'C-q')();
+    assert.strictEqual(screen.dialogOpen, true,
+      'C-q on a dirty document must open the SAME discard confirm dialog escape does');
+
+    const modal = lastDialog(screen);
+    (modal as any)._confirmButton.emit('press');
+    await pending;
+
+    assert.strictEqual(exited, true, 'confirming the discard prompt reached via C-q must exit');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * C-q must cost the door nothing: glyphForKey('C-q') is null (no 'S-'
+ * prefix, and it is not itself a single printable character), so it must
+ * not enter the glyph-typing exclusion set - and the bare letter 'q',
+ * unbound anywhere in this door, must keep painting the ordinary glyph q,
+ * exactly as it did before this binding existed. Losing the letter q for
+ * cell art was explicitly ruled out when this binding was added.
+ */
+export async function theLetterQRemainsUnboundAndStillPaintsAsAnOrdinaryGlyph(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 2, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }, null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    assert.ok(!(edit as any).bindingSet.excludedGlyphKeys.has('q'),
+      "'q' must not be excluded from cell typing - C-q must not reach the glyph set as a printable");
+
+    const canvasBox = paneContent(screen, 0);
+    const before = canvasBox.getContent();
+
+    pressChar(screen, 'q'); // no bare-'q' binding exists, so only the keypress fires
+
+    assert.notStrictEqual(canvasBox.getContent(), before,
+      "typing 'q' in cell mode must still reach setCell as an ordinary glyph, not be swallowed");
+    assert.ok(canvasBox.getContent().includes('q'), "the painted cell must contain the typed glyph 'q'");
+  } finally {
+    edit.destroy();
+  }
+}
+
+/** A blessed key name for a real KeyEvent, driven through Screen's real _handleKey dispatch. */
+function keyEvent(name: string, ctrl = false): any {
+  return { name, full: name, ctrl, meta: false, shift: false, sequence: name };
+}
+
+/**
+ * Live user report, third finding, verified with a REAL SDK Screen (the
+ * fake screen everywhere else in this file has no real key-dispatch/
+ * focus-trap machinery - screen.ts's `_handleKey`, `trapFocus`, a focused
+ * element's own `emit('keypress <name>', ...)` - to answer "does a real
+ * keypress genuinely operate the modal end to end", only whether the
+ * callback WIRING is correct, which `_confirmButton.emit('press')` already
+ * proves elsewhere in this file). Driving REAL KeyEvents through the REAL
+ * `_handleKey` entry point - the same call Program's own keypress parsing
+ * makes - surfaced a genuine, pre-existing production bug that no test in
+ * this door had ever caught, because every prior test used the fake
+ * screen:
+ *
+ * screen.ts's `_handleKey` does not stop at a registered `screen.key()`
+ * handler unless that handler's return value is `=== true` (none of this
+ * door's ever are - StudioBinding handlers return void throughout). After
+ * the handler runs, `_handleKey` ALSO re-emits the SAME physical keypress
+ * to `this._focused` and its ancestor chain - read AFTER the handler ran,
+ * not before. When the 'file.closeEditor' handler opens the discard
+ * ConfirmModal, `ConfirmModal.display()` (confirm-modal.ts) focuses its
+ * own confirm button SYNCHRONOUSLY, inside that same handler call - so by
+ * the time `_handleKey` re-emits the keypress, `this._focused` is already
+ * the confirm button, and the bubble walks up to its parent, the
+ * ConfirmModal ITSELF, which binds `this.key(['escape'], () =>
+ * this._handleCancel())` for its own Escape-to-cancel. The result: a
+ * dirty document's Escape keypress opens the confirm dialog AND cancels
+ * it again, within the SAME physical keystroke, before a user could ever
+ * press a second key. Confirmed by direct instrumentation (dialogOpen
+ * reads true immediately after the handler runs, then false again before
+ * `_handleKey` returns) - this is not a test artifact, it is exactly what
+ * a real terminal's Escape key does today.
+ *
+ * C-q (the same 'file.closeEditor' binding's second hotkey) does NOT
+ * collide: ConfirmModal only ever binds 'escape' for cancel, never 'C-q',
+ * so the bubbled keypress finds nothing to match and the dialog survives -
+ * verified below in cqReliablyExitsADirtyEditorViaRealKeyDispatchEndToEnd.
+ * Fixing the Escape case at the root (making an opKey-dispatched handler
+ * report itself as `handled` to screen.ts's dispatch, the same way any
+ * other blessed key handler can) is an architectural change to
+ * bindings.ts/opKey's return-value contract, used by every op this door
+ * binds, not a menu-reachability change - out of this task's scope. This
+ * test PINS the current, understood behaviour as a documented, reported
+ * finding (see task-7-report.md) rather than silently leaving the gap
+ * implicit or forcing the test to lie about what the door does today.
+ */
+export async function escapeOnADirtyDocumentSelfCancelsWithinTheSameRealKeypressKnownLimitation(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-real-keys-esc', width: 80, height: 25 } as any);
+  let exited = false;
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  try {
+    screen._handleKey(undefined, keyEvent('space')); // dirty it via the real 'space' paint binding
+    assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
+
+    screen._handleKey(undefined, keyEvent('escape'));
+
+    assert.strictEqual(screen.dialogOpen, false,
+      'KNOWN LIMITATION (reported, not fixed by this task): a real Escape keypress on a dirty document ' +
+      'opens the confirm dialog and immediately self-cancels it within the same keystroke, because ' +
+      "ConfirmModal's own Escape-to-cancel binding is reached by screen.ts's post-handler focus bubbling");
+    assert.strictEqual(exited, false, 'the self-cancel must leave the editor open, not exit it');
+    assert.strictEqual((edit as any).doc.dirty, true, 'and the document must still be dirty - nothing was discarded');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+/**
+ * The reliable half of the live user report fix: C-q reaches the SAME
+ * 'file.closeEditor' binding and handler as Escape, but because
+ * ConfirmModal never binds 'C-q' for anything, the confirm dialog it opens
+ * survives the real keypress-bubbling that defeats Escape (see the test
+ * above) - so C-q, driven through REAL `_handleKey` dispatch end to end
+ * (open -> dirty -> C-q -> real Enter keypress on the focused confirm
+ * button -> exit), is the genuinely keyboard-operable way out this task's
+ * addendum asked for.
+ */
+export async function cqReliablyExitsADirtyEditorViaRealKeyDispatchEndToEnd(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-real-keys-cq', width: 80, height: 25 } as any);
+  let exited = false;
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  try {
+    screen._handleKey(undefined, keyEvent('space')); // dirty it via the real 'space' paint binding
+    assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
+
+    screen._handleKey(undefined, keyEvent('C-q', true));
+    assert.strictEqual(screen.dialogOpen, true,
+      'a real C-q keypress must open the discard confirm dialog and, unlike escape, it must SURVIVE ' +
+      "the same keystroke's focus-bubbling, since ConfirmModal never binds 'C-q'");
+
+    // ConfirmModal.display() focuses its OWN confirm button the moment it
+    // shows (confirm-modal.ts) - a real 'enter' KeyEvent dispatched through
+    // the real Screen must reach THAT widget's own key(['enter', 'return'])
+    // handler, not a test shortcut around it.
+    screen._handleKey(undefined, keyEvent('enter'));
+
+    // _handleKey calls the button's key(['enter','return']) handler
+    // SYNCHRONOUSLY, which resolves confirm()'s Promise synchronously in
+    // VALUE - but the 'file.closeEditor' handler's own `await confirm(...)`
+    // continuation (`if (discard) this.exit();`) is a MICROTASK, scheduled
+    // by `await`, not run inline. A real terminal's event loop gives that
+    // microtask a turn before the next keypress; this test must too, or it
+    // asserts on state from before the continuation ever ran.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    assert.strictEqual(exited, true, 'a real Enter keypress on the focused confirm button must exit the editor');
+    assert.strictEqual(screen.dialogOpen, false);
+  } finally {
+    screen.destroy();
+  }
 }

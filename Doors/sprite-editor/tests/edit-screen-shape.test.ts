@@ -44,6 +44,63 @@ export async function escapeIsGuardedWhenDirty(): Promise<void> {
 }
 
 /**
+ * Task 7 (controller audit gap 1): ESC used to be wired outside the op
+ * table via a bare this.key(['escape'], ...) call, with no menu entry -
+ * "nothing should be hidden behind only hotkeys". It must now be an
+ * ordinary table entry, reachable from File > Close Editor, and - per the
+ * live user report that came in while this task was in flight (bare ESC
+ * only, ESC-twice reads as "quit is broken" on a dirty doc, and 'q' must
+ * keep painting the letter q, not become a second exit key) - it must also
+ * answer to C-q, a non-printable chord that costs the glyph-typing
+ * exclusion set nothing.
+ */
+export async function escapeIsATableBindingWithAMenuEntry(): Promise<void> {
+  const idx = code.indexOf("id: 'file.closeEditor'");
+  assert.ok(idx >= 0, "edit-screen.ts must declare the 'file.closeEditor' binding");
+  const block = code.slice(idx, idx + 400);
+  assert.ok(/keys: \['escape', 'C-q'\]/.test(block),
+    'Close Editor must bind both escape and C-q');
+  assert.ok(/menu: 'File'/.test(block), "Close Editor must live under the 'File' menu");
+  assert.ok(/label: 'Close Editor'/.test(block));
+  assert.ok(/hotkeyHint: 'esc\/C-q'/.test(block), 'the hotkey hint must show both chords');
+  assert.ok(!/this\.key\(\['escape'\]/.test(code),
+    'there must be no separate this.key([\'escape\']) call site outside the table any more');
+}
+
+/**
+ * Task 7 (controller audit gap 2): delete/backspace (erase at cursor) used
+ * to be wired outside the op table the same way - no menu entry. It must
+ * now be an ordinary table entry, reachable from Paint > Erase at Cursor.
+ */
+export async function deleteBackspaceIsATableBindingWithAMenuEntry(): Promise<void> {
+  const idx = code.indexOf("id: 'paint.eraseAtCursor'");
+  assert.ok(idx >= 0, "edit-screen.ts must declare the 'paint.eraseAtCursor' binding");
+  const block = code.slice(idx, idx + 400);
+  assert.ok(/keys: \['delete', 'backspace'\]/.test(block),
+    'Erase at Cursor must bind both delete and backspace');
+  assert.ok(/menu: 'Paint'/.test(block), "Erase at Cursor must live under the 'Paint' menu");
+  assert.ok(/label: 'Erase at Cursor'/.test(block));
+  assert.ok(/hotkeyHint: 'del'/.test(block));
+  assert.ok(!/this\.key\(\['delete', 'backspace'\]/.test(code),
+    'there must be no separate this.key([\'delete\', \'backspace\']) call site outside the table any more');
+}
+
+/**
+ * C-q must not become a typeable glyph: glyphForKey('C-q') is null (no
+ * 'S-' prefix, length !== 1 after the 'C-' strip is never even attempted),
+ * so it must never appear as a bare key anywhere else in the table (which
+ * would risk colliding with a real printable binding), and the plain
+ * letter 'q' must remain completely unbound in this door - painting the
+ * glyph q is still 'q's only meaning here.
+ */
+export async function cqDoesNotCollideWithAnyOtherBindingOrTheGlyphSet(): Promise<void> {
+  const closeEditorCount = (code.match(/'C-q'/g) || []).length;
+  assert.strictEqual(closeEditorCount, 1, "'C-q' must be declared exactly once, on file.closeEditor");
+  assert.ok(!/keys: \[[^\]]*'q'[^\]]*\]/.test(code),
+    "no binding may bind the bare letter 'q' - it must keep painting the glyph q");
+}
+
+/**
  * While the editor owns the screen, the browser must be deaf: blessed
  * fires every handler bound to a key, and unguarded navigation mutated
  * the selection underneath the editor on every arrow press.

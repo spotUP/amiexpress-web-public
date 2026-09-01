@@ -169,11 +169,21 @@ export class EditScreen {
    * buildBindingSet() returns) is pre-wrapped with this exact same check -
    * so for those, this check is redundant-by-construction, not the only
    * thing standing between a keystroke and a double dialog. It stays
-   * anyway: (a) it's what makes delete/backspace/escape/the raw
-   * cell-typing keypress listener below safe - those are NOT
-   * StudioBinding-table entries, so bindings.ts's wrap never touches them,
-   * and this is their only guard; (b) a redundant check here costs nothing
-   * and documents the invariant locally instead of only in bindings.ts.
+   * anyway: (a) it's what makes the raw cell-typing keypress listener
+   * below safe - that one is NOT a StudioBinding-table entry (it is a
+   * generic 'keypress' event listener, not a screen.key() binding, so
+   * bindings.ts's wrap never touches it), and this is its only guard;
+   * (b) a redundant check here costs nothing and documents the invariant
+   * locally instead of only in bindings.ts. Task 7 (menu coverage): the
+   * delete/backspace and escape handlers used to be this same kind of
+   * table-external exception, each with its own inline dialogOpen check
+   * as its ONLY guard; they are now ordinary table entries ('paint.
+   * eraseAtCursor', 'file.closeEditor') wired through this same opKey()
+   * loop like every other op, so bindings.ts's wrap guards them too - the
+   * inline checks inside their handler bodies are kept verbatim (moving a
+   * binding's declaration must not change what its handler does), so they
+   * are now triple-guarded (bindings.ts's wrap, this method, and their own
+   * inline check), which is redundant but harmless, not incorrect.
    *
    * Correction: `ConfirmModal` IS built with `trapFocus: true`
    * (confirm-modal.ts) and `Element.show()` DOES call `screen.trapFocus()`
@@ -285,6 +295,25 @@ export class EditScreen {
       { id: 'file.save', keys: ['s'], hotkeyHint: 's', menu: 'File', label: 'Save',
         handler: () => this.save() },
 
+      // Task 7 (menu coverage): ESC used to be wired OUTSIDE this table,
+      // directly via this.key() with no menu entry at all - the controller
+      // audit's gap 1. Handler body moved VERBATIM (same dirty-confirm
+      // flow, same dialogOpen check, same teardown) - only WHERE it is
+      // declared changed. Live user report, same day: with no other way
+      // out (bare 'q' types the letter into the cell, and a stuck ESC-ESC
+      // read as "quit is broken" - see the escapeOnADirtyDocument* tests),
+      // C-q is added as a second hotkey to the SAME binding: it is not a
+      // single printable character (glyphForKey('C-q') is null - no 'S-'
+      // prefix, length !== 1), so unlike a bare 'q' it costs the glyph
+      // exclusion set nothing and 'q' keeps painting the letter q.
+      { id: 'file.closeEditor', keys: ['escape', 'C-q'], hotkeyHint: 'esc/C-q', menu: 'File', label: 'Close Editor',
+        handler: async () => {
+          if (this.screen.dialogOpen) return;
+          if (!this.doc.dirty) { this.exit(); return; }
+          const discard = await confirm(this.screen, 'Discard unsaved changes?');
+          if (discard) this.exit();
+        } },
+
       // Studio 2c task 5: 'paint' (space) used to be wired OUTSIDE this
       // table, directly via this.key() rather than opKey() - the naming
       // mode it once had to special-case (typing a space into an
@@ -295,6 +324,18 @@ export class EditScreen {
           ? setPixel(this.doc, this.cursorRow, this.cursorCol, this.fg)
           : setCell(this.doc, this.cursorRow, this.cursorCol,
               { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg })) },
+
+      // Task 7 (menu coverage): delete/backspace used to be wired OUTSIDE
+      // this table, directly via this.key() with no menu entry at all -
+      // the controller audit's gap 2. Handler body moved VERBATIM (same
+      // dialogOpen check, same tryOp-guarded setPixel/setCell call).
+      { id: 'paint.eraseAtCursor', keys: ['delete', 'backspace'], hotkeyHint: 'del', menu: 'Paint', label: 'Erase at Cursor',
+        handler: () => {
+          if (this.screen.dialogOpen) return;
+          this.tryOp(() => this.mode === 'pixel'
+            ? setPixel(this.doc, this.cursorRow, this.cursorCol, null)
+            : setCell(this.doc, this.cursorRow, this.cursorCol, null));
+        } },
 
       // Studio 2c task 4: which tool a canvas click/drag applies. Keys
       // checked against every table entry above (task-4-report.md has the
@@ -350,31 +391,18 @@ export class EditScreen {
     // opKey()'s own dialogOpen check is now redundant-by-construction for
     // every one of these - the handler it receives is already guarded -
     // kept anyway as a second, harmless layer (see opKey's own doc
-    // comment for the delete/backspace/escape/keypress paths that still
-    // rely on it alone, since those aren't StudioBinding-table entries).
+    // comment for the raw cell-typing keypress listener below, the one
+    // remaining path that still relies on it alone since that listener
+    // isn't a StudioBinding-table entry).
+    //
+    // Task 7 (menu coverage): delete/backspace and escape used to be wired
+    // HERE, directly via this.key() with no table entry and no menu -
+    // that was the controller audit's gaps 1 and 2. They are now ordinary
+    // 'paint.eraseAtCursor'/'file.closeEditor' entries in buildOpBindings()
+    // (handler bodies moved verbatim), so this one loop wires them exactly
+    // like every other op - no separate this.key() call sites left for
+    // either.
     for (const binding of this.bindingSet.bindings) this.opKey(binding.keys, binding.handler);
-
-    // Not opKey-routed: while a dialog is open, delete/backspace must do
-    // nothing (not fall through to the ordinary cell-clear op) - same
-    // discipline as every opKey-wrapped binding, checked directly here
-    // since this handler isn't in the op table.
-    this.key(['delete', 'backspace'], () => {
-      if (this.screen.dialogOpen) return;
-      this.tryOp(() => this.mode === 'pixel'
-        ? setPixel(this.doc, this.cursorRow, this.cursorCol, null)
-        : setCell(this.doc, this.cursorRow, this.cursorCol, null));
-    });
-
-    // Escape: dialogs own ESC themselves while open (promptText/confirm's
-    // own cancel path) - this global binding must stay out of the way, not
-    // ALSO run exit()/the discard prompt for the same keystroke. Replaces
-    // the old ESC-twice discard discipline with a single confirm() dialog.
-    this.key(['escape'], async () => {
-      if (this.screen.dialogOpen) return;
-      if (!this.doc.dirty) { this.exit(); return; }
-      const discard = await confirm(this.screen, 'Discard unsaved changes?');
-      if (discard) this.exit();
-    });
 
     // Typed characters set the cell's char in cell mode. Screen keypress,
     // filtered to printables; a no-op while a dialog owns the keyboard -
