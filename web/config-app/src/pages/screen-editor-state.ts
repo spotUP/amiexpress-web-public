@@ -21,7 +21,7 @@ import type { Cell, DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi
 import { EditorState } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/editor-state';
 import { cloneCanvas } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 import {
-  handleDrawEvent, paintCell, undoDrawing, redoDrawing,
+  handleDrawEvent, paintCell, snapshotUndoState, undoDrawing, redoDrawing,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 
 export interface EditorSurface {
@@ -139,4 +139,27 @@ export function redo(surface: EditorSurface): EditorSurface {
   finishStroke(surface);
   redoDrawing(surface.state);
   return settle(surface, null);
+}
+
+/**
+ * A run of characters written in one go - an MCI code the sysop inserted.
+ *
+ * One undo, not one per character, through the SDK's own path for a
+ * host-computed mutation: snapshot, then write the cells
+ * (`drawing-tools.ts:203` documents exactly this case).
+ */
+export function typeText(
+  surface: EditorSurface,
+  x: number,
+  y: number,
+  text: string,
+): EditorSurface {
+  const state = apply(surface);
+  snapshotUndoState(state);
+
+  [...text].forEach((char, index) => {
+    state.setCanvasCell(x + index, y, { char, fg: surface.fg, bg: surface.bg });
+  });
+
+  return settle(surface, surface.pending);
 }

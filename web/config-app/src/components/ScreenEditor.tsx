@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Undo2, Redo2, Save, X } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
-  pointerToCanvas, typeCharacter, undo, redo, type EditorSurface,
+  pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface,
 } from '../pages/screen-editor-state';
+import { findMciTokens, MCI_INSERTS, type MciReferenceShape } from '../pages/mci-tokens';
 
 /**
  * A screen's art, editable.
@@ -35,14 +36,20 @@ const BRUSHES = ['█', '▓', '▒', '░', '▀', '▄', '▌', '▐', ' '];
 
 export interface ScreenEditorProps {
   surface: EditorSurface;
+  /** What the index knows about this file's MCI codes - which of them resolve. */
+  mci?: MciReferenceShape[];
   onChange: (surface: EditorSurface) => void;
   /** The edited screen as base64 - the same shape an uploaded file arrives in. */
   onSave: (base64: string) => void;
   onCancel: () => void;
 }
 
-export function ScreenEditor({ surface, onChange, onSave, onCancel }: ScreenEditorProps) {
+export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Re-found on every change rather than tracked: a code is edited character by
+  // character, and half of one is not a code.
+  const tokens = useMemo(() => findMciTokens(surface.canvas, mci), [surface.canvas, mci]);
 
   const rows = surface.canvas.length;
   const cols = rows > 0 ? surface.canvas[0].length : 0;
@@ -153,6 +160,9 @@ export function ScreenEditor({ surface, onChange, onSave, onCancel }: ScreenEdit
         <AnsiCanvas
           canvas={surface.canvas}
           cursor={surface.tool === 'text' ? cursor : null}
+          highlights={tokens.map(token => ({
+            x: token.column, y: token.line, length: token.length, broken: !token.resolves,
+          }))}
           onCellPointer={(x, y, phase) => {
             if (surface.tool === 'text') {
               if (phase === 'down') setCursor({ x, y });
@@ -162,6 +172,43 @@ export function ScreenEditor({ surface, onChange, onSave, onCancel }: ScreenEdit
           }}
         />
       </div>
+
+      <div className="space-y-1 text-sm">
+        <span className="block text-bbs-muted">Insert a code</span>
+        <div className="flex flex-wrap gap-2">
+          {MCI_INSERTS.map(insert => (
+            <button
+              key={insert.code}
+              type="button"
+              className="px-2 py-1 border border-bbs-border text-bbs-muted"
+              onClick={() => {
+                onChange(typeText(surface, cursor.x, cursor.y, insert.template));
+                setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + insert.template.length) }));
+              }}
+            >
+              {insert.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tokens.length > 0 && (
+        <div className="text-sm space-y-1">
+          <h4 className="text-bbs-text">
+            This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
+          </h4>
+          <ul className="font-mono">
+            {tokens.map((token, index) => (
+              <li key={`${token.line}-${token.column}-${index}`}
+                className={token.resolves ? 'text-bbs-text' : 'text-red-400'}>
+                line {token.line + 1}, column {token.column + 1}: ~{token.code}
+                {token.target ? `_${token.target}` : '.'}
+                {token.resolves ? '' : ' - points at nothing'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 text-sm">
         <button type="button" className="inline-flex items-center gap-1 underline"

@@ -14,10 +14,19 @@ export const CELL_HEIGHT = 16;
  * Cell numbers colours in SGR order and the EGA table does not - would ship
  * unproven. A recording context proves it instead.
  */
+/** A run of cells to ring - an MCI code, and whether the board can follow it. */
+export interface Highlight {
+  x: number;
+  y: number;
+  length: number;
+  broken?: boolean;
+}
+
 export function paintScreen(
   ctx: CanvasRenderingContext2D,
   canvas: Cell[][],
   cursor?: { x: number; y: number } | null,
+  highlights: Highlight[] = [],
 ): void {
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
@@ -49,6 +58,19 @@ export function paintScreen(
         ctx.fillText(cell.char, left, top);
       }
     }
+  }
+
+  // Rung, never repainted: a code is part of the art, and covering its cells
+  // would hide the characters the sysop is trying to read.
+  for (const mark of highlights) {
+    ctx.strokeStyle = ansiColor(mark.broken ? 9 : 11);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      mark.x * CELL_WIDTH + 0.5,
+      mark.y * CELL_HEIGHT + 0.5,
+      mark.length * CELL_WIDTH - 1,
+      CELL_HEIGHT - 1,
+    );
   }
 
   if (cursor && cursor.x >= 0 && cursor.y >= 0 && cursor.x < cols && cursor.y < rows) {

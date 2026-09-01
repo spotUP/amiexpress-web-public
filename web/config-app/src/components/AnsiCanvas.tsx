@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
-import { CELL_HEIGHT, CELL_WIDTH, paintScreen } from './ansi-canvas-paint';
+import { CELL_HEIGHT, CELL_WIDTH, paintScreen, type Highlight } from './ansi-canvas-paint';
 
 export { CELL_HEIGHT, CELL_WIDTH } from './ansi-canvas-paint';
 
@@ -30,10 +30,12 @@ export interface AnsiCanvasProps {
    * hover is not a stroke.
    */
   onCellPointer?: (x: number, y: number, event: 'down' | 'move' | 'up') => void;
+  /** Runs of cells to ring - the MCI codes a screen runs. */
+  highlights?: Highlight[];
   className?: string;
 }
 
-export function AnsiCanvas({ canvas, cursor, onCellPointer, className }: AnsiCanvasProps) {
+export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, className }: AnsiCanvasProps) {
   const elementRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
 
@@ -54,8 +56,8 @@ export function AnsiCanvas({ canvas, cursor, onCellPointer, className }: AnsiCan
     element.height = Math.max(1, rows * CELL_HEIGHT * ratio);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    paintScreen(ctx, canvas, cursor);
-  }, [canvas, cols, rows, cursor]);
+    paintScreen(ctx, canvas, cursor, highlights);
+  }, [canvas, cols, rows, cursor, highlights]);
 
   const report = useCallback((event: React.PointerEvent, phase: 'down' | 'move' | 'up') => {
     if (!onCellPointer) return;

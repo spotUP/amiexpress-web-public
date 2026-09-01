@@ -454,6 +454,7 @@ export function ScreenFilesPage() {
           {editing && (
             <ScreenEditor
               surface={editing}
+              mci={file.mci ?? []}
               onChange={setEditing}
               // An edit produces bytes, and bytes go out the way an uploaded
               // file does - through the same fan-out choice, the same backup
@@ -476,7 +477,10 @@ export function ScreenFilesPage() {
             </p>
           )}
 
-          {file.mci?.length > 0 && (
+          {/* While the editor is open it lists the codes itself, live and with
+              their positions; the file's own list would be the same facts twice
+              and one of the two would be stale the moment a code is typed. */}
+          {!editing && file.mci?.length > 0 && (
             <div className="text-sm">
               <h4 className="text-bbs-text">
                 This screen runs things - {file.mci.length} MCI reference

@@ -88,6 +88,30 @@ describe('painting a screen', () => {
     expect(off.strokes).toHaveLength(0);
   });
 
+  it('rings an MCI code across every cell it covers, and a dead one in the alert colour', () => {
+    const canvas = createCanvas(20, 1);
+
+    const live = recordingContext();
+    paintScreen(live.ctx, canvas, null, [{ x: 4, y: 0, length: 9 }]);
+    expect(live.strokes).toHaveLength(1);
+    expect(live.strokes[0].args[2]).toBeCloseTo(9 * CELL_WIDTH - 1);
+    expect(live.strokes[0].fill).toBe('#FFFF55');
+
+    const dead = recordingContext();
+    paintScreen(dead.ctx, canvas, null, [{ x: 0, y: 0, length: 4, broken: true }]);
+    expect(dead.strokes[0].fill).toBe('#FF5555');
+  });
+
+  it("leaves the code's own characters visible - a highlight rings, never fills", () => {
+    const canvas = createCanvas(8, 1);
+    setCell(canvas, 0, 0, { char: '~', fg: 7, bg: 0 });
+
+    const { ctx, glyphs } = recordingContext();
+    paintScreen(ctx, canvas, null, [{ x: 0, y: 0, length: 4 }]);
+
+    expect(glyphs[0]).toMatchObject({ char: '~' });
+  });
+
   it('clears the whole grid before drawing it', () => {
     const { ctx, rects } = recordingContext();
     paintScreen(ctx, createCanvas(80, 25));

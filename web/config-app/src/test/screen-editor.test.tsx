@@ -14,9 +14,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { base64ToBytes, bytesToBase64 } from '../pages/screen-bytes';
 
-const ansiBytes = new TextEncoder().encode('\x1b[31mHI');
-
+let ansiBytes = new TextEncoder().encode('\x1b[31mHI');
 let fileFormat: 'ansi' | 'rip' = 'ansi';
+let fileMci: { code: string; target: string; resolves: boolean; scopeSpecific: boolean }[] = [];
 
 const screenIndex = () => ({
   builtAt: '2026-09-02T00:00:00.000Z',
@@ -34,7 +34,7 @@ const screenIndex = () => ({
   ],
   files: {
     'Node1/BBSTITLE.txt': {
-      relPath: 'Node1/BBSTITLE.txt', bytes: ansiBytes.length, format: fileFormat, sha256: 'a', mci: [],
+      relPath: 'Node1/BBSTITLE.txt', bytes: ansiBytes.length, format: fileFormat, sha256: 'a', mci: fileMci,
     },
   },
 });
@@ -91,6 +91,8 @@ async function openTheFile(user: ReturnType<typeof userEvent.setup>) {
 describe('editing a screen in the browser', () => {
   beforeEach(() => {
     fileFormat = 'ansi';
+    ansiBytes = new TextEncoder().encode('\x1b[31mHI');
+    fileMci = [];
     fetchMock.mockClear();
   });
 
@@ -148,6 +150,33 @@ describe('editing a screen in the browser', () => {
 
     expect(screen.queryByTestId('ansi-canvas')).toBeNull();
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(false);
+  });
+
+  it('shows a dead MCI code as dead, where it sits on the screen', async () => {
+    // A screen is a program: a ~CC_ pointing at a deleted door is a menu item
+    // that fails when a caller presses the key, and the editor is where a sysop
+    // would see that before saving over it.
+    ansiBytes = new TextEncoder().encode('press K for ~CC_nosuchdoor|');
+    fileMci = [{ code: 'CC', target: 'nosuchdoor', resolves: false, scopeSpecific: false }];
+
+    const user = userEvent.setup();
+    await openTheFile(user);
+    await user.click(await screen.findByRole('button', { name: /edit/i }));
+
+    expect(await screen.findByText(/~CC_nosuchdoor - points at nothing/)).toBeTruthy();
+  });
+
+  it('inserts a code at the cursor, as one thing the sysop can undo', async () => {
+    const user = userEvent.setup();
+    await openTheFile(user);
+    await user.click(await screen.findByRole('button', { name: /edit/i }));
+
+    await user.click(screen.getByRole('button', { name: 'List the conferences' }));
+
+    expect(await screen.findByText(/line 1, column 1: ~CL\./)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /undo/i }));
+    expect(screen.queryByText(/line 1, column 1: ~CL\./)).toBeNull();
   });
 
   it('offers no editor for a RIP screen, and says which phase owns it', async () => {

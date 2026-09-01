@@ -33,23 +33,41 @@ export interface MciReference {
 
 const SCOPE_SPECIFIC = /(^|[:/])(Node\d+|Conf\d+)([/:]|$)/i;
 
-export function parseMciReferences(content: string): MciReference[] {
+/** A reference and where it starts in the text, for a caller that has to point at it. */
+export interface LocatedMciReference {
+  at: number;
+  /** The matched text itself - `~CC_gwall` - so a caller can measure it. */
+  text: string;
+  ref: MciReference;
+}
+
+/**
+ * The same parse, with the offsets kept. The browser editor highlights each
+ * token in place, and a second copy of these patterns living in the admin is
+ * exactly the drift this file's header warns about.
+ */
+export function locateMciReferences(content: string): LocatedMciReference[] {
   // `~~` is a literal tilde (screen.handler.ts), so blank those before
   // matching rather than letting one start a code.
   const text = content.replace(/~~/g, '  ');
-  const found: { at: number; ref: MciReference }[] = [];
+  const found: LocatedMciReference[] = [];
 
-  const push = (at: number, code: MciReference['code'], target: string) => {
+  const push = (at: number, matched: string, code: MciReference['code'], target: string) => {
     found.push({
       at,
+      text: matched,
       ref: { code, target, resolves: false, scopeSpecific: SCOPE_SPECIFIC.test(target) },
     });
   };
 
-  for (const m of text.matchAll(/~CC_([^\s|~\r\n]+)/g)) push(m.index ?? 0, 'CC', m[1]);
-  for (const m of text.matchAll(/~(?:SS_|2S)([^\s|~\r\n]+)/g)) push(m.index ?? 0, 'SS', m[1]);
-  for (const m of text.matchAll(/~\d*SR_([^\s|~\r\n]+)/g)) push(m.index ?? 0, 'SR', m[1]);
-  for (const m of text.matchAll(/~CL\./g)) push(m.index ?? 0, 'CL', '');
+  for (const m of text.matchAll(/~CC_([^\s|~\r\n]+)/g)) push(m.index ?? 0, m[0], 'CC', m[1]);
+  for (const m of text.matchAll(/~(?:SS_|2S)([^\s|~\r\n]+)/g)) push(m.index ?? 0, m[0], 'SS', m[1]);
+  for (const m of text.matchAll(/~\d*SR_([^\s|~\r\n]+)/g)) push(m.index ?? 0, m[0], 'SR', m[1]);
+  for (const m of text.matchAll(/~CL\./g)) push(m.index ?? 0, m[0], 'CL', '');
 
-  return found.sort((a, b) => a.at - b.at).map(f => f.ref);
+  return found.sort((a, b) => a.at - b.at);
+}
+
+export function parseMciReferences(content: string): MciReference[] {
+  return locateMciReferences(content).map(f => f.ref);
 }

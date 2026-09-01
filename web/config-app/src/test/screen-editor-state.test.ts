@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  createSurface, pointerToCanvas, typeCharacter, undo, redo,
+  createSurface, pointerToCanvas, typeCharacter, typeText, undo, redo,
 } from '../pages/screen-editor-state';
 import { createCanvas, getCell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 
@@ -93,6 +93,16 @@ describe('drawing on a screen', () => {
     const picked = pointerToCanvas({ ...drawn, tool: 'pick' as const }, 1, 1, 'down');
 
     expect(picked).toMatchObject({ fg: 13, bg: 2, char: '#' });
+  });
+
+  it('writes a whole MCI code at once, and undoes it at once', () => {
+    const surface = createSurface(createCanvas(20, 2));
+
+    const inserted = typeText(surface, 2, 1, '~CL.');
+
+    expect([0, 1, 2, 3].map(i => getCell(inserted.canvas, 2 + i, 1)?.char).join('')).toBe('~CL.');
+    // One undo, not four: an inserted code is one thing the sysop did.
+    expect(getCell(undo(inserted).canvas, 2, 1)?.char).toBe(' ');
   });
 
   it('hands React a new canvas each time, because the SDK draws in place', () => {
