@@ -16,6 +16,7 @@ import {
   X,
   Check,
 } from 'lucide-react';
+import { describeNodeActivity } from './node-activity';
 
 interface NodeStatus {
   nodeId: number;
@@ -255,7 +256,7 @@ export function NodeControlPage() {
                       </div>
                       <div>
                         <span className="text-content-secondary">Activity:</span>{' '}
-                        <span className="text-content-primary">{node.currentActivity || 'N/A'}</span>
+                        <span className="text-content-primary">{describeNodeActivity(node.currentActivity) || 'N/A'}</span>
                       </div>
                       <div>
                         <span className="text-content-secondary">Connection:</span>{' '}

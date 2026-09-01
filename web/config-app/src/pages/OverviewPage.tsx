@@ -37,6 +37,7 @@ import { StatTile } from '../components/ui/StatTile';
 import { StatusDot } from '../components/ui/StatusDot';
 import { EmptyState, ErrorPanel, SkeletonRows } from '../components/ui/states';
 import type { NodeStatus } from '../types/bbs';
+import { describeNodeActivity } from './node-activity';
 
 function NodeCard({ node }: { node: NodeStatus }) {
   const state = nodeState(node);
@@ -57,7 +58,7 @@ function NodeCard({ node }: { node: NodeStatus }) {
         {node.currentActivity && (
           <div className="flex justify-between gap-2">
             <dt className="text-content-muted">Activity</dt>
-            <dd className="truncate text-content-secondary">{node.currentActivity}</dd>
+            <dd className="truncate text-content-secondary">{describeNodeActivity(node.currentActivity)}</dd>
           </div>
         )}
         {node.timeRemaining !== undefined && node.online && (
