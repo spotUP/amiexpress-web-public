@@ -4,6 +4,7 @@ import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2 } from 'luci
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
+import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { ScreenPreview } from '../components/ScreenPreview';
 import {
@@ -36,6 +37,10 @@ export function ScreenFilesPage() {
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+  const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
+  const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
@@ -85,6 +90,74 @@ export function ScreenFilesPage() {
     } catch (error) {
       showError((error as Error).message);
     }
+  };
+
+  /**
+   * Ask the backend, per node, whether it can read the shared directory - and
+   * show what each blocked node would lose or gain. The dry run writes
+   * nothing, so this is safe to run before deciding.
+   */
+  const previewShare = async (paths: string[]) => {
+    const nodes = paths
+      .map(p => Number(/^Node(\d+)/.exec(p)?.[1]))
+      .filter(n => Number.isFinite(n)) as number[];
+    if (!nodes.length) return;
+
+    try {
+      const res = await apiClient.shareScreens(nodes, 'Screens/Shared', true);
+      setShareSummary(summariseShare(
+        Object.fromEntries(nodes.map(id => [id, {
+          ok: true, reasons: [], losing: [], gaining: [], nodeHasNoScreens: false,
+        }])),
+      ));
+      showSuccess(`${res.data?.wouldWrite?.length ?? nodes.length} node icons would be written`);
+    } catch (error) {
+      const payload = (error as { data?: { blocked?: { id: number; reasons: string[]; losing: string[]; gaining: string[] }[] } }).data;
+      if (payload?.blocked) {
+        setShareSummary(summariseShare(Object.fromEntries(payload.blocked.map(b => [b.id, {
+          ok: false, reasons: b.reasons, losing: b.losing ?? [], gaining: b.gaining ?? [],
+          nodeHasNoScreens: false,
+        }]))));
+      } else {
+        showError((error as Error).message);
+      }
+    }
+  };
+
+  const applyShare = async (nodes: number[]) => {
+    try {
+      await apiClient.shareScreens(nodes, 'Screens/Shared');
+      showSuccess(`${nodes.length} node${nodes.length === 1 ? '' : 's'} now read Screens/Shared`);
+      setShareSummary(null);
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+    } catch (error) {
+      showError((error as Error).message);
+    }
+  };
+
+  /** Import shows the plan before it writes: which files land, and over what. */
+  const previewImport = async (archive: File) => {
+    const form = new FormData();
+    form.append('archive', archive);
+    form.append('dryRun', 'true');
+    const res = await fetch('/api/screens/import', { method: 'POST', body: form, headers: apiClient.authHeaders() });
+    const body = await res.json();
+    if (!res.ok) { showError(body.error ?? 'The archive was refused'); return; }
+    setImportFile(archive);
+    setImportPlan(body.data.plan);
+  };
+
+  const applyImport = async () => {
+    if (!importFile) return;
+    const form = new FormData();
+    form.append('archive', importFile);
+    const res = await fetch('/api/screens/import', { method: 'POST', body: form, headers: apiClient.authHeaders() });
+    const body = await res.json();
+    if (!res.ok) { showError(body.error ?? 'The archive was refused'); return; }
+    showSuccess(`Imported ${body.data.plan.length} files`);
+    setImportPlan(null);
+    setImportFile(null);
+    queryClient.invalidateQueries({ queryKey: ['screen-index'] });
   };
 
   const removeFile = async (target: string) => {
@@ -175,6 +248,43 @@ export function ScreenFilesPage() {
         className="input-field w-full max-w-sm"
       />
 
+      <div className="flex items-center gap-4 text-sm">
+        <a className="inline-flex items-center gap-1 underline" href="/api/screens/export?scope=all">
+          <Download size={14} /> Export every screen
+        </a>
+        <input
+          ref={importInput}
+          type="file"
+          accept=".zip"
+          className="hidden"
+          onChange={async e => {
+            const chosen = e.target.files?.[0];
+            if (chosen) await previewImport(chosen);
+            e.target.value = '';
+          }}
+        />
+        <button className="inline-flex items-center gap-1 underline" onClick={() => importInput.current?.click()}>
+          <Upload size={14} /> Import an archive
+        </button>
+      </div>
+
+      {importPlan && (
+        <div className="border border-bbs-border p-3 text-sm space-y-2">
+          <p className="text-bbs-text">{importPlan.length} files would be written:</p>
+          <ul className="font-mono max-h-48 overflow-auto">
+            {importPlan.map(item => (
+              <li key={item.path}>
+                {item.action} {item.path} ({item.bytes} bytes)
+              </li>
+            ))}
+          </ul>
+          <button className="underline" onClick={applyImport}>Import them</button>
+          <button className="block text-bbs-muted underline" onClick={() => { setImportPlan(null); setImportFile(null); }}>
+            cancel
+          </button>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         rows={visible}
@@ -235,12 +345,40 @@ export function ScreenFilesPage() {
           </table>
 
           {entry.duplicateGroups.map(group => (
-            <p key={group.sha256} className="text-sm text-bbs-muted inline-flex items-center gap-2">
-              <Share2 size={14} />
-              {group.paths.length} copies with identical content - they can be read from one
-              directory instead.
-            </p>
+            <div key={group.sha256} className="text-sm text-bbs-muted space-y-1">
+              <p className="inline-flex items-center gap-2">
+                <Share2 size={14} />
+                {group.paths.length} copies with identical content - they can be read from one
+                directory instead.
+              </p>
+              <button className="underline" onClick={() => previewShare(group.paths)}>
+                Share from one directory
+              </button>
+            </div>
           ))}
+
+          {shareSummary && (
+            <div className="border border-bbs-border p-3 text-sm space-y-2">
+              <p className="text-bbs-text">
+                {shareSummary.canShare.length} node
+                {shareSummary.canShare.length === 1 ? '' : 's'} can read Screens/Shared.
+              </p>
+              {shareSummary.blocked.map(node => (
+                <p key={node.id} className="text-amber-400">
+                  Node {node.id}: {node.reasons.join('; ')}
+                </p>
+              ))}
+              {shareSummary.canShare.length > 0 && (
+                <button className="underline" onClick={() => applyShare(shareSummary.canShare)}>
+                  Point {shareSummary.canShare.length} node
+                  {shareSummary.canShare.length === 1 ? '' : 's'} at Screens/Shared
+                </button>
+              )}
+              <button className="block text-bbs-muted underline" onClick={() => setShareSummary(null)}>
+                cancel
+              </button>
+            </div>
+          )}
         </section>
       )}
 
