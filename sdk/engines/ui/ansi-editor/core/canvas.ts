@@ -69,10 +69,31 @@ export function getCell(canvas: Cell[][], x: number, y: number): Cell | null {
 }
 
 /**
- * Check if a cell is empty (space character with default colors)
+ * Check if a cell is "nothing here" - the ONE definition of empty, shared by
+ * every compositing site in the widget (composeLayers()/mergeLayerDown() in
+ * ansi-editor.ts both call this instead of re-implementing their own test).
+ *
+ * A cell is empty when either:
+ *  - it is explicitly marked `transparent: true` (see the Cell doc comment
+ *    in types.ts) - this is independent of char/fg/bg, so a host can mark a
+ *    cell transparent regardless of what it looks like, and
+ *  - OR it matches "space on a black background" (any foreground, blink
+ *    ignored) - the widget's own long-standing compositing convention.
+ *
+ * The bg-only half is deliberately looser than an earlier version of this
+ * function, which additionally required fg===7. That stricter check was
+ * never actually wired into the widget's compositing code (the widget had
+ * its own, looser, inline bg-only test at both call sites) - switching to
+ * the strict check here would flip the compositing result for any cell
+ * painted with a non-default foreground over a black space (e.g.
+ * `{char:' ', fg:3, bg:0}`, produced by any fg-only paint over a space),
+ * which is a real behavior change for existing hosts. See
+ * thoughts/shared/research/2026-09-01_ansi-editor-internals.md section 6.
  */
-export function isCellEmpty(cell: Cell): boolean {
-  return cell.char === ' ' && cell.fg === 7 && cell.bg === 0 && !cell.blink;
+export function isCellEmpty(cell: Cell | null | undefined): boolean {
+  if (!cell) return true;
+  if (cell.transparent === true) return true;
+  return cell.char === ' ' && cell.bg === 0;
 }
 
 /**
@@ -486,6 +507,8 @@ export function rotateCounterClockwise(canvas: Cell[][]): Cell[][] {
 
 /**
  * Convert canvas to ANSI string representation
+ * Intentionally does not emit anything for `cell.transparent` - ANSI text
+ * has no transparency concept. See the Cell doc comment in types.ts.
  */
 export function canvasToANSI(canvas: Cell[][], useIceColors = false): string {
   let ansi = '';
@@ -561,6 +584,8 @@ export function getCanvasDimensions(canvas: Cell[][]): { width: number; height: 
 /**
  * Parse ANSI string and populate canvas
  * Handles escape sequences for colors and cursor positioning
+ * Intentionally never sets `cell.transparent` - ANSI text has no
+ * transparency concept. See the Cell doc comment in types.ts.
  */
 export function parseANSIToCanvas(
   canvas: Cell[][],

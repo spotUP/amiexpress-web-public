@@ -53,6 +53,12 @@ export interface ANSIEditorOptions extends ElementOptions {
   maxLineLength?: number;
   canvasWidth?: number;   // Draw-mode canvas width in cells. Default: 80.
   canvasHeight?: number;  // Draw-mode canvas height in cells. Default: 25.
+  // When true, a freshly-created canvas (construction, File > New) and any
+  // erased cell are transparent instead of a solid black space - see
+  // CoreCanvas.isCellEmpty() and the Cell.transparent doc comment.
+  // Default: false (existing hosts are unaffected - erasing still resets
+  // to fg:7,bg:0 with no transparent marker).
+  transparentBackground?: boolean;
   showLineNumbers?: boolean;
   showToolbar?: boolean;      // F-key character toolbar
   showStatusBar?: boolean;
@@ -249,6 +255,10 @@ export class ANSIEditor extends Box {
   // automatically.
   private optCanvasWidth: number;
   private optCanvasHeight: number;
+  // When true, freshly-allocated canvases (construction, File > New) start
+  // all-transparent and eraseAtCursor() marks a cell transparent instead of
+  // resetting it to an opaque fg:7,bg:0 space. See createBlankCanvas().
+  private transparentBackground: boolean;
   private showLineNumbers: boolean;
   private onSaveCallback?: (content: string) => Promise<boolean>;
   private onSaveAsCallback?: () => Promise<void>;
@@ -296,6 +306,27 @@ export class ANSIEditor extends Box {
     this.cursor.line = this.clampLine(this.cursor.line);
   }
 
+  /**
+   * Allocate a blank width x height canvas. When transparentBackground is
+   * on, every cell starts marked `transparent: true` instead of the plain
+   * opaque {char:' ', fg:7, bg:0} CoreCanvas.createCanvas() always builds -
+   * the same distinction eraseAtCursor() applies to a single cell. Used at
+   * construction and by newDocument() (File > New); previewCanvas and a
+   * freshly-added layer stay plain CoreCanvas.createCanvas() calls, out of
+   * this task's scope.
+   */
+  private createBlankCanvas(width: number, height: number): Cell[][] {
+    const canvas = CoreCanvas.createCanvas(width, height);
+    if (this.transparentBackground) {
+      for (const row of canvas) {
+        for (const cell of row) {
+          cell.transparent = true;
+        }
+      }
+    }
+    return canvas;
+  }
+
   constructor(options: ANSIEditorOptions = {}) {
     super({
       ...options,
@@ -312,6 +343,7 @@ export class ANSIEditor extends Box {
     this.maxLineLength = options.maxLineLength || 160;
     this.optCanvasWidth = options.canvasWidth || 80;
     this.optCanvasHeight = options.canvasHeight || 25;
+    this.transparentBackground = options.transparentBackground ?? false;
     this.showLineNumbers = options.showLineNumbers ?? true;
     this.onSaveCallback = options.onSave;
     this.onSaveAsCallback = options.onSaveAs;
@@ -321,7 +353,7 @@ export class ANSIEditor extends Box {
     this.hideUIHotkey = options.hideUIHotkey || 'f2';
 
     // Initialize core canvas (defaults to 80x25 standard ANSI size)
-    this.cellCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
+    this.cellCanvas = this.createBlankCanvas(this.canvasW, this.canvasH);
     // sauce.tInfo1/tInfo2 are intentionally NOT cached here - a construction-time
     // snapshot would desync from the real canvas after any resize (setCoreCanvas),
     // exactly the kind of second source of truth this widget is being cleaned of.
@@ -1257,7 +1289,7 @@ export class ANSIEditor extends Box {
     for (let y = 0; y < srcLayer.canvas.length; y++) {
       for (let x = 0; x < srcLayer.canvas[y].length; x++) {
         const srcCell = srcLayer.canvas[y][x];
-        if (srcCell.char !== ' ' || srcCell.bg !== 0) {
+        if (!CoreCanvas.isCellEmpty(srcCell)) {
           dstLayer.canvas[y][x] = { ...srcCell };
         }
       }
@@ -1313,7 +1345,7 @@ export class ANSIEditor extends Box {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const cell = layer.canvas[y]?.[x];
-          if (cell && (cell.char !== ' ' || cell.bg !== 0)) {
+          if (cell && !CoreCanvas.isCellEmpty(cell)) {
             output[y][x] = { ...cell };
           }
         }
@@ -2061,7 +2093,7 @@ BBS Door SDK v2.0{/gray-fg}
     if (!this.cellCanvas) return;
 
     // Clear the canvas (preserves the editor's configured dimensions)
-    this.cellCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
+    this.cellCanvas = this.createBlankCanvas(this.canvasW, this.canvasH);
     // Keep the active layer's canvas reference in sync - same stale-reference
     // bug setCoreCanvas had (composeLayers/mergeLayerDown/flattenLayers all
     // read layer.canvas directly, not this.cellCanvas, so without this a
@@ -2748,7 +2780,9 @@ BBS Door SDK v2.0{/gray-fg}
 
     // Update core canvas
     if (this.cellCanvas) {
-      const emptyCell: Cell = { char: ' ', fg: 7, bg: 0, blink: false };
+      const emptyCell: Cell = this.transparentBackground
+        ? { char: ' ', fg: 7, bg: 0, blink: false, transparent: true }
+        : { char: ' ', fg: 7, bg: 0, blink: false };
       CoreCanvas.setCell(this.cellCanvas, x, y, emptyCell);
       // Re-render canvas with colors
       this.syncCoreCanvasToDisplay();
@@ -3533,6 +3567,14 @@ BBS Door SDK v2.0{/gray-fg}
     for (let y = 0; y < this.canvasH; y++) {
       for (let x = 0; x < this.canvasW; x++) {
         const cell = this.cellCanvas[y]?.[x] || { char: ' ', fg: 7, bg: 0 };
+        if (cell.transparent) {
+          // Presentation only - a transparent cell has no real content to
+          // show, so paint a dim guide glyph so an artist can see the
+          // through-holes. getCoreCanvas() still returns the cell's real
+          // char/fg/bg untouched; this branch never mutates the cell.
+          content += `{gray-fg}{black-bg}.{/black-bg}{/gray-fg}`;
+          continue;
+        }
         const fgColor = colors[cell.fg] || 'white';
         const bgColor = colors[cell.bg] || 'black';
         const char = cell.char || ' ';
