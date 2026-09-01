@@ -125,6 +125,21 @@ jest.mock('../src/handlers/command-handler/menu', () => ({
   displayMenuPrompt: jest.fn(),
 }));
 
+// A finished download: the handler returns with DISPLAY_MENU set, which is
+// what the real one does once the transfer is away.
+jest.mock('../src/handlers/file/download.handler', () => {
+  const states = require('../src/constants/bbs-states');
+  return {
+    DownloadHandler: {
+      handleConfirmInput: jest.fn(async (_socket: any, session: any) => {
+        session.subState = states.LoggedOnSubState.DISPLAY_MENU;
+      }),
+      handleFilenameInput: jest.fn(),
+      handlePGoodbyeInput: jest.fn(),
+    },
+  };
+});
+
 jest.mock('../src/utils/conference-tooltypes.util', () => ({
   getConferenceToolFlags: getConferenceToolFlagsMock,
 }));
@@ -276,6 +291,25 @@ describe('Display flow parity', () => {
     displayMainMenuMock.mockClear();
 
     await handleCommand(socket, session, '\r');
+
+    expect(displayMainMenuMock).toHaveBeenCalled();
+  });
+
+  /**
+   * Same gap, one screen over: "i downloaded two files now i have to press
+   * enter to return to the bbs prompt... it was stuck with no prompt".
+   *
+   * The download confirmation is what starts the transfer, so a finished
+   * batch download ends inside that input branch - and DISPLAY_MENU set
+   * from an input branch does not repaint until the next keystroke.
+   */
+  test('a finished download returns to the menu without a keypress', async () => {
+    const session = baseSession();
+    session.subState = LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT;
+
+    displayMainMenuMock.mockClear();
+
+    await handleCommand(socket, session, 'Y');
 
     expect(displayMainMenuMock).toHaveBeenCalled();
   });
