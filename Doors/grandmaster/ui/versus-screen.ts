@@ -7,11 +7,18 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { lockFlashChar } from './board-effects';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, PieceType } from '../core/types';
 import { MinimapRenderer, OpponentTracker } from './minimap';
+import type { OpponentState } from './minimap';
+import {
+  versusLayout, boardLeft,
+  LEFT_PANEL_COLS, OPPONENT_BOARD_COLS, VS_INFO_COLS,
+  type VersusLayout,
+} from './versus-layout';
 import type { GrandmasterNetworkManager, GameUpdate } from '../network/network-manager';
 import type { AttackManager } from '../network/attack-system';
 import { BotPlayer } from '../ai/bot-player';
@@ -51,19 +58,22 @@ export class VersusScreen {
   //   Col 22-33 : NEXT+HOLD      (12w each)
   //   Col 34-36 : garbage strip  (3w,  22h)
   //
-  // Right side is mode-dependent (toggled per-render):
-  //   1v1   (≤1 opp): Col 37-58 opp board (22w) + Col 59-79 VS info (21w)
-  //   Multi (>1 opp): Col 37-79 minimap grid (43w)
+  // Right side is decided per-render by versusLayout(), which answers how
+  // many opponent boards the TERMINAL holds rather than how many opponents
+  // exist. At 80 columns that reproduces what this screen always did:
+  //   1v1  : Col 37-58 opp board (22w) + Col 59-79 VS info (21w)
+  //   Multi: Col 37-79 minimap grid (43w)
+  // Wider, it is N boards from column 37 with the grid after them.
   private boardBox: any;
   private nextBox: any;
   private holdBox: any;
-  private opponentBoardBox: any;   // 1v1 full opponent board
+  private opponentBoards: any[] = [];  // one full board per opponent that fits
   private opponentInfoBox: any;    // 1v1 VS info / attack panel
   private minimapPanel: any;       // battle-royale minimap panel
   private minimapContainer: any;   // inner container for minimap widgets
   private garbageIndicator: any;
   private statsBox: any;
-  private lastOpponentCount: number = -1;  // tracks layout switch
+  private lastLayoutKey: string = '';  // suppresses widget churn between frames
   /** Match outcome, readable after run() resolves. */
   public victory: boolean = false;
   /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
@@ -248,6 +258,8 @@ export class VersusScreen {
   private setupUI(): void {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
+    this.opponentBoards = [];
+    this.lastLayoutKey = '';
 
     // Player board
     this.boardBox = createBox({
@@ -309,29 +321,16 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // Opponent full board
-    this.opponentBoardBox = createBox({
-      parent: this.screen,
-      top: 1,
-      left: 37,
-      width: 22,
-      height: 22,
-      border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
-      label: ' CPU ',
-      fixed: true,
-      focusable: false,
-      mouse: false,
-      clickable: false,
-    });
+    // Opponent full board. More are created as the layout asks for them.
+    this.opponentBoards = [this.createOpponentBoard(0)];
 
     // ── 1v1 right side (visible when ≤1 opponent) ──────────────────────────
     // VS info panel (21w)
     this.opponentInfoBox = createBox({
       parent: this.screen,
       top: 1,
-      left: 59,
-      width: 21,
+      left: LEFT_PANEL_COLS + OPPONENT_BOARD_COLS,
+      width: VS_INFO_COLS,
       height: 22,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
@@ -343,13 +342,13 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // ── Battle-royale right side (visible when >1 opponent) ──────────────
-    // Minimap panel fills all remaining columns (43w: cols 37-79)
+    // ── The grid, for every opponent that does not get a board ───────────
+    // Placed and sized per-render; these are its 80-column values.
     this.minimapPanel = createBox({
       parent: this.screen,
       top: 1,
-      left: 37,
-      width: 43,
+      left: LEFT_PANEL_COLS,
+      width: this.screen.width - LEFT_PANEL_COLS,
       height: 22,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
@@ -364,7 +363,7 @@ export class VersusScreen {
       parent: this.minimapPanel,
       top: 1,
       left: 1,
-      width: 41,
+      width: this.screen.width - LEFT_PANEL_COLS - 2,
       height: 20,
       border: 'none' as any,
       tags: true,
@@ -409,6 +408,71 @@ export class VersusScreen {
     }
   }
 
+  /** One opponent playfield, at the Nth board slot. */
+  private createOpponentBoard(index: number): any {
+    return createBox({
+      parent: this.screen,
+      top: 1,
+      left: boardLeft(index),
+      width: OPPONENT_BOARD_COLS,
+      height: 22,
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      label: ' CPU ',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+  }
+
+  /**
+   * Put the right-hand widgets where the layout says they go.
+   *
+   * Creates the boards the layout asks for, destroys the ones it does not
+   * (a board left behind is a framed rectangle full of a dead opponent), and
+   * gives the grid whatever columns the boards did not take. Guarded by a
+   * key because this runs inside a 20 fps render loop and rebuilding widgets
+   * every frame would flicker.
+   */
+  private applyVersusLayout(layout: VersusLayout): void {
+    const width = this.screen.width;
+    const key = `${width}:${layout.fullBoards}:${layout.minimaps}:${layout.showInfo}`;
+    if (key === this.lastLayoutKey) return;
+    this.lastLayoutKey = key;
+
+    while (this.opponentBoards.length > layout.fullBoards) {
+      this.opponentBoards.pop()?.destroy();
+    }
+    while (this.opponentBoards.length < layout.fullBoards) {
+      this.opponentBoards.push(this.createOpponentBoard(this.opponentBoards.length));
+    }
+    this.opponentBoards.forEach((box, i) => {
+      box.left = boardLeft(i);
+      box.width = OPPONENT_BOARD_COLS;
+      box.show();
+    });
+
+    if (layout.showInfo) {
+      this.opponentInfoBox.left = boardLeft(layout.fullBoards);
+      this.opponentInfoBox.width = VS_INFO_COLS;
+      this.opponentInfoBox.show();
+    } else {
+      this.opponentInfoBox.hide();
+    }
+
+    if (layout.minimaps > 0) {
+      const left = boardLeft(layout.fullBoards);
+      const panelWidth = Math.max(3, width - left);
+      this.minimapPanel.left = left;
+      this.minimapPanel.width = panelWidth;
+      this.minimapContainer.width = panelWidth - 2;
+      this.minimapPanel.show();
+    } else {
+      this.minimapPanel.hide();
+    }
+  }
+
   /**
    * Setup network event listeners
    */
@@ -429,6 +493,11 @@ export class VersusScreen {
         grade: update.grade,
         alive: true,
         pieceCells: (update as any).pieceCells,
+        // The lobby knows who is a CPU; the tracker has to, because the
+        // layout gives the boards to the people first when not all fit.
+        isBot: this.network?.getMatchState()?.players.find(
+          p => String(p.id) === String(update.playerId),
+        )?.isBot ?? false,
       });
       // Repaint on receipt instead of waiting for the next loop tick.
       this.renderNow();
@@ -547,6 +616,7 @@ export class VersusScreen {
                 alive: true,
                 rank: i + 1,
                 pieceCells,
+                isBot: true,   // VersusAI opponents are CPUs by definition
               });
             }
           }
@@ -1041,36 +1111,41 @@ export class VersusScreen {
     const pending = this.attackManager.getPendingGarbage();
     this.renderGarbage(pending);
 
-    // Switch right-side layout based on opponent count
+    // Right side: how many boards the TERMINAL holds, not how many
+    // opponents exist. The rule and its arithmetic live in versus-layout.ts.
     const opponents = this.opponentTracker.getAliveOpponents();
-    const oppCount = opponents.length;
+    const humans = opponents.filter(o => !o.isBot);
+    const bots = opponents.filter(o => o.isBot);
+    // An empty tracker is an opponent who has not arrived yet - between the
+    // countdown and the first update there is nobody - so the 1v1 shell
+    // stays up rather than the right side blinking out and back.
+    const layout = opponents.length > 0
+      ? versusLayout(this.screen.width, humans.length, bots.length)
+      : versusLayout(this.screen.width, 1, 0);
+    // Humans first: when only some fit, they are the ones with the boards.
+    const ordered = [...humans, ...bots];
+    const onBoards = ordered.slice(0, layout.fullBoards);
+    const onGrid = ordered.slice(layout.fullBoards);
     const attackPending = this.attackManager.getPendingGarbage();
 
-    if (oppCount !== this.lastOpponentCount) {
-      this.lastOpponentCount = oppCount;
-      if (oppCount > 1) {
-        // Battle royale: hide 1v1 boxes, show minimap panel
-        this.opponentBoardBox?.hide();
-        this.opponentInfoBox?.hide();
-        this.minimapPanel?.show();
-      } else {
-        // 1v1: show full board + VS info, hide minimap panel
-        this.opponentBoardBox?.show();
-        this.opponentInfoBox?.show();
-        this.minimapPanel?.hide();
-      }
+    this.applyVersusLayout(layout);
+
+    for (let i = 0; i < onBoards.length; i++) {
+      const box = this.opponentBoards[i];
+      if (!box) continue;
+      this.renderOpponentBoard(box, onBoards[i]);
+      box.setLabel(` ${onBoards[i].name || 'CPU'} `);
     }
 
-    if (oppCount > 1) {
-      // Battle royale — render bucket/list visualization
-      this.minimapRenderer.renderBuckets(this.minimapContainer, opponents);
-    } else {
-      // 1v1 — render full opponent board + VS info
-      const opp = opponents[0] ?? null;
-      if (opp) {
-        this.renderOpponentBoard(opp);
-        (this.opponentBoardBox as any).setLabel(` ${opp.name || 'CPU'} `);
-      }
+    if (onGrid.length > 0) {
+      this.minimapRenderer.renderBuckets(
+        this.minimapContainer, onGrid, this.minimapContainer.width,
+      );
+    }
+
+    if (layout.showInfo) {
+      // The 1v1 VS/attack panel, for the one opponent beside it.
+      const opp = onBoards[0] ?? null;
       const oppName = opp?.name || 'CPU';
       const oppLevel = opp?.level ?? '-';
       const oppGrade = opp?.grade ?? '-';
@@ -1141,18 +1216,16 @@ export class VersusScreen {
     };
 
     // Layer 4 (lowest): Lock glow
+    // Same flash as the single-player board, from the same function - the
+    // curve this used to sample was shorter than one painted frame, so the
+    // landing flashed or did not depending on the phase.
     const lockGlowAnims = this.animations.getAnimationsByType('lockGlow');
     for (const anim of lockGlowAnims) {
-      const intensity = AnimationRenderer.getLockGlowIntensity(anim);
-      if (intensity > 0.3) {
-        const data = anim.data as any;
-        for (const cell of data.cells) {
-          if (intensity > 0.7) {
-            setCell(cell.x, cell.y, '{white-fg}{bold}██{/bold}{/white-fg}');
-          } else {
-            setCell(cell.x, cell.y, '{white-fg}░░{/white-fg}');
-          }
-        }
+      const char = lockFlashChar(anim.elapsed);
+      if (!char) continue;
+      const data = anim.data as any;
+      for (const cell of data.cells) {
+        setCell(cell.x, cell.y, char);
       }
     }
 
@@ -1464,8 +1537,8 @@ export class VersusScreen {
   /**
    * Render opponent board (full size)
    */
-  private renderOpponentBoard(opponent: any): void {
-    if (!this.opponentBoardBox || !opponent.board) return;
+  private renderOpponentBoard(box: any, opponent: OpponentState): void {
+    if (!box || !opponent.board) return;
     const board = opponent.board;
     // Overlay the in-flight piece (see OpponentState.pieceCells): board.grid
     // is locked cells only, so drawing it alone made pieces pop into
@@ -1485,10 +1558,10 @@ export class VersusScreen {
           continue;
         }
         const cell = board.grid[y]?.[x];
-        content += cell?.filled ? this.getBlockChar(cell.color) : '  ';
+        content += cell?.filled ? this.getBlockChar(cell.color ?? '') : '  ';
       }
     }
-    this.opponentBoardBox.setContent(content);
+    box.setContent(content);
   }
 
   /**

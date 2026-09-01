@@ -37,13 +37,13 @@ export declare class VersusScreen {
     private boardBox;
     private nextBox;
     private holdBox;
-    private opponentBoardBox;
+    private opponentBoards;
     private opponentInfoBox;
     private minimapPanel;
     private minimapContainer;
     private garbageIndicator;
     private statsBox;
-    private lastOpponentCount;
+    private lastLayoutKey;
     /** Match outcome, readable after run() resolves. */
     victory: boolean;
     /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
@@ -106,6 +106,18 @@ export declare class VersusScreen {
      *   22 + 12 + 3 + 22 + 21 = 80 ✓
      */
     private setupUI;
+    /** One opponent playfield, at the Nth board slot. */
+    private createOpponentBoard;
+    /**
+     * Put the right-hand widgets where the layout says they go.
+     *
+     * Creates the boards the layout asks for, destroys the ones it does not
+     * (a board left behind is a framed rectangle full of a dead opponent), and
+     * gives the grid whatever columns the boards did not take. Guarded by a
+     * key because this runs inside a 20 fps render loop and rebuilding widgets
+     * every frame would flicker.
+     */
+    private applyVersusLayout;
     /**
      * Setup network event listeners
      */

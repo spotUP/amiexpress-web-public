@@ -20,6 +20,9 @@ const BUCKET_THRESHOLD = 10;
 const SLOT_W = 4; // 3-char bar + 1 space
 const BAR_W = 3; // printable width of the bar
 const BAR_H = 18; // rows dedicated to the bar (below the name row)
+// The panel's content width when it owns everything right of the player's
+// side at 80 columns - the only width this renderer ever had.
+const DEFAULT_PANEL_W = 41;
 /**
  * MinimapRenderer — renders the battle-royale opponent panel.
  */
@@ -38,8 +41,14 @@ class MinimapRenderer {
     /**
      * Render opponents into `container`.
      * Switches between bucket bars and text list automatically.
+     *
+     * `innerWidth` is the panel's content width. It was 41 for the whole life
+     * of this renderer because 80 columns minus the player's side left exactly
+     * that; now the grid can sit beside one or more full opponent boards and
+     * get far less, so how many bars fit is arithmetic rather than a constant.
      */
-    renderBuckets(container, opponents) {
+    renderBuckets(container, opponents, innerWidth) {
+        const width = innerWidth ?? (typeof container?.width === 'number' ? container.width : DEFAULT_PANEL_W);
         const alive = opponents.filter(o => o.alive);
         const sorted = [...alive].sort((a, b) => {
             if (a.targeting && !b.targeting)
@@ -48,8 +57,11 @@ class MinimapRenderer {
                 return 1;
             return (a.rank ?? 99) - (b.rank ?? 99);
         });
-        const content = sorted.length > BUCKET_THRESHOLD
-            ? this.buildTextList(sorted)
+        // Bars beyond BUCKET_THRESHOLD are unreadable however wide the panel is,
+        // and bars that do not fit are worse than a list.
+        const capacity = Math.min(BUCKET_THRESHOLD, Math.floor(width / SLOT_W));
+        const content = sorted.length > capacity
+            ? this.buildTextList(sorted, width)
             : this.buildBuckets(sorted);
         container.setContent(content);
         container.screen?.render();
@@ -129,17 +141,22 @@ class MinimapRenderer {
     /**
      * Text list mode — ranked leaderboard for large lobbies.
      *
-     * Format (41 chars wide):
+     * Format (columns derived from the panel's width; the name column is what
+     * gives when the panel is narrow, because the rank and the numbers are
+     * what the list is FOR):
      *   # Name       Lv Ht
      *   ─────────────────────
      *   1 Opponent1  05  12
      *   ...
      */
-    buildTextList(sorted) {
+    buildTextList(sorted, panelWidth = DEFAULT_PANEL_W) {
         const boardH = sorted[0]?.board?.height ?? 20;
+        // rank(2) + ' ' + name + ' ' + level(3) + ' ' + height(3)
+        const nameW = Math.max(3, Math.min(9, panelWidth - 11));
+        const rowW = nameW + 11;
         const lines = [
-            '{cyan-fg}# Name        Lv  Ht{/cyan-fg}',
-            '{gray-fg}─────────────────────{/gray-fg}',
+            `{cyan-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/cyan-fg}`,
+            `{gray-fg}${'─'.repeat(rowW)}{/gray-fg}`,
         ];
         const maxEntries = 18; // content area ≈ 20 rows; 2 used by header
         for (let i = 0; i < Math.min(sorted.length, maxEntries); i++) {
@@ -151,7 +168,7 @@ class MinimapRenderer {
                     : frac >= 0.33 ? 'yellow'
                         : 'white';
             const rank = String(i + 1).padStart(2);
-            const name = opp.name.substring(0, 9).padEnd(9);
+            const name = opp.name.substring(0, nameW).padEnd(nameW);
             const lv = String(opp.level).padStart(3);
             const htS = String(ht).padStart(3);
             lines.push(`{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`);
@@ -188,6 +205,7 @@ class OpponentTracker {
                 alive: state.alive !== false,
                 targeting: state.targeting || false,
                 rank: state.rank,
+                isBot: state.isBot ?? false,
             });
         }
     }

@@ -13,7 +13,8 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./versus-layout.test', 
+const TEST_MODULES = ['./versus-layout.test',
+  './versus-render.test',
   './attack-routing.test',
   './network-wiring.test',
   './board-clear.test',
