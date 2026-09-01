@@ -19,7 +19,7 @@
  * TypeScript doors, which is where these actually run, are far cheaper -
  * but the ceiling keeps an effect from ever being why a screen feels slow.
  */
-import type { Theme } from './tokens';
+import type { Theme } from './tokens.js';
 
 /** The character a leader is drawn with. Middle dot reads as a rule, not text. */
 export const LEADER_CHAR = '·';
@@ -398,4 +398,43 @@ export function attachMasthead(
     tick = 0;
     draw();
   };
+}
+
+/** One hint in a footer: the key to press, and what it does. */
+export interface FooterHint {
+  /** The key cap, e.g. 'Q' or 'Up/Down'. Drawn in the accent. */
+  key: string;
+  /** What it does. Drawn dim, because the CAP is the part worth reading. */
+  does: string;
+}
+
+/**
+ * The hint line for the bottom of a door's screen.
+ *
+ * A footer is not a panel. Bordering it makes it read as a separate box
+ * parked at the bottom rather than as part of the screen, so this returns
+ * plain content for a ONE-ROW, unframed box using the bar's colours.
+ *
+ * The key cap carries the accent and the description sits dim: bright text
+ * throughout makes the hint line compete with the content above it.
+ *
+ * Extracted from DOORS after the sysop found the other doors had no footer
+ * at all - the dashboard's status line was unstyled text and the theme
+ * picker's hints floated mid-screen under the list.
+ */
+export function footerHints(
+  hints: readonly FooterHint[],
+  paint: { key: (t: string) => string; dim: (t: string) => string },
+  rail = ''
+): string {
+  const line = hints
+    .map(h => `${paint.key(h.key + ':')} ${paint.dim(h.does)}`)
+    .join('  ');
+  // The rail at the end is branding, not a hint, so it stays dim.
+  return rail ? `${line}  ${paint.dim(rail)}` : line;
+}
+
+/** The style a footer row takes: the bar's colours, dim text, no border. */
+export function footerStyle(theme: Theme): { fg: string; bg: string } {
+  return { fg: theme.tokens.dim, bg: theme.tokens.bar };
 }

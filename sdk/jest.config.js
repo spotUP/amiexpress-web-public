@@ -10,6 +10,15 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+
+  // Source files write `./tokens.js` because Node's ESM loader will not
+  // guess an extension - without it an esbuild/ESM door importing the theme
+  // barrel dies with "does not provide an export named 'themeById'". ts-jest
+  // resolves TypeScript, so the extension has to come back off here. This
+  // mapping is the standard pairing for that, not a workaround.
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   rootDir: '.',
   testMatch: [
     '<rootDir>/test/**/*.test.ts',

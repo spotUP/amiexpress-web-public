@@ -45,14 +45,22 @@ let S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
 let THEME = (0, theme_1.themeById)('classic');
 const RIP_DIR = (0, paths_1.ripGraphicsDir)();
 async function execute(session) {
-    const host = session?.bbs;
-    if (typeof host?.getTheme === 'function') {
-        const theme = host.getTheme();
-        T = theme.tokens;
-        S = (0, theme_1.themeStyles)(theme);
-        THEME = theme;
-    }
     const { socket, bbsSession, user, params } = session;
+    // This door predates the bbs API object - it is handed a socket and a
+    // session, not a `bbs`, so `session.bbs.getTheme()` found nothing and it
+    // silently stayed on classic while every other door followed the user's
+    // choice. Reported as "rip looks totally unstyled".
+    //
+    // The preference is on the user either way; getTheme() in the backend
+    // does exactly this (themeById(user?.themePreference)) and themeById
+    // falls back to classic for an absent or unknown value.
+    const host = session?.bbs;
+    const theme = typeof host?.getTheme === 'function'
+        ? host.getTheme()
+        : (0, theme_1.themeById)(user?.themePreference ?? user?.themepreference);
+    T = theme.tokens;
+    S = (0, theme_1.themeStyles)(theme);
+    THEME = theme;
     console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);
     console.log(`[RIP Browser] Working directory: ${process.cwd()}`);
     // Check if terminal supports Unicode (web terminals do, telnet/Amiga don't)
@@ -136,7 +144,7 @@ async function execute(session) {
         top: 3,
         left: 0,
         width: '100%',
-        height: '100%-6',
+        height: '100%-4', // header 3 + footer 1
         keys: true,
         mouse: true,
         vi: true,
@@ -156,18 +164,23 @@ async function execute(session) {
             }
         }
     });
+    // One row, no frame. A bordered footer reads as a separate panel parked
+    // at the bottom; a hint line is the same surface with some text on it.
     const footer = bbs_door_sdk_1.blessed.box({
         parent: mainBox,
         bottom: 0,
         left: 0,
         width: '100%',
-        height: 3,
-        content: `{${T.warn}-fg}Arrows:{/${T.warn}-fg} Navigate  {${T.warn}-fg}Enter:{/${T.warn}-fg} View  {${T.warn}-fg}F5:{/${T.warn}-fg} Force View  {${T.warn}-fg}Q:{/${T.warn}-fg} Quit`,
+        height: 1,
+        content: ' ' + (0, theme_1.footerHints)([
+            { key: 'Arrows', does: 'Navigate' },
+            { key: 'Enter', does: 'View' },
+            { key: 'F5', does: 'Force View' },
+            { key: 'Q', does: 'Quit' },
+        ], { key: S.key, dim: S.dim }, S.rail),
         tags: true,
-        border: { type: 'ascii' }, // Use ASCII borders to avoid Unicode issues
-        style: {
-            border: { fg: T.accent }
-        }
+        border: undefined,
+        style: (0, theme_1.footerStyle)(THEME),
     });
     // ========== FILE LOADING ========== 
     const loadFiles = async () => {

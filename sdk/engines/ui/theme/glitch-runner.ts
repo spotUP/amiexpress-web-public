@@ -20,8 +20,8 @@ import {
   isColourOnly,
   type GlitchState,
   type Random,
-} from './glitch';
-import type { Theme } from './tokens';
+} from './glitch.js';
+import type { Theme } from './tokens.js';
 
 /** The little blessed needs to be for this to work. */
 export interface GlitchTarget {

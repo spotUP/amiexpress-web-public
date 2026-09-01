@@ -7,7 +7,7 @@ import {
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { themeStyles, themeById, attachMasthead, type Theme, type ThemeTokens, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeStyles, themeById, attachMasthead, footerHints, footerStyle, type Theme, type ThemeTokens, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { ripGraphicsDir } from './paths';
 
 /** The caller's colours; every literal here was one of these tokens. */
@@ -18,15 +18,23 @@ let THEME: Theme = themeById('classic');
 const RIP_DIR = ripGraphicsDir();
 
 export async function execute(session: any) {
-  const host: any = session?.bbs;
-  if (typeof host?.getTheme === 'function') {
-    const theme: Theme = host.getTheme();
-    T = theme.tokens;
-    S = themeStyles(theme);
-    THEME = theme;
-  }
-
   const { socket, bbsSession, user, params } = session;
+
+  // This door predates the bbs API object - it is handed a socket and a
+  // session, not a `bbs`, so `session.bbs.getTheme()` found nothing and it
+  // silently stayed on classic while every other door followed the user's
+  // choice. Reported as "rip looks totally unstyled".
+  //
+  // The preference is on the user either way; getTheme() in the backend
+  // does exactly this (themeById(user?.themePreference)) and themeById
+  // falls back to classic for an absent or unknown value.
+  const host: any = session?.bbs;
+  const theme: Theme = typeof host?.getTheme === 'function'
+    ? host.getTheme()
+    : themeById((user as any)?.themePreference ?? (user as any)?.themepreference);
+  T = theme.tokens;
+  S = themeStyles(theme);
+  THEME = theme;
   console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);
   console.log(`[RIP Browser] Working directory: ${process.cwd()}`);
 
@@ -121,7 +129,7 @@ export async function execute(session: any) {
     top: 3,
     left: 0,
     width: '100%',
-    height: '100%-6',
+    height: '100%-4',   // header 3 + footer 1
     keys: true,
     mouse: true,
     vi: true,
@@ -142,18 +150,27 @@ export async function execute(session: any) {
     }
   });
 
+  // One row, no frame. A bordered footer reads as a separate panel parked
+  // at the bottom; a hint line is the same surface with some text on it.
   const footer = blessed.box({
     parent: mainBox,
     bottom: 0,
     left: 0,
     width: '100%',
-    height: 3,
-    content: `{${T.warn}-fg}Arrows:{/${T.warn}-fg} Navigate  {${T.warn}-fg}Enter:{/${T.warn}-fg} View  {${T.warn}-fg}F5:{/${T.warn}-fg} Force View  {${T.warn}-fg}Q:{/${T.warn}-fg} Quit`,
+    height: 1,
+    content: ' ' + footerHints(
+      [
+        { key: 'Arrows', does: 'Navigate' },
+        { key: 'Enter', does: 'View' },
+        { key: 'F5', does: 'Force View' },
+        { key: 'Q', does: 'Quit' },
+      ],
+      { key: S.key, dim: S.dim },
+      S.rail
+    ),
     tags: true,
-    border: { type: 'ascii' },  // Use ASCII borders to avoid Unicode issues
-    style: {
-      border: { fg: T.accent }
-    }
+    border: undefined,
+    style: footerStyle(THEME),
   });
 
   // ========== FILE LOADING ========== 
