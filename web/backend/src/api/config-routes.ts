@@ -1810,6 +1810,32 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         // Write back to disk
         userFileManager.updateUserDataFile(updatedUser, slotNumber);
 
+        // And to the database, which is what LOGIN reads.
+        //
+        // db.authenticateUser compares against the users row
+        // (database.ts:2830-2836); user.misc holds only the first 32
+        // characters of a 60-character bcrypt hash
+        // (UserFileManager.ts:243), so the disk copy cannot verify anything
+        // and never could. A sysop who changed a password here was told
+        // "User updated successfully", the disk record changed, and the
+        // account kept its old password - reported on the live board for
+        // Phantasm, whose disk fragment and database hash disagreed.
+        if (password) {
+          try {
+            const dbUser = await database.getUserByUsername(updatedUser.username);
+            if (dbUser) {
+              await database.updateUser(dbUser.id, { passwordHash: updatedUser.passwordHash });
+            } else {
+              console.warn(
+                `[Users] ${updatedUser.username} has no database row; the new password ` +
+                `cannot take effect until the account is imported`
+              );
+            }
+          } catch (error) {
+            return handleError(res, error);
+          }
+        }
+
         // Remove password hash from response
         const { passwordHash: _, ...userWithoutPassword } = updatedUser;
         sendResponse(res, userWithoutPassword, 'User updated successfully');
