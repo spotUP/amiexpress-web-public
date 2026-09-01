@@ -76,6 +76,37 @@ describe('the await screen', () => {
   });
 });
 
+describe('the title screen', () => {
+  const nodes = nodeDirectories();
+
+  // express.e:6580 reads BBSTITLE from nodeScreenDir. This board had only
+  // `Node<N>/BBSTITLE.SEQ` there - and .SEQ is this project's C64 PETSCII,
+  // not a declared screen type: ScreenTypes.info offers TXT.GR and IBM, so an
+  // ANSI caller's title came from `Screens/BBSTITLE.txt` through the fallback
+  // and would have been missing on a real Amiga.
+  //
+  // The first measurement of this said 41 of 41 and was wrong: the glob
+  // matched ANY extension, so the .SEQ counted. Match what the loader takes.
+  it('is in the node directory, in a type an ANSI caller can read', () => {
+    const missing = nodes.filter(node => {
+      const entries = fs.readdirSync(path.join(REPO, node));
+      return !entries.some(entry => /^BBSTITLE\d*\.(txt|TXT|TXT\.GR|IBM)$/i.test(entry));
+    });
+
+    expect(missing.join(', ')).toBe('');
+  });
+
+  // The PETSCII file stays: addPetsciiVariants tries .seq BEFORE .txt, so a
+  // C64 caller still gets it and the .txt beside it does not shadow it.
+  it('keeps the PETSCII sequence beside it', () => {
+    const withSeq = nodes.filter(node =>
+      fs.readdirSync(path.join(REPO, node)).some(e => /^BBSTITLE\.SEQ$/i.test(e)),
+    );
+
+    expect(withSeq.length).toBeGreaterThan(0);
+  });
+});
+
 describe('a GLOBAL screen', () => {
   const handler = fs.readFileSync(
     path.join(REPO, 'web/backend/src/handlers/screen.handler.ts'),
