@@ -25,6 +25,7 @@ import { ConferenceSetupService } from '../services/conference-setup.service';
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
+import { applyUserEditsToDisk } from './user-edits-to-disk';
 import type { Database } from '../database';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1848,11 +1849,34 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
           updates.passwordHash = await bcrypt.hash(password, 10);
       }
 
+      // The name BEFORE the update, because it is the key the disk record is
+      // found by and a rename would otherwise lose the slot.
+      const beforeUpdate = await database.getUserById(id);
+
       await database.updateUser(id, updates);
       const updatedUser = await database.getUserById(id);
 
       if (!updatedUser) {
         return handleError(res, new Error(`User ${id} not found after update`));
+      }
+
+      // And to the disk, which is what the BBS reads.
+      //
+      // This branch wrote the database row and stopped. user.data is where
+      // express.e and every runtime consumer look, so a sysop editing a
+      // database-side user was told "User updated successfully" and the board
+      // went on using the old location, security level and time limit - the
+      // same shape as the password report, in the other direction.
+      //
+      // The record is read FROM DISK and only the edited fields are applied
+      // to it. Mirroring a whole `User` from the database back through the
+      // fixed-width record is what destroyed -TCB!-: the database does not
+      // faithfully hold every field the record has, so the ones it does not
+      // would be written over good values.
+      try {
+        applyUserEditsToDisk(beforeUpdate?.username ?? updatedUser.username, updates);
+      } catch (error) {
+        return handleError(res, error);
       }
 
       // Remove password hash from response
