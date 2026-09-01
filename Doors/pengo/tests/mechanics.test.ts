@@ -17,7 +17,7 @@ import { PengoData, Enemy } from '../game/types';
 import {
   GRID_WIDTH, GRID_HEIGHT, SCORES, MAX_SCORE, crushComboScore, MAX_LIVING_ENEMIES,
   CELL_W,
-  CELL_H,} from '../game/constants';
+  CELL_H, getLevelConfig,} from '../game/constants';
 
 const sheet = loadSpriteSheet(join(__dirname, '..', 'sprites'));
 
@@ -353,4 +353,91 @@ export async function aBlockInFlightIsNotLostFromTheBoard(): Promise<void> {
     ?.[data.slidingBlocks[0].x * CELL_W];
   assert.ok(cell && cell.char !== ' ',
     'the renderer draws a block in flight, or it vanishes for the whole slide');
+}
+
+/**
+ * A block in flight is SOLID.
+ *
+ * Reported in play 2026-09-01: "when i push a block in pengo the penguin
+ * flies with the block and dies on the enemy". pushBlock() takes the block
+ * off the grid (`grid[y][x] = 'empty'`) and hands it to `slidingBlocks`,
+ * and nothing consulted that list for walkability - so every cell the
+ * block travelled through, including the one it was standing in, read as
+ * empty floor. Pengo walks a cell per 90ms and a block travels one per
+ * SLIDE_TICKS_PER_CELL (200ms), so holding the direction key walked him
+ * straight through the block he had just pushed and into whatever was
+ * behind it.
+ */
+export async function pengoCannotWalkIntoABlockStillInFlight(): Promise<void> {
+  const { game, data } = emptyBoard();
+  data.pengo = { ...data.pengo, x: 2, y: 4, direction: 'right' };
+  data.grid[4][3] = 'ice';
+
+  game.handlePush();
+  assert.strictEqual(data.slidingBlocks.length, 1, 'precondition: the block is in flight');
+  const block = data.slidingBlocks[0];
+  assert.strictEqual(block.x, 3, 'precondition: it starts in the cell it was pushed from');
+
+  // The block has not moved yet - it still stands in the cell it was
+  // pushed from - so there is nowhere to step.
+  game.handleDirection('right');
+  assert.strictEqual(data.pengo.x, 2,
+    'Pengo must not enter the cell a block still occupies, grid-empty or not');
+
+  // Once it advances, the cell it left is free and Pengo may follow.
+  (game as unknown as { advanceSlidingBlocks(): void }).advanceSlidingBlocks();
+  (game as unknown as { advanceSlidingBlocks(): void }).advanceSlidingBlocks();
+  assert.strictEqual(data.slidingBlocks[0].x, 4, 'precondition: the block moved on');
+  game.handleDirection('right');
+  assert.strictEqual(data.pengo.x, 3, 'Pengo may follow into the cell the block left');
+
+  // But no further: the block is standing in the next one.
+  game.handleDirection('right');
+  assert.strictEqual(data.pengo.x, 3,
+    'Pengo must not walk into the cell a block in flight occupies');
+}
+
+export async function pengoCannotOvertakeTheBlockHePushed(): Promise<void> {
+  const { game, data } = emptyBoard();
+  data.pengo = { ...data.pengo, x: 2, y: 4, direction: 'right' };
+  data.grid[4][3] = 'ice';
+
+  game.handlePush();
+
+  // Hold the direction down for the whole flight: one step per tick, which
+  // is FASTER than the block's one cell per SLIDE_TICKS_PER_CELL.
+  for (let i = 0; i < 40 && data.slidingBlocks.length > 0; i++) {
+    game.handleDirection('right');
+    const block = data.slidingBlocks[0];
+    assert.ok(data.pengo.x < block.x,
+      `Pengo (x=${data.pengo.x}) must stay behind the block he pushed (x=${block.x})`);
+    (game as unknown as { advanceSlidingBlocks(): void }).advanceSlidingBlocks();
+  }
+}
+
+export async function anEnemyCannotWalkIntoABlockInFlight(): Promise<void> {
+  // Same hole, other actor: enemies read the same grid, so a Sno-Bee could
+  // step into a flying block instead of being squashed by it.
+  const { game, data } = emptyBoard();
+  data.pengo = { ...data.pengo, x: 2, y: 4, direction: 'right' };
+  data.grid[4][3] = 'ice';
+  game.handlePush();
+
+  const block = data.slidingBlocks[0];
+  const enemy = enemyAt(block.x + 1, 4);
+  // Aimed at the block's own cell, and one tick short of its move delay -
+  // updateEnemies() increments moveTimer and skips until it reaches
+  // enemySpeed, so a single call with moveTimer 0 moves nobody and the
+  // test would pass without exercising anything.
+  enemy.targetX = block.x;
+  enemy.targetY = 4;
+  enemy.moveTimer = getLevelConfig(data.level).enemySpeed - 1;
+  data.enemies = [enemy];
+
+  const before = { x: enemy.x, y: enemy.y };
+  (game as unknown as { updateEnemies(): void }).updateEnemies();
+  assert.ok(enemy.x !== before.x || enemy.y !== before.y,
+    'precondition: the Sno-Bee must actually have taken its move this tick');
+  assert.ok(!(enemy.x === block.x && enemy.y === block.y),
+    'a Sno-Bee must not step into the cell a block in flight occupies');
 }

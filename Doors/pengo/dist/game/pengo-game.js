@@ -193,13 +193,36 @@ class PengoGame {
             this.shakeWall(dir);
         }
     }
+    /**
+     * Is a block in flight standing in this cell?
+     *
+     * A pushed block leaves the grid for the duration of its slide (see
+     * pushBlock) and lives in `slidingBlocks` until it settles, so the grid
+     * alone reports its cells as empty floor. Every walkability question has
+     * to ask this too, or the block is a hole in the world: Pengo walks a
+     * cell per 90ms against the block's one per SLIDE_TICKS_PER_CELL, so
+     * holding the direction key used to walk him through the block he had
+     * just pushed and into whatever stood behind it - reported in play,
+     * "the penguin flies with the block and dies on the enemy". Sno-Bees
+     * read the same grid and could step into one instead of being squashed.
+     */
+    slidingBlockAt(x, y) {
+        return this.data.slidingBlocks.some(b => b.x === x && b.y === y);
+    }
+    /**
+     * Can an actor step into this cell? The one answer to that question -
+     * the grid says what terrain is there, `slidingBlocks` says what is in
+     * the air above it, and neither alone is the truth.
+     */
+    canEnter(x, y) {
+        return this.data.grid[y]?.[x] === 'empty' && !this.slidingBlockAt(x, y);
+    }
     tryMove(direction) {
         const dx = direction === 'left' ? -1 : direction === 'right' ? 1 : 0;
         const dy = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
         const newX = this.data.pengo.x + dx;
         const newY = this.data.pengo.y + dy;
-        const cell = this.data.grid[newY]?.[newX];
-        if (cell === 'empty') {
+        if (this.canEnter(newX, newY)) {
             this.data.pengo.x = newX;
             this.data.pengo.y = newY;
         }
@@ -480,7 +503,7 @@ class PengoGame {
             const newX = enemy.x + moveDx;
             const newY = enemy.y + moveDy;
             const blockedCell = this.data.grid[newY]?.[newX];
-            if (blockedCell === 'empty') {
+            if (this.canEnter(newX, newY)) {
                 enemy.x = newX;
                 enemy.y = newY;
                 enemy.direction = moveDir;
@@ -503,7 +526,7 @@ class PengoGame {
                     const rdy = dir === 'up' ? -1 : dir === 'down' ? 1 : 0;
                     const rx = enemy.x + rdx;
                     const ry = enemy.y + rdy;
-                    if (this.data.grid[ry]?.[rx] === 'empty') {
+                    if (this.canEnter(rx, ry)) {
                         enemy.x = rx;
                         enemy.y = ry;
                         enemy.direction = dir;

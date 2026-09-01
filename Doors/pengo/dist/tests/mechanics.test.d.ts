@@ -35,4 +35,20 @@ export declare function anEnemyBlockedByIceSometimesDoesNotBreakIt(): Promise<vo
 export declare function aPushedBlockTravelsOverSeveralFrames(): Promise<void>;
 /** While it is in flight the block is nowhere in the grid - so it must be drawn. */
 export declare function aBlockInFlightIsNotLostFromTheBoard(): Promise<void>;
+/**
+ * A block in flight is SOLID.
+ *
+ * Reported in play 2026-09-01: "when i push a block in pengo the penguin
+ * flies with the block and dies on the enemy". pushBlock() takes the block
+ * off the grid (`grid[y][x] = 'empty'`) and hands it to `slidingBlocks`,
+ * and nothing consulted that list for walkability - so every cell the
+ * block travelled through, including the one it was standing in, read as
+ * empty floor. Pengo walks a cell per 90ms and a block travels one per
+ * SLIDE_TICKS_PER_CELL (200ms), so holding the direction key walked him
+ * straight through the block he had just pushed and into whatever was
+ * behind it.
+ */
+export declare function pengoCannotWalkIntoABlockStillInFlight(): Promise<void>;
+export declare function pengoCannotOvertakeTheBlockHePushed(): Promise<void>;
+export declare function anEnemyCannotWalkIntoABlockInFlight(): Promise<void>;
 //# sourceMappingURL=mechanics.test.d.ts.map
