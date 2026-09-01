@@ -11,14 +11,17 @@
  * screen's own binding table declares. Any key registered outside the
  * table - by construction, ANY future gap of this exact shape - fails it.
  *
- * Two screens are audited: EditScreen and ArtSession, the two the
- * controller's audit named and this task's brief scopes its Files/Test
- * lists to. StudioApp (app.ts, the browser) is deliberately NOT audited
- * here - manual review of its own buildBindings() table (every keyed
- * entry already carries a menu/label) plus its own existing shape tests
- * (app-shape.test.ts's theBrowserHasAMenuBarBuiltFromTheBindingSet and
- * bindKeysRoutesThroughTheDialogOpenGuard) already establish the identical
- * invariant there; this is a deliberate scope decision, not a silent gap.
+ * Fix round 1: all THREE screens are audited now - EditScreen, ArtSession,
+ * and StudioApp (app.ts, the browser). StudioApp's start() is async, awaits
+ * a stay-alive promise forever, and constructs a real DoorInputManager off
+ * a live BBS context - none of which bindKeys() itself needs. bindKeys()
+ * only reads this.screen (for buildBindingSet's isBlocked closure and the
+ * screen.key() wiring loop) and calls this.buildBindings(), which returns
+ * the table without invoking any handler body - so the tests below
+ * construct `new StudioApp({} as any)`, set `.screen` to the fake screen
+ * directly, and call `.bindKeys()` directly, bypassing start() entirely.
+ * No playback timer, no DoorInputManager, no widget tree, no cleanup
+ * needed - bindKeys() touches none of them.
  *
  * Documented, deliberate exceptions (this runtime check would not even
  * SEE these - it only inspects Screen.key() registrations - documented
@@ -44,6 +47,7 @@
 import assert from 'assert';
 import { EditScreen } from '../edit-screen';
 import { ArtSession } from '../art-screen';
+import { StudioApp } from '../app';
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 
 /**
@@ -228,4 +232,43 @@ export async function artSessionRegistersNoScreenKeysOutsideItsBindingTable(): P
   } finally {
     session.destroy();
   }
+}
+
+/**
+ * Fix round 1: closes the concern that StudioApp (the browser) sat outside
+ * the runtime guarantee - manual review said its table was compliant, but
+ * only app-shape.test.ts's SOURCE-shape tests actually pinned it, the same
+ * kind of check that let the original three gaps ship elsewhere in this
+ * door. bindKeys() built directly (see the module doc comment above for
+ * why start() is bypassed), no cleanup needed since nothing timer/widget-
+ * shaped was ever created.
+ */
+export async function everyStudioAppKeyedBindingHasAMenuEntry(): Promise<void> {
+  const app: any = new StudioApp({} as any);
+  app.screen = makeFakeScreen();
+  app.bindKeys();
+
+  const bindings: Array<{ id: string; keys: string[]; menu: string; label: string }> = app.bindingSet.bindings;
+  assert.ok(bindings.length > 0, 'precondition: StudioApp must declare a non-empty binding table');
+  for (const b of bindings) {
+    if (b.keys.length === 0) continue; // menu-only bindings (keys: []) are exempt by design
+    assert.ok(b.menu && b.menu.length > 0, `binding '${b.id}' has keys ${JSON.stringify(b.keys)} but no menu`);
+    assert.ok(b.label && b.label.length > 0, `binding '${b.id}' has keys ${JSON.stringify(b.keys)} but no label`);
+  }
+}
+
+export async function studioAppRegistersNoScreenKeysOutsideItsBindingTable(): Promise<void> {
+  const app: any = new StudioApp({} as any);
+  const screen = makeFakeScreen();
+  app.screen = screen;
+  app.bindKeys();
+
+  const registered = registeredScreenKeyNames(screen);
+  const tabled = tableKeyNames(app.bindingSet.bindings);
+  const extra = registered.filter(k => !tabled.includes(k));
+  const missing = tabled.filter(k => !registered.includes(k));
+  assert.deepStrictEqual(extra, [],
+    `these keys are registered on the screen but have NO table entry: ${extra.join(', ')}`);
+  assert.deepStrictEqual(missing, [],
+    `these table keys were declared but never actually registered on the screen: ${missing.join(', ')}`);
 }

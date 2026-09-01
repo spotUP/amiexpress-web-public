@@ -2240,6 +2240,30 @@ export class Screen extends Element {
       }
     }
 
+    // Snapshot focus AFTER the focus-trap reassert above (which is allowed
+    // to change it - a trap reclaiming stolen focus must still receive this
+    // same keystroke, see doc-modal-escape.test.ts's "is closed by a key
+    // even after something else stole focus") but BEFORE the registered
+    // screen-key handlers run below. A registered handler that OPENS
+    // something focusable (a confirm dialog, a text prompt) as a side
+    // effect changes `this._focused` DURING its own call - traced here,
+    // not assumed: a dirty-document Escape opened dialogs.ts's discard
+    // ConfirmModal and focused its own Confirm button synchronously inside
+    // the handler, so the OLD code below (which re-read the live
+    // `this._focused` after the handlers loop) re-delivered that SAME
+    // Escape keystroke to the button's parent chain, straight into
+    // ConfirmModal's own `key(['escape'], () => this._handleCancel())` -
+    // opening and cancelling the dialog within one physical keypress, no
+    // second keystroke involved. The dialog's own handler cannot mark the
+    // keystroke "handled" to prevent this the ordinary way (returning
+    // `true`): it is async and awaits the dialog's own resolution, so the
+    // synchronous `handler(ch, key) === true` check below can never see a
+    // `true` it has not decided yet. This snapshot removes the need for
+    // that: the "emit to focused element" step below delivers to whoever
+    // was ALREADY focused before this dispatch's own handlers ran, never
+    // to a focus target one of THIS dispatch's own handlers just created.
+    const focusedBeforeGlobalHandlers = this._focused;
+
     // Try registered screen key handlers first (unless focus is trapped)
     const handlers = suppressGlobalKeys ? undefined : this.keyHandlers.get(key.full || key.name);
     let handled = false;
@@ -2249,22 +2273,24 @@ export class Screen extends Element {
       }
     }
 
-    // Emit to focused element
-    if (!handled && this._focused) {
+    // Emit to focused element - the PRE-handler snapshot, not whatever a
+    // handler above may have focused as a side effect (see the comment on
+    // focusedBeforeGlobalHandlers).
+    if (!handled && focusedBeforeGlobalHandlers) {
       // Emit specific key event first (for element.key() handlers)
       const keyName = key.full || key.name;
       if (keyName) {
-        if (this._focused.emit(`keypress ${keyName}`, ch, key) === true) handled = true;
+        if (focusedBeforeGlobalHandlers.emit(`keypress ${keyName}`, ch, key) === true) handled = true;
       }
-      
+
       // Emit generic keypress event
       if (!handled) {
-        if (this._focused.emit('keypress', ch, key) === true) handled = true;
+        if (focusedBeforeGlobalHandlers.emit('keypress', ch, key) === true) handled = true;
       }
 
       // Bubble unhandled key events up to parent elements
       if (!handled) {
-        let parent = this._focused.parent;
+        let parent = focusedBeforeGlobalHandlers.parent;
         while (parent && parent !== this) {
           if (keyName && parent.emit(`keypress ${keyName}`, ch, key) === true) {
             handled = true;

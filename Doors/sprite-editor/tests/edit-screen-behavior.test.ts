@@ -1287,52 +1287,34 @@ function keyEvent(name: string, ctrl = false): any {
 }
 
 /**
- * Live user report, third finding, verified with a REAL SDK Screen (the
- * fake screen everywhere else in this file has no real key-dispatch/
- * focus-trap machinery - screen.ts's `_handleKey`, `trapFocus`, a focused
- * element's own `emit('keypress <name>', ...)` - to answer "does a real
- * keypress genuinely operate the modal end to end", only whether the
- * callback WIRING is correct, which `_confirmButton.emit('press')` already
- * proves elsewhere in this file). Driving REAL KeyEvents through the REAL
- * `_handleKey` entry point - the same call Program's own keypress parsing
- * makes - surfaced a genuine, pre-existing production bug that no test in
- * this door had ever caught, because every prior test used the fake
- * screen:
- *
- * screen.ts's `_handleKey` does not stop at a registered `screen.key()`
- * handler unless that handler's return value is `=== true` (none of this
- * door's ever are - StudioBinding handlers return void throughout). After
- * the handler runs, `_handleKey` ALSO re-emits the SAME physical keypress
- * to `this._focused` and its ancestor chain - read AFTER the handler ran,
- * not before. When the 'file.closeEditor' handler opens the discard
- * ConfirmModal, `ConfirmModal.display()` (confirm-modal.ts) focuses its
- * own confirm button SYNCHRONOUSLY, inside that same handler call - so by
- * the time `_handleKey` re-emits the keypress, `this._focused` is already
- * the confirm button, and the bubble walks up to its parent, the
- * ConfirmModal ITSELF, which binds `this.key(['escape'], () =>
- * this._handleCancel())` for its own Escape-to-cancel. The result: a
- * dirty document's Escape keypress opens the confirm dialog AND cancels
- * it again, within the SAME physical keystroke, before a user could ever
- * press a second key. Confirmed by direct instrumentation (dialogOpen
- * reads true immediately after the handler runs, then false again before
- * `_handleKey` returns) - this is not a test artifact, it is exactly what
- * a real terminal's Escape key does today.
- *
- * C-q (the same 'file.closeEditor' binding's second hotkey) does NOT
- * collide: ConfirmModal only ever binds 'escape' for cancel, never 'C-q',
- * so the bubbled keypress finds nothing to match and the dialog survives -
- * verified below in cqReliablyExitsADirtyEditorViaRealKeyDispatchEndToEnd.
- * Fixing the Escape case at the root (making an opKey-dispatched handler
- * report itself as `handled` to screen.ts's dispatch, the same way any
- * other blessed key handler can) is an architectural change to
- * bindings.ts/opKey's return-value contract, used by every op this door
- * binds, not a menu-reachability change - out of this task's scope. This
- * test PINS the current, understood behaviour as a documented, reported
- * finding (see task-7-report.md) rather than silently leaving the gap
- * implicit or forcing the test to lie about what the door does today.
+ * Fix round 1 (screen.ts root-cause fix): a REAL `_handleKey` dispatch
+ * used to deliver a dialog-opening keystroke a SECOND time, to whatever
+ * that same keystroke's handler had just focused - see screen.ts's
+ * `focusedBeforeGlobalHandlers` for the exact mechanism and
+ * task-7-report.md's "## Fix round 1" for the full analysis. This
+ * discovery started with escape (opens the discard ConfirmModal on a
+ * dirty document, which itself binds Escape-to-cancel - self-cancelling
+ * within one keystroke), and the coordinator asked to verify the SAME
+ * fix holds for every OTHER key in this door that opens a dialog: '+'
+ * (new animation - promptText/Textbox), 'x' (delete frame - confirm),
+ * 'S-x' (delete animation - confirm), on top of escape itself. Each gets
+ * three tests below: opens-and-survives its own triggering keystroke,
+ * then Enter confirms and Escape cancels as SEPARATE, subsequent real
+ * keystrokes - proving the fix is general (a screen.ts dispatch property)
+ * rather than a special case for one binding.
  */
-export async function escapeOnADirtyDocumentSelfCancelsWithinTheSameRealKeypressKnownLimitation(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-real-keys-esc', width: 80, height: 25 } as any);
+
+/** Await enough of a tick for an `await confirm(...)`/`await promptText(...)` continuation's microtask to run. */
+function flush(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+// ---------------------------------------------------------------------
+// escape ('file.closeEditor', dirty document -> discard confirm)
+// ---------------------------------------------------------------------
+
+export async function escapeOnADirtyDocumentOpensAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-esc-survives', width: 80, height: 25 } as any);
   let exited = false;
   const sprite: Sprite = {
     name: 'fixture', cellW: 1, cellH: 1,
@@ -1340,17 +1322,67 @@ export async function escapeOnADirtyDocumentSelfCancelsWithinTheSameRealKeypress
   };
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    screen._handleKey(undefined, keyEvent('space')); // dirty it via the real 'space' paint binding
-    assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
-
+    screen._handleKey(undefined, keyEvent('space')); // dirty it
     screen._handleKey(undefined, keyEvent('escape'));
 
-    assert.strictEqual(screen.dialogOpen, false,
-      'KNOWN LIMITATION (reported, not fixed by this task): a real Escape keypress on a dirty document ' +
-      'opens the confirm dialog and immediately self-cancels it within the same keystroke, because ' +
-      "ConfirmModal's own Escape-to-cancel binding is reached by screen.ts's post-handler focus bubbling");
-    assert.strictEqual(exited, false, 'the self-cancel must leave the editor open, not exit it');
-    assert.strictEqual((edit as any).doc.dirty, true, 'and the document must still be dirty - nothing was discarded');
+    assert.strictEqual(screen.dialogOpen, true,
+      'a real Escape keypress must open the discard confirm dialog and SURVIVE its own triggering keystroke');
+    assert.strictEqual(exited, false, 'opening the dialog must not itself exit the editor');
+    assert.strictEqual((edit as any).doc.dirty, true, 'and must not itself discard anything');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function escapeThenARealEnterKeypressExitsADirtyDocumentThroughTheConfirmModal(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-esc-enter', width: 80, height: 25 } as any);
+  let exited = false;
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  try {
+    screen._handleKey(undefined, keyEvent('space'));
+    screen._handleKey(undefined, keyEvent('escape'));
+    assert.strictEqual(screen.dialogOpen, true, 'precondition: the dialog must be open');
+
+    // A SEPARATE, subsequent real keystroke - ConfirmModal.display() already
+    // focused its own confirm button when the dialog opened above.
+    screen._handleKey(undefined, keyEvent('enter'));
+    await flush();
+
+    assert.strictEqual(exited, true, 'a real Enter keypress on the focused confirm button must exit the editor');
+    assert.strictEqual(screen.dialogOpen, false);
+  } finally {
+    screen.destroy();
+  }
+}
+
+export async function escapeThenARealEscapeCancelsAndLeavesTheDocumentDirty(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-esc-esc', width: 80, height: 25 } as any);
+  let exited = false;
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  try {
+    screen._handleKey(undefined, keyEvent('space'));
+    screen._handleKey(undefined, keyEvent('escape'));
+    assert.strictEqual(screen.dialogOpen, true, 'precondition: the dialog must be open');
+
+    // A SEPARATE, subsequent real Escape - this one DOES reach
+    // ConfirmModal's own key(['escape'], cancel) binding, exactly as
+    // intended: the fix stops a keystroke reaching what IT JUST FOCUSED,
+    // not later, independent keystrokes aimed at an already-focused modal.
+    screen._handleKey(undefined, keyEvent('escape'));
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false, 'a second, separate Escape must cancel the dialog');
+    assert.strictEqual(exited, false, 'cancelling must not exit the editor');
+    assert.strictEqual((edit as any).doc.dirty, true, 'and must not discard the document');
   } finally {
     edit.destroy();
     screen.destroy();
@@ -1358,14 +1390,9 @@ export async function escapeOnADirtyDocumentSelfCancelsWithinTheSameRealKeypress
 }
 
 /**
- * The reliable half of the live user report fix: C-q reaches the SAME
- * 'file.closeEditor' binding and handler as Escape, but because
- * ConfirmModal never binds 'C-q' for anything, the confirm dialog it opens
- * survives the real keypress-bubbling that defeats Escape (see the test
- * above) - so C-q, driven through REAL `_handleKey` dispatch end to end
- * (open -> dirty -> C-q -> real Enter keypress on the focused confirm
- * button -> exit), is the genuinely keyboard-operable way out this task's
- * addendum asked for.
+ * C-q remains a working second hotkey on 'file.closeEditor' (unaffected by
+ * this fix round either way - it never collided with ConfirmModal's own
+ * escape binding in the first place, fix-round-1's report explains why).
  */
 export async function cqReliablyExitsADirtyEditorViaRealKeyDispatchEndToEnd(): Promise<void> {
   const screen: any = new Screen({ title: 'edit-screen-real-keys-cq', width: 80, height: 25 } as any);
@@ -1376,32 +1403,219 @@ export async function cqReliablyExitsADirtyEditorViaRealKeyDispatchEndToEnd(): P
   };
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    screen._handleKey(undefined, keyEvent('space')); // dirty it via the real 'space' paint binding
-    assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
-
+    screen._handleKey(undefined, keyEvent('space'));
     screen._handleKey(undefined, keyEvent('C-q', true));
-    assert.strictEqual(screen.dialogOpen, true,
-      'a real C-q keypress must open the discard confirm dialog and, unlike escape, it must SURVIVE ' +
-      "the same keystroke's focus-bubbling, since ConfirmModal never binds 'C-q'");
+    assert.strictEqual(screen.dialogOpen, true, 'a real C-q keypress must open the discard confirm dialog');
 
-    // ConfirmModal.display() focuses its OWN confirm button the moment it
-    // shows (confirm-modal.ts) - a real 'enter' KeyEvent dispatched through
-    // the real Screen must reach THAT widget's own key(['enter', 'return'])
-    // handler, not a test shortcut around it.
     screen._handleKey(undefined, keyEvent('enter'));
-
-    // _handleKey calls the button's key(['enter','return']) handler
-    // SYNCHRONOUSLY, which resolves confirm()'s Promise synchronously in
-    // VALUE - but the 'file.closeEditor' handler's own `await confirm(...)`
-    // continuation (`if (discard) this.exit();`) is a MICROTASK, scheduled
-    // by `await`, not run inline. A real terminal's event loop gives that
-    // microtask a turn before the next keypress; this test must too, or it
-    // asserts on state from before the continuation ever ran.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await flush();
 
     assert.strictEqual(exited, true, 'a real Enter keypress on the focused confirm button must exit the editor');
     assert.strictEqual(screen.dialogOpen, false);
   } finally {
+    screen.destroy();
+  }
+}
+
+// ---------------------------------------------------------------------
+// '+' ('animation.new' - promptText/Textbox)
+// ---------------------------------------------------------------------
+
+function twoAnimationSprite(): Sprite {
+  return {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      aaa: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }]]] },
+      bbb: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '@', fg: 7, bg: 0 }]]] },
+    },
+  };
+}
+
+/**
+ * The second, more insidious shape of the same bug: '+' is a PRINTABLE
+ * character. Textbox's own generic 'keypress' listener treats any
+ * printable, non-control character as "insert it" - so before this fix,
+ * opening the New Animation dialog with '+' pre-filled the literal
+ * character '+' into the just-focused, just-emptied text field (confirmed
+ * by direct instrumentation while investigating this fix: the Textbox's
+ * value read '+' immediately after the dialog opened, before a user typed
+ * anything).
+ */
+export async function plusOpensThePromptTextDialogAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-plus-survives', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
+  try {
+    screen._handleKey('+', keyEvent('+'));
+
+    assert.strictEqual(screen.dialogOpen, true, 'a real + keypress must open the new-animation dialog');
+    const textbox = screen._focused;
+    assert.strictEqual(textbox?.constructor?.name, 'Textbox', 'precondition: the dialog\'s Textbox must be focused');
+    assert.strictEqual(textbox.getValue(), '',
+      "the dialog must SURVIVE its own triggering keystroke - the literal '+' must not land in the text field");
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function plusThenTypingANameAndARealEnterCreatesTheAnimation(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-plus-enter', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
+  try {
+    screen._handleKey('+', keyEvent('+'));
+    const textbox = screen._focused;
+    for (const ch of 'spin') textbox.insertChar(ch); // typing itself is not what this fix is about
+
+    // A SEPARATE, subsequent real Enter keypress - Textbox's own generic
+    // 'keypress' listener submits on 'enter'/'return'.
+    screen._handleKey(undefined, keyEvent('enter'));
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false, 'submitting must close the dialog');
+    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb', 'spin'],
+      'a real Enter keypress on the focused Textbox must create the typed animation');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function plusThenARealEscapeCancelsWithoutCreatingAnAnimation(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-plus-esc', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
+  try {
+    screen._handleKey('+', keyEvent('+'));
+    const textbox = screen._focused;
+    textbox.insertChar('x');
+
+    // A SEPARATE, subsequent real Escape - reaches Textbox's own
+    // generic-'keypress' escape handling (clearSelection + cancel()).
+    screen._handleKey(undefined, keyEvent('escape'));
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false, 'a real Escape keypress must cancel the dialog');
+    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
+      'cancelling must not create an animation');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+// ---------------------------------------------------------------------
+// 'x' ('frame.delete' - confirm)
+// ---------------------------------------------------------------------
+
+function twoFrameSprite(): Sprite {
+  return {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
+      },
+    },
+  };
+}
+
+export async function xOpensTheConfirmDialogAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-x-survives', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoFrameSprite(), () => {});
+  try {
+    screen._handleKey(undefined, keyEvent('x'));
+
+    assert.strictEqual(screen.dialogOpen, true, 'a real x keypress must open the delete-frame confirm dialog');
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
+      'the dialog must SURVIVE its own triggering keystroke - the frame must not already be deleted');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function xThenARealEnterConfirmsAndDeletesTheFrame(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-x-enter', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoFrameSprite(), () => {});
+  try {
+    screen._handleKey(undefined, keyEvent('x'));
+    screen._handleKey(undefined, keyEvent('enter')); // separate, subsequent keystroke
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false);
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 1,
+      'a real Enter keypress on the focused confirm button must delete the frame');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function xThenARealEscapeCancelsAndLeavesTheFrameAlone(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-x-esc', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoFrameSprite(), () => {});
+  try {
+    screen._handleKey(undefined, keyEvent('x'));
+    screen._handleKey(undefined, keyEvent('escape')); // separate, subsequent keystroke
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false);
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
+      'a real Escape keypress must cancel without deleting the frame');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+// ---------------------------------------------------------------------
+// 'S-x' ('animation.delete' - confirm)
+// ---------------------------------------------------------------------
+
+export async function sXOpensTheConfirmDialogAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-sx-survives', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
+  try {
+    screen._handleKey(undefined, keyEvent('S-x'));
+
+    assert.strictEqual(screen.dialogOpen, true, 'a real S-x keypress must open the delete-animation confirm dialog');
+    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
+      'the dialog must SURVIVE its own triggering keystroke - the animation must not already be deleted');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function sXThenARealEnterConfirmsAndDeletesTheAnimation(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-sx-enter', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
+  try {
+    screen._handleKey(undefined, keyEvent('S-x'));
+    screen._handleKey(undefined, keyEvent('enter')); // separate, subsequent keystroke
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false);
+    assert.strictEqual(Object.keys((edit as any).doc.sprite.animations).length, 1,
+      'a real Enter keypress on the focused confirm button must delete the animation');
+  } finally {
+    edit.destroy();
+    screen.destroy();
+  }
+}
+
+export async function sXThenARealEscapeCancelsAndLeavesTheAnimationAlone(): Promise<void> {
+  const screen: any = new Screen({ title: 'edit-screen-sx-esc', width: 80, height: 25 } as any);
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
+  try {
+    screen._handleKey(undefined, keyEvent('S-x'));
+    screen._handleKey(undefined, keyEvent('escape')); // separate, subsequent keystroke
+    await flush();
+
+    assert.strictEqual(screen.dialogOpen, false);
+    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
+      'a real Escape keypress must cancel without deleting the animation');
+  } finally {
+    edit.destroy();
     screen.destroy();
   }
 }
