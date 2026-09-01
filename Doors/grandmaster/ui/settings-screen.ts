@@ -82,7 +82,14 @@ export class SettingsScreen {
     private screen: Screen,
     private state: AppState,
     private sounds: SoundEngine,
-    private bbsSession: any = null
+    private bbsSession: any = null,
+    /**
+     * The door's 80x25 / responsive switch, so the size can be changed from
+     * a menu and not only from a key: "we also need to add a fullscren
+     * toggle in the settings menu" (2026-09-02). A player who never finds
+     * Alt+Enter never finds the room.
+     */
+    private terminalMode: { mode(): 'fixed' | 'wide'; toggle(): void } | null = null,
   ) {}
 
   /**
@@ -165,8 +172,10 @@ export class SettingsScreen {
 
       // Handle item selection - wrap async handler for blessed's sync event requirement
       menu.on('select', (_item: any, index: number) => {
-        // Check for Save & Exit (last item, index 30)
-        if (index === 30) {
+        // Check for Save & Exit (last item). The DISPLAY section added
+        // three entries above it - blank, header, Screen Size - so this
+        // moved from 30 to 33.
+        if (index === 33) {
           this.sounds.playSfx('menu_ok');
           exitSettings();
           return;
@@ -227,6 +236,9 @@ export class SettingsScreen {
       `Bind Joypad:       {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
       `Joypad Preset:     {yellow-fg}[Enter to pick layout]{/yellow-fg}`,
       `Clear Joypad:      {yellow-fg}[Enter to clear all]{/yellow-fg}`,
+      '',
+      '{cyan-fg}--- DISPLAY ---{/cyan-fg}',
+      `Screen Size:       {yellow-fg}${this.terminalMode?.mode() === 'wide' ? 'RESPONSIVE' : '80x25'}{/yellow-fg}  {gray-fg}(Alt+Enter){/gray-fg}`,
       '',
       '{green-fg}Save & Exit{/green-fg}',
     ];
@@ -339,6 +351,11 @@ export class SettingsScreen {
       case 26: await this.editAllGamepadBindings(0); break;
       case 27: await this.pickGamepadPreset(); break;
       case 28: this.clearGamepadBindings(); break;
+      case 31:  // Screen Size - the same switch Alt+Enter drives
+        this.terminalMode?.toggle();
+        menu.setItems(this.getMenuItems());
+        menu.select(index);
+        break;
       // Note: Save & Exit (case 30) is handled directly in menu.on('select')
     }
 

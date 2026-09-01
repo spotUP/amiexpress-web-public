@@ -86,3 +86,62 @@ describe('ANSIEditor half-block cursor', () => {
     expect(editor.drawCursor.width).toBe(4);
   });
 });
+
+/**
+ * The cursor shows what is under it, reversed.
+ *
+ * "the ansi/sprited don't change to half char when i hover a halfchar...
+ * invert cart so halfchars are always visible even with cursor on"
+ * (2026-09-02). The cursor was an opaque red block with the BRUSH character
+ * in it, so the cell you were about to paint - the one that matters most in
+ * half-block art - was the one you could not see.
+ */
+describe('drawing cursor over art', () => {
+  let screen: any;
+  beforeEach(() => { screen = new Screen({ title: 'cursor', responsive: true, width: 100, height: 30 } as any); });
+  afterEach(() => screen?.destroy());
+
+  const cursorText = (editor: any): string =>
+    String(editor.drawCursor.content ?? '');
+
+  it('draws the cell’s own glyph, not the brush', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 8, canvasHeight: 4, cellScaleX: 2, cellScaleY: 2,
+    } as any);
+    editor.cellCanvas[0][0] = { char: '▀', fg: 6, bg: 0 };
+    editor.currentChar = 'X';
+    editor.cursor = { line: 0, col: 0 };
+    editor.updateDrawCursor();
+
+    const text = cursorText(editor);
+    expect(text).not.toContain('X');            // not the brush
+    expect(text.replace(/\{[^}]*\}/g, '').trim().length).toBeGreaterThan(0);
+  });
+
+  it('reverses the colours so the position still reads as a cursor', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 8, canvasHeight: 4,
+    } as any);
+    editor.cellCanvas[1][2] = { char: '█', fg: 6, bg: 0 };
+    editor.cursor = { line: 1, col: 2 };
+    editor.updateDrawCursor();
+
+    const text = cursorText(editor);
+    // The canvas would draw this cell as cyan on black; the cursor shows
+    // the same glyph with those two swapped.
+    expect(text).toMatch(/-bg\}/);
+    expect(text).toMatch(/black-fg/);
+  });
+
+  it('is still a solid marker on an empty cell, where there is nothing to reverse', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 8, canvasHeight: 4,
+    } as any);
+    editor.currentChar = '#';
+    editor.cursor = { line: 0, col: 0 };
+    editor.updateDrawCursor();
+
+    expect(cursorText(editor)).toContain('#');
+    expect(editor.drawCursor.style.bg).toBe('red');
+  });
+});

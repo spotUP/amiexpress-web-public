@@ -13,9 +13,10 @@
  * widgets and timers, and the interesting decision here is arithmetic.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CASCADE_MIN_OPPONENTS = exports.MAX_BUCKETS = exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS = exports.MIN_BUCKETS_COLS = exports.BUCKET_SLOT_COLS = exports.CASCADE_MAX_BOARDS = exports.VS_INFO_COLS = exports.OPPONENT_BOARD_COLS = exports.LEFT_PANEL_COLS = void 0;
+exports.CASCADE_MIN_OPPONENTS = exports.MAX_BUCKETS = exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS = exports.MIN_BUCKETS_COLS = exports.BUCKET_SLOT_COLS = exports.STATS_ROWS = exports.BOARD_TOP = exports.OPPONENT_BOARD_ROWS = exports.CASCADE_MAX_BOARDS = exports.VS_INFO_COLS = exports.OPPONENT_BOARD_COLS = exports.LEFT_PANEL_COLS = void 0;
 exports.versusLayout = versusLayout;
 exports.boardLeft = boardLeft;
+exports.boardPosition = boardPosition;
 exports.widthForFullBoards = widthForFullBoards;
 /** Player board (22) + NEXT/HOLD column (12) + garbage strip (3). */
 exports.LEFT_PANEL_COLS = 37;
@@ -38,6 +39,11 @@ exports.VS_INFO_COLS = 21;
  * as it did.
  */
 exports.CASCADE_MAX_BOARDS = 3;
+/** An opponent board with its border, in rows - the geometry the screen uses. */
+exports.OPPONENT_BOARD_ROWS = 22;
+/** Row 0 is the door's own top margin; the last row is the stats line. */
+exports.BOARD_TOP = 1;
+exports.STATS_ROWS = 1;
 /** A bucket bar and its separator - the minimap grid's own geometry. */
 exports.BUCKET_SLOT_COLS = 4;
 /** Bars are not worth a section below three of them, borders included. */
@@ -66,7 +72,7 @@ exports.CASCADE_MIN_OPPONENTS = 6;
  * third as a miniature would say something false about the match - the
  * player would read the two as the threats.
  */
-function versusLayout(screenWidth, humanCount, botCount = 0) {
+function versusLayout(screenWidth, humanCount, botCount = 0, screenHeight = 25) {
     const total = Math.max(0, humanCount) + Math.max(0, botCount);
     const available = Math.max(0, screenWidth - exports.LEFT_PANEL_COLS);
     /** Everything that is not on a board fills one grid panel, as it always did. */
@@ -75,6 +81,7 @@ function versusLayout(screenWidth, humanCount, botCount = 0) {
         const rest = total - fullBoards;
         return {
             fullBoards,
+            boardRows: 1,
             minimaps: rest,
             listed: 0,
             showInfo,
@@ -84,6 +91,7 @@ function versusLayout(screenWidth, humanCount, botCount = 0) {
             minimapWidth: rest > 0 ? Math.max(0, screenWidth - left - (showInfo ? exports.VS_INFO_COLS : 0)) : 0,
             listLeft: 0,
             listWidth: 0,
+            panelHeight: exports.OPPONENT_BOARD_ROWS,
         };
     };
     if (total <= 0)
@@ -104,7 +112,7 @@ function versusLayout(screenWidth, humanCount, botCount = 0) {
         return grid(humanCount, humanCount === 1 && total === 1
             && available >= exports.OPPONENT_BOARD_COLS + exports.VS_INFO_COLS);
     }
-    const cascaded = cascade(screenWidth, total);
+    const cascaded = cascade(screenWidth, total, screenHeight);
     if (cascaded)
         return cascaded;
     return grid(0);
@@ -118,20 +126,30 @@ function versusLayout(screenWidth, humanCount, botCount = 0) {
  * the list is what a hundred players look like. Anything that cannot be
  * given a section is simply not drawn, which is why each has a minimum.
  */
-function cascade(screenWidth, total) {
+function cascade(screenWidth, total, screenHeight) {
     if (total < exports.CASCADE_MIN_OPPONENTS)
         return null;
     const available = Math.max(0, screenWidth - exports.LEFT_PANEL_COLS);
     const reserved = exports.MIN_BUCKETS_COLS + exports.MIN_LIST_COLS;
     if (available < exports.OPPONENT_BOARD_COLS + reserved)
         return null;
-    let boards = 0;
-    while (boards < exports.CASCADE_MAX_BOARDS
-        && boards + 1 < total
-        && (boards + 1) * exports.OPPONENT_BOARD_COLS + reserved <= available) {
-        boards++;
+    // Boards fill a GRID, not a row. "we have shitloads of space left for
+    // full playfields in gmaster battle royale" - with a 55-row window the
+    // old single row used 22 of them and left the rest black, while three
+    // boards was a cap rather than a measurement.
+    const rows = Math.max(1, Math.floor((screenHeight - exports.BOARD_TOP - exports.STATS_ROWS) / exports.OPPONENT_BOARD_ROWS));
+    let columns = 0;
+    while ((columns + 1) * exports.OPPONENT_BOARD_COLS + reserved <= available
+        && columns * rows < total - 1) {
+        columns++;
     }
-    const afterBoards = available - boards * exports.OPPONENT_BOARD_COLS;
+    const boards = Math.min(columns * rows, Math.max(0, total - 1));
+    if (boards <= 0)
+        return null;
+    // A part-filled last column would leave a ragged hole in the middle of
+    // the field; the columns that are drawn are drawn full.
+    const usedColumns = Math.ceil(boards / rows);
+    const afterBoards = available - usedColumns * exports.OPPONENT_BOARD_COLS;
     // The bars take what they can hold, up to the point where a bar stops
     // saying anything; whatever remains is the leaderboard's.
     const barsFor = Math.min(exports.MAX_BUCKETS, total - boards, Math.floor((afterBoards - exports.MIN_LIST_COLS - 2) / exports.BUCKET_SLOT_COLS));
@@ -141,9 +159,10 @@ function cascade(screenWidth, total) {
     const listed = total - boards - buckets;
     if (buckets <= 0 || listed <= 0 || listWidth < exports.MIN_LIST_COLS)
         return null;
-    const boardsEnd = exports.LEFT_PANEL_COLS + boards * exports.OPPONENT_BOARD_COLS;
+    const boardsEnd = exports.LEFT_PANEL_COLS + usedColumns * exports.OPPONENT_BOARD_COLS;
     return {
         fullBoards: boards,
+        boardRows: rows,
         minimaps: buckets,
         listed,
         showInfo: false,
@@ -153,11 +172,26 @@ function cascade(screenWidth, total) {
         minimapWidth: bucketWidth,
         listLeft: boardsEnd + bucketWidth,
         listWidth,
+        panelHeight: rows * exports.OPPONENT_BOARD_ROWS,
     };
 }
 /** Where the Nth full opponent board starts. */
 function boardLeft(index) {
     return exports.LEFT_PANEL_COLS + index * exports.OPPONENT_BOARD_COLS;
+}
+/**
+ * Where the Nth board goes when the boards form a grid.
+ *
+ * Down each column, then across, so the first boards - the opponents
+ * closest to killing you - are the leftmost ones, next to your own board.
+ */
+function boardPosition(index, rows) {
+    const column = Math.floor(index / Math.max(1, rows));
+    const row = index % Math.max(1, rows);
+    return {
+        left: exports.LEFT_PANEL_COLS + column * exports.OPPONENT_BOARD_COLS,
+        top: exports.BOARD_TOP + row * exports.OPPONENT_BOARD_ROWS,
+    };
 }
 /** The narrowest terminal that shows `count` opponents as full boards. */
 function widthForFullBoards(count) {

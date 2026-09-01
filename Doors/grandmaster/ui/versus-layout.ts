@@ -37,6 +37,13 @@ export const VS_INFO_COLS = 21;
  */
 export const CASCADE_MAX_BOARDS = 3;
 
+/** An opponent board with its border, in rows - the geometry the screen uses. */
+export const OPPONENT_BOARD_ROWS = 22;
+
+/** Row 0 is the door's own top margin; the last row is the stats line. */
+export const BOARD_TOP = 1;
+export const STATS_ROWS = 1;
+
 /** A bucket bar and its separator - the minimap grid's own geometry. */
 export const BUCKET_SLOT_COLS = 4;
 
@@ -59,6 +66,8 @@ export const CASCADE_MIN_OPPONENTS = 6;
 export interface VersusLayout {
   /** How many opponents to draw as full boards. Zero means the minimap grid. */
   fullBoards: number;
+  /** How many board ROWS the window holds - boards fill a grid, not a row. */
+  boardRows: number;
   /** How many go to the minimap grid instead. */
   minimaps: number;
   /** How many go to the leaderboard, after the boards and the bars. */
@@ -75,6 +84,8 @@ export interface VersusLayout {
   /** Where the leaderboard goes, and how wide. Zero width means none. */
   listLeft: number;
   listWidth: number;
+  /** How tall the right-hand panels may be, in rows. */
+  panelHeight: number;
 }
 
 /**
@@ -95,6 +106,7 @@ export function versusLayout(
   screenWidth: number,
   humanCount: number,
   botCount: number = 0,
+  screenHeight: number = 25,
 ): VersusLayout {
   const total = Math.max(0, humanCount) + Math.max(0, botCount);
   const available = Math.max(0, screenWidth - LEFT_PANEL_COLS);
@@ -105,6 +117,7 @@ export function versusLayout(
     const rest = total - fullBoards;
     return {
       fullBoards,
+      boardRows: 1,
       minimaps: rest,
       listed: 0,
       showInfo,
@@ -114,6 +127,7 @@ export function versusLayout(
       minimapWidth: rest > 0 ? Math.max(0, screenWidth - left - (showInfo ? VS_INFO_COLS : 0)) : 0,
       listLeft: 0,
       listWidth: 0,
+      panelHeight: OPPONENT_BOARD_ROWS,
     };
   };
 
@@ -136,7 +150,7 @@ export function versusLayout(
       && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS);
   }
 
-  const cascaded = cascade(screenWidth, total);
+  const cascaded = cascade(screenWidth, total, screenHeight);
   if (cascaded) return cascaded;
 
   return grid(0);
@@ -151,23 +165,32 @@ export function versusLayout(
  * the list is what a hundred players look like. Anything that cannot be
  * given a section is simply not drawn, which is why each has a minimum.
  */
-function cascade(screenWidth: number, total: number): VersusLayout | null {
+function cascade(screenWidth: number, total: number, screenHeight: number): VersusLayout | null {
   if (total < CASCADE_MIN_OPPONENTS) return null;
 
   const available = Math.max(0, screenWidth - LEFT_PANEL_COLS);
   const reserved = MIN_BUCKETS_COLS + MIN_LIST_COLS;
   if (available < OPPONENT_BOARD_COLS + reserved) return null;
 
-  let boards = 0;
+  // Boards fill a GRID, not a row. "we have shitloads of space left for
+  // full playfields in gmaster battle royale" - with a 55-row window the
+  // old single row used 22 of them and left the rest black, while three
+  // boards was a cap rather than a measurement.
+  const rows = Math.max(1, Math.floor((screenHeight - BOARD_TOP - STATS_ROWS) / OPPONENT_BOARD_ROWS));
+  let columns = 0;
   while (
-    boards < CASCADE_MAX_BOARDS
-    && boards + 1 < total
-    && (boards + 1) * OPPONENT_BOARD_COLS + reserved <= available
+    (columns + 1) * OPPONENT_BOARD_COLS + reserved <= available
+    && columns * rows < total - 1
   ) {
-    boards++;
+    columns++;
   }
+  const boards = Math.min(columns * rows, Math.max(0, total - 1));
+  if (boards <= 0) return null;
+  // A part-filled last column would leave a ragged hole in the middle of
+  // the field; the columns that are drawn are drawn full.
+  const usedColumns = Math.ceil(boards / rows);
 
-  const afterBoards = available - boards * OPPONENT_BOARD_COLS;
+  const afterBoards = available - usedColumns * OPPONENT_BOARD_COLS;
   // The bars take what they can hold, up to the point where a bar stops
   // saying anything; whatever remains is the leaderboard's.
   const barsFor = Math.min(
@@ -182,9 +205,10 @@ function cascade(screenWidth: number, total: number): VersusLayout | null {
 
   if (buckets <= 0 || listed <= 0 || listWidth < MIN_LIST_COLS) return null;
 
-  const boardsEnd = LEFT_PANEL_COLS + boards * OPPONENT_BOARD_COLS;
+  const boardsEnd = LEFT_PANEL_COLS + usedColumns * OPPONENT_BOARD_COLS;
   return {
     fullBoards: boards,
+    boardRows: rows,
     minimaps: buckets,
     listed,
     showInfo: false,
@@ -194,12 +218,28 @@ function cascade(screenWidth: number, total: number): VersusLayout | null {
     minimapWidth: bucketWidth,
     listLeft: boardsEnd + bucketWidth,
     listWidth,
+    panelHeight: rows * OPPONENT_BOARD_ROWS,
   };
 }
 
 /** Where the Nth full opponent board starts. */
 export function boardLeft(index: number): number {
   return LEFT_PANEL_COLS + index * OPPONENT_BOARD_COLS;
+}
+
+/**
+ * Where the Nth board goes when the boards form a grid.
+ *
+ * Down each column, then across, so the first boards - the opponents
+ * closest to killing you - are the leftmost ones, next to your own board.
+ */
+export function boardPosition(index: number, rows: number): { left: number; top: number } {
+  const column = Math.floor(index / Math.max(1, rows));
+  const row = index % Math.max(1, rows);
+  return {
+    left: LEFT_PANEL_COLS + column * OPPONENT_BOARD_COLS,
+    top: BOARD_TOP + row * OPPONENT_BOARD_ROWS,
+  };
 }
 
 /** The narrowest terminal that shows `count` opponents as full boards. */

@@ -120,3 +120,35 @@ describe('terminal mode switch', () => {
     expect(() => sw.dispose()).not.toThrow();
   });
 });
+
+/**
+ * The toggle keystroke stops at the switch.
+ *
+ * "fullscren with alt+enter worked now but it also started the game"
+ * (2026-09-02). The screen runs its registered key handlers first and then
+ * hands the same keystroke to whatever has focus - and Alt+Enter is Enter
+ * to a focused list, so toggling the size in GRANDMASTER's menu also
+ * accepted the highlighted item.
+ */
+describe('terminal mode hotkey', () => {
+  it('reports the key as handled so nothing else sees it', () => {
+    const bound: Record<string, Array<() => unknown>> = {};
+    const screen: any = {
+      key: (keys: string[], fn: () => unknown) => {
+        for (const k of keys) (bound[k] ||= []).push(fn);
+      },
+      on: () => {}, removeListener: () => {}, unkey: () => {},
+    };
+    const sw = createTerminalModeSwitch({
+      bbs: { enableWideMode: () => {}, disableWideMode: () => {} },
+      screen,
+      start: 'fixed',
+      onRelayout: () => {},
+    });
+
+    const handler = bound['M-enter']?.[0];
+    expect(handler).toBeDefined();
+    expect(handler!()).toBe(true);
+    expect(sw.mode()).toBe('wide');
+  });
+});

@@ -12,8 +12,8 @@
 
 import assert from 'assert';
 import {
-  versusLayout, boardLeft, widthForFullBoards,
-  LEFT_PANEL_COLS, OPPONENT_BOARD_COLS, VS_INFO_COLS,
+  versusLayout, boardLeft, boardPosition, widthForFullBoards,
+  LEFT_PANEL_COLS, OPPONENT_BOARD_COLS, OPPONENT_BOARD_ROWS, VS_INFO_COLS,
 } from '../ui/versus-layout';
 
 export async function eightyColumnsBehavesExactlyAsItDoesToday(): Promise<void> {
@@ -187,4 +187,46 @@ export async function theHumansAreStillFirstInLine(): Promise<void> {
   assert.strictEqual(l.fullBoards, 2);
   assert.strictEqual(l.minimaps, 96);
   assert.strictEqual(l.listed, 0);
+}
+
+/**
+ * Boards fill a grid, because a tall window has room for more than a row.
+ *
+ * "we have shitloads of space left for full playfields in gmaster battle
+ * royale" - a 192x55 terminal was drawing three boards in a 22-row strip
+ * and leaving the other thirty rows black. Three was a cap, not a
+ * measurement, and one row was an assumption.
+ */
+export async function aTallWindowStacksBoardsIntoAGrid(): Promise<void> {
+  const tall = versusLayout(192, 0, 98, 55);
+  assert.strictEqual(tall.boardRows, 2, '55 rows hold two 22-row boards');
+  assert.ok(tall.fullBoards >= 8,
+    `a 192x55 window should hold a column of boards per 22 columns, saw ${tall.fullBoards}`);
+  assert.strictEqual(tall.fullBoards % tall.boardRows, 0,
+    'the columns that are drawn are drawn full - no ragged hole in the field');
+}
+
+export async function theBoardsGoDownEachColumnThenAcross(): Promise<void> {
+  // The closest opponents are the leftmost, next to your own board.
+  assert.deepStrictEqual(boardPosition(0, 2), { left: 37, top: 1 });
+  assert.deepStrictEqual(boardPosition(1, 2), { left: 37, top: 23 });
+  assert.deepStrictEqual(boardPosition(2, 2), { left: 59, top: 1 });
+  assert.deepStrictEqual(boardPosition(3, 2), { left: 59, top: 23 });
+  // One row is the old behaviour, exactly.
+  assert.deepStrictEqual(boardPosition(0, 1), { left: 37, top: 1 });
+  assert.deepStrictEqual(boardPosition(2, 1), { left: 81, top: 1 });
+}
+
+export async function theSidePanelsGrowWithTheWindowToo(): Promise<void> {
+  const tall = versusLayout(192, 0, 98, 55);
+  assert.strictEqual(tall.panelHeight, tall.boardRows * OPPONENT_BOARD_ROWS,
+    'the bars and the standings are as tall as the boards beside them');
+  assert.ok(tall.panelHeight > 22, 'which on a tall window is more than one board');
+}
+
+export async function aShortWindowIsExactlyWhatItWas(): Promise<void> {
+  const classic = versusLayout(80, 1, 0, 25);
+  assert.strictEqual(classic.boardRows, 1);
+  assert.strictEqual(classic.fullBoards, 1);
+  assert.strictEqual(classic.panelHeight, OPPONENT_BOARD_ROWS);
 }

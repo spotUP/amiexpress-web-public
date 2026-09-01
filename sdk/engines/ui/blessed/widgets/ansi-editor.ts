@@ -125,6 +125,27 @@ const FKEY_CHAR_SETS: string[][] = [
   ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'σ', 'τ', 'φ', 'ω'],
 ];
 
+/**
+ * The same glyph, drawn the other way round.
+ *
+ * The drawing cursor used to be an opaque red block with the brush
+ * character in it, so whatever was under it could not be seen - fatal for
+ * half-block art, where the cell you are about to paint is the one you most
+ * need to look at ("the ansi/sprited don't change to half char when i hover
+ * a halfchar... invert cart so halfchars are always visible even with
+ * cursor on", 2026-09-02).
+ *
+ * Swapping the colour names in the tag string keeps the CHARACTER exactly
+ * as the canvas drew it - including a magnified half-block's resolved
+ * halves - and marks the position by reversing it, which is what a terminal
+ * cursor has always been.
+ */
+export function invertTags(tag: string): string {
+  return tag.replace(/\{(\/?)([a-z0-9-]+?)-(fg|bg)\}/gi,
+    (_m, close: string, colour: string, kind: string) =>
+      `{${close}${colour}-${kind === 'fg' ? 'bg' : 'fg'}}`);
+}
+
 /** A menu a host contributes to the editor's own menu bar. */
 export interface HostMenu {
   label: string;
@@ -2393,20 +2414,27 @@ BBS Door SDK v2.0{/gray-fg}
    * Toggle sidebar visibility
    */
   private toggleSidebar(): void {
-    if (this.sidebar) {
-      if (this.sidebar.hidden) {
-        this.sidebar.show();
-        this.viewport.left = 6;
-        this.drawCanvas.left = 6;
-        this.drawCursor.left = 6;
-      } else {
-        this.sidebar.hide();
-        this.viewport.left = 0;
-        this.drawCanvas.left = 0;
-        this.drawCursor.left = 0;
-      }
-      this.screen?.render();
-    }
+    if (!this.sidebar) return;
+
+    const showing = this.sidebar.hidden;
+    if (showing) this.sidebar.show();
+    else this.sidebar.hide();
+
+    // The canvas is CENTRED in the room it has (centredCanvasGeometry), so
+    // pinning it to the sidebar's edge threw the artwork against the left
+    // border and left it there - "when i toggle sidebar the anim collapses
+    // to the left border" (2026-09-02). Hiding the sidebar gives the canvas
+    // six more columns of room; where it sits in that room is arithmetic,
+    // not a constant.
+    const sidebarWidth = showing ? 6 : 0;
+    const topOffset = (this.menuBar ? 1 : 0) + (this.fkeyToolbar ? 1 : 0);
+    this.viewport.left = sidebarWidth;
+
+    const geom = this.centredCanvasGeometry(topOffset, sidebarWidth, !!this.statusBar);
+    this.drawCanvas.top = geom.top;
+    this.drawCanvas.left = geom.left;
+    this.updateDrawCursor();
+    this.screen?.render();
   }
 
   /**
@@ -3179,8 +3207,25 @@ BBS Door SDK v2.0{/gray-fg}
     this.drawCursor.width = this.scaleX;
     this.drawCursor.height = height;
 
-    // Show the current drawing character in the cursor
-    this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
+    // What is UNDER the cursor, reversed - so the art stays readable while
+    // the cursor sits on it. An empty cell has nothing to reverse, so there
+    // the cursor is still a solid marker of the brush, which is also what
+    // makes it findable on a blank canvas.
+    const cell = this.cellCanvas?.[this.cursor.line]?.[this.cursor.col];
+    const emptyCell = !cell || cell.transparent || !cell.char || cell.char === ' ';
+    if (emptyCell) {
+      this.drawCursor.style = { bg: 'red', fg: 'red' };
+      this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
+      return;
+    }
+
+    this.drawCursor.style = { bg: 'black', fg: 'white' };
+    const firstSub = subOffset;
+    const rows: string[] = [];
+    for (let row = 0; row < height; row++) {
+      rows.push(invertTags(this.magnifiedCellTag(cell, firstSub + row, this.cursor.col, this.cursor.line)));
+    }
+    this.drawCursor.setContent(rows.join('\n'));
   }
 
   /**

@@ -70,3 +70,37 @@ describe('ANSIEditor canvas centring', () => {
     expect(editor.drawCanvas.position.left).toBe(6);
   });
 });
+
+/**
+ * Hiding the sidebar gives the canvas room; it does not move it to the wall.
+ *
+ * "when i toggle sidebar the anim collapses to the left border"
+ * (2026-09-02). toggleSidebar pinned the canvas to the sidebar's edge -
+ * left = 6 or 0 - which is exactly what centring replaced. Where the canvas
+ * sits is arithmetic over the room it has, and the room is what the toggle
+ * changes.
+ */
+describe('ANSIEditor sidebar toggle', () => {
+  let screen: any;
+  beforeEach(() => { screen = new Screen({ title: 'sidebar', responsive: true, width: 100, height: 30 } as any); });
+  afterEach(() => screen?.destroy());
+
+  it('keeps the canvas centred in the room the sidebar leaves', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen, width: 100, height: 30,
+      canvasWidth: 10, canvasHeight: 4, showSidebar: true,
+    } as any);
+
+    const before = editor.drawCanvas.position.left as number;
+    expect(before).toBeGreaterThan(6);          // centred, not pinned
+
+    editor.toggleSidebar();
+    const after = editor.drawCanvas.position.left as number;
+    expect(after).not.toBe(0);                   // NOT thrown at the border
+    expect(after).toBeLessThan(before);          // six more columns of room
+    expect(after).toBe(Math.floor((100 - 10) / 2));
+
+    editor.toggleSidebar();
+    expect(editor.drawCanvas.position.left).toBe(before);
+  });
+});

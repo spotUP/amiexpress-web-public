@@ -73,11 +73,19 @@ function formatGamepadBinding(triggers) {
  * Settings screen
  */
 class SettingsScreen {
-    constructor(screen, state, sounds, bbsSession = null) {
+    constructor(screen, state, sounds, bbsSession = null, 
+    /**
+     * The door's 80x25 / responsive switch, so the size can be changed from
+     * a menu and not only from a key: "we also need to add a fullscren
+     * toggle in the settings menu" (2026-09-02). A player who never finds
+     * Alt+Enter never finds the room.
+     */
+    terminalMode = null) {
         this.screen = screen;
         this.state = state;
         this.sounds = sounds;
         this.bbsSession = bbsSession;
+        this.terminalMode = terminalMode;
     }
     /**
      * Show settings editor and wait for exit
@@ -152,8 +160,10 @@ class SettingsScreen {
             });
             // Handle item selection - wrap async handler for blessed's sync event requirement
             menu.on('select', (_item, index) => {
-                // Check for Save & Exit (last item, index 30)
-                if (index === 30) {
+                // Check for Save & Exit (last item). The DISPLAY section added
+                // three entries above it - blank, header, Screen Size - so this
+                // moved from 30 to 33.
+                if (index === 33) {
                     this.sounds.playSfx('menu_ok');
                     exitSettings();
                     return;
@@ -211,6 +221,9 @@ class SettingsScreen {
             `Bind Joypad:       {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
             `Joypad Preset:     {yellow-fg}[Enter to pick layout]{/yellow-fg}`,
             `Clear Joypad:      {yellow-fg}[Enter to clear all]{/yellow-fg}`,
+            '',
+            '{cyan-fg}--- DISPLAY ---{/cyan-fg}',
+            `Screen Size:       {yellow-fg}${this.terminalMode?.mode() === 'wide' ? 'RESPONSIVE' : '80x25'}{/yellow-fg}  {gray-fg}(Alt+Enter){/gray-fg}`,
             '',
             '{green-fg}Save & Exit{/green-fg}',
         ];
@@ -331,6 +344,11 @@ class SettingsScreen {
                 break;
             case 28:
                 this.clearGamepadBindings();
+                break;
+            case 31: // Screen Size - the same switch Alt+Enter drives
+                this.terminalMode?.toggle();
+                menu.setItems(this.getMenuItems());
+                menu.select(index);
                 break;
             // Note: Save & Exit (case 30) is handled directly in menu.on('select')
         }

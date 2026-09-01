@@ -14,7 +14,24 @@ export declare class SettingsScreen {
     private state;
     private sounds;
     private bbsSession;
-    constructor(screen: Screen, state: AppState, sounds: SoundEngine, bbsSession?: any);
+    /**
+     * The door's 80x25 / responsive switch, so the size can be changed from
+     * a menu and not only from a key: "we also need to add a fullscren
+     * toggle in the settings menu" (2026-09-02). A player who never finds
+     * Alt+Enter never finds the room.
+     */
+    private terminalMode;
+    constructor(screen: Screen, state: AppState, sounds: SoundEngine, bbsSession?: any, 
+    /**
+     * The door's 80x25 / responsive switch, so the size can be changed from
+     * a menu and not only from a key: "we also need to add a fullscren
+     * toggle in the settings menu" (2026-09-02). A player who never finds
+     * Alt+Enter never finds the room.
+     */
+    terminalMode?: {
+        mode(): 'fixed' | 'wide';
+        toggle(): void;
+    } | null);
     /**
      * Show settings editor and wait for exit
      */
