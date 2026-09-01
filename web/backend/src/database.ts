@@ -386,6 +386,15 @@ console.log('✓ Added autorejoin column');
 console.log('✓ Added fontpreference column');
       }
 
+      if (!columnNames.includes('themepreference')) {
+        // Web-only, and deliberately NOT in user.data: that file's layout has
+        // to stay byte-compatible with real AmiExpress, and a door theme is
+        // not something express.e has ever heard of. Defaults to the board's
+        // existing appearance, so an upgrade changes nobody's screen.
+        this.db.exec('ALTER TABLE users ADD COLUMN themepreference TEXT DEFAULT \'classic\'');
+console.log('✓ Added themepreference column');
+      }
+
       if (!columnNames.includes('baud')) {
         this.db.exec('ALTER TABLE users ADD COLUMN baud INTEGER DEFAULT 56000');
 console.log('✓ Added baud column');

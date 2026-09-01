@@ -20,7 +20,13 @@
     // cell-art is pure and a client bundle may draw sprites; without this
     // the "import" condition points at a dist-esm path that never exists
     // (the exact fault the arcade module shipped with).
-    "engines/graphics/cell-art/**/*"
+    "engines/graphics/cell-art/**/*",
+    // Themes are pure - tokens, style objects and the glitch arithmetic,
+    // no I/O - and every TypeScript door imports them. Doors are loaded as
+    // ESM, so the "import" condition resolves dist-esm; leaving this out is
+    // the same fault again, and it would only show up when a themed door
+    // was actually run.
+    "engines/ui/theme/**/*"
   ],
   "exclude": [
     "node_modules",

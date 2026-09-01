@@ -601,6 +601,60 @@ console.log('[BBSApi] Mouse events disabled');
   // ========================================
 
   /**
+   * The caller's door theme, resolved.
+   *
+   * This is how a door stops hardcoding colours:
+   *
+   *     const theme = bbs.getTheme();
+   *     const s = themeStyles(theme);
+   *     createBox({ ...s.panel, label: ' DOORS ' });
+   *
+   * Always returns a theme - an absent or unrecognised preference resolves
+   * to CLASSIC, which reproduces the board exactly as it has always looked.
+   * A door never has to handle "no theme", and a cosmetic setting can never
+   * be the reason a door fails to draw.
+   */
+  getTheme(): any {
+    const { themeById } = require('@amiexpress/bbs-door-sdk/engines/ui/theme');
+    return themeById(this.session.user?.themePreference);
+  }
+
+  /** The id alone, for a door that only wants to know which one is active. */
+  getThemeId(): string {
+    return this.getTheme().id;
+  }
+
+  /**
+   * Change the caller's theme and remember it.
+   *
+   * Resolved before it is stored, so an id this board does not have can
+   * neither be written to the user's row nor puzzle somebody later - it
+   * becomes CLASSIC, which is the board as it always was. Returns the id
+   * that was actually saved.
+   *
+   * Takes effect the next time a door draws: a door already on screen has
+   * its widgets built from the old theme, and repainting somebody's UI out
+   * from under them is worse than asking them to re-enter it.
+   */
+  async setTheme(id: string): Promise<string> {
+    const { themeById } = require('@amiexpress/bbs-door-sdk/engines/ui/theme');
+    const resolved = themeById(id);
+
+    if (this.session.user) {
+      const { db } = require('../database');
+      await db.updateUser(this.session.user.id, { themePreference: resolved.id });
+      this.session.user.themePreference = resolved.id;
+    }
+    return resolved.id;
+  }
+
+  /** Every theme this board offers, for a door that wants to show a list. */
+  listThemes(): Array<{ id: string; name: string; blurb: string }> {
+    const { THEMES } = require('@amiexpress/bbs-door-sdk/engines/ui/theme');
+    return THEMES.map((t: any) => ({ id: t.id, name: t.name, blurb: t.blurb }));
+  }
+
+  /**
    * Get current user information
    * Equivalent to AEDoor GetDT() function with DT_NAME, DT_LOCATION, etc.
    */

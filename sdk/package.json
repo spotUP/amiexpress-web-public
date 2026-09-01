@@ -69,6 +69,12 @@
       "require": "./dist/engines/ui/blessed/index.js",
       "default": "./dist/engines/ui/blessed/index.js"
     },
+    "./engines/ui/theme": {
+      "types": "./dist/engines/ui/theme/index.d.ts",
+      "import": "./dist-esm/engines/ui/theme/index.js",
+      "require": "./dist/engines/ui/theme/index.js",
+      "default": "./dist/engines/ui/theme/index.js"
+    },
     "./engines/ui/arcade": {
       "types": "./dist/engines/ui/arcade/index.d.ts",
       "import": "./dist-esm/engines/ui/arcade/index.js",
