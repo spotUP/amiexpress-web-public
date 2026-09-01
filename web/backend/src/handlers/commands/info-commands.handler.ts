@@ -1056,16 +1056,19 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
 async function _displayComputerList(socket: any, session: BBSSession): Promise<void> {
   let choices: string[] = [];
 
+  // ComputerList.info first, through the service the admin uses. Asking the
+  // database directly offered a caller only the machines that happen to have a
+  // row - on this board the two the sysop had just added, while the file, the
+  // admin page and express.e all listed ten.
   try {
-    const repo = db.getConfigRepository();
-    if (repo && typeof repo.getAllComputerTypes === 'function') {
-      const records = repo.getAllComputerTypes();
-      if (Array.isArray(records) && records.length > 0) {
-        choices = records
-          .filter((c: any) => c.enabled !== false)
-          .sort((a: any, b: any) => a.computer_number - b.computer_number)
-          .map((c: any) => c.computer_name);
-      }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ComputerConfigService } = require('../../services/config-services/computer-config.service');
+    const records = await new ComputerConfigService(db).getAllComputerTypes();
+    if (Array.isArray(records) && records.length > 0) {
+      choices = records
+        .filter((c: any) => c.enabled !== false)
+        .sort((a: any, b: any) => a.computer_number - b.computer_number)
+        .map((c: any) => c.computer_name);
     }
   } catch (_e) { /* fall through to defaults */ }
 
@@ -1102,16 +1105,18 @@ async function _displayComputerList(socket: any, session: BBSSession): Promise<v
 async function _displayScreenTypeList(socket: any, session: BBSSession): Promise<void> {
   let choices: string[] = [];
 
+  // ScreenTypes.info first, for the same reason as the computer list above:
+  // W offered "1> Commodore PETSCII  2> Web" on a board whose file and admin
+  // page both list four, because only those two had database rows.
   try {
-    const repo = db.getConfigRepository();
-    if (repo && typeof repo.getAllScreenTypes === 'function') {
-      const records = repo.getAllScreenTypes();
-      if (Array.isArray(records) && records.length > 0) {
-        choices = records
-          .filter((c: any) => c.enabled !== false)
-          .sort((a: any, b: any) => a.screen_number - b.screen_number)
-          .map((c: any) => c.screen_title || c.screen_type);
-      }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ScreenConfigService } = require('../../services/config-services/screen-config.service');
+    const records = await new ScreenConfigService(db).getAllScreenTypes();
+    if (Array.isArray(records) && records.length > 0) {
+      choices = records
+        .filter((c: any) => c.enabled !== false)
+        .sort((a: any, b: any) => a.screen_number - b.screen_number)
+        .map((c: any) => c.screen_title || c.screen_type);
     }
   } catch (_e) { /* fall through to defaults */ }
 

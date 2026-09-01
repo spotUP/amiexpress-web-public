@@ -676,21 +676,31 @@ async function getComputerChoices(): Promise<string[]> {
   }
 
   let choices: string[] = [];
+
+  // ComputerList.info FIRST - the file the sysop edits, the file the admin
+  // lists, and the file express.e reads (TOOLTYPE_COMPUTERLIST).
+  //
+  // This asked the database instead. A board whose ComputerList.info holds ten
+  // machines had two rows in computer_types - the two the sysop had added
+  // through the admin, which inserts a row as well as writing the file - so a
+  // caller signing up was offered "1> Commodore 64  2> Commodore 128" and
+  // nothing else, while the admin page and the board both showed ten. The
+  // service the admin uses reads the file and falls back to the table; this
+  // uses the same service, so there is one answer to the question rather than
+  // two.
   try {
-    if (db && typeof db.getConfigRepository === 'function') {
-      const repo = db.getConfigRepository();
-      if (repo && typeof repo.getAllComputerTypes === 'function') {
-        const records = repo.getAllComputerTypes();
-        if (Array.isArray(records) && records.length > 0) {
-          choices = records
-            .filter((c: any) => c.enabled !== false)
-            .sort((a: any, b: any) => a.computer_number - b.computer_number)
-            .map((c: any) => c.computer_name);
-        }
-      }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ComputerConfigService } = require('../../services/config-services/computer-config.service');
+    // The service takes the Database and asks it for the repository itself.
+    const records = await new ComputerConfigService(db).getAllComputerTypes();
+    if (Array.isArray(records) && records.length > 0) {
+      choices = records
+        .filter((c: any) => c.enabled !== false)
+        .sort((a: any, b: any) => a.computer_number - b.computer_number)
+        .map((c: any) => c.computer_name);
     }
   } catch (error) {
-console.warn('[NEW USER] Unable to load computer types from repository:', error);
+console.warn('[NEW USER] Unable to load computer types:', error);
   }
 
   if (choices.length === 0) {
