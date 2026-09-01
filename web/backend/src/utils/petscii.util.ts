@@ -614,6 +614,17 @@ export function convertUnicodePuaToPetscii(data: string): Buffer {
           const petsciiColor = ansiColorToPetscii(params[p]);
           if (petsciiColor !== null) {
             bytes.push(petsciiColor);
+            // Keep the reverse-video dedup state (used by the PUA branch
+            // below) in sync with SGR reverse toggles too - otherwise an
+            // SGR $12/$92 interleaved with PUA reverse glyphs desyncs the
+            // two, and a later PUA glyph's own $12/$92 gets silently
+            // swallowed by the stale dedup check (or omitted when it's
+            // actually needed to cancel a still-latched SGR reverse).
+            if (petsciiColor === 0x12) {
+              currentReverse = true;
+            } else if (petsciiColor === 0x92) {
+              currentReverse = false;
+            }
           }
           p++;
         }

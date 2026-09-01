@@ -735,6 +735,26 @@ describe('convertUnicodePuaToPetscii reverse video', () => {
     const bytes = convertUnicodePuaToPetscii(String.fromCodePoint(0xE081, 0xE001));
     expect(Array.from(bytes)).toEqual([0x12, 0x41, 0x92, 0x41]);
   });
+
+  it('keeps currentReverse in sync when an SGR reverse toggle is interleaved with PUA reverse glyphs', () => {
+    // Reverse-A (PUA), then SGR reverse-off, then reverse-B (PUA) - the SGR
+    // toggle must update the same reverse-state the PUA branch dedups
+    // against, or the second reverse glyph's $12 gets silently swallowed
+    // (regression: the SGR 'm' branch pushed 0x12/0x92 without touching
+    // currentReverse).
+    const text = String.fromCodePoint(0xE081) + '\x1b[27m' + String.fromCodePoint(0xE082);
+    const bytes = convertUnicodePuaToPetscii(text);
+    expect(Array.from(bytes)).toEqual([0x12, 0x41, 0x92, 0x12, 0x42]);
+  });
+
+  it('turns reverse off before a non-reverse PUA glyph after an SGR reverse-on', () => {
+    // Mirror case: SGR reverse-on, then a NON-reverse PUA glyph. The glyph
+    // must emit $92 before printing itself, or it renders in reverse on
+    // real hardware (the terminal is still latched from the SGR $12).
+    const text = '\x1b[7m' + String.fromCodePoint(0xE001);
+    const bytes = convertUnicodePuaToPetscii(text);
+    expect(Array.from(bytes)).toEqual([0x12, 0x92, 0x41]);
+  });
 });
 
 describe('convertUnicodePuaToPetscii ANSI parser', () => {
