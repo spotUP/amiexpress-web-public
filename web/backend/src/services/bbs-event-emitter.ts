@@ -8,7 +8,14 @@
 import { EventEmitter } from 'events';
 import { Server as SocketIOServer } from 'socket.io';
 
-export type BBSEventType = 'user_login' | 'user_logout' | 'upload' | 'download' | 'door_activity' | 'custom_door_event';
+export type BBSEventType =
+  | 'user_login'
+  | 'user_logout'
+  | 'upload'
+  | 'download'
+  | 'door_activity'
+  | 'custom_door_event'
+  | 'command';
 
 export interface BBSEventPayload {
   type: BBSEventType;
@@ -52,11 +59,36 @@ export interface DownloadEvent {
   timestamp: number;
 }
 
+/**
+ * A command the user ran.
+ *
+ * The Activity feed knew whether a door was open and nothing about the rest of
+ * a session. Every command a logged-on user runs passes through
+ * `processCommand`, which reported none of them - so the admin could see that
+ * someone was on, and not what they were doing.
+ *
+ * The command NAME only. The parameters are deliberately not carried: a
+ * command line can hold a password (AUTOVAL_PASSWORD, a sysop typing a
+ * password change), this is broadcast to every admin socket, and the
+ * Configuration Files page will display anything that reaches disk.
+ */
+export interface CommandEvent {
+  username: string;
+  nodeId: number;
+  /** The resolved command name, upper-cased. Never the parameters. */
+  command: string;
+  /** Which conference they were in when they ran it. */
+  conferenceId?: number;
+  timestamp: number;
+}
+
 export interface DoorActivityEvent {
   username: string;
   nodeId: number;
   doorName: string;
   action: 'entered' | 'exited';
+  /** What KIND of door - 'game', 'utility', ... See doors/door-category.ts. */
+  category?: string | null;
   timestamp: number;
 }
 
@@ -159,7 +191,24 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
       timestamp: data.timestamp,
       data: {
         doorName: data.doorName,
-        action: data.action
+        action: data.action,
+        category: data.category ?? null
+      }
+    });
+  }
+
+  /**
+   * Emit the command a user ran. Name only - see CommandEvent.
+   */
+  emitCommand(data: CommandEvent): void {
+    this.broadcast('command', {
+      type: 'command',
+      username: data.username,
+      nodeId: data.nodeId,
+      timestamp: data.timestamp,
+      data: {
+        command: data.command,
+        conferenceId: data.conferenceId
       }
     });
   }
@@ -269,6 +318,13 @@ export function emitDownload(data: DownloadEvent): void {
  */
 export function emitDoorActivity(data: DoorActivityEvent): void {
   bbsEventEmitter.emitDoorActivity(data);
+}
+
+/**
+ * Convenience function for emitting a command the user ran
+ */
+export function emitCommand(data: CommandEvent): void {
+  bbsEventEmitter.emitCommand(data);
 }
 
 /**

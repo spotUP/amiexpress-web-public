@@ -21,6 +21,8 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
+import * as amigafs from './amigafs';
 
 export interface Tooltype {
   /**
@@ -75,6 +77,30 @@ const AMIGA_PREFIX_CHARS = new Set(['#', '+', '%', "'"]);
 // non-'=' byte in the key. The uppercase conversion preserves the
 // historical behavior callers expect for lookups.
 const VALID_KEY_RE = /^[!-<>-~]+$/; // printable ASCII except '='
+
+/**
+ * What a key must look like when it was GUESSED rather than read.
+ *
+ * A word, allowing the dot and underscore that AmiExpress uses
+ * (`BULL.MID_STRING`, `CONSOLE_INPUT_DEVICE`) and the angle brackets its
+ * templates use (`DLPATH.<NUM>`). Entries read out of a length-prefixed array
+ * keep the looser VALID_KEY_RE - they are real by construction, whatever they
+ * are named.
+ */
+const WORD_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/;
+
+/**
+ * The word inside a key, with the punctuation a key is allowed to wear.
+ *
+ * A TEXT .info can hold a key spelled `(INTERNAL)`, which is a literal key and
+ * not a commented-out one - only a fully wrapped entry is a comment - and this
+ * board's own files carry `;RESIDENT` and `!KEY` for entries a tool commented
+ * out. Those are keys. `W\``, `K@B` and `IHDR` bytes out of a bitmap are not.
+ */
+function keyIsWordShaped(key: string): boolean {
+  const core = key.replace(/^[!;(]+/, '').replace(/\)+$/, '');
+  return core.length >= 2 && WORD_KEY_RE.test(core);
+}
 
 function parseTooltypeString(raw: string): Tooltype | null {
   let content = raw;
@@ -169,6 +195,179 @@ function looksLikeTooltypeBytes(buf: Buffer, start: number, len: number): boolea
  * the bytes at position+4 follow the `(len, string+\0)` pattern for at
  * least one entry.
  */
+/**
+ * Read one entry of a tooltype array, in whichever of the three forms the
+ * boards' files use.
+ *
+ * The standard form is a 4-byte length then the string and its NUL. Entries
+ * written by whatever produced this board's Conf<N>.info, Node<N>.info and
+ * bbsConfig.info are bare NUL-terminated strings instead, and bbsConfig.info
+ * mixes the two - so a reader that assumes one form loses the file.
+ *
+ * The length field is also the trap. It leads with NUL bytes, so reading a
+ * bare string at a prefixed entry yields an empty one; and its low byte can
+ * print, so reading from one byte inside the field glues that byte to the key
+ * - which is where the `6FTPDATAPORT` and `SOPTIONS` this board has produced
+ * come from. Trying the prefixed form FIRST, and only accepting it when the
+ * declared length lands exactly on the string's own NUL, is what tells the
+ * three apart without guessing.
+ */
+function readToolTypeEntry(
+  buf: Buffer,
+  pos: number,
+  limit: number
+): { text: string; next: number } | null {
+  if (pos + 4 > limit) return null;
+
+  const entryLen = buf.readUInt32BE(pos);
+  if (
+    entryLen >= 2 &&
+    entryLen <= 512 &&
+    pos + 4 + entryLen <= limit &&
+    buf[pos + 4 + entryLen - 1] === 0 &&
+    buf.indexOf(0, pos + 4) === pos + 4 + entryLen - 1 &&
+    looksLikeTooltypeBytes(buf, pos + 4, entryLen)
+  ) {
+    return { text: buf.toString('latin1', pos + 4, pos + 4 + entryLen - 1), next: pos + 4 + entryLen };
+  }
+
+  // A length field that describes nothing - bbsConfig.info declares 0x19 for
+  // an entry of 14 bytes. Step over it rather than reading its NULs as an
+  // empty string and losing the whole array.
+  let entryAt = pos;
+  if (buf[entryAt] === 0 && entryAt + 4 < limit && buf[entryAt + 4] !== 0) {
+    entryAt += 4;
+  }
+
+  const end = buf.indexOf(0, entryAt);
+  if (end < 0 || end > limit || end - entryAt < 1 || end - entryAt > 512) return null;
+  if (!looksLikeTooltypeBytes(buf, entryAt, end - entryAt + 1)) return null;
+  return { text: buf.toString('latin1', entryAt, end), next: end + 1 };
+}
+
+/**
+ * Walk the DiskObject to the tooltype array's real offset.
+ *
+ * The scanner below hunts for the array by looking for a plausible count
+ * word anywhere after byte 40. That guesses, and it guesses wrong in two
+ * directions on this board's own files:
+ *
+ * It requires EVERY entry to carry a 4-byte length prefix. The board's own
+ * Conf<N>.info and Node<N>.info carry a correct count and a prefix on the
+ * FIRST entry only; the rest are bare NUL-terminated strings. Twenty-one
+ * files in this checkout are written that way - Conf1..14, Node1..6 - so the
+ * parse fell back to scraping ASCII out of the bytes, which marks the file
+ * `_fallback`, and writeInfoFile then refused it outright. That is how
+ * "tooltype array structure not recognised" reached the sysop the first time
+ * he edited a conference.
+ *
+ * It does not need guessing. The offset is computable: DiskObject is 78
+ * bytes, DrawerData another 56 when do_DrawerData is set, then the render
+ * image and the select image when their Gadget pointers are set (an Image is
+ * 20 bytes plus ((width+15)/16)*2*height*depth of planes), then the default
+ * tool string when do_DefaultTool is set. What follows is the array.
+ *
+ * Field offsets are from the file layout, not from a struct on this machine:
+ * ga_GadgetRender is at 22 and ga_SelectRender at 26 because Gadget starts at
+ * byte 4 and its own GadgetRender is at +18.
+ *
+ * Measured over every .info in this repo before it was written: on the 1012
+ * icons both approaches can read, they return the same offset and the same
+ * strings; the structural walk reads 43 more (this checkout's 21 plus the
+ * worktrees' copies) and there is no file the scanner reads that it cannot.
+ * The scanner stays behind it for anything whose header does not describe its
+ * own layout.
+ */
+function locateTooltypeArrayStructural(
+  buf: Buffer
+): { countOffset: number; entriesEnd: number; strings: string[] } | null {
+  if (buf.length < 78) return null;
+
+  const gadgetRender = buf.readUInt32BE(22);
+  const selectRender = buf.readUInt32BE(26);
+  const defaultTool = buf.readUInt32BE(50);
+  const toolTypes = buf.readUInt32BE(54);
+  const drawerData = buf.readUInt32BE(66);
+
+  // A NULL do_ToolTypes means the icon genuinely carries none.
+  if (toolTypes === 0) return null;
+
+  let pos = 78;
+  if (drawerData !== 0) pos += 56;
+
+  const skipImage = (at: number): number => {
+    if (at + 20 > buf.length) return -1;
+    const width = buf.readUInt16BE(at + 4);
+    const height = buf.readUInt16BE(at + 6);
+    const depth = buf.readUInt16BE(at + 8);
+    if (width === 0 || height === 0 || depth === 0 || depth > 8) return -1;
+    const rowBytes = Math.ceil(width / 16) * 2;
+    return at + 20 + rowBytes * height * depth;
+  };
+
+  if (gadgetRender !== 0) {
+    pos = skipImage(pos);
+    if (pos < 0) return null;
+  }
+  if (selectRender !== 0) {
+    pos = skipImage(pos);
+    if (pos < 0) return null;
+  }
+  if (defaultTool !== 0) {
+    if (pos + 4 > buf.length) return null;
+    const len = buf.readUInt32BE(pos);
+    if (len > 4096) return null;
+    pos += 4 + len;
+  }
+
+  if (pos + 4 > buf.length) return null;
+  const count = buf.readUInt32BE(pos);
+  if (count < 8 || count > 804 || count % 4 !== 0) return null;
+
+  const countOffset = pos;
+  const numEntries = count / 4 - 1;
+  const strings: string[] = [];
+  pos += 4;
+
+  for (let i = 0; i < numEntries; i++) {
+    const entry = readToolTypeEntry(buf, pos, buf.length);
+    if (!entry) return null;
+    strings.push(entry.text);
+    pos = entry.next;
+  }
+
+  if (strings.length === 0) return null;
+
+  // The count can describe less than the file holds. bbsConfig.info says 20
+  // and carries 62: tooltypes were appended without the count being grown,
+  // and the 42 the count does not cover were read as icon data - which is why
+  // writeInfoFile refused the file and every system-configuration save landed
+  // in bbsConfig.info.txt instead, leaving the icon saying something else.
+  //
+  // Keep reading while the bytes are still tooltypes, and stop at the icon
+  // image: an IFF payload declares its own size, and "FORM" is printable
+  // enough to be read as a tooltype by anything that only asks whether the
+  // bytes look like text.
+  const imageAt = iffPayloadOffset(buf);
+  const limit = imageAt === -1 ? buf.length : imageAt;
+  while (pos < limit) {
+    const entry = readToolTypeEntry(buf, pos, limit);
+    if (!entry) break;
+    if (!parseTooltypeString(entry.text)) break;
+    // The icon trailer's own chunk ids. Conf1.info ends its array with a bare
+    // FORM and ICONFACE before eight bytes of image, and reading past the
+    // count would move those two into the tooltype array on the next save -
+    // where a real Amiga would find them as tooltypes and not as the marker
+    // they are. Inside the count they stay where the file put them; past it
+    // they are the boundary.
+    if (entry.text === 'FORM' || entry.text === 'ICONFACE') break;
+    strings.push(entry.text);
+    pos = entry.next;
+  }
+
+  return { countOffset, entriesEnd: pos, strings };
+}
+
 function locateTooltypeArray(buf: Buffer): { countOffset: number; entriesEnd: number; strings: string[] } | null {
   for (let scan = 40; scan < buf.length - 8; scan++) {
     // Candidate count field at `scan`. Skip misaligned candidates early.
@@ -217,6 +416,22 @@ function locateTooltypeArray(buf: Buffer): { countOffset: number; entriesEnd: nu
  * account for everything after them. Requiring that is the difference
  * between finding an IFF payload and finding the word.
  */
+/**
+ * Where the trailing IFF payload begins, or -1. See locateIffPayload: a real
+ * FORM chunk accounts for everything after its own size field, and the word
+ * FORM on its own does not.
+ */
+function iffPayloadOffset(buffer: Buffer): number {
+  let at = buffer.indexOf('FORM');
+  while (at !== -1) {
+    if (at + 8 <= buffer.length && buffer.readUInt32BE(at + 4) === buffer.length - at - 8) {
+      return at;
+    }
+    at = buffer.indexOf('FORM', at + 1);
+  }
+  return -1;
+}
+
 function locateIffPayload(buffer: Buffer): Buffer {
   let at = buffer.indexOf('FORM');
   while (at !== -1) {
@@ -234,6 +449,35 @@ function locateIffPayload(buffer: Buffer): Buffer {
  * like tooltypes. Used for non-binary .info files or as a last resort
  * when the structured parse fails.
  */
+/**
+ * Is what follows the tooltype array an appended tooltype, or image data?
+ *
+ * An appended tooltype was written the way tooltypes are written: printable
+ * `KEY=VALUE` bytes with a NUL after them. Everything else after the array is
+ * an image - an IFF payload carries control bytes, and a run of plain letters
+ * with no '=' and no terminator is a bitmap that happens to read as text.
+ * Absorbing one of those would move image bytes into the tooltype array on the
+ * next save, so the test is deliberately narrow: terminated, and shaped like a
+ * tooltype.
+ */
+function isAppendedTooltypeText(trailing: Buffer): boolean {
+  if (trailing.length === 0) return false;
+  if (trailing[trailing.length - 1] !== 0) return false;
+
+  for (const byte of trailing) {
+    if (byte === 0) continue;
+    if (byte < 0x20 || byte === 0x7f) return false;
+  }
+
+  const records = trailing.toString('latin1').split('\0').filter(r => r.length > 0);
+  if (records.length === 0) return false;
+
+  return records.every(record => {
+    const eqIdx = record.indexOf('=');
+    return eqIdx > 0 && WORD_KEY_RE.test(record.slice(0, eqIdx).trim());
+  });
+}
+
 function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
   const tooltypes: Tooltype[] = [];
   const extracted: string[] = [];
@@ -261,7 +505,13 @@ function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
     if (!trimmed) continue;
     const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!]+/, '');
     const tt = parseTooltypeString(cleaned);
-    if (tt) {
+    // A key here was GUESSED out of a printable run, so it has to look like a
+    // key. VALID_KEY_RE accepts any printable byte but '=', which is right for
+    // a string that came out of a length-prefixed array and wrong for one
+    // scraped from a bitmap: this board's drawer icons produced "W`", "D@" and
+    // "K@B" as tooltypes, and a PNG saved as Conf11Cmd.info produced 178 of
+    // them, "IHDR" and "GAMA" among them. A real tooltype key is a word.
+    if (tt && keyIsWordShaped(tt.key)) {
       tt.originalLine = raw;
       tooltypes.push(tt);
     }
@@ -300,6 +550,30 @@ function isPlaceholderIconHeader(buf: Buffer): boolean {
  * Parse an .info file into an InfoFile record. Supports both binary
  * Amiga DiskObject icons and plain-text variants.
  */
+/**
+ * Is this directory entry a real .info file, or a copy's shadow?
+ *
+ * macOS writes an AppleDouble sidecar beside every file it copies to a
+ * non-native filesystem: `._EnglishFrench.info` next to `EnglishFrench.info`,
+ * holding the resource fork and nothing a BBS wants. They travel with any
+ * archive unpacked or volume mounted on a Mac, and every directory scan here
+ * treated them as content - the Languages page listed four of them as
+ * languages, with `._` as their code, above the four real ones.
+ *
+ * The same scan builds the command registry, so a stray `._DOORREPO.info`
+ * would register a command named `._DOORREPO` and, being a registration,
+ * would own that name. Ignored everywhere rather than in the one page that
+ * showed them.
+ */
+export function isRealInfoFile(name: string): boolean {
+  const base = name.replace(/^.*[\\/]/, '');
+  if (base.startsWith('._')) return false;
+  // .DS_Store and friends are not .info files at all, but a scan that filters
+  // by extension alone can still reach them on a case-insensitive match.
+  if (base === '.DS_Store') return false;
+  return base.toLowerCase().endsWith('.info');
+}
+
 export function parseInfoFile(filePath: string): InfoFile {
   return parseInfoBuffer(fs.readFileSync(filePath), filePath);
 }
@@ -344,7 +618,11 @@ export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
     };
   }
 
-  const located = locateTooltypeArray(buffer);
+  // Structural first: it reads the offset out of the DiskObject instead of
+  // hunting for it, so it finds the arrays the scanner cannot parse and does
+  // not land in the middle of a bitmap. The scanner stays as the fallback for
+  // anything whose header does not describe its own layout.
+  const located = locateTooltypeArrayStructural(buffer) ?? locateTooltypeArray(buffer);
   if (located) {
     const tooltypes: Tooltype[] = [];
     for (const s of located.strings) {
@@ -353,12 +631,27 @@ export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
         tooltypes.push(tt);
       }
     }
+
+    // A tooltype can be sitting PAST the end of the array, written by a tool
+    // that appended the bytes without growing the array's count. This BBS has
+    // done it - Doors/What/WHAT.info carries OVERCLOCK=100 that way, and the
+    // door side has honoured it for as long as it has been there. Read as
+    // icon data, it was invisible in the admin and could not be edited, while
+    // remaining in force on the board.
+    //
+    // Absorbed into the array here, so the next save writes it where
+    // icon.library would look for it. Only text qualifies: everything else
+    // after the array is a NewIcons or ICONFACE image, and scraping printable
+    // runs out of a bitmap invents tooltypes nobody wrote.
+    const trailing = buffer.slice(located.entriesEnd);
+    const appended = isAppendedTooltypeText(trailing) ? extractTooltypesFallback(trailing) : [];
+
     return {
       filePath,
       isBinary: true,
       diskObject: buffer.slice(0, located.countOffset),
-      iconData: buffer.slice(located.entriesEnd),
-      tooltypes,
+      iconData: appended.length > 0 ? Buffer.alloc(0) : trailing,
+      tooltypes: appended.length > 0 ? [...tooltypes, ...appended] : tooltypes,
       rawBuffer: buffer,
     };
   }
@@ -415,6 +708,20 @@ export class InfoFileWriteError extends Error {
  * silently wrote the original bytes back, so set/delete looked like
  * they succeeded while the on-disk file was unchanged.
  */
+/**
+ * Write-then-rename, because some of these files ARE the board.
+ *
+ * ConfConfig.info defines which conferences exist; a crash or a concurrent
+ * reader mid-writeFileSync sees a truncated registry. rename(2) on the same
+ * filesystem is atomic, so a reader gets the whole old file or the whole new
+ * one, never the middle.
+ */
+function atomicWrite(filePath: string, data: Buffer | string): void {
+  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, filePath);
+}
+
 export function writeInfoFile(info: InfoFile): void {
   if (info.isBinary) {
     if ((info as InfoFileInternal)._fallback) {
@@ -430,7 +737,7 @@ export function writeInfoFile(info: InfoFile): void {
 
     if (info.tooltypes.length === 0 && info.iconData.length === 0) {
       // Opaque binary without a recognized tooltype section.
-      fs.writeFileSync(info.filePath, info.rawBuffer);
+      atomicWrite(info.filePath, info.rawBuffer);
       return;
     }
 
@@ -473,7 +780,61 @@ export function writeInfoFile(info: InfoFile): void {
   // reason.
   const ends = info.trailingNewline ?? true;
   const textBuf = Buffer.from(lines + (lines && ends ? eol : ''), 'latin1');
-  fs.writeFileSync(info.filePath, Buffer.concat([textBuf, info.iconData]));
+  atomicWrite(info.filePath, Buffer.concat([textBuf, info.iconData]));
+}
+
+/**
+ * Move an .info to a new name, keeping the icon.
+ *
+ * Renaming a file checker or a language used to DELETE the old icon and then
+ * write tooltypes to the new name - and `applyTooltypes` creates a file when
+ * it finds none, so what landed was a text stub. A 529-byte Amiga icon came
+ * back as 54 bytes with no DiskObject, which `GetDiskObject` reads as NIL: on
+ * a real Amiga the checker stopped existing.
+ *
+ * A rename is a rename. The bytes move, and the caller applies its tooltypes
+ * to the file that arrived.
+ *
+ * @returns true when a file was moved
+ */
+export function moveInfoFile(oldPath: string, newPath: string): boolean {
+  if (oldPath === newPath) return false;
+
+  const source = amigafs.resolvePath(oldPath) ?? oldPath;
+  if (!fs.existsSync(source)) return false;
+
+  fs.mkdirSync(path.dirname(newPath), { recursive: true });
+  fs.renameSync(source, newPath);
+  return true;
+}
+
+/**
+ * The directory as it is spelled ON DISK.
+ *
+ * express.e writes `Fcheck` and this board's volume holds `FCheck`; on the
+ * Amiga's case-insensitive filesystem both are the same directory, and on the
+ * Linux container they are not. The file-checker service hardcoded `Fcheck`,
+ * so on the live board it read ENOENT and would have written a second
+ * directory the BBS never looks in - invisible on the sysop's Mac, which is
+ * case-insensitive too.
+ */
+export function resolveDirectory(parent: string, name: string): string {
+  const wanted = path.join(parent, name);
+
+  // Read the parent rather than asking whether `wanted` exists: on a
+  // case-insensitive filesystem it does, and the answer comes back with the
+  // spelling that was ASKED for, which is the spelling that is wrong on
+  // Linux. Matching the entry itself gives the same answer on both.
+  try {
+    const lower = name.toLowerCase();
+    for (const entry of fs.readdirSync(parent)) {
+      if (entry.toLowerCase() === lower) return path.join(parent, entry);
+    }
+  } catch {
+    // No parent yet - the caller creates what it needs.
+  }
+
+  return wanted;
 }
 
 /**
