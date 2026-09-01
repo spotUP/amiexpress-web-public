@@ -379,10 +379,15 @@ export class Screen extends Element {
       }
     }
 
-    // Walk tree and add elements to their grid cells
-    this.walk((el) => {
-      if (el.hidden || !el.visible) return;
-
+    // Walk tree and add elements to their grid cells. walkVisible (not
+    // walk) - a hidden/invisible element's SUBTREE must not enter the
+    // index at all, matching renderElement()'s cascade (element.ts:3010,
+    // 3035 - a hidden parent never draws its children). walk() recurses
+    // into every child unconditionally regardless of what the callback
+    // does, so a hidden container's children used to stay indexed at
+    // their last-known coordinates and remain mouse-live underneath
+    // whatever now covers them (fix-wave Critical 1, 2026-09-01).
+    this.walkVisible((el) => {
       const coords = el._getCoords();
       if (!coords) return;
 
@@ -420,11 +425,14 @@ export class Screen extends Element {
       return [...(this._mouseIndex[y][x] || [])];
     }
 
-    // Fallback to tree walk if index not built yet
+    // Fallback to tree walk if index not built yet. walkVisible again -
+    // same reasoning as _rebuildMouseIndex above; this path had the exact
+    // same gap (el.hidden/el.visible only gated the PUSH, not the
+    // recursion into el.children).
     const elements: Element[] = [];
 
-    this.walk((el) => {
-      if (el.hasMouseOver(x, y) && !el.hidden && el.visible) {
+    this.walkVisible((el) => {
+      if (el.hasMouseOver(x, y)) {
         elements.push(el);
       }
     });
@@ -433,10 +441,37 @@ export class Screen extends Element {
   }
 
   /**
-   * Walk the element tree
+   * Walk the element tree. Visits every element regardless of hidden/
+   * visible state - used by callers (dimension/resize coordinate-cache
+   * invalidation) that must reach hidden elements too, so they have fresh
+   * coords whenever they are later shown.
    */
   private walk(callback: (el: Element) => void): void {
     const visit = (el: Element) => {
+      callback(el);
+      for (const child of el.children) {
+        visit(child);
+      }
+    };
+
+    for (const child of this.children) {
+      visit(child);
+    }
+  }
+
+  /**
+   * Walk the element tree, but do NOT descend into the subtree of an
+   * element that is hidden or not visible - mouse hit-testing must match
+   * rendering's cascade (a hidden parent never draws its children;
+   * element.ts's renderElement()/  _renderElement() skip them at
+   * element.ts:3010 and 3035). Using the unconditional `walk()` above for
+   * hit-testing left a hidden container's children indexed at stale
+   * coordinates, live for mouse events, underneath whatever now covers
+   * them (fix-wave Critical 1, 2026-09-01).
+   */
+  private walkVisible(callback: (el: Element) => void): void {
+    const visit = (el: Element) => {
+      if (el.hidden || !el.visible) return;
       callback(el);
       for (const child of el.children) {
         visit(child);
