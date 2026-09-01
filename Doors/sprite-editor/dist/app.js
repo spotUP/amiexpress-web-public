@@ -349,8 +349,18 @@ class StudioApp {
     }
     bindKeys() {
         const bindings = this.buildBindings();
-        this.bindingSet = (0, bindings_1.buildBindingSet)(bindings);
-        for (const binding of bindings)
+        // Final fix wave, Important 4: this used to wire the RAW table while
+        // menuItems() (built by buildBindingSet below, read by
+        // createStudioMenuBar) served the GUARDED array - the opposite of the
+        // invariant bindings.ts's module doc comment documents, and of what
+        // edit-screen.ts's bindKeys() does. Harmless only as long as no
+        // isBlocked predicate was passed; the browser and editor share ONE
+        // Screen instance, so `this.screen.dialogOpen` set by an editor-owned
+        // confirm()/promptText() (dialogs.ts) is visible here too - pass it so
+        // the browser's own keyboard path stays inert while the editor's
+        // dialog owns the screen, exactly like edit-screen.ts's bindKeys().
+        this.bindingSet = (0, bindings_1.buildBindingSet)(bindings, () => this.screen.dialogOpen);
+        for (const binding of this.bindingSet.bindings)
             this.screen.key(binding.keys, binding.handler);
     }
     apply(next) {

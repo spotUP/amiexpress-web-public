@@ -99,6 +99,28 @@ export async function clickingLastSwatchSelectsColourFifteen(): Promise<void> {
   }
 }
 
+/**
+ * Final fix wave, Minor 6: the toolbar's click handler was the last
+ * StudioBinding-adjacent input surface with no `dialogOpen` guard -
+ * edit-screen.ts's handleCanvasClick/handleCanvasDrag/handleFramesClick
+ * all check `screen.dialogOpen` before acting; this one didn't. It only
+ * mutates tool/colour today (no document write), but the consumer class
+ * (a mouse click reaching a live handler while a modal owns the screen)
+ * has leaked four times in this door already.
+ */
+export async function clicksAreIgnoredWhileADialogIsOpen(): Promise<void> {
+  const { screen, panel, handle, box, changes } = buildToolbar({ tool: 'paint', colour: 0 });
+  try {
+    screen.dialogOpen = true;
+    const coords = (box as any)._getCoords();
+    box.emit('click', { x: coords.xi + 5, y: coords.yi + 1, button: 'left' });
+    assert.strictEqual(changes.length, 0, 'a click must be a no-op while screen.dialogOpen is true');
+  } finally {
+    handle.destroy();
+    panel.destroy();
+  }
+}
+
 export async function clickingPastTheLastSwatchDoesNothing(): Promise<void> {
   const { panel, handle, box, changes } = buildToolbar({ tool: 'paint', colour: 0 });
   try {

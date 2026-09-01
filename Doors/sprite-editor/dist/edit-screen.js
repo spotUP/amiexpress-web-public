@@ -586,7 +586,7 @@ class EditScreen {
     paintPreview() {
         const anim = this.doc.sprite.animations[this.doc.animation];
         const lines = (0, preview_1.previewLines)(this.doc.sprite, this.doc.animation, this.tick, 2);
-        this.previewBox.setContent(lines.join('\n ') +
+        this.previewBox.setContent(lines.join('\n') +
             `\n\n {gray-fg}${this.doc.animation} - ${anim.frames.length}f ` +
             `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}{/}`);
         this.screen.render();

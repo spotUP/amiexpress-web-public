@@ -236,6 +236,16 @@ export async function theEditScreenContentChildrenSitAtTop1ViaPanelContentRect()
  * the content CHILD's position (panelContentRect, top:1) already skips
  * the panel's title-bar row, so keeping the old literal newline would
  * double-blank it (one row lost to position, a second to the string).
+ *
+ * Final fix wave, Important 3: a LEADING newline is not the only way to
+ * introduce a stray column - a `.join('\n ')` SEPARATOR (a newline plus a
+ * literal space between every pair of lines) stairsteps every row after
+ * the first one column to the right, which is exactly the bug this test
+ * previously missed (edit-screen.ts:597 shipped `lines.join('\n ') + ...`
+ * - no leading '\n ', so the old regex here saw nothing wrong, but every
+ * preview row past row 0 was shifted right by one column - a visible
+ * diagonal tear). Checking for the separator form alongside the leading
+ * form is what makes this pin catch both shapes of the same mistake.
  */
 export async function paintMethodsDoNotDoubleBlankWithALeadingNewline(): Promise<void> {
   assert.ok(!/canvasBox\.setContent\('\\n /.test(code),
@@ -244,8 +254,28 @@ export async function paintMethodsDoNotDoubleBlankWithALeadingNewline(): Promise
     'previewBox.setContent must not start with a leading \\n - see panelContentRect');
   assert.ok(!/framesBox\.setContent\(`\\n /.test(code),
     'framesBox.setContent must not start with a leading \\n - see panelContentRect');
-  assert.ok(!/paletteBox\.setContent\(\s*\n?\s*`\\n /.test(code),
-    'paletteBox.setContent must not start with a leading \\n - see panelContentRect');
+  assert.ok(!/\.join\('\\n /.test(code) && !/\.join\(`\\n /.test(code),
+    "no line-join may use '\\n ' (newline + space) as its SEPARATOR either - " +
+    'that staggers every row but the first one column to the right, the same ' +
+    'defect a leading newline causes on row 0 alone');
+}
+
+/**
+ * Toolbar's content box moved out of edit-screen.ts into toolbar.ts's
+ * createToolbar() (Studio 2c task 4) - the old `paletteBox` pin here
+ * grepped a name that no longer exists in EITHER file, so it could never
+ * fail. toolbar.test.ts's theToolbarBoxSitsAtTheCorrectContentGeometry
+ * already covers the box's geometry against a real construction; this
+ * pin instead retargets the SAME leading-newline/stagger invariant at
+ * toolbar.ts's actual `box.setContent(` call.
+ */
+export async function toolbarPaintDoesNotDoubleBlankOrStagger(): Promise<void> {
+  const toolbarCode = readFileSync(join(__dirname, '..', 'toolbar.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.ok(!/box\.setContent\(\s*\n?\s*`\\n /.test(toolbarCode),
+    'toolbar.ts\'s box.setContent must not start with a leading \\n - see panelContentRect');
+  assert.ok(!/\.join\('\\n /.test(toolbarCode) && !/\.join\(`\\n /.test(toolbarCode),
+    "toolbar.ts must not join lines with '\\n ' either - the same stagger bug");
 }
 
 /** Studio 2c: View -> Reset Layout, wired through the same binding table as every hotkey. */

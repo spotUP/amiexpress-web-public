@@ -85,6 +85,12 @@ export function createToolbar(
   }
 
   box.on('click', (data: any) => {
+    // Final fix wave, Minor 6: the last StudioBinding-adjacent input
+    // surface with no dialogOpen guard (edit-screen.ts's handleCanvasClick/
+    // handleCanvasDrag/handleFramesClick all check it - same discipline
+    // here, even though this handler only mutates tool/colour today and
+    // never touches the document).
+    if ((screen as any).dialogOpen) return;
     const coords = (box as any)._getCoords();
     if (!coords) return;
     const x = data.x - coords.xi;
