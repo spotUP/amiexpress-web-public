@@ -91,6 +91,15 @@ export interface Cell {
   fg: number;  // 0-15 (0-7 normal, 8-15 bright)
   bg: number;  // 0-15 (0-7 normal, 8-15 bright with iCE colors)
   blink?: boolean;  // Blink attribute (requires iCE colors)
+  // Marks this cell as "nothing here" regardless of char/fg/bg - see
+  // isCellEmpty() in core/canvas.ts, the one definition of empty. Deliberately
+  // does NOT round-trip through canvasToANSI()/parseANSIToCanvas() - ANSI text
+  // has no transparency concept, so serializing to/from an ANSI string is a
+  // lossy conversion by design. A host that needs transparency to survive
+  // (e.g. the sprite editor) reads/writes it directly via the live Cell[][]
+  // through getCoreCanvas()/setCoreCanvas() instead. Do not "fix" this by
+  // wiring transparent into the ANSI codec.
+  transparent?: boolean;
 }
 
 /**
