@@ -110,4 +110,23 @@ describe('the door settings form', () => {
 
     await waitFor(() => expect(screen.getByText(/declares no settings/i)).toBeTruthy());
   });
+
+  // Sending the whole form writes the door's own defaults into settings.json
+  // as if the sysop had chosen them. The first board to use this had
+  // maxNodes: 8 pinned that way, so raising the door's default to 255 would
+  // never have reached it.
+  it('sends only what the sysop changed, not the defaults they left alone', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    const server = await screen.findByLabelText('Server') as HTMLInputElement;
+    await user.clear(server);
+    await user.type(server, 'wall.uprough.net');
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled());
+    const [, values] = saveDoorSettings.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(Object.keys(values)).toEqual(['server']);
+    expect(values.port).toBeUndefined();
+  });
 });

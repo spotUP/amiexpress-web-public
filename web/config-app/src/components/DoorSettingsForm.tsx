@@ -47,7 +47,16 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [values, setValues] = useState<Values>({});
-  const [dirty, setDirty] = useState(false);
+  /**
+   * Which keys the sysop actually touched.
+   *
+   * Only these are sent. Sending the whole form writes the door's own
+   * defaults into settings.json as if a sysop had chosen them - the first
+   * board to use this had `maxNodes: 8` pinned that way, so raising the
+   * door's default to 255 would not have reached it.
+   */
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const dirty = touched.size > 0;
 
   const settingsQuery = useQuery({
     queryKey: ['door-settings', command],
@@ -64,10 +73,14 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
     if (view && !dirty) setValues(view.values ?? {});
   }, [view, dirty]);
 
+  /** What to send: the keys that were edited, nothing else. */
+  const changedValues = (): Values =>
+    Object.fromEntries([...touched].map(key => [key, values[key]])) as Values;
+
   const saveMutation = useMutation({
-    mutationFn: () => apiClient.saveDoorSettings(command, values),
+    mutationFn: () => apiClient.saveDoorSettings(command, changedValues()),
     onSuccess: () => {
-      setDirty(false);
+      setTouched(new Set());
       queryClient.invalidateQueries({ queryKey: ['door-settings', command] });
       showSuccess(`${command} settings saved`);
     },
@@ -98,7 +111,7 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
   }
 
   const set = (key: string, value: string | number | boolean) => {
-    setDirty(true);
+    setTouched(prev => new Set(prev).add(key));
     setValues(prev => ({ ...prev, [key]: value }));
   };
 
