@@ -11,6 +11,8 @@ export {
   PALETTE,
   createBuffer,
   blitCells,
+  flipCellsH,
+  flipCellsV,
   rowToTags,
   bufferToTags,
 } from './cells';

@@ -106,3 +106,73 @@ export function rowToTags(row: CellRow, fallback: Cell = DEFAULT_FALLBACK): stri
 export function bufferToTags(buffer: CellBuffer, fallback: Cell = DEFAULT_FALLBACK): string[] {
   return buffer.map(row => rowToTags(row, fallback));
 }
+
+/**
+ * Characters that do not survive a horizontal mirror unchanged.
+ *
+ * The half-block glyphs the sprite codec produces - the full block and the
+ * upper and lower halves - are symmetric about a vertical axis, so a flip
+ * is pure cell reversal for anything the studio's pixel editor can author.
+ * Sprites drawn in CELL mode can carry anything, though, and a left-facing
+ * arrow that stays left-facing when flipped is worse than not flipping at
+ * all: the mirror is supposed to tell the player which way a thing is
+ * going. Anything not listed here is its own mirror image.
+ */
+const MIRROR_H: Record<string, string> = {
+  '(': ')', ')': '(',
+  '[': ']', ']': '[',
+  '{': '}', '}': '{',
+  '<': '>', '>': '<',
+  '/': '\\', '\\': '/',
+  '▌': '▐', '▐': '▌',  // left half block <-> right half block
+  '◄': '►', '►': '◄',  // arrow left <-> arrow right
+  '←': '→', '→': '←',  // arrow left <-> arrow right
+  '┌': '┐', '┐': '┌',  // box corners
+  '└': '┘', '┘': '└',
+  '├': '┤', '┤': '├',  // box tees
+  '╔': '╗', '╗': '╔',  // double-line corners
+  '╚': '╝', '╝': '╚',
+  '╠': '╣', '╣': '╠',  // double-line tees
+};
+
+/**
+ * The same cells, mirrored left to right.
+ *
+ * Pure: the source is untouched and every cell is copied, so a flipped
+ * frame can be blitted, stored or flipped again without the original
+ * changing underneath. Transparent cells stay transparent and stay in
+ * place relative to the mirror, which is what lets a sprite with an
+ * uncentred silhouette flip without drifting.
+ */
+export function flipCellsH(src: CellBuffer): CellBuffer {
+  return src.map(row =>
+    row.slice().reverse().map(cell =>
+      cell === null ? null : { ...cell, char: MIRROR_H[cell.char] ?? cell.char }
+    )
+  );
+}
+
+/**
+ * The same cells, mirrored top to bottom.
+ *
+ * A vertical flip must also swap the half-block glyphs: the upper half and
+ * the lower half ARE each other upside down, so reversing rows without
+ * swapping them turns a sprite inside out - the one case where a flip that
+ * looks like it worked is silently wrong.
+ */
+const MIRROR_V: Record<string, string> = {
+  '▀': '▄', '▄': '▀',  // upper half block <-> lower half block
+  '╔': '╚', '╚': '╔',
+  '╗': '╝', '╝': '╗',
+  '┌': '└', '└': '┌',
+  '┐': '┘', '┘': '┐',
+  '┬': '┴', '┴': '┬',
+};
+
+export function flipCellsV(src: CellBuffer): CellBuffer {
+  return src.slice().reverse().map(row =>
+    row.map(cell =>
+      cell === null ? null : { ...cell, char: MIRROR_V[cell.char] ?? cell.char }
+    )
+  );
+}
