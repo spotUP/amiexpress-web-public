@@ -51,6 +51,8 @@ export interface ANSIEditorOptions extends ElementOptions {
   initialMode?: EditorMode; // Default: 'text'
   maxLines?: number;
   maxLineLength?: number;
+  canvasWidth?: number;   // Draw-mode canvas width in cells. Default: 80.
+  canvasHeight?: number;  // Draw-mode canvas height in cells. Default: 25.
   showLineNumbers?: boolean;
   showToolbar?: boolean;      // F-key character toolbar
   showStatusBar?: boolean;
@@ -211,8 +213,8 @@ export class ANSIEditor extends Box {
     fileSize: 0,
     dataType: 1,  // Character (ANSI)
     fileType: 1,  // ANSi
-    tInfo1: 80,   // Width
-    tInfo2: 25,   // Height
+    tInfo1: 0,    // Width - set from canvas size in constructor
+    tInfo2: 0,    // Height - set from canvas size in constructor
     tInfo3: 0,
     tInfo4: 0,
     comments: [],
@@ -241,6 +243,12 @@ export class ANSIEditor extends Box {
   // Options
   private maxLines: number;
   private maxLineLength: number;
+  // Draw-mode canvas dimensions. Bootstrap fallback only - once cellCanvas
+  // is allocated, canvasW/canvasH below always read the real array so a
+  // later setCoreCanvas() with a differently-sized canvas is reflected
+  // automatically.
+  private optCanvasWidth: number;
+  private optCanvasHeight: number;
   private showLineNumbers: boolean;
   private onSaveCallback?: (content: string) => Promise<boolean>;
   private onSaveAsCallback?: () => Promise<void>;
@@ -250,6 +258,27 @@ export class ANSIEditor extends Box {
   private hideUIHotkey: string;
   private uiVisible: boolean = true;
   private modalOpen: boolean = false;  // Track when dialogs are open
+
+  /**
+   * Draw-mode canvas width/height. These two getters are the ONLY source of
+   * canvas dimensions in the widget - every bound check, allocation, and
+   * loop reads through here instead of a hardcoded 80/25 literal. Before
+   * cellCanvas is allocated (during construction) they fall back to the
+   * requested option; afterward they always reflect the real array, so a
+   * later setCoreCanvas() swap with a different-sized canvas "just works".
+   */
+  private get canvasW(): number { return this.cellCanvas?.[0]?.length ?? this.optCanvasWidth; }
+  private get canvasH(): number { return this.cellCanvas?.length ?? this.optCanvasHeight; }
+
+  /** Get the current draw-mode canvas dimensions in cells. */
+  getCanvasSize(): { width: number; height: number } {
+    return { width: this.canvasW, height: this.canvasH };
+  }
+
+  /** Full-canvas selection bounds - the default when no explicit selection exists. */
+  private fullCanvasSelection(): { x1: number; y1: number; x2: number; y2: number } {
+    return { x1: 0, y1: 0, x2: this.canvasW - 1, y2: this.canvasH - 1 };
+  }
 
   constructor(options: ANSIEditorOptions = {}) {
     super({
@@ -265,6 +294,8 @@ export class ANSIEditor extends Box {
     this.mode = options.initialMode || 'draw'; // Default to draw mode
     this.maxLines = options.maxLines || 1000;
     this.maxLineLength = options.maxLineLength || 160;
+    this.optCanvasWidth = options.canvasWidth || 80;
+    this.optCanvasHeight = options.canvasHeight || 25;
     this.showLineNumbers = options.showLineNumbers ?? true;
     this.onSaveCallback = options.onSave;
     this.onSaveAsCallback = options.onSaveAs;
@@ -273,8 +304,10 @@ export class ANSIEditor extends Box {
     this.onExitCallback = options.onExit;
     this.hideUIHotkey = options.hideUIHotkey || 'f2';
 
-    // Initialize core canvas (80x25 standard ANSI size)
-    this.cellCanvas = CoreCanvas.createCanvas(80, 25);
+    // Initialize core canvas (defaults to 80x25 standard ANSI size)
+    this.cellCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
+    this.sauce.tInfo1 = this.canvasW;
+    this.sauce.tInfo2 = this.canvasH;
 
     // Parse initial content
     if (options.initialContent) {
@@ -383,7 +416,7 @@ export class ANSIEditor extends Box {
       focusable: true,
       clickable: true,
       input: true,
-      wrap: false, // ANSI canvas is fixed 80 cols - never wrap
+      wrap: false, // ANSI canvas is fixed-width - never wrap
       fillChar: this.currentChar,
       clearChar: ' ',
     });
@@ -1153,7 +1186,7 @@ export class ANSIEditor extends Box {
     const newLayer: Layer = {
       id: this.nextLayerId++,
       name: `Layer ${this.nextLayerId - 1}`,
-      canvas: CoreCanvas.createCanvas(80, 25),
+      canvas: CoreCanvas.createCanvas(this.canvasW, this.canvasH),
       visible: true,
       locked: false,
       opacity: 100,
@@ -1248,8 +1281,8 @@ export class ANSIEditor extends Box {
    * Compose all visible layers into a single output canvas
    */
   private composeLayers(): Cell[][] {
-    const width = 80;
-    const height = 25;
+    const width = this.canvasW;
+    const height = this.canvasH;
     const output = CoreCanvas.createCanvas(width, height);
 
     // Composite from bottom to top
@@ -1354,7 +1387,7 @@ export class ANSIEditor extends Box {
     if (!this.cellCanvas) return;
 
     // If no selection, select entire canvas
-    const sel = this.selection || { x1: 0, y1: 0, x2: 79, y2: 24 };
+    const sel = this.selection || this.fullCanvasSelection();
 
     // Copy to clipboard
     this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
@@ -1378,7 +1411,7 @@ export class ANSIEditor extends Box {
    */
   private copySelection(): void {
     // If no selection, select entire canvas
-    const sel = this.selection || { x1: 0, y1: 0, x2: 79, y2: 24 };
+    const sel = this.selection || this.fullCanvasSelection();
     this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
   }
 
@@ -1416,7 +1449,7 @@ export class ANSIEditor extends Box {
       for (let x = 0; x < this.clipboard[y].length; x++) {
         const destX = startX + x;
         const destY = startY + y;
-        if (destY < 25 && destX < 80 && this.cellCanvas[destY]) {
+        if (destY < this.canvasH && destX < this.canvasW && this.cellCanvas[destY]) {
           this.cellCanvas[destY][destX] = { ...this.clipboard[y][x] };
         }
       }
@@ -1440,13 +1473,13 @@ export class ANSIEditor extends Box {
     const y = this.cursor.line;
 
     // Shift rows down (lose bottom row)
-    for (let row = 24; row > y; row--) {
+    for (let row = this.canvasH - 1; row > y; row--) {
       this.cellCanvas[row] = this.cellCanvas[row - 1];
     }
 
     // Create blank row
     this.cellCanvas[y] = [];
-    for (let x = 0; x < 80; x++) {
+    for (let x = 0; x < this.canvasW; x++) {
       this.cellCanvas[y][x] = { char: ' ', fg: 7, bg: 0 };
     }
 
@@ -1464,14 +1497,14 @@ export class ANSIEditor extends Box {
     const y = this.cursor.line;
 
     // Shift rows up
-    for (let row = y; row < 24; row++) {
+    for (let row = y; row < this.canvasH - 1; row++) {
       this.cellCanvas[row] = this.cellCanvas[row + 1];
     }
 
     // Create blank row at bottom
-    this.cellCanvas[24] = [];
-    for (let x = 0; x < 80; x++) {
-      this.cellCanvas[24][x] = { char: ' ', fg: 7, bg: 0 };
+    this.cellCanvas[this.canvasH - 1] = [];
+    for (let x = 0; x < this.canvasW; x++) {
+      this.cellCanvas[this.canvasH - 1][x] = { char: ' ', fg: 7, bg: 0 };
     }
 
     this.syncCoreCanvasToDisplay();
@@ -1487,7 +1520,7 @@ export class ANSIEditor extends Box {
    * Select entire canvas
    */
   private selectAll(): void {
-    this.selection = { x1: 0, y1: 0, x2: 79, y2: 24 };
+    this.selection = this.fullCanvasSelection();
     this.updateDisplay();
   }
 
@@ -1560,7 +1593,7 @@ export class ANSIEditor extends Box {
   private flipHorizontal(): void {
     if (!this.cellCanvas) return;
 
-    const sel = this.selection || { x1: 0, y1: 0, x2: 79, y2: 24 };
+    const sel = this.selection || this.fullCanvasSelection();
     const width = sel.x2 - sel.x1 + 1;
 
     for (let y = sel.y1; y <= sel.y2; y++) {
@@ -1588,7 +1621,7 @@ export class ANSIEditor extends Box {
   private flipVertical(): void {
     if (!this.cellCanvas) return;
 
-    const sel = this.selection || { x1: 0, y1: 0, x2: 79, y2: 24 };
+    const sel = this.selection || this.fullCanvasSelection();
     const height = sel.y2 - sel.y1 + 1;
 
     for (let y = 0; y < Math.floor(height / 2); y++) {
@@ -2006,8 +2039,8 @@ BBS Door SDK v2.0{/gray-fg}
   private newDocument(): void {
     if (!this.cellCanvas) return;
 
-    // Clear the canvas
-    this.cellCanvas = CoreCanvas.createCanvas(80, 25);
+    // Clear the canvas (preserves the editor's configured dimensions)
+    this.cellCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
     this.syncCoreCanvasToDisplay();
 
     // Reset lines for text mode
@@ -2164,9 +2197,9 @@ BBS Door SDK v2.0{/gray-fg}
 
       if (x < 0 || y < 0) return;
 
-      // Clamp to canvas bounds (80 columns, 25 rows)
-      this.cursor.col = Math.min(Math.max(0, x), 79);
-      this.cursor.line = Math.min(Math.max(0, y), 24);
+      // Clamp to canvas bounds
+      this.cursor.col = Math.min(Math.max(0, x), this.canvasW - 1);
+      this.cursor.line = Math.min(Math.max(0, y), this.canvasH - 1);
       this.updateDrawCursor();
 
       // Handle tool-specific click behavior
@@ -2196,9 +2229,9 @@ BBS Door SDK v2.0{/gray-fg}
 
       if (x < 0 || y < 0) return;
 
-      // Clamp to canvas bounds (80 columns, 25 rows)
-      this.cursor.col = Math.min(Math.max(0, x), 79);
-      this.cursor.line = Math.min(Math.max(0, y), 24);
+      // Clamp to canvas bounds
+      this.cursor.col = Math.min(Math.max(0, x), this.canvasW - 1);
+      this.cursor.line = Math.min(Math.max(0, y), this.canvasH - 1);
       this.updateDrawCursor();
 
       // For shape tools, update preview on mouse move while drawing
@@ -2399,7 +2432,7 @@ BBS Door SDK v2.0{/gray-fg}
       return;
     }
     if (name === 'right') {
-      this.cursor.col = Math.min(79, this.cursor.col + 1);
+      this.cursor.col = Math.min(this.canvasW - 1, this.cursor.col + 1);
       this.updateDrawCursor();
       return;
     }
@@ -2409,14 +2442,14 @@ BBS Door SDK v2.0{/gray-fg}
       return;
     }
     if (name === 'down') {
-      this.cursor.line = Math.min(24, this.cursor.line + 1);
+      this.cursor.line = Math.min(this.canvasH - 1, this.cursor.line + 1);
       this.updateDrawCursor();
       return;
     }
 
     // Enter moves to next line
     if (name === 'enter' || name === 'return') {
-      this.cursor.line = Math.min(24, this.cursor.line + 1);
+      this.cursor.line = Math.min(this.canvasH - 1, this.cursor.line + 1);
       this.cursor.col = 0;
       this.updateDrawCursor();
       return;
@@ -2437,7 +2470,7 @@ BBS Door SDK v2.0{/gray-fg}
       // Type any printable character
       if (ch && ch.length === 1) {
         this.typeCharAtCursor(ch);
-        this.cursor.col = Math.min(79, this.cursor.col + 1);
+        this.cursor.col = Math.min(this.canvasW - 1, this.cursor.col + 1);
         this.updateDrawCursor();
         return;
       }
@@ -2445,7 +2478,7 @@ BBS Door SDK v2.0{/gray-fg}
       // Space types a space
       if (name === 'space') {
         this.typeCharAtCursor(' ');
-        this.cursor.col = Math.min(79, this.cursor.col + 1);
+        this.cursor.col = Math.min(this.canvasW - 1, this.cursor.col + 1);
         this.updateDrawCursor();
         return;
       }
@@ -3028,7 +3061,7 @@ BBS Door SDK v2.0{/gray-fg}
    */
   private initPreviewCanvas(): void {
     if (!this.cellCanvas) return;
-    this.previewCanvas = CoreCanvas.createCanvas(80, 25);
+    this.previewCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
   }
 
   /**
@@ -3150,7 +3183,7 @@ BBS Door SDK v2.0{/gray-fg}
     let y = y0;
 
     while (true) {
-      if (x >= 0 && x < 80 && y >= 0 && y < 25) {
+      if (x >= 0 && x < this.canvasW && y >= 0 && y < this.canvasH) {
         this.previewCanvas[y][x] = { ...cell };
       }
 
@@ -3175,9 +3208,9 @@ BBS Door SDK v2.0{/gray-fg}
     if (!this.previewCanvas) return;
 
     const minX = Math.max(0, Math.min(x0, x1));
-    const maxX = Math.min(79, Math.max(x0, x1));
+    const maxX = Math.min(this.canvasW - 1, Math.max(x0, x1));
     const minY = Math.max(0, Math.min(y0, y1));
-    const maxY = Math.min(24, Math.max(y0, y1));
+    const maxY = Math.min(this.canvasH - 1, Math.max(y0, y1));
 
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
@@ -3199,14 +3232,14 @@ BBS Door SDK v2.0{/gray-fg}
       // Filled ellipse - draw horizontal lines
       for (let y = -ry; y <= ry; y++) {
         const py = cy + y;
-        if (py < 0 || py >= 25) continue;
+        if (py < 0 || py >= this.canvasH) continue;
 
         // Calculate x extent at this y
         const xExtent = Math.round(rx * Math.sqrt(1 - (y * y) / (ry * ry)));
 
         for (let x = -xExtent; x <= xExtent; x++) {
           const px = cx + x;
-          if (px >= 0 && px < 80) {
+          if (px >= 0 && px < this.canvasW) {
             this.previewCanvas[py][px] = { ...cell };
           }
         }
@@ -3219,7 +3252,7 @@ BBS Door SDK v2.0{/gray-fg}
         const px = Math.round(cx + rx * Math.cos(angle));
         const py = Math.round(cy + ry * Math.sin(angle));
 
-        if (px >= 0 && px < 80 && py >= 0 && py < 25) {
+        if (px >= 0 && px < this.canvasW && py >= 0 && py < this.canvasH) {
           this.previewCanvas[py][px] = { ...cell };
         }
       }
@@ -3233,9 +3266,9 @@ BBS Door SDK v2.0{/gray-fg}
     if (!this.previewCanvas) return;
 
     const minX = Math.max(0, Math.min(x0, x1));
-    const maxX = Math.min(79, Math.max(x0, x1));
+    const maxX = Math.min(this.canvasW - 1, Math.max(x0, x1));
     const minY = Math.max(0, Math.min(y0, y1));
-    const maxY = Math.min(24, Math.max(y0, y1));
+    const maxY = Math.min(this.canvasH - 1, Math.max(y0, y1));
 
     // Use dotted pattern for selection preview
     const selCell: Cell = { char: '·', fg: 15, bg: 0, blink: false };
@@ -3273,8 +3306,8 @@ BBS Door SDK v2.0{/gray-fg}
       'gray', 'lightred', 'lightgreen', 'lightyellow', 'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
     ];
 
-    for (let y = 0; y < 25; y++) {
-      for (let x = 0; x < 80; x++) {
+    for (let y = 0; y < this.canvasH; y++) {
+      for (let x = 0; x < this.canvasW; x++) {
         // Check preview first
         const preview = this.previewCanvas[y]?.[x];
         const main = this.cellCanvas[y]?.[x];
@@ -3295,7 +3328,7 @@ BBS Door SDK v2.0{/gray-fg}
 
         content += `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
       }
-      if (y < 24) content += '\n';
+      if (y < this.canvasH - 1) content += '\n';
     }
 
     this.drawCanvas.setContent(content);
@@ -3455,7 +3488,7 @@ BBS Door SDK v2.0{/gray-fg}
 
   /**
    * Sync core canvas to blessed Canvas widget for display
-   * Standard 80x25 ANSI art canvas with 1 character per cell
+   * ANSI art canvas (canvasW x canvasH), 1 character per cell
    */
   private syncCoreCanvasToDisplay(): void {
     if (!this.cellCanvas) return;
@@ -3466,17 +3499,17 @@ BBS Door SDK v2.0{/gray-fg}
     ];
 
     // Render canvas with colors using blessed tags
-    // Standard 80 columns, 1 character per cell
+    // 1 character per cell, canvasW columns x canvasH rows
     let content = '';
-    for (let y = 0; y < 25; y++) {
-      for (let x = 0; x < 80; x++) {
+    for (let y = 0; y < this.canvasH; y++) {
+      for (let x = 0; x < this.canvasW; x++) {
         const cell = this.cellCanvas[y]?.[x] || { char: ' ', fg: 7, bg: 0 };
         const fgColor = colors[cell.fg] || 'white';
         const bgColor = colors[cell.bg] || 'black';
         const char = cell.char || ' ';
         content += `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
       }
-      if (y < 24) content += '\n';
+      if (y < this.canvasH - 1) content += '\n';
     }
 
     this.drawCanvas.setContent(content);
@@ -3554,7 +3587,7 @@ BBS Door SDK v2.0{/gray-fg}
 
     const modifiedMark = this.modified ? '{yellow-fg}*{/}' : ' ';
     const pos = `{white-fg}X:${(this.cursor.col + 1).toString().padStart(3)} Y:${(this.cursor.line + 1).toString().padStart(3)}{/}`;
-    const canvasSize = `{gray-fg}80x25{/}`;
+    const canvasSize = `{gray-fg}${this.canvasW}x${this.canvasH}{/}`;
     const charPreview = this.currentChar || '█';
     const fgColor = colors[this.currentFg] || 'white';
     const bgColor = colors[this.currentBg] || 'black';
@@ -3588,7 +3621,7 @@ BBS Door SDK v2.0{/gray-fg}
       ? `{green-fg}${brushModeNames[this.brushMode]}${this.brushMode === 'half-block' ? (this.halfBlockSubY === 0 ? '▀' : '▄') : ''}{/}`
       : '';
 
-    // Format: [*] X:001 Y:001 | 80x25 | FG:7 BG:0 | [char] | TOOL | Brush | Layer | iCE
+    // Format: [*] X:001 Y:001 | WxH | FG:7 BG:0 | [char] | TOOL | Brush | Layer | iCE
     this.statusBar.setContent(
       ` ${modifiedMark} ${pos} | ${canvasSize} | ` +
       `{${fgColor}-fg}{${bgColor}-bg}${charPreview}{/} ` +
@@ -4152,10 +4185,30 @@ BBS Door SDK v2.0{/gray-fg}
   }
 
   /**
-   * Set the core canvas directly
+   * Set the core canvas directly. Size-safe: keeps the active layer's
+   * canvas reference in sync (it would otherwise go stale, pointing at the
+   * old canvas while this.cellCanvas points at the new one) and clamps the
+   * cursor and any live selection into the new canvas's bounds so neither
+   * can end up referencing cells that no longer exist.
    */
   setCoreCanvas(canvas: Cell[][]): void {
     this.cellCanvas = canvas;
+    if (this.layers[this.activeLayerIndex]) {
+      this.layers[this.activeLayerIndex].canvas = canvas;
+    }
+
+    // this.canvasW/canvasH now reflect the newly-assigned canvas.
+    this.cursor.col = Math.max(0, Math.min(this.canvasW - 1, this.cursor.col));
+    this.cursor.line = Math.max(0, Math.min(this.canvasH - 1, this.cursor.line));
+    if (this.selection) {
+      this.selection = {
+        x1: Math.max(0, Math.min(this.canvasW - 1, this.selection.x1)),
+        y1: Math.max(0, Math.min(this.canvasH - 1, this.selection.y1)),
+        x2: Math.max(0, Math.min(this.canvasW - 1, this.selection.x2)),
+        y2: Math.max(0, Math.min(this.canvasH - 1, this.selection.y2)),
+      };
+    }
+
     this.syncCoreCanvasToDisplay();
     this.modified = true;
     this.updateDisplay();
