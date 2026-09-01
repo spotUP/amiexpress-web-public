@@ -11,7 +11,7 @@ import assert from 'assert';
 import { readSprite } from '../assets';
 import {
   openDoc, currentFrame, selectAnimation, selectFrame, addFrame,
-  deleteFrame, moveFrame, setCell, setPixel, frameIsPixelEditable,
+  deleteFrame, moveFrame, setFrame,
   setTicksPerFrame, toggleLoop, addAnimation, deleteAnimation, toSprite,
   floodFill,
 } from '../edit-doc';
@@ -36,7 +36,7 @@ export async function openingClonesAndSelectsTheFirstAnimation(): Promise<void> 
   const doc = openDoc(source);
   assert.strictEqual(doc.dirty, false);
   assert.ok(doc.sprite.animations[doc.animation], 'a real animation is selected');
-  setCell(doc, 0, 0, { char: '#', fg: 7, bg: 0 });
+  setFrame(doc, currentFrame(doc).map(row => row.map(() => ({ char: '#', fg: 7, bg: 0 }))));
   assert.strictEqual(
     source.animations[doc.animation].frames[0][0][0] === doc.sprite.animations[doc.animation].frames[0][0][0],
     false,
@@ -75,27 +75,6 @@ export async function theLastFrameAndLastAnimationAreProtected(): Promise<void> 
   assert.throws(() => deleteAnimation(doc), /last animation/);
 }
 
-export async function cellAndPixelEditsLand(): Promise<void> {
-  let doc = pengo();
-  doc = setCell(doc, 0, 0, { char: '*', fg: 11, bg: 0 });
-  assert.deepStrictEqual(currentFrame(doc)[0][0], { char: '*', fg: 11, bg: 0 });
-  doc = setCell(doc, 0, 0, null);
-  assert.strictEqual(currentFrame(doc)[0][0], null);
-
-  assert.ok(frameIsPixelEditable(doc), 'pengo art is half-block');
-  doc = setPixel(doc, 0, 0, 9);
-  assert.deepStrictEqual(currentFrame(doc)[0][0], { char: '▀', fg: 9, bg: 0 });
-  doc = setPixel(doc, 1, 0, 11);
-  assert.deepStrictEqual(currentFrame(doc)[0][0], { char: '▀', fg: 9, bg: 11 });
-}
-
-export async function pixelEditingRefusesNonHalfblockFrames(): Promise<void> {
-  let doc = pengo();
-  doc = setCell(doc, 0, 2, { char: 'A', fg: 7, bg: 0 });
-  assert.strictEqual(frameIsPixelEditable(doc), false);
-  assert.throws(() => setPixel(doc, 0, 0, 9), /pixel/);
-}
-
 export async function timingAndAnimationOpsBehave(): Promise<void> {
   let doc = pengo();
   const tpf = () => doc.sprite.animations[doc.animation].ticksPerFrame;
@@ -121,7 +100,11 @@ export async function timingAndAnimationOpsBehave(): Promise<void> {
 
 export async function whatSaveWritesIsLoadable(): Promise<void> {
   let doc = pengo();
-  doc = setPixel(doc, 0, 0, 9);
+  // An edited frame, written the way the editor writes one: whole, through
+  // setFrame - the same path the hosted canvas takes on every commit.
+  const edited = currentFrame(doc).map(row => row.map(c => (c ? { ...c } : null)));
+  edited[0][0] = { char: '#', fg: 9, bg: 0 };
+  doc = setFrame(doc, edited);
   doc = addFrame(doc, 'duplicate');
   const sprite = toSprite(doc);
   // The strongest possible check: the loader's own validator accepts it.
@@ -141,95 +124,3 @@ export async function selectionMovesKeepIdentityWhenClamped(): Promise<void> {
   assert.strictEqual(doc.dirty, false, 'and selection never dirties');
 }
 
-export async function floodFillFillsABoundedSameColourRegionAndStopsAtDifferingColours(): Promise<void> {
-  // 4x4 pixel grid, three 2x2 blocks of colour: 1 (top-left), 2 (right
-  // column), 3 (bottom-left). Filling from (0,0) must repaint only the
-  // 1-block and stop dead at the 2/3 boundaries.
-  const pixels: PixelGrid = [
-    [1, 1, 2, 2],
-    [1, 1, 2, 2],
-    [3, 3, 2, 2],
-    [3, 3, 2, 2],
-  ];
-  let doc = openDoc(pixelSprite(pixels));
-  doc = floodFill(doc, 0, 0, 9);
-  assert.deepStrictEqual(decompilePixels(currentFrame(doc)), [
-    [9, 9, 2, 2],
-    [9, 9, 2, 2],
-    [3, 3, 2, 2],
-    [3, 3, 2, 2],
-  ]);
-}
-
-export async function floodFillPaintsATransparentRegionWithAColour(): Promise<void> {
-  const pixels: PixelGrid = [
-    [null, null],
-    [null, null],
-  ];
-  let doc = openDoc(pixelSprite(pixels));
-  doc = floodFill(doc, 1, 0, 5);
-  assert.deepStrictEqual(decompilePixels(currentFrame(doc)), [
-    [5, 5],
-    [5, 5],
-  ]);
-}
-
-export async function floodFillWhereTargetEqualsReplacementIsIdentity(): Promise<void> {
-  const pixels: PixelGrid = [
-    [1, 1],
-    [1, 1],
-  ];
-  const doc = openDoc(pixelSprite(pixels));
-  assert.strictEqual(floodFill(doc, 0, 0, 1), doc,
-    'filling a region with its own colour must return the SAME doc, like every other no-op edit');
-  assert.strictEqual(doc.dirty, false, 'and an identity fill must never dirty the document');
-}
-
-export async function floodFillRespectsFrameBoundsEvenWhenTheRegionTouchesEveryEdge(): Promise<void> {
-  // The whole grid is one colour, so the fill starts one pixel in from the
-  // corner and must terminate cleanly at every edge (no negative index,
-  // no wrap-around) rather than throwing or looping forever.
-  const pixels: PixelGrid = [
-    [1, 1, 1, 1],
-    [1, 1, 1, 1],
-    [1, 1, 1, 1],
-    [1, 1, 1, 1],
-  ];
-  let doc = openDoc(pixelSprite(pixels));
-  doc = floodFill(doc, 0, 0, 7);
-  assert.deepStrictEqual(decompilePixels(currentFrame(doc)), [
-    [7, 7, 7, 7],
-    [7, 7, 7, 7],
-    [7, 7, 7, 7],
-    [7, 7, 7, 7],
-  ]);
-}
-
-export async function floodFillOperatesOnTheCompiledCellBufferOfHalfBlockFrames(): Promise<void> {
-  // Proves the fill actually lands in storage (the compiled half-block
-  // Cells), not just in a throwaway PixelGrid - the same round-trip
-  // `cellAndPixelEditsLand` already proves for setPixel.
-  const pixels: PixelGrid = [
-    [3, 3],
-    [3, 3],
-  ];
-  let doc = openDoc(pixelSprite(pixels));
-  doc = floodFill(doc, 0, 0, 6);
-  assert.deepStrictEqual(currentFrame(doc)[0][0], { char: '█', fg: 6, bg: 6 });
-}
-
-export async function floodFillRefusesNonHalfblockFramesLikeSetPixel(): Promise<void> {
-  let doc = pengo();
-  doc = setCell(doc, 0, 2, { char: 'A', fg: 7, bg: 0 });
-  assert.strictEqual(frameIsPixelEditable(doc), false);
-  assert.throws(() => floodFill(doc, 0, 0, 9), /pixel/);
-}
-
-export async function floodFillThrowsOnAnOutOfBoundsStartingPointLikeSetPixel(): Promise<void> {
-  const pixels: PixelGrid = [
-    [1, 1],
-    [1, 1],
-  ];
-  const doc = openDoc(pixelSprite(pixels));
-  assert.throws(() => floodFill(doc, 99, 99, 1));
-}

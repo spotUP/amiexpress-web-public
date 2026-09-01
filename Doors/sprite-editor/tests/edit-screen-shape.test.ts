@@ -18,9 +18,12 @@ const appRaw = readFileSync(join(__dirname, '..', 'app.ts'), 'utf8');
 const appCode = appRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
 export async function theScreenUsesTheDocumentModel(): Promise<void> {
+  // setCell/setPixel/floodFill are gone with the door's own painter: the
+  // hosted ANSIEditor owns painting, and its canvas re-enters the document
+  // through setFrame - one whole-frame op instead of three per-cell ones.
   for (const op of ['openDoc', 'addFrame', 'deleteFrame', 'moveFrame',
-                    'setCell', 'setPixel', 'setTicksPerFrame', 'toggleLoop',
-                    'addAnimation', 'toSprite', 'floodFill']) {
+                    'setFrame', 'setTicksPerFrame', 'toggleLoop',
+                    'addAnimation', 'toSprite']) {
     assert.ok(code.includes(op), `edit-screen must use ${op} from edit-doc`);
   }
 }
@@ -36,53 +39,6 @@ export async function teardownClearsItsTimerAndKeys(): Promise<void> {
             /keyHandlers/.test(code),
     'screen-level key bindings must be removed on destroy - the browser\'s ' +
     'keys come back when the editor leaves');
-}
-
-export async function escapeIsGuardedWhenDirty(): Promise<void> {
-  assert.ok(/dirty/.test(code) && /escape/i.test(code),
-    'a dirty document must not be silently discarded by one keypress');
-}
-
-/**
- * Task 7 (controller audit gap 1): ESC used to be wired outside the op
- * table via a bare this.key(['escape'], ...) call, with no menu entry -
- * "nothing should be hidden behind only hotkeys". It must now be an
- * ordinary table entry, reachable from File > Close Editor, and - per the
- * live user report that came in while this task was in flight (bare ESC
- * only, ESC-twice reads as "quit is broken" on a dirty doc, and 'q' must
- * keep painting the letter q, not become a second exit key) - it must also
- * answer to C-q, a non-printable chord that costs the glyph-typing
- * exclusion set nothing.
- */
-export async function escapeIsATableBindingWithAMenuEntry(): Promise<void> {
-  const idx = code.indexOf("id: 'file.closeEditor'");
-  assert.ok(idx >= 0, "edit-screen.ts must declare the 'file.closeEditor' binding");
-  const block = code.slice(idx, idx + 400);
-  assert.ok(/keys: \['escape', 'C-q'\]/.test(block),
-    'Close Editor must bind both escape and C-q');
-  assert.ok(/menu: 'File'/.test(block), "Close Editor must live under the 'File' menu");
-  assert.ok(/label: 'Close Editor'/.test(block));
-  assert.ok(/hotkeyHint: 'esc\/C-q'/.test(block), 'the hotkey hint must show both chords');
-  assert.ok(!/this\.key\(\['escape'\]/.test(code),
-    'there must be no separate this.key([\'escape\']) call site outside the table any more');
-}
-
-/**
- * Task 7 (controller audit gap 2): delete/backspace (erase at cursor) used
- * to be wired outside the op table the same way - no menu entry. It must
- * now be an ordinary table entry, reachable from Paint > Erase at Cursor.
- */
-export async function deleteBackspaceIsATableBindingWithAMenuEntry(): Promise<void> {
-  const idx = code.indexOf("id: 'paint.eraseAtCursor'");
-  assert.ok(idx >= 0, "edit-screen.ts must declare the 'paint.eraseAtCursor' binding");
-  const block = code.slice(idx, idx + 400);
-  assert.ok(/keys: \['delete', 'backspace'\]/.test(block),
-    'Erase at Cursor must bind both delete and backspace');
-  assert.ok(/menu: 'Paint'/.test(block), "Erase at Cursor must live under the 'Paint' menu");
-  assert.ok(/label: 'Erase at Cursor'/.test(block));
-  assert.ok(/hotkeyHint: 'del'/.test(block));
-  assert.ok(!/this\.key\(\['delete', 'backspace'\]/.test(code),
-    'there must be no separate this.key([\'delete\', \'backspace\']) call site outside the table any more');
 }
 
 /**
@@ -146,54 +102,19 @@ export async function opBindingsRouteThroughTheDialogOpenGuard(): Promise<void> 
   assert.ok(/if \(this\.screen\.dialogOpen\) return;/.test(opKeyBody),
     'the wrapper must no-op every bound op while a dialog is open');
   assert.ok(!/this\.naming/.test(code), 'the typed-naming field/guard must be fully deleted, not renamed');
-  assert.ok(/buildBindingSet\(opBindings, \(\) => this\.screen\.dialogOpen\)/.test(code),
+  assert.ok(/buildBindingSet\(this\.buildOpBindings\(\), \(\) => this\.screen\.dialogOpen\)/.test(code),
     'buildBindingSet must be called with a dialogOpen guard predicate, so menuItems() inherits it too');
   assert.ok(/for \(const binding of this\.bindingSet\.bindings\) this\.opKey\(binding\.keys, binding\.handler\);/.test(code),
     'the op table must be wired from the GUARDED bindingSet.bindings, not the raw opBindings array, ' +
     'by one loop, not per-key call sites');
-  for (const key of ["'g'", "'f'", "'S-f'", "'b'", "'S-b'", "','", "'.'", "'n'", "'c'", "'x'",
-                     "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'",
-                     "'space'", "'p'", "'e'", "'k'", "'u'"]) {
+  // Every key the studio still claims. The old single-letter set is gone:
+  // the hosted editor types printable characters onto the canvas, so a
+  // letter hotkey would fire the op AND paint the letter. What is left is
+  // non-printable, and everything else is menu-only.
+  for (const key of ["'C-p'", "'C-f'", "'C-e'", "'C-q'"]) {
     assert.ok(code.includes(`keys: [${key}]`),
       `[${key}] must have a table entry, wired through the op loop into opKey`);
   }
-}
-
-/**
- * Review finding: space/delete called setPixel through apply() directly,
- * so an exception (frame no longer pixel-editable) threw uncaught out of
- * the key handler instead of landing in the status flash like every other
- * op's refusal.
- */
-export async function spaceAndDeleteRouteSetPixelThroughTryOp(): Promise<void> {
-  assert.ok(/this\.tryOp\(\(\) => this\.mode === 'pixel'\s*\n\s*\? setPixel/.test(code),
-    'space and delete must route setPixel/setCell through tryOp, not apply() directly');
-  // Studio 2c task 4: mouse paint/erase (applyToolAt) reuse this EXACT
-  // guarded form too - not a parallel, unguarded copy - so the count grew
-  // from 2 (space, delete) to 4 (space, delete, mouse paint, mouse erase)
-  // by design. A regression back toward a bespoke, unguarded mouse path
-  // would drop this below 4.
-  const count = (code.match(/this\.tryOp\(\(\) => this\.mode === 'pixel'/g) || []).length;
-  assert.strictEqual(count, 4,
-    'space, delete, and mouse paint/erase must all use the guarded tryOp form');
-}
-
-/**
- * Review finding: the exclusion string that keeps bound-key letters out of
- * typed cell art omitted 'X' - S-x is bound (deleteAnimation) but its
- * Shift+X keypress ('X') fell through to setCell.
- *
- * Studio 2c: the hand-written exclusion string is gone. The check must now
- * read the binding table's own derived set (bindings.ts's buildBindingSet -
- * unit-pinned in bindings.test.ts, including that S-x derives 'X'), so
- * this test pins that the check reads THAT set and that the delete-
- * animation binding is still declared with the key that derives it.
- */
-export async function theTypingExclusionListIncludesShiftedDeleteAnimation(): Promise<void> {
-  assert.ok(/this\.bindingSet\.excludedGlyphKeys\.has\(ch\)/.test(code),
-    'the glyph-typing exclusion check must read the derived binding set, not a hand-written string');
-  assert.ok(code.includes("keys: ['S-x']"),
-    "the delete-animation binding must still bind S-x, whose derived glyph 'X' keeps it out of cell-typing");
 }
 
 /**
@@ -238,7 +159,7 @@ export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
   const destroyBody = code.slice(destroyIdx, code.indexOf('\n}', destroyIdx));
   assert.ok(/this\.menuBar[\],]/.test(destroyBody),
     'destroy() must include this.menuBar in the widgets it destroys');
-  for (const panel of ['canvasPanel', 'previewPanel', 'framesPanel', 'toolbarPanel']) {
+  for (const panel of ['canvasPanel', 'previewPanel', 'framesPanel']) {
     assert.ok(new RegExp(`this\\.${panel}[\\],]`).test(destroyBody),
       `destroy() must include this.${panel} (the panel, not just its nested content) in the widgets it destroys`);
   }
@@ -253,7 +174,7 @@ export async function destroyTearsDownItsOwnMenuBar(): Promise<void> {
 export async function theEditScreenPanesAreDockablePanels(): Promise<void> {
   assert.ok(code.includes("from './panels'") && code.includes('makePanel('),
     'the edit screen must build its panes through panels.ts\'s makePanel');
-  for (const key of ['canvas', 'preview', 'frames', 'toolbar']) {
+  for (const key of ['canvas', 'preview', 'frames']) {
     assert.ok(code.includes(`key: '${key}'`),
       `the ${key} pane must be built via makePanel({ key: '${key}', ... })`);
   }
@@ -270,14 +191,14 @@ export async function theEditScreenPanesAreDockablePanels(): Promise<void> {
 export async function theEditScreenContentChildrenSitAtTop1ViaPanelContentRect(): Promise<void> {
   assert.ok(code.includes('panelContentRect') && code.includes("from './panels'"),
     'the edit screen must position its panes\' content through panels.ts\'s panelContentRect');
-  // Studio 2c task 4: the toolbar pane's content box moved out of this
-  // file into toolbar.ts's createToolbar() (the brief's fixed
-  // `createToolbar(screen, panel, state, onChange)` signature takes no
-  // rect, so it computes its own panelContentRect(LAYOUT.edit.toolbar)) -
-  // toolbar.test.ts pins the same top:1/no-literal-top:0 invariant there,
-  // against a REAL constructed box's geometry, instead of here.
-  for (const box of ['canvasBox', 'previewBox', 'framesBox']) {
-    const idx = code.indexOf(`this.${box} = blessed.box({`);
+  // The canvas pane's content is the hosted ANSIEditor, constructed with
+  // `new ANSIEditor({...})` rather than blessed.box - it takes the same
+  // panelContentRect geometry, so it is checked by the same rule with its
+  // own constructor name.
+  for (const [box, ctor] of [['editor', 'new ANSIEditor({'],
+                             ['previewBox', 'blessed.box({'],
+                             ['framesBox', 'blessed.box({']] as Array<[string, string]>) {
+    const idx = code.indexOf(`this.${box} = ${ctor}`);
     assert.ok(idx >= 0, `${box} must exist`);
     const block = code.slice(idx, code.indexOf('});', idx));
     assert.ok(!/top:\s*0,/.test(block),
@@ -305,8 +226,8 @@ export async function theEditScreenContentChildrenSitAtTop1ViaPanelContentRect()
  * form is what makes this pin catch both shapes of the same mistake.
  */
 export async function paintMethodsDoNotDoubleBlankWithALeadingNewline(): Promise<void> {
-  assert.ok(!/canvasBox\.setContent\('\\n /.test(code),
-    'canvasBox.setContent must not start with a leading \\n - see panelContentRect');
+  assert.ok(!/editor\.setContent\('\\n /.test(code),
+    'editor.setContent must not start with a leading \\n - see panelContentRect');
   assert.ok(!/previewBox\.setContent\(\s*\n?\s*'\\n /.test(code),
     'previewBox.setContent must not start with a leading \\n - see panelContentRect');
   assert.ok(!/framesBox\.setContent\(`\\n /.test(code),
@@ -315,24 +236,6 @@ export async function paintMethodsDoNotDoubleBlankWithALeadingNewline(): Promise
     "no line-join may use '\\n ' (newline + space) as its SEPARATOR either - " +
     'that staggers every row but the first one column to the right, the same ' +
     'defect a leading newline causes on row 0 alone');
-}
-
-/**
- * Toolbar's content box moved out of edit-screen.ts into toolbar.ts's
- * createToolbar() (Studio 2c task 4) - the old `paletteBox` pin here
- * grepped a name that no longer exists in EITHER file, so it could never
- * fail. toolbar.test.ts's theToolbarBoxSitsAtTheCorrectContentGeometry
- * already covers the box's geometry against a real construction; this
- * pin instead retargets the SAME leading-newline/stagger invariant at
- * toolbar.ts's actual `box.setContent(` call.
- */
-export async function toolbarPaintDoesNotDoubleBlankOrStagger(): Promise<void> {
-  const toolbarCode = readFileSync(join(__dirname, '..', 'toolbar.ts'), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-  assert.ok(!/box\.setContent\(\s*\n?\s*`\\n /.test(toolbarCode),
-    'toolbar.ts\'s box.setContent must not start with a leading \\n - see panelContentRect');
-  assert.ok(!/\.join\('\\n /.test(toolbarCode) && !/\.join\(`\\n /.test(toolbarCode),
-    "toolbar.ts must not join lines with '\\n ' either - the same stagger bug");
 }
 
 /** Studio 2c: View -> Reset Layout, wired through the same binding table as every hotkey. */
@@ -347,16 +250,3 @@ export async function theEditScreenHasAResetLayoutMenuItem(): Promise<void> {
     'Reset Layout must restore panels through panels.ts\'s resetPanelLayout, not hand-rolled position math');
 }
 
-/**
- * Fix round 1, Important 2: studio.help shipped keyboard-unreachable
- * (empty keys, no tab stop). F1 is a standard, non-printable help key -
- * it contributes nothing to the glyph exclusion set (glyphForKey('f1')
- * is null: length !== 1, no 'S-' prefix, not 'space').
- */
-export async function studioHelpBindsF1(): Promise<void> {
-  const idx = code.indexOf("id: 'studio.help'");
-  assert.ok(idx >= 0, 'studio.help binding must exist');
-  const block = code.slice(idx, idx + 200);
-  assert.ok(/keys: \['f1'\]/.test(block), 'studio.help must bind F1, not ship keyboard-unreachable');
-  assert.ok(/hotkeyHint: 'F1'/.test(block), "studio.help's hotkeyHint must read 'F1' so the menu label shows it");
-}

@@ -10,8 +10,7 @@
  */
 
 import {
-  Cell, CellBuffer, Sprite,
-  compilePixels, decompilePixels,
+  CellBuffer, Sprite,
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 
 export interface EditDoc {
@@ -89,67 +88,30 @@ export function moveFrame(doc: EditDoc, delta: -1 | 1): EditDoc {
   return withFrames(doc, frames, to);
 }
 
-export function setCell(doc: EditDoc, row: number, col: number, cell: Cell | null): EditDoc {
-  const frames = doc.sprite.animations[doc.animation].frames
-    .map(f => f.map(r => [...r]));
-  frames[doc.frame][row][col] = cell ? { ...cell } : null;
-  return withFrames(doc, frames, doc.frame);
-}
-
-export function frameIsPixelEditable(doc: EditDoc): boolean {
-  return decompilePixels(currentFrame(doc)) !== null;
-}
-
-export function setPixel(doc: EditDoc, py: number, px: number, colour: number | null): EditDoc {
-  const pixels = decompilePixels(currentFrame(doc));
-  if (!pixels) {
-    throw new Error('frame is not pixel-editable - it holds non-half-block art');
-  }
-  pixels[py][px] = colour;
-  const compiled = compilePixels(pixels);
-  const frames = doc.sprite.animations[doc.animation].frames
-    .map((f, i) => (i === doc.frame ? compiled : f));
-  return withFrames(doc, frames, doc.frame);
-}
-
 /**
- * 4-connected flood fill, in PIXEL space - same restriction as setPixel
- * (the frame must be pure half-block art; `colour` is a single 0-15 value
- * or null, which only a PixelGrid cell can hold, not a Cell's separate
- * char/fg/bg). Throws the same way setPixel does: not pixel-editable, or
- * (row, col) outside the grid.
+ * Replace the CURRENT frame wholesale.
  *
- * Identity rule, matching selectFrame/selectAnimation's no-op case: if the
- * starting pixel is already the target colour there is nothing to spread,
- * so this returns the SAME doc reference rather than a new (but
- * content-identical) one.
+ * The edit screen hosts the ANSIEditor, whose canvas is the live current
+ * frame; this is how that canvas re-enters the document. It replaced a
+ * per-cell setCell(), which had no caller left once the widget owned
+ * painting - a second mutation path into the same frames is exactly the
+ * duplication hosting the widget exists to remove.
+ *
+ * Refuses a frame of the wrong size: the sprite format requires every
+ * frame of every animation to match cellW/cellH, and the loader would
+ * reject the file on next open rather than here.
  */
-export function floodFill(doc: EditDoc, row: number, col: number, colour: number | null): EditDoc {
-  const pixels = decompilePixels(currentFrame(doc));
-  if (!pixels) {
-    throw new Error('frame is not pixel-editable - it holds non-half-block art');
+export function setFrame(doc: EditDoc, frame: CellBuffer): EditDoc {
+  if (frame.length !== doc.sprite.cellH) {
+    throw new Error(`frame has ${frame.length} rows, sprite is ${doc.sprite.cellH} tall`);
   }
-  const target = pixels[row][col]; // throws like setPixel when (row, col) is out of the grid
-  if (target === colour) return doc;
-
-  const height = pixels.length;
-  const width = pixels[0].length;
-  const filled = pixels.map(r => [...r]);
-  const stack: Array<[number, number]> = [[row, col]];
-  filled[row][col] = colour;
-  while (stack.length > 0) {
-    const [r, c] = stack.pop()!;
-    for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]] as Array<[number, number]>) {
-      if (nr < 0 || nr >= height || nc < 0 || nc >= width) continue;
-      if (filled[nr][nc] !== target) continue;
-      filled[nr][nc] = colour;
-      stack.push([nr, nc]);
+  for (const row of frame) {
+    if (row.length !== doc.sprite.cellW) {
+      throw new Error(`frame row has ${row.length} cells, sprite is ${doc.sprite.cellW} wide`);
     }
   }
-
-  const compiled = compilePixels(filled);
   const frames = doc.sprite.animations[doc.animation].frames
-    .map((f, i) => (i === doc.frame ? compiled : f));
+    .map((f, i) => (i === doc.frame ? frame.map(r => r.map(c => (c ? { ...c } : null))) : f));
   return withFrames(doc, frames, doc.frame);
 }
 

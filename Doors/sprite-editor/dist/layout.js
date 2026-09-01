@@ -33,17 +33,19 @@ function rect(top, left, width, height) {
 exports.LAYOUT = Object.freeze({
     /**
      * Edit screen. Canvas rows 1-19 (44 cols) alongside a right column that
-     * partitions the same 19 rows three ways: Preview / Frames / Toolbar
-     * (the Paint pane, until Task 4 fills the toolbar in). Every right-
-     * column top is the previous pane's top + height, not a re-derived
-     * percent, so the column always sums to exactly 19 - the same 19 the
-     * canvas occupies.
+     * splits the same 19 rows two ways: Preview / Frames. Every right-column
+     * top is the previous pane's top + height, not a re-derived percent, so
+     * the column always sums to exactly 19 - the same 19 the canvas occupies.
+     *
+     * There was a third pane here, a Paint toolbar, until the edit screen
+     * started hosting the ANSIEditor: the widget ships its own colour and
+     * tool sidebar inside the canvas pane, and toolbar.ts was a second copy
+     * of it. Its five rows went to Frames rather than being left blank.
      */
     edit: {
         canvas: rect(1, 0, 44, 19),
         preview: rect(1, 44, 36, 8),
-        frames: rect(9, 44, 36, 6),
-        toolbar: rect(15, 44, 36, 5),
+        frames: rect(9, 44, 36, 11),
         status: rect(exports.STATUS_ROW, 0, 80, 1),
     },
     /**

@@ -141,6 +141,34 @@ function pressKey(screen: any, keyName: string): void {
 }
 
 /**
+ * Dirty the document the way the hosted editor does: paint on the widget's
+ * canvas, then commit. `pressKey(screen, 'space')` used to do this when the
+ * door owned painting - the editor owns it now, and the door's key table
+ * claims no printable key at all.
+ */
+function paintAndCommit(edit: any, ch = '#'): void {
+  const canvas = edit.editor.getCoreCanvas();
+  canvas[0][0] = { char: ch, fg: 7, bg: 0 };
+  edit.commitCanvasToDoc();
+}
+
+/**
+ * The handler for one binding, by ID rather than by key.
+ *
+ * Most studio ops are menu-only now: the hosted ANSIEditor types every
+ * printable character onto the canvas, so a single-letter hotkey would
+ * both fire the op AND paint the letter. Tests that used to press 'x' or
+ * '+' therefore drive the op the menu drives - `bindingSet.bindings`,
+ * the same already-dialog-guarded array screen.key() registration and
+ * menuItems() both consume - which is the behavior that still exists.
+ */
+function opHandler(edit: any, id: string): (...args: any[]) => any {
+  const binding = (edit as any).bindingSet.bindings.find((b: any) => b.id === id);
+  if (!binding) throw new Error(`no binding with id '${id}'`);
+  return binding.handler;
+}
+
+/**
  * The registered screen.key() handler for one key, returned directly
  * instead of invoked - so a test can capture and `await` an async
  * handler's own returned Promise (op handlers that open a dialog are
@@ -220,13 +248,13 @@ export async function openingTheNewAnimationDialogSuppressesOpBindingsUntilItClo
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const statusBar = screen.children[4];
+    const statusBar = screen.children[3]; // canvas, preview, frames, STATUS, menu
     const framesBox = paneContent(screen, 2);
 
     // keyHandler(), not pressKey(): '+'s handler is async (it awaits
     // promptText) - capturing its own returned Promise is what lets this
     // test await the whole round trip below, not just fire-and-forget it.
-    const pending = keyHandler(screen, '+')();
+    const pending = opHandler(edit, 'animation.new')();
     assert.strictEqual(screen.dialogOpen, true, 'opening the dialog must set screen.dialogOpen');
 
     const statusBefore = statusBar.getContent();
@@ -284,7 +312,7 @@ export async function menuActionsAreSuppressedWhileADialogIsOpen(): Promise<void
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
+    const pending = opHandler(edit, 'animation.new')(); // open the new-animation dialog
     assert.strictEqual(screen.dialogOpen, true);
     const dialogBefore = lastDialog(screen);
     const framesBefore = (edit as any).doc.sprite.animations.only.frames.length;
@@ -359,8 +387,8 @@ export async function typingIntoTheNewAnimationDialogAndSubmittingCreatesIt(): P
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const statusBar = screen.children[4];
-    const pending = keyHandler(screen, '+')();
+    const statusBar = screen.children[3]; // canvas, preview, frames, STATUS, menu
+    const pending = opHandler(edit, 'animation.new')();
     const input = lastDialog(screen).children[0];
     for (const ch of 'spin') input.insertChar(ch);
     input.submit();
@@ -371,45 +399,6 @@ export async function typingIntoTheNewAnimationDialogAndSubmittingCreatesIt(): P
       'submitting a valid name must create the animation and switch to it');
     assert.ok(statusBar.getContent().includes(' spin '),
       `the new animation must show on the status bar - got: ${statusBar.getContent()}`);
-  } finally {
-    edit.destroy();
-  }
-}
-
-export async function selectingBackToANonPixelFrameDropsToCellModeAndSpaceNeverThrows(): Promise<void> {
-  // Reviewer's exact repro: frame 0 is plain cell art (not pixel-
-  // editable), frame 1 is pure half-block (pixel-editable).
-  const sprite: Sprite = {
-    name: 'fixture',
-    cellW: 1,
-    cellH: 1,
-    animations: {
-      only: {
-        ticksPerFrame: 4,
-        loop: true,
-        frames: [
-          [[{ char: 'A', fg: 7, bg: 0 }]],
-          [[{ char: '█', fg: 5, bg: 5 }]],
-        ],
-      },
-    },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    const canvasBox = paneContent(screen, 0);
-
-    pressChar(screen, '.'); // frame 1: pixel-editable
-    pressKey(screen, 'tab'); // -> pixel mode
-    assert.ok(canvasBox.getContent().includes('PIXEL'), 'tab must enter pixel mode on a half-block frame');
-
-    pressChar(screen, ','); // back to frame 0: NOT pixel-editable
-    assert.ok(canvasBox.getContent().includes('CELL'),
-      'selecting a non-half-block frame must drop back to cell mode');
-    assert.ok(!canvasBox.getContent().includes('PIXEL'));
-
-    assert.doesNotThrow(() => pressKey(screen, 'space'),
-      'space must never throw out of a key handler, even on a stale pixel-mode selection');
   } finally {
     edit.destroy();
   }
@@ -444,56 +433,14 @@ export async function shiftCommaAndShiftPeriodDoNotTypeIntoTheCell(): Promise<vo
     const canvasBox = paneContent(screen, 0);
 
     const beforeComma = canvasBox.getContent();
-    pressChar(screen, '<'); // Shift+comma: S-, binding (move frame earlier) + keypress '<'
+    opHandler(edit, 'frame.moveEarlier')(); // Shift+comma: S-, binding (move frame earlier) + keypress '<'
     assert.strictEqual(canvasBox.getContent(), beforeComma,
       'Shift+comma must not write the character < into the current cell');
 
     const beforePeriod = canvasBox.getContent();
-    pressChar(screen, '>'); // Shift+period: S-. binding (move frame later) + keypress '>'
+    opHandler(edit, 'frame.moveLater')(); // Shift+period: S-. binding (move frame later) + keypress '>'
     assert.strictEqual(canvasBox.getContent(), beforePeriod,
       'Shift+period must not write the character > into the current cell');
-  } finally {
-    edit.destroy();
-  }
-}
-
-/**
- * Studio 2c fix round 1: the controller signed off dropping the old hand
- * string's orphaned 'S' from the exclusion set (no binding has ever
- * produced it - there is no S-s binding anywhere in this door), which
- * widens what cell mode accepts: a bare 'S' is now an ordinary glyph like
- * any other letter, where the old hand-written string silently swallowed
- * it for no discoverable reason. Pins BOTH halves so a future change
- * can't silently regress the sign-off or silently reintroduce a collision:
- * (1) the derived set must not contain 'S', and (2) typing it must
- * actually reach setCell.
- */
-export async function typingCapitalSPaintsAGlyphIntentionallyNotExcluded(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture',
-    cellW: 2,
-    cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }, null]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    // No binding in the table may derive the glyph 'S' - if one ever does
-    // (e.g. a future S-s binding), this assertion forces whoever adds it to
-    // decide about the collision deliberately, rather than have the
-    // exclusion set silently swallow 'S' again.
-    assert.ok(!(edit as any).bindingSet.excludedGlyphKeys.has('S'),
-      "no binding may derive the glyph 'S' - the controller signed off on this being unexcluded");
-
-    const canvasBox = paneContent(screen, 0);
-    const before = canvasBox.getContent();
-
-    pressChar(screen, 'S'); // no S-s binding exists, so only the keypress fires
-
-    assert.notStrictEqual(canvasBox.getContent(), before,
-      "typing 'S' in cell mode must reach setCell as an ordinary glyph, not be silently swallowed");
-    assert.ok(canvasBox.getContent().includes('S'),
-      "the painted cell must contain the typed glyph 'S'");
   } finally {
     edit.destroy();
   }
@@ -593,109 +540,33 @@ export async function f1InvokesHelpWithoutTouchingTheDocumentAndLeavesNoStuckSta
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const statusBar = screen.children[4];
+    const statusBar = screen.children[3]; // canvas, preview, frames, STATUS, menu
     const framesBox = paneContent(screen, 2);
     const beforeStrip = frameStrip(framesBox.getContent());
     const beforeDirty = (edit as any).doc.dirty;
-    const beforeCursorRow = (edit as any).cursorRow;
+    const beforeFrame = (edit as any).doc.frame;
 
-    pressKey(screen, 'f1');
+    opHandler(edit, 'studio.help')();
 
-    // 'S-x animation' is distinctive to the F1 help text - unlike 'save'
-    // or 'TAB mode', it does not already appear in the default status
-    // line, so this actually proves F1's own handler ran rather than
-    // passing on the permanent hint that was already there.
-    assert.ok(statusBar.getContent().includes('S-x animation'),
-      'F1 must render the keyboard-shortcuts hint onto the status bar');
+    // 'belong to the editor' is distinctive to the help text - unlike
+    // 'C-s save', it does not already appear in the default status line,
+    // so this proves the help handler ran rather than passing on the
+    // permanent hint that was already there.
+    assert.ok(statusBar.getContent().includes('belong to the editor'),
+      'Help must render the keyboard-shortcuts hint onto the status bar');
     assert.strictEqual(frameStrip(framesBox.getContent()), beforeStrip,
       'F1 must not touch frames');
     assert.strictEqual((edit as any).doc.dirty, beforeDirty,
       'F1 must not mark the document dirty - it only reads the binding table');
 
-    // Closes cleanly: no overlay/modal state was entered, so the very
-    // next key still reaches its ordinary handler.
-    pressKey(screen, 'down');
-    assert.strictEqual((edit as any).cursorRow, beforeCursorRow + 1,
-      'a normal key immediately after F1 must still move the cursor - F1 must not leave the door stuck');
-  } finally {
-    edit.destroy();
-  }
-}
-
-/**
- * Studio 2c task 4: mouse painting. The default tool is 'paint' and the
- * default fg/glyph/bg (11, GLYPHS[0]='▀', 0) are the same ones the
- * spacebar paints with - a click is a second input surface for the exact
- * same op, not a parallel painting path.
- */
-export async function clickingTheCanvasPaintsTheClickedCellWithTheActiveTool(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 3, cellH: 2,
-    animations: {
-      only: {
-        ticksPerFrame: 4, loop: true,
-        frames: [[[null, null, null], [null, null, null]]],
-      },
-    },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    const canvasBox = paneContent(screen, 0);
-    clickBox(canvasBox, 2, 1); // 2 chars/cell: local column 2 is cell column 1; row 1 is cell row 1
-    assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][1],
-      { char: '▀', fg: 11, bg: 0 },
-      'the clicked cell must be painted with the default glyph/fg/bg, exactly like pressing space would');
-    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
-      'only the clicked cell may change');
-  } finally {
-    edit.destroy();
-  }
-}
-
-/**
- * Studio 2c task 4: paintCanvas() used to join rows with '\n ' (a leading
- * SPACE, not just a newline) - `['a','b'].join('\n ')` is `'a\n b'`, so
- * every row except the first rendered one column further right than row
- * 0. Invisible to any keyboard-only test (the cursor overlay is picked by
- * array index, never by screen column), but fatal to a click: this pins
- * that the column a click lands on for row 1+ is the SAME column the
- * rendered text actually shows there, not one off.
- */
-export async function canvasClickColumnMappingMatchesTheRenderedGridOnEveryRow(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 2, cellH: 2,
-    animations: {
-      only: {
-        ticksPerFrame: 4, loop: true,
-        frames: [[
-          [{ char: 'A', fg: 7, bg: 0 }, { char: 'B', fg: 7, bg: 0 }],
-          [{ char: 'C', fg: 7, bg: 0 }, { char: 'D', fg: 7, bg: 0 }],
-        ]],
-      },
-    },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    const canvasBox = paneContent(screen, 0);
-    const row1 = canvasBox.getContent().split('\n')[1].replace(/\{[^}]*\}/g, '');
-    // Fix round 1, Important 2: built from the SAME exported
-    // CELL_CHAR_WIDTH canvasHitTest divides by, not a hand-typed '4' -
-    // if paintCanvas's `char.repeat(CELL_CHAR_WIDTH)` and
-    // canvasHitTest's `Math.floor(localX / CELL_CHAR_WIDTH)` ever
-    // desync (one gets edited, the other doesn't), this expectation and
-    // the click below stop lining up and the test fails.
-    assert.strictEqual(row1.slice(0, 2 * CELL_CHAR_WIDTH), 'C'.repeat(CELL_CHAR_WIDTH) + 'D'.repeat(CELL_CHAR_WIDTH),
-      'row 1 must render flush-left, CELL_CHAR_WIDTH characters per cell, exactly like row 0 - no phantom left margin');
-
-    clickBox(canvasBox, CELL_CHAR_WIDTH, 1); // local column CELL_CHAR_WIDTH, row 1 - the column 'D' actually renders at
-    assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][1],
-      { char: '▀', fg: 11, bg: 0 },
-      'the click must repaint cell (1,1) - the SAME cell the rendered text shows at that column');
-    assert.deepStrictEqual((edit as any).doc.sprite.animations['only'].frames[0][1][0],
-      { char: 'C', fg: 7, bg: 0 },
-      'cell (1,0) must stay untouched - a phantom left margin on row 1 would have made THIS the one hit instead');
+    // Closes cleanly: no overlay/modal state was entered, so the very next
+    // op still runs. The cursor is the hosted editor's now, so the proof is
+    // an op of the door's own - a frame change - rather than a cursor move.
+    opHandler(edit, 'frame.next')();
+    assert.strictEqual((edit as any).doc.frame, beforeFrame,
+      'the one-frame fixture clamps, so the frame cannot move - but the op must RUN, not throw');
+    assert.doesNotThrow(() => opHandler(edit, 'frame.new')(),
+      'an op immediately after Help must still run - Help must not leave the door stuck');
   } finally {
     edit.destroy();
   }
@@ -730,27 +601,6 @@ export async function everyColumnOfACellMapsToTheSameCellViaCellCharWidth(): Pro
   }
 }
 
-export async function draggingWithThePaintToolPaintsEveryCellItCrosses(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 3, cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null, null]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    const canvasBox = paneContent(screen, 0);
-    clickBox(canvasBox, 0, 0);              // cell 0: an ordinary click
-    dragBox(canvasBox, 4, 0, 'left');       // cell 2: a mousemove WITH the button held
-
-    const frame = (edit as any).doc.sprite.animations['only'].frames[0][0];
-    assert.notStrictEqual(frame[0], null, 'the clicked cell must be painted');
-    assert.notStrictEqual(frame[2], null, 'the dragged-over cell must be painted too');
-    assert.strictEqual(frame[1], null, 'the cell the drag jumped over (never visited) stays untouched');
-  } finally {
-    edit.destroy();
-  }
-}
-
 export async function draggingWithoutAHeldButtonDoesNotPaint(): Promise<void> {
   const sprite: Sprite = {
     name: 'fixture', cellW: 1, cellH: 1,
@@ -765,112 +615,6 @@ export async function draggingWithoutAHeldButtonDoesNotPaint(): Promise<void> {
     const coords = canvasBox._getCoords();
     canvasBox.emit('mousemove', { x: coords.xi, y: coords.yi });
     assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null);
-  } finally {
-    edit.destroy();
-  }
-}
-
-export async function pressingToolHotkeysSwitchesTheActiveTool(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 1, cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    assert.strictEqual((edit as any).tool, 'paint', 'paint is the default tool');
-    pressChar(screen, 'e');
-    assert.strictEqual((edit as any).tool, 'erase');
-    pressChar(screen, 'k');
-    assert.strictEqual((edit as any).tool, 'pick');
-    pressChar(screen, 'u');
-    assert.strictEqual((edit as any).tool, 'fill');
-    pressChar(screen, 'p');
-    assert.strictEqual((edit as any).tool, 'paint');
-  } finally {
-    edit.destroy();
-  }
-}
-
-/**
- * The four tool hotkeys are single printable chars, so like every other
- * one (g/f/b/n/c/x/a/t/l/s) they must be excluded from ordinary cell
- * typing AND still only reach the tool switch while a dialog is open -
- * the same screen.dialogOpen guard opKey() already gives every op
- * binding.
- */
-export async function toolHotkeysAreExcludedFromCellTypingAndGuardedWhileADialogIsOpen(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 1, cellH: 1,
-    animations: {
-      only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }]]] },
-      other: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '@', fg: 7, bg: 0 }]]] },
-    },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    for (const ch of ['p', 'e', 'k', 'u']) {
-      assert.ok((edit as any).bindingSet.excludedGlyphKeys.has(ch),
-        `'${ch}' must be excluded from cell typing - it is a bound tool hotkey`);
-    }
-
-    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
-    const toolBefore = (edit as any).tool;
-    for (const ch of 'pku') pressChar(screen, ch);
-    assert.strictEqual((edit as any).tool, toolBefore, 'typing while the dialog is open must not switch tools');
-
-    const input = lastDialog(screen).children[0];
-    assert.strictEqual(input.getValue(), '',
-      'pressChar() drives the OUTER screen bindings, not the dialog\'s own Textbox - ' +
-      'the tool hotkeys must be swallowed by dialogOpen, not land in the dialog either');
-    input.cancel();
-    await pending;
-  } finally {
-    edit.destroy();
-  }
-}
-
-export async function pickToolReadsTheClickedColourWithoutChangingTheDocument(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 1, cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: 'Z', fg: 5, bg: 2 }]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    pressChar(screen, 'k'); // pick tool
-    const docBefore = (edit as any).doc;
-    const canvasBox = paneContent(screen, 0);
-    clickBox(canvasBox, 0, 0);
-
-    assert.strictEqual((edit as any).fg, 5, 'pick must read the clicked cell\'s fg into the active colour');
-    assert.strictEqual((edit as any).doc, docBefore, 'pick must never touch the document - same EditDoc reference');
-  } finally {
-    edit.destroy();
-  }
-}
-
-export async function fillToolFloodFillsTheConnectedPixelRegionOnAHalfBlockFrame(): Promise<void> {
-  // A 2x4 pixel grid: colour 1 on the left half, colour 2 on the right -
-  // filling from the left half must repaint only that half.
-  const pixels: PixelGrid = [
-    [1, 1, 2, 2],
-    [1, 1, 2, 2],
-  ];
-  const sprite = pixelSprite(pixels);
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    pressChar(screen, 'u'); // fill tool
-    const canvasBox = paneContent(screen, 0);
-    clickBox(canvasBox, 0, 0); // cell (row 0, col 0) - within the 1-coloured half
-
-    const frame = (edit as any).doc.sprite.animations[(edit as any).doc.animation].frames[0];
-    assert.deepStrictEqual(decompilePixels(frame), [
-      [11, 11, 2, 2],
-      [11, 11, 2, 2],
-    ], 'fill must use the active colour (default fg 11) and stop at the 2-coloured half');
   } finally {
     edit.destroy();
   }
@@ -972,7 +716,7 @@ export async function clickingAFrameNumberWhileADialogIsOpenDoesNothing(): Promi
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
+    const pending = opHandler(edit, 'animation.new')(); // open the new-animation dialog
     const tokens: string[] = (edit as any).frameTokens();
     const targetColumn = tokens[0].length + 1; // start of frame token index 1
 
@@ -980,56 +724,6 @@ export async function clickingAFrameNumberWhileADialogIsOpenDoesNothing(): Promi
     clickBox(framesBox, targetColumn, 0);
 
     assert.strictEqual((edit as any).doc.frame, 0, 'a click on a frame number while a dialog is open must be ignored');
-
-    lastDialog(screen).children[0].cancel();
-    await pending;
-  } finally {
-    edit.destroy();
-  }
-}
-
-/**
- * Fix round 1, Important 1: every keyboard op is dialog-guarded (opKey())
- * and the sibling handleFramesClick already had this check - canvas mouse
- * painting was the one path that bypassed it, so pressing '+' and then
- * clicking the canvas painted the live document mid dialog.
- */
-export async function clickingTheCanvasWhileADialogIsOpenDoesNothing(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 2, cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
-    const canvasBox = paneContent(screen, 0);
-    clickBox(canvasBox, 0, 0);
-
-    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
-      'a click on the canvas while a dialog is open must not paint the document');
-
-    lastDialog(screen).children[0].cancel();
-    await pending;
-  } finally {
-    edit.destroy();
-  }
-}
-
-export async function draggingOnTheCanvasWhileADialogIsOpenDoesNothing(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 2, cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
-    const canvasBox = paneContent(screen, 0);
-    dragBox(canvasBox, 0, 0, 'left');
-
-    assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
-      'a drag over the canvas while a dialog is open must not paint the document');
 
     lastDialog(screen).children[0].cancel();
     await pending;
@@ -1059,7 +753,7 @@ export async function deletingAFrameAsksForConfirmationAndCancelLeavesItAlone():
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const pending = keyHandler(screen, 'x')();
+    const pending = opHandler(edit, 'frame.delete')();
     assert.strictEqual(screen.dialogOpen, true, 'delete-frame must open a confirm dialog');
     assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
       'the frame must not be deleted before the dialog is answered');
@@ -1089,7 +783,7 @@ export async function deletingAFrameActuallyDeletesItOnConfirm(): Promise<void> 
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const pending = keyHandler(screen, 'x')();
+    const pending = opHandler(edit, 'frame.delete')();
     const modal = lastDialog(screen);
     (modal as any)._confirmButton.emit('press');
     await pending;
@@ -1113,7 +807,7 @@ export async function deletingAnAnimationAsksForConfirmationAndCancelLeavesItAlo
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    const pending = keyHandler(screen, 'S-x')();
+    const pending = opHandler(edit, 'animation.delete')();
     const modal = lastDialog(screen);
     (modal as any)._cancelButton.emit('press');
     await pending;
@@ -1140,11 +834,12 @@ export async function escapeOnADirtyDocumentAsksToDiscardAndOnlyExitsOnConfirm()
   let exited = false;
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    // Dirty the document the same way a real edit would: paint the one cell.
-    pressKey(screen, 'space');
+    // Dirty the document the same way a real edit would: paint on the
+    // hosted canvas and commit, which is where painting lives now.
+    paintAndCommit(edit);
     assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
 
-    const pending = keyHandler(screen, 'escape')();
+    const pending = opHandler(edit, 'file.closeEditor')();
     assert.strictEqual(screen.dialogOpen, true, 'ESC on a dirty document must open a confirm dialog');
 
     const modal = lastDialog(screen);
@@ -1166,9 +861,9 @@ export async function escapeOnADirtyDocumentExitsWhenDiscardIsConfirmed(): Promi
   const screen = makeFakeScreen();
   let exited = false;
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
-  pressKey(screen, 'space'); // dirty it
+  paintAndCommit(edit); // dirty it
 
-  const pending = keyHandler(screen, 'escape')();
+  const pending = opHandler(edit, 'file.closeEditor')();
   const modal = lastDialog(screen);
   (modal as any)._confirmButton.emit('press'); // "yes, discard"
   await pending;
@@ -1187,7 +882,7 @@ export async function escapeOnACleanDocumentExitsImmediatelyWithNoDialog(): Prom
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   assert.strictEqual((edit as any).doc.dirty, false, 'precondition: freshly opened, not dirty');
 
-  pressKey(screen, 'escape');
+  opHandler(edit, 'file.closeEditor')();
 
   assert.strictEqual(exited, true, 'a clean document must exit on the first ESC, no confirmation needed');
   assert.strictEqual(screen.dialogOpen, undefined, 'no dialog should ever have opened');
@@ -1211,7 +906,7 @@ export async function cqClosesACleanEditorTheSameWayEscapeDoes(): Promise<void> 
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   assert.strictEqual((edit as any).doc.dirty, false, 'precondition: freshly opened, not dirty');
 
-  pressKey(screen, 'C-q');
+  opHandler(edit, 'file.closeEditor')();
 
   assert.strictEqual(exited, true, 'C-q on a clean document must exit immediately, exactly like escape');
   assert.strictEqual(screen.dialogOpen, undefined, 'no dialog should ever have opened');
@@ -1232,10 +927,10 @@ export async function cqOnADirtyDocumentAsksToDiscardJustLikeEscape(): Promise<v
   let exited = false;
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    pressKey(screen, 'space'); // dirty it
+    paintAndCommit(edit); // dirty it
     assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
 
-    const pending = keyHandler(screen, 'C-q')();
+    const pending = opHandler(edit, 'file.closeEditor')();
     assert.strictEqual(screen.dialogOpen, true,
       'C-q on a dirty document must open the SAME discard confirm dialog escape does');
 
@@ -1244,38 +939,6 @@ export async function cqOnADirtyDocumentAsksToDiscardJustLikeEscape(): Promise<v
     await pending;
 
     assert.strictEqual(exited, true, 'confirming the discard prompt reached via C-q must exit');
-  } finally {
-    edit.destroy();
-  }
-}
-
-/**
- * C-q must cost the door nothing: glyphForKey('C-q') is null (no 'S-'
- * prefix, and it is not itself a single printable character), so it must
- * not enter the glyph-typing exclusion set - and the bare letter 'q',
- * unbound anywhere in this door, must keep painting the ordinary glyph q,
- * exactly as it did before this binding existed. Losing the letter q for
- * cell art was explicitly ruled out when this binding was added.
- */
-export async function theLetterQRemainsUnboundAndStillPaintsAsAnOrdinaryGlyph(): Promise<void> {
-  const sprite: Sprite = {
-    name: 'fixture', cellW: 2, cellH: 1,
-    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }, null]]] } },
-  };
-  const screen = makeFakeScreen();
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
-  try {
-    assert.ok(!(edit as any).bindingSet.excludedGlyphKeys.has('q'),
-      "'q' must not be excluded from cell typing - C-q must not reach the glyph set as a printable");
-
-    const canvasBox = paneContent(screen, 0);
-    const before = canvasBox.getContent();
-
-    pressChar(screen, 'q'); // no bare-'q' binding exists, so only the keypress fires
-
-    assert.notStrictEqual(canvasBox.getContent(), before,
-      "typing 'q' in cell mode must still reach setCell as an ordinary glyph, not be swallowed");
-    assert.ok(canvasBox.getContent().includes('q'), "the painted cell must contain the typed glyph 'q'");
   } finally {
     edit.destroy();
   }
@@ -1322,11 +985,11 @@ export async function escapeOnADirtyDocumentOpensAndSurvivesItsOwnTriggeringKeys
   };
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    screen._handleKey(undefined, keyEvent('space')); // dirty it
-    screen._handleKey(undefined, keyEvent('escape'));
+    paintAndCommit(edit); // dirty it - the canvas is where paint happens now
+    screen._handleKey(undefined, keyEvent('C-q'));
 
     assert.strictEqual(screen.dialogOpen, true,
-      'a real Escape keypress must open the discard confirm dialog and SURVIVE its own triggering keystroke');
+      'a real C-q keypress must open the discard confirm dialog and SURVIVE its own triggering keystroke');
     assert.strictEqual(exited, false, 'opening the dialog must not itself exit the editor');
     assert.strictEqual((edit as any).doc.dirty, true, 'and must not itself discard anything');
   } finally {
@@ -1344,8 +1007,8 @@ export async function escapeThenARealEnterKeypressExitsADirtyDocumentThroughTheC
   };
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    screen._handleKey(undefined, keyEvent('space'));
-    screen._handleKey(undefined, keyEvent('escape'));
+    paintAndCommit(edit);
+    screen._handleKey(undefined, keyEvent('C-q'));
     assert.strictEqual(screen.dialogOpen, true, 'precondition: the dialog must be open');
 
     // A SEPARATE, subsequent real keystroke - ConfirmModal.display() already
@@ -1369,8 +1032,8 @@ export async function escapeThenARealEscapeCancelsAndLeavesTheDocumentDirty(): P
   };
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    screen._handleKey(undefined, keyEvent('space'));
-    screen._handleKey(undefined, keyEvent('escape'));
+    paintAndCommit(edit);
+    screen._handleKey(undefined, keyEvent('C-q'));
     assert.strictEqual(screen.dialogOpen, true, 'precondition: the dialog must be open');
 
     // A SEPARATE, subsequent real Escape - this one DOES reach
@@ -1403,7 +1066,7 @@ export async function cqReliablyExitsADirtyEditorViaRealKeyDispatchEndToEnd(): P
   };
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
   try {
-    screen._handleKey(undefined, keyEvent('space'));
+    paintAndCommit(edit);
     screen._handleKey(undefined, keyEvent('C-q', true));
     assert.strictEqual(screen.dialogOpen, true, 'a real C-q keypress must open the discard confirm dialog');
 
@@ -1431,191 +1094,3 @@ function twoAnimationSprite(): Sprite {
   };
 }
 
-/**
- * The second, more insidious shape of the same bug: '+' is a PRINTABLE
- * character. Textbox's own generic 'keypress' listener treats any
- * printable, non-control character as "insert it" - so before this fix,
- * opening the New Animation dialog with '+' pre-filled the literal
- * character '+' into the just-focused, just-emptied text field (confirmed
- * by direct instrumentation while investigating this fix: the Textbox's
- * value read '+' immediately after the dialog opened, before a user typed
- * anything).
- */
-export async function plusOpensThePromptTextDialogAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-plus-survives', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
-  try {
-    screen._handleKey('+', keyEvent('+'));
-
-    assert.strictEqual(screen.dialogOpen, true, 'a real + keypress must open the new-animation dialog');
-    const textbox = screen._focused;
-    assert.strictEqual(textbox?.constructor?.name, 'Textbox', 'precondition: the dialog\'s Textbox must be focused');
-    assert.strictEqual(textbox.getValue(), '',
-      "the dialog must SURVIVE its own triggering keystroke - the literal '+' must not land in the text field");
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-export async function plusThenTypingANameAndARealEnterCreatesTheAnimation(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-plus-enter', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
-  try {
-    screen._handleKey('+', keyEvent('+'));
-    const textbox = screen._focused;
-    for (const ch of 'spin') textbox.insertChar(ch); // typing itself is not what this fix is about
-
-    // A SEPARATE, subsequent real Enter keypress - Textbox's own generic
-    // 'keypress' listener submits on 'enter'/'return'.
-    screen._handleKey(undefined, keyEvent('enter'));
-    await flush();
-
-    assert.strictEqual(screen.dialogOpen, false, 'submitting must close the dialog');
-    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb', 'spin'],
-      'a real Enter keypress on the focused Textbox must create the typed animation');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-export async function plusThenARealEscapeCancelsWithoutCreatingAnAnimation(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-plus-esc', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
-  try {
-    screen._handleKey('+', keyEvent('+'));
-    const textbox = screen._focused;
-    textbox.insertChar('x');
-
-    // A SEPARATE, subsequent real Escape - reaches Textbox's own
-    // generic-'keypress' escape handling (clearSelection + cancel()).
-    screen._handleKey(undefined, keyEvent('escape'));
-    await flush();
-
-    assert.strictEqual(screen.dialogOpen, false, 'a real Escape keypress must cancel the dialog');
-    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
-      'cancelling must not create an animation');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-// ---------------------------------------------------------------------
-// 'x' ('frame.delete' - confirm)
-// ---------------------------------------------------------------------
-
-function twoFrameSprite(): Sprite {
-  return {
-    name: 'fixture', cellW: 1, cellH: 1,
-    animations: {
-      only: {
-        ticksPerFrame: 4, loop: true,
-        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
-      },
-    },
-  };
-}
-
-export async function xOpensTheConfirmDialogAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-x-survives', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoFrameSprite(), () => {});
-  try {
-    screen._handleKey(undefined, keyEvent('x'));
-
-    assert.strictEqual(screen.dialogOpen, true, 'a real x keypress must open the delete-frame confirm dialog');
-    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
-      'the dialog must SURVIVE its own triggering keystroke - the frame must not already be deleted');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-export async function xThenARealEnterConfirmsAndDeletesTheFrame(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-x-enter', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoFrameSprite(), () => {});
-  try {
-    screen._handleKey(undefined, keyEvent('x'));
-    screen._handleKey(undefined, keyEvent('enter')); // separate, subsequent keystroke
-    await flush();
-
-    assert.strictEqual(screen.dialogOpen, false);
-    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 1,
-      'a real Enter keypress on the focused confirm button must delete the frame');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-export async function xThenARealEscapeCancelsAndLeavesTheFrameAlone(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-x-esc', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoFrameSprite(), () => {});
-  try {
-    screen._handleKey(undefined, keyEvent('x'));
-    screen._handleKey(undefined, keyEvent('escape')); // separate, subsequent keystroke
-    await flush();
-
-    assert.strictEqual(screen.dialogOpen, false);
-    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
-      'a real Escape keypress must cancel without deleting the frame');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-// ---------------------------------------------------------------------
-// 'S-x' ('animation.delete' - confirm)
-// ---------------------------------------------------------------------
-
-export async function sXOpensTheConfirmDialogAndSurvivesItsOwnTriggeringKeystroke(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-sx-survives', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
-  try {
-    screen._handleKey(undefined, keyEvent('S-x'));
-
-    assert.strictEqual(screen.dialogOpen, true, 'a real S-x keypress must open the delete-animation confirm dialog');
-    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
-      'the dialog must SURVIVE its own triggering keystroke - the animation must not already be deleted');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-export async function sXThenARealEnterConfirmsAndDeletesTheAnimation(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-sx-enter', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
-  try {
-    screen._handleKey(undefined, keyEvent('S-x'));
-    screen._handleKey(undefined, keyEvent('enter')); // separate, subsequent keystroke
-    await flush();
-
-    assert.strictEqual(screen.dialogOpen, false);
-    assert.strictEqual(Object.keys((edit as any).doc.sprite.animations).length, 1,
-      'a real Enter keypress on the focused confirm button must delete the animation');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}
-
-export async function sXThenARealEscapeCancelsAndLeavesTheAnimationAlone(): Promise<void> {
-  const screen: any = new Screen({ title: 'edit-screen-sx-esc', width: 80, height: 25 } as any);
-  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', twoAnimationSprite(), () => {});
-  try {
-    screen._handleKey(undefined, keyEvent('S-x'));
-    screen._handleKey(undefined, keyEvent('escape')); // separate, subsequent keystroke
-    await flush();
-
-    assert.strictEqual(screen.dialogOpen, false);
-    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
-      'a real Escape keypress must cancel without deleting the animation');
-  } finally {
-    edit.destroy();
-    screen.destroy();
-  }
-}

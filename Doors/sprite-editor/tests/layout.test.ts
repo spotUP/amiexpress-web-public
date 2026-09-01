@@ -87,21 +87,23 @@ export async function panesTileWithoutOverlap(): Promise<void> {
 }
 
 export async function editScreenColumnsSumToEightyColumns(): Promise<void> {
-  const { canvas, preview, frames, toolbar } = LAYOUT.edit;
+  const { canvas, preview, frames } = LAYOUT.edit;
   assert.strictEqual(canvas.width + preview.width, 80,
     'canvas + right column must span the full 80 columns');
-  assert.strictEqual(preview.width, frames.width, 'the right column is one width, not three');
-  assert.strictEqual(frames.width, toolbar.width, 'the right column is one width, not three');
+  assert.strictEqual(preview.width, frames.width, 'the right column is one width, not two');
 }
 
 export async function editScreenRightColumnSumsToTheCanvasHeight(): Promise<void> {
-  const { canvas, preview, frames, toolbar } = LAYOUT.edit;
-  assert.strictEqual(preview.height + frames.height + toolbar.height, canvas.height,
-    'preview+frames+toolbar must exactly fill the canvas height - the split the ' +
-    'old percent layout could not guarantee at every terminal height');
+  const { canvas, preview, frames } = LAYOUT.edit;
+  assert.strictEqual(preview.height + frames.height, canvas.height,
+    'preview+frames must exactly fill the canvas height - the split the ' +
+    'old percent layout could not guarantee at every terminal height. The ' +
+    'third pane (the Paint toolbar) is gone: the hosted ANSIEditor ships ' +
+    'its own colour/tool sidebar, and its rows went to Frames.');
   assert.strictEqual(preview.top, canvas.top, 'the right column starts where the canvas does');
   assert.strictEqual(frames.top, preview.top + preview.height, 'frames must start exactly where preview ends');
-  assert.strictEqual(toolbar.top, frames.top + frames.height, 'toolbar must start exactly where frames ends');
+  assert.strictEqual(frames.top + frames.height, canvas.top + canvas.height,
+    'frames must end exactly where the canvas does - no blank rows left by the removed toolbar');
 }
 
 export async function browserColumnsSumToEightyColumns(): Promise<void> {
