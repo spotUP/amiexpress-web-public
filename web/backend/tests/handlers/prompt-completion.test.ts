@@ -118,6 +118,24 @@ describe('the wiring', () => {
     path.resolve(__dirname, '../../src/handlers/command.handler.ts'), 'utf8'
   );
 
+  it('accepts the suggestion on ENTER, in the main prompt branch only', () => {
+    // "can we make it submit the autocompleted ghost command on enter so if
+    // i type doo[enter] doors fires?"
+    //
+    // This file holds SEVEN identical `if (data === '\\r' ...)` blocks, one
+    // per input state, so the check is anchored on the branch that follows
+    // the READ_COMMAND one - editing the wrong copy would have made every
+    // prompt in the BBS complete itself.
+    const branch = source.indexOf('_promptGhostShown && input.length > 0');
+    expect(branch).toBeGreaterThan(0);
+    const joinHandler = source.indexOf('waitingForJoinMsgBase', branch);
+    expect(joinHandler - branch).toBeLessThan(1600);
+
+    // And only where a ghost was actually on screen, so what runs is what
+    // was visible.
+    expect(source).toContain('_promptGhostShown && input.length > 0');
+  });
+
   it('completes on TAB', () => {
     expect(source).toContain("data === '\\t'");
     expect(source).toContain('promptComplete');

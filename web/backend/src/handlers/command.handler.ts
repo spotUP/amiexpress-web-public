@@ -3790,7 +3790,30 @@ console.log('[CommandHistory] History cleared by user (Ctrl-B)');
 
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
+      let input = (session.inputBuffer || '').trim();
+
+      // ENTER accepts the grey suggestion, so `doo` + RETURN runs the
+      // command that was being offered rather than failing on a half-typed
+      // word. Only when a ghost was actually SHOWN - what fires is what was
+      // on screen, never a completion nobody could see.
+      //
+      // This cannot hijack a command typed in full: candidates are ordered
+      // shortest-first, so an exact command is always the first candidate
+      // and its ghost is empty. Typing `J` where `JM` also exists shows
+      // nothing and runs J.
+      if ((session as any)._promptGhostShown && input.length > 0) {
+        const { promptComplete } = require('./command-handler/prompt-completion');
+        const completed = (await promptComplete(config.get('dataDir'), input)).trim();
+        if (completed && completed !== input) {
+          // Repaint the line so what runs is what is left on screen, in
+          // normal colour rather than as a grey offer.
+          emitText(socket, '\b'.repeat(input.length) + '\x1b[K' + completed);
+          input = completed;
+        }
+      }
+      (session as any)._promptGhostShown = false;
+      (session as any)._promptCycle = undefined;
+
       session.inputBuffer = '';
 
       // Check for pending input handlers
