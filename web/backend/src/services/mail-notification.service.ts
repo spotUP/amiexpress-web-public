@@ -19,17 +19,34 @@ import { getSystemTime } from '../utils/date-time.util';
 /**
  * Is this connection implicit TLS?
  *
+ * The two standard mail ports each answer this themselves, and the flag can
+ * only decide the ones that do not.
+ *
  * Port 465 is SMTPS: the server expects TLS from the first byte and never
  * sends a plaintext greeting. Connecting without `secure` there does not
  * fail - it HANGS, waiting for a banner that will not come, until
  * nodemailer's greeting timeout. That is the "SMTP test just spins" report:
  * gmail on 465 with the SSL box unticked.
  *
- * express.e:31814 reads SMTP_SSL as a flag, so the sysop's setting is
- * honoured; 465 simply cannot be anything else.
+ * Port 587 is submission (RFC 6409), the mirror image: the server greets in
+ * plaintext and upgrades on STARTTLS, so `secure` there aborts on the
+ * greeting. Measured against gmail from the board's own host -
+ *   openssl s_client -connect smtp.gmail.com:587
+ *     -> ssl3_get_record:wrong version number
+ *   openssl s_client -connect smtp.gmail.com:587 -starttls smtp
+ *     -> Verification: OK, 250 SMTPUTF8
+ * That is why uptown never sent a notification: SMTP_PORT=587 with SMTP_SSL
+ * ticked built every transport `secure: true`, and both send paths died in
+ * the handshake - the sysop-facing one with a message, the MAIL_ON_* one
+ * into the log.
+ *
+ * express.e:31814 reads SMTP_SSL as a flag, so the sysop's setting is still
+ * honoured wherever it is the only thing that can decide.
  */
 export function usesImplicitTls(port: number, sslFlag: boolean): boolean {
-  return sslFlag || port === 465;
+  if (port === 465) return true;
+  if (port === 587) return false;
+  return sslFlag;
 }
 
 /**
@@ -45,6 +62,38 @@ const SMTP_TIMEOUTS = {
   greetingTimeout: 10_000,
   socketTimeout: 20_000,
 } as const;
+
+/**
+ * The transport both callers open.
+ *
+ * The mailer and the admin's "Test SMTP Connection" have to reach the relay
+ * the same way, or the test answers a question nobody asked. They were two
+ * byte-identical literals; the timeouts had already been added to one and
+ * then to the other.
+ *
+ * `requireTLS` on 587: with implicit TLS off, nodemailer will fall back to a
+ * plaintext session if the server does not advertise STARTTLS, and AUTH would
+ * carry the sysop's credentials in the clear. Submission mandates the
+ * upgrade (RFC 6409), so a relay that will not do it is a failure, not a
+ * downgrade. Ports 465 (already encrypted) and 25 (relays that may have no
+ * TLS at all) are left as they were.
+ *
+ * Exported so the transport can be asserted directly: `secure` and
+ * `requireTLS` are decided here and are not visible through any send.
+ */
+export function buildTransportConfig(options: MailOptions): nodemailer.TransportOptions {
+  return {
+    host: options.smtpHost,
+    port: options.smtpPort,
+    secure: usesImplicitTls(options.smtpPort, options.ssl),
+    requireTLS: options.smtpPort === 587,
+    ...SMTP_TIMEOUTS,
+    auth: options.username ? {
+      user: options.username,
+      pass: options.password
+    } : undefined
+  } as nodemailer.TransportOptions;
+}
 
 
 export interface MailOptions {
@@ -206,18 +255,7 @@ async function sendMail(
   options: MailOptions
 ): Promise<boolean> {
   try {
-    const transportConfig: nodemailer.TransportOptions = {
-      host: options.smtpHost,
-      port: options.smtpPort,
-      secure: usesImplicitTls(options.smtpPort, options.ssl),
-      ...SMTP_TIMEOUTS,
-      auth: options.username ? {
-        user: options.username,
-        pass: options.password
-      } : undefined
-    } as nodemailer.TransportOptions;
-
-    const transporter = nodemailer.createTransport(transportConfig);
+    const transporter = nodemailer.createTransport(buildTransportConfig(options));
 
     await transporter.sendMail({
       from: options.bbsEmail || `noreply@${options.smtpHost}`,
@@ -392,27 +430,7 @@ export async function testSmtpConnection(): Promise<{ success: boolean; error?: 
     if (!options.sysopEmail) {
       return { success: false, error: 'Sysop email not configured' };
     }
-    // Said before the connection is attempted, because the failure it causes
-    // is a hang rather than a refusal.
-    if (options.smtpPort === 587 && options.ssl) {
-      return {
-        success: false,
-        error: 'Port 587 uses STARTTLS, not implicit SSL. Untick SMTP SSL, or use port 465.',
-      };
-    }
-
-    const transportConfig: nodemailer.TransportOptions = {
-      host: options.smtpHost,
-      port: options.smtpPort,
-      secure: usesImplicitTls(options.smtpPort, options.ssl),
-      ...SMTP_TIMEOUTS,
-      auth: options.username ? {
-        user: options.username,
-        pass: options.password
-      } : undefined
-    } as nodemailer.TransportOptions;
-
-    const transporter = nodemailer.createTransport(transportConfig);
+    const transporter = nodemailer.createTransport(buildTransportConfig(options));
 
     // First verify the connection
     await transporter.verify();
