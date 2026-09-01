@@ -62,3 +62,29 @@ export function conferenceDir(bbsRoot: string, conferenceNumber: number): string
 export function conferenceSubdir(bbsRoot: string, conferenceNumber: number, ...parts: string[]): string {
   return path.join(conferenceDir(bbsRoot, conferenceNumber), ...parts);
 }
+
+/**
+ * The conference's location in the form a 68K door expects: `BBS:Conf2/`,
+ * with the trailing slash a door concatenates onto.
+ *
+ * BB_CONFLOCAL, BB_PCONFLOCAL and MSGBASE_LOC all answer with this. Built from
+ * the number instead, a door on a renumbered board is told to write into the
+ * directory of the conference that was deleted.
+ *
+ * @param parts optional subdirectory, e.g. 'MsgBase' -> `BBS:Conf2/MsgBase/`
+ */
+export function conferenceAmigaPath(bbsRoot: string, conferenceNumber: number, ...parts: string[]): string {
+  let location = '';
+  try {
+    const config = loadConfConfig(bbsRoot);
+    location = config?.entries[conferenceNumber - 1]?.location?.trim() ?? '';
+  } catch {
+    location = '';
+  }
+
+  const base = location || `BBS:Conf${conferenceNumber}/`;
+  const withoutTrailer = base.replace(/[\\/]+$/, '');
+  const suffix = parts.length ? `/${parts.join('/')}` : '';
+
+  return `${withoutTrailer}${suffix}/`;
+}

@@ -1,6 +1,7 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import * as fs from 'fs';
 import * as path from 'path';
+import { conferenceDir, conferenceSubdir, conferenceAmigaPath } from '../../conferences/conference-paths';
 import { execSync } from 'child_process';
 import * as amigafs from '../../utils/amigafs';
 
@@ -678,7 +679,7 @@ console.log(`[icon.library]   No match found`);
         let dlpath = '';
         let ndirs = 0;
 
-        const confInfoPath = path.join(this.bbsRoot, `Conf${confNum}`, 'ConfConfig.info');
+        const confInfoPath = conferenceSubdir(this.bbsRoot, confNum, 'ConfConfig.info');
         const resolved = amigafs.resolvePath(confInfoPath);
         if (resolved) {
           const confTools = this.parseInfoFile(resolved);
@@ -704,7 +705,7 @@ console.log(`[icon.library]   No match found`);
         // (e.g. set to 1 at install time and never updated as uploads create new directories).
         // Use whichever value is higher so AquaScan always sees all real directories.
         try {
-          const confDir = path.join(this.bbsRoot, `Conf${confNum}`);
+          const confDir = conferenceDir(this.bbsRoot, confNum);
           const confEntries = fs.readdirSync(confDir);
           let highestDir = 0;
           for (const name of confEntries) {
@@ -721,9 +722,9 @@ console.log(`[icon.library]   No match found`);
 
         // Fall back to conventional Upload/ directory if ConfConfig.info missing or incomplete
         if (!ulpath) {
-          const uploadDir = path.join(this.bbsRoot, `Conf${confNum}`, 'Upload');
+          const uploadDir = conferenceSubdir(this.bbsRoot, confNum, 'Upload');
           if (amigafs.existsSync(uploadDir)) {
-            ulpath = `BBS:Conf${confNum}/Upload/`;
+            ulpath = conferenceAmigaPath(this.bbsRoot, confNum, 'Upload');
           }
         }
         if (!dlpath && ulpath) {

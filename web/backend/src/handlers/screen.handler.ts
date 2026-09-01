@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
+import { conferenceDir } from '../conferences/conference-paths';
 
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -216,7 +217,9 @@ function isRipFile(filePath: string): boolean {
 
 function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
   // reference-board data uses unpadded ConfX; avoid padded variants to prevent Conf01 creation
-  const names: string[] = [`Conf${relConfNum}`];
+  // The directory LOCATION.n names, not `Conf<n>`: on a renumbered board the
+  // conference in position 1 lives in Conf2/, and MENU would go missing.
+  const names: string[] = [path.basename(conferenceDir(baseDir, relConfNum))];
 
   const results: Array<{ dir: string; desc: string }> = [];
   const seen = new Set<string>();
@@ -1664,7 +1667,7 @@ console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
   const upper = screenName.toUpperCase();
   const screenDirType = getScreenDirType(screenName);
   const expectedDir = screenDirType === ScreenDirType.NODE ? resolveNodeScreenDir(baseDir, nodeId) :
-                      screenDirType === ScreenDirType.CONF ? `Conf${conferenceId || session?.relConfNum}/Screens/` :
+                      screenDirType === ScreenDirType.CONF ? `${path.basename(conferenceDir(baseDir, conferenceId || session?.relConfNum || 1))}/Screens/` :
                       'Screens/';
 console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
 console.warn(`[loadScreenFile]  Expected location: ${expectedDir}${getScreenFileName(screenName)}.TXT`);

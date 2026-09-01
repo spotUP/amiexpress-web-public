@@ -8,6 +8,8 @@
 import { Socket } from 'socket.io';
 import * as fs from 'fs';
 import * as path from 'path';
+import { conferenceAmigaPath } from '../../conferences/conference-paths';
+import { config as appConfig } from '../../config';
 import { execSync } from 'child_process';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
@@ -208,7 +210,7 @@ debugLog(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
           // Return Amiga-style path like "BBS:Conf1/" (door expects this format)
           // Check both currentConference (GlobalStructures) and currentConf (legacy)
           const confId = (this.bbsSession as any)?.currentConference ?? (this.bbsSession as any)?.currentConf ?? this.bbsSession?.conferenceId ?? 1;
-          value = `BBS:Conf${confId}/`;
+          value = conferenceAmigaPath(appConfig.get('dataDir'), confId);
 
           // DEBUG: Write to file for visibility
           const debugLine = `[BB_CONFLOCAL] ${new Date().toISOString()} confId=${confId} value="${value}" incomingString="${msg.string}" msgAddr=0x${msg.msgAddr.toString(16)}\n`;

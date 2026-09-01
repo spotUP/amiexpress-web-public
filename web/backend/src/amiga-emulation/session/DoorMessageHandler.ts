@@ -3,6 +3,8 @@
 // Handles door messages, XIM protocol, and inter-process communication
 // 2025-11-20
 
+import { conferenceAmigaPath } from '../../conferences/conference-paths';
+import { config as appConfig } from '../../config';
 import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
 import { Socket } from "socket.io";
 import { ExecLibrary } from "../api/ExecLibrary.js";
@@ -1413,7 +1415,9 @@ debugLog(`[DoorMessageHandler]   BB_CONFLOCAL: data=${data}`);
         if (data) {
           // Get current conference directory with BBS: assign and trailing slash
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
-          const confDir = `BBS:Conf${confNum}/`;
+          // LOCATION.n, not the number: a renumbered board would send the door
+          // into the directory of the conference that was deleted.
+          const confDir = conferenceAmigaPath(appConfig.get('dataDir'), confNum);
 debugLog(`[DoorMessageHandler]   BB_CONFLOCAL returning: "${confDir}" (from currentConf=${confNum})`);
           this.writeStringToMessage(msgAddr, confDir);
         } else {
@@ -2011,18 +2015,11 @@ debugLog(`[DoorMessageHandler]   BB_PCONFNAME: Error reading ConfConfig.info: ${
 debugLog(`[DoorMessageHandler]   BB_PCONFLOCAL: Invalid conf ${confNum}, returning ERROR`);
             this.writeStringToMessage(msgAddr, "ERROR");
           } else {
-            // Read conference location from ConfConfig.info
-            try {
-              const { loadConfConfig } = require('../../services/conf-config.service');
-              const bbsRoot = (this.config.bbsSession as any)?.bbsRoot || process.cwd();
-              const confConfig = loadConfConfig(bbsRoot);
-              const confDir = confConfig?.entries[confNum - 1]?.location || `BBS:Conf${confNum}/`;
+            // One resolver for every answer of this shape - it reads
+            // LOCATION.n and falls back to BBS:Conf<n>/ on its own.
+            const confDir = conferenceAmigaPath(appConfig.get('dataDir'), confNum);
 debugLog(`[DoorMessageHandler]   BB_PCONFLOCAL(${confNum}): "${confDir}"`);
-              this.writeStringToMessage(msgAddr, confDir);
-            } catch (error) {
-debugLog(`[DoorMessageHandler]   BB_PCONFLOCAL: Error reading ConfConfig.info: ${error}`);
-              this.writeStringToMessage(msgAddr, `BBS:Conf${confNum}/`);
-            }
+            this.writeStringToMessage(msgAddr, confDir);
           }
         }
         break;
@@ -2137,7 +2134,7 @@ debugLog(`[DoorMessageHandler]   GET_CONFNUM: ${confNum}`);
             const bbsRoot = (this.config.bbsSession as any)?.bbsRoot || process.cwd();
             const confConfig = loadConfConfig(bbsRoot);
             const confName = confConfig?.entries[confNum - 1]?.name || `Conference ${confNum}`;
-            const confLoc = confConfig?.entries[confNum - 1]?.location || `BBS:Conf${confNum}/`;
+            const confLoc = conferenceAmigaPath(appConfig.get('dataDir'), confNum);
             // Would write to filler1 and filler2 memory locations
 debugLog(`[DoorMessageHandler]   GET_CONFNUM: name="${confName}", loc="${confLoc}"`);
           } catch (error) {
@@ -2160,7 +2157,7 @@ debugLog(`[DoorMessageHandler]   MOD_TYPE: ${isPrivCmd ? 1 : 0}`);
         if (data !== 0) {
           // Read: return current message base path
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
-          const msgBaseLoc = `BBS:Conf${confNum}/MsgBase/`;
+          const msgBaseLoc = conferenceAmigaPath(appConfig.get('dataDir'), confNum, 'MsgBase');
 debugLog(`[DoorMessageHandler]   MSGBASE_LOC GET: "${msgBaseLoc}"`);
           this.writeStringToMessage(msgAddr, msgBaseLoc);
         } else {
@@ -2717,7 +2714,7 @@ debugLog(`[DoorMessageHandler]   BB_PCONFNAME(${confNum}): "${confName}"`);
 debugLog(`[DoorMessageHandler]   BB_PCONFLOCAL: Invalid conf ${confNum}, returning ERROR`);
             this.writeStringToMessage(msgAddr, "ERROR");
           } else {
-            const confDir = `BBS:Conf${confNum}/`;
+            const confDir = conferenceAmigaPath(appConfig.get('dataDir'), confNum);
 debugLog(`[DoorMessageHandler]   BB_PCONFLOCAL(${confNum}): "${confDir}"`);
             this.writeStringToMessage(msgAddr, confDir);
           }
@@ -2745,7 +2742,7 @@ debugLog(`[DoorMessageHandler]   BB_CONFNAME(126): "${confName}"`);
       case XIMCommand.BB_CONFLOCAL: // BB_CONFLOCAL=127 - Current conference location
         {
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
-          const confDir = `BBS:Conf${confNum}/`;
+          const confDir = conferenceAmigaPath(appConfig.get('dataDir'), confNum);
 debugLog(`[DoorMessageHandler]   BB_CONFLOCAL(127): "${confDir}"`);
           this.writeStringToMessage(msgAddr, confDir);
         }

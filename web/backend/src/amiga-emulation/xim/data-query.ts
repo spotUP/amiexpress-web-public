@@ -5,6 +5,7 @@
  * From E sources (express.e:3494-3981)
  */
 
+import { conferenceSubdir } from '../../conferences/conference-paths';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './types';
@@ -109,7 +110,7 @@ debugLog(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`)
             // Return file count from current conference's NumULs file
             const confNum = (this.bbsSession as any).conferenceNumber || 1;
             const bbsRoot = (this.bbsSession as any).bbsRoot || process.cwd();
-            const numULsPath = require('path').join(bbsRoot, `Conf${confNum}`, 'NumULs');
+            const numULsPath = conferenceSubdir(bbsRoot, confNum, 'NumULs');
 
             let fileCount = '0';
             try {

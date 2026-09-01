@@ -22,7 +22,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { getConferenceDir, getRootConferenceDir } from '../../src/utils/file-hold.util';
-import { conferenceDir } from '../../src/conferences/conference-paths';
+import { conferenceDir, conferenceAmigaPath, conferenceSubdir } from '../../src/conferences/conference-paths';
 
 let root: string;
 
@@ -104,5 +104,85 @@ describe('the LOCATION value itself', () => {
 
     writeConfConfig([{ name: 'Amiga Warez!', location: 'BBS:Conf3/' }]);
     expect(conferenceDir(root, 1)).toBe(path.join(root, 'Conf3'));
+  });
+});
+
+describe('the Amiga path a door is handed', () => {
+  test('BB_CONFLOCAL answers the LOCATION, not the number', () => {
+    writeConfConfig([
+      { name: 'Amiga Warez!', location: 'BBS:Conf2/' },
+      { name: 'Abandoned Apps', location: 'BBS:Conf3/' },
+    ]);
+
+    expect(conferenceAmigaPath(root, 1)).toBe('BBS:Conf2/');
+    expect(conferenceAmigaPath(root, 2)).toBe('BBS:Conf3/');
+  });
+
+  test('the trailing slash is always there - a door concatenates onto it', () => {
+    writeConfConfig([{ name: 'Amiga Warez!', location: 'BBS:Conf2' }]);
+
+    expect(conferenceAmigaPath(root, 1)).toBe('BBS:Conf2/');
+  });
+
+  test('a board with no ConfConfig.info still answers BBS:Conf<n>/', () => {
+    expect(conferenceAmigaPath(root, 3)).toBe('BBS:Conf3/');
+  });
+
+  test('a subdirectory of the conference follows LOCATION too', () => {
+    writeConfConfig([{ name: 'Amiga Warez!', location: 'BBS:Conf2/' }]);
+
+    expect(conferenceSubdir(root, 1, 'MsgBase')).toBe(path.join(root, 'Conf2', 'MsgBase'));
+    expect(conferenceSubdir(root, 1, 'Files')).toBe(path.join(root, 'Conf2', 'Files'));
+  });
+
+  test('the MsgBase a door is told about is under the conference LOCATION', () => {
+    writeConfConfig([{ name: 'Amiga Warez!', location: 'BBS:Conf2/' }]);
+
+    expect(conferenceAmigaPath(root, 1, 'MsgBase')).toBe('BBS:Conf2/MsgBase/');
+  });
+});
+
+/**
+ * The consumers, on a board shaped like the live one after the sysop deleted
+ * conference 1. Each of these was building `Conf<n>` from the number and
+ * reading the deleted conference's directory.
+ */
+describe('every consumer of a conference directory, on a renumbered board', () => {
+  beforeEach(() => {
+    writeConfConfig([
+      { name: 'Amiga Warez!', location: 'BBS:Conf2/' },
+      { name: 'Abandoned Apps', location: 'BBS:Conf3/' },
+    ]);
+    fs.mkdirSync(path.join(root, 'Conf2', 'Screens'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Conf2', 'MsgBase'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Conf2', 'Upload'), { recursive: true });
+  });
+
+  test('file listing and downloads read the conference that is there', () => {
+    expect(getConferenceDir(1, root)).toBe(path.join(root, 'Conf2'));
+  });
+
+  test('the .dir files a file area lists come from it too', () => {
+    expect(conferenceSubdir(root, 1, 'Files')).toBe(path.join(root, 'Conf2', 'Files'));
+  });
+
+  test('a door asking BB_CONFLOCAL is sent to Conf2, not the deleted Conf1', () => {
+    expect(conferenceAmigaPath(root, 1)).toBe('BBS:Conf2/');
+  });
+
+  test('a door asking for the message base gets the right one', () => {
+    expect(conferenceAmigaPath(root, 1, 'MsgBase')).toBe('BBS:Conf2/MsgBase/');
+  });
+
+  test('an upload path handed to a door lands in the right conference', () => {
+    expect(conferenceAmigaPath(root, 1, 'Upload')).toBe('BBS:Conf2/Upload/');
+  });
+
+  test('conference screens - MENU, the conference bulletins - resolve there', () => {
+    expect(conferenceSubdir(root, 1, 'Screens')).toBe(path.join(root, 'Conf2', 'Screens'));
+  });
+
+  test('NumULs, the file counter a scan door reads, follows as well', () => {
+    expect(conferenceSubdir(root, 1, 'NumULs')).toBe(path.join(root, 'Conf2', 'NumULs'));
   });
 });

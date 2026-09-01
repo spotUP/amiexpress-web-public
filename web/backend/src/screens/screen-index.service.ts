@@ -22,6 +22,7 @@ import {
   resolveNodeScreenDir, screenSearchLocations,
 } from './screen-resolution';
 import { parseMciReferences, type MciReference } from './mci-references';
+import { conferenceDir } from '../conferences/conference-paths';
 
 export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii';
 
@@ -124,8 +125,14 @@ export function listScreenDirectories(baseDir: string): string[] {
     dirs.add(resolveNodeScreenDir(baseDir, id));
   }
   for (const id of confIds(baseDir)) {
+    // Both the directory NAMED Conf<n> and the one conference n actually reads:
+    // a renumbered board has conference 1 living in Conf2/, and the manager has
+    // to list the files either way round.
     dirs.add(path.join(baseDir, `Conf${id}`));
     dirs.add(path.join(baseDir, `Conf${id}`, 'Screens'));
+    const located = conferenceDir(baseDir, id);
+    dirs.add(located);
+    dirs.add(path.join(located, 'Screens'));
   }
 
   return [...dirs].filter(d => fs.existsSync(d));

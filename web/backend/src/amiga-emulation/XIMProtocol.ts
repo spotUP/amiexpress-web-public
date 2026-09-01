@@ -12,6 +12,8 @@
  * - system-commands.ts: System commands (registration, shutdown, etc)
  */
 
+import { conferenceAmigaPath } from '../conferences/conference-paths';
+import { config as appConfig } from '../config';
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
 import { Socket } from 'socket.io';
@@ -1249,7 +1251,7 @@ debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorPara
           // MSGBASE_LOC (604): Return message base path for current conference
           // ctop.e uses this to access message headers for top uploaders
           const confNum = (this.bbsSession as any)?.currentConf || 1;
-          const msgBaseLoc = `BBS:Conf${confNum}/MsgBase/`;
+          const msgBaseLoc = conferenceAmigaPath(appConfig.get('dataDir'), confNum, 'MsgBase');
 debugLog(`[XIMProtocol] MSGBASE_LOC: "${msgBaseLoc}"`);
           this.messageParser.writeMessageString(msg.msgAddr, msgBaseLoc);
           this.sendReply(msg, 1);

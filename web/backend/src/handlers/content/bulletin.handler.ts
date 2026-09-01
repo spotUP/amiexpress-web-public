@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
+import { conferenceDir as resolveConferenceDir } from '../../conferences/conference-paths';
 import { readAmigaTextFileWithTransforms } from '../../utils/amiga-text-decode.util';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -208,7 +209,9 @@ console.log('[ENV] Bulletins');
   const { config } = require('../../config');
   const dataDir = config.getConfig().dataDir;
   const baseDirs = buildBulletinBaseDirs(dataDir);
-  const conferenceDir = `Conf${session.currentConf || 1}`;
+  // The conference's directory NAME, from LOCATION.n - `Conf2` for the
+  // conference sitting in position 1 on a renumbered board.
+  const conferenceDir = path.basename(resolveConferenceDir(dataDir, session.currentConf || 1));
   const userScreenType = session.user?.screentype || null;
 
   if (!findBullHelpAcross(baseDirs, conferenceDir, session.user?.secLevel || 0, userScreenType)) {
@@ -275,7 +278,9 @@ export async function handleBulletinInput(socket: any, session: any, input: stri
     const { config } = require('../../config');
     const dataDir = config.getConfig().dataDir;
     const baseDirs = buildBulletinBaseDirs(dataDir);
-    const conferenceDir = `Conf${session.currentConf || 1}`;
+    // The conference's directory NAME, from LOCATION.n - `Conf2` for the
+  // conference sitting in position 1 on a renumbered board.
+  const conferenceDir = path.basename(resolveConferenceDir(dataDir, session.currentConf || 1));
     await displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
 
     // Prompt again
@@ -297,7 +302,9 @@ export async function handleBulletinInput(socket: any, session: any, input: stri
     const { config } = require('../../config');
     const dataDir = config.getConfig().dataDir;
     const baseDirs = buildBulletinBaseDirs(dataDir);
-    const conferenceDir = `Conf${session.currentConf || 1}`;
+    // The conference's directory NAME, from LOCATION.n - `Conf2` for the
+  // conference sitting in position 1 on a renumbered board.
+  const conferenceDir = path.basename(resolveConferenceDir(dataDir, session.currentConf || 1));
     await displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // Prompt for another bulletin (express.e:24643 - JUMP inputAgain)

@@ -11,6 +11,7 @@ import { finalizeCommand } from '../../utils/command-response.util';
 import { config } from '../../config';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import * as path from 'path';
+import { conferenceDir } from '../../conferences/conference-paths';
 import { fileAreaManager } from '../../services/FileAreaManager';
 import { callersLogManager } from '../../services/CallersLogManager';
 
@@ -205,7 +206,7 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
   for (const file of filesToDelete) {
     try {
       const bbsRoot = config.get('dataDir');
-      const confDir = path.join(bbsRoot, `Conf${session.currentConf || 1}`);
+      const confDir = conferenceDir(bbsRoot, session.currentConf || 1);
       const areaId = file.areaId || file.area_id || 1;
       const dirFilePath = path.join(confDir, `DIR${areaId}`);
 

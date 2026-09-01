@@ -10,6 +10,7 @@
  * - B (Read Bulletin) - Read specific bulletin - express.e:24607-24656
  */
 
+import { conferenceSubdir } from '../../conferences/conference-paths';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity, UserFlags } from '../../utils/acs.util';
@@ -597,7 +598,7 @@ console.log('[ENV] Bulletins');
   // confScreenDir = Conf{N}/Screens/ — per-conference screen directory
   const dataDir = config.get('dataDir');
   const currentConf = session.currentConf || 1;
-  const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
+  const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
   const bullHelpPath = path.join(confScreenDir, 'Bulletins', 'BullHelp.txt');
   if (!amigafs.existsSync(bullHelpPath)) {
     // express.e:8544-8545 myError(ERR_NO_BULLS): '\b\nNo bulletins are available in this conference!\b\n\b\n'
@@ -634,7 +635,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
   // confScreenDir = Conf{N}/Screens/
   const dataDir = config.get('dataDir');
   const currentConf = session.currentConf || 1;
-  const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
+  const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
   const bullHelpBasePath = path.join(confScreenDir, 'Bulletins', 'BullHelp');
   const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
@@ -657,7 +658,7 @@ function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number,
   // confScreenDir = Conf{N}/Screens/
   const dataDir = config.get('dataDir');
   const currentConf = session.currentConf || 1;
-  const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
+  const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
   const bulletinBasePath = path.join(confScreenDir, 'Bulletins', `Bull${bulletinNum}`);
   const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
