@@ -80,6 +80,16 @@ describe('legacy paths', () => {
     for (const route of LEGACY_ROUTES) {
       const [target, query] = route.to.split('?');
       expect(navPaths.has(target), `${route.from} redirects to ${target}, which is not a destination`).toBe(true);
+
+      // A tabbed destination has to say WHICH tab, or the bookmark lands on
+      // the default one and the capability looks missing. A destination with
+      // no tabs takes no tab parameter - the same rule the next test states.
+      // Global Wall was the first redirect to land on one, and this asserted
+      // a tab unconditionally.
+      if (!WORKSPACE_TABS[target]) {
+        expect(query, `${target} has no tabs, so ${route.from} must not name one`).toBeUndefined();
+        continue;
+      }
       expect(query, `${route.from} must name the tab that carries "${route.capability}"`).toMatch(/^tab=[a-z-]+$/);
     }
   });

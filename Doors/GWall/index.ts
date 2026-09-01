@@ -1,4 +1,5 @@
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import { Socket as SocketIOSocket } from 'socket.io';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
@@ -14,18 +15,21 @@ export const metadata = {
   command: 'GWALL',
 };
 
-// BBS_DATA_DIR is what the live container sets; BBS_ROOT is empty there, and
-// reading it alone is how new users came to be written to a file nothing reads
-// (2026-08-31). The cwd fallback is for a dev run from the repo root - the
-// backend's cwd is web/backend, so it is a last resort, not the answer.
+// This door's own directory, from the SDK's walk - not from cwd, which on the
+// board is web/backend, and not from an env var spelled by hand.
 //
-// GWALL is uninstalled: its registration pointed at a 68K binary that is not
-// on the board, and was removed on 2026-08-31. The sources are kept, so this
-// is corrected rather than left as a trap for whoever revives it.
-const PROJECT_ROOT = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
-
+// Three paths were meant to be one file: the door looked in
+// `<data>/doors/gwall`, the admin's Global Wall page WROTE
+// `<data>/doors/gwall/GWall.cfg`, and the board's actual config sits at
+// `Doors/GWall/gwall.cfg`. The container is case-sensitive, so no two of them
+// ever met and the page never configured the door. The page is gone; this is
+// the surviving reader, pointed at the real directory.
+//
+// GWALL is uninstalled - its registration named a 68K binary that is not on
+// the board - so this is corrected for whoever revives it rather than left as
+// a trap.
 function resolveGlobalWallDir(): string {
-  return path.join(PROJECT_ROOT, 'doors', 'gwall');
+  return resolveDoorRoot(__dirname);
 }
 
 function resolveGlobalWallFile(filename: string): string {

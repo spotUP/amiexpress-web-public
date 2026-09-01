@@ -3,7 +3,8 @@
  *
  * Every door but one used to be configurable through six fields and a raw
  * tooltype list; GWall looked different only because a page had been written
- * by hand for it (GlobalWallPage.tsx). A door that ships a
+ * by hand for it. That page is gone - it wrote its config to a third path
+ * that neither the door nor the board ever read. A door that ships a
  * `door.settings.json` gets a real form here, and there is no door-specific
  * code in the admin to write for it: if a manifest cannot be rendered, the
  * manifest is wrong and the API says which setting is at fault.

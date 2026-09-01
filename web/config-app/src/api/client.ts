@@ -778,34 +778,6 @@ class ApiClient {
     });
   }
 
-  // Global Wall Management
-  async getGlobalWallComments(page: number = 1, limit: number = 20) {
-    return this.request<ApiResponse>(`${API_BASE}/globalwall/comments?page=${page}&limit=${limit}`);
-  }
-
-  async updateGlobalWallComment(id: string, data: any) {
-    return this.request<ApiResponse>(`${API_BASE}/globalwall/comments/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async deleteGlobalWallComment(id: string) {
-    return this.request<ApiResponse>(`${API_BASE}/globalwall/comments/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getGlobalWallConfig() {
-    return this.request<ApiResponse>(`${API_BASE}/globalwall/config`);
-  }
-
-  async updateGlobalWallConfig(config: any) {
-    return this.request<ApiResponse>(`${API_BASE}/globalwall/config`, {
-      method: 'PUT',
-      body: JSON.stringify(config),
-    });
-  }
 }
 
 export const apiClient = new ApiClient();

@@ -41,7 +41,6 @@ const ALLOWED = new Map<string, string>([
   // refuses any change to it until it is split. It shows the backend's own
   // files on the board rather than the BBS. Open.
   ['neo-blessed-showcase/app.ts', 'demo listing; the file is over the line limit and cannot be touched'],
-  ['GWall/index.ts', 'env first, cwd as the last resort; the door is uninstalled'],
   // Reaches the BACKEND's AmigaGuide parser, and the backend is what cwd is.
   ['door-manager/FileExplorerOverlay.ts', 'requires a backend module, which lives at cwd'],
 ]);

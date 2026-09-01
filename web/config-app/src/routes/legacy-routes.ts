@@ -33,4 +33,5 @@ export const LEGACY_ROUTES: LegacyRoute[] = [
   { from: 'tooltypes', to: 'config-files?tab=system', capability: 'Comment, add and remove a tooltype in any .info file' },
   { from: 'deployment', to: 'health?tab=deployment', capability: 'Build, version and container state' },
   { from: 'operator-chat-settings', to: 'operator-chat?tab=settings', capability: 'Paging hours and away messages' },
+  { from: 'globalwall', to: 'doors', capability: "A door's own configuration, which door.settings.json now carries" },
 ];

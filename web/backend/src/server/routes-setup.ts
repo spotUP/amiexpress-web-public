@@ -27,7 +27,6 @@ import { createConfigRouter } from '../api/config-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
-import { createGlobalWallRouter } from '../api/globalwall-routes';
 import { createStatisticsRouter } from '../api/statistics-routes';
 import { createNodeControlRouter } from '../api/node-control-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
@@ -148,10 +147,6 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);
   app.use('/api/chat', chatRouter);
-
-  // ===== Global Wall API - Sysop-only Routes =====
-  const globalWallRouter = createGlobalWallRouter(db);
-  app.use('/api/globalwall', authenticateToken(db), requireSysop(), globalWallRouter);
 
   // ===== Statistics API - Sysop-only Routes =====
   const statisticsRouter = createStatisticsRouter(db);

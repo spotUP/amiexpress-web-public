@@ -9,7 +9,6 @@ import { OverviewPage } from './pages/OverviewPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
-import { GlobalWallPage } from './pages/GlobalWallPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { UsersPage } from './pages/UsersPage';
@@ -84,7 +83,6 @@ function App() {
         {/* Content */}
         <Route path="conferences" element={<ConferencesWorkspace />} />
         <Route path="doors" element={<DoorsPage />} />
-        <Route path="globalwall" element={<GlobalWallPage />} />
 
         {/* System */}
         <Route path="system" element={<SystemConfigPage />} />

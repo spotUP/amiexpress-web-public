@@ -22,7 +22,6 @@ import {
   FileText,
   FolderOpen,
   Gauge,
-  Globe,
   History,
   LayoutDashboard,
   MessageSquare,
@@ -74,7 +73,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: 'conferences', label: 'Conferences', icon: MessageSquare, description: 'Message areas, and the file paths that belong to them' },
       { path: 'doors', label: 'Doors', icon: DoorOpen, description: 'External programs on the command menu' },
-      { path: 'globalwall', label: 'Global Wall', icon: Globe, description: 'Messages left for everyone' },
     ],
   },
   {

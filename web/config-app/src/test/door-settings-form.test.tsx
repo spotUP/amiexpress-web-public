@@ -2,7 +2,7 @@
  * A door's own settings, rendered from what the door declares.
  *
  * The admin could edit six fields and a raw tooltype list per door. The only
- * door that ever looked configurable was GWall, because GlobalWallPage.tsx was
+ * door that ever looked configurable was GWall, because a hand-written page was
  * written by hand for it - so a sysop with 42 TypeScript doors installed saw
  * exactly one of them configurable. This form is built from the door's own
  * door.settings.json, with no door-specific code in the admin.
