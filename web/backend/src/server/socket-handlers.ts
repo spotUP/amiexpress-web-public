@@ -186,19 +186,11 @@ console.error('[Socket] EXECUTE_ON_CONNECT failed:', err)
 
   // Get active users (for Who's Online displays like telnet-front)
   socket.on('get-active-users', () => {
-    const activeUsers: any[] = [];
-
-    sessions.forEach((session, socketId) => {
-      if (session.user && session.nodeId !== undefined) {
-        activeUsers.push({
-          nodeNumber: session.nodeId,
-          username: session.user.username || 'Unknown',
-          location: session.user.location || '',
-          ipAddress: session.user.ip || 'PRIVATE',
-          status: 'active'
-        });
-      }
-    });
+    // The same read the doors do - see doors/who-is-online.ts. It was written
+    // out twice, and the copy the telnet front end wanted could never reach
+    // this one anyway.
+    const { listOnlineNodes } = require('../doors/who-is-online');
+    const activeUsers = listOnlineNodes();
 
 console.log(`[get-active-users] Returning ${activeUsers.length} active users`);
     socket.emit('active-users', { users: activeUsers });

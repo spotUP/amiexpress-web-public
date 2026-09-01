@@ -58,94 +58,53 @@ function centre(text: string, width: number): string {
 }
 
 /**
- * Get active nodes from BBS session manager
+ * The node table: who is on which node.
+ *
+ * This used to ask over Socket.IO - emit `get-active-users`, wait 150ms for
+ * an `active-users` reply - and the reply could never arrive. A door runs
+ * INSIDE the backend, and the socket it holds is the user's own server-side
+ * socket, so that emit went OUT to the browser, which has no listener for
+ * it. The timeout fired every time and this drew a table of placeholders:
+ * every row "Awaiting Call" and the sysop's own node "Connecting", on a
+ * board with people on it.
+ *
+ * The session map is in this process. `bbs.getOnlineUsers()` reads it.
  */
-async function getNodes(socket: any, currentNodeNumber: number, currentUserIp: string): Promise<NodeInfo[]> {
-  return new Promise((resolve) => {
-    // Defaults, then BBS_IP/MAX_NODES, then what the sysop set in the admin
-    // (Doors -> Telnet-Front -> Door settings). See config.ts.
-    const maxNodes = loadConfig(__dirname).maxNodes;
+function getNodes(
+  bbs: any,
+  currentNodeNumber: number,
+  currentUserIp: string,
+): NodeInfo[] {
+  // Defaults, then BBS_IP/MAX_NODES, then what the sysop set in the admin
+  // (Doors -> Telnet-Front -> Door settings). See config.ts.
+  const maxNodes = loadConfig(__dirname).maxNodes;
 
-    // Set up listener BEFORE emitting to avoid race condition
-    const responseHandler = (data: { users: NodeInfo[] }) => {
-      clearTimeout(timeout);
-      console.log(`[telnet-front] Received ${data.users.length} active users from backend`);
+  // Pre-login the door runs before a door API is handed out, and there is
+  // genuinely nothing to show but the empty board.
+  const activeUsers: NodeInfo[] =
+    typeof bbs?.getOnlineUsers === 'function' ? bbs.getOnlineUsers() : [];
 
-      const nodes: NodeInfo[] = [];
-      const activeUsers = data.users || [];
-
-      // Fill all node slots
-      for (let i = 0; i < maxNodes; i++) {
-        // Find an active user for this node number
-        const activeUser = activeUsers.find(u => u.nodeNumber === i);
-
-        if (i === currentNodeNumber) {
-          // Current connecting node
-          nodes.push({
-            nodeNumber: i,
-            username: 'Connecting',
-            location: '',
-            ipAddress: currentUserIp,
-            status: 'connecting'
-          });
-        } else if (activeUser) {
-          // Real active user
-          nodes.push(activeUser);
-        } else {
-          // Inactive/awaiting node
-          nodes.push({
-            nodeNumber: i,
-            username: 'Awaiting Call',
-            location: '',
-            ipAddress: '',
-            status: 'awaiting'
-          });
-        }
-      }
-
-      resolve(nodes);
-    };
-
-    // Listen for response first
-    socket.once('active-users', responseHandler);
-
-    // Short timeout - if backend doesn't respond quickly, use defaults
-    // Original 1000ms was too long, causing visible pause
-    const timeout = setTimeout(() => {
-      socket.off('active-users', responseHandler);
-      console.log('[telnet-front] Timeout waiting for active-users, using defaults');
-      resolve(getDefaultNodes(currentNodeNumber, maxNodes));
-    }, 150); // Reduced from 1000ms to 150ms
-
-    // Request active users from backend
-    socket.emit('get-active-users');
-  });
-}
-
-/**
- * Fallback for when active-users request times out
- */
-function getDefaultNodes(currentNodeNumber: number, maxNodes: number): NodeInfo[] {
   const nodes: NodeInfo[] = [];
-
   for (let i = 0; i < maxNodes; i++) {
     if (i === currentNodeNumber) {
       nodes.push({
         nodeNumber: i,
         username: 'Connecting',
         location: '',
-        ipAddress: '',
-        status: 'connecting'
+        ipAddress: currentUserIp,
+        status: 'connecting',
       });
-    } else {
-      nodes.push({
-        nodeNumber: i,
-        username: 'Awaiting Call',
-        location: '',
-        ipAddress: '',
-        status: 'awaiting'
-      });
+      continue;
     }
+
+    const activeUser = activeUsers.find(u => u.nodeNumber === i);
+    nodes.push(activeUser ?? {
+      nodeNumber: i,
+      username: 'Awaiting Call',
+      location: '',
+      ipAddress: '',
+      status: 'awaiting',
+    });
   }
 
   return nodes;
@@ -154,7 +113,7 @@ function getDefaultNodes(currentNodeNumber: number, maxNodes: number): NodeInfo[
 /**
  * Display telnet frontend
  */
-async function displayFrontend(socket: any, user: any): Promise<void> {
+async function displayFrontend(socket: any, user: any, bbs: any): Promise<void> {
   // Get connection info from user object or socket handshake
   let hostname = user?.hostname;
   let userIp = user?.ip;
@@ -197,7 +156,7 @@ async function displayFrontend(socket: any, user: any): Promise<void> {
   socket.emit('ansi-output', '     \x1b[35m|----+-----------------+-----------------------+-------------------|\r\n');
 
   // Get all nodes (now with real user data from backend)
-  const nodes = await getNodes(socket, nodeNumber, userIp);
+  const nodes = getNodes(bbs, nodeNumber, userIp);
   const activeCount = nodes.filter(n => n.status === 'active' || n.status === 'connecting').length;
   let displayedCount = 0;
 
@@ -269,12 +228,12 @@ async function displayFrontend(socket: any, user: any): Promise<void> {
 const door = new ServerDoor(metadata);
 
 door.onStart(async (ctx: DoorContext) => {
-  const { socket, user, bbsSession } = ctx;
+  const { socket, user, bbsSession, bbs } = ctx;
 
   console.log('[TELNET-FRONT] Starting display');
 
   // Display the frontend
-  await displayFrontend(socket, user);
+  await displayFrontend(socket, user, bbs);
 
   console.log('[TELNET-FRONT] Display complete');
 

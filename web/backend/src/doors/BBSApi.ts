@@ -34,6 +34,7 @@ import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
+import { listOnlineNodes, type OnlineNode } from './who-is-online';
 
 // applyInstallMetadata and the list build moved to ./door-list on 2026-08-31
 // so the door list and its metadata rule live together and the HTTP route can
@@ -187,6 +188,22 @@ export class BBSApi {
    * Check if session is in PETSCII mode (C64 terminal)
    * When true, doors should use 40x25 layout and PETSCII output
    */
+  /**
+   * Who is on the board.
+   *
+   * The SDK's BBSApi interface has declared `getOnlineUsers` since it was
+   * written and nothing implemented it, so a door calling it got `undefined`
+   * and no error. The telnet front end worked around the gap with a
+   * Socket.IO round trip that could not complete - a door's socket talks to
+   * the BROWSER - and drew placeholders instead of the node table.
+   *
+   * Reads the session map directly, because a door is in the same process
+   * as it.
+   */
+  getOnlineUsers(): OnlineNode[] {
+    return listOnlineNodes();
+  }
+
   isPetsciiMode(): boolean {
     return this.session?.petsciiMode === true;
   }
