@@ -24,7 +24,20 @@ export function SecurityPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
 
+  /**
+   * The FILE being edited. Saving writes ACS.<selectedLevel>.info, so this is
+   * always a level that has a file.
+   */
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
+  /**
+   * The level the sysop ASKED for, which may have no file of its own.
+   *
+   * Reported as "some security levels still say 20 instead of 30": this
+   * board's users are level 30, express.e serves them out of ACS.20.info
+   * (express.e:3025), and the page titled the screen with the FILE's number.
+   * Both numbers are true and the sysop needs to see both.
+   */
+  const [viewingLevel, setViewingLevel] = useState<number | null>(null);
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [dirty, setDirty] = useState(false);
   const [newLevel, setNewLevel] = useState('');
@@ -83,7 +96,10 @@ export function SecurityPage() {
   // Select the first real level once we know what exists, rather than
   // defaulting to a number that may have no file at all.
   useEffect(() => {
-    if (selectedLevel === null && levels.length > 0) setSelectedLevel(levels[0]);
+    if (selectedLevel === null && levels.length > 0) {
+      setSelectedLevel(levels[0]);
+      setViewingLevel(levels[0]);
+    }
   }, [levels, selectedLevel]);
 
   const flagsQuery = useQuery({
@@ -116,6 +132,7 @@ export function SecurityPage() {
       setNewLevel('');
       queryClient.invalidateQueries({ queryKey: ['acs-levels'] });
       setSelectedLevel(level);
+      setViewingLevel(level);
     },
     onError: (error: Error) => showError(`Failed to create level: ${error.message}`),
   });
@@ -152,7 +169,7 @@ export function SecurityPage() {
         {levels.map(level => (
           <button
             key={level}
-            onClick={() => setSelectedLevel(level)}
+            onClick={() => { setSelectedLevel(level); setViewingLevel(level); }}
             className={`px-3 py-1 rounded border ${
               level === selectedLevel
                 ? 'bg-bbs-accent/20 border-bbs-accent text-accent'
@@ -204,7 +221,11 @@ export function SecurityPage() {
               return (
                 <button
                   key={row.level}
-                  onClick={() => row.servedBy !== null && setSelectedLevel(row.servedBy)}
+                  onClick={() => {
+                    if (row.servedBy === null) return;
+                    setSelectedLevel(row.servedBy);
+                    setViewingLevel(row.level);
+                  }}
                   className={`px-2 py-1 rounded border text-left ${
                     exact ? 'border-status-ok/50' : 'border-status-warn/50'
                   }`}
@@ -240,19 +261,46 @@ export function SecurityPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold">
-                Level {selectedLevel} - {visibleCount === permissions.length
+                Level {viewingLevel ?? selectedLevel}
+                {viewingLevel !== null && viewingLevel !== selectedLevel
+                  && ` - edited through ACS.${selectedLevel}.info`}
+                {' - '}
+                {visibleCount === permissions.length
                   ? `${permissions.length} permissions`
                   : `${visibleCount} of ${permissions.length} permissions`}
               </h2>
               {/*
-                Clicking a level that has no file of its own opens the file
-                that SERVES it - ACS.20.info for a board full of level-30
-                users - and the heading then says 20 with nothing to say where
-                you came from. Reported as "level 30 is labeled as level 20".
-                express.e:3025 rounds a level down to a multiple of five and
-                walks down, so the mapping is right; only the silence was
-                wrong.
+                A level with no file of its own is served by the nearest lower
+                one (express.e:3025 rounds down to a multiple of five and walks
+                down), so opening level 30 opens ACS.20.info. The page used to
+                title the screen with the FILE's number - reported twice as
+                "level 30 is labeled as level 20". Both numbers are true; the
+                heading now carries the level that was asked for, and the lines
+                below say what editing this file really touches, and offer the
+                level a file of its own.
               */}
+              {viewingLevel !== null && viewingLevel !== selectedLevel && (
+                <div className="text-sm space-y-1">
+                  <p className="text-status-warn">
+                    Level {viewingLevel} has no ACS file of its own. Saving here
+                    writes ACS.{selectedLevel}.info, which also changes level{' '}
+                    {selectedLevel}
+                    {servedLevels.filter(l => l.level !== viewingLevel).length > 0
+                      && ` and ${servedLevels
+                        .filter(l => l.level !== viewingLevel)
+                        .map(l => `level ${l.level}`)
+                        .join(', ')}`}
+                    .
+                  </p>
+                  <button
+                    onClick={() => createMutation.mutate(viewingLevel)}
+                    disabled={createMutation.isPending}
+                    className="underline text-accent"
+                  >
+                    Create ACS.{viewingLevel}.info from ACS.{selectedLevel}.info
+                  </button>
+                </div>
+              )}
               {servedLevels.length > 0 && (
                 <p className="text-sm text-content-muted">
                   Also serves {servedLevels.map(l => `level ${l.level} (${l.users} user${l.users === 1 ? '' : 's'})`).join(', ')}
