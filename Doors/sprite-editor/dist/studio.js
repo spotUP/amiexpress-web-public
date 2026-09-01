@@ -167,6 +167,14 @@ class SpriteStudioDoor {
         this.playTimer = null;
         /** How to stop playback from somewhere other than a keypress. */
         this.stopPlay = null;
+        /**
+         * Which frame playback is showing.
+         *
+         * Kept on the door because the editor is REBUILT for a zoom step or a
+         * resize, and playback should carry on across that rather than start
+         * again from the top.
+         */
+        this.playIndex = 0;
         this.door = '';
         this.file = '';
         this.exitResolve = null;
@@ -229,13 +237,17 @@ class SpriteStudioDoor {
      * the canvas until a key stops it.
      */
     async relayout() {
-        if (this.playing)
-            return;
         if (!this.doc && this.artText === null)
             return;
+        // Same as a zoom step: the editor is rebuilt at the new size and
+        // playback picks up where it was, rather than the animation dying
+        // because the window changed.
+        const wasPlaying = this.playing;
         if (this.doc)
             this.commit();
         await this.openEditor();
+        if (wasPlaying)
+            this.playInPlace();
     }
     // ============================================
     // REQUESTERS
@@ -835,9 +847,17 @@ class SpriteStudioDoor {
             : zoom;
         if (capped === this.zoom)
             return;
+        // Zooming REBUILDS the editor, and a rebuild stops playback so the old
+        // timer cannot paint into the new widget - correct, but "if i zoom
+        // while the anim plays it stops animating" (2026-09-02) is not what
+        // anyone means by zooming. It carries on, at the new size, from the
+        // frame it had reached.
+        const wasPlaying = this.playing;
         this.commit();
         this.zoom = capped;
         await this.openEditor();
+        if (wasPlaying)
+            this.playInPlace();
     }
     step(delta) {
         this.op(d => (0, edit_doc_1.selectFrame)(d, d.frame + delta));
@@ -935,8 +955,9 @@ class SpriteStudioDoor {
         // through every frame otherwise.
         this.editor.setCursorVisible?.(false);
         this.editor.setUnderlay(null);
-        let i = 0;
+        let i = this.playIndex;
         const showFrame = () => {
+            this.playIndex = i % anim.frames.length;
             this.editor.setCoreCanvas((0, cell_art_1.frameToCanvas)(anim.frames[i % anim.frames.length]));
             this.editor.modified = false;
             this.editor.setLabel?.(` PLAYING - any key stops - frame ${(i % anim.frames.length) + 1}/${anim.frames.length} `);

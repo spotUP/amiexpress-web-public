@@ -252,8 +252,14 @@ export async function theEditorFollowsTheTerminalWhenItResizes(): Promise<void> 
   // relayout MEANS - the ANSIEditor takes its geometry at construction, so
   // following a resize means rebuilding it without losing work.
   const fn = source.slice(source.indexOf('private async relayout('), source.indexOf('// ============================================\n  // REQUESTERS'));
-  assert.ok(fn.includes('if (this.playing) return;'),
-    'a resize during playback must not fight it for the canvas');
+  // A resize used to be REFUSED during playback, so the canvas and the
+  // play timer could not fight over it. Carrying playback across the
+  // rebuild is the better answer, and the same one a zoom step needs:
+  // "if i zoom while the anim plays it stops animating" (2026-09-02).
+  assert.ok(fn.includes('const wasPlaying = this.playing;'),
+    'a relayout must carry playback across the rebuild, not drop it');
+  assert.ok(fn.includes('if (wasPlaying) this.playInPlace();'),
+    'and start it again at the new size');
   assert.ok(fn.includes('this.commit()'),
     'a window drag must not eat work in progress');
   assert.ok(fn.includes('await this.openEditor()'), 'and the editor is rebuilt at the new size');

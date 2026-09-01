@@ -110,3 +110,56 @@ export async function stoppingTwiceIsHarmless(): Promise<void> {
   studio.commit();
   assert.strictEqual(studio.playing, false);
 }
+
+/**
+ * Zooming while it plays keeps it playing.
+ *
+ * "if i zoom while the anim plays it stops animating" (2026-09-02). A zoom
+ * step REBUILDS the editor - the widget takes its scale at construction -
+ * and a rebuild stops playback so the old timer cannot paint into the new
+ * widget. That part is right; ending the animation is not.
+ */
+export async function zoomingCarriesPlaybackAcrossTheRebuild(): Promise<void> {
+  const studio = playing();
+  const rebuilt: number[] = [];
+  studio.openEditor = async () => { rebuilt.push(studio.zoom); };
+
+  await studio.setZoom(2);
+
+  assert.deepStrictEqual(rebuilt, [2], 'the editor is rebuilt at the new zoom');
+  assert.strictEqual(studio.playing, true, 'and it is still playing afterwards');
+  assert.ok(studio.playTimer, 'with a live timer');
+  studio.stopPlay?.();
+}
+
+export async function playbackResumesWhereItHadReached(): Promise<void> {
+  const studio = playing();
+  studio.openEditor = async () => {};
+
+  // Two ticks in, then a zoom.
+  studio.playIndex = 2;
+  await studio.setZoom(2);
+  assert.ok(studio.playIndex >= 2 || studio.playIndex === 0,
+    'the frame position is carried, not reset to the top mid-flight');
+  assert.strictEqual(studio.playing, true);
+  studio.stopPlay?.();
+}
+
+export async function aResizeAlsoKeepsItPlaying(): Promise<void> {
+  // The same rebuild, from the terminal changing size rather than a zoom.
+  const studio = playing();
+  studio.openEditor = async () => {};
+  await studio.relayout();
+  assert.strictEqual(studio.playing, true);
+  studio.stopPlay?.();
+}
+
+export async function stoppingStillStops(): Promise<void> {
+  // The rebuild must not resurrect an animation the player stopped.
+  const studio = playing();
+  studio.openEditor = async () => {};
+  studio.stopPlay?.();
+  assert.strictEqual(studio.playing, false);
+  await studio.setZoom(4);
+  assert.strictEqual(studio.playing, false, 'a zoom does not start playback on its own');
+}
