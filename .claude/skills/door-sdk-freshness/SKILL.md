@@ -103,6 +103,34 @@ guessing.
    each run, but if a run failed to launch (see A.6's absolute-path gotcha)
    you can end up reading a leftover log from a previous, still-old run.
 
+## E. After editing `packages/terminal/**` or `web/frontend/**` (the browser half)
+
+The browser at `localhost:3001` does NOT get a dev server. Port 3001 is the
+backend serving `web/frontend/dist` as static files, and `--quick` skips
+frontend builds. So a change to the shared terminal package or the frontend
+is invisible until the bundle is rebuilt - restarting the backend does
+nothing for it, and neither does a plain reload.
+
+Codified 2026-09-01: two separate "the RIP graphics don't display" reports
+were a bundle from the previous night. Every terminal fix that day had been
+built into `packages/terminal/dist` and gone no further.
+
+1. `cd packages/terminal && npm run build` (the frontend bundles from its
+   `dist/`, not its `src/`).
+2. `cd web/frontend && npm run build`.
+3. **Verify the bundle carries your change**: `grep -l "<a string literal
+   only your new code contains>" web/frontend/dist/assets/*.js`. Minified
+   identifiers do not survive; use a log message or an error string. An
+   empty result means the bundle is stale, whatever the build said.
+4. Confirm the backend served the new bundle: the asset hash changes on
+   every build, so `grep -o "index-[A-Za-z0-9_-]*\.js" logs/backend.log |
+   sort | uniq -c` must show the new hash once the browser has reloaded.
+5. Tell the user to **hard-reload** (Cmd+Shift+R). The tab has the old
+   bundle in memory; `maxAge: 0` on the static route only helps on the
+   next fetch.
+6. `public/` assets (fonts, icons) are copied into `dist/` by the build.
+   A new asset directory needs step 2 before it exists at the URL.
+
 ## Zombie-process hygiene (compounds every symptom above)
 
 Never start the backend with ad-hoc `npm run dev &` / `pkill` — use
