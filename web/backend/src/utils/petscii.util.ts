@@ -428,22 +428,43 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
  * @param buffer - Buffer containing PETSCII data
  * @returns String with Unicode PUA characters and ANSI color/cursor codes
  */
-export function convertPetsciiToPetMe64(buffer: Buffer): string {
-  const state = createPetsciiState();
+/**
+ * Streaming PETSCII-to-PetMe64 converter that preserves charset, color and
+ * reverse-video state across multiple convert() calls. Doors emit output in
+ * many small chunks (audit B2); resetting state per-chunk (as the one-shot
+ * convertPetsciiToPetMe64 does) drops charset/color/reverse state at every
+ * chunk boundary.
+ */
+export class PetsciiStreamConverter {
+  private state = createPetsciiState();
 
-  // C64 power-on state: light blue pen on blue background
-  let output = vicToSgrForeground(14) + vicToSgrBackground(6);
-
-  // Process each byte
-  for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i];
-    output += convertPetsciiByteForPetMe64(byte, state);
+  /**
+   * Convert a chunk of raw PETSCII bytes, carrying state over from any
+   * previous convert() call on this instance.
+   */
+  convert(buffer: Buffer): string {
+    let out = '';
+    for (let i = 0; i < buffer.length; i++) out += convertPetsciiByteForPetMe64(buffer[i], this.state);
+    return out;
   }
 
-  // Reset at end
-  output += '\x1b[0m';
+  /**
+   * One-shot full-screen conversion: resets state, emits the C64 power-on
+   * color prologue, converts the buffer, then resets SGR at the end.
+   */
+  convertScreen(buffer: Buffer): string {
+    this.reset();
+    return vicToSgrForeground(14) + vicToSgrBackground(6) + this.convert(buffer) + '\x1b[0m';
+  }
 
-  return output;
+  /** Reset to the C64 power-on default state (light blue pen, unshifted, no reverse). */
+  reset(): void {
+    this.state = createPetsciiState();
+  }
+}
+
+export function convertPetsciiToPetMe64(buffer: Buffer): string {
+  return new PetsciiStreamConverter().convertScreen(buffer);
 }
 
 /**

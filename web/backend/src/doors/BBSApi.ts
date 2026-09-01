@@ -20,7 +20,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
+import { PetsciiStreamConverter } from '../utils/petscii.util';
 import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
 import { getSystemTime } from '../utils/date-time.util';
@@ -94,6 +94,11 @@ export class BBSApi {
   // Internal event emitter for server-side events (like resize)
   // This is needed because socket.emit() sends to the client, not to server-side listeners
   private internalEmitter: EventEmitter = new EventEmitter();
+
+  // Streaming PETSCII converter for writePetscii/writePetsciiLine: doors emit
+  // output in many small Buffer chunks, so charset/color/reverse state must
+  // persist across calls instead of resetting on every chunk (audit B2).
+  private petsciiConverter?: PetsciiStreamConverter;
 
   constructor(socket: Socket, session: BBSSession) {
     this.socket = socket;
@@ -255,8 +260,11 @@ export class BBSApi {
    */
   writePetscii(data: string | Buffer): void {
     if (Buffer.isBuffer(data)) {
-      // Convert raw PETSCII bytes to Unicode PUA for PetMe64 font
-      const converted = convertPetsciiToPetMe64(data);
+      // Convert raw PETSCII bytes to Unicode PUA for PetMe64 font, carrying
+      // charset/color/reverse state across chunks via the per-instance
+      // streaming converter (doors emit many small chunks, not one screen).
+      this.petsciiConverter = this.petsciiConverter ?? new PetsciiStreamConverter();
+      const converted = this.petsciiConverter.convert(data);
       this.socket.emit('petscii-output', converted);
     } else {
       // Already a string - send directly
@@ -269,7 +277,8 @@ export class BBSApi {
    */
   writePetsciiLine(data: string | Buffer): void {
     if (Buffer.isBuffer(data)) {
-      const converted = convertPetsciiToPetMe64(data);
+      this.petsciiConverter = this.petsciiConverter ?? new PetsciiStreamConverter();
+      const converted = this.petsciiConverter.convert(data);
       this.socket.emit('petscii-output', converted + '\r\n');
     } else {
       this.socket.emit('petscii-output', data + '\r\n');

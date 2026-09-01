@@ -12,6 +12,7 @@ import {
   convertAsciiToPetsciiOutput,
   convertPetsciiInputToAscii,
   isPetsciiSeqFile,
+  PetsciiStreamConverter,
 } from '../../src/utils/petscii.util';
 import {
   C64_PALETTE_COLODORE,
@@ -712,5 +713,19 @@ describe('petscii.util', () => {
       // Should contain Unicode block elements
       expect(result.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('PetsciiStreamConverter', () => {
+  it('keeps charset, color and reverse state across chunks', () => {
+    const c = new PetsciiStreamConverter();
+    c.convert(Buffer.from([0x0E, 0x1C, 0x12])); // shifted charset, red, RVS on
+    const out = c.convert(Buffer.from([0x41]));  // 'a' in shifted mode
+    expect(out).toContain(String.fromCodePoint(0xE181)); // bank 1 (0xE100) + screen code 0x01 + reverse 0x80
+  });
+  it('one-shot wrapper still resets per call', () => {
+    convertPetsciiToPetMe64(Buffer.from([0x12]));
+    const out = convertPetsciiToPetMe64(Buffer.from([0x41]));
+    expect(out).toContain(String.fromCodePoint(0xE001)); // fresh state, no reverse
   });
 });
