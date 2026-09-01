@@ -43,7 +43,7 @@ jest.mock('../../src/handlers/transfer/olm.handler', () => ({
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { displayMainMenu, displayMenuPrompt } from '../../src/handlers/command-handler/menu';
 import { getConfig, getMessageBases } from '../../src/handlers/command-handler/dependency-injection';
-import { emitPrompt } from '../../src/utils/output.util';
+import { emitPrompt, emitText } from '../../src/utils/output.util';
 import { updateTimeUsed } from '../../src/utils/time-tracking.util';
 import { displayScreen as mockedDisplayScreen } from '../../src/handlers/screen.handler';
 
@@ -228,6 +228,28 @@ describe('Menu Display (express.e:28555-28648)', () => {
 
       displayMenuPrompt(socket, session);
 
+      expect(emitPrompt).not.toHaveBeenCalled();
+    });
+
+    // A door that exits with magenta still set (the selected row of a themed
+    // list) leaked pink over the whole board. The prompt is the one thing
+    // drawn on EVERY pass, so it resets attributes first - express.e:28409.
+    it('resets terminal attributes before drawing the prompt', () => {
+      const socket = makeSocket();
+      const session = makeSession();
+
+      displayMenuPrompt(socket, session);
+
+      expect((emitText as jest.Mock).mock.calls[0]).toEqual([socket, '\x1b[0m']);
+    });
+
+    it('resets terminal attributes even on a pass that then skips the prompt', () => {
+      const socket = makeSocket();
+      const session = makeSession({ inConfScan: true });
+
+      displayMenuPrompt(socket, session);
+
+      expect(emitText).toHaveBeenCalledWith(socket, '\x1b[0m');
       expect(emitPrompt).not.toHaveBeenCalled();
     });
 
