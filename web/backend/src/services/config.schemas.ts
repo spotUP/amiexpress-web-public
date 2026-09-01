@@ -84,9 +84,17 @@ export const SystemConfigSchema = z.object({
   max_conferences: z.number().int().min(1).max(256).optional(),
   max_message_bases: z.number().int().min(1).max(1024).optional(),
   max_file_areas: z.number().int().min(1).max(1024).optional(),
-  // axcommon.e:28 - EXPORT CONST MAX_NODES=32. A board cannot have more, so
-  // offering 255 offered a number AmiExpress cannot honour.
-  max_nodes: z.number().int().min(1).max(32).optional(),
+  // 255, which is what THIS BBS runs: NodeStatusManager.MAX_NODES = 255, and
+  // the sysop's board is configured for that many.
+  //
+  // The Amiga's own limit is 32 (axcommon.e:28, EXPORT CONST MAX_NODES=32) and
+  // capping here on that reading was wrong twice over: it rejected every
+  // System Configuration save on a field the sysop had not touched, and the
+  // fix applied on 2026-08-31 was to change the BOARD's value from 255 to 32
+  // rather than to question the cap. The board is not an Amiga; the 68K door
+  // paths that do carry the Amiga limit enforce it themselves
+  // (MulticomManager, XIM's RTW_MAX_NODES).
+  max_nodes: z.number().int().min(1).max(255).optional(),
 
   // File Management
   // express.e:346 - the level required to reach the HOLD directory. The form
@@ -178,9 +186,10 @@ export const NodeConfigSchema = z.object({
   // Node0 is a real node - it exists on this board and on the live one, and
   // AmiExpress numbers from zero. Requiring 1 meant the admin refused to save
   // the first node it listed.
-  // Node numbers are 0-based and there are at most MAX_NODES of them
-  // (axcommon.e:28). Node 0 is real - Node0.info is the first node.
-  node_number: z.number().int().min(0).max(31),
+  // Node numbers are 0-based and there are at most MAX_NODES of them -
+  // 255 on this BBS, see max_nodes above. Node 0 is real: Node0.info is the
+  // first node.
+  node_number: z.number().int().min(0).max(254),
   // NODESTART is a multi-line block - the command, then a tooltype per line
   // (QUIETNODE, PRIORITY, CONSOLE_OUTPUT_DEVICE and the rest). A real one is
   // well past 200 characters, so the cap rejected every node that had one.

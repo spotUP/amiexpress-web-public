@@ -216,12 +216,17 @@ describe('tooltype names AmiExpress actually reads', () => {
 describe('ranges AmiExpress can honour', () => {
   const { NodeConfigSchema, SecurityLevelAccessSchema } = require('../../src/services/config.schemas');
 
-  it('caps nodes at MAX_NODES', () => {
-    // axcommon.e:28 - EXPORT CONST MAX_NODES=32, and node numbers are 0-based.
+  it('caps nodes at what this BBS runs, not at what an Amiga ran', () => {
+    // NodeStatusManager.MAX_NODES = 255 and this board is configured for 255.
+    // The Amiga's own limit is 32 (axcommon.e:28); reading that as the board's
+    // limit rejected every System Configuration save on 2026-08-31 and led to
+    // the BOARD's value being changed to match the cap. Node numbers are
+    // 0-based, so 254 is the last one.
     expect(NodeConfigSchema.partial().safeParse({ node_number: 0 }).success).toBe(true);
     expect(NodeConfigSchema.partial().safeParse({ node_number: 31 }).success).toBe(true);
-    expect(NodeConfigSchema.partial().safeParse({ node_number: 32 }).success).toBe(false);
-    expect(NodeConfigSchema.partial().safeParse({ node_number: 97 }).success).toBe(false);
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 97 }).success).toBe(true);
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 254 }).success).toBe(true);
+    expect(NodeConfigSchema.partial().safeParse({ node_number: 255 }).success).toBe(false);
   });
 
   it('takes only the ACS levels findAcsLevel can reach', () => {

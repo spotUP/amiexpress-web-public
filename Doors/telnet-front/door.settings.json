@@ -12,10 +12,10 @@
       "key": "maxNodes",
       "label": "Nodes shown",
       "type": "number",
-      "default": 8,
+      "default": 255,
       "min": 1,
-      "max": 32,
-      "help": "How many node lines the login screen lists. AmiExpress allows at most 32 (axconsts.e:43); this board's bbsConfig says MAX_NODES."
+      "max": 255,
+      "help": "How many nodes the login screen looks at. It prints the ones in use, so a high number costs nothing; set it to your board's MAX_NODES."
     }
   ]
 }

@@ -60,10 +60,18 @@ const os = __importStar(require("os"));
 // The narrow subpath, not the package root: reading a JSON file has no
 // business loading the SDK's audio engine.
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
-/** AmiExpress allows at most 32 nodes - axconsts.e:43, MAXNODES=32. */
-exports.MAX_NODES_CEILING = 32;
+/**
+ * What this BBS runs: NodeStatusManager.MAX_NODES = 255.
+ *
+ * The Amiga's own limit is 32 (axcommon.e:28) and this door capped there at
+ * first, which would have hidden every node above 32 on a board configured
+ * for 255. The 68K paths that do carry the Amiga limit enforce it themselves.
+ */
+exports.MAX_NODES_CEILING = 255;
 function defaultConfig() {
-    return { bbsAddress: '', maxNodes: 8 };
+    // Look at every node the board can have. The screen prints the ones in
+    // use, so scanning more costs a loop, not rows.
+    return { bbsAddress: '', maxNodes: exports.MAX_NODES_CEILING };
 }
 /** The machine's first non-internal IPv4, which is a last resort, not an answer. */
 function firstExternalIPv4(interfaces = os.networkInterfaces()) {

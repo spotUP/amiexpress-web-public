@@ -6,8 +6,12 @@
  * first non-internal IPv4 - inside the container that is 172.18.0.2, a private
  * docker-bridge address nobody outside can reach, shown to every user who
  * connected. With MAX_NODES unset it listed 8 nodes on a board whose own
- * bbsConfig.info says 32. Neither could be set without editing the container's
- * environment.
+ * bbsConfig.info is configured for. Neither could be set without editing the
+ * container's environment.
+ *
+ * The node count is bounded by what THIS BBS runs - NodeStatusManager's 255 -
+ * not by the Amiga's 32 (axcommon.e:28). Capping at 32 would hide every node
+ * above it on a 255-node board, which is what this one is.
  */
 
 import * as fs from 'fs';
@@ -62,10 +66,16 @@ describe('the telnet front-end configuration', () => {
     expect(config.maxNodes).toBe(12);
   });
 
-  it('refuses more nodes than AmiExpress can have', () => {
+  it('refuses more nodes than this BBS can have', () => {
     writeValues({ maxNodes: 999 });
 
     expect(loadConfig(distDir, {}).maxNodes).toBe(MAX_NODES_CEILING);
+    expect(MAX_NODES_CEILING).toBe(255);
+  });
+
+  it('looks at every node a 255-node board has, unless told otherwise', () => {
+    expect(defaultConfig().maxNodes).toBe(255);
+    expect(loadConfig(distDir, {}).maxNodes).toBe(255);
   });
 
   it('falls back to the machine only when nobody has said anything', () => {

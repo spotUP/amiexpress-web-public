@@ -28,11 +28,19 @@ export interface FrontendConfig {
   maxNodes: number;
 }
 
-/** AmiExpress allows at most 32 nodes - axconsts.e:43, MAXNODES=32. */
-export const MAX_NODES_CEILING = 32;
+/**
+ * What this BBS runs: NodeStatusManager.MAX_NODES = 255.
+ *
+ * The Amiga's own limit is 32 (axcommon.e:28) and this door capped there at
+ * first, which would have hidden every node above 32 on a board configured
+ * for 255. The 68K paths that do carry the Amiga limit enforce it themselves.
+ */
+export const MAX_NODES_CEILING = 255;
 
 export function defaultConfig(): FrontendConfig {
-  return { bbsAddress: '', maxNodes: 8 };
+  // Look at every node the board can have. The screen prints the ones in
+  // use, so scanning more costs a loop, not rows.
+  return { bbsAddress: '', maxNodes: MAX_NODES_CEILING };
 }
 
 /** The machine's first non-internal IPv4, which is a last resort, not an answer. */
