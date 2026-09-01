@@ -92,7 +92,7 @@ export async function anArrowCombinationDoesNotAlsoMoveTheCursor(): Promise<void
 
   const arrows = bound.filter(([keys]) => keys.some(k => EDITOR_TEXT_KEYS.some(t => k.endsWith(t))));
   assert.ok(arrows.length > 0, 'there are arrow combinations to check');
-  for (const [keys, handler] of bound) {
+  for (const [keys, handler] of arrows) {
     // A command that opens a requester arms the dialog guard and leaves it
     // armed until the requester closes - which is right, and would make
     // every key after it in this loop report "not handled" for that reason

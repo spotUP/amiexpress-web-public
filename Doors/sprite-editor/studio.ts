@@ -116,6 +116,17 @@ export function zoomScales(zoom: number): { x: number; y: number } {
   return { x: zoom * CELL_ASPECT, y: zoom };
 }
 
+/**
+ * Wheel notches per zoom step.
+ *
+ * "the scrollwheel zooms to fast halve the speed" - one ladder step per
+ * wheel EVENT is not one step per gesture: a trackpad reports a handful of
+ * events for a single flick, so the zoom ran away up the ladder. Two
+ * events per step, and each step rebuilds the editor, so this is cheaper
+ * as well as calmer.
+ */
+export const WHEEL_NOTCHES_PER_STEP = 2;
+
 /** The next step up or down, clamped - never off the end of the list. */
 export function stepZoom(current: number, delta: 1 | -1): number {
   const i = ZOOM_STEPS.indexOf(current);
@@ -145,6 +156,9 @@ export class SpriteStudioDoor {
   private onionSkin = false;
   /** The dim dot on a transparent cell. Off by default - it annotates art. */
   private guide = false;
+  /** Wheel notches counted so far, and which way they were going. */
+  private wheelNotches = 0;
+  private wheelDirection: 1 | -1 = 1;
   /** One frame on the clipboard, for copying artwork between frames. */
   private frameClipboard: CellBuffer | null = null;
   /**
@@ -442,6 +456,12 @@ export class SpriteStudioDoor {
   // ============================================
 
   private async openEditor(): Promise<void> {
+    // "i cant load a new anim when an anim plays even if i havent edited
+    // it" - the play timer holds `this.editor` and a frame list from the
+    // OLD document, so a new editor built under it was painted over a
+    // frame at a time. File > Open is a mouse path and a keypress was the
+    // only thing that stopped playback.
+    this.stopPlayback();
     if (!this.doc && this.artText === null) return;
 
     if (this.editor) {
@@ -493,7 +513,7 @@ export class SpriteStudioDoor {
     // magnify and is always drawn 1:1.
     this.editor.on('canvas-wheel', (d: any) => {
       if (!this.doc) return;
-      void this.setZoom(stepZoom(this.zoom, d.direction === 'up' ? 1 : -1));
+      this.wheelZoom(d.direction === 'up' ? 1 : -1);
     });
 
     if (this.doc) this.loadFrame();
@@ -604,6 +624,23 @@ export class SpriteStudioDoor {
     ];
   }
 
+  /**
+   * The wheel, at half speed.
+   *
+   * The accumulator lives on the door rather than the editor because
+   * changing zoom REBUILDS the editor - a counter kept in the widget would
+   * be thrown away by the very step it just counted.
+   */
+  private wheelZoom(direction: 1 | -1): void {
+    if (direction !== this.wheelDirection) {
+      this.wheelDirection = direction;
+      this.wheelNotches = 0;
+    }
+    if (++this.wheelNotches < WHEEL_NOTCHES_PER_STEP) return;
+    this.wheelNotches = 0;
+    void this.setZoom(stepZoom(this.zoom, direction));
+  }
+
   /** One step up the zoom ladder, back to 1:1 from the top. */
   private cycleZoom(): void {
     const top = ZOOM_STEPS[ZOOM_STEPS.length - 1];
@@ -688,6 +725,11 @@ export class SpriteStudioDoor {
    * strokes is the defect this prevents.
    */
   private commit(): void {
+    // Playback owns the canvas while it runs, so reading the canvas back
+    // into the document has to stop it first - otherwise a save mid-play
+    // writes whichever frame happened to be on screen into the one being
+    // edited. Stopping restores the edited frame, which is what gets read.
+    this.stopPlayback();
     if (!this.doc || !this.editor) return;
     const canvas = this.editor.getCoreCanvas();
     if (!canvas) return;
@@ -856,8 +898,19 @@ export class SpriteStudioDoor {
    */
   /** The strip's one play button, which has to be able to stop it too. */
   private togglePlay(): void {
-    if (this.playing) this.stopPlay?.();
+    if (this.playing) this.stopPlayback();
     else this.playInPlace();
+  }
+
+  /**
+   * Stop playback from anywhere, not only from a keypress.
+   *
+   * Everything that replaces what the canvas shows - a document op, a
+   * rebuilt editor, a commit - goes through here first. Harmless when
+   * nothing is playing.
+   */
+  private stopPlayback(): void {
+    this.stopPlay?.();
   }
 
   private playInPlace(): void {

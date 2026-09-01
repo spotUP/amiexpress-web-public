@@ -147,3 +147,39 @@ export async function artFilesGetNoStrip(): Promise<void> {
   assert.ok(source.includes('extraToolbar: this.doc ? this.buildToolbar() : undefined'),
     'the strip is handed over only when a sprite is open');
 }
+
+/**
+ * The wheel, at half speed.
+ *
+ * "the scrollwheel zooms to fast halve the speed" - one ladder step per
+ * wheel EVENT is not one per gesture; a trackpad reports several events
+ * for a single flick and the zoom ran away.
+ */
+export async function theWheelTakesTwoNotchesPerZoomStep(): Promise<void> {
+  const studio = studioWithSprite();
+  const asked: number[] = [];
+  studio.setZoom = async (z: number) => { asked.push(z); studio.zoom = z; };
+
+  studio.wheelZoom(1);
+  assert.deepStrictEqual(asked, [], 'one notch is not a step');
+  studio.wheelZoom(1);
+  assert.deepStrictEqual(asked, [ZOOM_STEPS[1]], 'the second notch is');
+  studio.wheelZoom(1);
+  assert.deepStrictEqual(asked, [ZOOM_STEPS[1]], 'and the count starts again');
+  studio.wheelZoom(1);
+  assert.deepStrictEqual(asked, [ZOOM_STEPS[1], ZOOM_STEPS[2]]);
+}
+
+export async function turningTheWheelBackStartsCountingAgain(): Promise<void> {
+  // A notch up then a notch down is not "two notches" of anything - it is
+  // half a gesture each way, and neither should move the ladder.
+  const studio = studioWithSprite();
+  const asked: number[] = [];
+  studio.setZoom = async (z: number) => { asked.push(z); studio.zoom = z; };
+
+  studio.wheelZoom(1);
+  studio.wheelZoom(-1);
+  assert.deepStrictEqual(asked, [], 'the direction change resets the count');
+  studio.wheelZoom(-1);
+  assert.deepStrictEqual(asked, [ZOOM_STEPS[0]], 'two down from 1:1 stays at 1:1 (clamped)');
+}
