@@ -240,7 +240,15 @@ export class UserFileManager {
       uploadBytesBCD: this.numberToBCD(uploadBytes),
       eMail: user.email || '',
       lastDlCPS: user.topDownloadCPS,
-      pwdHash: user.passwordHash.substring(0, 32),
+      // EMPTY, deliberately. The field is 32 characters and a bcrypt hash is
+      // 60, so what used to go here was the first half of a credential:
+      // unable to verify anything, and a fragment of a real hash sitting in a
+      // file doors can read. The store that authenticates is the users table
+      // (db.authenticateUser), and on 2026-09-01 a password changed in the
+      // admin went to this fragment while the board kept checking the row -
+      // the account kept its old password and the sysop was told it had been
+      // updated.
+      pwdHash: '',
       salt: '', // Not used with bcrypt
       pwdType: 1, // bcrypt
       forcePwdReset: 0,
@@ -874,7 +882,10 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     return {
       id: userId,
       username: userStruct.name,
-      passwordHash: miscStruct.pwdHash || '',
+      // Never from disk: see userToMiscStruct. A user read from user.misc has
+      // no usable credential, and pretending otherwise is what let a
+      // half-hash look like an answer.
+      passwordHash: '',
       realname: miscStruct.realName,
       location: userStruct.location,
       phone: userStruct.phoneNumber,
