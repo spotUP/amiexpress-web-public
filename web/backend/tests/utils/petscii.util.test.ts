@@ -206,6 +206,28 @@ describe('petscii.util', () => {
 
       expect(result).toContain(' ');
     });
+
+    it('ignores unhandled control codes without printing stray characters', () => {
+      // $0A, $0F, $10, $80, $8F are no-ops on a C64 (audit A5). Before the
+      // blanket guard, these fell through to the printable path and each
+      // printed as a stray space (or block char) - only 'A' should appear.
+      const result = convertPetsciiToAnsi(Buffer.from([0x0A, 0x0F, 0x10, 0x80, 0x8F, 0x41]));
+      expect(result).toBe('\x1b[97mA\x1b[0m');
+    });
+
+    it('RETURN cancels reverse video in the ANSI fallback (emits SGR reverse-off)', () => {
+      // RVS on, 'A', RETURN, 'A' -> RETURN must emit reverse-off SGR and
+      // reset state so nothing downstream treats reverse video as still on.
+      const result = convertPetsciiToAnsi(Buffer.from([0x12, 0x41, 0x0D, 0x41]));
+      expect(result).toBe('\x1b[97m\x1b[7mA\x1b[27m\r\nA\x1b[0m');
+    });
+
+    it('Shift+RETURN ($8D) does NOT cancel reverse video in the ANSI fallback', () => {
+      // RVS on, 'A', Shift+RETURN (must NOT reset RVS), 'A', real RETURN
+      // (must still see reverseVideo=true and emit the reverse-off SGR).
+      const result = convertPetsciiToAnsi(Buffer.from([0x12, 0x41, 0x8D, 0x41, 0x0D]));
+      expect(result).toBe('\x1b[97m\x1b[7mA\r\nA\x1b[27m\r\n\x1b[0m');
+    });
   });
 
   describe('convertAnsiToPetscii', () => {
