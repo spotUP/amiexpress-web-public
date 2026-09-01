@@ -430,30 +430,17 @@ class ApiClient {
     });
   }
 
-  // Security Level Access
-  async getSecurityAccessForLevel(level: number) {
-    return this.request<ApiResponse>(`${API_BASE}/config/security/${level}`);
-  }
-
-  async createSecurityAccess(access: any) {
-    return this.request<ApiResponse>(`${API_BASE}/config/security`, {
-      method: 'POST',
-      body: JSON.stringify(access),
-    });
-  }
-
-  async updateSecurityAccess(id: number, updates: any) {
-    return this.request<ApiResponse>(`${API_BASE}/config/security/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
-  }
-
-  async deleteSecurityAccess(id: number) {
-    return this.request<ApiResponse>(`${API_BASE}/config/security/${id}`, {
-      method: 'DELETE',
-    });
-  }
+  /*
+   * There were four more methods here - get/create/update/deleteSecurityAccess
+   * - on /config/security/*, with no caller anywhere in this app. They read
+   * and wrote the DATABASE MIRROR of security levels, keyed CENSORED, while
+   * the four above read and write Access/ACS.<level>.info, keyed ACS.CENSORED,
+   * which is what AmiExpress actually reads. Two endpoint families describing
+   * the same thing, one of them dead in this app and one line away from being
+   * picked up by mistake.
+   *
+   * The routes stay - dev/console still uses them - and the trap does not.
+   */
 
   // Drives
   async getDrives() {
