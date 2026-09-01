@@ -131,3 +131,24 @@ describe('runLoginBatches — per-node reentrancy guard', () => {
     expect(skipped).toBe(false);
   });
 });
+
+// Source-level pin, in the style of menu.test.ts's call-site guard: a spawn
+// test would need the real emulator. tsx resolves tsconfig by walking up
+// from cwd; from a door's own directory it finds the repo root's config
+// (no experimentalDecorators) and the runner dies on chat.handler.ts on
+// every scheduler tick. The TS-runner branch must therefore spawn from
+// web/backend. Dev-only in practice - the container ships dist/ and takes
+// the node branch - which is exactly why only this pin ever notices.
+describe('runAmigaDoorViaRunner spawn cwd (regression for the [runner:mtop] crash-loop)', () => {
+  test('the tsx runner branch is pinned to web/backend as cwd', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../src/services/batch-scheduler.ts'),
+      'utf8'
+    );
+    expect(src).toContain(
+      "cwd: useTsRunner ? path.join(appRootPath, 'web', 'backend') : (cwd || path.dirname(doorPath))"
+    );
+  });
+});
