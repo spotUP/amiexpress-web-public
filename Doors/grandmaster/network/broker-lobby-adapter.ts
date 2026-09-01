@@ -15,7 +15,7 @@ import type {
   LobbyState,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { GrandmasterNetworkManager, PlayerInfo, MultiplayerMode } from './network-manager';
-import { fillLobbyWithBots, removeBots, type BotDifficulty } from './bot-lobby';
+import { fillLobbyWithBots, removeBots, modePlayerTarget, type BotDifficulty } from './bot-lobby';
 
 /**
  * Adapter that wraps GrandmasterNetworkManager for the SDK MultiplayerLobby
@@ -193,13 +193,11 @@ export class BrokerLobbyAdapter extends EventEmitter implements LobbyNetworkAdap
     const matchState = this.network.getMatchState();
     if (!matchState) return;
 
-    // Get min players for current mode
-    const modeMinPlayers: Record<string, number> = {
-      versus_1v1: 2,
-      team_2v2: 4,
-      battle_royale: 2,
-    };
-    const minPlayers = count ?? modeMinPlayers[matchState.mode] ?? 2;
+    // How many players this mode is played with. The table lives in
+    // bot-lobby.ts, which is the file that also knows how to make them -
+    // this copy said battle_royale wanted TWO, so the 99-player mode
+    // started with a single CPU opponent.
+    const minPlayers = count ?? modePlayerTarget(matchState.mode);
 
     const diff = (difficulty ?? this.botDifficulty) as BotDifficulty;
     matchState.players = fillLobbyWithBots(matchState.players, minPlayers, diff);

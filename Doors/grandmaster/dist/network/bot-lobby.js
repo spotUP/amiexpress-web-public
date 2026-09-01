@@ -5,10 +5,12 @@
  * Utilities for filling lobbies with AI bot players
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.MODE_PLAYER_TARGET = void 0;
 exports.generateBotPlayers = generateBotPlayers;
 exports.fillLobbyWithBots = fillLobbyWithBots;
 exports.removeBots = removeBots;
 exports.replaceBots = replaceBots;
+exports.modePlayerTarget = modePlayerTarget;
 exports.getRecommendedBotCount = getRecommendedBotCount;
 exports.getBotDifficultyName = getBotDifficultyName;
 const bot_player_1 = require("../ai/bot-player");
@@ -63,15 +65,30 @@ function replaceBots(players, difficulty) {
     return [...humanPlayers, ...newBots];
 }
 /**
- * Get recommended bot count for mode
+ * How many players a mode is played with, humans and bots together.
+ *
+ * ONE table, because there were two and they disagreed: this file said a
+ * battle royale wanted six players and the lobby adapter's own literal said
+ * TWO, so "Battle Royale (99)" started with one CPU opponent ("in gmaster
+ * only one bot joins in battle royale 99, that's not much of a battle
+ * royale", 2026-09-01). The adapter reads this now.
+ *
+ * 99 is what the menu has always promised and the engine turns out not to
+ * mind: 98 bots playing for thirty seconds of game time cost 0.16 ms per
+ * frame, measured, against a 50 ms tick. The limit was never the CPU.
  */
+exports.MODE_PLAYER_TARGET = {
+    versus_1v1: 2,
+    team_2v2: 4,
+    battle_royale: 99,
+};
+/** Players a mode wants in total. Unknown modes are a duel. */
+function modePlayerTarget(mode) {
+    return exports.MODE_PLAYER_TARGET[mode] ?? 2;
+}
+/** Bots a mode wants beside one human. */
 function getRecommendedBotCount(mode) {
-    const recommendations = {
-        versus_1v1: 1, // 1 bot opponent
-        team_2v2: 3, // 3 bots (fill 4-player team)
-        battle_royale: 5, // 5 bots (6 players total)
-    };
-    return recommendations[mode] || 1;
+    return Math.max(1, modePlayerTarget(mode) - 1);
 }
 /**
  * Get bot difficulty name

@@ -23,6 +23,11 @@ const BAR_H = 18; // rows dedicated to the bar (below the name row)
 // The panel's content width when it owns everything right of the player's
 // side at 80 columns - the only width this renderer ever had.
 const DEFAULT_PANEL_W = 41;
+// And its content height, from the same 80-column layout.
+const DEFAULT_PANEL_H = 20;
+// Columns of the leaderboard are separated by this much, when a panel is
+// wide enough to hold more than one.
+const COLUMN_GAP = 2;
 /**
  * MinimapRenderer — renders the battle-royale opponent panel.
  */
@@ -60,8 +65,9 @@ class MinimapRenderer {
         // Bars beyond BUCKET_THRESHOLD are unreadable however wide the panel is,
         // and bars that do not fit are worse than a list.
         const capacity = Math.min(BUCKET_THRESHOLD, Math.floor(width / SLOT_W));
+        const height = typeof container?.height === 'number' ? container.height : DEFAULT_PANEL_H;
         const content = sorted.length > capacity
-            ? this.buildTextList(sorted, width)
+            ? this.buildTextList(sorted, width, height)
             : this.buildBuckets(sorted);
         container.setContent(content);
         container.screen?.render();
@@ -149,29 +155,53 @@ class MinimapRenderer {
      *   1 Opponent1  05  12
      *   ...
      */
-    buildTextList(sorted, panelWidth = DEFAULT_PANEL_W) {
+    buildTextList(sorted, panelWidth = DEFAULT_PANEL_W, panelHeight = DEFAULT_PANEL_H) {
         const boardH = sorted[0]?.board?.height ?? 20;
         // rank(2) + ' ' + name + ' ' + level(3) + ' ' + height(3)
         const nameW = Math.max(3, Math.min(9, panelWidth - 11));
         const rowW = nameW + 11;
-        const lines = [
-            `{cyan-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/cyan-fg}`,
-            `{gray-fg}${'─'.repeat(rowW)}{/gray-fg}`,
-        ];
-        const maxEntries = 18; // content area ≈ 20 rows; 2 used by header
-        for (let i = 0; i < Math.min(sorted.length, maxEntries); i++) {
-            const opp = sorted[i];
+        // A wide panel gets COLUMNS rather than a longer list it has no rows
+        // for. "since we made it responsive space is not an issue at least" -
+        // and a battle royale is 98 opponents, so at 80 columns the panel shows
+        // the eighteen most dangerous and a wide terminal shows four times that.
+        const columns = Math.max(1, Math.floor((panelWidth + COLUMN_GAP) / (rowW + COLUMN_GAP)));
+        const bodyRows = Math.max(1, panelHeight - 2); // header + rule
+        const overflow = sorted.length > columns * bodyRows;
+        const rows = overflow ? Math.max(1, bodyRows - 1) : bodyRows; // room for the tail
+        const shown = Math.min(sorted.length, columns * rows);
+        const cell = (index) => {
+            const opp = sorted[index];
             const ht = this.stackHeight(opp.board);
             const frac = ht / boardH;
             const col = opp.targeting ? 'red'
                 : frac >= 0.66 ? 'red'
                     : frac >= 0.33 ? 'yellow'
                         : 'white';
-            const rank = String(i + 1).padStart(2);
+            const rank = String(index + 1).padStart(2);
             const name = opp.name.substring(0, nameW).padEnd(nameW);
             const lv = String(opp.level).padStart(3);
             const htS = String(ht).padStart(3);
-            lines.push(`{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`);
+            return `{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`;
+        };
+        const header = `{cyan-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/cyan-fg}`;
+        const rule = `{gray-fg}${'─'.repeat(rowW)}{/gray-fg}`;
+        const gap = ' '.repeat(COLUMN_GAP);
+        const lines = [
+            Array.from({ length: columns }, () => header).join(gap),
+            Array.from({ length: columns }, () => rule).join(gap),
+        ];
+        // Down each column, then across: rank order reads top to bottom, which
+        // is where the eye goes for "who is closest to dying".
+        for (let row = 0; row < rows; row++) {
+            const parts = [];
+            for (let col = 0; col < columns; col++) {
+                const index = col * rows + row;
+                parts.push(index < shown ? cell(index) : ' '.repeat(rowW));
+            }
+            lines.push(parts.join(gap).replace(/\s+$/, ''));
+        }
+        if (overflow) {
+            lines.push(`{gray-fg}${String(sorted.length - shown).padStart(2)} more still playing{/gray-fg}`);
         }
         return lines.join('\n');
     }

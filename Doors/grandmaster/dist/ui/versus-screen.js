@@ -382,6 +382,10 @@ class VersusScreen {
             this.minimapPanel.left = left;
             this.minimapPanel.width = panelWidth;
             this.minimapContainer.width = panelWidth - 2;
+            // Say how many are in there. A battle royale fields 98 CPUs and the
+            // list shows the eighteen most dangerous; without the count, the
+            // other eighty are simply missing with nothing to say so.
+            this.minimapPanel.setLabel?.(` Opponents (${layout.minimaps}) `);
             this.minimapPanel.show();
         }
         else {
