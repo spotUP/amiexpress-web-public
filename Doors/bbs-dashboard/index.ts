@@ -158,7 +158,11 @@ class BBSDashboard {
       left: 0,
       top: 1,                 // below the masthead
       width: '50%',
-      height: '50%-1',
+      // Full half-height. Taking the masthead's row out of HERE cost this
+      // panel its last line, and the Disk gauge silently fell off the
+      // bottom - the row comes out of Node Status below instead, which has
+      // space to spare.
+      height: '50%',
       fixed: true,  // Static panel for BBS environment
       focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
@@ -183,7 +187,7 @@ class BBSDashboard {
       left: '50%',
       top: 1,                 // below the masthead
       width: '50%',
-      height: '50%-1',
+      height: '50%',          // matches the system panel
       fixed: true,  // Static panel for BBS environment
       focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
@@ -206,7 +210,7 @@ class BBSDashboard {
       parent: this.screen,
       label: ' NODE STATUS ',
       left: 0,
-      top: '50%',
+      top: '50%+1',           // one row down, to pay for the masthead
       width: '100%',
       bottom: 1,  // Reserve 1 line for status bar
       fixed: true,  // Static panel for BBS environment
