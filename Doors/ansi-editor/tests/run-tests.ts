@@ -7,8 +7,9 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = [
+const TEST_MODULES = ['./backport.test',
   './black-screen.test',
+  './opens.test',
 ];
 
 (async () => {

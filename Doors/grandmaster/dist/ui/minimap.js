@@ -20,6 +20,14 @@ const BUCKET_THRESHOLD = 10;
 const SLOT_W = 4; // 3-char bar + 1 space
 const BAR_W = 3; // printable width of the bar
 const BAR_H = 18; // rows dedicated to the bar (below the name row)
+// The panel's content width when it owns everything right of the player's
+// side at 80 columns - the only width this renderer ever had.
+const DEFAULT_PANEL_W = 41;
+// And its content height, from the same 80-column layout.
+const DEFAULT_PANEL_H = 20;
+// Columns of the leaderboard are separated by this much, when a panel is
+// wide enough to hold more than one.
+const COLUMN_GAP = 2;
 /**
  * MinimapRenderer — renders the battle-royale opponent panel.
  */
@@ -38,8 +46,14 @@ class MinimapRenderer {
     /**
      * Render opponents into `container`.
      * Switches between bucket bars and text list automatically.
+     *
+     * `innerWidth` is the panel's content width. It was 41 for the whole life
+     * of this renderer because 80 columns minus the player's side left exactly
+     * that; now the grid can sit beside one or more full opponent boards and
+     * get far less, so how many bars fit is arithmetic rather than a constant.
      */
-    renderBuckets(container, opponents) {
+    renderBuckets(container, opponents, innerWidth) {
+        const width = innerWidth ?? (typeof container?.width === 'number' ? container.width : DEFAULT_PANEL_W);
         const alive = opponents.filter(o => o.alive);
         const sorted = [...alive].sort((a, b) => {
             if (a.targeting && !b.targeting)
@@ -48,10 +62,29 @@ class MinimapRenderer {
                 return 1;
             return (a.rank ?? 99) - (b.rank ?? 99);
         });
-        const content = sorted.length > BUCKET_THRESHOLD
-            ? this.buildTextList(sorted)
+        // Bars beyond BUCKET_THRESHOLD are unreadable however wide the panel is,
+        // and bars that do not fit are worse than a list.
+        const capacity = Math.min(BUCKET_THRESHOLD, Math.floor(width / SLOT_W));
+        const height = typeof container?.height === 'number' ? container.height : DEFAULT_PANEL_H;
+        const content = sorted.length > capacity
+            ? this.buildTextList(sorted, width, height)
             : this.buildBuckets(sorted);
         container.setContent(content);
+        container.screen?.render();
+    }
+    /**
+     * Render opponents as the ranked leaderboard, whatever their number.
+     *
+     * renderBuckets picks bars or list by how many there are; the cascade has
+     * already made that choice for each section (ui/versus-layout.ts), so the
+     * list section must not turn into bars when the field thins out.
+     */
+    renderList(container, opponents, innerWidth) {
+        const width = innerWidth ?? (typeof container?.width === 'number' ? container.width : DEFAULT_PANEL_W);
+        const height = typeof container?.height === 'number' ? container.height : DEFAULT_PANEL_H;
+        const alive = opponents.filter(o => o.alive);
+        const sorted = [...alive].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+        container.setContent(this.buildTextList(sorted, width, height));
         container.screen?.render();
     }
     // ── private ────────────────────────────────────────────────────────────────
@@ -129,32 +162,61 @@ class MinimapRenderer {
     /**
      * Text list mode — ranked leaderboard for large lobbies.
      *
-     * Format (41 chars wide):
+     * Format (columns derived from the panel's width; the name column is what
+     * gives when the panel is narrow, because the rank and the numbers are
+     * what the list is FOR):
      *   # Name       Lv Ht
      *   ─────────────────────
      *   1 Opponent1  05  12
      *   ...
      */
-    buildTextList(sorted) {
+    buildTextList(sorted, panelWidth = DEFAULT_PANEL_W, panelHeight = DEFAULT_PANEL_H) {
         const boardH = sorted[0]?.board?.height ?? 20;
-        const lines = [
-            '{cyan-fg}# Name        Lv  Ht{/cyan-fg}',
-            '{gray-fg}─────────────────────{/gray-fg}',
-        ];
-        const maxEntries = 18; // content area ≈ 20 rows; 2 used by header
-        for (let i = 0; i < Math.min(sorted.length, maxEntries); i++) {
-            const opp = sorted[i];
+        // rank(2) + ' ' + name + ' ' + level(3) + ' ' + height(3)
+        const nameW = Math.max(3, Math.min(9, panelWidth - 11));
+        const rowW = nameW + 11;
+        // A wide panel gets COLUMNS rather than a longer list it has no rows
+        // for. "since we made it responsive space is not an issue at least" -
+        // and a battle royale is 98 opponents, so at 80 columns the panel shows
+        // the eighteen most dangerous and a wide terminal shows four times that.
+        const columns = Math.max(1, Math.floor((panelWidth + COLUMN_GAP) / (rowW + COLUMN_GAP)));
+        const bodyRows = Math.max(1, panelHeight - 2); // header + rule
+        const overflow = sorted.length > columns * bodyRows;
+        const rows = overflow ? Math.max(1, bodyRows - 1) : bodyRows; // room for the tail
+        const shown = Math.min(sorted.length, columns * rows);
+        const cell = (index) => {
+            const opp = sorted[index];
             const ht = this.stackHeight(opp.board);
             const frac = ht / boardH;
             const col = opp.targeting ? 'red'
                 : frac >= 0.66 ? 'red'
                     : frac >= 0.33 ? 'yellow'
                         : 'white';
-            const rank = String(i + 1).padStart(2);
-            const name = opp.name.substring(0, 9).padEnd(9);
+            const rank = String(index + 1).padStart(2);
+            const name = opp.name.substring(0, nameW).padEnd(nameW);
             const lv = String(opp.level).padStart(3);
             const htS = String(ht).padStart(3);
-            lines.push(`{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`);
+            return `{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`;
+        };
+        const header = `{cyan-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/cyan-fg}`;
+        const rule = `{gray-fg}${'─'.repeat(rowW)}{/gray-fg}`;
+        const gap = ' '.repeat(COLUMN_GAP);
+        const lines = [
+            Array.from({ length: columns }, () => header).join(gap),
+            Array.from({ length: columns }, () => rule).join(gap),
+        ];
+        // Down each column, then across: rank order reads top to bottom, which
+        // is where the eye goes for "who is closest to dying".
+        for (let row = 0; row < rows; row++) {
+            const parts = [];
+            for (let col = 0; col < columns; col++) {
+                const index = col * rows + row;
+                parts.push(index < shown ? cell(index) : ' '.repeat(rowW));
+            }
+            lines.push(parts.join(gap).replace(/\s+$/, ''));
+        }
+        if (overflow) {
+            lines.push(`{gray-fg}${String(sorted.length - shown).padStart(2)} more still playing{/gray-fg}`);
         }
         return lines.join('\n');
     }
@@ -188,6 +250,7 @@ class OpponentTracker {
                 alive: state.alive !== false,
                 targeting: state.targeting || false,
                 rank: state.rank,
+                isBot: state.isBot ?? false,
             });
         }
     }

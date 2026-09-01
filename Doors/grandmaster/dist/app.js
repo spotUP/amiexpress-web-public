@@ -47,6 +47,7 @@ exports.parseTriggerStr = parseTriggerStr;
 exports.buildGamepadMapping = buildGamepadMapping;
 exports.createApp = createApp;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const game_1 = require("./core/game");
 const menu_1 = require("./ui/menu");
@@ -276,6 +277,16 @@ class GrandmasterApp {
         }
     }
     constructor(session) {
+        /**
+         * 80x25 like the board, or the caller's whole terminal.
+         *
+         * Starts FIXED, unlike the editors: this door's menus, attract screen and
+         * solo playfield are 80-column pieces of art, while the versus screen is
+         * a layout that gains from the room (ui/versus-layout.ts - three opponent
+         * boards at 120 columns, five at 160). So the room is something a player
+         * ASKS for with Alt+Enter, not something the door takes on their behalf.
+         */
+        this.terminalMode = null;
         this.gameEngine = null;
         this.network = null;
         this.attackManager = null;
@@ -307,6 +318,15 @@ class GrandmasterApp {
             // the input path, the same back-pressure class that froze DOORMAN.
             debug: false,
             debugName: 'GRANDMASTER'
+        });
+        // Alt+Enter, in every door that has a size to change. Fixed to start:
+        // a player opts into the room, and gets the board's 80 columns back on
+        // the way out whatever they chose.
+        this.terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
+            bbs: this.session.bbs,
+            screen: this.screen,
+            start: 'fixed',
+            onRelayout: () => this.relayout(),
         });
         // Create input handler with user's key bindings
         this.inputHandler = new handler_1.InputHandler(this.screen, session, this.state.settings.keyBindings);
@@ -471,6 +491,9 @@ class GrandmasterApp {
         const screen = (0, blessed_helpers_1.createScreen)(this.session.bbs, {
             dockBorders: false, // Not needed for fixed panels in BBS environment
             title: 'GRANDMASTER v1.1.0', // Version for debugging
+            // The screen has to be ABLE to become the size Alt+Enter asks for;
+            // left fixed, Screen pins itself to 80x25 whatever the terminal says.
+            responsive: true,
             fullUnicode: false,
             smartCSR: false, // Disable smart scroll-region optimization - prevents layout corruption
             fastCSR: false, // Disable fast CSR - forces full redraws for stable rendering
@@ -2945,6 +2968,21 @@ class GrandmasterApp {
     /**
      * Quit the application
      */
+    /**
+     * The terminal changed size: repaint at the new one.
+     *
+     * The versus screen asks versusLayout how many boards the width holds on
+     * every frame, so it picks the new size up by itself within a frame; what
+     * it cannot do is clean up the columns it no longer occupies, which is
+     * what the clear here is for. Every other screen in this door is built
+     * from 80-column pieces and simply keeps its size in the middle of a
+     * wider terminal.
+     */
+    relayout() {
+        this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+        this.screen.alloc();
+        this.screen.render();
+    }
     async quit() {
         // Clear screen buffer before exit to prevent ghosting in next door
         // This ensures tetrinet lobby, menus, etc. don't leak into BBS or next GMASTER session
@@ -2964,6 +3002,9 @@ class GrandmasterApp {
             this.network.disconnect();
             console.log('[GRANDMASTER] Network disconnected');
         }
+        // Hands the board its 80 columns back and unhooks resize and Alt+Enter.
+        this.terminalMode?.dispose();
+        this.terminalMode = null;
         // Destroy screen (this will cleanup blessed state)
         this.screen.destroy();
     }

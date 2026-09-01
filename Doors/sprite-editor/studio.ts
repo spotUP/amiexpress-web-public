@@ -27,7 +27,12 @@ import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import {
   Screen, ANSIEditor, List, Box,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { HostToolbarGroup } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { menuItemLabel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import {
+  createTerminalModeSwitch, type TerminalModeSwitch,
+} from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import {
   Sprite, CellBuffer, frameToCanvas, canvasToFrame,
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
@@ -43,6 +48,23 @@ import {
 import { previewLines } from './preview';
 import { promptText, confirm } from './dialogs';
 import { T, applyTheme } from './door-theme';
+
+/**
+ * One thing the door can do, in the one place that says so.
+ *
+ * `key` is the blessed name the screen binds; `show` is what the menu
+ * prints when that name reads badly ('C-up' as 'C-Up'). No key at all is a
+ * deliberate answer for the items that open a dialog: the editor and the
+ * browser between them have taken most of the alphabet, and a menu item
+ * promising a key that something else already owns is worse than one with
+ * no key.
+ */
+export interface StudioCommand {
+  label: string;
+  key?: string;
+  show?: string;
+  run: () => void;
+}
 
 /** The editor's own sidebar width, subtracted before working out the zoom. */
 export const SIDEBAR_COLS = 6;
@@ -94,11 +116,52 @@ export function zoomScales(zoom: number): { x: number; y: number } {
   return { x: zoom * CELL_ASPECT, y: zoom };
 }
 
+/**
+ * Wheel notches per zoom step.
+ *
+ * "the scrollwheel zooms to fast halve the speed" - one ladder step per
+ * wheel EVENT is not one step per gesture: a trackpad reports a handful of
+ * events for a single flick, so the zoom ran away up the ladder. Two
+ * events per step, and each step rebuilds the editor, so this is cheaper
+ * as well as calmer.
+ */
+export const WHEEL_NOTCHES_PER_STEP = 2;
+
 /** The next step up or down, clamped - never off the end of the list. */
 export function stepZoom(current: number, delta: 1 | -1): number {
   const i = ZOOM_STEPS.indexOf(current);
   const from = i === -1 ? 0 : i;
   return ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, from + delta))];
+}
+
+/**
+ * The room the artwork has, in characters: the editor minus its chrome.
+ *
+ * Menu bar, F-key toolbar and status bar take a row each; the colour and
+ * tool sidebar takes SIDEBAR_COLS.
+ */
+export function canvasRoom(width: number, height: number): { w: number; h: number } {
+  return { w: Math.max(1, width - SIDEBAR_COLS), h: Math.max(1, height - 3) };
+}
+
+/**
+ * The biggest zoom on the ladder at which a sprite still FITS.
+ *
+ * A canvas larger than the room it is drawn in cannot be centred and
+ * cannot be scrolled - it just runs off the right edge, which is what a
+ * sprite loaded at the previous sprite's magnification looked like
+ * ("it doesnt resize the canvas to the new anim loaded"). 1:1 is always
+ * allowed: if the art does not fit even at actual size, clipping it is
+ * still better than refusing to open it.
+ */
+export function zoomThatFits(
+  cellW: number, cellH: number, room: { w: number; h: number },
+): number {
+  let best = ZOOM_STEPS[0];
+  for (const z of ZOOM_STEPS) {
+    if (cellW * z * CELL_ASPECT <= room.w && cellH * z <= room.h) best = z;
+  }
+  return best;
 }
 
 /** The title line: what is open, which animation, which frame. */
@@ -123,15 +186,26 @@ export class SpriteStudioDoor {
   private onionSkin = false;
   /** The dim dot on a transparent cell. Off by default - it annotates art. */
   private guide = false;
+  /** Wheel notches counted so far, and which way they were going. */
+  private wheelNotches = 0;
+  private wheelDirection: 1 | -1 = 1;
   /** One frame on the clipboard, for copying artwork between frames. */
   private frameClipboard: CellBuffer | null = null;
-  /** 80x25 like the board, or the caller's real terminal. */
-  private fixedSize = false;
+  /**
+   * 80x25 like the board, or the caller's real terminal.
+   *
+   * The three parts of getting this right - ask the terminal to widen,
+   * follow the resize, put the 80 columns back on exit - live in the SDK
+   * now, because every door with a layout wants them and this one had to
+   * learn each part the hard way.
+   */
+  private terminalMode: TerminalModeSwitch | null = null;
   /** Set when a .ans is open instead of a sprite - Save writes art then. */
   private artText: string | null = null;
   private playing = false;
-  private onScreenResize: (() => void) | null = null;
   private playTimer: ReturnType<typeof setInterval> | null = null;
+  /** How to stop playback from somewhere other than a keypress. */
+  private stopPlay: (() => void) | null = null;
   private door = '';
   private file = '';
   private exitResolve: (() => void) | null = null;
@@ -143,10 +217,11 @@ export class SpriteStudioDoor {
 
   async start(): Promise<void> {
     this.createUI();
-    // Responsive from the start, like livechat: without this the browser
-    // terminal stays at a fixed 80x25 whatever the editor's own geometry
-    // says, and 'responsive' has nothing to resize into.
-    this.applyTerminalMode();
+    this.terminalMode = createTerminalModeSwitch({
+      bbs: (this.ctx as any).bbs,
+      screen: this.screen,
+      onRelayout: () => this.relayout(),
+    });
     this.inputManager.enable();
     this.bindHotkeys();
 
@@ -183,17 +258,6 @@ export class SpriteStudioDoor {
       debugName: 'SPRITED',
     });
 
-    // Lay out again whenever the terminal changes size.
-    //
-    // The livechat door learned this twice and wrote it down: a one-shot
-    // layout answers "what size am I now", and this answers "what size did
-    // I just become". Without it the editor stays frozen at the size the
-    // door opened with, and resizing the browser window resizes the screen
-    // underneath it while nothing moves - reported here as "i switched to
-    // responsive now it did not resize to my browser window".
-    this.onScreenResize = () => { void this.relayout(); };
-    this.screen.on('resize', this.onScreenResize);
-
     this.screen.render();
   }
 
@@ -222,6 +286,18 @@ export class SpriteStudioDoor {
    * takes itself down again - the black-screen rule the fork base learned
    * the hard way: whoever hides something owns showing it again.
    */
+  /**
+   * Give a requester the keyboard and keep it.
+   *
+   * Every dialog in this door goes through here. Focus alone loses to the
+   * click that opened it; the trap survives that, and the SDK releases it
+   * for us if the element is destroyed while it still holds one.
+   */
+  private trap(dialog: any): void {
+    dialog.focus();
+    (this.screen as any).trapFocus?.(dialog);
+  }
+
   private pick(title: string, items: string[]): Promise<number | null> {
     return new Promise((resolve) => {
       if (items.length === 0) { resolve(null); return; }
@@ -248,6 +324,7 @@ export class SpriteStudioDoor {
 
       const done = (value: number | null) => {
         (this.screen as any).dialogOpen = false;
+        (this.screen as any).releaseFocusTrap?.(list);
         list.destroy();
         this.editor?.focus();
         this.screen.render();
@@ -257,7 +334,7 @@ export class SpriteStudioDoor {
       (this.screen as any).dialogOpen = true;
       list.on('select', (_item: any, index: number) => done(index));
       list.key(['escape', 'q'], () => done(null));
-      list.focus();
+      this.trap(list);
       this.screen.render();
     });
   }
@@ -286,6 +363,7 @@ export class SpriteStudioDoor {
     this.file = sprites[s];
     this.artText = null;
     this.doc = openDoc(readSprite(this.door, this.file));
+    this.resetZoomForDocument();
     await this.openEditor();
   }
 
@@ -318,6 +396,7 @@ export class SpriteStudioDoor {
     this.file = files[f];
     this.doc = null;
     this.artText = readArt(this.door, this.file).toString('latin1');
+    this.resetZoomForDocument();
     await this.openEditor();
   }
 
@@ -385,6 +464,7 @@ export class SpriteStudioDoor {
       } as any);
       const close = () => {
         (this.screen as any).dialogOpen = false;
+        (this.screen as any).releaseFocusTrap?.(box);
         box.destroy();
         this.editor?.focus();
         this.screen.render();
@@ -392,7 +472,13 @@ export class SpriteStudioDoor {
       };
       (this.screen as any).dialogOpen = true;
       box.key(['escape', 'enter', 'space', 'q'], close);
-      box.focus();
+      // Focusing is not enough when the dialog was opened by a CLICK: the
+      // same mouse dispatch carries on to the elements underneath, and the
+      // editor's canvas takes focus straight back - so Escape went to the
+      // canvas and the dialog could not be dismissed at all (reported live
+      // 2026-09-01 from the strip's play button). A trap reasserts itself
+      // whenever focus is outside it.
+      this.trap(box);
       this.screen.render();
     });
   }
@@ -402,6 +488,12 @@ export class SpriteStudioDoor {
   // ============================================
 
   private async openEditor(): Promise<void> {
+    // "i cant load a new anim when an anim plays even if i havent edited
+    // it" - the play timer holds `this.editor` and a frame list from the
+    // OLD document, so a new editor built under it was painted over a
+    // frame at a time. File > Open is a mouse path and a keypress was the
+    // only thing that stopped playback.
+    this.stopPlayback();
     if (!this.doc && this.artText === null) return;
 
     if (this.editor) {
@@ -417,8 +509,8 @@ export class SpriteStudioDoor {
     this.editor = new ANSIEditor({
       parent: this.screen,
       top: 0, left: 0,
-      width: this.fixedSize ? 80 : '100%',
-      height: this.fixedSize ? 25 : '100%',
+      width: this.terminalMode?.mode() === 'fixed' ? 80 : '100%',
+      height: this.terminalMode?.mode() === 'fixed' ? 25 : '100%',
       title: this.doc
         ? studioTitle(this.doc, this.door, this.file)
         : `${this.door}/${this.file}  (art)`,
@@ -441,6 +533,7 @@ export class SpriteStudioDoor {
       showSidebar: true,
       showStatusBar: true,
       extraMenus: this.buildMenus(),
+      extraToolbar: this.doc ? this.buildToolbar() : undefined,
       onSave: async () => { await this.save(); return true; },
       onOpen: async () => { await this.openSpriteRequester(); },
       onExit: () => { void this.close(); },
@@ -452,7 +545,7 @@ export class SpriteStudioDoor {
     // magnify and is always drawn 1:1.
     this.editor.on('canvas-wheel', (d: any) => {
       if (!this.doc) return;
-      void this.setZoom(stepZoom(this.zoom, d.direction === 'up' ? 1 : -1));
+      this.wheelZoom(d.direction === 'up' ? 1 : -1);
     });
 
     if (this.doc) this.loadFrame();
@@ -460,61 +553,194 @@ export class SpriteStudioDoor {
     this.screen.render();
   }
 
+  /**
+   * Everything this door can do, with the key that does it.
+   *
+   * ONE table, because a command has three faces - a menu item, a hotkey and
+   * sometimes a button in the footer - and three lists is how a menu comes
+   * to promise a key that is bound to something else. The menus, the key
+   * bindings and the footer strip are all built from this.
+   *
+   * The keys are Ctrl combinations, and which ones are free is not a matter
+   * of taste. The EDITOR owns Ctrl+S/M/Z/Y/H/D, Alt+C/B/H, F1-F12, Tab,
+   * Escape and every printable character (in draw mode a letter paints a
+   * letter), and the BROWSER keeps Ctrl+N, Ctrl+T and Ctrl+W whatever the
+   * page says. What is left is the alphabet minus all of that - which is
+   * why some of these are positional rather than mnemonic, and why the
+   * dialog-opening items further down have no key at all rather than a
+   * clashing one. tests/hotkeys.test.ts holds the reserved list.
+   */
+  private commands(): Record<string, StudioCommand> {
+    const frames = (): number => {
+      if (!this.doc) return 0;
+      return this.doc.sprite.animations[this.doc.animation].frames.length;
+    };
+    return {
+      nextFrame:   { label: 'Next Frame', key: 'C-f', run: () => this.step(+1) },
+      prevFrame:   { label: 'Previous Frame', key: 'C-b', run: () => this.step(-1) },
+      firstFrame:  { label: 'First Frame', key: 'C-a', run: () => this.op(d => selectFrame(d, 0)) },
+      lastFrame:   { label: 'Last Frame', key: 'C-l', run: () => this.op(d => selectFrame(d, frames() - 1)) },
+      newFrame:    { label: 'New Frame', key: 'C-k', run: () => this.op(d => addFrame(d, 'blank')) },
+      dupFrame:    { label: 'Duplicate Frame', key: 'C-r', run: () => this.op(d => addFrame(d, 'duplicate')) },
+      delFrame:    { label: 'Delete Frame', key: 'C-x', run: () => void this.deleteFrameAsked() },
+      moveEarlier: { label: 'Move Earlier', key: 'C-up', show: 'C-Up', run: () => this.op(d => moveFrame(d, -1)) },
+      moveLater:   { label: 'Move Later', key: 'C-down', show: 'C-Dn', run: () => this.op(d => moveFrame(d, 1)) },
+      copyFrame:   { label: 'Copy Frame', key: 'C-c', run: () => this.copyFrame() },
+      pasteFrame:  { label: 'Paste Frame', key: 'C-v', run: () => this.pasteFrame() },
+      onionSkin:   { label: 'Onion Skin', key: 'C-o', run: () => this.toggleOnionSkin() },
+      guide:       { label: 'Transparency Guide', key: 'C-g', run: () => this.toggleGuide() },
+
+      play:        { label: 'Play / Stop', key: 'C-p', run: () => this.togglePlay() },
+      playBox:     { label: 'Play in a box', run: () => this.previewRequester() },
+      nextAnim:    { label: 'Next Animation', key: 'C-e', run: () => this.cycleAnimation() },
+      slower:      { label: 'Slower', key: 'C-left', show: 'C-Lt', run: () => this.op(d => setTicksPerFrame(d, -1)) },
+      faster:      { label: 'Faster', key: 'C-right', show: 'C-Rt', run: () => this.op(d => setTicksPerFrame(d, +1)) },
+      toggleLoop:  { label: 'Loop / Hold', key: 'C-u', run: () => this.op(d => toggleLoop(d)) },
+      newAnim:     { label: 'New Animation...', run: () => void this.newAnimationAsked() },
+      renameAnim:  { label: 'Rename Animation...', run: () => void this.renameAnimationAsked() },
+      deleteAnim:  { label: 'Delete Animation', run: () => void this.deleteAnimationAsked() },
+
+      zoomCycle:   { label: 'Zoom In (wraps)', key: 'C-q', run: () => this.cycleZoom() },
+      size:        {
+        label: '80x25 / Responsive', key: 'M-enter', show: 'A-Ent',
+        run: () => this.toggleFixedSize(),
+      },
+
+      newSprite:   { label: 'New Sprite...', run: () => void this.newSpriteAsked() },
+      saveAs:      { label: 'Save As...', run: () => void this.saveAsAsked() },
+      openArt:     { label: 'Open Art (.ans)...', run: () => void this.openArtRequester() },
+    };
+  }
+
+  /** How a menu prints one of them: the label, then the key, right-aligned. */
+  private menuItem(id: string): { label: string; action: () => void } {
+    const cmd = this.commands()[id];
+    return {
+      label: menuItemLabel(cmd.label, cmd.show ?? cmd.key),
+      action: () => cmd.run(),
+    };
+  }
+
+  /**
+   * The footer strip: what a hand reaches for while animating.
+   *
+   * The same commands as the menus, one click away instead of a dropdown.
+   * Sprites only - a .ans has no frames, no animation and no cells to
+   * magnify, and a strip of controls that do nothing is worse than none.
+   */
+  private buildToolbar(): HostToolbarGroup[] {
+    const cmd = this.commands();
+    const frames = (): number => {
+      if (!this.doc) return 0;
+      return this.doc.sprite.animations[this.doc.animation].frames.length;
+    };
+    return [
+      [
+        { label: '|<', action: cmd.firstFrame.run },
+        { label: '<<', action: cmd.prevFrame.run },
+        { label: () => (this.playing ? '[]' : '|>'), action: cmd.play.run },
+        { label: '>>', action: cmd.nextFrame.run },
+        { label: '>|', action: cmd.lastFrame.run },
+      ],
+      [
+        { label: () => `${(this.doc?.frame ?? 0) + 1}/${frames()}` },
+        { label: '[+]', action: cmd.dupFrame.run },
+        { label: '[-]', action: cmd.delFrame.run },
+      ],
+      [
+        { label: () => `ONION ${this.onionSkin ? 'on' : 'off'}`, action: cmd.onionSkin.run },
+      ],
+      [
+        { label: () => `${this.zoom}x`, action: cmd.zoomCycle.run },
+      ],
+    ];
+  }
+
+  /**
+   * The wheel, at half speed.
+   *
+   * The accumulator lives on the door rather than the editor because
+   * changing zoom REBUILDS the editor - a counter kept in the widget would
+   * be thrown away by the very step it just counted.
+   */
+  private wheelZoom(direction: 1 | -1): void {
+    if (direction !== this.wheelDirection) {
+      this.wheelDirection = direction;
+      this.wheelNotches = 0;
+    }
+    if (++this.wheelNotches < WHEEL_NOTCHES_PER_STEP) return;
+    this.wheelNotches = 0;
+    void this.setZoom(stepZoom(this.zoom, direction));
+  }
+
+  /** One step up the zoom ladder, back to 1:1 from the top. */
+  private cycleZoom(): void {
+    const top = ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    void this.setZoom(this.zoom === top ? ZOOM_STEPS[0] : stepZoom(this.zoom, 1));
+  }
+
   /** Frame and Animation, in the editor's OWN menu bar. */
   private buildMenus(): Array<{ label: string; items: Array<{ label: string; action?: () => void; separator?: boolean }> }> {
+    const line = { label: '────────────────', separator: true };
     return [
       {
         label: 'Frame',
         items: [
-          { label: 'Next Frame      C-f', action: () => this.step(+1) },
-          { label: 'Previous Frame  C-b', action: () => this.step(-1) },
-          { label: '────────────────', separator: true },
-          { label: 'New Frame', action: () => this.op(d => addFrame(d, 'blank')) },
-          { label: 'Duplicate Frame', action: () => this.op(d => addFrame(d, 'duplicate')) },
-          { label: 'Delete Frame', action: () => void this.deleteFrameAsked() },
-          { label: '────────────────', separator: true },
-          { label: 'Move Earlier', action: () => this.op(d => moveFrame(d, -1)) },
-          { label: 'Move Later', action: () => this.op(d => moveFrame(d, 1)) },
-          { label: '────────────────', separator: true },
-          { label: 'Copy Frame      C-c', action: () => this.copyFrame() },
-          { label: 'Paste Frame     C-v', action: () => this.pasteFrame() },
-          { label: '────────────────', separator: true },
-          { label: 'Onion Skin      C-o', action: () => this.toggleOnionSkin() },
-          { label: 'Transparency Guide  C-g', action: () => this.toggleGuide() },
+          this.menuItem('nextFrame'),
+          this.menuItem('prevFrame'),
+          this.menuItem('firstFrame'),
+          this.menuItem('lastFrame'),
+          line,
+          this.menuItem('newFrame'),
+          this.menuItem('dupFrame'),
+          this.menuItem('delFrame'),
+          line,
+          this.menuItem('moveEarlier'),
+          this.menuItem('moveLater'),
+          line,
+          this.menuItem('copyFrame'),
+          this.menuItem('pasteFrame'),
+          line,
+          this.menuItem('onionSkin'),
+          this.menuItem('guide'),
         ],
       },
       {
         label: 'Sprite',
         items: [
-          { label: 'New Sprite...', action: () => void this.newSpriteAsked() },
-          { label: 'Save As...', action: () => void this.saveAsAsked() },
-          { label: '────────────────', separator: true },
-          { label: 'Open Art (.ans)...', action: () => void this.openArtRequester() },
-          { label: '────────────────', separator: true },
-          { label: '80x25 / Responsive', action: () => void this.toggleFixedSize() },
+          this.menuItem('newSprite'),
+          this.menuItem('saveAs'),
+          line,
+          this.menuItem('openArt'),
+          line,
+          this.menuItem('size'),
         ],
       },
       {
         label: 'Zoom',
-        items: ZOOM_STEPS.map(z => ({
-          label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
-          action: () => void this.setZoom(z),
-        })),
+        items: [
+          this.menuItem('zoomCycle'),
+          line,
+          ...ZOOM_STEPS.map(z => ({
+            label: z === 1 ? '1:1  (actual size)' : `${z}:1`,
+            action: () => void this.setZoom(z),
+          })),
+        ],
       },
       {
         label: 'Animation',
         items: [
-          { label: 'Play          C-p', action: () => this.playInPlace() },
-          { label: 'Play in a box', action: () => this.previewRequester() },
-          { label: 'Next          C-e', action: () => this.cycleAnimation() },
-          { label: '────────────────', separator: true },
-          { label: 'New...', action: () => void this.newAnimationAsked() },
-          { label: 'Rename...', action: () => void this.renameAnimationAsked() },
-          { label: 'Delete', action: () => void this.deleteAnimationAsked() },
-          { label: '────────────────', separator: true },
-          { label: 'Slower', action: () => this.op(d => setTicksPerFrame(d, -1)) },
-          { label: 'Faster', action: () => this.op(d => setTicksPerFrame(d, +1)) },
-          { label: 'Toggle Loop', action: () => this.op(d => toggleLoop(d)) },
+          this.menuItem('play'),
+          this.menuItem('playBox'),
+          this.menuItem('nextAnim'),
+          line,
+          this.menuItem('newAnim'),
+          this.menuItem('renameAnim'),
+          this.menuItem('deleteAnim'),
+          line,
+          this.menuItem('slower'),
+          this.menuItem('faster'),
+          this.menuItem('toggleLoop'),
         ],
       },
     ];
@@ -531,6 +757,11 @@ export class SpriteStudioDoor {
    * strokes is the defect this prevents.
    */
   private commit(): void {
+    // Playback owns the canvas while it runs, so reading the canvas back
+    // into the document has to stop it first - otherwise a save mid-play
+    // writes whichever frame happened to be on screen into the one being
+    // edited. Stopping restores the edited frame, which is what gets read.
+    this.stopPlayback();
     if (!this.doc || !this.editor) return;
     const canvas = this.editor.getCoreCanvas();
     if (!canvas) return;
@@ -545,6 +776,8 @@ export class SpriteStudioDoor {
     // work, and left set a freshly opened sprite reads as dirty.
     this.editor.modified = false;
     this.editor.setLabel?.(` ${studioTitle(this.doc, this.door, this.file)} `);
+    // The strip's frame readout is only true until the frame changes.
+    this.editor.refreshExtraToolbar?.();
     this.screen.render();
   }
 
@@ -583,6 +816,7 @@ export class SpriteStudioDoor {
   private toggleOnionSkin(): void {
     this.onionSkin = !this.onionSkin;
     this.editor?.setUnderlay(this.onionSkinCanvas());
+    this.editor?.refreshExtraToolbar?.();
     this.screen.render();
   }
 
@@ -616,38 +850,50 @@ export class SpriteStudioDoor {
    * both. The screen is created responsive; this pins the editor to 80x25
    * inside it, which is what a caller on a real board will see.
    */
-  private async toggleFixedSize(): Promise<void> {
-    this.fixedSize = !this.fixedSize;
-    this.applyTerminalMode();
-    await this.openEditor();
-    this.flash(this.fixedSize ? '80x25 (as the board serves it)' : 'Responsive (your terminal)');
+  private toggleFixedSize(): void {
+    this.terminalMode?.toggle();
+    this.flash(this.terminalMode?.mode() === 'fixed'
+      ? '80x25 (as the board serves it)'
+      : 'Responsive (your terminal)');
   }
 
   /**
-   * Ask the TERMINAL for the size, not just the editor.
+   * The room this door's editor has for artwork, right now.
    *
-   * Reported twice: "when i select responsive mode it doesnt resize to the
-   * browser size". Sizing the editor to 100% was only ever half of it - the
-   * browser terminal starts in FIXED 80x25 and stays there until a door asks
-   * for wide mode (BBSTerminal's own comment: "DON'T auto-fit on mount ...
-   * only resize when the door calls enableWideMode()"). So there was nothing
-   * bigger to fill. livechat calls enableWideMode() at startup, which is why
-   * it has always worked.
-   *
-   * Fixed mode calls disableWideMode(), which snaps the terminal back to
-   * 80x25 - so the toggle shows what a caller on the board actually sees
-   * rather than a cropped view of a wide one.
+   * 80x25 when pinned to what the board serves, the caller's real terminal
+   * otherwise - the same two sizes openEditor builds the editor at.
    */
-  private applyTerminalMode(): void {
-    const bbs: any = (this.ctx as any)?.bbs;
-    if (this.fixedSize) bbs?.disableWideMode?.();
-    else bbs?.enableWideMode?.();
+  private room(): { w: number; h: number } {
+    const fixed = this.terminalMode?.mode() === 'fixed';
+    return canvasRoom(
+      fixed ? 80 : (this.screen?.width ?? 80),
+      fixed ? 25 : (this.screen?.height ?? 25),
+    );
+  }
+
+  /**
+   * A newly opened document opens at actual size, like the first one did.
+   *
+   * Zoom is something you ask for, and you asked for it about the sprite
+   * you were looking at - carrying it to the next one drew a 20-cell log at
+   * the 8x you had chosen for a 5-cell egg, which runs off the screen.
+   */
+  private resetZoomForDocument(): void {
+    this.zoom = this.doc
+      ? Math.min(DEFAULT_ZOOM, zoomThatFits(this.doc.sprite.cellW, this.doc.sprite.cellH, this.room()))
+      : DEFAULT_ZOOM;
+    this.wheelNotches = 0;
   }
 
   private async setZoom(zoom: number): Promise<void> {
-    if (zoom === this.zoom) return;
+    // Never past what fits: the canvas cannot scroll, so a step too far
+    // just pushes the artwork off the right-hand side.
+    const capped = this.doc
+      ? Math.min(zoom, zoomThatFits(this.doc.sprite.cellW, this.doc.sprite.cellH, this.room()))
+      : zoom;
+    if (capped === this.zoom) return;
     this.commit();
-    this.zoom = zoom;
+    this.zoom = capped;
     await this.openEditor();
   }
 
@@ -715,17 +961,38 @@ export class SpriteStudioDoor {
    * canvas is restored to the frame being edited afterwards, and the work
    * is committed first so playback cannot eat an uncommitted stroke.
    */
+  /** The strip's one play button, which has to be able to stop it too. */
+  private togglePlay(): void {
+    if (this.playing) this.stopPlayback();
+    else this.playInPlace();
+  }
+
+  /**
+   * Stop playback from anywhere, not only from a keypress.
+   *
+   * Everything that replaces what the canvas shows - a document op, a
+   * rebuilt editor, a commit - goes through here first. Harmless when
+   * nothing is playing.
+   */
+  private stopPlayback(): void {
+    this.stopPlay?.();
+  }
+
   private playInPlace(): void {
     if (!this.doc || !this.editor || this.playing) return;
     this.commit();
     const doc = this.doc;
     const anim = doc.sprite.animations[doc.animation];
     if (anim.frames.length < 2) {
-      void this.message('Play', 'This animation has a single frame.');
+      // Not an error and not worth a modal - nothing has gone wrong, there
+      // is simply nothing to play. A modal here was also the one the sysop
+      // could not dismiss, because it opened from a click.
+      this.flash('Only one frame in this animation');
       return;
     }
 
     this.playing = true;
+    this.editor.refreshExtraToolbar?.();
     this.editor.setUnderlay(null);
     let i = 0;
     const showFrame = () => {
@@ -743,10 +1010,12 @@ export class SpriteStudioDoor {
     const stop = () => {
       if (!this.playing) return;
       this.playing = false;
+      this.stopPlay = null;
       if (this.playTimer) { clearInterval(this.playTimer); this.playTimer = null; }
       this.screen.removeListener('keypress', stop);
       this.loadFrame();
     };
+    this.stopPlay = stop;
     this.screen.on('keypress', stop);
   }
 
@@ -812,6 +1081,7 @@ export class SpriteStudioDoor {
     this.door = doors[d];
     this.file = `${name}.sprite.json`;
     this.doc = openDoc(sprite);
+    this.resetZoomForDocument();
     await this.openEditor();
     await this.save();
   }
@@ -908,33 +1178,30 @@ export class SpriteStudioDoor {
    * editor's own and are left alone.
    */
   private bindHotkeys(): void {
-    const key = (keys: string[], handler: () => void) => {
+    for (const cmd of Object.values(this.commands())) {
+      if (!cmd.key) continue;
+      // Alt+Enter belongs to the SDK's terminal-mode switch, which binds it
+      // itself; binding it here too would toggle twice per press.
+      if (cmd.key === 'M-enter') continue;
+      const keys = [cmd.key];
       const guarded = () => {
         if ((this.screen as any).dialogOpen) return;
-        handler();
+        cmd.run();
+        // TRUE means handled, so the editor never sees it. That matters for
+        // the arrow combinations: the editor's draw handler reads the arrow
+        // name without looking at Ctrl, so Ctrl+Up would move the frame AND
+        // walk the cursor up a row.
+        return true;
       };
       this.screen.key(keys, guarded);
       this.keyHandlers.push([keys, guarded]);
-    };
-
-    key(['C-f'], () => this.step(+1));
-    key(['C-b'], () => this.step(-1));
-    key(['C-e'], () => this.cycleAnimation());
-    key(['C-p'], () => this.playInPlace());
-    key(['C-o'], () => this.toggleOnionSkin());
-    key(['C-g'], () => this.toggleGuide());
-    key(['C-c'], () => this.copyFrame());
-    key(['C-v'], () => this.pasteFrame());
+    }
   }
 
   destroy(): void {
-    // Leave the board as it was found: a caller returning to the BBS gets
-    // its 80 columns back, not this door's wide terminal.
-    (this.ctx as any)?.bbs?.disableWideMode?.();
-    if (this.onScreenResize) {
-      this.screen.removeListener('resize', this.onScreenResize);
-      this.onScreenResize = null;
-    }
+    // Restores the board's 80 columns and drops the resize listener.
+    this.terminalMode?.dispose();
+    this.terminalMode = null;
     if (this.playTimer) { clearInterval(this.playTimer); this.playTimer = null; }
     for (const [keys, handler] of this.keyHandlers) this.screen.unkey(keys, handler);
     this.keyHandlers = [];

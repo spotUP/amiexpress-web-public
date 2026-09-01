@@ -163,13 +163,11 @@ class BrokerLobbyAdapter extends blessed_1.EventEmitter {
         const matchState = this.network.getMatchState();
         if (!matchState)
             return;
-        // Get min players for current mode
-        const modeMinPlayers = {
-            versus_1v1: 2,
-            team_2v2: 4,
-            battle_royale: 2,
-        };
-        const minPlayers = count ?? modeMinPlayers[matchState.mode] ?? 2;
+        // How many players this mode is played with. The table lives in
+        // bot-lobby.ts, which is the file that also knows how to make them -
+        // this copy said battle_royale wanted TWO, so the 99-player mode
+        // started with a single CPU opponent.
+        const minPlayers = count ?? (0, bot_lobby_1.modePlayerTarget)(matchState.mode);
         const diff = (difficulty ?? this.botDifficulty);
         matchState.players = (0, bot_lobby_1.fillLobbyWithBots)(matchState.players, minPlayers, diff);
         console.log(`[BrokerLobbyAdapter] fillWithBots: mode=${matchState.mode}, minPlayers=${minPlayers}, now have ${matchState.players.length} players`);

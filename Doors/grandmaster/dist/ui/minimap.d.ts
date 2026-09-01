@@ -25,6 +25,14 @@ export interface OpponentState {
     targeting?: boolean;
     rank?: number;
     /**
+     * A CPU opponent rather than a person.
+     *
+     * The versus screen hands full boards to the humans first when not
+     * everyone fits (see ui/versus-layout.ts), so the tracker has to know
+     * which is which - the lobby knew, and the tracker did not.
+     */
+    isBot?: boolean;
+    /**
      * Absolute cells of the opponent's CURRENTLY FALLING piece.
      *
      * `board` holds locked cells only, so a view rendered from it alone never
@@ -59,8 +67,21 @@ export declare class MinimapRenderer {
     /**
      * Render opponents into `container`.
      * Switches between bucket bars and text list automatically.
+     *
+     * `innerWidth` is the panel's content width. It was 41 for the whole life
+     * of this renderer because 80 columns minus the player's side left exactly
+     * that; now the grid can sit beside one or more full opponent boards and
+     * get far less, so how many bars fit is arithmetic rather than a constant.
      */
-    renderBuckets(container: any, opponents: OpponentState[]): void;
+    renderBuckets(container: any, opponents: OpponentState[], innerWidth?: number): void;
+    /**
+     * Render opponents as the ranked leaderboard, whatever their number.
+     *
+     * renderBuckets picks bars or list by how many there are; the cascade has
+     * already made that choice for each section (ui/versus-layout.ts), so the
+     * list section must not turn into bars when the field thins out.
+     */
+    renderList(container: any, opponents: OpponentState[], innerWidth?: number): void;
     /** Rows the stack occupies (0 = empty board, board.height = topped out). */
     private stackHeight;
     /** Color string based on fill fraction (0–1). */
@@ -77,7 +98,9 @@ export declare class MinimapRenderer {
     /**
      * Text list mode — ranked leaderboard for large lobbies.
      *
-     * Format (41 chars wide):
+     * Format (columns derived from the panel's width; the name column is what
+     * gives when the panel is narrow, because the rank and the numbers are
+     * what the list is FOR):
      *   # Name       Lv Ht
      *   ─────────────────────
      *   1 Opponent1  05  12

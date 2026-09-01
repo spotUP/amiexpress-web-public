@@ -85,7 +85,10 @@ export { StackedGauge } from './widgets/stacked-gauge';
 export { ColorPicker } from './widgets/colorpicker';
 export { FileExplorer } from './widgets/fileexplorer';
 export { ANSIEditor, ansiEditor } from './widgets/ansi-editor';
-export type { ANSIEditorOptions } from './widgets/ansi-editor';
+export type {
+  ANSIEditorOptions, HostMenu, HostToolbarItem, HostToolbarGroup,
+} from './widgets/ansi-editor';
+export { menuItemLabel, menuWidthFor, MENU_ITEM_COLUMNS } from './widgets/ansi-editor';
 export { DocModal } from './widgets/doc-modal';
 export type { DocModalOptions } from './widgets/doc-modal';
 export { LoginModal, loginModal } from './widgets/login-modal';

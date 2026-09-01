@@ -10,6 +10,7 @@
  * - Mouse support everywhere
  * - Settings panel with checkboxes
  */
+import { type TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { AppState } from './core/state';
 interface DoorSession {
     socket: any;
@@ -20,6 +21,8 @@ interface DoorSession {
 }
 export declare function createApp(session: DoorSession): Promise<{
     state: AppState;
+    screen: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").Screen;
+    readonly terminalMode: TerminalModeSwitch | null;
     run(): Promise<void>;
 }>;
 export {};

@@ -91,3 +91,93 @@ describe('ANSIEditor host-supplied menus', () => {
     expect(ran).toBe(1);
   });
 });
+
+/**
+ * "all menu items needs to show hotkeys as well" (2026-09-01).
+ *
+ * A menu is where a hotkey is LEARNED. Every item the editor answers with a
+ * key had that key nowhere in its own menus, so the only way to find Ctrl+S
+ * was to already know it.
+ */
+describe('ANSIEditor menu hotkeys', () => {
+  let screen: any;
+  beforeEach(() => { screen = new Screen({ title: 'menu-keys', responsive: true, width: 100, height: 40 } as any); });
+  afterEach(() => screen?.destroy());
+
+  /** Every dropdown item label in the editor's own menus. */
+  function itemLabels(editor: any): string[] {
+    return [editor.fileMenu, editor.editMenu, editor.selectionMenu,
+      editor.colorsMenu, editor.viewMenu, editor.helpMenu]
+      .filter(Boolean)
+      .flatMap((m: any) => (m.items as any[]).map(i => i.label as string));
+  }
+
+  it('names the key beside the command it runs', () => {
+    const editor: any = new ANSIEditor({ parent: screen, showMenuBar: true } as any);
+    const labels = itemLabels(editor);
+    for (const [command, key] of [
+      ['Save', 'C-s'], ['Undo', 'C-z'], ['Redo', 'C-y'],
+      ['Foreground...', 'A-c'], ['Background...', 'A-b'],
+      ['Text Mode', 'C-m'], ['Draw Mode', 'C-m'], ['Exit', 'ESC'],
+    ] as Array<[string, string]>) {
+      const item = labels.find(l => l.startsWith(command));
+      expect(item).toBeDefined();
+      expect(item!.endsWith(key)).toBe(true);
+    }
+  });
+
+  it('gives a menu room for the labels it carries', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen,
+      showMenuBar: true,
+      extraMenus: [{
+        label: 'Frame',
+        items: [{ label: 'Transparency Guide  C-g', action: () => {} }],
+      }],
+    } as any);
+    const host = editor.extraMenuDropdowns[0];
+    expect(host.width).toBeGreaterThanOrEqual('Transparency Guide  C-g'.length + 2);
+  });
+});
+
+/**
+ * A rebuilt editor must not leave its menus behind.
+ *
+ * The dropdowns are parented to the SCREEN so they can paint over
+ * everything, which also means Element.destroy() never swept them. The
+ * sprite studio rebuilds its editor for every zoom step, every resize and
+ * every document it opens, so each of those left eleven hidden dropdowns
+ * on the screen holding actions closed over a dead editor.
+ */
+describe('ANSIEditor teardown', () => {
+  let screen: any;
+  beforeEach(() => { screen = new Screen({ title: 'teardown', responsive: true, width: 100, height: 40 } as any); });
+  afterEach(() => screen?.destroy());
+
+  const dropdowns = () => (screen.children as any[])
+    .filter(c => c.constructor.name === 'DropdownMenu').length;
+
+  it('takes its own and its host’s menus down with it', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen,
+      showMenuBar: true,
+      extraMenus: [
+        { label: 'Frame', items: [{ label: 'Next', action: () => {} }] },
+        { label: 'Animation', items: [{ label: 'Play', action: () => {} }] },
+      ],
+    } as any);
+    expect(dropdowns()).toBeGreaterThan(0);
+
+    editor.destroy();
+    expect(dropdowns()).toBe(0);
+  });
+
+  it('leaves nothing behind when a host rebuilds it repeatedly', () => {
+    for (let i = 0; i < 5; i++) {
+      const editor: any = new ANSIEditor({ parent: screen, showMenuBar: true } as any);
+      editor.destroy();
+    }
+    expect(dropdowns()).toBe(0);
+    expect((screen.children as any[]).length).toBe(0);
+  });
+});
