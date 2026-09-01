@@ -32,7 +32,7 @@ function makeSprite(): Sprite {
 }
 
 export async function theEditorOwnsTheScreenAndItsOwnChrome(): Promise<void> {
-  assert.ok(source.includes("width: this.fixedSize ? 80 : '100%'"),
+  assert.ok(source.includes("width: this.terminalMode?.mode() === 'fixed' ? 80 : '100%'"),
     'the editor must fill the screen - nothing wraps it - unless it is ' +
     'deliberately pinned to the 80x25 the board serves');
   for (const on of ['showMenuBar: true', 'showToolbar: true', 'showSidebar: true', 'showStatusBar: true']) {
@@ -63,7 +63,8 @@ export async function frameAndAnimationLiveInTheEditorsOwnMenuBar(): Promise<voi
     assert.ok(frame.some((l: string) => l.startsWith(needed)), `Frame menu needs ${needed}`);
   }
   const animation = menus[3].items.filter((i: any) => !i.separator).map((i: any) => i.label);
-  for (const needed of ['Play', 'Next', 'New...', 'Delete', 'Slower', 'Faster', 'Toggle Loop']) {
+  for (const needed of ['Play', 'Next Animation', 'New Animation...', 'Delete Animation',
+    'Slower', 'Faster', 'Loop / Hold']) {
     assert.ok(animation.some((l: string) => l.startsWith(needed)), `Animation menu needs ${needed}`);
   }
 }
@@ -100,9 +101,13 @@ export async function theOpenPathIsARequesterNotAScreen(): Promise<void> {
 }
 
 export async function everyHotkeyIsNonPrintableAndNotTheEditorsOwn(): Promise<void> {
-  const bind = source.slice(source.indexOf('private bindHotkeys'), source.indexOf('destroy(): void {'));
-  const keys = [...bind.matchAll(/key\(\['([^']+)'\]/g)].map(m => m[1]);
-  assert.ok(keys.length > 0, 'the hotkeys must be readable from bindHotkeys');
+  // The full clash rules live in tests/hotkeys.test.ts, which reads the
+  // same table; this keeps the two oldest rules next to the shape they
+  // belong to.
+  const studio: any = new SpriteStudioDoor();
+  const keys = Object.values(studio.commands())
+    .map((c: any) => c.key).filter(Boolean) as string[];
+  assert.ok(keys.length > 0, 'the hotkeys must be readable from the command table');
   const editorsOwn = new Set(['C-s', 'C-m', 'C-z', 'C-y', 'C-h']);
   for (const k of keys) {
     assert.ok(!(k.length === 1 && k >= ' '),
@@ -133,9 +138,11 @@ export async function zoomIsSomethingYouAskFor(): Promise<void> {
   const zoom = studio.buildMenus().find((m: any) => m.label === 'Zoom');
   assert.ok(zoom, 'there must be a Zoom menu');
   assert.deepStrictEqual(
-    zoom.items.map((i: any) => i.label),
+    zoom.items.filter((i: any) => !i.separator).map((i: any) => i.label.trim()).slice(1),
     ['1:1  (actual size)', '2:1', '4:1', '6:1', '8:1'],
     'the steps a sysop can pick, actual size first');
+  assert.ok(zoom.items[0].label.startsWith('Zoom In'),
+    'with the key that walks the ladder at the top of the menu');
   for (const z of ZOOM_STEPS) {
     assert.ok(z === 1 || z % 2 === 0,
       `${z}:1 is odd - a half-block cell holds two pixels vertically, so an ` +
@@ -186,7 +193,8 @@ export async function onionSkinShowsThePreviousFrameAndOnlyAsAGhost(): Promise<v
   assert.ok(fn.includes('anim.loop'),
     'on frame 0 of a looping animation the previous frame is the LAST one - ' +
     'that is the join the loop actually makes');
-  assert.ok(source.includes("key(['C-o']"), 'and a hotkey to toggle it');
+  const studio: any = new SpriteStudioDoor();
+  assert.strictEqual(studio.commands().onionSkin.key, 'C-o', 'and a hotkey to toggle it');
 }
 
 export async function playingHappensOnTheCanvasAndStopsOnAnyKey(): Promise<void> {
@@ -225,10 +233,9 @@ export async function artFilesOpenInTheSameEditor(): Promise<void> {
 }
 
 export async function theSizeToggleShowsWhatTheBoardWillShow(): Promise<void> {
-  assert.ok(source.includes('private async toggleFixedSize('), 'the toggle must exist');
-  assert.ok(source.includes("width: this.fixedSize ? 80 : '100%'"),
+  assert.ok(source.includes('private toggleFixedSize('), 'the toggle must exist');
+  assert.ok(source.includes("height: this.terminalMode?.mode() === 'fixed' ? 25 : '100%'"),
     'pinned to 80x25, which is what a caller on the board sees');
-  assert.ok(source.includes("height: this.fixedSize ? 25 : '100%'"));
 }
 
 export async function theTitleReportsTheTimingSoSlowerAndFasterAreNotBlind(): Promise<void> {
@@ -240,19 +247,16 @@ export async function theTitleReportsTheTimingSoSlowerAndFasterAreNotBlind(): Pr
 
 export async function theEditorFollowsTheTerminalWhenItResizes(): Promise<void> {
   // "i switched to responsive now it did not resize to my browser window."
-  // The widget takes its geometry at construction, so responsive means
-  // rebuilding on resize - the livechat door's lesson, written down in its
-  // own source after being reported twice.
-  assert.ok(source.includes("this.screen.on('resize', this.onScreenResize)"),
-    'the studio must listen for screen resize');
+  // The listening lives in the shared switch now (its own suite pins that
+  // it hooks and unhooks 'resize'); what stays this door's job is what a
+  // relayout MEANS - the ANSIEditor takes its geometry at construction, so
+  // following a resize means rebuilding it without losing work.
   const fn = source.slice(source.indexOf('private async relayout('), source.indexOf('// ============================================\n  // REQUESTERS'));
   assert.ok(fn.includes('if (this.playing) return;'),
     'a resize during playback must not fight it for the canvas');
   assert.ok(fn.includes('this.commit()'),
     'a window drag must not eat work in progress');
   assert.ok(fn.includes('await this.openEditor()'), 'and the editor is rebuilt at the new size');
-  assert.ok(source.includes("this.screen.removeListener('resize'"),
-    'and the listener goes when the door does');
 }
 
 export async function theTransparencyGuideIsOffUntilAskedFor(): Promise<void> {
@@ -261,7 +265,8 @@ export async function theTransparencyGuideIsOffUntilAskedFor(): Promise<void> {
   assert.ok(source.includes('private guide = false;'), 'the guide starts off');
   assert.ok(source.includes('showTransparencyGuide: this.guide'),
     'and the editor is built with whatever it currently is');
-  assert.ok(source.includes("key(['C-g']"), 'with a hotkey');
+  const guided: any = new SpriteStudioDoor();
+  assert.strictEqual(guided.commands().guide.key, 'C-g', 'with a hotkey');
   const studio: any = new SpriteStudioDoor();
   const sprite = studio.buildMenus().find((m: any) => m.label === 'Frame');
   assert.ok(sprite.items.some((i: any) => i.label.startsWith('Transparency Guide')),
@@ -272,16 +277,19 @@ export async function responsiveAsksTheTerminalNotJustTheEditor(): Promise<void>
   // "when i select responsive mode it doesnt resize to the browser size."
   // The browser terminal starts FIXED at 80x25 and only widens when a door
   // asks (BBSTerminal: "DON'T auto-fit on mount"), so sizing the editor to
-  // 100% filled a terminal that never grew.
-  assert.ok(source.includes('private applyTerminalMode('), 'the door must set the terminal mode');
-  assert.ok(source.includes('bbs?.enableWideMode?.()'), 'responsive asks for wide');
-  assert.ok(source.includes('bbs?.disableWideMode?.()'), 'and fixed asks for 80 columns back');
+  // 100% filled a terminal that never grew. The three parts of getting it
+  // right live in the SDK now - this door uses them rather than owning them.
+  assert.ok(source.includes('createTerminalModeSwitch({'),
+    'the door must use the shared switch, not its own copy of the dance');
   const start = source.slice(source.indexOf('async start('), source.indexOf('private createUI('));
-  assert.ok(start.includes('this.applyTerminalMode()'),
-    'and it must be applied at startup, not only when the toggle is used');
+  assert.ok(start.includes('createTerminalModeSwitch'),
+    'and build it at startup, so the terminal is wide before anything is drawn');
+  assert.ok(source.includes('onRelayout: () => this.relayout()'),
+    'with the door supplying what re-layout MEANS for it - here, rebuilding ' +
+    'a widget that took its geometry at construction');
   const destroy = source.slice(source.indexOf('destroy(): void {'));
-  assert.ok(destroy.includes('disableWideMode'),
-    'the board gets its 80 columns back when the door closes');
+  assert.ok(destroy.includes('this.terminalMode?.dispose()'),
+    'and disposing it, which restores the board 80 columns and unhooks resize');
 }
 
 export async function theWheelStepsTheZoomLadder(): Promise<void> {
@@ -289,9 +297,11 @@ export async function theWheelStepsTheZoomLadder(): Promise<void> {
   // the turn; the door owns the ladder, so the door decides what it means.
   assert.ok(source.includes("this.editor.on('canvas-wheel'"),
     'the studio must listen for the wheel the editor reports');
-  assert.ok(source.includes("stepZoom(this.zoom, d.direction === 'up' ? 1 : -1)"),
-    'up zooms in, down zooms out, along the same clamped ladder the menu uses');
+  assert.ok(source.includes("this.wheelZoom(d.direction === 'up' ? 1 : -1)"),
+    'up zooms in, down zooms out, along the same clamped ladder the menu uses ' +
+    '- at half speed, see toolbar.test.ts');
   // And the ladder itself already refuses to run off either end.
   assert.strictEqual(stepZoom(1, -1), 1);
   assert.strictEqual(stepZoom(8, 1), 8);
 }
+

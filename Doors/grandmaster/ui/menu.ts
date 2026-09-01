@@ -198,7 +198,7 @@ export class MenuScreen {
         height: 1,
         align: 'center',
         style: { fg: 'gray', bg: 'black' },
-        content: 'Arrow Keys: Navigate  |  Enter: Select  |  ESC/Q: Quit',
+        content: 'Arrows: Navigate | Enter: Select | Alt+Enter: Full Screen | ESC/Q: Quit',
       });
 
       // Ensure title is rendered on top (z-index fix)

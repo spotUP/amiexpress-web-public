@@ -10,6 +10,7 @@ exports.VersusScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const board_effects_1 = require("./board-effects");
 const minimap_1 = require("./minimap");
+const versus_layout_1 = require("./versus-layout");
 const bot_player_1 = require("../ai/bot-player");
 const board_1 = require("../core/board");
 const screen_shake_1 = require("../effects/screen-shake");
@@ -33,7 +34,8 @@ class VersusScreen {
         this.localMuted = false;
         this.sessionSocket = null;
         this.voiceSpeakingHandler = null;
-        this.lastOpponentCount = -1; // tracks layout switch
+        this.opponentBoards = []; // one full board per opponent that fits
+        this.lastLayoutKey = ''; // suppresses widget churn between frames
         /** Match outcome, readable after run() resolves. */
         this.victory = false;
         /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
@@ -186,6 +188,8 @@ class VersusScreen {
     setupUI() {
         // Clear screen
         this.screen.children.forEach(child => child.destroy());
+        this.opponentBoards = [];
+        this.lastLayoutKey = '';
         // Player board
         this.boardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -242,28 +246,15 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
-        // Opponent full board
-        this.opponentBoardBox = (0, blessed_helpers_1.createBox)({
-            parent: this.screen,
-            top: 1,
-            left: 37,
-            width: 22,
-            height: 22,
-            border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
-            label: ' CPU ',
-            fixed: true,
-            focusable: false,
-            mouse: false,
-            clickable: false,
-        });
+        // Opponent full board. More are created as the layout asks for them.
+        this.opponentBoards = [this.createOpponentBoard(0)];
         // ── 1v1 right side (visible when ≤1 opponent) ──────────────────────────
         // VS info panel (21w)
         this.opponentInfoBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: 59,
-            width: 21,
+            left: versus_layout_1.LEFT_PANEL_COLS + versus_layout_1.OPPONENT_BOARD_COLS,
+            width: versus_layout_1.VS_INFO_COLS,
             height: 22,
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
@@ -274,13 +265,13 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
-        // ── Battle-royale right side (visible when >1 opponent) ──────────────
-        // Minimap panel fills all remaining columns (43w: cols 37-79)
+        // ── The grid, for every opponent that does not get a board ───────────
+        // Placed and sized per-render; these are its 80-column values.
         this.minimapPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: 37,
-            width: 43,
+            left: versus_layout_1.LEFT_PANEL_COLS,
+            width: this.screen.width - versus_layout_1.LEFT_PANEL_COLS,
             height: 22,
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
@@ -295,7 +286,7 @@ class VersusScreen {
             parent: this.minimapPanel,
             top: 1,
             left: 1,
-            width: 41,
+            width: this.screen.width - versus_layout_1.LEFT_PANEL_COLS - 2,
             height: 20,
             border: 'none',
             tags: true,
@@ -303,6 +294,37 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
+        // ── The leaderboard, for the opponents past the bars ─────────────────
+        // Only ever shown in the cascade (see ui/versus-layout.ts): boards for
+        // the closest few, bars for the next handful, and this for the rest of
+        // a field that no width could draw in full.
+        this.listPanel = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: versus_layout_1.LEFT_PANEL_COLS,
+            width: 22,
+            height: 22,
+            border: { type: 'line' },
+            style: { border: { fg: 'cyan' } },
+            label: ' Standings ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        this.listContainer = (0, blessed_helpers_1.createBox)({
+            parent: this.listPanel,
+            top: 1,
+            left: 1,
+            width: 20,
+            height: 20,
+            border: 'none',
+            tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        this.listPanel.hide();
         // Player stats — bottom row
         this.statsBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -334,6 +356,81 @@ class VersusScreen {
             });
         }
     }
+    /** One opponent playfield, at the Nth board slot. */
+    createOpponentBoard(index) {
+        return (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: (0, versus_layout_1.boardLeft)(index),
+            width: versus_layout_1.OPPONENT_BOARD_COLS,
+            height: 22,
+            border: { type: 'line' },
+            style: { bg: 'black', border: { fg: 'cyan' } },
+            label: ' CPU ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+    }
+    /**
+     * Put the right-hand widgets where the layout says they go.
+     *
+     * Creates the boards the layout asks for, destroys the ones it does not
+     * (a board left behind is a framed rectangle full of a dead opponent), and
+     * gives the grid whatever columns the boards did not take. Guarded by a
+     * key because this runs inside a 20 fps render loop and rebuilding widgets
+     * every frame would flicker.
+     */
+    applyVersusLayout(layout) {
+        const width = this.screen.width;
+        const key = `${width}:${layout.fullBoards}:${layout.minimaps}:${layout.showInfo}`;
+        if (key === this.lastLayoutKey)
+            return;
+        this.lastLayoutKey = key;
+        while (this.opponentBoards.length > layout.fullBoards) {
+            this.opponentBoards.pop()?.destroy();
+        }
+        while (this.opponentBoards.length < layout.fullBoards) {
+            this.opponentBoards.push(this.createOpponentBoard(this.opponentBoards.length));
+        }
+        this.opponentBoards.forEach((box, i) => {
+            box.left = (0, versus_layout_1.boardLeft)(i);
+            box.width = versus_layout_1.OPPONENT_BOARD_COLS;
+            box.show();
+        });
+        if (layout.showInfo) {
+            this.opponentInfoBox.left = (0, versus_layout_1.boardLeft)(layout.fullBoards);
+            this.opponentInfoBox.width = versus_layout_1.VS_INFO_COLS;
+            this.opponentInfoBox.show();
+        }
+        else {
+            this.opponentInfoBox.hide();
+        }
+        if (layout.minimaps > 0 && layout.minimapWidth > 0) {
+            this.minimapPanel.left = layout.minimapLeft;
+            this.minimapPanel.width = layout.minimapWidth;
+            this.minimapContainer.width = Math.max(1, layout.minimapWidth - 2);
+            // Say how many are in there. A battle royale fields 98 CPUs and the
+            // list shows the most dangerous of them; without the count, the rest
+            // are simply missing with nothing to say so.
+            this.minimapPanel.setLabel?.(` Opponents (${layout.minimaps}) `);
+            this.minimapPanel.show();
+        }
+        else {
+            this.minimapPanel.hide();
+        }
+        if (layout.listed > 0 && layout.listWidth > 0) {
+            this.listPanel.left = layout.listLeft;
+            this.listPanel.width = layout.listWidth;
+            this.listContainer.width = Math.max(1, layout.listWidth - 2);
+            this.listPanel.setLabel?.(` Standings (${layout.listed}) `);
+            this.listPanel.show();
+        }
+        else {
+            this.listPanel.hide();
+        }
+    }
     /**
      * Setup network event listeners
      */
@@ -354,6 +451,9 @@ class VersusScreen {
                 grade: update.grade,
                 alive: true,
                 pieceCells: update.pieceCells,
+                // The lobby knows who is a CPU; the tracker has to, because the
+                // layout gives the boards to the people first when not all fit.
+                isBot: this.network?.getMatchState()?.players.find(p => String(p.id) === String(update.playerId))?.isBot ?? false,
             });
             // Repaint on receipt instead of waiting for the next loop tick.
             this.renderNow();
@@ -463,6 +563,7 @@ class VersusScreen {
                                 alive: true,
                                 rank: i + 1,
                                 pieceCells,
+                                isBot: true, // VersusAI opponents are CPUs by definition
                             });
                         }
                     }
@@ -933,36 +1034,46 @@ class VersusScreen {
         // Render garbage strip
         const pending = this.attackManager.getPendingGarbage();
         this.renderGarbage(pending);
-        // Switch right-side layout based on opponent count
+        // Right side: how many boards the TERMINAL holds, not how many
+        // opponents exist. The rule and its arithmetic live in versus-layout.ts.
         const opponents = this.opponentTracker.getAliveOpponents();
-        const oppCount = opponents.length;
+        const humans = opponents.filter(o => !o.isBot);
+        const bots = opponents.filter(o => o.isBot);
+        // An empty tracker is an opponent who has not arrived yet - between the
+        // countdown and the first update there is nobody - so the 1v1 shell
+        // stays up rather than the right side blinking out and back.
+        const layout = opponents.length > 0
+            ? (0, versus_layout_1.versusLayout)(this.screen.width, humans.length, bots.length)
+            : (0, versus_layout_1.versusLayout)(this.screen.width, 1, 0);
+        // Humans first, then the CPUs by danger: when only some of the field
+        // gets a board, the ones that get it are the people and then whoever is
+        // closest to killing you. `rank` is assigned at sample time, 1 being the
+        // tallest stack (see run()'s AI sampling).
+        const byRank = (a, b) => (a.rank ?? 99) - (b.rank ?? 99);
+        const ordered = [...humans.sort(byRank), ...bots.sort(byRank)];
+        const onBoards = ordered.slice(0, layout.fullBoards);
+        const onGrid = ordered.slice(layout.fullBoards, layout.fullBoards + layout.minimaps);
+        const onList = layout.listed > 0
+            ? ordered.slice(layout.fullBoards + layout.minimaps)
+            : [];
         const attackPending = this.attackManager.getPendingGarbage();
-        if (oppCount !== this.lastOpponentCount) {
-            this.lastOpponentCount = oppCount;
-            if (oppCount > 1) {
-                // Battle royale: hide 1v1 boxes, show minimap panel
-                this.opponentBoardBox?.hide();
-                this.opponentInfoBox?.hide();
-                this.minimapPanel?.show();
-            }
-            else {
-                // 1v1: show full board + VS info, hide minimap panel
-                this.opponentBoardBox?.show();
-                this.opponentInfoBox?.show();
-                this.minimapPanel?.hide();
-            }
+        this.applyVersusLayout(layout);
+        for (let i = 0; i < onBoards.length; i++) {
+            const box = this.opponentBoards[i];
+            if (!box)
+                continue;
+            this.renderOpponentBoard(box, onBoards[i]);
+            box.setLabel(` ${onBoards[i].name || 'CPU'} `);
         }
-        if (oppCount > 1) {
-            // Battle royale — render bucket/list visualization
-            this.minimapRenderer.renderBuckets(this.minimapContainer, opponents);
+        if (onGrid.length > 0) {
+            this.minimapRenderer.renderBuckets(this.minimapContainer, onGrid, this.minimapContainer.width);
         }
-        else {
-            // 1v1 — render full opponent board + VS info
-            const opp = opponents[0] ?? null;
-            if (opp) {
-                this.renderOpponentBoard(opp);
-                this.opponentBoardBox.setLabel(` ${opp.name || 'CPU'} `);
-            }
+        if (onList.length > 0) {
+            this.minimapRenderer.renderList(this.listContainer, onList, this.listContainer.width);
+        }
+        if (layout.showInfo) {
+            // The 1v1 VS/attack panel, for the one opponent beside it.
+            const opp = onBoards[0] ?? null;
             const oppName = opp?.name || 'CPU';
             const oppLevel = opp?.level ?? '-';
             const oppGrade = opp?.grade ?? '-';
@@ -1309,8 +1420,8 @@ class VersusScreen {
     /**
      * Render opponent board (full size)
      */
-    renderOpponentBoard(opponent) {
-        if (!this.opponentBoardBox || !opponent.board)
+    renderOpponentBoard(box, opponent) {
+        if (!box || !opponent.board)
             return;
         const board = opponent.board;
         // Overlay the in-flight piece (see OpponentState.pieceCells): board.grid
@@ -1332,10 +1443,10 @@ class VersusScreen {
                     continue;
                 }
                 const cell = board.grid[y]?.[x];
-                content += cell?.filled ? this.getBlockChar(cell.color) : '  ';
+                content += cell?.filled ? this.getBlockChar(cell.color ?? '') : '  ';
             }
         }
-        this.opponentBoardBox.setContent(content);
+        box.setContent(content);
     }
     /**
      * Get colored block character for piece type

@@ -19,6 +19,7 @@ export {
   buildTerminalBuffer,
   XTERM_CONFIG,
 } from './utils/terminal-utils';
+export { keyOverride, type KeyLike } from './utils/key-overrides';
 
 // Re-export xterm types for convenience
 export type { Terminal, ITerminalOptions, ITheme } from '@xterm/xterm';

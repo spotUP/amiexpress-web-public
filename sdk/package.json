@@ -103,6 +103,12 @@
       "types": "./dist/utils/wasm-loader.d.ts",
       "default": "./dist/utils/wasm-loader.js"
     },
+    "./utils/terminal-mode": {
+      "types": "./dist/utils/terminal-mode.d.ts",
+      "import": "./dist/utils/terminal-mode.js",
+      "require": "./dist/utils/terminal-mode.js",
+      "default": "./dist/utils/terminal-mode.js"
+    },
     "./utils/blessed-helpers": {
       "types": "./dist/utils/blessed-helpers.d.ts",
       "default": "./dist/utils/blessed-helpers.js"

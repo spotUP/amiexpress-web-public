@@ -16,7 +16,8 @@
     "build": "tsc && npm run bundle:client",
     "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=iife --platform=browser --target=es2020 --minify --external:fs --external:path --external:net --external:child_process --external:crypto",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "tsx tests/run-tests.ts"
   },
   "doorMetadata": {
     "name": "LiveChat",

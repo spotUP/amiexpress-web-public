@@ -1286,8 +1286,16 @@ export class Program extends EventEmitter {
       // Meta + character
       if (buf.length === 2) {
         key.meta = true;
-        key.name = buf[1];
-        key.full = 'M-' + key.name;
+        // Resolve the second byte exactly as it would be resolved on its
+        // own, so Alt+Enter is 'M-enter' rather than 'M-' + a carriage
+        // return. Naming the raw byte produced a `full` that nothing could
+        // bind, which kept the doors' size toggle unreachable even once the
+        // sequence above was being formed.
+        const inner = this.parseKey(buf[1]);
+        key.name = inner?.name ?? buf[1];
+        key.ctrl = inner?.ctrl ?? false;
+        key.shift = inner?.shift ?? false;
+        key.full = (key.ctrl ? 'M-C-' : 'M-') + key.name;
         return key;
       }
 
@@ -1499,7 +1507,13 @@ export class Program extends EventEmitter {
 
       // 3. Parse key/escape sequences
       // Long sequences first
-      const keyRegex = new RegExp('^(' + ESC + '\\[([0-9;]+)?([A-Za-z~])|' + ESC + 'O[PQRSABCDHF]|' + ESC + '[a-zA-Z0-9])');
+      // ESC + a letter or digit was the only meta sequence recognised, so
+      // Alt+Enter (ESC CR) was not a sequence at all: the buffer produced an
+      // Escape keypress and then an Enter keypress, and a door listening for
+      // 'M-enter' - which is what sdk/utils/terminal-mode.ts binds - saw its
+      // dialog close and its message sent instead (reported 2026-09-01).
+      // Control bytes are keys too: CR, TAB, BACKSPACE/DEL, Ctrl+letter.
+      const keyRegex = new RegExp('^(' + ESC + '\\[([0-9;]+)?([A-Za-z~])|' + ESC + 'O[PQRSABCDHF]|' + ESC + '[a-zA-Z0-9]|' + ESC + '[\\r\\n\\t\\x08\\x7f\\x01-\\x1a])');
       const keyMatch = this._inputBuffer.match(keyRegex);
       if (keyMatch) {
         const key = this.parseKey(keyMatch[0]);

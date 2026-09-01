@@ -22,6 +22,7 @@
  */
 
 import * as fs from 'fs';
+import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground } from './c64-palette';
 
 /**
  * PETSCII Control Codes - Complete Reference
@@ -68,29 +69,6 @@ import * as fs from 'fs';
  */
 
 /**
- * C64 color codes to ANSI color codes
- * Maps all 16 C64 colors to closest ANSI equivalents
- */
-const PETSCII_COLORS: { [key: number]: string } = {
-  0x05: '\x1b[97m',   // White (bright white)
-  0x1C: '\x1b[31m',   // Red
-  0x1E: '\x1b[32m',   // Green
-  0x1F: '\x1b[34m',   // Blue
-  0x81: '\x1b[33m',   // Orange (using yellow - no true orange in ANSI)
-  0x90: '\x1b[30m',   // Black
-  0x95: '\x1b[33m',   // Brown (using yellow)
-  0x96: '\x1b[91m',   // Light Red (pink)
-  0x97: '\x1b[90m',   // Dark Grey
-  0x98: '\x1b[37m',   // Grey (medium)
-  0x99: '\x1b[92m',   // Light Green
-  0x9A: '\x1b[94m',   // Light Blue
-  0x9B: '\x1b[37m',   // Light Grey
-  0x9C: '\x1b[35m',   // Purple
-  0x9E: '\x1b[93m',   // Yellow
-  0x9F: '\x1b[36m',   // Cyan
-};
-
-/**
  * State for PETSCII conversion
  */
 interface PetsciiState {
@@ -101,12 +79,12 @@ interface PetsciiState {
 
 /**
  * Create initial PETSCII state
- * Default is unshifted/graphics mode with white color
+ * C64 power-on default: pen color is light blue (VIC 14).
  */
 function createPetsciiState(): PetsciiState {
   return {
     reverseVideo: false,
-    currentColor: '\x1b[97m', // White
+    currentColor: vicToSgrForeground(14), // Light blue (C64 power-on pen)
     shiftMode: false,         // Start in unshifted/graphics mode
   };
 }
@@ -232,8 +210,8 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   // ========================================
   // COLOR CONTROL CODES
   // ========================================
-  if (byte in PETSCII_COLORS) {
-    state.currentColor = PETSCII_COLORS[byte];
+  if (byte in PETSCII_COLOR_TO_VIC) {
+    state.currentColor = vicToSgrForeground(PETSCII_COLOR_TO_VIC[byte]);
     return state.currentColor;
   }
 
@@ -252,18 +230,6 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   }
 
   // ========================================
-  // REVERSE VIDEO
-  // ========================================
-  if (byte === 0x12) {
-    state.reverseVideo = true;
-    return '\x1b[7m';  // ANSI reverse video on
-  }
-  if (byte === 0x92) {
-    state.reverseVideo = false;
-    return '\x1b[27m'; // ANSI reverse video off
-  }
-
-  // ========================================
   // CURSOR MOVEMENT
   // ========================================
   if (byte === 0x11) return '\x1b[B';      // Cursor down
@@ -275,36 +241,33 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   // ========================================
   // SCREEN CONTROL
   // ========================================
-  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear screen + home
+  if (byte === 0x93) return vicToSgrBackground(6) + '\x1b[2J\x1b[H'; // Blue bg (fixed VIC 6) + clear + home
   if (byte === 0x14) return '\x08';          // Delete (backspace)
   if (byte === 0x94) return '\x1b[@';        // Insert character
 
   // ========================================
-  // LINE BREAKS
+  // REVERSE VIDEO - state only; rendering uses the font's reverse glyph bank (+0x80)
   // ========================================
-  if (byte === 0x0D) return '\r\n';  // Carriage return
-  if (byte === 0x8D) return '\r\n';  // Shift+Return (same as return)
+  if (byte === 0x12) { state.reverseVideo = true;  return ''; }
+  if (byte === 0x92) { state.reverseVideo = false; return ''; }
 
   // ========================================
-  // IGNORED CONTROL CODES
+  // LINE BREAKS - KERNAL: RETURN ($0D) cancels reverse mode; Shift+RETURN ($8D) does not
   // ========================================
-  if (byte === 0x00) return '';  // NULL
-  if (byte === 0x03) return '';  // STOP
-  if (byte === 0x08) return '';  // Disable Shift+C=
-  if (byte === 0x09) return '';  // Enable Shift+C=
-  if (byte === 0x83) return '';  // RUN
-  // Function keys F1-F8 (0x85-0x8C) - ignore in terminal context
-  if (byte >= 0x85 && byte <= 0x8C) return '';
+  if (byte === 0x0D) { state.reverseVideo = false; return '\r\n'; }
+  if (byte === 0x8D) { return '\r\n'; }
 
   // ========================================
-  // PRINTABLE CHARACTERS
-  // Convert PETSCII to screen code, then map to PetMe64 PUA
+  // ALL remaining control bytes are no-ops on a C64 (audit A5): never let them
+  // fall through to the printable path, where petsciiToScreenCode() would turn
+  // them into reverse glyphs.
   // ========================================
-  const screenCode = petsciiToScreenCode(byte);
+  if (byte < 0x20 || (byte >= 0x80 && byte <= 0x9F)) return '';
 
-  // PetMe64 PUA layout:
-  // 0xE000-0xE0FF: Unshifted/Graphics charset
-  // 0xE100-0xE1FF: Shifted/Text charset
+  // ========================================
+  // PRINTABLE - screen code, reverse via bit 7 (matches C64 screen RAM exactly)
+  // ========================================
+  const screenCode = petsciiToScreenCode(byte) | (state.reverseVideo ? 0x80 : 0);
   const baseCodePoint = state.shiftMode ? 0xE100 : 0xE000;
   return String.fromCodePoint(baseCodePoint + screenCode);
 }
@@ -318,8 +281,8 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
  */
 function convertPetsciiByte(byte: number, state: PetsciiState): string {
   // Handle color codes
-  if (byte in PETSCII_COLORS) {
-    state.currentColor = PETSCII_COLORS[byte];
+  if (byte in PETSCII_COLOR_TO_VIC) {
+    state.currentColor = vicToSgrForeground(PETSCII_COLOR_TO_VIC[byte]);
     return state.currentColor;
   }
 
@@ -349,20 +312,22 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
   if (byte === 0x1D) return '\x1b[C';      // Cursor right
   if (byte === 0x9D) return '\x1b[D';      // Cursor left
   if (byte === 0x13) return '\x1b[H';      // Home
-  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear screen + home
+  if (byte === 0x93) return vicToSgrBackground(6) + '\x1b[2J\x1b[H'; // Blue bg (fixed VIC 6) + clear + home
   if (byte === 0x14) return '\x08';          // Delete
   if (byte === 0x94) return '\x1b[@';        // Insert
 
-  // Handle line breaks
-  if (byte === 0x0D || byte === 0x8D) return '\r\n';
+  // Handle line breaks - KERNAL: RETURN ($0D) cancels reverse mode; Shift+RETURN ($8D) does not
+  if (byte === 0x0D) {
+    if (state.reverseVideo) {
+      state.reverseVideo = false;
+      return '\x1b[27m\r\n';
+    }
+    return '\r\n';
+  }
+  if (byte === 0x8D) return '\r\n';
 
-  // Ignore other control codes
-  if (byte === 0x00) return '';
-  if (byte === 0x03) return '';
-  if (byte === 0x08) return '';
-  if (byte === 0x09) return '';
-  if (byte === 0x83) return '';
-  if (byte >= 0x85 && byte <= 0x8C) return '';
+  // ALL remaining control bytes are no-ops on a C64 (audit A5)
+  if (byte < 0x20 || (byte >= 0x80 && byte <= 0x9F)) return '';
 
   // ========================================
   // PRINTABLE CHARACTERS - ASCII approximation
@@ -463,22 +428,43 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
  * @param buffer - Buffer containing PETSCII data
  * @returns String with Unicode PUA characters and ANSI color/cursor codes
  */
-export function convertPetsciiToPetMe64(buffer: Buffer): string {
-  const state = createPetsciiState();
+/**
+ * Streaming PETSCII-to-PetMe64 converter that preserves charset, color and
+ * reverse-video state across multiple convert() calls. Doors emit output in
+ * many small chunks (audit B2); resetting state per-chunk (as the one-shot
+ * convertPetsciiToPetMe64 does) drops charset/color/reverse state at every
+ * chunk boundary.
+ */
+export class PetsciiStreamConverter {
+  private state = createPetsciiState();
 
-  // Start with white color
-  let output = state.currentColor;
-
-  // Process each byte
-  for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i];
-    output += convertPetsciiByteForPetMe64(byte, state);
+  /**
+   * Convert a chunk of raw PETSCII bytes, carrying state over from any
+   * previous convert() call on this instance.
+   */
+  convert(buffer: Buffer): string {
+    let out = '';
+    for (let i = 0; i < buffer.length; i++) out += convertPetsciiByteForPetMe64(buffer[i], this.state);
+    return out;
   }
 
-  // Reset at end
-  output += '\x1b[0m';
+  /**
+   * One-shot full-screen conversion: resets state, emits the C64 power-on
+   * color prologue, converts the buffer, then resets SGR at the end.
+   */
+  convertScreen(buffer: Buffer): string {
+    this.reset();
+    return vicToSgrForeground(14) + vicToSgrBackground(6) + this.convert(buffer) + '\x1b[0m';
+  }
 
-  return output;
+  /** Reset to the C64 power-on default state (light blue pen, unshifted, no reverse). */
+  reset(): void {
+    this.state = createPetsciiState();
+  }
+}
+
+export function convertPetsciiToPetMe64(buffer: Buffer): string {
+  return new PetsciiStreamConverter().convertScreen(buffer);
 }
 
 /**
@@ -490,7 +476,8 @@ export function convertPetsciiToPetMe64(buffer: Buffer): string {
 export function convertPetsciiToAnsi(buffer: Buffer): string {
   const state = createPetsciiState();
 
-  let output = state.currentColor;
+  // C64 power-on state: light blue pen on blue background
+  let output = vicToSgrForeground(14) + vicToSgrBackground(6);
 
   for (let i = 0; i < buffer.length; i++) {
     const byte = buffer[i];

@@ -35,6 +35,7 @@ import blessed, {
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
+import { createTerminalModeSwitch, type TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 // Local helper to strip blessed tags from text
 function stripTags(text: string): string {
   return text.replace(/{[^}]+}/g, '');
@@ -156,11 +157,13 @@ function invalidateCache(element: any) {
 export async function createApp(session: DoorSession) {
   const { bbs, socket } = session;
 
-  // Only enable wide mode for standalone chat page, not when running inside BBS terminal
+  // The standalone /chat page always widened; the door inside the BBS never
+  // did. That is why chat opened at 80 columns on the board however big the
+  // window was ("livechat has issues opening fullscreen responsive mode in
+  // the bbs", 2026-09-01). Both are the same door and both want the room;
+  // the switch below gives it to them, and Alt+Enter takes it back.
   const chatOnly = session.bbsSession?.tempData?.chatOnly;
-  if (chatOnly) {
-    bbs.enableWideMode?.();
-  }
+  let terminalMode: TerminalModeSwitch | null = null;
 
   // Disable modem emulation for TUI apps - they need instant feedback
   // Save original speed to restore on exit
@@ -170,6 +173,8 @@ export async function createApp(session: DoorSession) {
   }
 
   // ========== CREATE NEO-BLESSED SCREEN ==========
+  // ui/screen.ts already builds this responsive; what was missing was
+  // anyone ASKING the terminal to grow (see the switch below).
   const screen = createScreen(bbs);
   // Note: Optimized rendering is now enabled by default in the SDK
 
@@ -1104,6 +1109,21 @@ export async function createApp(session: DoorSession) {
   // answer two different questions - "what size am I now" and "what size did
   // I just become" - and the door needs both.
   screen.on('resize', updateLayout);
+
+  // Ask the terminal to widen, follow the resize, and put the board's 80
+  // columns back on the way out - the three halves of "responsive", none of
+  // which work alone (sdk/utils/terminal-mode.ts). Alt+Enter toggles, the
+  // same key as in the ANSI editor and the sprite studio.
+  terminalMode = createTerminalModeSwitch({
+    bbs,
+    screen,
+    // The standalone /chat page IS the whole window and always was wide.
+    // Inside the BBS the door opens at the size the board serves and the
+    // caller asks for more with Alt+Enter - "livechat opened in responsive
+    // mode by default in the bbs it should not" (2026-09-01).
+    start: chatOnly ? 'wide' : 'fixed',
+    onRelayout: () => { updateLayout(); screen.render(); },
+  });
 
   // Bind layout updates to sidebar events
   sidebarPanel.on('drag', updateLayout);
@@ -2808,10 +2828,11 @@ export async function createApp(session: DoorSession) {
     screen.destroy();
     console.log('[LIVECHAT CLEANUP] screen.destroy() completed');
 
-    // Restore fixed terminal mode only if we enabled wide mode
-    if (chatOnly) {
-      bbs.disableWideMode?.();
-    }
+    // Gives the board its 80 columns back, and unhooks resize and Alt+Enter.
+    // Unconditional now: the door widens whether or not it is the standalone
+    // page, so it has to hand the columns back either way.
+    terminalMode?.dispose();
+    terminalMode = null;
 
     // Restore modem emulation if it was enabled before
     if (originalModemSpeed > 0) {
@@ -2829,6 +2850,11 @@ export async function createApp(session: DoorSession) {
 
   return {
     state,
+    // The screen and the size switch are handed back so the door can be
+    // DRIVEN by a test - toggled wide, resized, toggled back - rather than
+    // only started. Nothing in the door reads them from here.
+    screen,
+    get terminalMode() { return terminalMode; },
     async run() {
       try {
         // Clear screen before drawing UI (prevent BBS log bleed-through)

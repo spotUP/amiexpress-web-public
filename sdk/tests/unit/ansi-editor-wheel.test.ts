@@ -29,8 +29,11 @@ describe('ANSIEditor canvas wheel', () => {
     initialMode: 'draw', transparentBackground: true,
   } as any);
 
+  // On the WIDGET, which is where a wheel turn is heard: the draw canvas is
+  // only as big as the art now that it is centred, so scrolling over the
+  // space around a 5x2 sprite never touches it.
   const wheel = (editor: any, action: 'wheelup' | 'wheeldown') => {
-    editor.drawCanvas.emit('mouse', {
+    editor.emit('mouse', {
       x: editor.drawCanvas.ileft + 1,
       y: editor.drawCanvas.itop + 1,
       action, button: 'left',
@@ -56,6 +59,11 @@ describe('ANSIEditor canvas wheel', () => {
   it('does NOT paint when the wheel turns', () => {
     const editor = make();
     editor.currentChar = '#';
+    // Through the CANVAS handler too - that is the one that could paint.
+    editor.drawCanvas.emit('mouse', {
+      x: editor.drawCanvas.ileft + 1, y: editor.drawCanvas.itop + 1,
+      action: 'wheelup', button: 'left',
+    });
     wheel(editor, 'wheelup');
     wheel(editor, 'wheeldown');
     const canvas = editor.getCoreCanvas();
@@ -69,8 +77,20 @@ describe('ANSIEditor canvas wheel', () => {
   it('does not move the drawing cursor either', () => {
     const editor = make();
     editor.cursor = { line: 0, col: 0 };
-    wheel(editor, 'wheelup');
+    editor.drawCanvas.emit('mouse', {
+      x: editor.drawCanvas.ileft + 2, y: editor.drawCanvas.itop + 1,
+      action: 'wheelup', button: 'left',
+    });
     expect(editor.cursor).toEqual({ line: 0, col: 0 });
+  });
+
+  it('is heard over the space AROUND a small centred canvas', () => {
+    const editor = make();
+    const seen: string[] = [];
+    editor.on('canvas-wheel', (d: any) => seen.push(d.direction));
+    // Far outside the 4x2 canvas box, still inside the editor.
+    editor.emit('mouse', { x: 70, y: 20, action: 'wheeldown', button: undefined });
+    expect(seen).toEqual(['down']);
   });
 
   it('says where the pointer was, so a host could zoom about it', () => {

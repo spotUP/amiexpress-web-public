@@ -85,6 +85,17 @@ export interface ANSIEditorOptions extends ElementOptions {
    * two applications bolted together.
    */
   extraMenus?: HostMenu[];
+  /**
+   * A one-row strip of the host's own controls, under the canvas.
+   *
+   * The place a drawing application puts playback and frame controls: near
+   * the art, reachable with the mouse, out of the menus you would otherwise
+   * open on every frame. It appears only when there is a spare row between
+   * the canvas and the status bar, which is what makes it a WIDE-terminal
+   * feature without knowing anything about terminal modes - at 80x25 with a
+   * full-screen document there is no such row, and the strip stays away.
+   */
+  extraToolbar?: HostToolbarGroup[];
   showSidebar?: boolean;      // Left sidebar with colors & tools
   onSave?: (content: string) => Promise<boolean>;
   onSaveAs?: () => Promise<void>;  // Open save-as dialog
@@ -118,6 +129,45 @@ const FKEY_CHAR_SETS: string[][] = [
 export interface HostMenu {
   label: string;
   items: DropdownMenuItem[];
+}
+
+/**
+ * One segment of the host's strip under the canvas.
+ *
+ * A function label is re-read on every refreshExtraToolbar(), which is how a
+ * readout ("3/12", "ONION on") stays true without the host rebuilding the
+ * editor. No action means a readout rather than a button.
+ */
+export interface HostToolbarItem {
+  label: string | (() => string);
+  action?: () => void;
+}
+
+/** Segments that belong together; groups are separated by a divider. */
+export type HostToolbarGroup = HostToolbarItem[];
+
+/** The narrowest menu the editor draws, hotkey column included. */
+export const MENU_ITEM_COLUMNS = 20;
+
+/**
+ * A menu item that says which key does the same thing.
+ *
+ * "all menu items needs to show hotkeys as well" - and a menu is where you
+ * LEARN a hotkey, so an item with a key that does not name it teaches
+ * nobody. The key is pushed to the right so the column reads down the menu.
+ * Exported because a host's contributed menus must look like the editor's
+ * own, or the bar has two conventions in it.
+ */
+export function menuItemLabel(text: string, key?: string): string {
+  if (!key) return text;
+  const gap = MENU_ITEM_COLUMNS - text.length - key.length;
+  return gap > 0 ? `${text}${' '.repeat(gap)}${key}` : `${text}  ${key}`;
+}
+
+/** Wide enough for the longest label in a menu, borders included. */
+export function menuWidthFor(items: Array<{ label: string }>): number {
+  const longest = items.reduce((n, i) => Math.max(n, i.label.length), 0);
+  return Math.max(MENU_ITEM_COLUMNS, longest) + 4;
 }
 
 export type EditorMode = 'text' | 'draw';
@@ -216,6 +266,12 @@ export class ANSIEditor extends Box {
   /** Host-contributed menus, in bar order after Help. */
   private extraMenus: HostMenu[] = [];
   private extraMenuDropdowns: DropdownMenu[] = [];
+
+  /** Host-contributed controls, on the right of the status bar. */
+  private extraToolbar: HostToolbarGroup[] = [];
+  private extraToolbarBar?: Box;
+  /** Columns the strip occupies, which the status bar must not paint into. */
+  private extraToolbarWidth = 0;
 
   // F-key toolbar state
   private fkeySetIndex: number = 0;    // Current character set (0-7)
@@ -441,6 +497,7 @@ export class ANSIEditor extends Box {
     // put the render and the hit-test on different grids, and a negative
     // one would build an empty row - a silently blank canvas.
     this.extraMenus = options.extraMenus ?? [];
+    this.extraToolbar = options.extraToolbar ?? [];
     this.transparencyGuide = options.showTransparencyGuide ?? false;
     this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
     this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
@@ -661,6 +718,9 @@ export class ANSIEditor extends Box {
       });
     }
 
+    // 8. The host's own controls, on the right of that status bar.
+    this.createExtraToolbar();
+
     // Initial render
     this.updateDisplay();
   }
@@ -747,7 +807,10 @@ export class ANSIEditor extends Box {
     // menu says and does.
     this.extraMenuDropdowns = this.extraMenus.map(menu => new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      // Wide enough for the host's own longest label. A fixed 22 clipped
+      // the hotkey off the end of the label it was added to, which is the
+      // one part of a menu item nobody can guess.
+      width: menuWidthFor(menu.items),
       items: menu.items,
     }));
 
@@ -764,27 +827,27 @@ export class ANSIEditor extends Box {
 
     fileMenuItems.push(
       { label: '────────────────', separator: true },
-      { label: 'Save', action: () => this.save() },
+      { label: menuItemLabel('Save', 'C-s'), action: () => this.save() },
       { label: 'Save As...', action: () => this.onSaveAsCallback?.() },
       { label: '────────────────', separator: true },
       { label: 'SAUCE Info...', action: () => this.showSauceEditor() },
       { label: '────────────────', separator: true },
-      { label: 'Exit', action: () => this.onExitCallback?.() },
+      { label: menuItemLabel('Exit', 'ESC'), action: () => this.onExitCallback?.() },
     );
 
     this.fileMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: menuWidthFor(fileMenuItems),
       items: fileMenuItems,
     });
 
     // Edit menu
     this.editMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: MENU_ITEM_COLUMNS + 4,
       items: [
-        { label: 'Undo', action: () => this.undo() },
-        { label: 'Redo', action: () => this.redo() },
+        { label: menuItemLabel('Undo', 'C-z'), action: () => this.undo() },
+        { label: menuItemLabel('Redo', 'C-y'), action: () => this.redo() },
         { label: '────────────────', separator: true },
         { label: 'Cut', action: () => this.cutSelection() },
         { label: 'Copy', action: () => this.copySelection() },
@@ -798,7 +861,7 @@ export class ANSIEditor extends Box {
     // Selection menu
     this.selectionMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: MENU_ITEM_COLUMNS + 4,
       items: [
         { label: 'Select All', action: () => this.selectAll() },
         { label: 'Deselect', action: () => this.deselect() },
@@ -814,10 +877,10 @@ export class ANSIEditor extends Box {
     // Colors menu
     this.colorsMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: MENU_ITEM_COLUMNS + 4,
       items: [
-        { label: 'Foreground...', action: () => this.showColorPicker(true) },
-        { label: 'Background...', action: () => this.showColorPicker(false) },
+        { label: menuItemLabel('Foreground...', 'A-c'), action: () => this.showColorPicker(true) },
+        { label: menuItemLabel('Background...', 'A-b'), action: () => this.showColorPicker(false) },
         { label: '────────────────', separator: true },
         { label: 'Swap FG/BG', action: () => this.swapColors() },
         { label: 'Default Colors', action: () => this.resetColors() },
@@ -829,7 +892,7 @@ export class ANSIEditor extends Box {
     // Layer menu
     this.layerMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: MENU_ITEM_COLUMNS + 4,
       items: [
         { label: 'Add Layer', action: () => this.addLayer() },
         { label: 'Delete Layer', action: () => this.deleteLayer() },
@@ -848,22 +911,22 @@ export class ANSIEditor extends Box {
     // View menu
     this.viewMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: MENU_ITEM_COLUMNS + 4,
       items: [
         { label: 'Toggle Sidebar', action: () => this.toggleSidebar() },
         { label: 'Toggle Toolbar', action: () => this.toggleFkeyToolbar() },
         { label: '────────────────', separator: true },
-        { label: 'Text Mode', action: () => this.mode !== 'text' && this.toggleMode() },
-        { label: 'Draw Mode', action: () => this.mode !== 'draw' && this.toggleMode() },
+        { label: menuItemLabel('Text Mode', 'C-m'), action: () => this.mode !== 'text' && this.toggleMode() },
+        { label: menuItemLabel('Draw Mode', 'C-m'), action: () => this.mode !== 'draw' && this.toggleMode() },
       ],
     });
 
     // Help menu
     this.helpMenu = new DropdownMenu({
       parent: this.screen,
-      width: 22,
+      width: MENU_ITEM_COLUMNS + 4,
       items: [
-        { label: 'Keyboard Shortcuts', action: () => this.showHelp() },
+        { label: menuItemLabel('Keyboard Shortcuts', '?'), action: () => this.showHelp() },
         { label: '────────────────', separator: true },
         { label: 'About ANSI Editor', action: () => this.showAbout() },
       ],
@@ -888,6 +951,116 @@ export class ANSIEditor extends Box {
     if (item?.menu) {
       item.menu.openAt(item.left + this.aleft + 1, this.atop + 2);
     }
+  }
+
+  /**
+   * The host's controls, on the RIGHT of the status bar.
+   *
+   * They floated in a framed strip under the canvas for one commit and the
+   * sysop's verdict was "this was an ugly toolbar - move it to the footer
+   * on the right side instead". The footer is the right home: the editor
+   * already has exactly one row of chrome at the bottom, it is always
+   * there, and it needs no room test, no repositioning when the canvas
+   * moves, and no rule about what happens at 80 columns.
+   *
+   * Segments are boxes over the status bar's own text rather than part of
+   * its content, because a segment is clickable - the same shape the F-key
+   * toolbar's buttons have. The status bar drops its own optional readouts
+   * when the strip needs the room (see updateStatusBar).
+   */
+  private createExtraToolbar(): void {
+    if (this.extraToolbar.length === 0 || !this.statusBar) return;
+
+    const bar = new Box({
+      parent: this.statusBar,
+      top: 0,
+      right: 0,
+      width: 1,          // sized to its content by layoutExtraToolbar()
+      height: 1,
+      style: { bg: 'blue', fg: 'white' },
+      tags: true,
+      focusable: false,
+    });
+    this.extraToolbarBar = bar;
+    this.layoutExtraToolbar();
+  }
+
+  /** Place the segments, and size the strip to what they came to. */
+  private layoutExtraToolbar(): void {
+    const bar = this.extraToolbarBar;
+    if (!bar) return;
+
+    for (const child of bar.children.slice()) child.destroy();
+
+    let x = 0;
+    this.extraToolbar.forEach((group, g) => {
+      if (g > 0) {
+        new Text({
+          parent: bar,
+          top: 0, left: x, width: 3, height: 1,
+          content: ' · ',
+          style: { bg: 'blue', fg: 'white' },
+          tags: true,
+        });
+        x += 3;
+      }
+      group.forEach((item, i) => {
+        if (i > 0) x += 1;
+        const text = typeof item.label === 'function' ? item.label() : item.label;
+        const segment = new Box({
+          parent: bar,
+          top: 0, left: x, width: text.length, height: 1,
+          content: text,
+          style: item.action
+            ? { bg: 'blue', fg: 'white', hover: { bg: 'cyan', fg: 'black' } }
+            : { bg: 'blue', fg: 'lightcyan' },
+          tags: true,
+          mouse: Boolean(item.action),
+          clickable: Boolean(item.action),
+          focusable: false,
+        });
+        if (item.action) segment.on('click', () => item.action!());
+        x += text.length;
+      });
+    });
+
+    bar.width = x;
+    this.extraToolbarWidth = x;
+  }
+
+  /**
+   * Take the menus down with the editor.
+   *
+   * The dropdowns are parented to the SCREEN, not to this widget, because a
+   * menu must paint over everything - so Element.destroy()'s sweep of its
+   * own children never reached them. A host that REBUILDS the editor (a
+   * zoom step, a resize, opening another document - the sprite studio does
+   * all three) left eleven hidden dropdowns behind every time, each holding
+   * an action closing over the editor that had just been destroyed.
+   */
+  destroy(): void {
+    for (const menu of [
+      this.fileMenu, this.editMenu, this.selectionMenu, this.colorsMenu,
+      this.layerMenu, this.viewMenu, this.helpMenu, ...this.extraMenuDropdowns,
+    ]) {
+      menu?.destroy();
+    }
+    this.extraMenuDropdowns = [];
+    super.destroy();
+  }
+
+  /**
+   * Re-read the strip's labels.
+   *
+   * A host calls this when the state a readout shows has changed - the
+   * frame number, whether it is playing - rather than rebuilding the editor
+   * for a two-character difference.
+   */
+  refreshExtraToolbar(): void {
+    if (!this.extraToolbarBar) return;
+    this.layoutExtraToolbar();
+    this.updateStatusBar();
+    this.screen?.render();
   }
 
   /**
@@ -2399,6 +2572,28 @@ BBS Door SDK v2.0{/gray-fg}
   }
 
   private setupMouseHandlers(): void {
+    // The wheel is reported from the WIDGET, not from the draw canvas.
+    //
+    // Zoom belongs to whatever hosts this editor - the widget has no zoom of
+    // its own, only the scale it was built with - so it says which way the
+    // wheel turned and over which cell, and lets the host decide.
+    //
+    // On the widget deliberately: since the canvas became centred it is only
+    // as large as the ART, so a wheel turn over the surrounding space never
+    // reached it. Reported as "i tried the scrollwheel in spriteed now it
+    // didnt zoom" - the event was arriving, at a box the pointer was not
+    // over. Listening here means anywhere in the editor works, and it fires
+    // once rather than twice, which listening on both would have done.
+    this.on('mouse', (data: any) => {
+      if (!data || (data.action !== 'wheelup' && data.action !== 'wheeldown')) return;
+      if (this.modalOpen) return;
+      this.emit('canvas-wheel', {
+        direction: data.action === 'wheelup' ? 'up' : 'down',
+        col: this.screenToCanvasX(data.x - this.drawCanvas.ileft),
+        line: this.screenToCanvasY(data.y - this.drawCanvas.itop),
+      });
+    });
+
     // TEXT MODE - Mouse click on viewport for cursor positioning
     this.viewport.on('click', (data: any) => {
       if (!data) return;
@@ -2490,19 +2685,10 @@ BBS Door SDK v2.0{/gray-fg}
 
       if (x < 0 || y < 0) return;
 
-      // The wheel is REPORTED, never acted on. Zoom belongs to whatever is
-      // hosting this editor - the widget has no zoom of its own, only the
-      // scale it was built with - so it says which way the wheel turned and
-      // over which cell, and returns before anything else. Returning here
-      // also keeps the drawing cursor still: scrolling is not pointing.
-      if (data.action === 'wheelup' || data.action === 'wheeldown') {
-        this.emit('canvas-wheel', {
-          direction: data.action === 'wheelup' ? 'up' : 'down',
-          col: this.screenToCanvasX(x),
-          line: this.screenToCanvasY(y),
-        });
-        return;
-      }
+      // A wheel turn is not pointing: it must not move the drawing cursor
+      // or paint. It is REPORTED from the widget-level handler below, not
+      // here - see there for why.
+      if (data.action === 'wheelup' || data.action === 'wheeldown') return;
 
       // Clamp to canvas bounds
       this.cursor.col = this.screenToCanvasX(x);
@@ -3866,16 +4052,34 @@ BBS Door SDK v2.0{/gray-fg}
       : '';
 
     // Format: [*] X:001 Y:001 | WxH | FG:7 BG:0 | [char] | TOOL | Brush | Layer | iCE
-    this.statusBar.setContent(
-      ` ${modifiedMark} ${pos} | ${canvasSize} | ` +
-      `{${fgColor}-fg}{${bgColor}-bg}${charPreview}{/} ` +
-      `{${fgColor}-fg}FG:${this.currentFg.toString().padStart(2)}{/} ` +
-      `{${bgColor}-bg}{white-fg}BG:${this.currentBg.toString().padStart(2)}{/} | ` +
-      `{cyan-fg}${toolName}{/}${drawingState}` +
-      (brushIndicator ? ` ${brushIndicator}` : '') +
-      (layerInfo ? ` | ${layerInfo}` : '') +
-      (iceIndicator ? ` ${iceIndicator}` : '')
-    );
+    //
+    // The host's strip sits on the right of this same row, painted over
+    // whatever is under it. So the tail readouts are dropped, cheapest
+    // first, until what is left fits in the columns before it - a status
+    // bar half-covered by the strip would be worse than one that says less.
+    // Each readout, in display order, with the order they are GIVEN UP in.
+    // Position and tool are never dropped: they are what the bar is for.
+    const pieces: Array<{ text: string; drop: number }> = [
+      { text: ` ${modifiedMark} ${pos}`, drop: Infinity },
+      { text: ` | ${canvasSize}`, drop: 4 },
+      { text: ` | {${fgColor}-fg}{${bgColor}-bg}${charPreview}{/}` +
+              ` {${fgColor}-fg}FG:${this.currentFg.toString().padStart(2)}{/}` +
+              ` {${bgColor}-bg}{white-fg}BG:${this.currentBg.toString().padStart(2)}{/}`, drop: 5 },
+      { text: ` | {cyan-fg}${toolName}{/}${drawingState}`, drop: Infinity },
+      { text: brushIndicator ? ` ${brushIndicator}` : '', drop: 3 },
+      { text: layerInfo ? ` | ${layerInfo}` : '', drop: 2 },
+      { text: iceIndicator ? ` ${iceIndicator}` : '', drop: 1 },
+    ];
+
+    const room = (this.width as number)
+      - (this.extraToolbarWidth > 0 ? this.extraToolbarWidth + 1 : 0);
+    const plain = (text: string): number => text.replace(/\{[^}]*\}/g, '').length;
+    const line = (dropped: number): string =>
+      pieces.filter(p => p.drop > dropped).map(p => p.text).join('');
+
+    let dropped = 0;
+    while (plain(line(dropped)) > room && dropped < 5) dropped++;
+    this.statusBar.setContent(line(dropped));
   }
 
   private updateToolbar(): void {
