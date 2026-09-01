@@ -28,6 +28,11 @@ const seen = vi.hoisted(() => ({
 vi.mock('@amiexpress/terminal/rip/vendor/ripterm', () => ({
   RIPterm: class FakeRIPterm {
     onHostCommand?: (text: string) => void;
+    // Session state the wrapper drives directly (it must not use play()).
+    isRunning = false;
+    ripStopped = true;
+    refTimer: unknown = null;
+    refreshCanvas(): void {}
     async initFonts(): Promise<void> {}
     async setupStream(stream: ReadableStream<Uint8Array>): Promise<void> {
       seen.streams.push(stream);
@@ -53,21 +58,25 @@ beforeEach(() => {
 });
 
 describe('RIPRenderer starting RIPtermJS', () => {
-  it('calls play(), which owns the refresh timer, not playStream() directly', async () => {
+  it('runs the session itself: playStream(), never the file-replay play()', async () => {
+    // play()'s first run cancels a live stream (reloadStream ->
+    // releaseStream -> stream.cancel), which blacked out the whole
+    // terminal. The wrapper consumes the stream directly and starts the
+    // refresh loop by hand.
     render(<RIPRenderer />);
 
-    await waitFor(() => expect(seen.play).toHaveBeenCalledTimes(1));
-    expect(seen.playStream).not.toHaveBeenCalled();
+    await waitFor(() => expect(seen.playStream).toHaveBeenCalledTimes(1));
+    expect(seen.play).not.toHaveBeenCalled();
   });
 
-  it('delivers RIP text that arrived before the fonts loaded, once play() has run', async () => {
+  it('delivers RIP text that arrived before the fonts loaded, once the session runs', async () => {
     const ref = React.createRef<RIPRendererRef>();
 
     render(<RIPRenderer ref={ref} />);
     // Same tick as the mount - long before initFonts() resolves.
     ref.current?.render('!|*');
 
-    await waitFor(() => expect(seen.play).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(seen.playStream).toHaveBeenCalledTimes(1));
 
     expect(seen.streams).toHaveLength(1);
     const { value } = await seen.streams[0].getReader().read();

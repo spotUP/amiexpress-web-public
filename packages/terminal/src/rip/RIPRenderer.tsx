@@ -108,15 +108,25 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
           if (cancelled) return;
           await term.setupStream(stream);
           if (cancelled) return;
-          // play(), NOT playStream(). BGI draws every command into an
-          // offscreen ImageData buffer, and the only thing that copies that
-          // buffer onto the visible canvas is bgi.refresh(), on a timer that
-          // play() starts (isRunning + refreshCanvas). Calling playStream()
-          // directly ran every command and painted nothing - "RIP shows
-          // black images" on the live board. play() runs playStream itself
-          // and keeps going until the stream closes on unmount. Not awaited:
-          // it IS the render loop.
-          void term.play();
+          // The session is run HERE, not by term.play(). Two halves, both
+          // learned the hard way:
+          // - BGI draws every command into an offscreen ImageData buffer;
+          //   only refreshCanvas()'s self-rescheduling timer copies it to
+          //   the visible canvas ("RIP shows black images" #1 - calling
+          //   playStream() alone painted nothing).
+          // - play() is RIPtermJS's file/url replay API: its first run
+          //   calls reloadStream() -> releaseStream() -> stream.cancel()
+          //   on the very stream this component enqueues into, so the
+          //   flush below threw "Cannot enqueue a chunk into a closed
+          //   readable stream" and the canvas stayed black ("the entire
+          //   browser goes black" #2).
+          // playStream() is not awaited: it IS the render loop, running
+          // until the stream closes on unmount.
+          term.isRunning = true;
+          term.ripStopped = false;
+          if (term.refTimer) { clearTimeout(term.refTimer); term.refTimer = null; }
+          term.refreshCanvas();
+          void term.playStream();
           readyRef.current = true;
           for (const text of pendingRef.current.splice(0)) {
             controllerRef.current?.enqueue(toBytes(text));
@@ -150,7 +160,12 @@ const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
       },
       reset: () => {
         pendingRef.current = [];
-        try { void termRef.current?.reset(); } catch { /* not started yet */ }
+        // A new picture, not a new session. The vendor's reset() stops the
+        // refresh timer and the stream consumer (isRunning = false,
+        // ripStopped = true), which starved every picture after the first.
+        // RIPscrip's own reset command ('*') clears the screen and restores
+        // defaults while the session keeps running.
+        try { void termRef.current?.runRIPcmd('*', ''); } catch { /* not started yet */ }
       },
       getState: () => createInitialState(),
     }), []);
