@@ -5354,6 +5354,15 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
          * list - the pane is a window onto a file much larger than itself,
          * and moving the selection would just refetch and reset it. The
          * same key that opened the view closes it. */
+        /* And ESC closes it: one level back, the way ESC works on every
+         * other screen. Without this, ESC inside an archive listing fell
+         * through to the list's own ESC and quit the door - "exit quits the
+         * app now when I am inside an archive", the sysop, 2026-09-01. */
+        if (info_mode != UI_INFO_DIZ && key == UI_KEY_ESC) {
+            info_mode = UI_INFO_DIZ;
+            info_scroll = 0;
+            continue;
+        }
         if (info_mode != UI_INFO_DIZ
             && (key == UI_KEY_UP || key == UI_KEY_DOWN
                 || key == UI_KEY_PGUP || key == UI_KEY_PGDN
@@ -6886,6 +6895,13 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             stop_for_carrier_loss();
         }
 
+        /* ESC closes an open detail view before it means "back": one level
+         * at a time, as on the catalog screen. */
+        if (info_mode != UI_INFO_DIZ && key == UI_KEY_ESC) {
+            info_mode = UI_INFO_DIZ;
+            info_scroll = 0;
+            continue;
+        }
         if (info_mode != UI_INFO_DIZ
             && (key == UI_KEY_UP || key == UI_KEY_DOWN
                 || key == UI_KEY_PGUP || key == UI_KEY_PGDN
