@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
+import { conferenceDir } from '../conferences/conference-paths';
 
 export enum ScreenDirType {
   NODE = 'node',      // nodeScreenDir - Node{X}/ or Node{X}/Screens/
@@ -177,8 +178,12 @@ export function screenSearchLocations(
       desc: screenDir === nodeDir ? `Node${opts.nodeId}` : `Node${opts.nodeId} SCREENS tooltype`,
     });
   } else if (dirType === ScreenDirType.CONF && opts.confId) {
-    locations.push({ dir: path.join(baseDir, `Conf${opts.confId}`), desc: `Conf${opts.confId}` });
-    locations.push({ dir: path.join(baseDir, `Conf${opts.confId}`, 'Screens'), desc: `Conf${opts.confId}/Screens` });
+    // express.e:31849 reads LOCATION.n for a conference's directory; deriving
+    // `Conf<n>` from the number breaks the moment a board is renumbered, which
+    // is how MENU went missing for the conference that moved into position 1.
+    const confDir = conferenceDir(baseDir, opts.confId);
+    locations.push({ dir: confDir, desc: `Conf${opts.confId}` });
+    locations.push({ dir: path.join(confDir, 'Screens'), desc: `Conf${opts.confId}/Screens` });
   } else if (dirType === ScreenDirType.GLOBAL) {
     locations.push({ dir: baseDir, desc: 'board root' });
     locations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });

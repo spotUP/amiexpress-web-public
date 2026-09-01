@@ -16,6 +16,7 @@
  * filename|size|uploader|uploadDate|downloads|description
  */
 
+import { conferenceSubdir } from '../conferences/conference-paths';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -58,7 +59,10 @@ export class FileAreaManager {
    * Get the Files directory path for a conference
    */
   private getFilesDir(confNumber: number): string {
-    return path.join(this.bbsRoot, `Conf${confNumber}`, 'Files');
+    // LOCATION.n, not `Conf<n>`: a renumbered board has conference 1 living in
+    // Conf2/, and deriving the name from the number reads the deleted
+    // conference's directory. See conferences/conference-paths.ts.
+    return conferenceSubdir(this.bbsRoot, confNumber, 'Files');
   }
 
   /**

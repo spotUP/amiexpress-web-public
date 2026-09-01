@@ -6,6 +6,7 @@
  */
 
 import * as path from 'path';
+import { conferenceDir } from '../conferences/conference-paths';
 import * as fs from 'fs/promises';
 
 /**
@@ -148,12 +149,12 @@ console.error(`[HOLD] Error updating HELD tracking: ${error.message}`);
  * @param bbsDataPath Base data path
  * @returns Path to conference directory (e.g., Conf1)
  */
-function getConferenceName(conferenceId: number): string {
-  return `Conf${conferenceId}`;
-}
-
 export function getRootConferenceDir(conferenceId: number, bbsDataPath: string): string {
-  return path.join(bbsDataPath, getConferenceName(conferenceId));
+  // The directory is whatever LOCATION.n says, not `Conf<n>`: a renumbered
+  // board has conference 1 living in Conf2/, and building the name from the
+  // number reads the directory of the conference that was deleted.
+  // See conferences/conference-paths.ts.
+  return conferenceDir(bbsDataPath, conferenceId);
 }
 
 export function getConferenceDir(conferenceId: number, bbsDataPath: string): string {
