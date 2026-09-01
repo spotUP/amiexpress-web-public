@@ -195,6 +195,16 @@ export class ANSIEditor extends Box {
   private colorsMenu?: DropdownMenu;
   private viewMenu?: DropdownMenu;
   private helpMenu?: DropdownMenu;
+  /**
+   * A canvas drawn UNDER this one, dimmed, wherever a cell is empty.
+   *
+   * Presentation only, and that is the whole safety property: it is never
+   * merged, never returned by getCoreCanvas(), never saved. A sprite editor
+   * hands over the previous frame to make onion skin; the editor itself has
+   * no idea what a frame is.
+   */
+  private underlayCanvas: Cell[][] | null = null;
+
   /** Host-contributed menus, in bar order after Help. */
   private extraMenus: HostMenu[] = [];
   private extraMenuDropdowns: DropdownMenu[] = [];
@@ -320,6 +330,18 @@ export class ANSIEditor extends Box {
   /** Get the current draw-mode canvas dimensions in cells. */
   getCanvasSize(): { width: number; height: number } {
     return { width: this.canvasW, height: this.canvasH };
+  }
+
+  /**
+   * Show (or clear) a ghost canvas beneath the empty cells of this one.
+   * Pass null to remove it. Cells outside its bounds simply have no ghost.
+   */
+  setUnderlay(canvas: Cell[][] | null): void {
+    this.underlayCanvas = canvas;
+    if (this.mode === 'draw') {
+      this.syncCoreCanvasToDisplay();
+      this.screen?.render();
+    }
   }
 
   /** Get the current magnification, in characters per cell. */
@@ -3424,7 +3446,7 @@ BBS Door SDK v2.0{/gray-fg}
       for (let sub = 0; sub < this.scaleY; sub++) {
         let row = '';
         for (let x = 0; x < this.canvasW; x++) {
-          row += this.magnifiedCellTag(cellAt(x, y), sub);
+          row += this.magnifiedCellTag(cellAt(x, y), sub, x, y);
         }
         rows.push(row);
       }
@@ -3445,7 +3467,15 @@ BBS Door SDK v2.0{/gray-fg}
    * An odd scale gives the extra row to the TOP half, matching how the
    * half-block cursor already treats the upper row as the default.
    */
-  private magnifiedCellTag(cell: Cell, sub: number): string {
+  private magnifiedCellTag(cell: Cell, sub: number, x?: number, y?: number): string {
+    // A ghost shows only where the artist has not drawn: their own work
+    // always wins, so the underlay can never hide what is being made.
+    if (cell.transparent && x !== undefined && y !== undefined) {
+      const ghost = this.underlayCanvas?.[y]?.[x];
+      if (ghost && !ghost.transparent) {
+        return `{gray-fg}{black-bg}${(ghost.char || ' ').repeat(this.scaleX)}{/black-bg}{/gray-fg}`;
+      }
+    }
     if (this.scaleY === 1 || cell.transparent) {
       return this.cellToDisplayTag(cell, this.scaleX);
     }
