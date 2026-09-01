@@ -16,6 +16,7 @@ import {
 } from '../../src/utils/petscii.util';
 import {
   C64_PALETTE_COLODORE,
+  C64_PALETTE_PEPTO,
   PETSCII_COLOR_TO_VIC,
   vicToSgrForeground,
   vicToSgrBackground,
@@ -34,6 +35,20 @@ describe('c64-palette', () => {
   it('emits truecolor SGR from Colodore values', () => {
     expect(vicToSgrForeground(2)).toBe('\x1b[38;2;129;51;56m'); // #813338 red
     expect(vicToSgrForeground(8)).toBe('\x1b[38;2;142;80;41m'); // #8E5029 orange, distinct from yellow
+  });
+
+  it('pins the Colodore palette to its exact 16 hex values', () => {
+    expect(C64_PALETTE_COLODORE).toEqual([
+      '#000000', '#FFFFFF', '#813338', '#75CEC8', '#8E3C97', '#56AC4D', '#2E2C9B', '#EDF171',
+      '#8E5029', '#553800', '#C46C71', '#4A4A4A', '#7B7B7B', '#A9FF9F', '#706DEB', '#B2B2B2',
+    ]);
+  });
+
+  it('pins the Pepto palette to its exact 16 hex values', () => {
+    expect(C64_PALETTE_PEPTO).toEqual([
+      '#000000', '#FFFFFF', '#68372B', '#70A4B2', '#6F3D86', '#588D43', '#352879', '#B8C76F',
+      '#6F4F25', '#433900', '#9A6759', '#444444', '#6C6C6C', '#9AD284', '#6C5EB5', '#959595',
+    ]);
   });
 });
 

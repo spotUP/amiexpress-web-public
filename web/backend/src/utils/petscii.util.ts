@@ -19,6 +19,11 @@
  * - https://www.pagetable.com/c64ref/charset/
  * - https://www.kreativekorp.com/software/fonts/c64/
  * - https://style64.org/c64-truetype/petscii-rom-mapping
+ *
+ * The screen-code -> Unicode table used by the ANSI fallback path
+ * (convertPetsciiToAnsi) lives in `./petscii-unicode-map.ts`; see that
+ * file's own header for its normative sources (Unicode Consortium
+ * MAPPINGS/C64IPRI.TXT and C64IALT.TXT).
  */
 
 import * as fs from 'fs';
@@ -340,18 +345,6 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
 }
 
 /**
- * Convert PETSCII binary data to Unicode for PetMe64 font display
- *
- * This function converts PETSCII bytes to Unicode PUA code points (0xE000-0xE1FF)
- * for use with the PetMe64 C64 font. The font renders these code points as authentic
- * C64 PETSCII characters including graphics, block elements, and special characters.
- *
- * Handles character set switching via 0x0E (shifted/text) and 0x8E (unshifted/graphics).
- *
- * @param buffer - Buffer containing PETSCII data
- * @returns String with Unicode PUA characters and ANSI color/cursor codes
- */
-/**
  * Streaming PETSCII-to-PetMe64 converter that preserves charset, color and
  * reverse-video state across multiple convert() calls. Doors emit output in
  * many small chunks (audit B2); resetting state per-chunk (as the one-shot
@@ -386,6 +379,11 @@ export class PetsciiStreamConverter {
   }
 }
 
+/**
+ * One-shot per-screen wrapper over PetsciiStreamConverter: builds a fresh
+ * converter (so no state leaks in from a prior call), then delegates to
+ * convertScreen() for the power-on color prologue, conversion, and SGR reset.
+ */
 export function convertPetsciiToPetMe64(buffer: Buffer): string {
   return new PetsciiStreamConverter().convertScreen(buffer);
 }
