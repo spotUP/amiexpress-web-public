@@ -252,18 +252,6 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   }
 
   // ========================================
-  // REVERSE VIDEO
-  // ========================================
-  if (byte === 0x12) {
-    state.reverseVideo = true;
-    return '\x1b[7m';  // ANSI reverse video on
-  }
-  if (byte === 0x92) {
-    state.reverseVideo = false;
-    return '\x1b[27m'; // ANSI reverse video off
-  }
-
-  // ========================================
   // CURSOR MOVEMENT
   // ========================================
   if (byte === 0x11) return '\x1b[B';      // Cursor down
@@ -280,31 +268,28 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   if (byte === 0x94) return '\x1b[@';        // Insert character
 
   // ========================================
-  // LINE BREAKS
+  // REVERSE VIDEO - state only; rendering uses the font's reverse glyph bank (+0x80)
   // ========================================
-  if (byte === 0x0D) return '\r\n';  // Carriage return
-  if (byte === 0x8D) return '\r\n';  // Shift+Return (same as return)
+  if (byte === 0x12) { state.reverseVideo = true;  return ''; }
+  if (byte === 0x92) { state.reverseVideo = false; return ''; }
 
   // ========================================
-  // IGNORED CONTROL CODES
+  // LINE BREAKS - KERNAL: RETURN ($0D) cancels reverse mode; Shift+RETURN ($8D) does not
   // ========================================
-  if (byte === 0x00) return '';  // NULL
-  if (byte === 0x03) return '';  // STOP
-  if (byte === 0x08) return '';  // Disable Shift+C=
-  if (byte === 0x09) return '';  // Enable Shift+C=
-  if (byte === 0x83) return '';  // RUN
-  // Function keys F1-F8 (0x85-0x8C) - ignore in terminal context
-  if (byte >= 0x85 && byte <= 0x8C) return '';
+  if (byte === 0x0D) { state.reverseVideo = false; return '\r\n'; }
+  if (byte === 0x8D) { return '\r\n'; }
 
   // ========================================
-  // PRINTABLE CHARACTERS
-  // Convert PETSCII to screen code, then map to PetMe64 PUA
+  // ALL remaining control bytes are no-ops on a C64 (audit A5): never let them
+  // fall through to the printable path, where petsciiToScreenCode() would turn
+  // them into reverse glyphs.
   // ========================================
-  const screenCode = petsciiToScreenCode(byte);
+  if (byte < 0x20 || (byte >= 0x80 && byte <= 0x9F)) return '';
 
-  // PetMe64 PUA layout:
-  // 0xE000-0xE0FF: Unshifted/Graphics charset
-  // 0xE100-0xE1FF: Shifted/Text charset
+  // ========================================
+  // PRINTABLE - screen code, reverse via bit 7 (matches C64 screen RAM exactly)
+  // ========================================
+  const screenCode = petsciiToScreenCode(byte) | (state.reverseVideo ? 0x80 : 0);
   const baseCodePoint = state.shiftMode ? 0xE100 : 0xE000;
   return String.fromCodePoint(baseCodePoint + screenCode);
 }
@@ -353,16 +338,18 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
   if (byte === 0x14) return '\x08';          // Delete
   if (byte === 0x94) return '\x1b[@';        // Insert
 
-  // Handle line breaks
-  if (byte === 0x0D || byte === 0x8D) return '\r\n';
+  // Handle line breaks - KERNAL: RETURN ($0D) cancels reverse mode; Shift+RETURN ($8D) does not
+  if (byte === 0x0D) {
+    if (state.reverseVideo) {
+      state.reverseVideo = false;
+      return '\x1b[27m\r\n';
+    }
+    return '\r\n';
+  }
+  if (byte === 0x8D) return '\r\n';
 
-  // Ignore other control codes
-  if (byte === 0x00) return '';
-  if (byte === 0x03) return '';
-  if (byte === 0x08) return '';
-  if (byte === 0x09) return '';
-  if (byte === 0x83) return '';
-  if (byte >= 0x85 && byte <= 0x8C) return '';
+  // ALL remaining control bytes are no-ops on a C64 (audit A5)
+  if (byte < 0x20 || (byte >= 0x80 && byte <= 0x9F)) return '';
 
   // ========================================
   // PRINTABLE CHARACTERS - ASCII approximation

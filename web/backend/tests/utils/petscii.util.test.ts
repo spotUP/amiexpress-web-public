@@ -89,12 +89,13 @@ describe('petscii.util', () => {
       expect(result).toBeTruthy();
     });
 
-    it('should handle reverse video control codes', () => {
+    it('should handle reverse video control codes via the reverse glyph bank, not SGR', () => {
       const buffer = Buffer.from([0x12, 0x41, 0x92]); // Reverse on, A, Reverse off
       const result = convertPetsciiToPetMe64(buffer);
 
-      expect(result).toContain('\x1b[7m');  // Reverse on
-      expect(result).toContain('\x1b[27m'); // Reverse off
+      expect(result).toContain(String.fromCodePoint(0xE081)); // Reverse A (screen code 0x01 | 0x80)
+      expect(result).not.toContain('\x1b[7m');
+      expect(result).not.toContain('\x1b[27m');
     });
 
     it('should handle cursor movement codes', () => {
@@ -128,6 +129,38 @@ describe('petscii.util', () => {
 
       expect(result).toContain('\x1b[97m'); // White prefix
       expect(result).toContain('\x1b[0m');  // Reset
+    });
+
+    it('ignores unhandled control codes instead of emitting reverse glyphs', () => {
+      // $0A, $0F, $10, $80, $8F are no-ops on a C64
+      const out = convertPetsciiToPetMe64(Buffer.from([0x0A, 0x0F, 0x10, 0x80, 0x8F, 0x41]));
+      // Only 'A' (screen code 0x01 -> U+E001) plus color/reset framing may appear
+      expect(out).toContain(String.fromCodePoint(0xE001));
+      for (const cp of [0xE08A, 0xE08F, 0xE090, 0xE0C0, 0xE0CF]) {
+        expect(out).not.toContain(String.fromCodePoint(cp));
+      }
+    });
+
+    it('renders reverse video via +0x80 screen codes, not SGR 7', () => {
+      // RVS on, 'A', RVS off, 'A'
+      const out = convertPetsciiToPetMe64(Buffer.from([0x12, 0x41, 0x92, 0x41]));
+      expect(out).toContain(String.fromCodePoint(0xE081)); // reverse A = screen code 0x01 | 0x80
+      expect(out).toContain(String.fromCodePoint(0xE001)); // normal A
+      expect(out).not.toContain('\x1b[7m');
+    });
+
+    it('RETURN cancels reverse video (KERNAL $0D behavior)', () => {
+      // RVS on, 'A', RETURN, 'A' -> second A must NOT be reverse
+      const out = convertPetsciiToPetMe64(Buffer.from([0x12, 0x41, 0x0D, 0x41]));
+      const afterReturn = out.slice(out.indexOf('\r\n') + 2);
+      expect(afterReturn).toContain(String.fromCodePoint(0xE001));
+      expect(afterReturn).not.toContain(String.fromCodePoint(0xE081));
+    });
+
+    it('Shift+RETURN ($8D) does NOT cancel reverse video', () => {
+      const out = convertPetsciiToPetMe64(Buffer.from([0x12, 0x41, 0x8D, 0x41]));
+      const afterReturn = out.slice(out.indexOf('\r\n') + 2);
+      expect(afterReturn).toContain(String.fromCodePoint(0xE081));
     });
   });
 
