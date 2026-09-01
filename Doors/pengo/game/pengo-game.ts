@@ -23,6 +23,7 @@ import {
   crushComboScore,
   MAX_LIVING_ENEMIES,
   AI_TARGET_SIGMA,
+  AI_RETARGET_MOVES,
   ENEMY_BREAK_BLOCK_CHANCE,
 } from './constants';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
@@ -289,7 +290,22 @@ export class PengoGame {
         chain.push(enemyHit);
         slideX = nextX;
         slideY = nextY;
-        continue;
+
+        // The block STOPS on the Sno-Bee it squashed, unless the very next
+        // cell holds another one - then it carries on through the line and
+        // stops on the last of them.
+        //
+        // It used to keep sliding through empty floor after a crush and
+        // travel to the far wall, which read as the block vanishing: the
+        // player pushed it at an enemy a cell away and it ended up across
+        // the maze. A crush is the moment the push resolves, so that is
+        // where the block comes to rest.
+        const beyond = this.data.enemies.find(e =>
+          e.x === slideX + dx && e.y === slideY + dy &&
+          e.state !== 'dead' && e.state !== 'crushed'
+        );
+        if (beyond) continue;
+        break;
       }
 
       if (nextCell === 'empty') {
@@ -497,8 +513,11 @@ export class PengoGame {
       // position was reported as meaningfully harder than either
       // reference clone, and than the arcade itself. Re-picked once the
       // enemy has reached its current target (or never had one).
+      enemy.targetAge = (enemy.targetAge ?? 0) + 1;
       if (enemy.targetX === undefined || enemy.targetY === undefined ||
-          (enemy.x === enemy.targetX && enemy.y === enemy.targetY)) {
+          (enemy.x === enemy.targetX && enemy.y === enemy.targetY) ||
+          enemy.targetAge >= AI_RETARGET_MOVES) {
+        enemy.targetAge = 0;
         const target = gaussianTargetNear(
           this.data.pengo, AI_TARGET_SIGMA,
           { minX: 1, maxX: GRID_WIDTH - 2, minY: 1, maxY: GRID_HEIGHT - 2 }

@@ -236,7 +236,20 @@ class PengoGame {
                 chain.push(enemyHit);
                 slideX = nextX;
                 slideY = nextY;
-                continue;
+                // The block STOPS on the Sno-Bee it squashed, unless the very next
+                // cell holds another one - then it carries on through the line and
+                // stops on the last of them.
+                //
+                // It used to keep sliding through empty floor after a crush and
+                // travel to the far wall, which read as the block vanishing: the
+                // player pushed it at an enemy a cell away and it ended up across
+                // the maze. A crush is the moment the push resolves, so that is
+                // where the block comes to rest.
+                const beyond = this.data.enemies.find(e => e.x === slideX + dx && e.y === slideY + dy &&
+                    e.state !== 'dead' && e.state !== 'crushed');
+                if (beyond)
+                    continue;
+                break;
             }
             if (nextCell === 'empty') {
                 slideX = nextX;
@@ -427,8 +440,11 @@ class PengoGame {
             // position was reported as meaningfully harder than either
             // reference clone, and than the arcade itself. Re-picked once the
             // enemy has reached its current target (or never had one).
+            enemy.targetAge = (enemy.targetAge ?? 0) + 1;
             if (enemy.targetX === undefined || enemy.targetY === undefined ||
-                (enemy.x === enemy.targetX && enemy.y === enemy.targetY)) {
+                (enemy.x === enemy.targetX && enemy.y === enemy.targetY) ||
+                enemy.targetAge >= constants_1.AI_RETARGET_MOVES) {
+                enemy.targetAge = 0;
                 const target = (0, ai_1.gaussianTargetNear)(this.data.pengo, constants_1.AI_TARGET_SIGMA, { minX: 1, maxX: constants_1.GRID_WIDTH - 2, minY: 1, maxY: constants_1.GRID_HEIGHT - 2 });
                 enemy.targetX = target.x;
                 enemy.targetY = target.y;

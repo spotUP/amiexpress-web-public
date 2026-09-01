@@ -44,6 +44,8 @@ export interface Enemy {
      */
     targetX?: number;
     targetY?: number;
+    /** Moves spent on the current target, so a stale one gets re-aimed. */
+    targetAge?: number;
 }
 export interface Block {
     x: number;

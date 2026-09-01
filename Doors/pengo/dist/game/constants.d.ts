@@ -109,7 +109,28 @@ export declare const MAX_LIVING_ENEMIES = 4;
  * Re-picked once the enemy arrives at (or is blocked approaching) its
  * current target.
  */
-export declare const AI_TARGET_SIGMA = 3;
+/**
+ * How far a Sno-Bee's chosen target strays from Pengo, in cells.
+ *
+ * Reference 1 uses 3 on this same 13x15 grid, but that is nearly a random
+ * point on a board this small - a target can land six cells off, and the
+ * enemy walks all the way there while Pengo goes somewhere else. Reported
+ * in play: "the enemies are super stupid". Reference 2 is worse still: a
+ * pure random walk that never reads the player's position at all.
+ *
+ * Neither clone is the benchmark - the ARCADE is, and its Sno-Bees hunt.
+ * A tight spread keeps them heading at Pengo while still leaving them
+ * beatable, which a perfect chase toward his exact cell does not.
+ */
+export declare const AI_TARGET_SIGMA = 1.2;
+/**
+ * How many moves a Sno-Bee commits to a target before re-aiming.
+ *
+ * Re-picking ONLY on arrival - which is what both references do - means an
+ * enemy walks to where Pengo used to be and only then looks up. On a board
+ * this size that reads as wandering rather than hunting.
+ */
+export declare const AI_RETARGET_MOVES = 6;
 /**
  * Odds an enemy blocked by an ice block breaks it rather than trying
  * another direction (ref2's `SnobeeChaseState.cpp:54-71`: a 50/50
