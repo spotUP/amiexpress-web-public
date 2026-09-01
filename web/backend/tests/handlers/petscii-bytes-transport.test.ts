@@ -18,7 +18,7 @@ import * as fs from 'fs';
 
 process.env.SKIP_DB_INIT = '1';
 
-import { loadScreenFile, emitPetsciiScreen } from '../../src/handlers/screen.handler';
+import { loadScreenFile, emitPetsciiScreen, displayScreen } from '../../src/handlers/screen.handler';
 import { buildConnectionEmitter } from '../../src/server/connection-emitter';
 
 describe('petscii raw byte transport', () => {
@@ -108,6 +108,62 @@ describe('petscii raw byte transport', () => {
     emitter.emit('petscii-bytes', fixture.toString('base64'));
 
     expect(Buffer.compare(written[0], fixture)).toBe(0);
+  });
+
+  /**
+   * The other tests above exercise emitPetsciiScreen and
+   * buildConnectionEmitter directly - useful building blocks, but not the
+   * product's actual entry point. A real caller (command.handler.ts,
+   * menu.ts, etc.) calls displayScreen(socket, session, screenName); THIS
+   * test drives that exact function, through the real (unmocked)
+   * loadScreenFile, and asserts the isPetscii early return actually fires
+   * end-to-end: one petscii-bytes emit, nothing from the ANSI/MCI/
+   * pagination pipeline, no pause/segment state left on the session.
+   */
+  it('displayScreen (the real entry point) emits petscii-bytes and skips the ANSI/MCI pipeline entirely', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'petscii-display-'));
+    const seqPath = path.join(dir, 'BBSTITLE.SEQ');
+    fs.writeFileSync(seqPath, fixture);
+
+    const emitted: Array<{ event: string; data: any }> = [];
+    const socket = {
+      // getAnsiBuffer (via displayScreen's initial flushOutput(socket) call)
+      // keys its per-socket buffer map on socket.id and registers a
+      // 'disconnect' cleanup listener - both need to exist on the mock,
+      // even though this test never appends anything to that buffer.
+      id: `petscii-display-test-${Date.now()}`,
+      emit: (event: string, data: any) => emitted.push({ event, data }),
+      on: () => {},
+    };
+    const session: any = { petsciiMode: true, nodeId: 0 };
+
+    // screenName is forwarded verbatim from displayScreen into
+    // loadScreenFile (only ever .toUpperCase()'d for flow-screen/clear-set
+    // membership checks along the way, which a filesystem path never
+    // matches) - so the same absolute-path-with-extension seam
+    // loadScreenFileForTest uses above works here too, driving the real
+    // production call path instead of a synthetic loader invocation.
+    const result = await displayScreen(socket as any, session, seqPath);
+
+    expect(result).toBe(true);
+
+    const petsciiEvents = emitted.filter((e) => e.event === 'petscii-bytes');
+    expect(petsciiEvents).toHaveLength(1);
+    expect(Buffer.compare(Buffer.from(petsciiEvents[0].data, 'base64'), fixture)).toBe(0);
+
+    // No ANSI/MCI pipeline output at all: not a screen-clear, not the
+    // legacy PUA conversion, nothing else.
+    expect(emitted).toHaveLength(1);
+    expect(emitted.some((e) => e.event === 'ansi-output')).toBe(false);
+    expect(emitted.some((e) => e.event === 'petscii-output')).toBe(false);
+
+    // No pagination/pause/~SP segment state left behind by the (skipped)
+    // MCI pipeline.
+    expect(session.screenSegments).toBeUndefined();
+    expect(session.paginatedScreen).toBeUndefined();
+    expect(session.queuedScreenCommands).toBeUndefined();
+    expect(session.pendingScreenCommand).toBeUndefined();
+    expect(session.lastScreenHadPause).toBe(false);
   });
 
   it('telnet emitter degrades to PetMe64 PUA text for a non-PETSCII terminal', () => {
