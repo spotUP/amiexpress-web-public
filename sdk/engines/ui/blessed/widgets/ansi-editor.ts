@@ -2399,6 +2399,28 @@ BBS Door SDK v2.0{/gray-fg}
   }
 
   private setupMouseHandlers(): void {
+    // The wheel is reported from the WIDGET, not from the draw canvas.
+    //
+    // Zoom belongs to whatever hosts this editor - the widget has no zoom of
+    // its own, only the scale it was built with - so it says which way the
+    // wheel turned and over which cell, and lets the host decide.
+    //
+    // On the widget deliberately: since the canvas became centred it is only
+    // as large as the ART, so a wheel turn over the surrounding space never
+    // reached it. Reported as "i tried the scrollwheel in spriteed now it
+    // didnt zoom" - the event was arriving, at a box the pointer was not
+    // over. Listening here means anywhere in the editor works, and it fires
+    // once rather than twice, which listening on both would have done.
+    this.on('mouse', (data: any) => {
+      if (!data || (data.action !== 'wheelup' && data.action !== 'wheeldown')) return;
+      if (this.modalOpen) return;
+      this.emit('canvas-wheel', {
+        direction: data.action === 'wheelup' ? 'up' : 'down',
+        col: this.screenToCanvasX(data.x - this.drawCanvas.ileft),
+        line: this.screenToCanvasY(data.y - this.drawCanvas.itop),
+      });
+    });
+
     // TEXT MODE - Mouse click on viewport for cursor positioning
     this.viewport.on('click', (data: any) => {
       if (!data) return;
@@ -2490,19 +2512,10 @@ BBS Door SDK v2.0{/gray-fg}
 
       if (x < 0 || y < 0) return;
 
-      // The wheel is REPORTED, never acted on. Zoom belongs to whatever is
-      // hosting this editor - the widget has no zoom of its own, only the
-      // scale it was built with - so it says which way the wheel turned and
-      // over which cell, and returns before anything else. Returning here
-      // also keeps the drawing cursor still: scrolling is not pointing.
-      if (data.action === 'wheelup' || data.action === 'wheeldown') {
-        this.emit('canvas-wheel', {
-          direction: data.action === 'wheelup' ? 'up' : 'down',
-          col: this.screenToCanvasX(x),
-          line: this.screenToCanvasY(y),
-        });
-        return;
-      }
+      // A wheel turn is not pointing: it must not move the drawing cursor
+      // or paint. It is REPORTED from the widget-level handler below, not
+      // here - see there for why.
+      if (data.action === 'wheelup' || data.action === 'wheeldown') return;
 
       // Clamp to canvas bounds
       this.cursor.col = this.screenToCanvasX(x);

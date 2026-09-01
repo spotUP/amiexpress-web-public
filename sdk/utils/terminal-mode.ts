@@ -31,6 +31,12 @@ export interface TerminalModeSwitchOptions {
   onRelayout: () => void | Promise<void>;
   /** Where to start. Defaults to 'wide': a door asking for this wants it. */
   start?: TerminalMode;
+  /**
+   * Bind Alt+Enter to the toggle. Default true - the sysop's call, so that
+   * the same key does the same thing in every door that supports it, the
+   * way it does in most full-screen applications.
+   */
+  bindHotkey?: boolean;
 }
 
 export interface TerminalModeSwitch {
@@ -43,7 +49,10 @@ export interface TerminalModeSwitch {
   dispose(): void;
 }
 
-export const TERMINAL_MODE_MENU_LABEL = '80x25 / Responsive';
+export const TERMINAL_MODE_MENU_LABEL = '80x25 / Responsive  (Alt+Enter)';
+
+/** The one key, in every door that supports the switch. */
+export const TERMINAL_MODE_HOTKEY = 'M-enter';
 
 export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): TerminalModeSwitch {
   const { bbs, screen, onRelayout } = options;
@@ -63,7 +72,13 @@ export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): Te
   askTerminal();
   screen?.on?.('resize', relayout);
 
-  return {
+  let hotkey: (() => void) | null = null;
+  if (options.bindHotkey !== false) {
+    hotkey = () => switchRef.toggle();
+    screen?.key?.([TERMINAL_MODE_HOTKEY], hotkey);
+  }
+
+  const switchRef: TerminalModeSwitch = {
     mode: () => mode,
 
     set(next: TerminalMode): void {
@@ -85,8 +100,11 @@ export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): Te
       if (disposed) return;
       disposed = true;
       screen?.removeListener?.('resize', relayout);
+      if (hotkey) screen?.unkey?.([TERMINAL_MODE_HOTKEY], hotkey);
       // Always fixed on the way out, whatever the door was showing.
       bbs?.disableWideMode?.();
     },
   };
+
+  return switchRef;
 }

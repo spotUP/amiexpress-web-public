@@ -16,7 +16,16 @@ function harness() {
     enableWideMode: () => calls.push('wide'),
     disableWideMode: () => calls.push('fixed'),
   };
+  const keys: Record<string, Array<() => void>> = {};
   const screen = {
+    key: (names: string[], fn: () => void) => {
+      names.forEach(n => (keys[n] ||= []).push(fn));
+    },
+    unkey: (names: string[], fn: () => void) => {
+      names.forEach(n => { keys[n] = (keys[n] || []).filter(f => f !== fn); });
+    },
+    press: (name: string) => (keys[name] || []).forEach(f => f()),
+    keyCount: (name: string) => (keys[name] || []).length,
     on: (event: string, fn: () => void) => {
       (listeners[event] ||= []).push(fn);
     },
@@ -79,6 +88,21 @@ describe('terminal mode switch', () => {
     h.sw.dispose();
     h.screen.emit('resize');
     expect(h.relayouts()).toBe(0);
+  });
+
+  it('toggles on Alt+Enter, the same key in every door', () => {
+    const h = harness();
+    expect(h.screen.keyCount('M-enter')).toBe(1);
+    h.screen.press('M-enter');
+    expect(h.sw.mode()).toBe('fixed');
+    h.screen.press('M-enter');
+    expect(h.sw.mode()).toBe('wide');
+  });
+
+  it('gives the key back when disposed', () => {
+    const h = harness();
+    h.sw.dispose();
+    expect(h.screen.keyCount('M-enter')).toBe(0);
   });
 
   it('labels itself the same way in every door', () => {
