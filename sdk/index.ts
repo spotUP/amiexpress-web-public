@@ -220,7 +220,10 @@ export {
   getToolHandler,
   handleDrawEvent,
   undoDrawing,
+  redoDrawing,
   clearUndoStack,
+  paintCell,
+  getSelectionBounds,
   // File operations
   FileOps as ANSIFileOps,
   loadANSFile,

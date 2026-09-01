@@ -70,11 +70,14 @@ export {
   getToolHandler,
   handleDrawEvent,
   undoDrawing,
+  redoDrawing,
   clearUndoStack,
+  paintCell,
   getSelection,
   clearSelection,
   copySelection,
   pasteSelection,
+  getSelectionBounds,
 } from './tools/drawing-tools';
 export {
   getBrushCell,

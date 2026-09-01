@@ -105,6 +105,59 @@ describe('ANSIEditor canvas dimensions derive from the canvas', () => {
       expect(content).toContain('5x2');
       expect(content).not.toContain('80x25');
     });
+
+    // Task 4: the widget now routes drawing through the shared library
+    // tools (getToolHandler(), drawTool, etc.) instead of its own inline
+    // 80x25-shaped preview code. The library tools themselves read
+    // dimensions off the actual Cell[][] array (Task 1's invariant), but a
+    // regression that re-hardcoded 80/25 anywhere in the NEW sync/dispatch
+    // plumbing (syncToCoreState/syncFromCoreState, handleShapeToolClick)
+    // would only show up on a canvas smaller than 80x25 - these tests catch
+    // that class of regression the same way the ones above catch it for
+    // cursor/mouse/status-bar.
+    it('a freehand draw at the bottom-right corner (4,1) of the 5x2 canvas lands there, not off the edge of an assumed 80x25 canvas', () => {
+      editor.switchTool('draw');
+      editor.cursor = { line: 1, col: 4 };
+      editor.currentChar = 'Z';
+      editor.drawAtCursor(false);
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas[1][4].char).toBe('Z');
+    });
+
+    it('a two-click line drag on the 5x2 canvas draws across its full width and Ctrl+Z reverts it', () => {
+      editor.switchTool('line');
+      editor.currentChar = 'L';
+
+      editor.handleShapeToolClick(0, 0);
+      editor.handleShapeToolClick(4, 0);
+
+      const canvas = editor.getCoreCanvas();
+      for (let x = 0; x < 5; x++) {
+        expect(canvas[0][x].char).toBe('L');
+      }
+
+      editor.undo();
+      const reverted = editor.getCoreCanvas();
+      for (let x = 0; x < 5; x++) {
+        expect(reverted[0][x].char).toBe(' ');
+      }
+    });
+
+    it('flood fill on the 5x2 canvas fills exactly its 10 cells, not an assumed 80x25 grid', () => {
+      editor.switchTool('fill');
+      editor.currentChar = 'F';
+      editor.handleToolClick(0, 0);
+
+      const canvas = editor.getCoreCanvas();
+      expect(canvas.length).toBe(2);
+      for (const row of canvas) {
+        expect(row.length).toBe(5);
+        for (const cell of row) {
+          expect(cell.char).toBe('F');
+        }
+      }
+    });
   });
 
   describe('default canvas size (80x25) - no regression', () => {
