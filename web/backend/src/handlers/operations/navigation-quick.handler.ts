@@ -137,7 +137,7 @@ export async function handlePreviousMessageBaseCommand(
 
   // If no previous message base, wrap to last or prompt - express.e:24574-24575
   if (newMsgBase < 1) {
-    const { handleJoinMessageBaseCommand } = require('./message-commands.handler');
+    const { handleJoinMessageBaseCommand } = require('../message/message-commands.handler');
     await handleJoinMessageBaseCommand(socket, session, '');
   } else {
     // Join the previous message base - express.e:24577
@@ -166,7 +166,7 @@ export async function handleNextMessageBaseCommand(
 
   // If no next message base, prompt for selection - express.e:24588-24589
   if (newMsgBase > numMsgBases) {
-    const { handleJoinMessageBaseCommand } = require('./message-commands.handler');
+    const { handleJoinMessageBaseCommand } = require('../message/message-commands.handler');
     await handleJoinMessageBaseCommand(socket, session, '');
   } else {
     // Join the next message base - express.e:24591

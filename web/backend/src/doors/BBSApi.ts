@@ -1114,7 +1114,7 @@ console.error('[BBSApi] Error posting message:', error);
       throw new Error('Database access requires security level 100+');
     }
 
-    const { db } = require('../database/Database');
+    const { db } = require('../database');
     const result = await db.query(sql, params);
     return result.rows;
   }

@@ -236,7 +236,7 @@ console.log("💬 [COMMAND] User in CHAT mode, real-time input");
       session.inputBuffer = "";
     }
 
-    const { handleChatKeystroke } = require("../internode-chat.handler");
+    const { handleChatKeystroke } = require("../chat/internode-chat.handler");
 
     // Handle arrow keys for cursor movement (left/right navigation)
     if (data === "\x1b[D") {
@@ -263,7 +263,7 @@ console.log("💬 [COMMAND] User in CHAT mode, real-time input");
       // Check for /END or /EXIT command
       if (input.toUpperCase() === "/END" || input.toUpperCase() === "/EXIT") {
 console.log("💬 [COMMAND] User wants to end chat");
-        const { handleChatEnd } = require("../internode-chat.handler");
+        const { handleChatEnd } = require("../chat/internode-chat.handler");
         await handleChatEnd(socket, session);
         return;
       }
@@ -287,7 +287,7 @@ console.log("💬 [COMMAND] User requested help");
       // Regular message - finalize and send to scroll area
       if (input.length > 0) {
 console.log("💬 [COMMAND] Finalizing message:", input);
-        const { handleChatMessage } = require("../internode-chat.handler");
+        const { handleChatMessage } = require("../chat/internode-chat.handler");
         await handleChatMessage(socket, session, { message: input });
         session.inputBuffer = ""; // Clear buffer after sending
       }
@@ -327,7 +327,7 @@ console.log("💬 User in CHAT_ROOM mode, handling room input");
 
     // Check for /LEAVE or /EXIT command
     if (input.toUpperCase() === "/LEAVE" || input.toUpperCase() === "/EXIT") {
-      const { handleRoomLeave } = require("../group-chat.handler");
+      const { handleRoomLeave } = require("../chat/group-chat.handler");
       await handleRoomLeave(socket, session);
       return;
     }
@@ -368,7 +368,7 @@ console.log("💬 User in CHAT_ROOM mode, handling room input");
 
     // Regular message - send to room
     if (input.length > 0) {
-      const { handleRoomMessage } = require("../group-chat.handler");
+      const { handleRoomMessage } = require("../chat/group-chat.handler");
       await handleRoomMessage(socket, session, { message: input });
     }
     return;
@@ -497,7 +497,7 @@ console.log("✅ In READ_COMMAND state, reading line input");
 
   // Handle command history navigation
   if (data === "\x1b[A") {
-    const { getPreviousCommand } = require("../utils/command-history.util");
+    const { getPreviousCommand } = require("../../utils/command-history.util");
     const previousCmd = getPreviousCommand(session);
     if (previousCmd) {
       // Clear current line
@@ -515,7 +515,7 @@ console.log("✅ In READ_COMMAND state, reading line input");
   }
   // Down Arrow - next command
   else if (data === "\x1b[B") {
-    const { getNextCommand } = require("../utils/command-history.util");
+    const { getNextCommand } = require("../../utils/command-history.util");
     const nextCmd = getNextCommand(session);
     if (nextCmd) {
       // Clear current line
@@ -542,7 +542,7 @@ console.log("✅ In READ_COMMAND state, reading line input");
 
     // Add command to history if non-empty
     if (input.length > 0) {
-      const { addToHistory } = require("../utils/command-history.util");
+      const { addToHistory } = require("../../utils/command-history.util");
       addToHistory(session, input);
     }
 

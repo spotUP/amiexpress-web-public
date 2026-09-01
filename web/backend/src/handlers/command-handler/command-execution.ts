@@ -245,7 +245,7 @@ console.error("❌ ERROR in handleLiveChatCommand:", error);
       return;
 
     case "ROOM": // Group Chat Rooms (Modern Enhancement)
-      const { handleRoomCommand } = require("../room-commands.handler");
+      const { handleRoomCommand } = require("../chat/room-commands.handler");
       await handleRoomCommand(socket, session, params);
       return;
 
@@ -445,7 +445,7 @@ console.error("❌ ERROR in handleLiveChatCommand:", error);
 console.log("[GA] Starting GetAnswer door...");
         const {
           AmigaDoorSession,
-        } = require("../amiga-emulation/AmigaDoorSession");
+        } = require("../../amiga-emulation/AmigaDoorSession");
         // Door path is relative to project root, not backend directory
         const doorPath = path.join(
           process.cwd(),

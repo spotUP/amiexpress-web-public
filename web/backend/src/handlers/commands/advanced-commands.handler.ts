@@ -304,7 +304,7 @@ async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Pro
   socket.emit('ansi-output', '\x1b[33m        ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~         ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~\x1b[0m\r\n\r\n');
 
   // express.e:24692-24731 - List all accessible conferences with flags
-  const { db } = require('../database');
+  const { db } = require('../../database');
   let n = 0;
 
   for (const conf of _conferences) {
@@ -424,7 +424,7 @@ export async function handleCFFlagSelectInput(socket: any, session: BBSSession, 
 export async function handleCFConfSelectInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const confNums = input.trim();
   const editMask = session.tempData.cfEditMask;
-  const { db } = require('../database');
+  const { db } = require('../../database');
 
   socket.emit('ansi-output', '\r\n');
 
@@ -506,7 +506,7 @@ const MAILSCAN_ALL = 128;   // Bit 7 - Scan all messages, not just addressed to 
  * Get user's scan flags for a conference/base
  */
 async function getUserScanFlags(userId: string, confId: number, msgBaseId: number): Promise<number> {
-  const { db } = require('../database');
+  const { db } = require('../../database');
 
   try {
     const result = await db.query(
@@ -536,7 +536,7 @@ async function toggleScanFlag(
   mask: number,
   mode: boolean | null
 ): Promise<void> {
-  const { db } = require('../database');
+  const { db } = require('../../database');
 
   try {
     // Get current flags

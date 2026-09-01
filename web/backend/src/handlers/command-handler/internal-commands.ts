@@ -209,7 +209,7 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
       return RESULT_SUCCESS;
 
     case 'ROOM': // Group Chat Rooms (Modern Enhancement)
-      const { handleRoomCommand } = require('../room-commands.handler');
+      const { handleRoomCommand } = require('../chat/room-commands.handler');
       await handleRoomCommand(socket, session, params);
       return RESULT_SUCCESS;
 
