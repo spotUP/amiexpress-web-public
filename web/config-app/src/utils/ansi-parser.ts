@@ -6,49 +6,26 @@
  * - Replaces cursor positioning and screen control codes with descriptive placeholders
  */
 
+import { ANSI_PALETTE } from './ansi-palette';
+
 interface AnsiColor {
   fg?: string;
   bg?: string;
   bold?: boolean;
 }
 
-const ANSI_COLORS: Record<number, string> = {
-  30: '#000000', // Black
-  31: '#AA0000', // Red
-  32: '#00AA00', // Green
-  33: '#AA5500', // Yellow
-  34: '#0000AA', // Blue
-  35: '#AA00AA', // Magenta
-  36: '#00AAAA', // Cyan
-  37: '#AAAAAA', // White
-  90: '#555555', // Bright Black (Gray)
-  91: '#FF5555', // Bright Red
-  92: '#55FF55', // Bright Green
-  93: '#FFFF55', // Bright Yellow
-  94: '#5555FF', // Bright Blue
-  95: '#FF55FF', // Bright Magenta
-  96: '#55FFFF', // Bright Cyan
-  97: '#FFFFFF', // Bright White
-};
+// Keyed by the SGR number, derived from the one palette so the log view and
+// the ANSI canvas cannot drift apart. 30-37 and 90-97 are foreground, 40-47
+// and 100-107 the same colours as background.
+const ANSI_COLORS: Record<number, string> = Object.fromEntries(
+  ANSI_PALETTE.flatMap((color, index) =>
+    index < 8 ? [[30 + index, color]] : [[90 + index - 8, color]]),
+);
 
-const ANSI_BG_COLORS: Record<number, string> = {
-  40: '#000000', // Black
-  41: '#AA0000', // Red
-  42: '#00AA00', // Green
-  43: '#AA5500', // Yellow
-  44: '#0000AA', // Blue
-  45: '#AA00AA', // Magenta
-  46: '#00AAAA', // Cyan
-  47: '#AAAAAA', // White
-  100: '#555555', // Bright Black
-  101: '#FF5555', // Bright Red
-  102: '#55FF55', // Bright Green
-  103: '#FFFF55', // Bright Yellow
-  104: '#5555FF', // Bright Blue
-  105: '#FF55FF', // Bright Magenta
-  106: '#55FFFF', // Bright Cyan
-  107: '#FFFFFF', // Bright White
-};
+const ANSI_BG_COLORS: Record<number, string> = Object.fromEntries(
+  ANSI_PALETTE.flatMap((color, index) =>
+    index < 8 ? [[40 + index, color]] : [[100 + index - 8, color]]),
+);
 
 /**
  * Parse ANSI codes and convert to HTML with color support and cursor code placeholders

@@ -1,0 +1,64 @@
+import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
+import { ansiColor } from '../utils/ansi-palette';
+
+/** VGA text-mode cell, the shape every one of these screens was drawn in. */
+export const CELL_WIDTH = 8;
+export const CELL_HEIGHT = 16;
+
+/**
+ * What the canvas renderer actually draws, as a function.
+ *
+ * Separated from the component on purpose: a test environment has no 2D
+ * backend, so a paint loop living inside `useEffect` is never executed by any
+ * test and the colour mapping - the thing most likely to be wrong, since a
+ * Cell numbers colours in SGR order and the EGA table does not - would ship
+ * unproven. A recording context proves it instead.
+ */
+export function paintScreen(
+  ctx: CanvasRenderingContext2D,
+  canvas: Cell[][],
+  cursor?: { x: number; y: number } | null,
+): void {
+  const rows = canvas.length;
+  const cols = rows > 0 ? canvas[0].length : 0;
+
+  ctx.fillStyle = ansiColor(0);
+  ctx.fillRect(0, 0, cols * CELL_WIDTH, rows * CELL_HEIGHT);
+
+  // The CP437 glyphs come from the same face the preview uses; the fallbacks
+  // keep a machine without it monospaced rather than proportional.
+  ctx.font = `${CELL_HEIGHT}px "IBM VGA", "Consolas", "Courier New", monospace`;
+  ctx.textBaseline = 'top';
+
+  for (let y = 0; y < rows; y++) {
+    const row = canvas[y];
+    for (let x = 0; x < row.length; x++) {
+      const cell = row[x];
+      if (!cell) continue;
+
+      const left = x * CELL_WIDTH;
+      const top = y * CELL_HEIGHT;
+
+      ctx.fillStyle = ansiColor(cell.bg);
+      ctx.fillRect(left, top, CELL_WIDTH, CELL_HEIGHT);
+
+      // A space carries its background and nothing else - drawing it costs a
+      // glyph per cell on a screen that is mostly spaces.
+      if (cell.char && cell.char !== ' ') {
+        ctx.fillStyle = ansiColor(cell.fg);
+        ctx.fillText(cell.char, left, top);
+      }
+    }
+  }
+
+  if (cursor && cursor.x >= 0 && cursor.y >= 0 && cursor.x < cols && cursor.y < rows) {
+    ctx.strokeStyle = ansiColor(15);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      cursor.x * CELL_WIDTH + 0.5,
+      cursor.y * CELL_HEIGHT + 0.5,
+      CELL_WIDTH - 1,
+      CELL_HEIGHT - 1,
+    );
+  }
+}
