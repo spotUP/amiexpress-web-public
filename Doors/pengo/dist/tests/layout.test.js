@@ -1,7 +1,7 @@
 "use strict";
 /**
  * The board fits the terminal, and the world it scrolls through is
- * exactly the arcade's 13x15.
+ * exactly the arcade's 13x15 playable maze, inside its own wall ring.
  *
  * Reported 2026-08-31 with a screenshot: the board used ~30 of 80 columns
  * and 13 of 24 rows. That fix (a 16x11 world sized to fill 80x22 exactly)
@@ -26,8 +26,14 @@ const assert_1 = __importDefault(require("assert"));
 const constants_1 = require("../game/constants");
 /** The world is the arcade's real 13x15, not a shape picked to fit the screen. */
 async function theWorldIsTheArcadesRealSize() {
-    assert_1.default.strictEqual(constants_1.GRID_WIDTH, 13, 'both independent reference clones agree on 13 columns');
-    assert_1.default.strictEqual(constants_1.GRID_HEIGHT, 15, 'both independent reference clones agree on 15 rows');
+    // 13x15 is the arcade's PLAYABLE maze - what the level data addresses
+    // and what both reference clones agree on. Our grid adds the wall ring
+    // around it rather than inside it, so the totals are two larger; before
+    // 2026-09-01 the ring lived inside and ate source cells.
+    assert_1.default.strictEqual(constants_1.ARCADE_COLS, 13, 'both independent reference clones agree on 13 columns');
+    assert_1.default.strictEqual(constants_1.ARCADE_ROWS, 15, 'both independent reference clones agree on 15 rows');
+    assert_1.default.strictEqual(constants_1.GRID_WIDTH, constants_1.ARCADE_COLS + 2, 'the wall ring sits outside the playable maze');
+    assert_1.default.strictEqual(constants_1.GRID_HEIGHT, constants_1.ARCADE_ROWS + 2, 'the wall ring sits outside the playable maze');
     assert_1.default.strictEqual(constants_1.WORLD_COLS, constants_1.GRID_WIDTH * constants_1.CELL_W);
     assert_1.default.strictEqual(constants_1.WORLD_ROWS, constants_1.GRID_HEIGHT * constants_1.CELL_H);
 }

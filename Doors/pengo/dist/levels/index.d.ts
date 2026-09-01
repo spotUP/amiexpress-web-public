@@ -21,10 +21,9 @@ export declare function originalLevelCount(): number;
  * the procedural generator.
  *
  * The border ring (row 0, row GRID_HEIGHT-1, column 0, column
- * GRID_WIDTH-1) is always wall, regardless of what character the source
- * transcription has there - see the provenance note atop
- * `original-levels.ts` for why a handful of source cells land there and
- * what happens to them.
+ * GRID_WIDTH-1) is always wall. It sits OUTSIDE the arcade's addressable
+ * space, so no source cell can land on it: grid (x, y) reads source
+ * (x-1, y-1), and the source's 13x15 fills the interior exactly.
  */
 export declare function loadOriginalLevel(levelNumber: number): ParsedLevel | null;
 //# sourceMappingURL=index.d.ts.map

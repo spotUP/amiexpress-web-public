@@ -13,11 +13,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.thereAreSixteenOriginalLevels = thereAreSixteenOriginalLevels;
-exports.everyLevelIsThirteenByFifteen = everyLevelIsThirteenByFifteen;
+exports.everyLevelIsTheFullWorldGrid = everyLevelIsTheFullWorldGrid;
 exports.theBorderIsAlwaysWall = theBorderIsAlwaysWall;
 exports.everyLevelKeepsAllThreeDiamonds = everyLevelKeepsAllThreeDiamonds;
-exports.eggCountsMatchTheSourceWithinTheBorderOverride = eggCountsMatchTheSourceWithinTheBorderOverride;
-exports.blockCountsNeverExceedTheSource = blockCountsNeverExceedTheSource;
+exports.eggCountsMatchTheSourceExactly = eggCountsMatchTheSourceExactly;
+exports.blockCountsMatchTheSourceExactly = blockCountsMatchTheSourceExactly;
+exports.theArcadeSpaceFitsInsideTheWallRing = theArcadeSpaceFitsInsideTheWallRing;
 exports.everyLevelHasAnOpenInteriorCell = everyLevelHasAnOpenInteriorCell;
 exports.pengoGameUsesTheOriginalLevelsForOneThroughSixteen = pengoGameUsesTheOriginalLevelsForOneThroughSixteen;
 exports.pengoGameFallsBackToTheProceduralGeneratorPastSixteen = pengoGameFallsBackToTheProceduralGeneratorPastSixteen;
@@ -55,8 +56,8 @@ async function thereAreSixteenOriginalLevels() {
     assert_1.default.strictEqual((0, levels_1.loadOriginalLevel)(17), null, 'no 17th original to load');
     assert_1.default.strictEqual((0, levels_1.loadOriginalLevel)(0), null);
 }
-/** Every transcribed level is exactly the door's own 13x15 world grid. */
-async function everyLevelIsThirteenByFifteen() {
+/** Every parsed level is exactly the door's own world grid, wall ring included. */
+async function everyLevelIsTheFullWorldGrid() {
     for (let n = 1; n <= 16; n++) {
         const level = (0, levels_1.loadOriginalLevel)(n);
         assert_1.default.strictEqual(level.grid.length, constants_1.GRID_HEIGHT, `level ${n} row count`);
@@ -97,20 +98,31 @@ async function everyLevelKeepsAllThreeDiamonds() {
     }
 }
 /**
- * Egg-spawn counts match the source to within the (at most one) egg that
- * lands on our wall border and is dropped - never more than one, and
- * never for a level whose source had none there.
+ * Egg-spawn counts match the source EXACTLY.
+ *
+ * They used to be allowed to fall one short: the source's 13x15 was mapped
+ * straight onto a 13x15 grid whose outer ring was our wall, so any source
+ * cell on that ring was overwritten - seven of the sixteen levels lost an
+ * egg that way, and with it one Sno-Bee. The arcade's 13x15 is the
+ * PLAYABLE interior and its wall sits outside that space; our grid is
+ * 15x17 for the same reason, so nothing lands on the ring any more and
+ * the tolerance is gone.
  */
-async function eggCountsMatchTheSourceWithinTheBorderOverride() {
+async function eggCountsMatchTheSourceExactly() {
     for (let n = 1; n <= 16; n++) {
         const level = (0, levels_1.loadOriginalLevel)(n);
-        const expected = SOURCE_COUNTS[n - 1].eggs;
-        const diff = expected - level.eggSpawns.length;
-        assert_1.default.ok(diff >= 0 && diff <= 1, `level ${n}: source had ${expected} eggs, transcription kept ${level.eggSpawns.length}`);
+        assert_1.default.strictEqual(level.eggSpawns.length, SOURCE_COUNTS[n - 1].eggs, `level ${n}: source had ${SOURCE_COUNTS[n - 1].eggs} eggs`);
     }
 }
-/** Ice + diamond block counts (post-border-override) never exceed the source's. */
-async function blockCountsNeverExceedTheSource() {
+/**
+ * Ice + diamond block counts match the source EXACTLY - see the note above.
+ *
+ * The source's `blocks` array is every block cell INCLUDING the ones
+ * `diamond` and `unhatched` override, so the terrain this door ends up
+ * with is `blocks - eggs`: an egg cell is walkable floor plus a spawn
+ * point in our model, not a block.
+ */
+async function blockCountsMatchTheSourceExactly() {
     for (let n = 1; n <= 16; n++) {
         const { grid } = (0, levels_1.loadOriginalLevel)(n);
         let blocks = 0;
@@ -118,9 +130,20 @@ async function blockCountsNeverExceedTheSource() {
             for (const cell of row)
                 if (cell === 'ice' || cell === 'diamond')
                     blocks++;
-        assert_1.default.ok(blocks <= SOURCE_COUNTS[n - 1].blocks, `level ${n}: ${blocks} blocks exceeds source's ${SOURCE_COUNTS[n - 1].blocks}`);
-        assert_1.default.ok(blocks > 0, `level ${n}: transcription lost every block`);
+        const expected = SOURCE_COUNTS[n - 1].blocks - SOURCE_COUNTS[n - 1].eggs;
+        assert_1.default.strictEqual(blocks, expected, `level ${n}: ${blocks} blocks against the source's ${expected} - ` +
+            'a mismatch means source cells are being absorbed by the wall ring again');
     }
+}
+/**
+ * The wall ring sits OUTSIDE the arcade's addressable space, so every
+ * source cell has an interior home. Asserted structurally, not by count:
+ * the ring is at 0 and GRID-1, and the arcade's 13x15 occupies 1..13 by
+ * 1..15 inside it.
+ */
+async function theArcadeSpaceFitsInsideTheWallRing() {
+    assert_1.default.strictEqual(constants_1.GRID_WIDTH - 2, constants_1.ARCADE_COLS, 'the interior must be exactly the arcade\'s column count');
+    assert_1.default.strictEqual(constants_1.GRID_HEIGHT - 2, constants_1.ARCADE_ROWS, 'the interior must be exactly the arcade\'s row count');
 }
 /** Every level has room to stand: at least one interior cell is walkable floor. */
 async function everyLevelHasAnOpenInteriorCell() {

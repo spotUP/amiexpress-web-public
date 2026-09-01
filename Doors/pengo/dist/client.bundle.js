@@ -12526,9 +12526,25 @@ var init_ansi_editor = __esm({
       get canvasH() {
         return this.cellCanvas?.length ?? this.optCanvasHeight;
       }
+      /**
+       * Characters per cell across and rows per cell down. The ONLY source of
+       * magnification: buildCanvasContent() repeats by them, screenToCanvasX/Y
+       * divide by them, and updateDrawCursor() multiplies by them, so the
+       * render and the hit-test can never be scaled by two different numbers.
+       */
+      get scaleX() {
+        return this.optCellScaleX;
+      }
+      get scaleY() {
+        return this.optCellScaleY;
+      }
       /** Get the current draw-mode canvas dimensions in cells. */
       getCanvasSize() {
         return { width: this.canvasW, height: this.canvasH };
+      }
+      /** Get the current magnification, in characters per cell. */
+      getCellScale() {
+        return { x: this.scaleX, y: this.scaleY };
       }
       /** Full-canvas selection bounds - the default when no explicit selection exists. */
       fullCanvasSelection() {
@@ -12541,6 +12557,19 @@ var init_ansi_editor = __esm({
       /** Clamp a row into the canvas's vertical bounds [0, canvasH - 1]. */
       clampLine(line3) {
         return Math.max(0, Math.min(this.canvasH - 1, line3));
+      }
+      /**
+       * Rendered column/row -> canvas column/row: the inverse of the repeat
+       * buildCanvasContent() applies. Every mouse path goes through these, so a
+       * click lands on the cell the artist actually pointed at whatever the
+       * magnification; at the default 1/1 they reduce to the plain clamp the
+       * handlers used before.
+       */
+      screenToCanvasX(x) {
+        return this.clampCol(Math.floor(x / this.scaleX));
+      }
+      screenToCanvasY(y) {
+        return this.clampLine(Math.floor(y / this.scaleY));
       }
       /** Clamp the live cursor position into the current canvas's bounds. */
       clampCursorToCanvas() {
@@ -12629,6 +12658,8 @@ var init_ansi_editor = __esm({
         this.maxLineLength = options.maxLineLength || 160;
         this.optCanvasWidth = options.canvasWidth || 80;
         this.optCanvasHeight = options.canvasHeight || 25;
+        this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
+        this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
         this.transparentBackground = options.transparentBackground ?? false;
         this.showLineNumbers = options.showLineNumbers ?? true;
         this.onSaveCallback = options.onSave;
@@ -14257,8 +14288,8 @@ BBS Door SDK v2.0{/gray-fg}
           const y = data.y - this.drawCanvas.itop;
           if (x < 0 || y < 0)
             return;
-          this.cursor.col = this.clampCol(x);
-          this.cursor.line = this.clampLine(y);
+          this.cursor.col = this.screenToCanvasX(x);
+          this.cursor.line = this.screenToCanvasY(y);
           this.updateDrawCursor();
           if (data.button === "left") {
             this.handleToolClick(this.cursor.col, this.cursor.line);
@@ -14280,8 +14311,8 @@ BBS Door SDK v2.0{/gray-fg}
           if (data.action === "mouseup") {
             this.flushDrawChunk();
           }
-          this.cursor.col = this.clampCol(x);
-          this.cursor.line = this.clampLine(y);
+          this.cursor.col = this.screenToCanvasX(x);
+          this.cursor.line = this.screenToCanvasY(y);
           this.updateDrawCursor();
           const shapeTools = ["line", "box", "box-fill", "ellipse", "ellipse-fill", "select"];
           const isShapeTool = shapeTools.includes(this.currentTool);
@@ -14657,9 +14688,11 @@ BBS Door SDK v2.0{/gray-fg}
           return;
         const canvasTop = this.drawCanvas.position.top || 0;
         const canvasLeft = this.drawCanvas.position.left || 0;
-        this.drawCursor.top = canvasTop + this.cursor.line;
-        this.drawCursor.left = canvasLeft + this.cursor.col;
-        this.drawCursor.setContent(this.currentChar);
+        this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY;
+        this.drawCursor.left = canvasLeft + this.cursor.col * this.scaleX;
+        this.drawCursor.width = this.scaleX;
+        this.drawCursor.height = this.scaleY;
+        this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
       }
       /**
        * Paint the current fg/bg/char cell at the cursor through the library's
@@ -15087,13 +15120,37 @@ BBS Door SDK v2.0{/gray-fg}
        * paths the way it did before this task (renderPreview() duplicated this
        * logic without the transparent branch - see task-4-report.md).
        */
-      cellToDisplayTag(cell) {
+      /**
+       * The one place a canvas becomes blessed content. Each cell is emitted
+       * scaleX times across and each cell row scaleY times down, so a magnified
+       * canvas is a pure repeat of what one character per cell already
+       * produced - there is no second, "scaled" rendering path that could
+       * disagree with the plain one, and at the default 1/1 the output is
+       * byte-identical to the two hand-written loops this replaced.
+       *
+       * `cellAt` lets a caller substitute cells it wants drawn instead of the
+       * canvas's own - the marching-ants selection overlay does exactly that -
+       * without duplicating the loop and its scaling.
+       */
+      buildCanvasContent(cellAt) {
+        const rows = [];
+        for (let y = 0; y < this.canvasH; y++) {
+          let row = "";
+          for (let x = 0; x < this.canvasW; x++) {
+            row += this.cellToDisplayTag(cellAt(x, y), this.scaleX);
+          }
+          for (let n = 0; n < this.scaleY; n++)
+            rows.push(row);
+        }
+        return rows.join("\n");
+      }
+      cellToDisplayTag(cell, repeat = 1) {
         if (cell.transparent) {
-          return `{gray-fg}{black-bg}.{/black-bg}{/gray-fg}`;
+          return `{gray-fg}{black-bg}${".".repeat(repeat)}{/black-bg}{/gray-fg}`;
         }
         const fgColor = _ANSIEditor.ANSI_COLOR_NAMES[cell.fg] || "white";
         const bgColor = _ANSIEditor.ANSI_COLOR_NAMES[cell.bg] || "black";
-        const char = cell.char || " ";
+        const char = (cell.char || " ").repeat(repeat);
         return `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
       }
       /**
@@ -15142,18 +15199,11 @@ BBS Door SDK v2.0{/gray-fg}
         const minY = Math.max(0, Math.min(start2.line, end.line));
         const maxY = Math.min(this.canvasH - 1, Math.max(start2.line, end.line));
         const marchCell = { char: "\xB7", fg: 15, bg: 0, blink: false };
-        let content = "";
-        for (let y = 0; y < this.canvasH; y++) {
-          for (let x = 0; x < this.canvasW; x++) {
-            const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY && (y === minY || y === maxY || x === minX || x === maxX);
-            const useMarch = isEdge && (x + y) % 2 === 0;
-            const cell = useMarch ? marchCell : this.cellCanvas[y]?.[x] || { char: " ", fg: 7, bg: 0 };
-            content += this.cellToDisplayTag(cell);
-          }
-          if (y < this.canvasH - 1)
-            content += "\n";
-        }
-        this.drawCanvas.setContent(content);
+        this.drawCanvas.setContent(this.buildCanvasContent((x, y) => {
+          const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY && (y === minY || y === maxY || x === minX || x === maxX);
+          const useMarch = isEdge && (x + y) % 2 === 0;
+          return useMarch ? marchCell : this.cellCanvas[y]?.[x] || { char: " ", fg: 7, bg: 0 };
+        }));
         if (this.drawCursor) {
           this.drawCursor.setFront();
         }
@@ -15231,16 +15281,7 @@ BBS Door SDK v2.0{/gray-fg}
       syncCoreCanvasToDisplay() {
         if (!this.cellCanvas)
           return;
-        let content = "";
-        for (let y = 0; y < this.canvasH; y++) {
-          for (let x = 0; x < this.canvasW; x++) {
-            const cell = this.cellCanvas[y]?.[x] || { char: " ", fg: 7, bg: 0 };
-            content += this.cellToDisplayTag(cell);
-          }
-          if (y < this.canvasH - 1)
-            content += "\n";
-        }
-        this.drawCanvas.setContent(content);
+        this.drawCanvas.setContent(this.buildCanvasContent((x, y) => this.cellCanvas[y]?.[x] || { char: " ", fg: 7, bg: 0 }));
         if (this.drawCursor) {
           this.drawCursor.setFront();
         }

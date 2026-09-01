@@ -1,6 +1,6 @@
 /**
  * The board fits the terminal, and the world it scrolls through is
- * exactly the arcade's 13x15.
+ * exactly the arcade's 13x15 playable maze, inside its own wall ring.
  *
  * Reported 2026-08-31 with a screenshot: the board used ~30 of 80 columns
  * and 13 of 24 rows. That fix (a 16x11 world sized to fill 80x22 exactly)

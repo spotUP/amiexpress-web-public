@@ -1,6 +1,6 @@
 /**
  * The board fits the terminal, and the world it scrolls through is
- * exactly the arcade's 13x15.
+ * exactly the arcade's 13x15 playable maze, inside its own wall ring.
  *
  * Reported 2026-08-31 with a screenshot: the board used ~30 of 80 columns
  * and 13 of 24 rows. That fix (a 16x11 world sized to fill 80x22 exactly)
@@ -15,15 +15,21 @@
 
 import assert from 'assert';
 import {
-  SCREEN_WIDTH, SCREEN_HEIGHT, GRID_WIDTH, GRID_HEIGHT,
+  SCREEN_WIDTH, SCREEN_HEIGHT, GRID_WIDTH, GRID_HEIGHT, ARCADE_COLS, ARCADE_ROWS,
   CELL_W, CELL_H, WORLD_COLS, WORLD_ROWS, VIEW_GRID_ROWS,
   BOARD_COLS, BOARD_ROWS, getLevelConfig,
 } from '../game/constants';
 
 /** The world is the arcade's real 13x15, not a shape picked to fit the screen. */
 export async function theWorldIsTheArcadesRealSize(): Promise<void> {
-  assert.strictEqual(GRID_WIDTH, 13, 'both independent reference clones agree on 13 columns');
-  assert.strictEqual(GRID_HEIGHT, 15, 'both independent reference clones agree on 15 rows');
+  // 13x15 is the arcade's PLAYABLE maze - what the level data addresses
+  // and what both reference clones agree on. Our grid adds the wall ring
+  // around it rather than inside it, so the totals are two larger; before
+  // 2026-09-01 the ring lived inside and ate source cells.
+  assert.strictEqual(ARCADE_COLS, 13, 'both independent reference clones agree on 13 columns');
+  assert.strictEqual(ARCADE_ROWS, 15, 'both independent reference clones agree on 15 rows');
+  assert.strictEqual(GRID_WIDTH, ARCADE_COLS + 2, 'the wall ring sits outside the playable maze');
+  assert.strictEqual(GRID_HEIGHT, ARCADE_ROWS + 2, 'the wall ring sits outside the playable maze');
   assert.strictEqual(WORLD_COLS, GRID_WIDTH * CELL_W);
   assert.strictEqual(WORLD_ROWS, GRID_HEIGHT * CELL_H);
 }

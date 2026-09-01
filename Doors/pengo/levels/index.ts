@@ -29,10 +29,9 @@ export function originalLevelCount(): number {
  * the procedural generator.
  *
  * The border ring (row 0, row GRID_HEIGHT-1, column 0, column
- * GRID_WIDTH-1) is always wall, regardless of what character the source
- * transcription has there - see the provenance note atop
- * `original-levels.ts` for why a handful of source cells land there and
- * what happens to them.
+ * GRID_WIDTH-1) is always wall. It sits OUTSIDE the arcade's addressable
+ * space, so no source cell can land on it: grid (x, y) reads source
+ * (x-1, y-1), and the source's 13x15 fills the interior exactly.
  */
 export function loadOriginalLevel(levelNumber: number): ParsedLevel | null {
   const rows = ORIGINAL_LEVELS[levelNumber - 1];
@@ -43,7 +42,6 @@ export function loadOriginalLevel(levelNumber: number): ParsedLevel | null {
 
   for (let y = 0; y < GRID_HEIGHT; y++) {
     grid[y] = [];
-    const row = rows[y] ?? '';
     for (let x = 0; x < GRID_WIDTH; x++) {
       const isBorder = x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1;
       if (isBorder) {
@@ -51,7 +49,11 @@ export function loadOriginalLevel(levelNumber: number): ParsedLevel | null {
         continue;
       }
 
-      const ch = row[x] ?? ORIGINAL_LEVEL_LEGEND.empty;
+      // The source addresses the arcade's PLAYABLE maze, which sits one
+      // cell inside our wall ring - so grid (x, y) reads source
+      // (x-1, y-1). Mapping them 1:1 (what this did until 2026-09-01) put
+      // the ring on top of real source cells and silently ate them.
+      const ch = rows[y - 1]?.[x - 1] ?? ORIGINAL_LEVEL_LEGEND.empty;
       switch (ch) {
         case ORIGINAL_LEVEL_LEGEND.ice:
           grid[y][x] = 'ice';

@@ -11,26 +11,38 @@ export declare const SCREEN_WIDTH = 80;
  */
 export declare const SCREEN_HEIGHT = 25;
 /**
+ * The arcade's PLAYABLE maze, in cells - the addressable space the original
+ * level data indexes, and the size both independent reference clones agree
+ * on (PenguBruh-Pengo and cpp-pengo; see
+ * thoughts/shared/research/2026-09-01_pengo-arcade-mechanics-gap.md
+ * section 4). Neither stores a wall: cpp-pengo's GridManager draws a fixed
+ * border OUTSIDE this space.
+ */
+export declare const ARCADE_COLS = 13;
+export declare const ARCADE_ROWS = 15;
+/**
  * The world grid, in cells - the door's TOTAL maze, border wall included
  * (same convention this door has always used: row/column 0 and the last
  * are wall, the interior is GRID_WIDTH-2 x GRID_HEIGHT-2).
  *
- * 13x15 because both independent arcade-mechanics reference clones
- * (PenguBruh-Pengo and cpp-pengo) use it, which is strong evidence it is
- * the real arcade size - see
- * thoughts/shared/research/2026-09-01_pengo-arcade-mechanics-gap.md
- * section 4. It replaces the door's old 16x11, which was sized for the
- * terminal's sprite budget, not derived from the original.
+ * It was 13x15 TOTAL until 2026-09-01, which put the arcade's 13x15
+ * addressable space and our wall ring in the same cells: the ring
+ * overwrote whatever the source had there - 3 to 15 ice blocks per level,
+ * and one egg (so one fewer Sno-Bee) on seven of the sixteen. Giving the
+ * ring its own cells outside the arcade's space costs two cells in each
+ * dimension and loses nothing: 75x34 characters still fits the terminal's
+ * 80 columns, and the camera was already scrolling vertically because 30
+ * rows never fit 25 either.
  */
-export declare const GRID_WIDTH = 13;
-export declare const GRID_HEIGHT = 15;
+export declare const GRID_WIDTH: number;
+export declare const GRID_HEIGHT: number;
 /**
  * Cell geometry for the sprite renderer: every maze cell is a 5x2 block of
- * characters. The 13x15 world is 65x30 characters - wider than it is
+ * characters. The 15x17 world is 75x34 characters - wider than it is
  * tall relative to the 80x25 terminal, the opposite problem the old 16x11
- * board had. It fits horizontally (65 <= 80) with room to spare, but at
- * 30 rows it is taller than the terminal has ever had room for; only 11
- * of the 15 maze rows (22 of the 30 character rows) can be shown at once
+ * board had. It fits horizontally (75 <= 80) with room to spare, but at
+ * 34 rows it is taller than the terminal has ever had room for; only 11
+ * of the 17 maze rows (22 of the 34 character rows) can be shown at once
  * (row budget: HUD 1 + board 22 + hint 1 = 24 of 25 screen rows). The
  * `cameraView`/`cropBuffer` pair from the cell-art engine's camera module
  * makes up that difference by following Pengo up and down through the
@@ -45,9 +57,8 @@ export declare const WORLD_ROWS: number;
 export declare const VIEW_GRID_ROWS = 11;
 /**
  * What actually reaches the screen, in characters - the camera's window.
- * The world already fits the terminal horizontally (13 == 13, no column
- * to spare), so the view is exactly as wide as the world and only ever
- * scrolls vertically.
+ * The world already fits the terminal horizontally (75 <= 80), so the view
+ * is exactly as wide as the world and only ever scrolls vertically.
  */
 export declare const VIEW_COLS: number;
 export declare const VIEW_ROWS: number;
@@ -122,7 +133,7 @@ export declare const MAX_LIVING_ENEMIES = 4;
 /**
  * How far a Sno-Bee's chosen target strays from Pengo, in cells.
  *
- * Reference 1 uses 3 on this same 13x15 grid, but that is nearly a random
+ * Reference 1 uses 3 on this same 13x15 maze, but that is nearly a random
  * point on a board this small - a target can land six cells off, and the
  * enemy walks all the way there while Pengo goes somewhere else. Reported
  * in play: "the enemies are super stupid". Reference 2 is worse still: a

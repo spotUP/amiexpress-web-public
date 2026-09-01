@@ -13,25 +13,18 @@
  * There is no wall, player-spawn, or enemy-spawn data in the source at
  * all - the source project draws a fixed outer-border wall OUTSIDE this
  * 13x15 addressable space and hard-codes player/enemy spawns in engine
- * code, not the level file. Our door's world grid (`GRID_WIDTH x
- * GRID_HEIGHT` = 13x15, see `game/constants.ts`) uses the OPPOSITE
- * convention it has always used: the border ring (row 0, row 14, column 0,
- * column 12) IS part of the 13x15 total and is always wall, with an 11x13
- * interior inside it. Rather than re-deriving a 15x17 total grid to give
- * the source's 13x15 addressable space room to be a pure interior, this
- * transcription maps each source index directly onto our own 13x15 grid
- * at the same (x, y) - the literal reading of "render the world at 13x15
- * cells" - and lets our wall ring simply win wherever the two conventions
- * collide.
+ * code, not the level file. Our door does the same as of 2026-09-01: the
+ * world grid is 15x17 (`ARCADE_COLS + 2` by `ARCADE_ROWS + 2`, see
+ * `game/constants.ts`), the wall ring occupies the outermost cells, and
+ * this 13x15 transcription fills the interior exactly - source (x, y)
+ * loads at grid (x+1, y+1).
  *
- * That collision is small and checked: across all 16 levels, 0 diamonds
- * and at most 1 egg spawn per level ever land on our border (verified
- * against the fetched source below); a handful of ice blocks per level
- * (3-16) do, and those cells were already going to render as our wall -
- * they simply become a one-cell-thicker stretch of border instead of an
- * ice block one cell further in. No level loses a diamond, and no level
- * loses enough eggs to change its egg count by more than one. See
- * `pengo-finish-report.md` for the exact per-level counts.
+ * It did NOT always: the first transcription mapped source (x, y) straight
+ * onto grid (x, y) of a 13x15 TOTAL, so our ring overwrote every source
+ * cell that sat on it - 3 to 15 ice blocks per level, and one egg (one
+ * fewer Sno-Bee) on seven of the sixteen. Diamonds were never affected;
+ * `levels.test.ts` now asserts exact equality with the source counts
+ * below rather than the tolerances that concession needed.
  *
  * Levels 7-16 are not new content - this is the source's OWN data, not a
  * transcription mistake: 7-12 repeat 1-6 exactly, and 13-16 repeat 3-6
@@ -46,9 +39,9 @@
  *   D  diamond block (pushable; align three for the alignment bonus)
  *   e  egg spawn point (a Sno-Bee's egg appears here at level start)
  *
- * The outer ring of every row/column (index 0 and 12 for x, 0 and 14 for
- * y) is always drawn as wall by the loader (`levels/index.ts`) regardless
- * of what character sits there in this transcription - see the note above.
+ * These 13x15 characters are the PLAYABLE maze only. The loader
+ * (`levels/index.ts`) draws the wall ring in the cells around them, so
+ * every character here reaches the board - see the note above.
  */
 export declare const ORIGINAL_LEVEL_LEGEND: {
     readonly empty: ".";

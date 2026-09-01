@@ -54,7 +54,7 @@ function initScreen() {
     gameArea = new blessed_1.Box({
         parent: screen,
         top: 1,
-        // The 13x15 world (65 characters) is narrower than the 80-column
+        // The 15x17 world (75 characters) is narrower than the 80-column
         // terminal - it fits with room to spare, unlike the 30 character
         // rows the camera has to scroll for. Centring it, rather than
         // pinning to the left edge, is the only place that spare width goes.

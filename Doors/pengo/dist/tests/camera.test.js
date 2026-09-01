@@ -1,6 +1,6 @@
 "use strict";
 /**
- * The camera that scrolls the 13x15 world through the 11-row window the
+ * The camera that scrolls the 15x17 world through the 11-row window the
  * terminal can show.
  *
  * `buildBoard` used to return the world buffer directly - grid coordinates
