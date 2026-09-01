@@ -1,7 +1,7 @@
 /**
  * makePanel - the one place every sprite-studio content pane becomes a
  * DockablePanel, so the eight panes (browser: doors/sprites/animations/
- * preview; edit: canvas/preview/frames/toolbar) share identical drag/
+ * preview; edit: canvas/preview/frames) share identical drag/
  * resize/minimize/persistence behaviour instead of eight hand-tuned
  * option blocks drifting apart.
  *
