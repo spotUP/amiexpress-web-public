@@ -23,6 +23,8 @@ import * as amigafs from '../utils/amigafs';
 import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
+import { checkShare } from '../screens/share-preconditions';
+import { applyTooltypes } from '../utils/info-file.util';
 import {
   getScreenIndex, invalidateScreenIndex, screenFileFacts, buildScreenIndex,
 } from '../screens/screen-index.service';
@@ -311,4 +313,75 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
   } catch (error) {
     return res.status(400).json({ success: false, error: (error as Error).message });
   }
+});
+
+/**
+ * POST /api/screens/share
+ * Body: { nodes: number[], sharedDir: string, dryRun?: boolean }
+ *
+ * Points nodes at one screen directory - express.e's own answer to a board
+ * with more nodes than screen sets (ACP.e:2666-2673). Nothing is deleted: the
+ * node's own files stay where they are and simply stop being read, so undoing
+ * this is clearing one tooltype rather than restoring from a backup.
+ *
+ * Every node is checked BEFORE any is written. A share that half-applies
+ * leaves the board in two states, and the sysop cannot see which node is in
+ * which.
+ */
+screensRouter.post('/share', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const nodes: number[] = Array.isArray(req.body?.nodes) ? req.body.nodes : [];
+  const sharedDirRel = String(req.body?.sharedDir || '');
+  const dryRun = !!req.body?.dryRun;
+
+  if (!nodes.length || !sharedDirRel) {
+    return res.status(400).json({ success: false, error: 'nodes and sharedDir are required' });
+  }
+  if (!resolveScreenPath(sharedDirRel)) {
+    return res.status(400).json({ success: false, error: 'The shared directory is outside the board root' });
+  }
+
+  const checks = nodes.map(id => ({ id, check: checkShare(baseDir, id, sharedDirRel) }));
+  const blocked = checks.filter(c => !c.check.ok).map(c => ({
+    id: c.id,
+    reasons: [
+      ...c.check.reasons,
+      ...c.check.losing.map(name => `would lose ${name}`),
+      ...c.check.gaining.map(name => `would gain ${name}`),
+    ],
+    losing: c.check.losing,
+    gaining: c.check.gaining,
+  }));
+
+  if (blocked.length) {
+    return res.status(409).json({
+      success: false,
+      error: `${blocked.length} node${blocked.length === 1 ? '' : 's'} cannot share this directory`,
+      data: { blocked, canShare: checks.filter(c => c.check.ok).map(c => c.id) },
+    });
+  }
+
+  // ACP.e:2668 runs checkPathSlash over the value, so a real board's tooltype
+  // carries the trailing slash. Write the same thing.
+  const amigaPath = `BBS:${sharedDirRel.split(path.sep).join('/')}/`;
+  const wouldWrite = nodes.map(id => `Node${id}.info`);
+
+  if (dryRun) {
+    return sendOk(res, { wouldWrite, tooltype: amigaPath, canShare: nodes, blocked: [] },
+      'Nothing written - this was a dry run');
+  }
+
+  try {
+    for (const id of nodes) {
+      // applyTooltypes preserves the icon and every tooltype it does not name;
+      // SCREENS is the only key this owns.
+      applyTooltypes(path.join(baseDir, `Node${id}.info`), [['SCREENS', amigaPath]]);
+    }
+    invalidateScreenIndex();
+  } catch (error) {
+    return res.status(500).json({ success: false, error: (error as Error).message });
+  }
+
+  return sendOk(res, { written: wouldWrite, tooltype: amigaPath },
+    `${nodes.length} node${nodes.length === 1 ? '' : 's'} now read ${sharedDirRel}`);
 });
