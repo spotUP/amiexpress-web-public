@@ -20,6 +20,7 @@ import {
 } from './edit-doc';
 import { writeSprite } from './assets';
 import { previewLines } from './preview';
+import { promptText, confirm } from './dialogs';
 import { buildBindingSet, BindingSet, StudioBinding } from './bindings';
 import { LAYOUT } from './layout';
 import { createStudioMenuBar } from './menu';
@@ -29,7 +30,6 @@ import { tokenAtColumn } from './token-strip';
 
 const GLYPHS = ['▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '•', '►', '◄', '▲', '▼'];
 const PLAYBACK_MS = 100;
-const DISCARD_WINDOW_MS = 3000;
 // Fix round 1, Important 2: the ONE place that says a cell renders as two
 // characters wide. paintCanvas() (the render side) and canvasHitTest()
 // (the click side) both read this constant instead of each carrying its
@@ -57,8 +57,6 @@ export class EditScreen {
   private tick = 0;
   private playback: ReturnType<typeof setInterval> | null = null;
   private statusFlash = '';
-  private discardArmedAt = 0;
-  private naming: string | null = null; // non-null while typing a new animation name
 
   private canvasPanel: any = null;
   private previewPanel: any = null;
@@ -157,31 +155,38 @@ export class EditScreen {
 
   /**
    * Bind a key that MUTATES THE DOCUMENT OR VIEW STATE and must do nothing
-   * while a name is being typed. blessed fires the registered key handler
-   * AND emits 'keypress' for the same physical key, so every one of these
-   * would otherwise double as a letter in the typed name - naming "spin"
-   * saved to disk (s) and inserted a blank frame (n) before this guard
-   * existed. space/delete/enter/escape/+ are NOT routed through here: they
-   * handle the naming state themselves (typing into the name, submitting,
-   * cancelling). Routed through one wrapper so the guard exists exactly
-   * once, per finding-1's review note.
+   * while a modal dialog (dialogs.ts's promptText/confirm) owns the
+   * keyboard. blessed fires the registered key handler AND emits
+   * 'keypress' for the same physical key, so every one of these would
+   * otherwise double as a letter typed into a dialog's own text field -
+   * naming "spin" saved to disk (s) and inserted a blank frame (n) before
+   * this guard existed. `screen.dialogOpen` is owned entirely by
+   * dialogs.ts (set/cleared around its own await, never by this file) -
+   * see dialogs.ts's module doc comment for why the guard still has to be
+   * checked here even so: neither ConfirmModal nor Textbox suppress this
+   * door's own screen.key() bindings on their own. delete/escape are NOT
+   * routed through here: they have their own direct dialogOpen checks
+   * below, since escape/delete-while-dialog-open must do nothing rather
+   * than fall through to their normal (non-dialog) behaviour. Routed
+   * through one wrapper so the guard exists exactly once, per finding-1's
+   * review note.
    */
   private opKey(keys: string[], handler: (...args: any[]) => void): void {
     this.key(keys, (...args: any[]) => {
-      if (this.naming !== null) return;
+      if (this.screen.dialogOpen) return;
       handler(...args);
     });
   }
 
   /**
-   * The op table: every opKey-guarded binding, plus 'paint' (space), which
-   * is naming-aware itself and so is wired separately below (see opKey's
-   * own doc comment for why space/delete/enter/escape/+ don't share the
-   * outer guard). Handler bodies are unchanged from before the table -
-   * only where they are declared moved. This one table is also the single
-   * source for the glyph-typing exclusion set below, replacing a
-   * hand-written string that had already drifted once (missing 'X' for
-   * S-x, caught by shiftXDoesNotTypeIntoTheCell).
+   * The op table: every opKey-guarded binding, including 'paint' (space) -
+   * now an ordinary op like every other, since it no longer has a
+   * dialog-aware branch of its own (the old naming mode used to route a
+   * typed space into the in-progress name; a modal dialog's own Textbox
+   * owns that now). This one table is also the single source for the
+   * glyph-typing exclusion set below, replacing a hand-written string that
+   * had already drifted once (missing 'X' for S-x, caught by
+   * shiftXDoesNotTypeIntoTheCell).
    */
   private buildOpBindings(): StudioBinding[] {
     return [
@@ -230,7 +235,9 @@ export class EditScreen {
       { id: 'frame.duplicate', keys: ['c'], hotkeyHint: 'c', menu: 'Frame', label: 'Duplicate Frame',
         handler: () => this.tryOp(() => addFrame(this.doc, 'duplicate')) },
       { id: 'frame.delete', keys: ['x'], hotkeyHint: 'x', menu: 'Frame', label: 'Delete Frame',
-        handler: () => this.tryOp(() => deleteFrame(this.doc)) },
+        handler: async () => {
+          if (await confirm(this.screen, 'Delete this frame?')) this.tryOp(() => deleteFrame(this.doc));
+        } },
       { id: 'frame.moveEarlier', keys: ['S-,'], hotkeyHint: 'S-,', menu: 'Frame', label: 'Move Frame Earlier',
         handler: () => this.apply(moveFrame(this.doc, -1)) },
       { id: 'frame.moveLater', keys: ['S-.'], hotkeyHint: 'S-.', menu: 'Frame', label: 'Move Frame Later',
@@ -243,7 +250,11 @@ export class EditScreen {
           this.apply(selectAnimation(this.doc, next));
         } },
       { id: 'animation.new', keys: ['+'], hotkeyHint: '+', menu: 'Animation', label: 'New Animation',
-        handler: () => { this.naming = ''; this.paint(); } },
+        handler: async () => {
+          const name = await promptText(this.screen, 'New animation name');
+          if (name === null) return; // ESC cancelled - the document is untouched
+          this.tryOp(() => addAnimation(this.doc, name));
+        } },
       { id: 'animation.slower', keys: ['t'], hotkeyHint: 't', menu: 'Animation', label: 'Slower',
         handler: () => this.apply(setTicksPerFrame(this.doc, -1)) },
       { id: 'animation.faster', keys: ['S-t'], hotkeyHint: 'S-t', menu: 'Animation', label: 'Faster',
@@ -251,10 +262,24 @@ export class EditScreen {
       { id: 'animation.toggleLoop', keys: ['l'], hotkeyHint: 'l', menu: 'Animation', label: 'Toggle Loop',
         handler: () => this.apply(toggleLoop(this.doc)) },
       { id: 'animation.delete', keys: ['S-x'], hotkeyHint: 'S-x', menu: 'Animation', label: 'Delete Animation',
-        handler: () => this.tryOp(() => deleteAnimation(this.doc)) },
+        handler: async () => {
+          const message = `Delete animation "${this.doc.animation}"?`;
+          if (await confirm(this.screen, message)) this.tryOp(() => deleteAnimation(this.doc));
+        } },
 
       { id: 'file.save', keys: ['s'], hotkeyHint: 's', menu: 'File', label: 'Save',
         handler: () => this.save() },
+
+      // Studio 2c task 5: 'paint' (space) used to be wired OUTSIDE this
+      // table, directly via this.key() rather than opKey() - the naming
+      // mode it once had to special-case (typing a space into an
+      // in-progress name) is gone, so it is an ordinary op like every
+      // other binding here now, guarded the same way through opKey().
+      { id: 'paint.paint', keys: ['space'], hotkeyHint: 'space', menu: 'Paint', label: 'Paint',
+        handler: () => this.tryOp(() => this.mode === 'pixel'
+          ? setPixel(this.doc, this.cursorRow, this.cursorCol, this.fg)
+          : setCell(this.doc, this.cursorRow, this.cursorCol,
+              { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg })) },
 
       // Studio 2c task 4: which tool a canvas click/drag applies. Keys
       // checked against every table entry above (task-4-report.md has the
@@ -298,56 +323,38 @@ export class EditScreen {
   private bindKeys(): void {
     const opBindings = this.buildOpBindings();
     for (const binding of opBindings) this.opKey(binding.keys, binding.handler);
+    this.bindingSet = buildBindingSet(opBindings);
 
-    // Paint (space) is naming-aware itself (it types a space into the name
-    // while naming, rather than doing nothing like every opKey binding),
-    // so it is wired directly with this.key(), not opKey() - but it still
-    // needs a table entry so its key contributes to the exclusion set
-    // below, the same as every opKey binding does.
-    const paintBinding: StudioBinding = {
-      id: 'paint.paint', keys: ['space'], hotkeyHint: 'space', menu: 'Paint', label: 'Paint',
-      handler: () => {
-        if (this.naming !== null) { this.typeName(' '); return; }
-        this.tryOp(() => this.mode === 'pixel'
-          ? setPixel(this.doc, this.cursorRow, this.cursorCol, this.fg)
-          : setCell(this.doc, this.cursorRow, this.cursorCol,
-              { char: GLYPHS[this.glyph], fg: this.fg, bg: this.bg }));
-      },
-    };
-    this.key(paintBinding.keys, paintBinding.handler);
-
-    this.bindingSet = buildBindingSet([...opBindings, paintBinding]);
-
+    // Not opKey-routed: while a dialog is open, delete/backspace must do
+    // nothing (not fall through to the ordinary cell-clear op) - same
+    // discipline as every opKey-wrapped binding, checked directly here
+    // since this handler isn't in the op table.
     this.key(['delete', 'backspace'], () => {
-      if (this.naming !== null) { this.naming = this.naming.slice(0, -1); this.paint(); return; }
+      if (this.screen.dialogOpen) return;
       this.tryOp(() => this.mode === 'pixel'
         ? setPixel(this.doc, this.cursorRow, this.cursorCol, null)
         : setCell(this.doc, this.cursorRow, this.cursorCol, null));
     });
 
-    this.key(['enter'], () => {
-      if (this.naming !== null) {
-        const name = this.naming;
-        this.naming = null;
-        this.tryOp(() => addAnimation(this.doc, name));
-      }
-    });
-    this.key(['escape'], () => {
-      if (this.naming !== null) { this.naming = null; this.paint(); return; }
-      if (this.doc.dirty && Date.now() - this.discardArmedAt > DISCARD_WINDOW_MS) {
-        this.discardArmedAt = Date.now();
-        this.statusFlash = 'UNSAVED - escape again to discard, s to save';
-        this.paint();
-        return;
-      }
-      this.exit();
+    // Escape: dialogs own ESC themselves while open (promptText/confirm's
+    // own cancel path) - this global binding must stay out of the way, not
+    // ALSO run exit()/the discard prompt for the same keystroke. Replaces
+    // the old ESC-twice discard discipline with a single confirm() dialog.
+    this.key(['escape'], async () => {
+      if (this.screen.dialogOpen) return;
+      if (!this.doc.dirty) { this.exit(); return; }
+      const discard = await confirm(this.screen, 'Discard unsaved changes?');
+      if (discard) this.exit();
     });
 
-    // Typed characters set the cell's char in cell mode, or extend the
-    // animation name while naming. Screen keypress, filtered to printables.
+    // Typed characters set the cell's char in cell mode. Screen keypress,
+    // filtered to printables; a no-op while a dialog owns the keyboard -
+    // otherwise every character typed into a dialog's own text field would
+    // ALSO land in the current cell (screen.key()/'keypress' both fire for
+    // the same physical key - see dialogs.ts's module doc comment).
     const onKeypress = (ch: string) => {
       if (!ch || ch.length !== 1 || ch < ' ' || ch === '\x7f') return;
-      if (this.naming !== null) { this.typeName(ch); return; }
+      if (this.screen.dialogOpen) return;
       if (this.mode !== 'cell') return;
       if (this.bindingSet.excludedGlyphKeys.has(ch)) return; // bound keys keep their meaning
       if (ch === '{' || ch === '}') return; // the two characters the format refuses
@@ -356,12 +363,6 @@ export class EditScreen {
     };
     this.screen.on('keypress', onKeypress);
     this.keyHandlers.push([['__keypress__'], onKeypress]);
-  }
-
-  private typeName(ch: string): void {
-    if (this.naming === null) return;
-    if (/[a-z0-9-]/.test(ch)) this.naming += ch;
-    this.paint();
   }
 
   private moveCursor(dr: number, dc: number): void {
@@ -519,12 +520,12 @@ export class EditScreen {
   }
 
   private handleCanvasClick(data: { x: number; y: number }): void {
-    // Fix round 1, Important 1: every keyboard op is naming-guarded
+    // Fix round 1, Important 1: every keyboard op is dialog-guarded
     // (opKey()) and the sibling handleFramesClick already has this same
     // check - mouse painting must not be the one path that bypasses it,
     // or "+", click-paint, click-paint... mutates the live document while
-    // an animation name is mid-entry.
-    if (this.naming !== null) return;
+    // the new-animation dialog is open.
+    if (this.screen.dialogOpen) return;
     const hit = this.canvasHitTest(data);
     if (!hit) return;
     this.applyToolAt(hit.row, hit.col);
@@ -532,7 +533,7 @@ export class EditScreen {
 
   /** Drag (mousemove with a button held) paints continuously - paint/erase only, never pick/fill. */
   private handleCanvasDrag(data: { x: number; y: number; button?: string }): void {
-    if (this.naming !== null) return; // same naming guard as handleCanvasClick
+    if (this.screen.dialogOpen) return; // same dialog guard as handleCanvasClick
     if (!data.button) return;
     if (this.tool !== 'paint' && this.tool !== 'erase') return;
     const hit = this.canvasHitTest(data);
@@ -541,12 +542,12 @@ export class EditScreen {
   }
 
   private handleFramesClick(data: { x: number; y: number }): void {
-    if (this.naming !== null) return; // don't reinterpret a click while typing a name
+    if (this.screen.dialogOpen) return; // don't reinterpret a click while a dialog is open
     const coords = (this.framesBox as any)._getCoords();
     if (!coords) return;
     const localX = data.x - coords.xi;
     const localY = data.y - coords.yi;
-    if (localY !== 0) return; // row 1+ is the "new animation" naming line, not a frame
+    if (localY !== 0) return; // the frames strip is a single row
     const index = tokenAtColumn(this.frameTokens(), localX);
     if (index === -1) return;
     // The exact same op the ,/. bindings call - selectFrame, not a
@@ -587,10 +588,7 @@ export class EditScreen {
     const strip = this.frameTokens()
       .map((text, i) => (i === this.doc.frame ? `{blue-bg}{lightyellow-fg}${text}{/}` : text))
       .join(' ');
-    const naming = this.naming !== null
-      ? `\n new animation: {lightyellow-fg}${this.naming}{/}_ (enter/escape)`
-      : '';
-    this.framesBox.setContent(`${strip}${naming}`);
+    this.framesBox.setContent(strip);
   }
 
   private paint(): void {

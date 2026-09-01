@@ -52,8 +52,64 @@ function makeFakeScreen(): any {
         screen._keypressHandlers = screen._keypressHandlers.filter((h: any) => h !== handler);
       }
     },
+    // dialogs.ts's promptText/confirm call widget.focus(), which is
+    // Element.focus() -> this.screen.setFocused(this) - NOT optional-
+    // chained, so a fake screen without this throws the moment a dialog
+    // opens. Mirrors the real Screen.setFocused (screen.ts): blur the
+    // previous focused element, focus the new one. Nothing here renders.
+    _focused: null as any,
+    setFocused(element: any) {
+      if (screen._focused && screen._focused !== element) {
+        screen._focused.focused = false;
+        screen._focused.emit('blur');
+      }
+      screen._focused = element;
+      if (element) {
+        element.focused = true;
+        element.emit('focus');
+      }
+    },
+    getFocused() {
+      return screen._focused;
+    },
+    // ConfirmModal is built with `trapFocus: true` (confirm-modal.ts), so
+    // Element.show() (element.ts) calls this.screen.trapFocus(this) - NOT
+    // optional-chained - the moment display() shows it. Not focusing
+    // anything here is fine: ConfirmModal.display() unconditionally
+    // refocuses its own confirm button right after show(), so a no-op
+    // (state-only) trap never leaves focus stuck anywhere real focus logic
+    // depends on. Element.hide() DOES optional-chain its release
+    // (`this.screen?.getFocusTrap?.() === this`), so that half still needs
+    // to work correctly to release the trap when the modal is destroyed.
+    focusTrap: null as any,
+    trapFocus(container: any) {
+      screen.focusTrap = container;
+    },
+    releaseFocusTrap(owner?: any) {
+      if (!screen.focusTrap) return;
+      if (owner && screen.focusTrap !== owner) return;
+      screen.focusTrap = null;
+    },
+    isFocusTrapped() {
+      return screen.focusTrap !== null;
+    },
+    getFocusTrap() {
+      return screen.focusTrap;
+    },
   };
   return screen;
+}
+
+/**
+ * Studio 2c task 5: the last child appended to `screen` by a promptText()/
+ * confirm() call - the dialog Box (promptText) or ConfirmModal (confirm).
+ * Both are parented directly on the screen (see dialogs.ts), so they land
+ * at the END of screen.children, after every panel/statusBar/menuBar
+ * buildLayout() creates - this reads that position instead of a hand-
+ * picked index, so it can't drift if buildLayout() ever adds a pane.
+ */
+function lastDialog(screen: any): any {
+  return screen.children[screen.children.length - 1];
 }
 
 /** blessed key names for the SHIFTED form of a typed character. */
@@ -80,6 +136,18 @@ function pressKey(screen: any, keyName: string): void {
   for (const [keys, handler] of screen._keyBindings) {
     if (keys.includes(keyName)) handler();
   }
+}
+
+/**
+ * The registered screen.key() handler for one key, returned directly
+ * instead of invoked - so a test can capture and `await` an async
+ * handler's own returned Promise (op handlers that open a dialog are
+ * `async`; pressKey() above fires them but discards what they return).
+ */
+function keyHandler(screen: any, keyName: string): (...args: any[]) => any {
+  const entry = screen._keyBindings.find(([keys]: [string[], any]) => keys.includes(keyName));
+  if (!entry) throw new Error(`no screen.key() binding for '${keyName}'`);
+  return entry[1];
 }
 
 /**
@@ -126,7 +194,16 @@ function pixelSprite(pixels: PixelGrid): Sprite {
   };
 }
 
-export async function namingSwallowsAnimationNameLettersNotBoundOps(): Promise<void> {
+/**
+ * Studio 2c task 5: the typed naming mode is gone - '+' now opens
+ * dialogs.ts's promptText() as a real modal (a Box+Textbox appended
+ * directly to the screen, found via lastDialog()), and screen.dialogOpen
+ * (set by promptText itself, around its own await) is what keeps every
+ * bound op key from firing while it is up - the exact discipline the old
+ * `naming !== null` guard gave, now driven by the real dialog widget
+ * instead of an inline field this file owned.
+ */
+export async function openingTheNewAnimationDialogSuppressesOpBindingsUntilItCloses(): Promise<void> {
   // Two animations so 'a' (cycle animation) has somewhere to go, one frame
   // each so 'c'/'n' (clone/new frame) have an observable frame count.
   const sprite: Sprite = {
@@ -144,28 +221,40 @@ export async function namingSwallowsAnimationNameLettersNotBoundOps(): Promise<v
     const statusBar = screen.children[4];
     const framesBox = paneContent(screen, 2);
 
-    pressKey(screen, '+'); // start naming a new animation
+    // keyHandler(), not pressKey(): '+'s handler is async (it awaits
+    // promptText) - capturing its own returned Promise is what lets this
+    // test await the whole round trip below, not just fire-and-forget it.
+    const pending = keyHandler(screen, '+')();
+    assert.strictEqual(screen.dialogOpen, true, 'opening the dialog must set screen.dialogOpen');
+
     const statusBefore = statusBar.getContent();
     const stripBefore = frameStrip(framesBox.getContent());
 
     // "cane": c and n are bound to clone-frame/new-frame, a is bound to
-    // cycle-animation. Every one of them must land ONLY in the typed name.
+    // cycle-animation. None of them may fire while the dialog is open.
     for (const ch of 'cane') pressChar(screen, ch);
 
     assert.strictEqual(statusBar.getContent(), statusBefore,
-      'typing a name must not change the current animation, frame, or dirty state');
+      'a bound op key must not change the current animation, frame, or dirty state while the dialog is open');
     assert.strictEqual(frameStrip(framesBox.getContent()), stripBefore,
-      'typing a name must not add/clone a frame');
+      'a bound op key must not add/clone a frame while the dialog is open');
 
-    // The guard must not have swallowed the TYPED characters themselves.
-    assert.ok(framesBox.getContent().includes('new animation: {lightyellow-fg}cane{/}'),
-      'the typed letters must still reach the name');
+    // ESC in the dialog (its own Textbox.cancel(), the exact path a real
+    // Escape keypress drives - see textbox.ts's _onKeypress) must cancel
+    // without touching the document, and clear screen.dialogOpen.
+    const input = lastDialog(screen).children[0];
+    input.cancel();
+    await pending;
+
+    assert.strictEqual(screen.dialogOpen, false, 'cancelling the dialog must clear screen.dialogOpen');
+    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
+      'ESC must cancel without creating a new animation');
   } finally {
     edit.destroy();
   }
 }
 
-export async function namingStillSubmitsAValidAnimationName(): Promise<void> {
+export async function typingIntoTheNewAnimationDialogAndSubmittingCreatesIt(): Promise<void> {
   const sprite: Sprite = {
     name: 'fixture',
     cellW: 1,
@@ -176,11 +265,17 @@ export async function namingStillSubmitsAValidAnimationName(): Promise<void> {
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
     const statusBar = screen.children[4];
-    pressKey(screen, '+');
-    for (const ch of 'spin') pressChar(screen, ch);
-    pressKey(screen, 'enter');
+    const pending = keyHandler(screen, '+')();
+    const input = lastDialog(screen).children[0];
+    for (const ch of 'spin') input.insertChar(ch);
+    input.submit();
+    await pending;
+
+    assert.strictEqual(screen.dialogOpen, false, 'submitting must clear screen.dialogOpen');
+    assert.strictEqual((edit as any).doc.animation, 'spin',
+      'submitting a valid name must create the animation and switch to it');
     assert.ok(statusBar.getContent().includes(' spin '),
-      `the guard must not block a legitimate submit - got: ${statusBar.getContent()}`);
+      `the new animation must show on the status bar - got: ${statusBar.getContent()}`);
   } finally {
     edit.destroy();
   }
@@ -605,10 +700,11 @@ export async function pressingToolHotkeysSwitchesTheActiveTool(): Promise<void> 
 /**
  * The four tool hotkeys are single printable chars, so like every other
  * one (g/f/b/n/c/x/a/t/l/s) they must be excluded from ordinary cell
- * typing AND still only reach the tool switch while naming is active -
- * the same naming guard opKey() already gives every op binding.
+ * typing AND still only reach the tool switch while a dialog is open -
+ * the same screen.dialogOpen guard opKey() already gives every op
+ * binding.
  */
-export async function toolHotkeysAreExcludedFromCellTypingAndGuardedWhileNaming(): Promise<void> {
+export async function toolHotkeysAreExcludedFromCellTypingAndGuardedWhileADialogIsOpen(): Promise<void> {
   const sprite: Sprite = {
     name: 'fixture', cellW: 1, cellH: 1,
     animations: {
@@ -624,13 +720,17 @@ export async function toolHotkeysAreExcludedFromCellTypingAndGuardedWhileNaming(
         `'${ch}' must be excluded from cell typing - it is a bound tool hotkey`);
     }
 
-    pressKey(screen, '+'); // start naming a new animation
+    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
     const toolBefore = (edit as any).tool;
     for (const ch of 'pku') pressChar(screen, ch);
-    assert.strictEqual((edit as any).tool, toolBefore, 'typing a name must not switch tools');
-    const framesBox = paneContent(screen, 2);
-    assert.ok(framesBox.getContent().includes('new animation: {lightyellow-fg}pku{/}'),
-      'the typed letters must still land in the name');
+    assert.strictEqual((edit as any).tool, toolBefore, 'typing while the dialog is open must not switch tools');
+
+    const input = lastDialog(screen).children[0];
+    assert.strictEqual(input.getValue(), '',
+      'pressChar() drives the OUTER screen bindings, not the dialog\'s own Textbox - ' +
+      'the tool hotkeys must be swallowed by dialogOpen, not land in the dialog either');
+    input.cancel();
+    await pending;
   } finally {
     edit.destroy();
   }
@@ -764,7 +864,7 @@ export async function clickingInTheGapBetweenFrameTokensDoesNotChangeTheSelectio
   }
 }
 
-export async function clickingAFrameNumberWhileNamingDoesNothing(): Promise<void> {
+export async function clickingAFrameNumberWhileADialogIsOpenDoesNothing(): Promise<void> {
   const sprite: Sprite = {
     name: 'fixture', cellW: 1, cellH: 1,
     animations: {
@@ -777,26 +877,29 @@ export async function clickingAFrameNumberWhileNamingDoesNothing(): Promise<void
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    pressKey(screen, '+'); // start naming - the frames strip now also shows the typed name below
+    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
     const tokens: string[] = (edit as any).frameTokens();
     const targetColumn = tokens[0].length + 1; // start of frame token index 1
 
     const framesBox = paneContent(screen, 2);
     clickBox(framesBox, targetColumn, 0);
 
-    assert.strictEqual((edit as any).doc.frame, 0, 'a click on a frame number while naming must be ignored');
+    assert.strictEqual((edit as any).doc.frame, 0, 'a click on a frame number while a dialog is open must be ignored');
+
+    lastDialog(screen).children[0].cancel();
+    await pending;
   } finally {
     edit.destroy();
   }
 }
 
 /**
- * Fix round 1, Important 1: every keyboard op is naming-guarded (opKey())
+ * Fix round 1, Important 1: every keyboard op is dialog-guarded (opKey())
  * and the sibling handleFramesClick already had this check - canvas mouse
  * painting was the one path that bypassed it, so pressing '+' and then
- * clicking the canvas painted the live document mid name-entry.
+ * clicking the canvas painted the live document mid dialog.
  */
-export async function clickingTheCanvasWhileNamingDoesNothing(): Promise<void> {
+export async function clickingTheCanvasWhileADialogIsOpenDoesNothing(): Promise<void> {
   const sprite: Sprite = {
     name: 'fixture', cellW: 2, cellH: 1,
     animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null]]] } },
@@ -804,18 +907,21 @@ export async function clickingTheCanvasWhileNamingDoesNothing(): Promise<void> {
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    pressKey(screen, '+'); // start naming a new animation
+    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
     const canvasBox = paneContent(screen, 0);
     clickBox(canvasBox, 0, 0);
 
     assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
-      'a click on the canvas while naming must not paint the document');
+      'a click on the canvas while a dialog is open must not paint the document');
+
+    lastDialog(screen).children[0].cancel();
+    await pending;
   } finally {
     edit.destroy();
   }
 }
 
-export async function draggingOnTheCanvasWhileNamingDoesNothing(): Promise<void> {
+export async function draggingOnTheCanvasWhileADialogIsOpenDoesNothing(): Promise<void> {
   const sprite: Sprite = {
     name: 'fixture', cellW: 2, cellH: 1,
     animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null, null]]] } },
@@ -823,13 +929,171 @@ export async function draggingOnTheCanvasWhileNamingDoesNothing(): Promise<void>
   const screen = makeFakeScreen();
   const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
   try {
-    pressKey(screen, '+'); // start naming a new animation
+    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
     const canvasBox = paneContent(screen, 0);
     dragBox(canvasBox, 0, 0, 'left');
 
     assert.strictEqual((edit as any).doc.sprite.animations['only'].frames[0][0][0], null,
-      'a drag over the canvas while naming must not paint the document');
+      'a drag over the canvas while a dialog is open must not paint the document');
+
+    lastDialog(screen).children[0].cancel();
+    await pending;
   } finally {
     edit.destroy();
   }
+}
+
+/**
+ * Studio 2c task 5: frame delete ('x') now asks dialogs.ts's confirm() -
+ * built on the SDK's real ConfirmModal (parented directly on the screen,
+ * so lastDialog(screen) finds it) - before calling deleteFrame(). Driven
+ * through the modal's actual Cancel button (a real `Button.emit('press')`,
+ * the same event ConfirmModal wires its own click/Enter handling to), not
+ * a source-shape grep.
+ */
+export async function deletingAFrameAsksForConfirmationAndCancelLeavesItAlone(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const pending = keyHandler(screen, 'x')();
+    assert.strictEqual(screen.dialogOpen, true, 'delete-frame must open a confirm dialog');
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
+      'the frame must not be deleted before the dialog is answered');
+
+    const modal = lastDialog(screen);
+    (modal as any)._cancelButton.emit('press');
+    await pending;
+
+    assert.strictEqual(screen.dialogOpen, false);
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 2,
+      'cancelling the confirm dialog must leave the frame untouched');
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function deletingAFrameActuallyDeletesItOnConfirm(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const pending = keyHandler(screen, 'x')();
+    const modal = lastDialog(screen);
+    (modal as any)._confirmButton.emit('press');
+    await pending;
+
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, 1,
+      'confirming must actually delete the frame');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/** Same discipline for animation delete (S-x) - a second, independent call site. */
+export async function deletingAnAnimationAsksForConfirmationAndCancelLeavesItAlone(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      aaa: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '#', fg: 7, bg: 0 }]]] },
+      bbb: { ticksPerFrame: 4, loop: true, frames: [[[{ char: '@', fg: 7, bg: 0 }]]] },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const pending = keyHandler(screen, 'S-x')();
+    const modal = lastDialog(screen);
+    (modal as any)._cancelButton.emit('press');
+    await pending;
+
+    assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
+      'cancelling must leave both animations in place');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Studio 2c task 5: ESC on a dirty document now asks confirm() ONCE -
+ * replacing the old ESC-twice discard-window discipline (discardArmedAt/
+ * DISCARD_WINDOW_MS, both deleted). Confirming exits (onExit fires);
+ * cancelling leaves the editor open with the document still dirty.
+ */
+export async function escapeOnADirtyDocumentAsksToDiscardAndOnlyExitsOnConfirm(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  let exited = false;
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  try {
+    // Dirty the document the same way a real edit would: paint the one cell.
+    pressKey(screen, 'space');
+    assert.strictEqual((edit as any).doc.dirty, true, 'precondition: the document must be dirty');
+
+    const pending = keyHandler(screen, 'escape')();
+    assert.strictEqual(screen.dialogOpen, true, 'ESC on a dirty document must open a confirm dialog');
+
+    const modal = lastDialog(screen);
+    (modal as any)._cancelButton.emit('press'); // "no, don't discard"
+    await pending;
+
+    assert.strictEqual(exited, false, 'cancelling the discard prompt must not exit');
+    assert.strictEqual(screen.dialogOpen, false);
+  } finally {
+    edit.destroy();
+  }
+}
+
+export async function escapeOnADirtyDocumentExitsWhenDiscardIsConfirmed(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  let exited = false;
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  pressKey(screen, 'space'); // dirty it
+
+  const pending = keyHandler(screen, 'escape')();
+  const modal = lastDialog(screen);
+  (modal as any)._confirmButton.emit('press'); // "yes, discard"
+  await pending;
+
+  assert.strictEqual(exited, true, 'confirming the discard prompt must exit');
+}
+
+/** A CLEAN document must exit on the first ESC - no confirm dialog at all. */
+export async function escapeOnACleanDocumentExitsImmediatelyWithNoDialog(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  let exited = false;
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => { exited = true; });
+  assert.strictEqual((edit as any).doc.dirty, false, 'precondition: freshly opened, not dirty');
+
+  pressKey(screen, 'escape');
+
+  assert.strictEqual(exited, true, 'a clean document must exit on the first ESC, no confirmation needed');
+  assert.strictEqual(screen.dialogOpen, undefined, 'no dialog should ever have opened');
 }

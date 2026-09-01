@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./assets.test', './browser-model.test', './preview.test', './app-shape.test', './edit-doc.test', './edit-screen-shape.test', './art-mode-shape.test', './edit-screen-behavior.test', './art-screen.test', './bindings.test', './layout.test', './panels-shape.test', './panels-behavior.test', './toolbar.test'];
+const TEST_MODULES = ['./assets.test', './browser-model.test', './preview.test', './app-shape.test', './edit-doc.test', './edit-screen-shape.test', './art-mode-shape.test', './edit-screen-behavior.test', './art-screen.test', './bindings.test', './layout.test', './panels-shape.test', './panels-behavior.test', './toolbar.test', './dialogs-shape.test'];
 
 (async () => {
   let passed = 0;

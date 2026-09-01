@@ -50,6 +50,7 @@ exports.ArtSession = void 0;
 exports.newFileContent = newFileContent;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const assets_1 = require("./assets");
+const dialogs_1 = require("./dialogs");
 /**
  * The content to open for a typed new-file name.
  *
@@ -78,7 +79,6 @@ class ArtSession {
         this.editor = null;
         this.files = [];
         this.selected = 0;
-        this.naming = null; // non-null while typing a new file name
         this.keyHandlers = [];
         this.screen = screen;
         this.door = door;
@@ -119,31 +119,32 @@ class ArtSession {
         });
         this.selected = 0;
         this.paint();
+        // dialogOpen (dialogs.ts) is the same guard edit-screen.ts's opKey()
+        // uses: screen.key() bindings are GLOBAL (fire regardless of focus -
+        // see this file's own module doc comment), so the physical keystrokes
+        // a promptText dialog's own Textbox is consuming would otherwise ALSO
+        // reach these handlers.
         this.key(['up', 'k'], () => {
-            if (this.naming !== null)
+            if (this.screen.dialogOpen)
                 return;
             this.selected = Math.max(0, this.selected - 1);
             this.paint();
         });
         this.key(['down', 'j'], () => {
-            if (this.naming !== null)
+            if (this.screen.dialogOpen)
                 return;
             this.selected = Math.min(this.items().length - 1, this.selected + 1);
             this.paint();
         });
-        this.key(['enter'], () => {
-            if (this.naming !== null) {
-                const name = this.naming;
-                if (!name)
-                    return; // the pattern is [a-z0-9-]+; an empty name stays in naming
-                this.naming = null;
-                this.openEditor(`${name}.ans`, newFileContent(this.door, this.files, name));
+        this.key(['enter'], async () => {
+            if (this.screen.dialogOpen)
                 return;
-            }
             const isNewFile = this.selected === this.items().length - 1;
             if (isNewFile) {
-                this.naming = '';
-                this.paint();
+                const name = await (0, dialogs_1.promptText)(this.screen, 'New file name');
+                if (name === null)
+                    return; // ESC cancelled
+                this.openEditor(`${name}.ans`, newFileContent(this.door, this.files, name));
                 return;
             }
             const file = this.files[this.selected];
@@ -156,43 +157,18 @@ class ArtSession {
             }
             this.openEditor(file, content);
         });
-        this.key(['backspace', 'delete'], () => {
-            if (this.naming === null)
-                return;
-            this.naming = this.naming.slice(0, -1);
-            this.paint();
-        });
         // 'q' is NOT bound here (unlike the browser's own quit key): a typed
-        // filename must be free to contain the letter q. Escape alone cancels,
-        // the same restriction EditScreen's naming flow already lives with.
+        // filename must be free to contain the letter q, and the promptText
+        // dialog owns its own text field's keystrokes anyway. Escape alone
+        // exits the list.
         this.key(['escape'], () => {
-            if (this.naming !== null) {
-                this.naming = null;
-                this.paint();
-                return;
-            }
+            if (this.screen.dialogOpen)
+                return; // the dialog's own ESC handles its own cancel
             this.exit();
         });
-        // Typed characters extend the new-file name while naming; the same
-        // [a-z0-9-] pattern EditScreen's '+' animation-naming uses.
-        const onKeypress = (ch) => {
-            if (this.naming === null)
-                return;
-            if (!ch || ch.length !== 1)
-                return;
-            if (/[a-z0-9-]/.test(ch)) {
-                this.naming += ch;
-                this.paint();
-            }
-        };
-        this.screen.on('keypress', onKeypress);
-        this.keyHandlers.push([['__keypress__'], onKeypress]);
     }
     paint() {
-        const items = this.naming !== null
-            ? [...this.files, `[new file: ${this.naming}_]`]
-            : this.items();
-        this.listBox.setItems(items);
+        this.listBox.setItems(this.items());
         this.listBox.select(this.selected);
         this.screen.render();
     }

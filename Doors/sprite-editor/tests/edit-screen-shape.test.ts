@@ -58,26 +58,30 @@ export async function theBrowserIsDeafWhileTheEditorIsOpen(): Promise<void> {
  * Review finding: typing an animation name fired every op key bound to a
  * letter in the name (naming "spin" saved to disk and inserted a blank
  * frame). Every op binding must route through one guarded wrapper so the
- * `naming !== null` check exists exactly once, not copy-pasted per key.
- */
-/**
- * Studio 2c: the 19 opKey-bound keys below no longer appear as literal
+ * check exists exactly once, not copy-pasted per key.
+ *
+ * Studio 2c task 5: the typed-naming mode is gone (dialogs.ts's
+ * promptText/confirm replace it). The wrapper's guard now reads
+ * `screen.dialogOpen`, a flag dialogs.ts itself sets/clears around its own
+ * await - never a `this.naming` field this file owned. The meaning this
+ * test pins is unchanged from before: every op binding must still be
+ * declared AND still be wired through ONE guard, not the raw key().
+ *
+ * Studio 2c: the 24 opKey-bound keys below no longer appear as literal
  * `this.opKey(['x'], ...)` call sites - they are StudioBinding entries in
- * one table (bindings.ts), wired through opKey by a single loop. The
- * meaning this test pins is unchanged: every one of these keys must still
- * be declared AND still be wired through the naming guard, not the raw
- * key().
+ * one table (bindings.ts), wired through opKey by a single loop.
  */
-export async function opBindingsRouteThroughTheNamingGuard(): Promise<void> {
+export async function opBindingsRouteThroughTheDialogOpenGuard(): Promise<void> {
   assert.ok(/private opKey\(/.test(code), 'op key bindings must share one guarded wrapper');
   const opKeyBody = code.slice(code.indexOf('private opKey('), code.indexOf('private opKey(') + 300);
-  assert.ok(/if \(this\.naming !== null\) return;/.test(opKeyBody),
-    'the wrapper must no-op every bound op while a name is being typed');
+  assert.ok(/if \(this\.screen\.dialogOpen\) return;/.test(opKeyBody),
+    'the wrapper must no-op every bound op while a dialog is open');
+  assert.ok(!/this\.naming/.test(code), 'the typed-naming field/guard must be fully deleted, not renamed');
   assert.ok(/for \(const binding of opBindings\) this\.opKey\(binding\.keys, binding\.handler\);/.test(code),
     'the op table must be wired through opKey by one loop, not per-key call sites');
   for (const key of ["'g'", "'f'", "'S-f'", "'b'", "'S-b'", "','", "'.'", "'n'", "'c'", "'x'",
                      "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'",
-                     "'p'", "'e'", "'k'", "'u'"]) {
+                     "'space'", "'p'", "'e'", "'k'", "'u'"]) {
     assert.ok(code.includes(`keys: [${key}]`),
       `[${key}] must have a table entry, wired through the op loop into opKey`);
   }
