@@ -64,10 +64,27 @@ export interface ANSIEditorOptions extends ElementOptions {
   // Default: false (existing hosts are unaffected - erasing still resets
   // to fg:7,bg:0 with no transparent marker).
   transparentBackground?: boolean;
+  /**
+   * Mark transparent cells with a dim dot so a HOLE can be told from an
+   * opaque black cell. Default FALSE: the guide annotates the art and the
+   * art is what you are judging, so it is something you turn on when you
+   * need it rather than something you look past.
+   */
+  showTransparencyGuide?: boolean;
   showLineNumbers?: boolean;
   showToolbar?: boolean;      // F-key character toolbar
   showStatusBar?: boolean;
   showMenuBar?: boolean;      // Moebius-style menu bar
+  /**
+   * Menus the HOST adds to this editor's own menu bar, after Help.
+   *
+   * A door that teaches this editor a new document kind - the sprite studio
+   * and its Frame/Animation menus - needs its commands in THIS bar. Without
+   * it the only way was a second menu bar drawn above the editor's own with
+   * the editor's switched off, which is what made the sprite studio read as
+   * two applications bolted together.
+   */
+  extraMenus?: HostMenu[];
   showSidebar?: boolean;      // Left sidebar with colors & tools
   onSave?: (content: string) => Promise<boolean>;
   onSaveAs?: () => Promise<void>;  // Open save-as dialog
@@ -96,6 +113,12 @@ const FKEY_CHAR_SETS: string[][] = [
   // Set 8: Greek letters
   ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'σ', 'τ', 'φ', 'ω'],
 ];
+
+/** A menu a host contributes to the editor's own menu bar. */
+export interface HostMenu {
+  label: string;
+  items: DropdownMenuItem[];
+}
 
 export type EditorMode = 'text' | 'draw';
 
@@ -179,6 +202,20 @@ export class ANSIEditor extends Box {
   private colorsMenu?: DropdownMenu;
   private viewMenu?: DropdownMenu;
   private helpMenu?: DropdownMenu;
+  /**
+   * A canvas drawn UNDER this one, dimmed, wherever a cell is empty.
+   *
+   * Presentation only, and that is the whole safety property: it is never
+   * merged, never returned by getCoreCanvas(), never saved. A sprite editor
+   * hands over the previous frame to make onion skin; the editor itself has
+   * no idea what a frame is.
+   */
+  private underlayCanvas: Cell[][] | null = null;
+  private transparencyGuide = false;
+
+  /** Host-contributed menus, in bar order after Help. */
+  private extraMenus: HostMenu[] = [];
+  private extraMenuDropdowns: DropdownMenu[] = [];
 
   // F-key toolbar state
   private fkeySetIndex: number = 0;    // Current character set (0-7)
@@ -303,6 +340,31 @@ export class ANSIEditor extends Box {
     return { width: this.canvasW, height: this.canvasH };
   }
 
+  /**
+   * Show (or clear) a ghost canvas beneath the empty cells of this one.
+   * Pass null to remove it. Cells outside its bounds simply have no ghost.
+   */
+  /** Show or hide the dim dot that marks a transparent cell. */
+  setTransparencyGuide(on: boolean): void {
+    this.transparencyGuide = on;
+    if (this.mode === 'draw') {
+      this.syncCoreCanvasToDisplay();
+      this.screen?.render();
+    }
+  }
+
+  isTransparencyGuideOn(): boolean {
+    return this.transparencyGuide;
+  }
+
+  setUnderlay(canvas: Cell[][] | null): void {
+    this.underlayCanvas = canvas;
+    if (this.mode === 'draw') {
+      this.syncCoreCanvasToDisplay();
+      this.screen?.render();
+    }
+  }
+
   /** Get the current magnification, in characters per cell. */
   getCellScale(): { x: number; y: number } {
     return { x: this.scaleX, y: this.scaleY };
@@ -378,6 +440,8 @@ export class ANSIEditor extends Box {
     // Floored and floored to at least 1: a fractional or zero scale would
     // put the render and the hit-test on different grids, and a negative
     // one would build an empty row - a silently blank canvas.
+    this.extraMenus = options.extraMenus ?? [];
+    this.transparencyGuide = options.showTransparencyGuide ?? false;
     this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
     this.optCellScaleY = Math.max(1, Math.floor(options.cellScaleY ?? 1));
     this.transparentBackground = options.transparentBackground ?? false;
@@ -446,6 +510,29 @@ export class ANSIEditor extends Box {
     }
   }
 
+  /**
+   * Where the draw canvas sits, and how big it is.
+   *
+   * Sized to the canvas's own extent (cells times scale) and centred in the
+   * region left over after the sidebar, the chrome above and the status bar
+   * below. Clamped so a canvas at least as large as the room starts flush
+   * where it always did - centring must never push content off the top or
+   * the left, which is the usual way this goes wrong.
+   */
+  private centredCanvasGeometry(topOffset: number, sidebarWidth: number, showStatusBar: boolean): {
+    top: number; left: number; width: number; height: number;
+  } {
+    const width = this.canvasW * this.scaleX;
+    const height = this.canvasH * this.scaleY;
+
+    const roomW = (this.width as number) - sidebarWidth;
+    const roomH = (this.height as number) - topOffset - (showStatusBar ? 1 : 0);
+
+    const left = sidebarWidth + Math.max(0, Math.floor((roomW - width) / 2));
+    const top = topOffset + Math.max(0, Math.floor((roomH - height) / 2));
+    return { top, left, width, height };
+  }
+
   private createUI(options: ANSIEditorOptions): void {
     // Calculate layout offsets based on enabled UI components
     let topOffset = 0;
@@ -493,13 +580,22 @@ export class ANSIEditor extends Box {
       wrap: false, // ANSI content is fixed width - never wrap
     });
 
-    // 5. Canvas (for draw mode)
+    // 5. Canvas (for draw mode), CENTRED in the room it has.
+    //
+    // A 5x2 sprite pinned to the top-left of an 80x25 editor reads as an
+    // accident - "can we center the sprites in the sprited canvas?". The
+    // box is sized to the canvas rather than filling the region, and placed
+    // in the middle of what is left after the sidebar and the chrome. A
+    // canvas that fills the room gets no offset, so the 80x25 hosts are
+    // unchanged. The mouse handlers subtract drawCanvas.ileft/itop and the
+    // cursor reads drawCanvas.position, so both follow the box for free.
+    const canvasGeom = this.centredCanvasGeometry(topOffset, sidebarWidth, showStatusBar);
     this.drawCanvas = new Canvas({
       parent: this,
-      top: topOffset,
-      left: sidebarWidth,
-      right: 0,
-      bottom: showStatusBar ? 1 : 0,
+      top: canvasGeom.top,
+      left: canvasGeom.left,
+      width: canvasGeom.width,
+      height: canvasGeom.height,
       style: { bg: 'black', fg: 'white' },
       keys: true,
       mouse: true,
@@ -583,16 +679,19 @@ export class ANSIEditor extends Box {
       tags: true,
     });
 
-    // Menu button positions
-    const menus = [
-      { label: ' File ', left: 0 },
-      { label: ' Edit ', left: 6 },
-      { label: ' Layer ', left: 12 },
-      { label: ' Select ', left: 19 },
-      { label: ' Colors ', left: 28 },
-      { label: ' View ', left: 36 },
-      { label: ' Help ', left: 42 },
-    ];
+    // Menu button positions, derived from the labels rather than written
+    // down beside them. The old literals only happened to match the label
+    // lengths; renaming ' Select ' to ' Sel ' would have left a gap or an
+    // overlap, and a host adding menus of its own could not have placed
+    // them at all.
+    const ownLabels = [' File ', ' Edit ', ' Layer ', ' Select ', ' Colors ', ' View ', ' Help '];
+    const hostLabels = this.extraMenus.map(m => ` ${m.label} `);
+    let nextLeft = 0;
+    const menus = [...ownLabels, ...hostLabels].map(label => {
+      const left = nextLeft;
+      nextLeft += label.length;
+      return { label, left };
+    });
 
     // Store button references for anchor registration
     const menuButtons: Box[] = [];
@@ -616,7 +715,9 @@ export class ANSIEditor extends Box {
     this.createDropdownMenus();
 
     // Register anchors for hover-to-open behavior
-    // Positions are now calculated dynamically from anchor coordinates
+    // Positions are now calculated dynamically from anchor coordinates.
+    // Host menus follow the widget's own, in the same order their buttons
+    // were laid out above, so button N always opens dropdown N.
     const dropdownMenus = [
       this.fileMenu,
       this.editMenu,
@@ -625,6 +726,7 @@ export class ANSIEditor extends Box {
       this.colorsMenu,
       this.viewMenu,
       this.helpMenu,
+      ...this.extraMenuDropdowns,
     ];
     menuButtons.forEach((btn, idx) => {
       const dropdown = dropdownMenus[idx];
@@ -639,6 +741,15 @@ export class ANSIEditor extends Box {
    */
   private createDropdownMenus(): void {
     if (!this.screen) return;
+
+    // Host menus first so they exist before the anchor registration below
+    // walks them. Their items are used as given - a host owns what its own
+    // menu says and does.
+    this.extraMenuDropdowns = this.extraMenus.map(menu => new DropdownMenu({
+      parent: this.screen,
+      width: 22,
+      items: menu.items,
+    }));
 
     // File menu - build items dynamically based on available callbacks
     const fileMenuItems: any[] = [
@@ -2358,17 +2469,26 @@ BBS Door SDK v2.0{/gray-fg}
 
       // Calculate position relative to canvas content area
       // Use ileft/itop to account for any border or padding
+      // Releasing the mouse ends a continuous freehand/half-block drag -
+      // flush its chunked undo entry (see drawAtCursor()/paintCell()).
+      // No-op if nothing was chunked (e.g. a shape tool or a plain click).
+      //
+      // BEFORE the bounds check, deliberately: a release outside the canvas
+      // is still the end of the stroke. Flushing after the check meant a
+      // mouseup over the sidebar, the menu bar or off the widget entirely
+      // left the chunk open, so the NEXT stroke joined the previous one's
+      // undo entry and one Ctrl+Z threw both away. Reported as "undo
+      // behaves weird" while drawing a sprite.
+      if (data.action === 'mouseup') {
+        this.flushDrawChunk();
+      }
+
+      // Calculate position relative to canvas content area
+      // Use ileft/itop to account for any border or padding
       const x = data.x - this.drawCanvas.ileft;
       const y = data.y - this.drawCanvas.itop;
 
       if (x < 0 || y < 0) return;
-
-      // Releasing the mouse ends a continuous freehand/half-block drag -
-      // flush its chunked undo entry (see drawAtCursor()/paintCell()).
-      // No-op if nothing was chunked (e.g. a shape tool or a plain click).
-      if (data.action === 'mouseup') {
-        this.flushDrawChunk();
-      }
 
       // Clamp to canvas bounds
       this.cursor.col = this.screenToCanvasX(x);
@@ -2842,10 +2962,22 @@ BBS Door SDK v2.0{/gray-fg}
     // covers the whole magnified cell, so it marks the cell an artist sees
     // rather than its top-left corner. At the default 1/1 this is the
     // 1x1 box at (line, col) it has always been.
-    this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY;
+    // In half-block mode the stroke lands on HALF a cell, so the cursor
+    // says which half - asked while drawing a Pengo egg, "the red marker
+    // dont align with the blocks, or is that becasue its halfblocks?". It
+    // was: a cell-sized marker over art whose pixels are half-cells cannot
+    // point at the pixel you are about to paint.
+    //
+    // Only from 2:1 up. At actual size a cell IS one character row and half
+    // of it is not a thing a terminal can draw, so the cursor stays whole.
+    const halfBlockCursor = this.brushMode === 'half-block' && this.scaleY >= 2;
+    const height = halfBlockCursor ? Math.floor(this.scaleY / 2) : this.scaleY;
+    const subOffset = halfBlockCursor && this.halfBlockSubY === 1 ? height : 0;
+
+    this.drawCursor.top = canvasTop + this.cursor.line * this.scaleY + subOffset;
     this.drawCursor.left = canvasLeft + this.cursor.col * this.scaleX;
     this.drawCursor.width = this.scaleX;
-    this.drawCursor.height = this.scaleY;
+    this.drawCursor.height = height;
 
     // Show the current drawing character in the cursor
     this.drawCursor.setContent(this.currentChar.repeat(this.scaleX));
@@ -3362,13 +3494,87 @@ BBS Door SDK v2.0{/gray-fg}
   private buildCanvasContent(cellAt: (x: number, y: number) => Cell): string {
     const rows: string[] = [];
     for (let y = 0; y < this.canvasH; y++) {
-      let row = '';
-      for (let x = 0; x < this.canvasW; x++) {
-        row += this.cellToDisplayTag(cellAt(x, y), this.scaleX);
+      // Built per sub-row, not once and repeated: a half-block cell shows
+      // DIFFERENT content in the top half of its magnified box than in the
+      // bottom, because its two halves are pixels.
+      for (let sub = 0; sub < this.scaleY; sub++) {
+        let row = '';
+        for (let x = 0; x < this.canvasW; x++) {
+          row += this.magnifiedCellTag(cellAt(x, y), sub, x, y);
+        }
+        rows.push(row);
       }
-      for (let n = 0; n < this.scaleY; n++) rows.push(row);
     }
     return rows.join('\n');
+  }
+
+  /**
+   * One cell's appearance in sub-row `sub` of its magnified box.
+   *
+   * At scale 1 this is just the cell. Magnified, a half-block glyph must be
+   * RESOLVED rather than repeated: '▀' drawn four times down is four rows of
+   * "upper half filled" - stripes - when what magnification means is two
+   * solid rows of the top colour over two of the bottom. Reported from the
+   * sprite studio, where a crocodile came out as horizontal bars.
+   *
+   * An ordinary character is not a pixel pair, so it is repeated as before.
+   * An odd scale gives the extra row to the TOP half, matching how the
+   * half-block cursor already treats the upper row as the default.
+   */
+  private magnifiedCellTag(cell: Cell, sub: number, x?: number, y?: number): string {
+    // A ghost shows only where the artist has not drawn: their own work
+    // always wins, so the underlay can never hide what is being made.
+    if (cell.transparent && x !== undefined && y !== undefined) {
+      const ghost = this.underlayCanvas?.[y]?.[x];
+      if (ghost && !ghost.transparent) {
+        return `{gray-fg}{black-bg}${(ghost.char || ' ').repeat(this.scaleX)}{/black-bg}{/gray-fg}`;
+      }
+    }
+
+    // A hole is MARKED, not textured. Repeating the guide dot across every
+    // character of a magnified cell turned each hole into a filled grid of
+    // dots that competed with the art - "dotted artefacts". One dot, in the
+    // middle of the cell, says the same thing.
+    if (cell.transparent) {
+      if (!this.transparencyGuide) {
+        // A hole reads as the background it will actually let through.
+        return `{black-fg}{black-bg}${' '.repeat(this.scaleX)}{/black-bg}{/black-fg}`;
+      }
+      if (this.scaleX === 1 && this.scaleY === 1) {
+        return this.cellToDisplayTag(cell, 1);
+      }
+      const midRow = Math.floor(this.scaleY / 2);
+      const midCol = Math.floor(this.scaleX / 2);
+      const run = sub === midRow
+        ? ' '.repeat(midCol) + '.' + ' '.repeat(this.scaleX - midCol - 1)
+        : ' '.repeat(this.scaleX);
+      return `{gray-fg}{black-bg}${run}{/black-bg}{/gray-fg}`;
+    }
+
+    if (this.scaleY === 1) {
+      return this.cellToDisplayTag(cell, this.scaleX);
+    }
+
+    const isUpper = cell.char === HALF_BLOCK.UPPER;
+    const isLower = cell.char === HALF_BLOCK.LOWER;
+    const isFull = cell.char === HALF_BLOCK.FULL;
+    if (!isUpper && !isLower && !isFull) {
+      return this.cellToDisplayTag(cell, this.scaleX);
+    }
+
+    // Which colour this sub-row is showing. '▀' paints fg on top and bg
+    // below; '▄' is the same glyph pair with the roles swapped; '█' is one
+    // colour throughout.
+    const topHalf = Math.ceil(this.scaleY / 2);
+    const inTop = sub < topHalf;
+    let colour: number;
+    if (isFull) colour = cell.fg;
+    else if (isUpper) colour = inTop ? cell.fg : cell.bg;
+    else colour = inTop ? cell.bg : cell.fg;
+
+    // Solid, as a full block in that colour on that colour - so the row
+    // reads as one flat area however the terminal renders block glyphs.
+    return this.cellToDisplayTag({ char: HALF_BLOCK.FULL, fg: colour, bg: colour }, this.scaleX);
   }
 
   private cellToDisplayTag(cell: Cell, repeat: number = 1): string {
@@ -3376,7 +3582,9 @@ BBS Door SDK v2.0{/gray-fg}
     // the whole tagged run N times: same pixels, a third of the content
     // string at scale 3, and one colour switch per cell instead of three.
     if (cell.transparent) {
-      return `{gray-fg}{black-bg}${'.'.repeat(repeat)}{/black-bg}{/gray-fg}`;
+      return this.transparencyGuide
+        ? `{gray-fg}{black-bg}${'.'.repeat(repeat)}{/black-bg}{/gray-fg}`
+        : `{black-fg}{black-bg}${' '.repeat(repeat)}{/black-bg}{/black-fg}`;
     }
     const fgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.fg] || 'white';
     const bgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.bg] || 'black';

@@ -136,3 +136,158 @@ describe('ANSIEditor canvas zoom', () => {
     expect(editor.drawCursor.height).toBe(4);
   });
 });
+
+/**
+ * Magnifying half-block art.
+ *
+ * Reported from a screenshot of the sprite studio: a crocodile drawn in
+ * half blocks came out as horizontal stripes. Repeating a '▀' four times
+ * down gives four rows each showing "upper half filled" - a stripe pattern.
+ * What magnification means for that cell is two solid rows of the TOP
+ * colour then two of the BOTTOM one, because the glyph's two halves are
+ * pixels, not decoration.
+ */
+describe('ANSIEditor zoom of half-block cells', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const rowsOf = (cell: any, scale: number): string[] => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      cellScaleX: scale, cellScaleY: scale, initialMode: 'draw',
+    } as any);
+    return (editor.buildCanvasContent(() => cell) as string).split('\n');
+  };
+
+  it('splits an upper-half block into top colour over bottom colour', () => {
+    const rows = rowsOf({ char: '▀', fg: 2, bg: 4 }, 4);
+    expect(rows.length).toBe(4);
+    // The two halves must differ, and each half must be internally uniform.
+    expect(rows[0]).toBe(rows[1]);
+    expect(rows[2]).toBe(rows[3]);
+    expect(rows[0]).not.toBe(rows[2]);
+    // Solid, not striped: no half-block glyph survives magnification.
+    for (const row of rows) {
+      expect(row.includes('▀')).toBe(false);
+      expect(row.includes('▄')).toBe(false);
+    }
+  });
+
+  it('splits a lower-half block the other way up', () => {
+    const upper = rowsOf({ char: '▀', fg: 2, bg: 4 }, 4);
+    const lower = rowsOf({ char: '▄', fg: 2, bg: 4 }, 4);
+    // '▄' is '▀' with the colours swapped, so its halves are the mirror.
+    expect(lower[0]).toBe(upper[2]);
+    expect(lower[3]).toBe(upper[1]);
+  });
+
+  it('magnifies a full block as one solid colour', () => {
+    const rows = rowsOf({ char: '█', fg: 5, bg: 5 }, 4);
+    expect(new Set(rows).size).toBe(1);
+    expect(rows[0].includes('▀')).toBe(false);
+  });
+
+  it('still repeats an ordinary character, which is not a pixel pair', () => {
+    const rows = rowsOf({ char: 'A', fg: 7, bg: 0 }, 3);
+    expect(rows.length).toBe(3);
+    expect(new Set(rows).size).toBe(1);
+    expect(rows[0].includes('AAA')).toBe(true);
+  });
+
+  it('gives an odd scale the extra row to the top half', () => {
+    const rows = rowsOf({ char: '▀', fg: 2, bg: 4 }, 5);
+    expect(rows.length).toBe(5);
+    expect(rows[0]).toBe(rows[2]);          // three rows of top colour
+    expect(rows[3]).toBe(rows[4]);          // two of bottom
+    expect(rows[2]).not.toBe(rows[3]);
+  });
+});
+
+/**
+ * The transparency guide is a marker, not a texture.
+ *
+ * A transparent cell paints a dim dot so an artist can tell a HOLE from an
+ * opaque black cell. Magnified, that dot was repeated across every
+ * character of the cell, so a zoomed hole became a filled grid of dots -
+ * reported from a crocodile sprite as "dotted artefacts". One dot per cell
+ * says the same thing without competing with the art.
+ */
+describe('ANSIEditor transparency guide when magnified', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const holeRows = (scale: number): string[] => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      cellScaleX: scale, cellScaleY: scale,
+      initialMode: 'draw', transparentBackground: true,
+      // Explicitly on: the guide is OFF by default now, because it
+      // annotates the art and the art is what you are judging.
+      showTransparencyGuide: true,
+    } as any);
+    return (editor.buildCanvasContent(
+      () => ({ char: ' ', fg: 7, bg: 0, transparent: true })
+    ) as string).split('\n');
+  };
+
+  it('marks a magnified hole once, not in every character of it', () => {
+    const rows = holeRows(4);
+    const dots = rows.join('').split('.').length - 1;
+    expect(dots).toBe(1);
+  });
+
+  it('puts the mark inside the cell, not at its corner', () => {
+    const rows = holeRows(4);
+    const marked = rows.findIndex(r => r.includes('.'));
+    expect(marked).toBeGreaterThan(0);
+    expect(marked).toBeLessThan(rows.length - 1);
+  });
+
+  it('still marks every hole at actual size, where there is only one character', () => {
+    const rows = holeRows(1);
+    expect(rows.join('').split('.').length - 1).toBe(1);
+  });
+
+  it('keeps the magnified hole the right size', () => {
+    const rows = holeRows(4);
+    expect(rows.length).toBe(4);
+    for (const row of rows) {
+      expect(row.replace(/\{[^}]*\}/g, '').length).toBe(4);
+    }
+  });
+});
+
+describe('ANSIEditor transparency guide is off by default', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const rows = (guide: boolean): string => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      cellScaleX: 4, cellScaleY: 4, initialMode: 'draw',
+      transparentBackground: true, showTransparencyGuide: guide,
+    } as any);
+    return editor.buildCanvasContent(() => ({ char: ' ', fg: 7, bg: 0, transparent: true }));
+  };
+
+  it('marks nothing unless asked', () => {
+    expect(rows(false).includes('.')).toBe(false);
+  });
+
+  it('marks when asked', () => {
+    expect(rows(true).includes('.')).toBe(true);
+  });
+
+  it('can be turned on and off after construction', () => {
+    const editor: any = new ANSIEditor({
+      parent: screen, canvasWidth: 1, canvasHeight: 1,
+      initialMode: 'draw', transparentBackground: true,
+    } as any);
+    expect(editor.isTransparencyGuideOn()).toBe(false);
+    editor.setTransparencyGuide(true);
+    expect(editor.isTransparencyGuideOn()).toBe(true);
+  });
+});
