@@ -23,9 +23,44 @@
  * One resolver, so the writer and the readers cannot drift apart again.
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfConfig } from '../services/conf-config.service';
 import { BBSPaths } from '../utils/bbs-paths.util';
+
+/**
+ * Which conferences the board HAS, as numbers - 1..NCONFS.
+ *
+ * Not the `Conf<n>` directories on disk. Deleting a conference shifts the
+ * entries down and leaves the directories alone, so a board with five
+ * conferences can carry fourteen directories, nine of them belonging to
+ * conferences that no longer exist. Reading the disk instead of ConfConfig.info
+ * invents those nine back: the screen manager listed fourteen conferences for
+ * CONF_JOINMSGBASE on the live board, six through fourteen reading directories
+ * nothing joins.
+ *
+ * Falls back to the directories only when there is no ConfConfig.info at all,
+ * which is what a board that has never been configured looks like - the same
+ * fallback conferenceDir() makes, for the same reason.
+ */
+export function conferenceNumbers(bbsRoot: string): number[] {
+  try {
+    const config = loadConfConfig(bbsRoot);
+    if (config && config.confCount > 0) {
+      return Array.from({ length: config.confCount }, (_, i) => i + 1);
+    }
+  } catch { /* fall through to the directories */ }
+
+  try {
+    return fs.readdirSync(bbsRoot)
+      .filter(entry => /^Conf\d+$/.test(entry))
+      .map(entry => parseInt(entry.slice(4), 10))
+      .filter(n => Number.isFinite(n))
+      .sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * The conference's directory, absolute.

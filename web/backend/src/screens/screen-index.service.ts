@@ -22,7 +22,7 @@ import {
   resolveNodeScreenDir, screenSearchLocations,
 } from './screen-resolution';
 import { parseMciReferences, type MciReference } from './mci-references';
-import { conferenceDir } from '../conferences/conference-paths';
+import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 
 export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii';
 
@@ -92,11 +92,15 @@ function nodeIds(baseDir: string): number[] {
     .sort((a, b) => a - b);
 }
 
+/**
+ * The conferences the board HAS - ConfConfig.info, not the directories.
+ *
+ * A deleted conference leaves its directory behind on purpose, so the disk is
+ * not the list. Reading it as one showed fourteen conferences for a board with
+ * five, nine of them named after directories nothing joins.
+ */
 function confIds(baseDir: string): number[] {
-  return fs.readdirSync(baseDir)
-    .filter(d => /^Conf\d+$/.test(d))
-    .map(d => parseInt(d.slice(4), 10))
-    .sort((a, b) => a - b);
+  return conferenceNumbers(baseDir);
 }
 
 /**
