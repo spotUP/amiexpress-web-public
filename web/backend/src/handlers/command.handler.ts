@@ -3847,6 +3847,27 @@ console.log(' Empty command, redisplaying menu');
       }
       return;
     }
+    // TAB accepts the grey suggestion, if a completer door is installed and
+    // is offering one. TAB does nothing at this prompt otherwise, here and
+    // on a real Amiga alike (express.e's lineInput has no TAB case), so
+    // this adds a meaning rather than changing one.
+    if (data === '\t') {
+      const { promptComplete, promptGhost, renderGhost } = require('./command-handler/prompt-completion');
+      const completed = await promptComplete(config.get('dataDir'), session.inputBuffer || '');
+      if (completed !== session.inputBuffer) {
+        // Redraw the WHOLE word rather than appending the tail: the
+        // completion uses the command's own spelling, so accepting "do"
+        // gives "DOOR", not "doOR". Back over what was typed, erase the
+        // grey suggestion with it, and write the command out.
+        const typed = session.inputBuffer || '';
+        session.inputBuffer = completed;
+        (session as any)._readCommandCurpos = completed.length;
+        emitText(socket, '\b'.repeat(typed.length) + '\x1b[K' + completed);
+        emitText(socket, renderGhost(await promptGhost(config.get('dataDir'), completed)));
+      }
+      return;
+    }
+
     if (data === '\x7f' || data === '\b') { // Backspace at cursor
       if (curpos > 0) {
         const buf = session.inputBuffer;
@@ -3875,6 +3896,22 @@ console.log(' Empty command, redisplaying menu');
     // Reset curpos when buffer is empty (e.g., after submit)
     if (session.inputBuffer.length === 0) {
       (session as any)._readCommandCurpos = 0;
+    }
+
+    // The grey tail, redrawn after every change to the line. Only when the
+    // cursor is at the END: mid-line editing has text to the right of the
+    // cursor, and a suggestion drawn there would overwrite it.
+    //
+    // Costs nothing when no completer door is installed - promptGhost
+    // returns '' and renderGhost emits a bare erase-to-end-of-line, which
+    // is what the prompt would look like anyway.
+    if ((session as any)._readCommandCurpos === session.inputBuffer.length) {
+      const { promptGhost, renderGhost } = require('./command-handler/prompt-completion');
+      const ghost = await promptGhost(config.get('dataDir'), session.inputBuffer);
+      if (ghost || (session as any)._promptGhostShown) {
+        emitText(socket, renderGhost(ghost));
+        (session as any)._promptGhostShown = ghost.length > 0;
+      }
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {

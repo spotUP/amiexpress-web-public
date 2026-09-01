@@ -1,0 +1,23 @@
+{
+  "name": "prompt-complete",
+  "version": "1.0.0",
+  "description": "Ghost-text completion for the BBS main prompt",
+  "main": "dist/index.js",
+  "bbsCommand": "PROMPTCOMPLETE",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
+  "author": "AmiExpress Team",
+  "keywords": ["bbs", "door", "prompt", "completion"],
+  "scripts": {
+    "build": "tsc",
+    "test": "npx tsx tests/run-tests.ts"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
