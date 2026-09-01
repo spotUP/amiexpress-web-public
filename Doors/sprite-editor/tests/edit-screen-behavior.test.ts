@@ -18,6 +18,7 @@ import assert from 'assert';
 import { Sprite, compilePixels, decompilePixels, PixelGrid } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { EditScreen, CELL_CHAR_WIDTH } from '../edit-screen';
 import { tokenAtColumn } from '../token-strip';
+import { LAYOUT } from '../layout';
 
 function makeFakeScreen(): any {
   const screen: any = {
@@ -249,6 +250,99 @@ export async function openingTheNewAnimationDialogSuppressesOpBindingsUntilItClo
     assert.strictEqual(screen.dialogOpen, false, 'cancelling the dialog must clear screen.dialogOpen');
     assert.deepStrictEqual(Object.keys((edit as any).doc.sprite.animations), ['aaa', 'bbb'],
       'ESC must cancel without creating a new animation');
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Fix round 1 (review-caught CRITICAL 1): screen.key() bindings and a
+ * DropdownMenu's mouse-driven item are TWO SEPARATE dispatch paths -
+ * dropdown-menu.ts's selectItem() calls `item.action?.()` directly, never
+ * touching screen.key()'s registered-handler map or screen.dialogOpen.
+ * Before this fix, opening the new-animation dialog with '+' and then
+ * clicking Frame > Delete Frame in the still-visible menu bar opened a
+ * SECOND ConfirmModal stacked over the first, and confirming it deleted
+ * the frame underneath. `menuItems()[i].items[j].action` (read here) is
+ * the EXACT function reference menu-bar.ts hands to `new DropdownMenu({
+ * items: item.items, ... })` (same array, not cloned - traced in
+ * menu-bar.ts/dropdown-menu.ts), so calling it directly is calling it "the
+ * way dropdown-menu does" without needing to drive the full mouse-click-
+ * opens-dropdown UI chain.
+ */
+export async function menuActionsAreSuppressedWhileADialogIsOpen(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: {
+      only: {
+        ticksPerFrame: 4, loop: true,
+        frames: [[[{ char: '1', fg: 7, bg: 0 }]], [[{ char: '2', fg: 7, bg: 0 }]]],
+      },
+    },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    const pending = keyHandler(screen, '+')(); // open the new-animation dialog
+    assert.strictEqual(screen.dialogOpen, true);
+    const dialogBefore = lastDialog(screen);
+    const framesBefore = (edit as any).doc.sprite.animations.only.frames.length;
+
+    const frameMenu = (edit as any).bindingSet.menuItems().find((m: any) => m.label === 'Frame');
+    const deleteFrameItem = frameMenu.items.find((i: any) => i.label.startsWith('Delete Frame'));
+    assert.ok(deleteFrameItem, 'precondition: the Frame menu must have a Delete Frame item');
+
+    deleteFrameItem.action(); // the exact call dropdown-menu.ts's selectItem() makes
+
+    assert.strictEqual((edit as any).doc.sprite.animations.only.frames.length, framesBefore,
+      'a menu action must not run its op while a dialog is open');
+    // assert.ok(a === b), NOT assert.strictEqual(a, b): on failure,
+    // strictEqual's generated diff tries to util.inspect() both operands -
+    // full LIVE blessed widget trees here (circular parent/children/screen
+    // refs), which made the RED-by-deletion proof for this exact test
+    // hang for minutes formatting an error message instead of failing
+    // fast. ok()'s failure message is a plain string; nothing is
+    // serialized either way.
+    assert.ok(lastDialog(screen) === dialogBefore,
+      'a menu action must not open a SECOND dialog while one is already open - no stacking');
+    assert.strictEqual(screen.dialogOpen, true, 'the original dialog must still be open');
+
+    lastDialog(screen).children[0].cancel();
+    await pending;
+  } finally {
+    edit.destroy();
+  }
+}
+
+/**
+ * Companion to the above: the guard must be transparent, not a permanent
+ * block - a menu-only binding (empty `keys`, e.g. View > Reset Layout)
+ * must still run normally through the SAME wrapped action when no dialog
+ * is open.
+ */
+export async function menuActionsStillWorkWhenNoDialogIsOpen(): Promise<void> {
+  const sprite: Sprite = {
+    name: 'fixture', cellW: 1, cellH: 1,
+    animations: { only: { ticksPerFrame: 4, loop: true, frames: [[[null]]] } },
+  };
+  const screen = makeFakeScreen();
+  const edit = new EditScreen(screen, 'fixture-door', 'fixture.sprite.json', sprite, () => {});
+  try {
+    assert.strictEqual(screen.dialogOpen, undefined, 'precondition: no dialog open');
+
+    const viewMenu = (edit as any).bindingSet.menuItems().find((m: any) => m.label === 'View');
+    const resetLayoutItem = viewMenu.items.find((i: any) => i.label === 'Reset Layout');
+    assert.ok(resetLayoutItem, 'precondition: the View menu must have a Reset Layout item');
+
+    // Move the canvas panel away from its LAYOUT rect, then prove the
+    // menu action (not the hotkey - there isn't one, this binding has
+    // keys:[]) still restores it.
+    (edit as any).canvasPanel.position.left += 5;
+    resetLayoutItem.action();
+
+    assert.notStrictEqual((edit as any).canvasPanel.position.left, undefined);
+    assert.strictEqual((edit as any).canvasPanel.position.left, LAYOUT.edit.canvas.left,
+      'a menu-only (keys:[]) action must still run normally when no dialog is open');
   } finally {
     edit.destroy();
   }

@@ -70,6 +70,18 @@ export async function theBrowserIsDeafWhileTheEditorIsOpen(): Promise<void> {
  * Studio 2c: the 24 opKey-bound keys below no longer appear as literal
  * `this.opKey(['x'], ...)` call sites - they are StudioBinding entries in
  * one table (bindings.ts), wired through opKey by a single loop.
+ *
+ * Fix round 1 (review-caught): a menu item's mouse click bypassed
+ * dialogOpen entirely (dropdown-menu.ts's selectItem() calls
+ * `item.action?.()` directly - a separate dispatch path from
+ * screen.key()). The fix moved the CHECK into bindings.ts's
+ * buildBindingSet(bindings, isBlocked), which wraps every handler once
+ * before either screen.key() registration OR menuItems()'s action ever
+ * sees it - so this file's own opKey() check is now redundant-by-
+ * construction for every table-routed binding (see opKey's own doc
+ * comment). Pins both halves: buildBindingSet is called WITH a guard
+ * predicate, and the wiring loop reads the GUARDED bindingSet.bindings,
+ * not the raw opBindings array.
  */
 export async function opBindingsRouteThroughTheDialogOpenGuard(): Promise<void> {
   assert.ok(/private opKey\(/.test(code), 'op key bindings must share one guarded wrapper');
@@ -77,8 +89,11 @@ export async function opBindingsRouteThroughTheDialogOpenGuard(): Promise<void> 
   assert.ok(/if \(this\.screen\.dialogOpen\) return;/.test(opKeyBody),
     'the wrapper must no-op every bound op while a dialog is open');
   assert.ok(!/this\.naming/.test(code), 'the typed-naming field/guard must be fully deleted, not renamed');
-  assert.ok(/for \(const binding of opBindings\) this\.opKey\(binding\.keys, binding\.handler\);/.test(code),
-    'the op table must be wired through opKey by one loop, not per-key call sites');
+  assert.ok(/buildBindingSet\(opBindings, \(\) => this\.screen\.dialogOpen\)/.test(code),
+    'buildBindingSet must be called with a dialogOpen guard predicate, so menuItems() inherits it too');
+  assert.ok(/for \(const binding of this\.bindingSet\.bindings\) this\.opKey\(binding\.keys, binding\.handler\);/.test(code),
+    'the op table must be wired from the GUARDED bindingSet.bindings, not the raw opBindings array, ' +
+    'by one loop, not per-key call sites');
   for (const key of ["'g'", "'f'", "'S-f'", "'b'", "'S-b'", "','", "'.'", "'n'", "'c'", "'x'",
                      "'S-,'", "'S-.'", "'a'", "'+'", "'t'", "'S-t'", "'l'", "'S-x'", "'s'",
                      "'space'", "'p'", "'e'", "'k'", "'u'"]) {

@@ -161,15 +161,30 @@ export class EditScreen {
    * otherwise double as a letter typed into a dialog's own text field -
    * naming "spin" saved to disk (s) and inserted a blank frame (n) before
    * this guard existed. `screen.dialogOpen` is owned entirely by
-   * dialogs.ts (set/cleared around its own await, never by this file) -
-   * see dialogs.ts's module doc comment for why the guard still has to be
-   * checked here even so: neither ConfirmModal nor Textbox suppress this
-   * door's own screen.key() bindings on their own. delete/escape are NOT
-   * routed through here: they have their own direct dialogOpen checks
-   * below, since escape/delete-while-dialog-open must do nothing rather
-   * than fall through to their normal (non-dialog) behaviour. Routed
-   * through one wrapper so the guard exists exactly once, per finding-1's
-   * review note.
+   * dialogs.ts (set/cleared around its own await, never by this file).
+   *
+   * Fix round 1 (review-caught): as of bindings.ts's `isBlocked` parameter,
+   * every binding this method is actually called with (bindKeys() below
+   * now loops over `this.bindingSet.bindings`, the ALREADY-guarded array
+   * buildBindingSet() returns) is pre-wrapped with this exact same check -
+   * so for those, this check is redundant-by-construction, not the only
+   * thing standing between a keystroke and a double dialog. It stays
+   * anyway: (a) it's what makes delete/backspace/escape/the raw
+   * cell-typing keypress listener below safe - those are NOT
+   * StudioBinding-table entries, so bindings.ts's wrap never touches them,
+   * and this is their only guard; (b) a redundant check here costs nothing
+   * and documents the invariant locally instead of only in bindings.ts.
+   *
+   * Correction: `ConfirmModal` IS built with `trapFocus: true`
+   * (confirm-modal.ts) and `Element.show()` DOES call `screen.trapFocus()`
+   * when that option is set (element.ts) - so a real ConfirmModal already
+   * suppresses this door's registered `screen.key()` handlers on its own.
+   * `Textbox` (promptText's own widget) sets no such option, so for
+   * promptText specifically this check is still load-bearing even against
+   * the real Screen, not merely the test harness. dialogOpen is checked
+   * uniformly for both dialog kinds regardless, since bindings.ts has no
+   * way to know which kind of dialog is open - and the redundancy for
+   * confirm() is harmless.
    */
   private opKey(keys: string[], handler: (...args: any[]) => void): void {
     this.key(keys, (...args: any[]) => {
@@ -322,8 +337,22 @@ export class EditScreen {
 
   private bindKeys(): void {
     const opBindings = this.buildOpBindings();
-    for (const binding of opBindings) this.opKey(binding.keys, binding.handler);
-    this.bindingSet = buildBindingSet(opBindings);
+    // Fix round 1 (review-caught): buildBindingSet's `isBlocked` wraps
+    // every handler with the SAME dialogOpen check BEFORE either consumer
+    // sees it, so this loop (screen.key() registration) and menuItems()'s
+    // action (read by menu.ts's createStudioMenuBar, dispatched by a real
+    // mouse click through dropdown-menu.ts's selectItem()) share the
+    // identical guarded function - see bindings.ts's module doc comment
+    // for why the guard has to live there, not here. buildBindingSet must
+    // run BEFORE this loop now (it didn't need to before): the loop wires
+    // the GUARDED bindings, not the raw table.
+    this.bindingSet = buildBindingSet(opBindings, () => this.screen.dialogOpen);
+    // opKey()'s own dialogOpen check is now redundant-by-construction for
+    // every one of these - the handler it receives is already guarded -
+    // kept anyway as a second, harmless layer (see opKey's own doc
+    // comment for the delete/backspace/escape/keypress paths that still
+    // rely on it alone, since those aren't StudioBinding-table entries).
+    for (const binding of this.bindingSet.bindings) this.opKey(binding.keys, binding.handler);
 
     // Not opKey-routed: while a dialog is open, delete/backspace must do
     // nothing (not fall through to the ordinary cell-clear op) - same

@@ -153,11 +153,22 @@ export async function confirmSetsDialogOpenAndResolvesTrueOnTheConfirmButton(): 
   assert.strictEqual(screen.dialogOpen, true, 'confirm must set screen.dialogOpen synchronously');
 
   const modal = lastChild(screen);
+  assert.strictEqual(screen.focusTrap, modal,
+    'precondition: ConfirmModal (trapFocus:true) must have armed the real focus trap on show()');
   (modal as any)._confirmButton.emit('press');
 
   const result = await pending;
   assert.strictEqual(result, true);
   assert.strictEqual(screen.dialogOpen, false);
+  // Fix round 1, minor 3: finish() must call modal.hide() BEFORE
+  // modal.destroy() - Element.hide()'s focus-trap release
+  // (`this.screen.releaseFocusTrap()`) early-returns once `this.destroyed`
+  // is true, so calling destroy() first (the pre-fix code) left the trap
+  // armed on a destroyed, unreachable widget forever - the DOOR's own
+  // escape/keyboard handling would then depend entirely on screen.ts's
+  // defensive self-heal (re-arming the first focusable element) rather
+  // than the widget releasing what it acquired.
+  assert.strictEqual(screen.focusTrap, null, 'confirming must release the focus trap ConfirmModal armed');
 }
 
 export async function confirmResolvesFalseOnTheCancelButton(): Promise<void> {

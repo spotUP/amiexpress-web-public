@@ -7,6 +7,23 @@
  * that needs to know about them (wiring, the exclusion set, and - for
  * later tasks - a menu) reads this table instead of re-listing keys by
  * hand.
+ *
+ * Studio 2c task 5 fix round 1: `buildBindingSet`'s optional `isBlocked`
+ * predicate is the fourth attempt at the SAME bug class - a caller opens a
+ * modal dialog (dialogs.ts) and something else fires anyway while it's up.
+ * Round 1 (studio 2b) was every keyboard op; round 2 and 3 (studio 2c task
+ * 4) were canvas click and drag; round 4 (studio 2c task 5, review-caught)
+ * was a menu item's mouse click - `screen.key()`'s registered handlers and
+ * a DropdownMenu item's `action` are two SEPARATE dispatch paths
+ * (dropdown-menu.ts's `selectItem()` calls `item.action?.()` directly, and
+ * mouse dispatch never consults `screen.dialogOpen` - traced against
+ * screen.ts: `suppressGlobalKeys` only gates the KEYBOARD handler map),
+ * so a guard added only to the keyboard side (edit-screen.ts's `opKey()`)
+ * left the menu unguarded. Wrapping `binding.handler` HERE, once, before
+ * either consumer ever sees it, means every current AND future consumer of
+ * a StudioBinding's handler - `screen.key()` registration, a menu action,
+ * anything added later - inherits the guard automatically; there is no
+ * fifth call site left to forget it at.
  */
 
 export interface StudioBinding {
@@ -59,7 +76,16 @@ function glyphForKey(key: string): string | null {
   return null;
 }
 
-export function buildBindingSet(bindings: StudioBinding[]): BindingSet {
+/**
+ * @param bindings the table.
+ * @param isBlocked called on every dispatch, from either consumer; a
+ *   `true` result makes that dispatch a no-op. Defaults to `() => false`
+ *   (nothing blocked) so every EXISTING caller that built a BindingSet
+ *   before this parameter existed keeps compiling and behaving exactly as
+ *   before - passing a guard is opt-in per screen, not a breaking change
+ *   forced on every StudioBinding consumer in this door.
+ */
+export function buildBindingSet(bindings: StudioBinding[], isBlocked: () => boolean = () => false): BindingSet {
   const seenIds = new Set<string>();
   for (const binding of bindings) {
     if (seenIds.has(binding.id)) {
@@ -68,8 +94,24 @@ export function buildBindingSet(bindings: StudioBinding[]): BindingSet {
     seenIds.add(binding.id);
   }
 
+  // The ONE wrap. `guardedBindings` carries every other field through
+  // unchanged (id/keys/hotkeyHint/menu/label) - only `handler` changes -
+  // and IS the `bindings` this function returns, so a caller that wires
+  // screen.key() from `bindingSet.bindings` (not the raw table it passed
+  // in) and menuItems() (built from this same array below) dispatch
+  // through the identical guarded function. `keys` is untouched, so
+  // menu-only bindings (empty keys - view.resetLayout) still register no
+  // screen.key() binding, exactly as before.
+  const guardedBindings: StudioBinding[] = bindings.map(binding => ({
+    ...binding,
+    handler: () => {
+      if (isBlocked()) return;
+      binding.handler();
+    },
+  }));
+
   const excludedGlyphKeys = new Set<string>();
-  for (const binding of bindings) {
+  for (const binding of guardedBindings) {
     for (const key of binding.keys) {
       const glyph = glyphForKey(key);
       if (glyph !== null) excludedGlyphKeys.add(glyph);
@@ -79,7 +121,7 @@ export function buildBindingSet(bindings: StudioBinding[]): BindingSet {
   function menuItems(): { label: string; items: { label: string; action: () => void }[] }[] {
     const menus: { label: string; items: { label: string; action: () => void }[] }[] = [];
     const indexByMenu = new Map<string, number>();
-    for (const binding of bindings) {
+    for (const binding of guardedBindings) {
       let index = indexByMenu.get(binding.menu);
       if (index === undefined) {
         index = menus.length;
@@ -94,5 +136,5 @@ export function buildBindingSet(bindings: StudioBinding[]): BindingSet {
     return menus;
   }
 
-  return { bindings, excludedGlyphKeys, menuItems };
+  return { bindings: guardedBindings, excludedGlyphKeys, menuItems };
 }
