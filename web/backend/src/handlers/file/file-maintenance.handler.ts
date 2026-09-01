@@ -101,7 +101,7 @@ console.log('[FM] Starting file maintenance');
     socket.emit('ansi-output', '\r\n');
 
     // express.e:24910-24914 - Check if directories exist
-    const { getMaxDirs } = require('../utils/max-dirs.util');
+    const { getMaxDirs } = require('../../utils/max-dirs.util');
     const bbsDataPath = _config.get('dataDir');
     const maxDirs = await getMaxDirs(session.currentConf || 1, bbsDataPath);
 

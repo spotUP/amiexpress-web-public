@@ -1097,7 +1097,7 @@ export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, i
 }
 
 export async function handleFontSelectionInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const { db } = require('../database');
+  const { db } = require('../../database');
 
   const fonts = [
     'mosoul',

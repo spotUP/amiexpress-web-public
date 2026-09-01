@@ -323,7 +323,7 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
  * express.e:26552 - checks cb.handle[0] AND ZOOM_SCAN_MASK
  */
 async function getZoomFlaggedConferences(userId: string): Promise<number[]> {
-  const { db } = require('../database');
+  const { db } = require('../../database');
   const ZOOM_SCAN_MASK = 2; // Bit 1 - from express.e axconsts.e:47
 
   try {

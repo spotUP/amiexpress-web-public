@@ -205,7 +205,7 @@ export async function handleBulletinCommand(socket: any, session: any, params: s
 console.log('[ENV] Bulletins');
 
   // BBS directory structure
-  const { config } = require('../config');
+  const { config } = require('../../config');
   const dataDir = config.getConfig().dataDir;
   const baseDirs = buildBulletinBaseDirs(dataDir);
   const conferenceDir = `Conf${session.currentConf || 1}`;
@@ -272,7 +272,7 @@ export async function handleBulletinInput(socket: any, session: any, input: stri
 
   // express.e:24642 - Handle ? (show help again)
   if (trimmedInput === '?') {
-    const { config } = require('../config');
+    const { config } = require('../../config');
     const dataDir = config.getConfig().dataDir;
     const baseDirs = buildBulletinBaseDirs(dataDir);
     const conferenceDir = `Conf${session.currentConf || 1}`;
@@ -294,7 +294,7 @@ export async function handleBulletinInput(socket: any, session: any, input: stri
   const bulletinNumber = ParamsUtil.extractNumber(parsedParams);
 
   if (bulletinNumber !== null) {
-    const { config } = require('../config');
+    const { config } = require('../../config');
     const dataDir = config.getConfig().dataDir;
     const baseDirs = buildBulletinBaseDirs(dataDir);
     const conferenceDir = `Conf${session.currentConf || 1}`;

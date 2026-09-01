@@ -209,7 +209,7 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
       return RESULT_SUCCESS;
 
     case 'ROOM': // Group Chat Rooms (Modern Enhancement)
-      const { handleRoomCommand } = require('../room-commands.handler');
+      const { handleRoomCommand } = require('../chat/room-commands.handler');
       await handleRoomCommand(socket, session, params);
       return RESULT_SUCCESS;
 
@@ -386,7 +386,6 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
       return RESULT_SUCCESS;
 
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
-    case 'DOOR':
     case 'DOORS': // Door Games Menu - lists doors with arrow key navigation
       await displayDoorMenu(socket, session, params);
       return RESULT_SUCCESS;

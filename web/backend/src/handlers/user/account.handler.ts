@@ -348,7 +348,7 @@ console.error('Error fetching user stats:', error);
 
 // handleChangeSecLevel() - Change user security level
 export function handleChangeSecLevel(socket: any, session: BBSSession, input: string) {
-  const { db } = require('../database');
+  const { db } = require('../../database');
   const trimmed = input.trim();
 
   // Step 1: ask for username
@@ -415,7 +415,7 @@ console.error('Error updating security level:', err);
 
 // handleToggleUserFlags() - Toggle user flags (expert, ansi, etc.)
 export function handleToggleUserFlags(socket: any, session: BBSSession, input: string) {
-  const { db } = require('../database');
+  const { db } = require('../../database');
   const trimmed = input.trim();
 
   if (!session.tempData?.toggleFlagsUser) {
@@ -498,7 +498,7 @@ console.error('Error updating user flags:', err);
 
 // handleDeleteUserAccount() - Delete user account
 export async function handleDeleteUserAccount(socket: any, session: BBSSession, input: string) {
-  const { db } = require('../database');
+  const { db } = require('../../database');
 
   if (!session.user) {
     socket.emit('ansi-output', '\r\n\x1b[31mError: No user logged in\x1b[0m\r\n');
@@ -558,7 +558,7 @@ console.error('[DeleteAccount] Error deleting user:', error);
 
 // handleSearchUsers() - Search users by various criteria
 export function handleSearchUsers(socket: any, session: BBSSession, searchTerm: string) {
-  const { db } = require('../database');
+  const { db } = require('../../database');
   const term = searchTerm.trim();
   if (!term) {
     socket.emit('ansi-output', '\r\n\x1b[31mSearch term is required.\x1b[0m\r\n');

@@ -305,7 +305,7 @@ console.log('[ENV] Join - Previous Message Base');
   // express.e:24572-24576 - Join previous message base or prompt
   if (newIndex < 0) {
     // Mirror express.e: fall back to JM prompt
-    const { handleJoinMessageBaseCommand } = require('./message-commands.handler');
+    const { handleJoinMessageBaseCommand } = require('../message/message-commands.handler');
     handleJoinMessageBaseCommand(socket, session, '');
     return;
   } else {
@@ -337,7 +337,7 @@ console.log('[ENV] Join - Next Message Base');
   // express.e:24586-24590 - Join next message base or prompt
   if (newIndex >= confMessageBases.length) {
     // Mirror express.e: fall back to JM prompt
-    const { handleJoinMessageBaseCommand } = require('./message-commands.handler');
+    const { handleJoinMessageBaseCommand } = require('../message/message-commands.handler');
     handleJoinMessageBaseCommand(socket, session, '');
     return;
   } else {

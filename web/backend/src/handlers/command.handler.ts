@@ -1837,7 +1837,7 @@ console.log(' [COMMAND] User in CHAT mode, real-time input');
       session.inputBuffer = '';
     }
 
-    const { handleChatKeystroke } = require('./internode-chat.handler');
+    const { handleChatKeystroke } = require('./chat/internode-chat.handler');
     const {
       shouldOpenPicker,
       createPickerState,
@@ -1906,7 +1906,7 @@ console.log(' [COMMAND] User in CHAT mode, real-time input');
       // Check for /END or /EXIT command
       if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
 console.log(' [COMMAND] User wants to end chat');
-        const { handleChatEnd } = require('./internode-chat.handler');
+        const { handleChatEnd } = require('./chat/internode-chat.handler');
         await handleChatEnd(socket, session);
         return;
       }
@@ -1930,7 +1930,7 @@ console.log(' [COMMAND] User requested help');
       // Regular message - finalize and send to scroll area
       if (input.length > 0) {
 console.log(' [COMMAND] Finalizing message:', input);
-        const { handleChatMessage } = require('./internode-chat.handler');
+        const { handleChatMessage } = require('./chat/internode-chat.handler');
         await handleChatMessage(socket, session, { message: input });
         session.inputBuffer = ''; // Clear buffer after sending
       }
@@ -2125,7 +2125,7 @@ console.log(' User in CHAT_ROOM mode, handling room input');
 
     // Check for /LEAVE or /EXIT command
     if (input.toUpperCase() === '/LEAVE' || input.toUpperCase() === '/EXIT') {
-      const { handleRoomLeave } = require('./group-chat.handler');
+      const { handleRoomLeave } = require('./chat/group-chat.handler');
       await handleRoomLeave(socket, session);
       return;
     }
@@ -2158,7 +2158,7 @@ console.log(' User in CHAT_ROOM mode, handling room input');
 
     // Regular message - send to room
     if (input.length > 0) {
-      const { handleRoomMessage } = require('./group-chat.handler');
+      const { handleRoomMessage } = require('./chat/group-chat.handler');
       await handleRoomMessage(socket, session, { message: input });
     }
     return;
@@ -2168,7 +2168,7 @@ console.log(' User in CHAT_ROOM mode, handling room input');
   // When user is selecting from numbered list
   if (session.subState === LoggedOnSubState.LIVECHAT_SELECT_USER) {
 console.log(' [LIVECHAT] User selecting from numbered list');
-    const { handleLiveChatSelection } = require('./chat-commands.handler');
+    const { handleLiveChatSelection } = require('./chat/chat-commands.handler');
     await handleLiveChatSelection(socket, session, data);
     return;
   }
@@ -2177,7 +2177,7 @@ console.log(' [LIVECHAT] User selecting from numbered list');
   // When user is responding to a chat invitation
   if (session.subState === LoggedOnSubState.LIVECHAT_INVITATION_RESPONSE) {
 console.log(' [LIVECHAT] User responding to invitation with Y/n');
-    const { handleLiveChatInvitationResponse } = require('./chat-commands.handler');
+    const { handleLiveChatInvitationResponse } = require('./chat/chat-commands.handler');
     await handleLiveChatInvitationResponse(socket, session, data);
     return;
   }
@@ -4080,7 +4080,7 @@ console.error('Error processing command:', error);
   } else if (session.subState === LoggedOnSubState.USER_STATS_MENU) {
     // Handle user stats menu input (F=Font, Q=Quit)
 console.log(' In USER_STATS_MENU state, processing input');
-    const { handleUserStatsMenuInput } = require('./user-commands.handler');
+    const { handleUserStatsMenuInput } = require('./commands/user-commands.handler');
     handleUserStatsMenuInput(socket, session, data);
     return;
   } else if (session.subState === LoggedOnSubState.FONT_SELECTION) {
@@ -4097,7 +4097,7 @@ console.log(' In FONT_SELECTION state, buffering input');
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
 
-      const { handleFontSelectionInput } = require('./user-commands.handler');
+      const { handleFontSelectionInput } = require('./commands/user-commands.handler');
       handleFontSelectionInput(socket, session, input);
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
@@ -4348,7 +4348,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case 'ROOM': // Group Chat Rooms (Modern Enhancement)
-      const { handleRoomCommand } = require('./room-commands.handler');
+      const { handleRoomCommand } = require('./chat/room-commands.handler');
       await handleRoomCommand(socket, session, params);
       return;
 
