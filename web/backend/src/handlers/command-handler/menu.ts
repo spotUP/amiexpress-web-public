@@ -172,6 +172,16 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
  * Shows BBS name, conference info, and time remaining
  */
 export function displayMenuPrompt(socket: any, session: BBSSession) {
+  // Put the colours back, unconditionally and before anything else.
+  //
+  // displayMainMenu() resets too, but it returns early in several cases -
+  // expert mode, the conference-scan skip, the debounce - and the prompt is
+  // the one thing drawn on EVERY pass. A door that exits leaving magenta
+  // set (the selected row of a themed list) leaked pink over the board
+  // until this ran. express.e does the same thing at 28409 for the
+  // MENU_PROMPT path; this is that, for every path.
+  emitText(socket, '\x1b[0m');
+
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu prompt once after the entire scan finishes
   if ((session as any).inConfScan) {
