@@ -1210,7 +1210,7 @@ export class ANSIEditor extends Box {
       layerRow.on('click', (data: any) => {
         if (data.button === 'left') {
           this.activeLayerIndex = actualIdx;
-          this.cellCanvas = this.layers[actualIdx].canvas;
+          this.adoptCellCanvas(this.layers[actualIdx].canvas);
           this.updateLayerPanel();
           this.updateDisplay();
         } else if (data.button === 'right') {
@@ -1242,7 +1242,7 @@ export class ANSIEditor extends Box {
     // Insert above current layer
     this.layers.splice(this.activeLayerIndex + 1, 0, newLayer);
     this.activeLayerIndex++;
-    this.cellCanvas = newLayer.canvas;
+    this.adoptCellCanvas(newLayer.canvas);
 
     this.updateLayerPanel();
     this.updateDisplay();
@@ -1262,7 +1262,7 @@ export class ANSIEditor extends Box {
       this.activeLayerIndex = this.layers.length - 1;
     }
 
-    this.cellCanvas = this.layers[this.activeLayerIndex].canvas;
+    this.adoptCellCanvas(this.layers[this.activeLayerIndex].canvas);
 
     this.composeLayers();
     this.updateLayerPanel();
@@ -1292,7 +1292,7 @@ export class ANSIEditor extends Box {
     // Remove source layer
     this.layers.splice(this.activeLayerIndex, 1);
     this.activeLayerIndex--;
-    this.cellCanvas = dstLayer.canvas;
+    this.adoptCellCanvas(dstLayer.canvas);
 
     this.composeLayers();
     this.updateLayerPanel();
@@ -1367,7 +1367,7 @@ export class ANSIEditor extends Box {
       opacity: 100,
     }];
     this.activeLayerIndex = 0;
-    this.cellCanvas = flattened;
+    this.adoptCellCanvas(flattened);
 
     this.updateLayerPanel();
     this.updateDisplay();
@@ -2086,16 +2086,15 @@ BBS Door SDK v2.0{/gray-fg}
   private newDocument(): void {
     if (!this.cellCanvas) return;
 
-    // Clear the canvas (preserves the editor's configured dimensions)
-    this.cellCanvas = this.createBlankCanvas(this.canvasW, this.canvasH);
-    // Keep the active layer's canvas reference in sync - same stale-reference
-    // bug setCoreCanvas had (composeLayers/mergeLayerDown/flattenLayers all
-    // read layer.canvas directly, not this.cellCanvas, so without this a
-    // merge-down or flatten-on-save after File > New would still emit the
-    // pre-clear content).
-    if (this.layers[this.activeLayerIndex]) {
-      this.layers[this.activeLayerIndex].canvas = this.cellCanvas;
-    }
+    // Clear the canvas (preserves the editor's configured dimensions).
+    // adoptCellCanvas() keeps the active layer's canvas reference in sync
+    // (composeLayers/mergeLayerDown/flattenLayers all read layer.canvas
+    // directly, not this.cellCanvas - without this a merge-down or
+    // flatten-on-save after File > New would still emit the pre-clear
+    // content) AND clears coreState's draw-mode undo history, so a stale
+    // entry from before the clear can't resurrect the pre-clear canvas via
+    // Ctrl+Z.
+    this.adoptCellCanvas(this.createBlankCanvas(this.canvasW, this.canvasH));
     this.syncCoreCanvasToDisplay();
 
     // Reset lines for text mode
@@ -2107,12 +2106,6 @@ BBS Door SDK v2.0{/gray-fg}
     this.undoStack = [];
     this.redoStack = [];
     this.saveUndoState();
-
-    // Clear undo stack (draw mode) - a stale draw-undo entry from before
-    // File > New would otherwise let Ctrl+Z resurrect the pre-clear canvas.
-    if (this.coreState) {
-      clearUndoStack(this.coreState);
-    }
 
     this.updateDisplay();
   }
@@ -3200,6 +3193,60 @@ BBS Door SDK v2.0{/gray-fg}
     drawTool.onEnd(this.coreState, this.cursor.col, this.cursor.line);
   }
 
+  /**
+   * The ONLY way this.cellCanvas is allowed to be re-pointed at a different
+   * Cell[][] array OUTSIDE the syncToCoreState()/syncFromCoreState()
+   * tool-call bracket - layer switch/add/delete/merge/flatten, and the
+   * public setCoreCanvas(). Every one of those is, from the undo system's
+   * perspective, switching documents: the library's undo/redo stacks are a
+   * timeline of snapshots of ONE Cell[][] array. undo()/redo() call
+   * undoDrawing()/redoDrawing() directly, WITHOUT going through
+   * syncToCoreState() first (they don't need the current fg/bg/char) - so if
+   * this.cellCanvas is swapped by a raw assignment instead of through here,
+   * coreState keeps pointing at the OLD array until the next tool call
+   * happens to refresh it. A bare Ctrl+Z in that window pops a snapshot
+   * built against the old canvas and writes it into whichever layer is
+   * active NOW via syncFromCoreState()'s
+   * `this.layers[activeLayerIndex].canvas = this.cellCanvas` - silently
+   * destroying content on a layer nobody drew on. Fixed at the root by
+   * keeping coreState's canvas reference authoritative and IMMEDIATELY
+   * current, never lazily refreshed, and by treating a canvas swap as a new
+   * undo timeline (clearUndoStack) rather than trying to preserve history
+   * that no longer describes what's on screen - the same treatment
+   * newDocument() (File > New) already gave itself for exactly this reason.
+   *
+   * Rejected alternative: validate-before-pop (tag each undo entry with
+   * which canvas/layer it belongs to, check at undo() time). Considered and
+   * rejected as more invasive for no behavioral gain here - it would still
+   * have to decide what to do on a mismatch (skip deeper into the stack,
+   * breaking LIFO, or refuse and report "nothing to undo", which is exactly
+   * what clearing the stack up front already gives for free) and it doesn't
+   * remove the root cause (coreState still going stale between the swap and
+   * the next tool call) the way keeping it always-current does.
+   *
+   * Rejected alternative: per-layer undo histories (rebase instead of
+   * clear). Would preserve "switch back to layer 1, still able to undo the
+   * edit from before you left it" - a real nicety - but requires N
+   * independent undo timelines keyed by layer identity, a materially larger
+   * feature than this bug fix calls for. Not built here; noted in the
+   * report as a disclosed limitation of the clear-based fix.
+   *
+   * Also folds in Task 1's `this.layers[activeLayerIndex].canvas` sync (the
+   * same invariant setCoreCanvas()/newDocument() used to each maintain by
+   * hand) so every non-tool-bracket canvas swap keeps both invariants in
+   * one place instead of two easy-to-forget call sites.
+   */
+  private adoptCellCanvas(canvas: Cell[][]): void {
+    this.cellCanvas = canvas;
+    if (this.layers[this.activeLayerIndex]) {
+      this.layers[this.activeLayerIndex].canvas = canvas;
+    }
+    if (this.coreState) {
+      this.coreState.setCanvas(canvas);
+      clearUndoStack(this.coreState);
+    }
+  }
+
   /** ANSI colour names indexed 0-15, shared by every cell-to-display-tag call. */
   private static readonly ANSI_COLOR_NAMES = [
     'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
@@ -4087,17 +4134,19 @@ BBS Door SDK v2.0{/gray-fg}
   }
 
   /**
-   * Set the core canvas directly. Size-safe: keeps the active layer's
-   * canvas reference in sync (it would otherwise go stale, pointing at the
-   * old canvas while this.cellCanvas points at the new one) and clamps the
-   * cursor and any live selection into the new canvas's bounds so neither
-   * can end up referencing cells that no longer exist.
+   * Set the core canvas directly. Size-safe: adoptCellCanvas() keeps the
+   * active layer's canvas reference in sync (it would otherwise go stale,
+   * pointing at the old canvas while this.cellCanvas points at the new one)
+   * and clears coreState's draw-mode undo history (a host swapping in a
+   * different frame - e.g. the sprite editor's frame-swap use case this
+   * method exists for - is a new undo timeline, not a continuation of the
+   * old canvas's; see adoptCellCanvas()'s doc comment for the full
+   * reasoning). Also clamps the cursor and any live selection into the new
+   * canvas's bounds so neither can end up referencing cells that no longer
+   * exist.
    */
   setCoreCanvas(canvas: Cell[][]): void {
-    this.cellCanvas = canvas;
-    if (this.layers[this.activeLayerIndex]) {
-      this.layers[this.activeLayerIndex].canvas = canvas;
-    }
+    this.adoptCellCanvas(canvas);
 
     // this.canvasW/canvasH now reflect the newly-assigned canvas.
     this.clampCursorToCanvas();
