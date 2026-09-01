@@ -2393,17 +2393,26 @@ BBS Door SDK v2.0{/gray-fg}
 
       // Calculate position relative to canvas content area
       // Use ileft/itop to account for any border or padding
+      // Releasing the mouse ends a continuous freehand/half-block drag -
+      // flush its chunked undo entry (see drawAtCursor()/paintCell()).
+      // No-op if nothing was chunked (e.g. a shape tool or a plain click).
+      //
+      // BEFORE the bounds check, deliberately: a release outside the canvas
+      // is still the end of the stroke. Flushing after the check meant a
+      // mouseup over the sidebar, the menu bar or off the widget entirely
+      // left the chunk open, so the NEXT stroke joined the previous one's
+      // undo entry and one Ctrl+Z threw both away. Reported as "undo
+      // behaves weird" while drawing a sprite.
+      if (data.action === 'mouseup') {
+        this.flushDrawChunk();
+      }
+
+      // Calculate position relative to canvas content area
+      // Use ileft/itop to account for any border or padding
       const x = data.x - this.drawCanvas.ileft;
       const y = data.y - this.drawCanvas.itop;
 
       if (x < 0 || y < 0) return;
-
-      // Releasing the mouse ends a continuous freehand/half-block drag -
-      // flush its chunked undo entry (see drawAtCursor()/paintCell()).
-      // No-op if nothing was chunked (e.g. a shape tool or a plain click).
-      if (data.action === 'mouseup') {
-        this.flushDrawChunk();
-      }
 
       // Clamp to canvas bounds
       this.cursor.col = this.screenToCanvasX(x);

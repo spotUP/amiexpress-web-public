@@ -96,3 +96,78 @@ describe('ANSIEditor half-block output is a decompilable sprite frame', () => {
     expect(pixels![1][0]).toBe(2);
   });
 });
+
+/**
+ * Half-block strokes are undoable.
+ *
+ * Reported while drawing a sprite: "undo behaves weird". drawHalfBlock and
+ * drawHalfBlockWithBg mutated the canvas directly and pushed NO undo state,
+ * while every other painter went through the library. So in half-block mode
+ * - which is how sprite art is drawn - Ctrl+Z skipped past every stroke to
+ * whatever the last text-brush action had been.
+ *
+ * paintCell() exists for exactly this: its own doc comment names half-block
+ * compositing as the case the ten ToolHandlers cannot express.
+ */
+describe('ANSIEditor half-block undo', () => {
+  let screen: any;
+  beforeEach(() => { screen = makeScreen(); });
+  afterEach(() => screen?.destroy());
+
+  const editorWith = (): any => new ANSIEditor({
+    parent: screen, canvasWidth: 2, canvasHeight: 1,
+    initialMode: 'draw', transparentBackground: true,
+  } as any);
+
+  const stroke = (editor: any, cellX: number, sub: 0 | 1, fg: number, action = 'mousedown') => {
+    editor.switchBrushMode('half-block');
+    editor.halfBlockSubY = sub;
+    editor.currentFg = fg;
+    editor.drawCanvas.emit('mouse', {
+      x: editor.drawCanvas.ileft + cellX,
+      y: editor.drawCanvas.itop,
+      action, button: 'left',
+    });
+  };
+
+  it('undoes one half-block stroke', () => {
+    const editor = editorWith();
+    expect(editor.getCoreCanvas()[0][0].transparent).toBe(true);
+
+    stroke(editor, 0, 0, 4);
+    editor.drawCanvas.emit('mouse', { x: 0, y: 0, action: 'mouseup' });
+    expect(editor.getCoreCanvas()[0][0].transparent).toBeFalsy();
+
+    editor.undo();
+    expect(editor.getCoreCanvas()[0][0].transparent).toBe(true);
+  });
+
+  it('treats one drag as a single undo step, not one per cell', () => {
+    const editor = editorWith();
+    stroke(editor, 0, 0, 4, 'mousedown');
+    stroke(editor, 1, 0, 4, 'mousemove');
+    editor.drawCanvas.emit('mouse', { x: 0, y: 0, action: 'mouseup' });
+
+    const painted = editor.getCoreCanvas();
+    expect(painted[0][0].transparent).toBeFalsy();
+    expect(painted[0][1].transparent).toBeFalsy();
+
+    editor.undo();
+    const after = editor.getCoreCanvas();
+    expect(after[0][0].transparent).toBe(true);
+    expect(after[0][1].transparent).toBe(true);
+  });
+
+  it('keeps separate strokes separately undoable', () => {
+    const editor = editorWith();
+    stroke(editor, 0, 0, 4);
+    editor.drawCanvas.emit('mouse', { x: 0, y: 0, action: 'mouseup' });
+    stroke(editor, 1, 0, 2);
+    editor.drawCanvas.emit('mouse', { x: 0, y: 0, action: 'mouseup' });
+
+    editor.undo();
+    const after = editor.getCoreCanvas();
+    expect(after[0][1].transparent).toBe(true);
+    expect(after[0][0].transparent).toBeFalsy();
+  });
+});
