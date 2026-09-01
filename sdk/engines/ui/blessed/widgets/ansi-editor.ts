@@ -27,21 +27,18 @@ import type { ElementOptions } from '../core/types';
 import { trapModalInput } from '../utils/modal-helpers';
 
 // Import core library for reusable ANSI editor functionality
-import type { Cell, DrawingTool, Position as CorePosition } from '../../ansi-editor/types';
+import type { Cell, DrawingTool } from '../../ansi-editor/types';
 import * as CoreCanvas from '../../ansi-editor/core/canvas';
 import {
   drawTool,
-  lineTool,
-  boxTool,
-  boxFillTool,
-  ellipseTool,
-  ellipseFillTool,
   fillTool,
   pickTool,
-  selectTool,
-  undoDrawing,
-  clearUndoStack,
   getToolHandler,
+  undoDrawing,
+  redoDrawing,
+  clearUndoStack,
+  paintCell,
+  getSelectionBounds,
 } from '../../ansi-editor/tools/drawing-tools';
 import { EditorState as CoreEditorState } from '../../ansi-editor/core/editor-state';
 
@@ -194,7 +191,6 @@ export class ANSIEditor extends Box {
   private cellCanvas: Cell[][] | null = null;  // Core library canvas
   private currentTool: DrawingTool = 'text';  // Default to text/typing mode (Moebius-style)
   private isDrawing: boolean = false;
-  private drawStartPos: CorePosition | null = null;
 
   // Core editor state for tool operations
   private coreState: CoreEditorState | null = null;
@@ -241,9 +237,8 @@ export class ANSIEditor extends Box {
   private brushMode: BrushMode = 'text';
   private halfBlockSubY: 0 | 1 = 0;  // 0 = upper half, 1 = lower half
 
-  // Preview overlay for shape tools (line, box, ellipse)
-  private previewCanvas: Cell[][] | null = null;
-  private previewOverlay?: Box;
+  // Repaint-throttle guard for shape-tool drag preview (skip redundant work
+  // when the mouse reports the same cell twice in a row).
   private lastPreviewPos: { x: number; y: number } | null = null;
 
   // Options
@@ -311,9 +306,8 @@ export class ANSIEditor extends Box {
    * on, every cell starts marked `transparent: true` instead of the plain
    * opaque {char:' ', fg:7, bg:0} CoreCanvas.createCanvas() always builds -
    * the same distinction eraseAtCursor() applies to a single cell. Used at
-   * construction and by newDocument() (File > New); previewCanvas and a
-   * freshly-added layer stay plain CoreCanvas.createCanvas() calls, out of
-   * this task's scope.
+   * construction and by newDocument() (File > New); a freshly-added layer
+   * stays a plain CoreCanvas.createCanvas() call, out of this task's scope.
    */
   private createBlankCanvas(width: number, height: number): Cell[][] {
     const canvas = CoreCanvas.createCanvas(width, height);
@@ -2109,10 +2103,16 @@ BBS Door SDK v2.0{/gray-fg}
     this.cursor = { line: 0, col: 0 };
     this.modified = false;
 
-    // Clear undo stack
+    // Clear undo stack (text mode)
     this.undoStack = [];
     this.redoStack = [];
     this.saveUndoState();
+
+    // Clear undo stack (draw mode) - a stale draw-undo entry from before
+    // File > New would otherwise let Ctrl+Z resurrect the pre-clear canvas.
+    if (this.coreState) {
+      clearUndoStack(this.coreState);
+    }
 
     this.updateDisplay();
   }
@@ -2289,6 +2289,13 @@ BBS Door SDK v2.0{/gray-fg}
       const y = data.y - this.drawCanvas.itop;
 
       if (x < 0 || y < 0) return;
+
+      // Releasing the mouse ends a continuous freehand/half-block drag -
+      // flush its chunked undo entry (see drawAtCursor()/paintCell()).
+      // No-op if nothing was chunked (e.g. a shape tool or a plain click).
+      if (data.action === 'mouseup') {
+        this.flushDrawChunk();
+      }
 
       // Clamp to canvas bounds
       this.cursor.col = this.clampCol(x);
@@ -2573,43 +2580,54 @@ BBS Door SDK v2.0{/gray-fg}
       return;
     }
 
-    // Drawing with space
+    // Drawing with space - a single discrete keypress, not part of a mouse
+    // drag, so it is its own undo entry (chunked=false).
     if (name === 'space') {
-      this.drawAtCursor();
+      this.drawAtCursor(false);
     }
   }
 
   /**
-   * Switch to a different drawing tool
+   * Switch to a different drawing tool. Abandons an in-progress shape/select
+   * drag exactly like today: the canvas is left untouched, as if the second
+   * click had never happened. Before this task that fell out for free
+   * (the old shape-preview overlay never touched this.cellCanvas until the
+   * second click); now that shape tools mutate the real canvas on every
+   * onMove for live preview, abandoning one requires an explicit onCancel to
+   * restore it. Also flushes any still-open freehand/half-block drag chunk,
+   * so switching tools mid-drag doesn't leave dangling unflushed undo state.
    */
   private switchTool(tool: DrawingTool): void {
+    if (this.isDrawing && this.coreState) {
+      this.syncToCoreState();
+      getToolHandler(this.currentTool).onCancel(this.coreState);
+      this.syncFromCoreState();
+    }
+    this.flushDrawChunk();
     this.currentTool = tool;
     this.isDrawing = false;
-    this.drawStartPos = null;
+    this.lastPreviewPos = null;
     this.updateToolbar();
     this.updateStatusBar();
   }
 
   /**
-   * Type a character at cursor position (for text tool)
+   * Type a character at cursor position (for text tool). Each keypress is a
+   * single discrete undo entry (chunked=false) - unlike a mouse drag, there
+   * is no natural "stroke" boundary to flush on, so every character typed is
+   * its own Ctrl+Z step. Routed through paintCell(), not drawTool, because
+   * the painted char is whatever was just typed, not necessarily
+   * this.currentChar (drawTool always paints state.getCurrentCell()).
    */
   private typeCharAtCursor(char: string): void {
+    if (!this.coreState) return;
     const y = this.cursor.line;
     const x = this.cursor.col;
+    const cell: Cell = { char, fg: this.currentFg, bg: this.currentBg, blink: false };
 
-    // Use core canvas for cell-based drawing
-    if (this.cellCanvas) {
-      const cell: Cell = {
-        char: char,
-        fg: this.currentFg,
-        bg: this.currentBg,
-        blink: false,
-      };
-      CoreCanvas.setCell(this.cellCanvas, x, y, cell);
-      this.syncCoreCanvasToDisplay();
-    }
-
-    this.modified = true;
+    this.syncToCoreState();
+    paintCell(this.coreState, x, y, cell, false);
+    this.syncFromCoreState();
   }
 
   private moveCursor(dx: number, dy: number): void {
@@ -2754,66 +2772,68 @@ BBS Door SDK v2.0{/gray-fg}
     this.drawCursor.setContent(this.currentChar);
   }
 
-  private drawAtCursor(): void {
+  /**
+   * Paint the current fg/bg/char cell at the cursor through the library's
+   * drawTool - onStart's chunk guard makes repeated calls from a continuous
+   * mouse drag safe (only the first call of a stroke pushes undo state; the
+   * rest just paint), flushed on mouseup (flushDrawChunk()). A single
+   * keyboard press (chunked=false) instead pushes its own immediate undo
+   * entry, since there's no drag to flush at the end of.
+   */
+  private drawAtCursor(chunked: boolean = true): void {
+    if (!this.coreState) return;
     const y = this.cursor.line;
     const x = this.cursor.col;
 
-    // Use core canvas for cell-based drawing
-    if (this.cellCanvas) {
-      const cell: Cell = {
-        char: this.currentChar,
-        fg: this.currentFg,
-        bg: this.currentBg,
-        blink: false,
-      };
-      CoreCanvas.setCell(this.cellCanvas, x, y, cell);
-      // Re-render canvas with colors
-      this.syncCoreCanvasToDisplay();
+    this.syncToCoreState();
+    if (chunked) {
+      drawTool.onStart(this.coreState, x, y);
+    } else {
+      paintCell(this.coreState, x, y, this.coreState.getCurrentCell(), false);
     }
-
-    this.modified = true;
+    this.syncFromCoreState();
   }
 
+  /**
+   * Erase (Backspace) is a discrete keyboard action, not a drag - one
+   * immediate undo entry per press (chunked=false). Routed through
+   * paintCell(), not drawTool, because the empty/transparent cell it paints
+   * is independent of currentFg/Bg/Char.
+   */
   private eraseAtCursor(): void {
+    if (!this.coreState) return;
     const y = this.cursor.line;
     const x = this.cursor.col;
+    const emptyCell: Cell = this.transparentBackground
+      ? { char: ' ', fg: 7, bg: 0, blink: false, transparent: true }
+      : { char: ' ', fg: 7, bg: 0, blink: false };
 
-    // Update core canvas
-    if (this.cellCanvas) {
-      const emptyCell: Cell = this.transparentBackground
-        ? { char: ' ', fg: 7, bg: 0, blink: false, transparent: true }
-        : { char: ' ', fg: 7, bg: 0, blink: false };
-      CoreCanvas.setCell(this.cellCanvas, x, y, emptyCell);
-      // Re-render canvas with colors
-      this.syncCoreCanvasToDisplay();
-    }
-
-    this.modified = true;
+    this.syncToCoreState();
+    paintCell(this.coreState, x, y, emptyCell, false);
+    this.syncFromCoreState();
   }
 
   /**
    * Draw with background color (Moebius-style RMB drawing)
-   * Swaps FG and BG colors so RMB draws with the current background color
+   * Swaps FG and BG colors so RMB draws with the current background color.
+   * Chunked like drawAtCursor() - RMB drag/click flushes on mouseup the same
+   * way LMB does. Routed through paintCell() (not drawTool) because the
+   * swapped-colors cell isn't state.getCurrentCell().
    */
   private drawWithBackgroundColor(): void {
+    if (!this.coreState) return;
     const y = this.cursor.line;
     const x = this.cursor.col;
+    const cell: Cell = {
+      char: this.currentChar,
+      fg: this.currentBg,  // Use BG as FG
+      bg: this.currentFg,  // Use FG as BG
+      blink: false,
+    };
 
-    // Use core canvas for cell-based drawing
-    // Swap FG and BG so we're drawing with the background color
-    if (this.cellCanvas) {
-      const cell: Cell = {
-        char: this.currentChar,
-        fg: this.currentBg,  // Use BG as FG
-        bg: this.currentFg,  // Use FG as BG
-        blink: false,
-      };
-      CoreCanvas.setCell(this.cellCanvas, x, y, cell);
-      // Re-render canvas with colors
-      this.syncCoreCanvasToDisplay();
-    }
-
-    this.modified = true;
+    this.syncToCoreState();
+    paintCell(this.coreState, x, y, cell, true);
+    this.syncFromCoreState();
   }
 
   // ============================================
@@ -2902,9 +2922,11 @@ BBS Door SDK v2.0{/gray-fg}
       blink: false,
     };
 
-    CoreCanvas.setCell(this.cellCanvas, x, y, newCell);
-    this.syncCoreCanvasToDisplay();
-    this.modified = true;
+    if (this.coreState) {
+      this.syncToCoreState();
+      paintCell(this.coreState, x, y, newCell, true);
+      this.syncFromCoreState();
+    }
   }
 
   /**
@@ -3038,9 +3060,11 @@ BBS Door SDK v2.0{/gray-fg}
       blink: false,
     };
 
-    CoreCanvas.setCell(this.cellCanvas, x, y, newCell);
-    this.syncCoreCanvasToDisplay();
-    this.modified = true;
+    if (this.coreState) {
+      this.syncToCoreState();
+      paintCell(this.coreState, x, y, newCell, true);
+      this.syncFromCoreState();
+    }
   }
 
   /**
@@ -3116,38 +3140,103 @@ BBS Door SDK v2.0{/gray-fg}
   }
 
   // ============================================
-  // REAL-TIME PREVIEW OVERLAY SYSTEM
+  // LIBRARY TOOL DISPATCH
   // ============================================
 
   /**
-   * Initialize preview canvas (same size as main canvas)
+   * Push the widget's live canvas + current paint attributes into coreState
+   * immediately before invoking a library tool handler. coreState is the one
+   * persistent EditorState per widget instance (constructed once, never
+   * recreated) - its identity is what the library's per-instance undo/redo
+   * (and selection) WeakMaps key on, so two ANSIEditor widgets never undo or
+   * select for each other. Every other method in this file still reads
+   * this.cellCanvas/currentFg/currentBg/currentChar directly (getContent,
+   * save, layers, syncCoreCanvasToDisplay, ...) - re-pointing all of those
+   * at coreState was out of scope for this task - so every tool invocation
+   * is bracketed by this and syncFromCoreState().
    */
-  private initPreviewCanvas(): void {
-    if (!this.cellCanvas) return;
-    this.previewCanvas = CoreCanvas.createCanvas(this.canvasW, this.canvasH);
+  private syncToCoreState(): void {
+    if (!this.coreState || !this.cellCanvas) return;
+    this.coreState.setCanvas(this.cellCanvas);
+    this.coreState.setCurrentFg(this.currentFg);
+    this.coreState.setCurrentBg(this.currentBg);
+    this.coreState.setCurrentChar(this.currentChar);
   }
 
   /**
-   * Clear preview canvas
+   * Pull the canvas (and any tool-driven attribute change, e.g. pickTool's
+   * fg/bg/char) back out of coreState after a library tool handler runs.
+   * A shape tool's onMove/onEnd replaces coreState's canvas array wholesale
+   * (Canvas.cloneCanvas()), so this.cellCanvas must be re-pointed at the new
+   * array, not assumed to still be the same reference - and the active
+   * layer's canvas reference kept in sync the same way setCoreCanvas()/
+   * newDocument() already do (Task 1's invariant).
    */
-  private clearPreview(): void {
-    if (this.previewCanvas) {
-      // Clear all cells
-      for (let y = 0; y < this.previewCanvas.length; y++) {
-        for (let x = 0; x < this.previewCanvas[y].length; x++) {
-          this.previewCanvas[y][x] = { char: '', fg: 0, bg: 0, blink: false };
-        }
+  private syncFromCoreState(): void {
+    if (!this.coreState) return;
+    const canvas = this.coreState.getCanvas();
+    if (canvas) {
+      this.cellCanvas = canvas;
+      if (this.layers[this.activeLayerIndex]) {
+        this.layers[this.activeLayerIndex].canvas = this.cellCanvas;
       }
     }
-    this.lastPreviewPos = null;
+    this.currentFg = this.coreState.getCurrentFg();
+    this.currentBg = this.coreState.getCurrentBg();
+    this.currentChar = this.coreState.getCurrentChar();
+    this.syncCoreCanvasToDisplay();
+    this.modified = true;
   }
 
   /**
-   * Update preview for shape tools (line, box, ellipse)
-   * Called on mouse move while drawing
+   * Flush a still-open chunked undo entry from a continuous freehand/
+   * half-block/RMB drag (drawTool.onStart / paintCell(..., true) both open
+   * one; drawTool.onEnd just flushes it regardless of which one started it,
+   * since they share the same per-instance undo data). Safe to call even
+   * when nothing is chunked (no-op) - called unconditionally on mouseup.
+   */
+  private flushDrawChunk(): void {
+    if (!this.coreState) return;
+    drawTool.onEnd(this.coreState, this.cursor.col, this.cursor.line);
+  }
+
+  /** ANSI colour names indexed 0-15, shared by every cell-to-display-tag call. */
+  private static readonly ANSI_COLOR_NAMES = [
+    'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+    'gray', 'lightred', 'lightgreen', 'lightyellow', 'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
+  ];
+
+  /**
+   * Render one cell as a blessed content tag, including the transparent
+   * guide glyph. The single definition syncCoreCanvasToDisplay() and
+   * renderSelectionPreview() both use, so the guide-glyph handling can't
+   * drift between the "committed canvas" and "live selection drag" render
+   * paths the way it did before this task (renderPreview() duplicated this
+   * logic without the transparent branch - see task-4-report.md).
+   */
+  private cellToDisplayTag(cell: Cell): string {
+    if (cell.transparent) {
+      return `{gray-fg}{black-bg}.{/black-bg}{/gray-fg}`;
+    }
+    const fgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.fg] || 'white';
+    const bgColor = ANSIEditor.ANSI_COLOR_NAMES[cell.bg] || 'black';
+    const char = cell.char || ' ';
+    return `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
+  }
+
+  /**
+   * Update the live preview while dragging a shape/select tool. For the
+   * five canvas-mutating shape tools (line/box/box-fill/ellipse/
+   * ellipse-fill), onMove restores the pre-drag snapshot and redraws the
+   * shape onto it fresh each call (see drawing-tools.ts's peekUndoCanvas
+   * usage), replacing coreState's canvas - so syncFromCoreState() +
+   * syncCoreCanvasToDisplay() IS the live preview, with no separate overlay
+   * needed, and it inherits the transparent-guide-glyph rendering for free.
+   * select never mutates the canvas (a selection is a read-only rectangle),
+   * so it gets its own renderSelectionPreview() overlay instead.
    */
   private updateShapePreview(x: number, y: number): void {
-    if (!this.drawStartPos || !this.cellCanvas) return;
+    if (!this.isDrawing || !this.cellCanvas || !this.coreState) return;
 
     // Only update if position changed
     if (this.lastPreviewPos && this.lastPreviewPos.x === x && this.lastPreviewPos.y === y) {
@@ -3155,282 +3244,88 @@ BBS Door SDK v2.0{/gray-fg}
     }
     this.lastPreviewPos = { x, y };
 
-    // Initialize preview canvas if needed
-    if (!this.previewCanvas) {
-      this.initPreviewCanvas();
-    }
-    if (!this.previewCanvas) return;
+    this.syncToCoreState();
+    getToolHandler(this.currentTool).onMove(this.coreState, x, y);
 
-    // Clear previous preview
-    this.clearPreview();
-
-    const cell: Cell = {
-      char: this.currentChar,
-      fg: this.currentFg,
-      bg: this.currentBg,
-      blink: false,
-    };
-
-    // Draw preview shape based on current tool
-    switch (this.currentTool) {
-      case 'line':
-        this.previewLine(
-          this.drawStartPos.col,
-          this.drawStartPos.line,
-          x, y, cell
-        );
-        break;
-
-      case 'box':
-        this.previewBox(
-          this.drawStartPos.col,
-          this.drawStartPos.line,
-          x, y, cell, false
-        );
-        break;
-
-      case 'box-fill':
-        this.previewBox(
-          this.drawStartPos.col,
-          this.drawStartPos.line,
-          x, y, cell, true
-        );
-        break;
-
-      case 'ellipse':
-        const rx = Math.abs(x - this.drawStartPos.col);
-        const ry = Math.abs(y - this.drawStartPos.line);
-        this.previewEllipse(
-          this.drawStartPos.col,
-          this.drawStartPos.line,
-          rx, ry, cell, false
-        );
-        break;
-
-      case 'ellipse-fill':
-        const rx2 = Math.abs(x - this.drawStartPos.col);
-        const ry2 = Math.abs(y - this.drawStartPos.line);
-        this.previewEllipse(
-          this.drawStartPos.col,
-          this.drawStartPos.line,
-          rx2, ry2, cell, true
-        );
-        break;
-
-      case 'select':
-        this.previewSelection(
-          this.drawStartPos.col,
-          this.drawStartPos.line,
-          x, y
-        );
-        break;
-    }
-
-    // Render preview
-    this.renderPreview();
-  }
-
-  /**
-   * Draw preview line using Bresenham algorithm
-   */
-  private previewLine(x0: number, y0: number, x1: number, y1: number, cell: Cell): void {
-    if (!this.previewCanvas) return;
-
-    const dx = Math.abs(x1 - x0);
-    const dy = Math.abs(y1 - y0);
-    const sx = x0 < x1 ? 1 : -1;
-    const sy = y0 < y1 ? 1 : -1;
-    let err = dx - dy;
-
-    let x = x0;
-    let y = y0;
-
-    while (true) {
-      if (x >= 0 && x < this.canvasW && y >= 0 && y < this.canvasH) {
-        this.previewCanvas[y][x] = { ...cell };
-      }
-
-      if (x === x1 && y === y1) break;
-
-      const e2 = 2 * err;
-      if (e2 > -dy) {
-        err -= dy;
-        x += sx;
-      }
-      if (e2 < dx) {
-        err += dx;
-        y += sy;
-      }
-    }
-  }
-
-  /**
-   * Draw preview box/rectangle
-   */
-  private previewBox(x0: number, y0: number, x1: number, y1: number, cell: Cell, filled: boolean): void {
-    if (!this.previewCanvas) return;
-
-    const minX = Math.max(0, Math.min(x0, x1));
-    const maxX = Math.min(this.canvasW - 1, Math.max(x0, x1));
-    const minY = Math.max(0, Math.min(y0, y1));
-    const maxY = Math.min(this.canvasH - 1, Math.max(y0, y1));
-
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        const isEdge = (y === minY || y === maxY || x === minX || x === maxX);
-        if (filled || isEdge) {
-          this.previewCanvas[y][x] = { ...cell };
-        }
-      }
-    }
-  }
-
-  /**
-   * Draw preview ellipse using midpoint algorithm
-   */
-  private previewEllipse(cx: number, cy: number, rx: number, ry: number, cell: Cell, filled: boolean): void {
-    if (!this.previewCanvas || rx === 0 || ry === 0) return;
-
-    if (filled) {
-      // Filled ellipse - draw horizontal lines
-      for (let y = -ry; y <= ry; y++) {
-        const py = cy + y;
-        if (py < 0 || py >= this.canvasH) continue;
-
-        // Calculate x extent at this y
-        const xExtent = Math.round(rx * Math.sqrt(1 - (y * y) / (ry * ry)));
-
-        for (let x = -xExtent; x <= xExtent; x++) {
-          const px = cx + x;
-          if (px >= 0 && px < this.canvasW) {
-            this.previewCanvas[py][px] = { ...cell };
-          }
-        }
-      }
+    if (this.currentTool === 'select') {
+      this.renderSelectionPreview();
     } else {
-      // Outline only - use parametric approach
-      const steps = Math.max(rx, ry) * 4;
-      for (let i = 0; i < steps; i++) {
-        const angle = (2 * Math.PI * i) / steps;
-        const px = Math.round(cx + rx * Math.cos(angle));
-        const py = Math.round(cy + ry * Math.sin(angle));
-
-        if (px >= 0 && px < this.canvasW && py >= 0 && py < this.canvasH) {
-          this.previewCanvas[py][px] = { ...cell };
-        }
-      }
+      this.syncFromCoreState();
     }
   }
 
   /**
-   * Draw preview selection rectangle (marching ants style)
+   * Render the marching-ants preview for an in-progress select-tool drag.
+   * Reads the in-progress rectangle from coreState.getDrawingStart/EndPoint()
+   * - the same values selectTool.onMove already stores - instead of keeping
+   * a second, separately-tracked copy of "what's being dragged".
    */
-  private previewSelection(x0: number, y0: number, x1: number, y1: number): void {
-    if (!this.previewCanvas) return;
-
-    const minX = Math.max(0, Math.min(x0, x1));
-    const maxX = Math.min(this.canvasW - 1, Math.max(x0, x1));
-    const minY = Math.max(0, Math.min(y0, y1));
-    const maxY = Math.min(this.canvasH - 1, Math.max(y0, y1));
-
-    // Use dotted pattern for selection preview
-    const selCell: Cell = { char: '·', fg: 15, bg: 0, blink: false };
-
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        const isEdge = (y === minY || y === maxY || x === minX || x === maxX);
-        if (isEdge) {
-          // Alternating pattern for "marching ants" effect
-          if ((x + y) % 2 === 0) {
-            this.previewCanvas[y][x] = selCell;
-          }
-        }
-      }
+  private renderSelectionPreview(): void {
+    if (!this.cellCanvas || !this.coreState) return;
+    const start = this.coreState.getDrawingStartPoint();
+    const end = this.coreState.getDrawingEndPoint();
+    if (!start || !end) {
+      this.syncCoreCanvasToDisplay();
+      return;
     }
 
-    // Store selection bounds for later use
-    this.selection = { x1: minX, y1: minY, x2: maxX, y2: maxY };
-  }
+    const minX = Math.max(0, Math.min(start.col, end.col));
+    const maxX = Math.min(this.canvasW - 1, Math.max(start.col, end.col));
+    const minY = Math.max(0, Math.min(start.line, end.line));
+    const maxY = Math.min(this.canvasH - 1, Math.max(start.line, end.line));
+    const marchCell: Cell = { char: '·', fg: 15, bg: 0, blink: false };
 
-  /**
-   * Render preview overlay on top of main canvas
-   */
-  private renderPreview(): void {
-    if (!this.previewCanvas || !this.cellCanvas) return;
-
-    // Compose main canvas + preview for display
-    // For now, directly render preview cells over main canvas display
-    // This is a simplified approach - a proper overlay would use blessed overlay
-
-    // Build display content combining main canvas and preview
     let content = '';
-    const colors = [
-      'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-      'gray', 'lightred', 'lightgreen', 'lightyellow', 'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
-    ];
-
     for (let y = 0; y < this.canvasH; y++) {
       for (let x = 0; x < this.canvasW; x++) {
-        // Check preview first
-        const preview = this.previewCanvas[y]?.[x];
-        const main = this.cellCanvas[y]?.[x];
-
-        let displayCell: Cell;
-        if (preview && preview.char && preview.char !== '') {
-          // Use preview cell with highlight
-          displayCell = preview;
-        } else if (main) {
-          displayCell = main;
-        } else {
-          displayCell = { char: ' ', fg: 7, bg: 0, blink: false };
-        }
-
-        const fgColor = colors[displayCell.fg] || 'white';
-        const bgColor = colors[displayCell.bg] || 'black';
-        const char = displayCell.char || ' ';
-
-        content += `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
+        const isEdge = x >= minX && x <= maxX && y >= minY && y <= maxY &&
+          (y === minY || y === maxY || x === minX || x === maxX);
+        const useMarch = isEdge && (x + y) % 2 === 0;
+        const cell = useMarch ? marchCell : (this.cellCanvas[y]?.[x] || { char: ' ', fg: 7, bg: 0 });
+        content += this.cellToDisplayTag(cell);
       }
       if (y < this.canvasH - 1) content += '\n';
     }
-
     this.drawCanvas.setContent(content);
-    this.screen?.render();
+    if (this.drawCursor) {
+      this.drawCursor.setFront();
+    }
   }
 
   /**
-   * Apply preview to main canvas (commit the shape)
+   * A two-click shape/select tool: first click starts it (onStart), second
+   * click commits it (onEnd). Shared by all six tools that follow this
+   * pattern (line/box/box-fill/ellipse/ellipse-fill/select) - dispatched
+   * through getToolHandler() so adding an 11th such tool needs no widget
+   * change here.
    */
-  private applyPreview(): void {
-    if (!this.previewCanvas || !this.cellCanvas) return;
+  private handleShapeToolClick(x: number, y: number): void {
+    if (!this.coreState) return;
+    const handler = getToolHandler(this.currentTool);
 
-    for (let y = 0; y < this.previewCanvas.length; y++) {
-      for (let x = 0; x < this.previewCanvas[y].length; x++) {
-        const preview = this.previewCanvas[y][x];
-        if (preview && preview.char && preview.char !== '') {
-          this.cellCanvas[y][x] = { ...preview };
+    this.syncToCoreState();
+    if (!this.isDrawing) {
+      this.isDrawing = true;
+      this.lastPreviewPos = null;
+      handler.onStart(this.coreState, x, y);
+    } else {
+      handler.onEnd(this.coreState, x, y);
+      if (this.currentTool === 'select') {
+        const bounds = getSelectionBounds(this.coreState);
+        if (bounds) {
+          this.selection = bounds;
         }
       }
+      this.isDrawing = false;
     }
-
-    this.clearPreview();
-    this.syncCoreCanvasToDisplay();
-    this.modified = true;
+    this.syncFromCoreState();
   }
 
   /**
-   * Handle tool-specific click behavior using core library
-   * Shape tools use preview system for real-time feedback
+   * Handle tool-specific click behavior using the shared library tools.
    */
   private handleToolClick(x: number, y: number): void {
-    if (!this.cellCanvas) return;
-
-    const cell: Cell = {
-      char: this.currentChar,
-      fg: this.currentFg,
-      bg: this.currentBg,
-      blink: false,
-    };
+    if (!this.cellCanvas || !this.coreState) return;
 
     switch (this.currentTool) {
       case 'draw':
@@ -3448,101 +3343,24 @@ BBS Door SDK v2.0{/gray-fg}
         break;
 
       case 'line':
-        // Line tool: first click sets start, second click applies preview
-        if (!this.isDrawing) {
-          this.isDrawing = true;
-          this.drawStartPos = { line: y, col: x };
-          this.initPreviewCanvas();
-        } else {
-          // Apply the preview to main canvas
-          this.applyPreview();
-          this.isDrawing = false;
-          this.drawStartPos = null;
-        }
-        break;
-
       case 'box':
-        // Box tool: first click sets start, second click applies preview
-        if (!this.isDrawing) {
-          this.isDrawing = true;
-          this.drawStartPos = { line: y, col: x };
-          this.initPreviewCanvas();
-        } else {
-          this.applyPreview();
-          this.isDrawing = false;
-          this.drawStartPos = null;
-        }
-        break;
-
       case 'box-fill':
-        // Filled box tool
-        if (!this.isDrawing) {
-          this.isDrawing = true;
-          this.drawStartPos = { line: y, col: x };
-          this.initPreviewCanvas();
-        } else {
-          this.applyPreview();
-          this.isDrawing = false;
-          this.drawStartPos = null;
-        }
-        break;
-
       case 'ellipse':
-        // Ellipse tool: first click sets center, second click applies preview
-        if (!this.isDrawing) {
-          this.isDrawing = true;
-          this.drawStartPos = { line: y, col: x };
-          this.initPreviewCanvas();
-        } else {
-          this.applyPreview();
-          this.isDrawing = false;
-          this.drawStartPos = null;
-        }
-        break;
-
       case 'ellipse-fill':
-        // Filled ellipse tool
-        if (!this.isDrawing) {
-          this.isDrawing = true;
-          this.drawStartPos = { line: y, col: x };
-          this.initPreviewCanvas();
-        } else {
-          this.applyPreview();
-          this.isDrawing = false;
-          this.drawStartPos = null;
-        }
+      case 'select':
+        this.handleShapeToolClick(x, y);
         break;
 
       case 'fill':
-        // Flood fill at clicked position
-        CoreCanvas.floodFill(this.cellCanvas, x, y, cell);
-        this.syncCoreCanvasToDisplay();
+        this.syncToCoreState();
+        fillTool.onStart(this.coreState, x, y);
+        this.syncFromCoreState();
         break;
 
       case 'pick':
-        // Pick color/char from clicked cell
-        const pickedCell = CoreCanvas.getCell(this.cellCanvas, x, y);
-        if (pickedCell) {
-          this.currentFg = pickedCell.fg;
-          this.currentBg = pickedCell.bg;
-          if (pickedCell.char !== ' ') {
-            this.currentChar = pickedCell.char;
-          }
-        }
-        break;
-
-      case 'select':
-        // Selection tool - first click starts, second click finalizes
-        if (!this.isDrawing) {
-          this.isDrawing = true;
-          this.drawStartPos = { line: y, col: x };
-          this.initPreviewCanvas();
-        } else {
-          // Finalize selection (preview already set selection bounds)
-          this.clearPreview();
-          this.isDrawing = false;
-          this.drawStartPos = null;
-        }
+        this.syncToCoreState();
+        pickTool.onStart(this.coreState, x, y);
+        this.syncFromCoreState();
         break;
     }
 
@@ -3556,29 +3374,16 @@ BBS Door SDK v2.0{/gray-fg}
   private syncCoreCanvasToDisplay(): void {
     if (!this.cellCanvas) return;
 
-    const colors = [
-      'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-      'gray', 'lightred', 'lightgreen', 'lightyellow', 'lightblue', 'lightmagenta', 'lightcyan', 'lightwhite',
-    ];
-
     // Render canvas with colors using blessed tags
-    // 1 character per cell, canvasW columns x canvasH rows
+    // 1 character per cell, canvasW columns x canvasH rows. A transparent
+    // cell (see cellToDisplayTag()) paints a dim guide glyph so an artist
+    // can see the through-holes - getCoreCanvas() still returns the cell's
+    // real char/fg/bg untouched; this is presentation-only.
     let content = '';
     for (let y = 0; y < this.canvasH; y++) {
       for (let x = 0; x < this.canvasW; x++) {
         const cell = this.cellCanvas[y]?.[x] || { char: ' ', fg: 7, bg: 0 };
-        if (cell.transparent) {
-          // Presentation only - a transparent cell has no real content to
-          // show, so paint a dim guide glyph so an artist can see the
-          // through-holes. getCoreCanvas() still returns the cell's real
-          // char/fg/bg untouched; this branch never mutates the cell.
-          content += `{gray-fg}{black-bg}.{/black-bg}{/gray-fg}`;
-          continue;
-        }
-        const fgColor = colors[cell.fg] || 'white';
-        const bgColor = colors[cell.bg] || 'black';
-        const char = cell.char || ' ';
-        content += `{${fgColor}-fg}{${bgColor}-bg}${char}{/${bgColor}-bg}{/${fgColor}-fg}`;
+        content += this.cellToDisplayTag(cell);
       }
       if (y < this.canvasH - 1) content += '\n';
     }
@@ -4211,7 +4016,22 @@ BBS Door SDK v2.0{/gray-fg}
     this.redoStack = [];
   }
 
+  /**
+   * Ctrl+Z / U. In draw mode, routes to the library's per-instance
+   * undoDrawing() (see task-4-report.md) instead of the text-mode
+   * this.undoStack, which draw-mode operations never populate.
+   */
   private undo(): void {
+    if (this.mode === 'draw') {
+      if (this.coreState && undoDrawing(this.coreState)) {
+        this.syncFromCoreState();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      return;
+    }
+
     if (this.undoStack.length > 1) {
       const current = this.undoStack.pop()!;
       this.redoStack.push(current);
@@ -4222,7 +4042,18 @@ BBS Door SDK v2.0{/gray-fg}
     }
   }
 
+  /** Ctrl+Y. Draw-mode counterpart of undo() above, via redoDrawing(). */
   private redo(): void {
+    if (this.mode === 'draw') {
+      if (this.coreState && redoDrawing(this.coreState)) {
+        this.syncFromCoreState();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      return;
+    }
+
     if (this.redoStack.length > 0) {
       const next = this.redoStack.pop()!;
       this.undoStack.push(next);

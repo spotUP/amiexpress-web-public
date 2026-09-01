@@ -33,6 +33,7 @@ interface UndoState {
 
 interface UndoData {
   undoStack: UndoState[];
+  redoStack: UndoState[];
   currentUndoChunk: Cell[][] | null;
 }
 
@@ -44,7 +45,7 @@ const undoDataByState = new WeakMap<EditorState, UndoData>();
 function getUndoData(state: EditorState): UndoData {
   let data = undoDataByState.get(state);
   if (!data) {
-    data = { undoStack: [], currentUndoChunk: null };
+    data = { undoStack: [], redoStack: [], currentUndoChunk: null };
     undoDataByState.set(state, data);
   }
   return data;
@@ -60,7 +61,10 @@ function peekUndoCanvas(state: EditorState): Cell[][] | undefined {
 }
 
 /**
- * Save current canvas state to undo stack
+ * Save current canvas state to undo stack. Starting a new edit - the first
+ * call of a chunk, or any non-chunked call - invalidates the redo stack,
+ * matching standard undo/redo semantics (and the widget's own pre-existing
+ * text-mode saveUndoState(), which does the same).
  */
 function saveUndoState(state: EditorState, chunked: boolean = false): void {
   const canvas = state.getCanvas();
@@ -72,6 +76,7 @@ function saveUndoState(state: EditorState, chunked: boolean = false): void {
     // For chunked operations (draw tool), save once at start
     if (!data.currentUndoChunk) {
       data.currentUndoChunk = Canvas.cloneCanvas(canvas);
+      data.redoStack = [];
     }
   } else {
     // For single operations, save immediately
@@ -84,6 +89,24 @@ function saveUndoState(state: EditorState, chunked: boolean = false): void {
     if (data.undoStack.length > 50) {
       data.undoStack.shift();
     }
+
+    data.redoStack = [];
+  }
+}
+
+/**
+ * Pop the top of the undo stack and apply it, discarding the entry (used by
+ * a shape tool's onCancel to abandon an in-progress drag: restore the
+ * pre-drag canvas AND remove the undo entry onStart pushed for it, so a
+ * cancelled shape doesn't leave a stale no-op entry on the stack). Distinct
+ * from peekUndoCanvas(), which onMove uses to redraw the live preview
+ * without popping - the drag isn't over yet.
+ */
+function restoreAndDiscardUndo(state: EditorState): void {
+  const data = getUndoData(state);
+  const snapshot = data.undoStack.pop();
+  if (snapshot) {
+    state.setCanvas(Canvas.cloneCanvas(snapshot.canvas));
   }
 }
 
@@ -107,14 +130,44 @@ function flushUndoChunk(state: EditorState): void {
 }
 
 /**
- * Restore previous canvas state (undo)
+ * Restore previous canvas state (undo). Pushes the canvas being replaced
+ * onto the redo stack first, so redoDrawing() can reapply it.
  */
 export function undoDrawing(state: EditorState): boolean {
   const data = getUndoData(state);
   const undoState = data.undoStack.pop();
   if (!undoState) return false;
 
+  const currentCanvas = state.getCanvas();
+  if (currentCanvas) {
+    data.redoStack.push({ canvas: Canvas.cloneCanvas(currentCanvas), timestamp: Date.now() });
+    if (data.redoStack.length > 50) {
+      data.redoStack.shift();
+    }
+  }
+
   state.setCanvas(undoState.canvas);
+  return true;
+}
+
+/**
+ * Reapply the most recently undone canvas state (redo). Pushes the canvas
+ * being replaced back onto the undo stack, symmetric with undoDrawing().
+ */
+export function redoDrawing(state: EditorState): boolean {
+  const data = getUndoData(state);
+  const redoState = data.redoStack.pop();
+  if (!redoState) return false;
+
+  const currentCanvas = state.getCanvas();
+  if (currentCanvas) {
+    data.undoStack.push({ canvas: Canvas.cloneCanvas(currentCanvas), timestamp: Date.now() });
+    if (data.undoStack.length > 50) {
+      data.undoStack.shift();
+    }
+  }
+
+  state.setCanvas(redoState.canvas);
   return true;
 }
 
@@ -127,7 +180,24 @@ export function undoDrawing(state: EditorState): boolean {
 export function clearUndoStack(state: EditorState): void {
   const data = getUndoData(state);
   data.undoStack = [];
+  data.redoStack = [];
   data.currentUndoChunk = null;
+}
+
+/**
+ * Paint an explicit cell into the canvas, recording undo the same way
+ * drawTool does (chunked groups repeated calls from one continuous
+ * drag/typed-run into a single undo entry, flushed via drawTool.onEnd/
+ * flushUndoChunk; non-chunked pushes one entry per call). The one thing none
+ * of the ten ToolHandlers can express is "paint a cell I computed myself" -
+ * half-block compositing, the RMB fg/bg-swap convention, arbitrary typed
+ * characters, and erase (which may write a `transparent` cell) all need this
+ * instead of drawTool's fixed state.getCurrentCell(). See
+ * thoughts/shared/research/2026-09-01_ansi-editor-internals.md section 5.
+ */
+export function paintCell(state: EditorState, x: number, y: number, cell: Cell, chunked: boolean): void {
+  saveUndoState(state, chunked);
+  state.setCanvasCell(x, y, cell);
 }
 
 // ===== TOOL: FREEHAND DRAW =====
@@ -209,11 +279,7 @@ export const lineTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    // Restore original canvas
-    const originalCanvas = peekUndoCanvas(state);
-    if (originalCanvas) {
-      state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-    }
+    restoreAndDiscardUndo(state);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -272,10 +338,7 @@ export const boxTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = peekUndoCanvas(state);
-    if (originalCanvas) {
-      state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-    }
+    restoreAndDiscardUndo(state);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -332,10 +395,7 @@ export const boxFillTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = peekUndoCanvas(state);
-    if (originalCanvas) {
-      state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-    }
+    restoreAndDiscardUndo(state);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -403,10 +463,7 @@ export const ellipseTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = peekUndoCanvas(state);
-    if (originalCanvas) {
-      state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-    }
+    restoreAndDiscardUndo(state);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -473,10 +530,7 @@ export const ellipseFillTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    const originalCanvas = peekUndoCanvas(state);
-    if (originalCanvas) {
-      state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-    }
+    restoreAndDiscardUndo(state);
 
     state.setDrawingPreview(null);
     state.setDrawingStartPoint(null);
@@ -506,12 +560,7 @@ export const fillTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    // Restore original canvas
-    const originalCanvas = peekUndoCanvas(state);
-    if (originalCanvas) {
-      state.setCanvas(Canvas.cloneCanvas(originalCanvas));
-      getUndoData(state).undoStack.pop(); // Remove the undo state we just restored
-    }
+    restoreAndDiscardUndo(state);
   }
 };
 
@@ -522,13 +571,17 @@ export const pickTool: ToolHandler = {
     const cell = state.getCanvasCell(x, y);
     if (!cell) return;
 
-    // Pick colors and character from cell
+    // Pick colors and background always; skip the character when the picked
+    // cell is blank so an eyedropper click on empty space doesn't blank out
+    // the current character. Does NOT switch tool afterward - unlike a
+    // momentary-eyedropper convention, this widget's other tools (fill,
+    // etc.) never auto-revert to 'draw' either, so pick shouldn't be the
+    // one exception. See task-4-report.md.
     state.setCurrentFg(cell.fg);
     state.setCurrentBg(cell.bg);
-    state.setCurrentChar(cell.char);
-
-    // Switch back to previous tool (draw tool by default)
-    state.setCurrentTool('draw');
+    if (cell.char !== ' ') {
+      state.setCurrentChar(cell.char);
+    }
   },
 
   onMove(state: EditorState, x: number, y: number) {
@@ -540,61 +593,79 @@ export const pickTool: ToolHandler = {
   },
 
   onCancel(state: EditorState) {
-    // Switch back to draw tool
-    state.setCurrentTool('draw');
+    // Pick never mutates the canvas or pushes undo state - nothing to undo.
   }
 };
 
 // ===== TOOL: BLOCK SELECTION =====
 
-interface SelectionState {
+/**
+ * Per-instance, not module-global: same rationale as UndoData above - two
+ * EditorState instances in the same process (e.g. multiple sprite-editor
+ * frames) must not see or clobber each other's in-progress selection.
+ */
+interface SelectionData {
   startPoint: Position | null;
   endPoint: Position | null;
+  bounds: { x1: number; y1: number; x2: number; y2: number } | null;
   selectedRegion: Cell[][] | null;
 }
 
-let selectionState: SelectionState = {
-  startPoint: null,
-  endPoint: null,
-  selectedRegion: null
-};
+const selectionDataByState = new WeakMap<EditorState, SelectionData>();
+
+function getSelectionData(state: EditorState): SelectionData {
+  let data = selectionDataByState.get(state);
+  if (!data) {
+    data = { startPoint: null, endPoint: null, bounds: null, selectedRegion: null };
+    selectionDataByState.set(state, data);
+  }
+  return data;
+}
 
 export const selectTool: ToolHandler = {
   onStart(state: EditorState, x: number, y: number) {
-    selectionState.startPoint = { line: y, col: x };
-    selectionState.endPoint = { line: y, col: x };
+    const data = getSelectionData(state);
+    data.startPoint = { line: y, col: x };
+    data.endPoint = { line: y, col: x };
+    data.bounds = null;
   },
 
   onMove(state: EditorState, x: number, y: number) {
-    selectionState.endPoint = { line: y, col: x };
+    const data = getSelectionData(state);
+    data.endPoint = { line: y, col: x };
 
     // Update selection visual (TODO: implement selection rendering)
-    state.setDrawingStartPoint(selectionState.startPoint);
-    state.setDrawingEndPoint(selectionState.endPoint);
+    state.setDrawingStartPoint(data.startPoint);
+    state.setDrawingEndPoint(data.endPoint);
   },
 
   onEnd(state: EditorState, x: number, y: number) {
-    if (!selectionState.startPoint) return;
+    const data = getSelectionData(state);
+    if (!data.startPoint) return;
 
     const canvas = state.getCanvas();
     if (!canvas) return;
 
     // Extract selected region
-    const x1 = Math.min(selectionState.startPoint.col, x);
-    const y1 = Math.min(selectionState.startPoint.line, y);
-    const x2 = Math.max(selectionState.startPoint.col, x);
-    const y2 = Math.max(selectionState.startPoint.line, y);
+    const x1 = Math.min(data.startPoint.col, x);
+    const y1 = Math.min(data.startPoint.line, y);
+    const x2 = Math.max(data.startPoint.col, x);
+    const y2 = Math.max(data.startPoint.line, y);
+
+    data.bounds = { x1, y1, x2, y2 };
 
     const width = x2 - x1 + 1;
     const height = y2 - y1 + 1;
 
-    selectionState.selectedRegion = Canvas.extractRegion(canvas, x1, y1, width, height);
+    data.selectedRegion = Canvas.extractRegion(canvas, x1, y1, width, height);
   },
 
   onCancel(state: EditorState) {
-    selectionState.startPoint = null;
-    selectionState.endPoint = null;
-    selectionState.selectedRegion = null;
+    const data = getSelectionData(state);
+    data.startPoint = null;
+    data.endPoint = null;
+    data.bounds = null;
+    data.selectedRegion = null;
 
     state.setDrawingStartPoint(null);
     state.setDrawingEndPoint(null);
@@ -602,28 +673,41 @@ export const selectTool: ToolHandler = {
 };
 
 /**
- * Get current selection
+ * The rectangle a select-tool drag committed on its last onEnd, or null if
+ * nothing has been selected yet (or the selection was cleared/cancelled).
+ * Callers that need "what did the user select" (e.g. the blessed widget's
+ * copy/cut/paste/flip operations, which work on an {x1,y1,x2,y2} rectangle,
+ * not the extracted Cell[][] region selectTool also keeps) read this instead
+ * of re-deriving it from getDrawingStartPoint()/getDrawingEndPoint().
  */
-export function getSelection(): SelectionState {
-  return selectionState;
+export function getSelectionBounds(state: EditorState): { x1: number; y1: number; x2: number; y2: number } | null {
+  return getSelectionData(state).bounds;
 }
 
 /**
- * Clear selection
+ * Get current selection for one editor instance.
  */
-export function clearSelection(): void {
-  selectionState = {
-    startPoint: null,
-    endPoint: null,
-    selectedRegion: null
-  };
+export function getSelection(state: EditorState): SelectionData {
+  return getSelectionData(state);
 }
 
 /**
- * Copy selected region
+ * Clear selection for one editor instance.
  */
-export function copySelection(): Cell[][] | null {
-  return selectionState.selectedRegion ? Canvas.cloneCanvas(selectionState.selectedRegion) : null;
+export function clearSelection(state: EditorState): void {
+  const data = getSelectionData(state);
+  data.startPoint = null;
+  data.endPoint = null;
+  data.bounds = null;
+  data.selectedRegion = null;
+}
+
+/**
+ * Copy the selected region for one editor instance.
+ */
+export function copySelection(state: EditorState): Cell[][] | null {
+  const region = getSelectionData(state).selectedRegion;
+  return region ? Canvas.cloneCanvas(region) : null;
 }
 
 /**
