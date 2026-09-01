@@ -394,3 +394,33 @@ describe('the (F)rom prompt flags from the file onwards', () => {
     expect(s.subState).toBe('display_menu');
   });
 });
+
+/**
+ * (F)rom must read the conference the user is IN.
+ *
+ * flagFrom resolved its conference with `session.currentConf || 1`, so
+ * conference 0 became conference 1 - a real conference with a real file
+ * list. Flagging "from" a file in [0:General] scanned conference 1's
+ * listing and would happily flag files from it. express.e uses
+ * currentConfDir with no fallback (express.e:12568), and the file list
+ * passes session.currentConf straight through.
+ */
+describe('(F)rom reads the conference the user is in', () => {
+  it('does not fall through to conference 1 from conference 0', async () => {
+    const { AlterFlagsHandler } = require('../../src/handlers/operations/alter-flags.handler');
+    const out: string[] = [];
+    const socket: any = {
+      emit: (e: string, d: any) => { if (e === 'ansi-output') out.push(String(d)); },
+    };
+    const flagged: string[] = [];
+    const manager: any = { addFlag: (n: string) => { flagged.push(n); return true; }, save: async () => {} };
+    const session: any = { user: { slotNumber: 9 }, currentConf: 0 };
+
+    // AE-KEY.LHA is the first entry of CONFERENCE 1's listing. Asking for it
+    // from conference 0 must find nothing, not flag conference 1's files.
+    await (AlterFlagsHandler as any).flagFrom(socket, session, 'AE-KEY.LHA', manager);
+
+    expect(flagged).toEqual([]);
+    expect(out.join('')).toContain('No file areas in this conference');
+  });
+});
