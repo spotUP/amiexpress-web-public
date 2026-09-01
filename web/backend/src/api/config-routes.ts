@@ -1875,13 +1875,45 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
       const diskUserMatch = id.match(/^user-(\d+)$/);
       if (diskUserMatch) {
         const slotNumber = parseInt(diskUserMatch[1], 10);
+
+        // Who is in the slot, before it is zeroed: the database row is found
+        // by name, and afterwards there is no name to find.
+        const onDisk = userFileManager.readUserBySlot(slotNumber);
+
         userFileManager.deleteUserSlot(slotNumber);
+
+        // And out of the database, which is the store that decides whether
+        // someone can log in. Deleting the slot alone left the row behind,
+        // and db.authenticateUser reads the row - so a deleted account went
+        // on logging in, with no record of it on the board's own user list.
+        if (onDisk?.username) {
+          try {
+            const dbUser = await database.getUserByUsername(onDisk.username);
+            if (dbUser) await database.deleteUser(dbUser.id);
+          } catch (error) {
+            return handleError(res, error);
+          }
+        }
+
         sendResponse(res, { deleted: true }, 'User deleted successfully');
         return;
       }
 
-      // Otherwise, it's a database UUID - delete from database
+      // Otherwise, it's a database UUID. Take the disk record with it when the
+      // row names a slot: a user.data record nothing deleted keeps the account
+      // on the board's own lists, and the next account created lands in the
+      // slot after it rather than reusing this one.
+      const dbUser = await database.getUserById(id);
       await database.deleteUser(id);
+      const slot = (dbUser as { slotNumber?: number; slotnumber?: number } | null)?.slotNumber
+        ?? (dbUser as { slotnumber?: number } | null)?.slotnumber;
+      if (slot && slot >= 1) {
+        try {
+          userFileManager.deleteUserSlot(slot);
+        } catch (error) {
+          console.warn(`[Users] database row ${id} deleted; its disk slot ${slot} did not clear:`, error);
+        }
+      }
       sendResponse(res, { deleted: true }, 'User deleted successfully');
     } catch (error) {
       handleError(res, error);
