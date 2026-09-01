@@ -23,5 +23,8 @@ export type { Sprite, SpriteAnimation } from './sprite';
 
 export { loadSpriteSheet } from './load';
 
+export { cameraView, cropBuffer, offScreenMarkers } from './camera';
+export type { Rect, CameraOptions, OffScreenMarker } from './camera';
+
 export { compilePixels, decompilePixels } from './halfblock';
 export type { PixelGrid } from './halfblock';
