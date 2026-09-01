@@ -1,5 +1,6 @@
 {
   "name": "sprite-editor",
+  "category": "utility",
   "version": "1.0.0",
   "description": "Sprite studio - browse, preview and (2b) edit door sprite sheets",
   "main": "dist/index.js",

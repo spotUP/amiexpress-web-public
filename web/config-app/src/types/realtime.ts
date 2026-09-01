@@ -45,7 +45,7 @@ export interface TransferEvent extends BBSEventBase {
 
 export interface DoorActivityEvent extends BBSEventBase {
   type: 'door_activity';
-  data?: { doorName?: string; action?: 'entered' | 'exited' };
+  data?: { doorName?: string; action?: 'entered' | 'exited'; category?: string | null };
 }
 
 export interface CustomDoorEvent extends BBSEventBase {

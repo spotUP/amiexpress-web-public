@@ -26,6 +26,7 @@ import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.uti
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
+import { doorCategoryAt } from '../doors/door-category';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
@@ -1697,6 +1698,8 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
       nodeId: nodeId,
       doorName: door.name,
       action: 'entered',
+      // So the feed can say a game was PLAYED and not say it of DOORMAN.
+      category: doorCategoryAt(door.path),
       timestamp: Date.now()
     });
 
@@ -1775,6 +1778,7 @@ console.error(`Unknown door type: ${door.type}`);
       nodeId: nodeId,
       doorName: door.name,
       action: 'exited',
+      category: doorCategoryAt(door.path),
       timestamp: Date.now()
     });
 

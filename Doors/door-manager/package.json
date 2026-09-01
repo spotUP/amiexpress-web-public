@@ -1,5 +1,6 @@
 {
   "name": "door-manager",
+  "category": "utility",
   "version": "2.0.0",
   "description": "Neo-blessed door management tool for AmiExpress BBS",
   "bbsCommand": "DMAN",

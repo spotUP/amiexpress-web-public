@@ -1,5 +1,6 @@
 {
   "name": "bug-tracker",
+  "category": "utility",
   "version": "1.0.0",
   "description": "Comprehensive bug tracking system for AmiExpress BBS",
   "main": "dist/index.js",

@@ -1,5 +1,6 @@
 {
   "name": "super-qix",
+  "category": "game",
   "version": "1.0.0",
   "description": "Super Qix arcade game - 1987 Taito classic",
   "main": "dist/index.js",

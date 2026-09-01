@@ -87,6 +87,8 @@ export interface DoorActivityEvent {
   nodeId: number;
   doorName: string;
   action: 'entered' | 'exited';
+  /** What KIND of door - 'game', 'utility', ... See doors/door-category.ts. */
+  category?: string | null;
   timestamp: number;
 }
 
@@ -189,7 +191,8 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
       timestamp: data.timestamp,
       data: {
         doorName: data.doorName,
-        action: data.action
+        action: data.action,
+        category: data.category ?? null
       }
     });
   }

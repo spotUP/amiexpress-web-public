@@ -1,5 +1,6 @@
 {
   "name": "galaga",
+  "category": "game",
   "version": "1.0.0",
   "description": "Galaga arcade game - 1981 Namco classic space shooter",
   "main": "dist/index.js",

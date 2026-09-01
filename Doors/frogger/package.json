@@ -1,5 +1,6 @@
 {
   "name": "frogger",
+  "category": "game",
   "version": "1.0.0",
   "description": "Frogger arcade game - 1981 Konami classic",
   "main": "dist/index.js",

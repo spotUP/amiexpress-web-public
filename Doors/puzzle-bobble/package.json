@@ -1,5 +1,6 @@
 {
   "name": "puzzle-bobble-door",
+  "category": "game",
   "version": "1.0.0",
   "description": "Puzzle Bobble (Bust-A-Move) - 1994 Taito bubble-matching puzzle game",
   "main": "dist/index.js",

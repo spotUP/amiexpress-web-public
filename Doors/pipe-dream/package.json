@@ -1,5 +1,6 @@
 {
   "name": "pipe-dream-door",
+  "category": "game",
   "version": "1.0.0",
   "description": "Pipe Dream - 1989 LucasArts puzzle game",
   "main": "dist/index.js",

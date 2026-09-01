@@ -1,5 +1,6 @@
 {
   "name": "joust-door",
+  "category": "game",
   "version": "1.0.0",
   "description": "Joust - 1982 Williams Electronics arcade jousting game",
   "main": "dist/index.js",

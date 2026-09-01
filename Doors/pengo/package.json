@@ -1,5 +1,6 @@
 {
   "name": "pengo",
+  "category": "game",
   "version": "1.0.0",
   "description": "Pengo arcade game - 1982 Sega classic ice block puzzle",
   "main": "dist/index.js",

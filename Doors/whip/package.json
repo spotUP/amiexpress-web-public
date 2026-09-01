@@ -1,5 +1,6 @@
 {
   "name": "whip",
+  "category": "game",
   "version": "1.0.0",
   "description": "Demo Scene Project Management Door",
   "main": "dist/index.js",

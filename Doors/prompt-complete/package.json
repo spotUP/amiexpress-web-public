@@ -1,5 +1,6 @@
 {
   "name": "prompt-complete",
+  "category": "utility",
   "version": "1.0.0",
   "description": "Ghost-text completion for the BBS main prompt",
   "main": "dist/index.js",

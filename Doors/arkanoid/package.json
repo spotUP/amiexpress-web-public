@@ -1,5 +1,6 @@
 {
   "name": "arkanoid",
+  "category": "game",
   "version": "2.0.0",
   "description": "Arkanoid with Web Audio sounds and music - Hybrid Door",
   "bbsCommand": "ARKANOID",

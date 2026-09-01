@@ -134,3 +134,15 @@ export function describeTransfer(
 
   return `${verb} ${name}${where}${size}`;
 }
+
+/**
+ * Is this a door someone PLAYS?
+ *
+ * Mirrors `normaliseCategory` in web/backend/src/doors/door-category.ts. The
+ * declared values are inconsistent by hand - "Games", "game", "utility",
+ * "Utilities" - because until now nothing read them.
+ */
+export function isGameCategory(category: string | null | undefined): boolean {
+  const value = String(category ?? '').trim().toLowerCase();
+  return value === 'game' || value === 'games';
+}

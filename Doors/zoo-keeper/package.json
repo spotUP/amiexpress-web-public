@@ -1,5 +1,6 @@
 {
   "name": "zoo-keeper",
+  "category": "game",
   "version": "1.0.0",
   "description": "Zoo Keeper arcade game - 1982 Taito classic",
   "main": "dist/index.js",

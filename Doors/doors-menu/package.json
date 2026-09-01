@@ -1,5 +1,6 @@
 {
   "name": "doors-menu",
+  "category": "utility",
   "version": "1.0.0",
   "description": "Interactive door selection menu with arrow key navigation",
   "main": "dist/index.js",

@@ -28,7 +28,7 @@ import { formatBytes, formatClockTime, formatRelativeTime } from '../lib/format'
 import { StatusDot } from '../components/ui/StatusDot';
 import { EmptyState } from '../components/ui/states';
 import type { BBSEvent, BBSEventType } from '../types/realtime';
-import { describeCommand, describeDoorActivity, describeTransfer } from './activity-phrasing';
+import { describeCommand, describeDoorActivity, describeTransfer, isGameCategory } from './activity-phrasing';
 import type { StatusTone } from '../types/ui';
 
 /** A busy board fills this in a few minutes; older entries fall off the end. */
@@ -121,9 +121,13 @@ function describe(
       );
     }
     case 'door_activity':
-      // isGame is false until a door's category reaches this event: calling
-      // DOORMAN or LINKWALL "a game" would read worse than the shorthand did.
-      return describeDoorActivity(event.data?.doorName, event.data?.action, false);
+      // A door the board knows to be a game is played; anything else - and
+      // any 68K door, which has no package.json to declare one - is opened.
+      return describeDoorActivity(
+        event.data?.doorName,
+        event.data?.action,
+        isGameCategory(event.data?.category),
+      );
     case 'custom_door_event':
       return event.data?.message ?? event.data?.eventType ?? '';
     case 'command':

@@ -1,5 +1,6 @@
 {
   "name": "donkey-kong-door",
+  "category": "game",
   "version": "1.0.0",
   "description": "Donkey Kong - 1981 Nintendo arcade classic",
   "main": "dist/index.js",

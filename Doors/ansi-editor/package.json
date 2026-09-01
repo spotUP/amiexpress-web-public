@@ -1,5 +1,6 @@
 {
   "name": "ansi-editor",
+  "category": "utility",
   "version": "1.0.0",
   "description": "Professional ANSI Art Editor with file management",
   "main": "dist/index.js",

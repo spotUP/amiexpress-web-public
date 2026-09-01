@@ -1,5 +1,6 @@
 {
   "name": "@amiexpress/rip-browser",
+  "category": "utility",
   "version": "1.0.0",
   "description": "RIP Graphics Browser for AmiExpress-Web",
   "bbsCommand": "RIPBROWSER",

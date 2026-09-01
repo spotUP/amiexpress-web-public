@@ -10,10 +10,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   describeCommand,
   describeDoorActivity,
   describeTransfer,
+  isGameCategory,
 } from '../pages/activity-phrasing';
 
 describe('a command', () => {
@@ -91,5 +94,30 @@ describe('a transfer', () => {
   it('drops the size when it is not known', () => {
     expect(describeTransfer('upload', 'Tetris.ans', undefined, 'Amiga Elite'))
       .toBe('Uploaded Tetris.ans to Amiga Elite');
+  });
+});
+
+describe('the category behind the wording', () => {
+  it('reads a game however the door spelled it', () => {
+    expect(isGameCategory('Games')).toBe(true);
+    expect(isGameCategory('game')).toBe(true);
+  });
+
+  it('does not call a tool, or an unlabelled 68K door, a game', () => {
+    expect(isGameCategory('utility')).toBe(false);
+    expect(isGameCategory('Communication')).toBe(false);
+    expect(isGameCategory(null)).toBe(false);
+    expect(isGameCategory(undefined)).toBe(false);
+  });
+
+  // The helper is only worth anything if the page hands it the real category.
+  // It was passing a hardcoded false while the field did not exist yet.
+  it('is taken from the event by the page', () => {
+    const page = readFileSync(
+      resolve(__dirname, '..', 'pages', 'ActivityPage.tsx'),
+      'utf8',
+    );
+
+    expect(page).toContain('isGameCategory(event.data?.category)');
   });
 });

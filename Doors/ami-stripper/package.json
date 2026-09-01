@@ -1,5 +1,6 @@
 {
   "name": "ami-stripper",
+  "category": "utility",
   "version": "1.0.0",
   "description": "Interactive Amiga archive ad-stripper door",
   "main": "dist/index.js",
