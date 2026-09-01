@@ -108,6 +108,11 @@ These are the default bindings. Rebind anything in Settings.
   three opponents in full at 120 columns and five at 160. Human players
   get the full boards first when not everyone fits.
 
+  A BATTLE ROYALE is 99 players and no width draws 98 boards, so a wide
+  window cascades instead: the few closest to killing you get playfields,
+  the next handful get danger bars, and the rest are a ranked list of who
+  is still standing.
+
 {bold}Advanced:{/bold}
   {white-fg}IRS (Initial Rotation System){/white-fg}
     Hold a rotation key while a piece spawns to pre-rotate it.

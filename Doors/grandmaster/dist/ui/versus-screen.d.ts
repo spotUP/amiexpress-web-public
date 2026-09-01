@@ -41,6 +41,8 @@ export declare class VersusScreen {
     private opponentInfoBox;
     private minimapPanel;
     private minimapContainer;
+    private listPanel;
+    private listContainer;
     private garbageIndicator;
     private statsBox;
     private lastLayoutKey;

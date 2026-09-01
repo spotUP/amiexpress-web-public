@@ -74,6 +74,14 @@ export declare class MinimapRenderer {
      * get far less, so how many bars fit is arithmetic rather than a constant.
      */
     renderBuckets(container: any, opponents: OpponentState[], innerWidth?: number): void;
+    /**
+     * Render opponents as the ranked leaderboard, whatever their number.
+     *
+     * renderBuckets picks bars or list by how many there are; the cascade has
+     * already made that choice for each section (ui/versus-layout.ts), so the
+     * list section must not turn into bars when the field thins out.
+     */
+    renderList(container: any, opponents: OpponentState[], innerWidth?: number): void;
     /** Rows the stack occupies (0 = empty board, board.height = topped out). */
     private stackHeight;
     /** Color string based on fill fraction (0–1). */

@@ -71,6 +71,8 @@ export class VersusScreen {
   private opponentInfoBox: any;    // 1v1 VS info / attack panel
   private minimapPanel: any;       // battle-royale minimap panel
   private minimapContainer: any;   // inner container for minimap widgets
+  private listPanel: any;          // the leaderboard, beside the bars
+  private listContainer: any;      // its inner container
   private garbageIndicator: any;
   private statsBox: any;
   private lastLayoutKey: string = '';  // suppresses widget churn between frames
@@ -372,6 +374,38 @@ export class VersusScreen {
       clickable: false,
     });
 
+    // ── The leaderboard, for the opponents past the bars ─────────────────
+    // Only ever shown in the cascade (see ui/versus-layout.ts): boards for
+    // the closest few, bars for the next handful, and this for the rest of
+    // a field that no width could draw in full.
+    this.listPanel = createBox({
+      parent: this.screen,
+      top: 1,
+      left: LEFT_PANEL_COLS,
+      width: 22,
+      height: 22,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      label: ' Standings ',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+    this.listContainer = createBox({
+      parent: this.listPanel,
+      top: 1,
+      left: 1,
+      width: 20,
+      height: 20,
+      border: 'none' as any,
+      tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+    this.listPanel.hide();
+
 
     // Player stats — bottom row
     this.statsBox = createBox({
@@ -461,19 +495,27 @@ export class VersusScreen {
       this.opponentInfoBox.hide();
     }
 
-    if (layout.minimaps > 0) {
-      const left = boardLeft(layout.fullBoards);
-      const panelWidth = Math.max(3, width - left);
-      this.minimapPanel.left = left;
-      this.minimapPanel.width = panelWidth;
-      this.minimapContainer.width = panelWidth - 2;
+    if (layout.minimaps > 0 && layout.minimapWidth > 0) {
+      this.minimapPanel.left = layout.minimapLeft;
+      this.minimapPanel.width = layout.minimapWidth;
+      this.minimapContainer.width = Math.max(1, layout.minimapWidth - 2);
       // Say how many are in there. A battle royale fields 98 CPUs and the
-      // list shows the eighteen most dangerous; without the count, the
-      // other eighty are simply missing with nothing to say so.
+      // list shows the most dangerous of them; without the count, the rest
+      // are simply missing with nothing to say so.
       this.minimapPanel.setLabel?.(` Opponents (${layout.minimaps}) `);
       this.minimapPanel.show();
     } else {
       this.minimapPanel.hide();
+    }
+
+    if (layout.listed > 0 && layout.listWidth > 0) {
+      this.listPanel.left = layout.listLeft;
+      this.listPanel.width = layout.listWidth;
+      this.listContainer.width = Math.max(1, layout.listWidth - 2);
+      this.listPanel.setLabel?.(` Standings (${layout.listed}) `);
+      this.listPanel.show();
+    } else {
+      this.listPanel.hide();
     }
   }
 
@@ -1126,10 +1168,18 @@ export class VersusScreen {
     const layout = opponents.length > 0
       ? versusLayout(this.screen.width, humans.length, bots.length)
       : versusLayout(this.screen.width, 1, 0);
-    // Humans first: when only some fit, they are the ones with the boards.
-    const ordered = [...humans, ...bots];
+    // Humans first, then the CPUs by danger: when only some of the field
+    // gets a board, the ones that get it are the people and then whoever is
+    // closest to killing you. `rank` is assigned at sample time, 1 being the
+    // tallest stack (see run()'s AI sampling).
+    const byRank = (a: OpponentState, b: OpponentState): number =>
+      (a.rank ?? 99) - (b.rank ?? 99);
+    const ordered = [...humans.sort(byRank), ...bots.sort(byRank)];
     const onBoards = ordered.slice(0, layout.fullBoards);
-    const onGrid = ordered.slice(layout.fullBoards);
+    const onGrid = ordered.slice(layout.fullBoards, layout.fullBoards + layout.minimaps);
+    const onList = layout.listed > 0
+      ? ordered.slice(layout.fullBoards + layout.minimaps)
+      : [];
     const attackPending = this.attackManager.getPendingGarbage();
 
     this.applyVersusLayout(layout);
@@ -1144,6 +1194,12 @@ export class VersusScreen {
     if (onGrid.length > 0) {
       this.minimapRenderer.renderBuckets(
         this.minimapContainer, onGrid, this.minimapContainer.width,
+      );
+    }
+
+    if (onList.length > 0) {
+      this.minimapRenderer.renderList(
+        this.listContainer, onList, this.listContainer.width,
       );
     }
 

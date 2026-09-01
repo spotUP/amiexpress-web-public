@@ -72,6 +72,21 @@ class MinimapRenderer {
         container.setContent(content);
         container.screen?.render();
     }
+    /**
+     * Render opponents as the ranked leaderboard, whatever their number.
+     *
+     * renderBuckets picks bars or list by how many there are; the cascade has
+     * already made that choice for each section (ui/versus-layout.ts), so the
+     * list section must not turn into bars when the field thins out.
+     */
+    renderList(container, opponents, innerWidth) {
+        const width = innerWidth ?? (typeof container?.width === 'number' ? container.width : DEFAULT_PANEL_W);
+        const height = typeof container?.height === 'number' ? container.height : DEFAULT_PANEL_H;
+        const alive = opponents.filter(o => o.alive);
+        const sorted = [...alive].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+        container.setContent(this.buildTextList(sorted, width, height));
+        container.screen?.render();
+    }
     // ── private ────────────────────────────────────────────────────────────────
     /** Rows the stack occupies (0 = empty board, board.height = topped out). */
     stackHeight(board) {

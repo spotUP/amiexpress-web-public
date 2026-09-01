@@ -17,17 +17,54 @@ export declare const LEFT_PANEL_COLS = 37;
 export declare const OPPONENT_BOARD_COLS = 22;
 /** The 1v1 VS/attack panel beside a single opponent. */
 export declare const VS_INFO_COLS = 21;
+/**
+ * The cascade: boards, then bars, then a leaderboard.
+ *
+ * A 99-player battle royale can never be all boards - 98 of them is 2,156
+ * columns - and a leaderboard alone throws away a wide terminal. "top few
+ * as boards, some minimaps and the rest as list" (2026-09-01), which is
+ * also how the field reads: the two closest to killing you get playfields,
+ * the next handful get danger bars, and the rest are a ranked list.
+ *
+ * It is a WIDE-terminal shape by arithmetic rather than by rule: all three
+ * sections need 37 + 22 + 14 + 22 columns before the first board is worth
+ * drawing, which no 80-column caller has. At 80 the screen behaves exactly
+ * as it did.
+ */
+export declare const CASCADE_MAX_BOARDS = 3;
+/** A bucket bar and its separator - the minimap grid's own geometry. */
+export declare const BUCKET_SLOT_COLS = 4;
+/** Bars are not worth a section below three of them, borders included. */
+export declare const MIN_BUCKETS_COLS: number;
+/** One leaderboard column: rank, name, level, height, plus borders. */
+export declare const LIST_COLUMN_COLS = 20;
+export declare const MIN_LIST_COLS: number;
+/** Bars stop being readable past this many, however wide the panel is. */
+export declare const MAX_BUCKETS = 10;
+/**
+ * A field this size cannot be shown in full at any width, so the cascade
+ * is honest about ranking it rather than pretending to be the whole field.
+ */
+export declare const CASCADE_MIN_OPPONENTS = 6;
 export interface VersusLayout {
     /** How many opponents to draw as full boards. Zero means the minimap grid. */
     fullBoards: number;
     /** How many go to the minimap grid instead. */
     minimaps: number;
+    /** How many go to the leaderboard, after the boards and the bars. */
+    listed: number;
     /** Whether the 1v1 VS/attack panel fits beside them. */
     showInfo: boolean;
     /** Where the opponent boards start, in columns. */
     left: number;
     /** Columns each full board occupies. */
     boardWidth: number;
+    /** Where the bucket-bar panel goes, and how wide. Zero width means none. */
+    minimapLeft: number;
+    minimapWidth: number;
+    /** Where the leaderboard goes, and how wide. Zero width means none. */
+    listLeft: number;
+    listWidth: number;
 }
 /**
  * Humans get the boards; bots get miniatures if that is what it takes.

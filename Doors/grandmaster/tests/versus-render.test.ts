@@ -70,6 +70,7 @@ function harness(width: number, opponents: Opp[]) {
     boards: (): any[] => vs.opponentBoards.filter((b: any) => !b.hidden && !b.destroyed),
     info: vs.opponentInfoBox,
     minimap: vs.minimapPanel,
+    list: vs.listPanel,
     grid: (): string => String(vs.minimapContainer.getContent?.() ?? ''),
     destroy: () => screen.destroy(),
   };
@@ -260,5 +261,67 @@ export async function goingBackToEightyPutsTheGridBack(): Promise<void> {
     assert.strictEqual(h.boards().length, 0, 'the boards do not fit any more');
     assert.strictEqual(h.minimap.hidden, false);
     assert.strictEqual(h.minimap.width, 80 - LEFT_PANEL_COLS, 'and the grid takes the room back');
+  } finally { h.destroy(); }
+}
+
+/**
+ * The cascade, as the screen actually builds it.
+ *
+ * Three widgets, three groups, and every opponent in exactly one of them.
+ */
+/**
+ * A 98-strong field with names that stay unique when the bucket bars cut
+ * them to three characters - BT1 and BT10 are the same bar, and that is a
+ * property of the display, not of the grouping under test.
+ */
+function bigField(): Opp[] {
+  return Array.from({ length: 98 }, (_, i) => ({
+    id: `b${i}`, name: `A${String(i + 1).padStart(2, '0')}`, isBot: true,
+  }));
+}
+
+export async function aBattleRoyaleGetsBoardsBarsAndAList(): Promise<void> {
+  const field = bigField();
+  const h = harness(160, field);
+  try {
+    const boards = h.boards();
+    assert.strictEqual(boards.length, 3, 'the top few get playfields');
+    assert.strictEqual(h.minimap.hidden, false, 'the next handful get bars');
+    assert.strictEqual(h.list.hidden, false, 'and the rest a leaderboard');
+
+    // Left to right, in that order, with nothing overlapping.
+    assert.strictEqual(h.minimap.left, 37 + 3 * OPPONENT_BOARD_COLS);
+    assert.strictEqual(h.list.left, h.minimap.left + h.minimap.width);
+    assert.ok(h.list.left + h.list.width <= 160);
+
+    // And the panels say how many they hold, because the field is bigger
+    // than any of them.
+    assert.ok(String(h.minimap.getLabel?.() ?? '').includes('('));
+    assert.ok(String(h.list.getLabel?.() ?? '').includes('('));
+  } finally { h.destroy(); }
+}
+
+export async function nobodyIsInTwoPlacesAtOnce(): Promise<void> {
+  const field = bigField();
+  const h = harness(160, field);
+  try {
+    const onBoards = h.boards().map((b: any) => String(b.getLabel?.() ?? '').trim());
+    const inGrid = h.grid();
+    for (const name of onBoards) {
+      assert.ok(name.length > 0);
+      assert.ok(!inGrid.includes(name),
+        `${name} has a board and must not also be a bar`);
+    }
+  } finally { h.destroy(); }
+}
+
+export async function eightyColumnsKeepsTheSingleGrid(): Promise<void> {
+  const field = bigField();
+  const h = harness(80, field);
+  try {
+    assert.strictEqual(h.boards().length, 0);
+    assert.strictEqual(h.minimap.hidden, false);
+    assert.strictEqual(h.list.hidden, true, 'no room for a third section at 80');
+    assert.strictEqual(h.minimap.width, 80 - LEFT_PANEL_COLS);
   } finally { h.destroy(); }
 }
