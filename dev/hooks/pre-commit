@@ -59,6 +59,19 @@ EXEMPT_FILES=(
     # panel geometry / new-user time limit). Same reasoning as above.
     "sdk/engines/ui/blessed/widgets/dockable-panel.ts"            # Dockable panel widget (2900+ lines)
     "web/backend/src/api/config-routes.ts"                        # Sysop config API surface (2000+ lines)
+
+    # Already 4196 lines before the 2026-09-01 ANSIEditor convergence, which
+    # made it SMALLER (the ~300-line preview subsystem was deleted and the
+    # forked tools replaced by the shared library). Splitting it is a real
+    # refactor, not something to fold into a bug fix.
+    "sdk/engines/ui/blessed/widgets/ansi-editor.ts"               # ANSI/sprite editor widget (4200+ lines)
+
+    # A widget SHOWCASE: forty independent demos in one closure, 3,700 lines,
+    # every one of them already there before the theme work reached this door.
+    # The five chrome widgets at the top are what needed touching, and the
+    # extraction the cap is really asking for is hours of mechanical work on a
+    # door with no tests. Exempt on the same terms as the two above.
+    "Doors/neo-blessed-showcase/app.ts"                           # Widget showcase door (3,700+ lines)
 )
 
 # Convert array to grep pattern
