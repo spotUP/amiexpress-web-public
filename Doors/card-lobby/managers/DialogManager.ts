@@ -130,15 +130,32 @@ export class DialogManager {
   }
 
   async showBulletinsWindow(session: DoorSession): Promise<void> {
-    const entries = LOBBY_BULLETINS.map((entry) => `#${entry.number} ${entry.title}`);
+    // Only offer bulletins that are actually on the board. The list was
+    // built from a hardcoded table, so a board with no bulletins - which
+    // is every board until the weekly one is first written - offered one
+    // anyway and answered "Bulletin not found." (sysop, 2026-09-02:
+    // "there is no bulletin posted either so it cant display it").
+    const available: Array<{ entry: typeof LOBBY_BULLETINS[number]; content: string }> = [];
+    for (const entry of LOBBY_BULLETINS) {
+      const content = await this.readBulletin(entry.number, session);
+      if (content && content.trim()) available.push({ entry, content });
+    }
+
+    if (available.length === 0) {
+      this.showTextWindow('Bulletins', 'No bulletins have been posted yet.\n\n'
+        + 'The lobby writes its weekly leaderboard bulletin once a week of play\n'
+        + 'has gone by, and it will appear here when it does.');
+      return;
+    }
+
+    const entries = available.map(({ entry }) => `#${entry.number} ${entry.title}`);
     const selection = await this.showListDialog('Bulletins', entries);
     if (selection === null) return;
 
-    const entry = LOBBY_BULLETINS[selection];
-    if (!entry) return;
+    const chosen = available[selection];
+    if (!chosen) return;
 
-    const content = await this.readBulletin(entry.number, session);
-    this.showTextWindow(`Bulletin #${entry.number}`, content || 'Bulletin not found.');
+    this.showTextWindow(`Bulletin #${chosen.entry.number}`, chosen.content);
   }
 
   async readBulletin(number: number, session: DoorSession): Promise<string | null> {
@@ -179,7 +196,14 @@ export class DialogManager {
       parent: this.screen as any,
       title,
       content,
-      footerText: opts?.footer ?? '[ESC/Q] Close   [Up/Down/PgUp/PgDn] Scroll',
+      // ESC and Q are what the SDK closes on, and nobody guesses that: the
+      // sysop sat in a bulletin pressing ENTER and SPACE while the door -
+      // which gates every one of its own keys on modalActive - did nothing
+      // at all in reply, which reads as a frozen door rather than a modal
+      // wanting a different key (live log, 2026-09-02). A read-only window
+      // has no other use for Enter or Space, so they close it too.
+      closeKeys: ['enter', 'return', 'space'],
+      footerText: opts?.footer ?? '[ESC/Q/ENTER] Close   [Up/Down/PgUp/PgDn] Scroll',
       contentStyle: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
       footerStyle: { fg: UI_THEME.accent, bg: UI_THEME.windowBg },
       onClose: () => {

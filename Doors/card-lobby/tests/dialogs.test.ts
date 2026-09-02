@@ -150,3 +150,100 @@ export async function theDoorUsesTheSdkWidgetsRatherThanItsOwn(): Promise<void> 
   await h.app.shutdown();
   await h.finished;
 }
+
+export async function aBoardWithNoBulletinsSaysSo(): Promise<void> {
+  // The live trace (2026-09-02): a click picked bulletin #20, BBSApi answered
+  // "ENOENT: no such file or directory ... Bulletins/bull20.txt", and the
+  // door opened a reader saying "Bulletin not found." - offering a bulletin
+  // that was never posted, from a hardcoded table.
+  const h = await openDoor();          // its readFile answers null for everything
+  const dm = h.app.dialogManager;
+
+  try {
+    dm.setModalActive(false);
+    await dm.showBulletinsWindow(h.session);
+    await h.settle();
+
+    const all = (node: any): any[] => [node, ...((node.children ?? []).flatMap(all))];
+    const list = all(h.app.screen).find((c: any) =>
+      Array.isArray(c.items) && String(c.options?.label ?? '').includes('Bulletins'));
+    assert.ok(!list, 'a board with nothing posted must not offer a list of bulletins to read');
+
+    const text = all(h.app.screen)
+      .map((c: any) => (typeof c.getContent === 'function' ? String(c.getContent()) : ''))
+      .join(' ');
+    assert.ok(/No bulletins have been posted/.test(text), 'it says so instead');
+    assert.ok(!/not found/i.test(text), 'and does not report a missing file at the player');
+
+    h.escape();
+    await h.settle();
+    assert.strictEqual(dm.isModalActive(), false);
+  } finally {
+    await h.app.shutdown();
+    await h.finished;
+  }
+}
+
+export async function aReaderClosesOnTheKeysPeopleActuallyPress(): Promise<void> {
+  // "i can not close the bulletin viewer with mouse or keyboard". The live log
+  // shows what was pressed: \r and space, over and over. DocModal closed on
+  // ESC/Q/F1 only, and every one of the door's own keys is gated on
+  // modalActive - so the door answered nothing at all, which reads as frozen.
+  for (const key of ['enter', 'space', 'escape', 'q'] as const) {
+    const h = await openDoor();
+    const dm = h.app.dialogManager;
+    try {
+      dm.setModalActive(false);
+      dm.showTextWindow('Bulletin #20', 'nothing to see');
+      await h.settle();
+      assert.strictEqual(dm.isModalActive(), true, `${key}: the reader must be open first`);
+
+      h.app.screen.program.emit('keypress', key === 'space' ? ' ' : '', { name: key, full: key });
+      await h.settle();
+
+      assert.strictEqual(dm.isModalActive(), false, `the reader must close on ${key}`);
+    } finally {
+      await h.app.shutdown();
+      await h.finished;
+    }
+  }
+}
+
+export async function aBulletinCanBeReadAndClosed(): Promise<void> {
+  // "i can not close the bulletin viewer with mouse or keyboard" (sysop,
+  // 2026-09-02), and "there is no bulletin posted either so it cant display
+  // it". The escape test above opens the bulletin LIST and closes that; what
+  // it never did was PICK one, which is the half the sysop was stuck in.
+  const h = await openDoor();
+  const dm = h.app.dialogManager;
+
+  try {
+    // A board that HAS a bulletin: the list only offers what it can read.
+    h.session.bbs.readFile = async () => 'Top of the chip leaders this week.';
+    dm.setModalActive(false);
+    void dm.showBulletinsWindow(h.session);
+    await h.settle();
+
+    // Choose the first bulletin, the way a player does.
+    const list = h.app.screen.children
+      .flatMap((child: any) => [child, ...(child.children ?? [])])
+      .flatMap((child: any) => [child, ...(child.children ?? [])])
+      .find((child: any) => Array.isArray(child.items) && child.items.length > 0
+        && String(child.options?.label ?? '').includes('Bulletins'));
+    assert.ok(list, 'the bulletin list must be on screen');
+    list.emit('select', null, 0);
+    await h.settle();
+
+    assert.strictEqual(dm.isModalActive(), true,
+      'picking a bulletin opens the reader - the board has none, so it says so');
+
+    h.escape();
+    await h.settle();
+
+    assert.strictEqual(dm.isModalActive(), false,
+      'and Escape closes the reader; the sysop could not close it at all');
+  } finally {
+    await h.app.shutdown();
+    await h.finished;
+  }
+}
