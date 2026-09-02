@@ -1922,7 +1922,15 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Every non-PETSCII session gets 'passthrough' and both this branch
     // and the reflow hook below are no-ops, which is what keeps 80-column
     // output byte-identical.
-    const petsciiTextPlan = petsciiTextScreenPlan(content, session);
+    // A MENU is never skipped, however art-heavy it scores - see
+    // petsciiTextScreenPlan's isMenu. `isMenuScreen` is the express.e-parity
+    // check on the REQUESTED name; the per-security-level variants
+    // (MENU250.TXT and friends) and any caller that hands displayScreen an
+    // already-resolved path arrive through `filePath` instead, so both are
+    // consulted.
+    const isMenuTextScreen =
+      isMenuScreen || path.basename(filePath).toUpperCase().startsWith('MENU');
+    const petsciiTextPlan = petsciiTextScreenPlan(content, session, isMenuTextScreen);
     if (petsciiTextPlan === 'art-skip') {
       socket.emit('ansi-output', ANSI_ART_SKIPPED_NOTICE);
       screenFlowLog(screenName, `PETSCII session: 80-col ANSI art screen skipped (${filePath})`);
@@ -2183,6 +2191,11 @@ console.log(`[NEWLINE-DEBUG] AFTER addAnsiEscapes: ${parsed.length} bytes, ${aft
 
     // PETSCII text fallback: reflow the parsed prose to the session width
     // (wrapForSession is identity at >=80 and passes positioned payloads).
+    // NOTE the seam: the art gate above read the RAW, pre-MCI content, while
+    // this runs on the expanded text. An MCI code that introduces cursor
+    // motion therefore makes wrapForSession a no-op here, and a screen
+    // planned as 'reflow' would go out unwrapped rather than smeared - the
+    // safe direction, and no screen on this board does it today.
     if (petsciiTextPlan === 'reflow') {
       parsed = wrapForSession(parsed, session);
     }

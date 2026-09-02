@@ -20,7 +20,7 @@ import {
   petsciiTextScreenPlan,
   ANSI_ART_SKIPPED_NOTICE,
   ART_ROW_SHARE,
-  MIN_ROWS_FOR_ART_VOTE,
+  MIN_ART_ROWS,
 } from '../../src/utils/ansi-art-detect.util';
 import { looksLikeAsciiArt } from '../../src/utils/ascii-art.util';
 
@@ -98,9 +98,11 @@ describe('isAnsiArtScreen', () => {
    * board's Screens/ or Bulletins/ sits in that shape without also being
    * real art (the measured census has an empty band from 0.25 to 0.45).
    */
-  it('a screen that is half rules IS art', () => {
+  it('a screen that is half rules IS art once it clears the art-row floor', () => {
     const divider = '='.repeat(76);
-    expect(isAnsiArtScreen((divider + '\r\nsome ordinary prose here\r\n').repeat(4))).toBe(true);
+    const row = divider + '\r\nsome ordinary prose here\r\n';
+    expect(isAnsiArtScreen(row.repeat(4))).toBe(false); // 4 art rows - under the floor
+    expect(isAnsiArtScreen(row.repeat(8))).toBe(true);  // 8 art rows, share 0.5
   });
 
   /**
@@ -110,8 +112,8 @@ describe('isAnsiArtScreen', () => {
    * which at 1-of-1 would be a 100% art screen and would replace the whole
    * logon flow with the skip token.
    */
-  it('a screen with fewer than the minimum rows is never art by density (LOGON.TXT shape)', () => {
-    expect(MIN_ROWS_FOR_ART_VOTE).toBeGreaterThanOrEqual(3);
+  it('a screen with fewer art rows than the floor is never art by density (LOGON.TXT shape)', () => {
+    expect(MIN_ART_ROWS).toBe(6);
     expect(looksLikeAsciiArt('~')).toBe(true);
     expect(isAnsiArtScreen('~\n')).toBe(false);
     expect(isAnsiArtScreen('Placeholder screen uploadmsg.txt\n')).toBe(false);
@@ -131,12 +133,62 @@ describe('isAnsiArtScreen', () => {
   it('classifies through the shared row detector, not a private glyph regex', () => {
     const deepIndent = ' '.repeat(34) + 'hello';
     expect(looksLikeAsciiArt(deepIndent)).toBe(true);
-    expect(isAnsiArtScreen((deepIndent + '\r\n').repeat(5))).toBe(true);
+    expect(isAnsiArtScreen((deepIndent + '\r\n').repeat(8))).toBe(true);
   });
 
   it('the art-row share sits in the empty band between this board\'s prose and art screens', () => {
     expect(ART_ROW_SHARE).toBeGreaterThan(0.25); // PRIVACY.TXT (0.25) must reflow
     expect(ART_ROW_SHARE).toBeLessThan(0.45);    // MENU.TXT (0.45) must skip
+  });
+
+  /**
+   * Reviewer case 1 (short prose flips a bare share cut). A seven-row
+   * bulletin with a CENTRED title (`looksLikeAsciiArt` calls a >= 33-column
+   * indent art) and two `===` rules scores 3/7 = 0.43 - over ART_ROW_SHARE.
+   * Only the absolute art-row floor keeps it readable.
+   */
+  it('a 7-row bulletin with a centred title and two rules is prose, not art', () => {
+    const page = [
+      ' '.repeat(34) + 'THE WEEKLY BULLETIN',
+      '='.repeat(76),
+      'New files landed in the Amiga conference this week, uploaded by',
+      'the usual suspects and a couple of new faces from the demo scene.',
+      '='.repeat(76),
+      'Read the rules before you upload anything at all.',
+      'Enjoy your stay on the board.',
+    ].join('\r\n');
+    expect(page.split('\r\n').filter((l) => looksLikeAsciiArt(l)).length).toBe(3); // 3/7 = 0.43
+    expect(isAnsiArtScreen(page)).toBe(false);
+  });
+
+  /**
+   * Reviewer case 2. Three rows - centred title, a rule, one sentence -
+   * scores 2/3 = 0.67 on a bare share cut, and the old three-row minimum
+   * did not protect it (three rows is not FEWER than three).
+   */
+  it('a 3-row screen with a centred title and a rule is prose, not art', () => {
+    const page = [
+      ' '.repeat(34) + 'NOTICE',
+      '-'.repeat(60),
+      'The board is down for maintenance on Sunday morning.',
+    ].join('\r\n');
+    expect(page.split('\r\n').filter((l) => looksLikeAsciiArt(l)).length).toBe(2); // 2/3 = 0.67
+    expect(isAnsiArtScreen(page)).toBe(false);
+  });
+
+  /**
+   * The floor is 6 because Screens/Logon24hrs.txt - the art file on this
+   * board with the FEWEST art rows - has exactly 6 of 12. Raising it would
+   * start reflowing real pictures.
+   */
+  it('the art-row floor is the lowest art-row count on the board (Logon24hrs 6/12)', () => {
+    const rows = fs
+      .readFileSync(path.join(REPO_ROOT, 'Screens/Logon24hrs.txt'), 'latin1')
+      .split(/\r\n|\r|\n/)
+      .map((l) => l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
+      .filter((l) => l.trim().length > 0);
+    expect(rows.filter((l) => looksLikeAsciiArt(l)).length).toBe(MIN_ART_ROWS);
+    expect(isAnsiArtScreen(fs.readFileSync(path.join(REPO_ROOT, 'Screens/Logon24hrs.txt'), 'latin1'))).toBe(true);
   });
 
   describe('the board\'s own screens', () => {
@@ -174,6 +226,29 @@ describe('petsciiTextScreenPlan', () => {
     expect(petsciiTextScreenPlan(BLOCK_ART, petscii)).toBe('art-skip');
     expect(petsciiTextScreenPlan(POSITIONED, petscii)).toBe('art-skip');
     expect(petsciiTextScreenPlan(PROSE, petscii)).toBe('reflow');
+  });
+
+  /**
+   * A MENU is never skipped, however art-heavy it scores. Screens/MENU.TXT
+   * (0.45) and MENU250.TXT (0.74) are both art by the vote, no MENU*.seq
+   * exists, and MENU is in SCREENS_REQUIRE_CLEAR - so skipping one leaves a
+   * C64 caller staring at a cleared screen and a token, with no command
+   * list and no way to navigate. A folded menu is navigable; a skipped one
+   * is not (strategy plan Phase 2.4).
+   */
+  it('menus always reflow, even when they score as art', () => {
+    const menu = fs.readFileSync(path.join(REPO_ROOT, 'Screens/MENU.TXT'), 'latin1');
+    const menu250 = fs.readFileSync(path.join(REPO_ROOT, 'Screens/MENU250.TXT'), 'latin1');
+
+    expect(isAnsiArtScreen(menu)).toBe(true);                       // it IS art...
+    expect(isAnsiArtScreen(menu250)).toBe(true);
+    expect(petsciiTextScreenPlan(menu, petscii, false)).toBe('art-skip');   // ...and would be skipped
+    expect(petsciiTextScreenPlan(menu, petscii, true)).toBe('reflow');      // ...but never as a menu
+    expect(petsciiTextScreenPlan(menu250, petscii, true)).toBe('reflow');
+  });
+
+  it('the menu override never overrides the session gate', () => {
+    expect(petsciiTextScreenPlan(BLOCK_ART, {}, true)).toBe('passthrough');
   });
 });
 
