@@ -67,23 +67,58 @@ describe('a ~SR_ reference resolves through its numbered pool', () => {
   });
 });
 
-describe('an assign other than BBS: is resolved, not read as a directory name', () => {
-  it('follows WORK: to where the board would look', () => {
-    // WORK: is the board root here (BBSPaths), so this names <root>/bbs/... -
-    // which is NOT <root>/Screens/..., and that is the whole point: 142 of
-    // this board's screens reference art through a path this port cannot reach
-    // while the art itself sits in Screens/.
+describe('an assign is resolved the way the BOARD resolves it', () => {
+  it('collapses a redundant bbs/ under the board root', () => {
+    /*
+     * `~SR_WORK:bbs/...` is what this board's screens actually say. Read
+     * literally that is `<root>/bbs/...` and there is no `bbs` directory, so
+     * the manager called a hundred live references dead and told the sysop
+     * that art the board draws at every logoff was never displayed. They knew
+     * better: "the logoff ansi logos are also flagged as not in use i doubt
+     * that".
+     *
+     * The runtime strips it in the ~SR_ sentinel (screen.handler:558-562) and
+     * again on the ~SS_ path (screen.handler:1031). The index has to make the
+     * same move or it is answering a different question from the board.
+     */
     write('Screens/logon20.txt', '~SS_WORK:bbs/Screens/flt.txt\r\n');
     write('Screens/flt.txt', 'art\r\n');
 
-    const [ref] = refsFor('Screens/logon20.txt');
+    expect(refsFor('Screens/logon20.txt')[0].resolves).toBe(true);
+  });
 
-    expect(ref.resolves).toBe(false);
-
-    // And it IS found once the file sits where that assign actually points.
-    write('bbs/Screens/flt.txt', 'art\r\n');
-    invalidateScreenIndex();
+  it('finds a numbered pool whose files carry no extension', () => {
+    // This board's flt pool is `001.flt`, `002.flt` - no extension after the
+    // stem at all. Requiring one called all 58 references to it dead.
+    write('Screens/logon20.txt', '~5SR_WORK:bbs/Screens/flt/flt\r\n');
+    write('Screens/flt/001.flt', 'art\r\n');
 
     expect(refsFor('Screens/logon20.txt')[0].resolves).toBe(true);
+  });
+
+  it('still reports a reference with nothing behind it', () => {
+    // The point of the check survives: a target that exists nowhere is dead.
+    write('Screens/logon20.txt', '~SS_WORK:bbs/Screens/nothing.txt\r\n');
+
+    expect(refsFor('Screens/logon20.txt')[0].resolves).toBe(false);
+  });
+});
+
+describe('a screen found outside the first search directory', () => {
+  it('is read by the screen that resolves to it', () => {
+    /*
+     * `LOGON24` is looked for in several places and lives in `Screens/`. The
+     * index listed its variants from the FIRST location - the board root -
+     * so the file came back read by nobody and the manager offered it for
+     * deletion. Reported by the sysop, who knew what it was for:
+     * "Logon24hrs.txt is flagged as not used but it's used when a user runs
+     * out of time".
+     */
+    write('Screens/Logon24hrs.txt', 'your time is up\r\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Screens/Logon24hrs.txt'].readBy.length).toBeGreaterThan(0);
+    expect(index.unused.some(u => u.relPath === 'Screens/Logon24hrs.txt')).toBe(false);
   });
 });

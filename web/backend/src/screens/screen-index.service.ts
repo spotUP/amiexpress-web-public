@@ -540,9 +540,31 @@ function commandExists(baseDir: string, command: string): boolean {
  */
 function boardPath(baseDir: string, target: string): string {
   const resolved = new BBSPaths(baseDir).resolveAmigaPath(target);
-  return path.isAbsolute(resolved)
+  const absolute = path.isAbsolute(resolved)
     ? resolved
     : path.join(baseDir, resolved.replace(/\//g, path.sep));
+
+  /*
+   * A leading `bbs/` under the board root collapses away, because that is
+   * what the BOARD does with it - twice, in two different ways.
+   *
+   * This board's screens say `~3SR_WORK:bbs/Screens/logoff/logoff`. `WORK:`
+   * is the board root, so read literally that names `<root>/bbs/Screens/...`
+   * and there is no `bbs` directory - which is how the manager came to report
+   * a hundred live references as pointing at nothing, and how it told a sysop
+   * that art the board displays every logoff was never displayed. The sysop
+   * said so plainly: "the logoff ansi logos are also flagged as not in use i
+   * doubt that".
+   *
+   * The runtime strips it in the `~SR_` sentinel (screen.handler:558-562) and
+   * again on the `~SS_` path (screen.handler:1031). The index has to make the
+   * same move or it is answering a different question from the board.
+   */
+  const prefix = path.join(baseDir, 'bbs') + path.sep;
+  if (absolute.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return path.join(baseDir, absolute.slice(prefix.length));
+  }
+  return absolute;
 }
 
 function resolveScreenReference(baseDir: string, target: string): string | null {
@@ -581,7 +603,10 @@ function numberedPool(baseDir: string, target: string): string[] {
     // amigafs, so a pool written `screens/logoff` is found in `Screens/logoff`
     // - the same reason resolveScreenReference walks with it.
     return amigafs.readdirSync(dir)
-      .filter(name => new RegExp(`^\\d+\\.${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`, 'i').test(name))
+      // `\\.` or the END of the name: this board's flt pool is `001.flt`,
+      // `002.flt` with no extension at all, and requiring one after the stem
+      // called all 58 references to it dead while the board showed the art.
+      .filter(name => new RegExp(`^\\d+\\.${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.|$)`, 'i').test(name))
       .map(name => path.join(dir, name));
   } catch {
     return [];
@@ -784,10 +809,19 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
       });
       if (locations.length === 0) continue;
 
-      const dir = locations[0].dir;
-      const ownDir = scope === 'node' ? path.join(baseDir, `Node${id}`) : dir;
-
       let found: string | null = null;
+      /*
+       * The directory the screen was actually found in - NOT locations[0].
+       *
+       * A screen is searched for in several places and the variants below are
+       * listed from one of them. Taking the first meant a screen found in a
+       * LATER location had its readers counted in a directory that does not
+       * contain it: `LOGON24` resolves to `Screens/Logon24hrs.txt` and its
+       * readers were looked for in the board root, so the file came back read
+       * by nobody. Reported by the sysop, who knew better: "Logon24hrs.txt is
+       * flagged as not used but it's used when a user runs out of time".
+       */
+      let foundIn = locations[0].dir;
       for (const location of locations) {
         // The same call the loader makes, so the answer is the loader's answer.
         const hit = findSecurityScreen(path.join(location.dir, fileName), 255, '.TXT', false, false);
@@ -796,8 +830,12 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
         // which on a case-insensitive filesystem is not the name on disk. The
         // manager shows and edits real filenames, so report the real one.
         found = amigafs.findCaseInsensitive(path.dirname(hit), path.basename(hit)) || hit;
+        foundIn = location.dir;
         break;
       }
+
+      const dir = foundIn;
+      const ownDir = scope === 'node' ? path.join(baseDir, `Node${id}`) : dir;
 
       // Everything in that directory this screen can serve, and to whom. The
       // loader picks ONE of these per caller; all of them are read by the board.
