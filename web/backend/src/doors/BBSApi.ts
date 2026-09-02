@@ -1237,21 +1237,35 @@ console.error('[BBSApi] Error posting message:', error);
 
       // Create a response collector
       let response: any = null;
-      const originalEmit = this.socket.emit.bind(this.socket);
+      // Restore what was FOUND, not a bound copy of it: on a socket.io Socket
+      // `emit` lives on the PROTOTYPE, so assigning a bound copy back would pin
+      // a permanent own property onto the instance. Same rule as
+      // `c64-door-adapter.ts:333-344`.
+      const hadOwnEmit = Object.prototype.hasOwnProperty.call(this.socket, 'emit');
+      const found = this.socket.emit;
+      const downstream = found.bind(this.socket);
 
       // Intercept the room:joined event
-      this.socket.emit = ((event: string, ...args: any[]) => {
+      const interceptor = ((event: string, ...args: any[]) => {
         if (event === 'room:joined') {
           response = args[0];
         }
-        return originalEmit(event, ...args);
+        return downstream(event, ...args);
       }) as any;
+      this.socket.emit = interceptor;
 
-      // Call handler directly
-      await handleRoomJoin(this.socket, this.session, { roomName, password });
-
-      // Restore original emit
-      this.socket.emit = originalEmit;
+      try {
+        // Call handler directly
+        await handleRoomJoin(this.socket, this.session, { roomName, password });
+      } finally {
+        // In a `finally` so a throwing handler cannot leak the interceptor, and
+        // only while ours is still the live one, so a wrapper installed during
+        // the handler is not torn off.
+        if (this.socket.emit === interceptor) {
+          if (hadOwnEmit) this.socket.emit = found;
+          else delete (this.socket as any).emit;
+        }
+      }
 
       if (response) {
         return {
@@ -1306,24 +1320,33 @@ console.error('[BBSApi] Error sending room message:', error);
       const { handleRoomCreate } = require('../handlers/chat/group-chat.handler');
 
       let response: any = null;
-      const originalEmit = this.socket.emit.bind(this.socket);
+      // Restore what was FOUND - see the note in joinRoom above.
+      const hadOwnEmit = Object.prototype.hasOwnProperty.call(this.socket, 'emit');
+      const found = this.socket.emit;
+      const downstream = found.bind(this.socket);
 
-      this.socket.emit = ((event: string, ...args: any[]) => {
+      const interceptor = ((event: string, ...args: any[]) => {
         if (event === 'room:created') {
           response = args[0];
         }
-        return originalEmit(event, ...args);
+        return downstream(event, ...args);
       }) as any;
+      this.socket.emit = interceptor;
 
-      await handleRoomCreate(this.socket, this.session, {
-        roomName,
-        topic: options?.topic,
-        isPublic: options?.isPublic,
-        password: options?.password,
-        maxUsers: options?.maxUsers
-      });
-
-      this.socket.emit = originalEmit;
+      try {
+        await handleRoomCreate(this.socket, this.session, {
+          roomName,
+          topic: options?.topic,
+          isPublic: options?.isPublic,
+          password: options?.password,
+          maxUsers: options?.maxUsers
+        });
+      } finally {
+        if (this.socket.emit === interceptor) {
+          if (hadOwnEmit) this.socket.emit = found;
+          else delete (this.socket as any).emit;
+        }
+      }
 
       if (response) {
         return { success: true, roomId: response.roomId };

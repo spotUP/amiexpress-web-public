@@ -144,13 +144,26 @@ console.error('[DoorSocket] Local handler error for', event, err);
       }
     };
   } else {
-    socket.emit = ((event: string, ...args: any[]) => {
+    // Restore what was FOUND, not the bound copy in `rawEmit`: on a socket.io
+    // Socket `emit` is a PROTOTYPE method, so putting a bound copy back pins a
+    // permanent own property onto the instance, and on a connection-emitter
+    // literal it leaves a function that is no longer `===` to the emitter's
+    // own. Same rule as `c64-door-adapter.ts:333-344`.
+    const hadOwnEmit = Object.prototype.hasOwnProperty.call(socket, 'emit');
+    const found = socket.emit;
+    const interceptor = ((event: string, ...args: any[]) => {
       const result = rawEmit(event, ...args);
       dispatchLocal(event, ...args);
       return result;
     }) as any;
+    socket.emit = interceptor;
     cleanupOutgoing = () => {
-      socket.emit = rawEmit;
+      // Only while ours is still the live one - a layer installed during the
+      // door (a C64 adapter, a modem emulator) owns the property now and
+      // captured ours as ITS downstream.
+      if (socket.emit !== interceptor) return;
+      if (hadOwnEmit) socket.emit = found;
+      else delete socket.emit;
     };
   }
 
