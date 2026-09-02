@@ -5,7 +5,7 @@
  * Full-featured multi-window lobby for card games with PokerEngine support.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.metadata = void 0;
+exports.CardLobbyApp = exports.metadata = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const GamepadBindings_1 = require("./managers/GamepadBindings");
@@ -79,6 +79,8 @@ class CardLobbyApp {
     }
     constructor(session) {
         this.gamepadManager = null;
+        /** Resolves the promise onStart is waiting on - see run(). */
+        this.exitResolve = null;
         this.viewMode = 'lobby';
         this.autoDealInProgress = false;
         this.lastAnimatedHandStartedAt = null;
@@ -120,7 +122,20 @@ class CardLobbyApp {
         await loader.delay(500);
         loader.hide();
         loader.destroy();
-        this.cleanup();
+        // The lobby polls the shared state so tables other nodes create appear,
+        // and so a table that fills up deals itself. Nothing had ever started
+        // that timer.
+        this.unoEvents.startRefreshTimer();
+        // The door is open until the player closes it. run() used to paint the
+        // lobby, call cleanup() and RETURN, which resolves the promise onStart
+        // awaits - so the SDK tore the door down the instant it was drawn and
+        // the board's menu came back over a freshly rendered lobby ("cardlobby
+        // renders the lobby and exits", 2026-09-02). Teardown belongs to
+        // shutdown(), which every exit path already goes through.
+        await new Promise((resolve) => {
+            this.exitResolve = resolve;
+            this.screen.once('destroy', resolve);
+        });
     }
     setupScreen() {
         const height = this.session.bbsSession?.screenHeight || 24;
@@ -404,6 +419,10 @@ class CardLobbyApp {
             this.inputManager.disable();
         }
         this.screen.destroy();
+        // Let run() return, and with it the door.
+        const resolve = this.exitResolve;
+        this.exitResolve = null;
+        resolve?.();
     }
     cleanup() {
         // Remove all event listeners to prevent memory leaks
@@ -1639,3 +1658,4 @@ class CardLobbyApp {
         return this.dialogManager.showMessageDialog(title, text);
     }
 }
+exports.CardLobbyApp = CardLobbyApp;

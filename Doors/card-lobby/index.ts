@@ -133,7 +133,7 @@ door.onStart(async (ctx: DoorContext) => {
 
 export default door;
 
-class CardLobbyApp {
+export class CardLobbyApp {
   public session: DoorSession;
   public screen!: Screen;
   private desktop!: Box;
@@ -148,6 +148,8 @@ class CardLobbyApp {
   private unoEvents!: UnoEventBus;
   private gameViews!: GameViews;
   private terminalMode!: TerminalModeSwitch;
+  /** Resolves the promise onStart is waiting on - see run(). */
+  private exitResolve: (() => void) | null = null;
 
   // UI elements (now accessed via uiManager)
   private get topBar() { return this.uiManager.topBar; }
@@ -253,7 +255,21 @@ class CardLobbyApp {
     loader.hide();
     loader.destroy();
 
-    this.cleanup();
+    // The lobby polls the shared state so tables other nodes create appear,
+    // and so a table that fills up deals itself. Nothing had ever started
+    // that timer.
+    this.unoEvents.startRefreshTimer();
+
+    // The door is open until the player closes it. run() used to paint the
+    // lobby, call cleanup() and RETURN, which resolves the promise onStart
+    // awaits - so the SDK tore the door down the instant it was drawn and
+    // the board's menu came back over a freshly rendered lobby ("cardlobby
+    // renders the lobby and exits", 2026-09-02). Teardown belongs to
+    // shutdown(), which every exit path already goes through.
+    await new Promise<void>((resolve) => {
+      this.exitResolve = resolve;
+      this.screen.once('destroy', resolve);
+    });
   }
 
   private setupScreen(): void {
@@ -557,6 +573,11 @@ class CardLobbyApp {
     }
 
     this.screen.destroy();
+
+    // Let run() return, and with it the door.
+    const resolve = this.exitResolve;
+    this.exitResolve = null;
+    resolve?.();
   }
 
   private cleanup(): void {
