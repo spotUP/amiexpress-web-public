@@ -201,3 +201,71 @@ export function describeCarry(verdict: CarryVerdict): string {
   const where = verdict.lost.map(l => `line ${l.line}`).join(', ');
   return `${keptPart}, and ${lost} among the art cannot be placed (${where}) - put ${lost === 1 ? 'it' : 'them'} back with the editor`;
 }
+
+/**
+ * Changing a code that is ALREADY in a screen.
+ *
+ * The canvas is a fixed grid: a code occupies cells, and replacing it means
+ * writing over exactly those cells. A shorter replacement has to blank what it
+ * does not cover, or the tail of the old code is left behind as art - `~CC_a|`
+ * over `~CC_gwall|` would read `~CC_a|all|`.
+ */
+export interface TokenEdit {
+  /** What to type at the token's position, padded to cover the old one. */
+  text: string;
+  /** Cells beyond the old code this will overwrite - art, if there is any. */
+  overwrites: number;
+}
+
+export function tokenEdit(replacement: string, oldLength: number): TokenEdit {
+  const overwrites = Math.max(0, replacement.length - oldLength);
+  const padding = Math.max(0, oldLength - replacement.length);
+
+  return { text: replacement + ' '.repeat(padding), overwrites };
+}
+
+/** Blanking a code out: the cells it held, returned to spaces. */
+export function tokenRemoval(oldLength: number): string {
+  return ' '.repeat(oldLength);
+}
+
+/**
+ * A written code, taken apart into the pieces the picker edits.
+ *
+ * `~20SS_BBS:Node1/x.txt|` is the code `SS_`, the argument
+ * `BBS:Node1/x.txt`, and a width of 20. Parsed rather than remembered,
+ * because the sysop may have typed it by hand years ago.
+ */
+export interface SplitToken {
+  code: string;
+  argument: string;
+  width: number | null;
+}
+
+export function splitToken(text: string, codes: MciCodeShape[]): SplitToken | null {
+  const match = /^~(\d{0,3})(.*)$/s.exec(text);
+  if (!match) return null;
+
+  const [, digits, rest] = match;
+
+  // Longest code first, so `SS_` is not read as `S`, and an alias like `z0`
+  // is not read as the start of something else.
+  const byLength = [...codes].sort((a, b) => b.code.length - a.code.length);
+
+  for (const entry of byLength) {
+    if (!rest.startsWith(entry.code)) continue;
+
+    let argument = rest.slice(entry.code.length);
+    if (entry.terminator && argument.endsWith(entry.terminator)) {
+      argument = argument.slice(0, -entry.terminator.length);
+    }
+
+    return {
+      code: entry.code,
+      argument,
+      width: digits ? Number(digits) : null,
+    };
+  }
+
+  return null;
+}

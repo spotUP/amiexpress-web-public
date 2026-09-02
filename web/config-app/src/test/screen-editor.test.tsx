@@ -78,7 +78,10 @@ const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   if (url.includes('/api/screens/mci/catalog')) return envelope(mciCatalog());
   if (url.includes('/api/screens/mci/targets')) {
-    return envelope({ kind: 'command', targets: [{ value: 'gwall', label: 'Global Wall', detail: 'access 10' }] });
+    return envelope({ kind: 'command', targets: [
+      { value: 'gwall', label: 'Global Wall', detail: 'access 10' },
+      { value: 'ctop', label: 'Conference Top', detail: 'access 20' },
+    ] });
   }
   if (url.includes('/api/screens/file') && init?.method === 'PUT') {
     return envelope({ written: ['Node1/BBSTITLE.txt'] });
@@ -241,6 +244,59 @@ describe('editing a screen in the browser', () => {
     await user.click(screen.getByRole('button', { name: 'Insert a code' }));
 
     expect(await screen.findByText(/will not run ANY code/)).toBeTruthy();
+  });
+
+  it('changes a code already in the screen, through the same picker', async () => {
+    // The editor listed the codes and would not let a sysop touch one: to fix
+    // a ~CC_ pointing at a deleted door you had to retype it by hand.
+    ansiBytes = new TextEncoder().encode('~CC_gwall|');
+    fileMci = [{ code: 'CC', target: 'gwall', resolves: true, scopeSpecific: false }];
+
+    const user = userEvent.setup();
+    await openTheFile(user);
+
+    await user.click(await screen.findByRole('button', { name: 'change' }));
+
+    // The picker opens ON that code - the door list is already showing, and
+    // the code it was is already chosen.
+    const commands = await screen.findByRole('combobox');
+    expect((commands as HTMLSelectElement).value).toBe('gwall');
+
+    await user.selectOptions(commands, 'ctop');
+    await user.click(await screen.findByRole('button', { name: 'Change it' }));
+
+    // Changed on the canvas, and the OLD code is gone - a shorter replacement
+    // that did not pad would leave `~CC_ctop|all|` behind.
+    expect(await screen.findByText(/line 1, column 1: ~CC_ctop/)).toBeTruthy();
+    expect(screen.queryByText(/gwall/)).toBeNull();
+  });
+
+  it('removes a code, returning its cells to the drawing', async () => {
+    ansiBytes = new TextEncoder().encode('~CC_gwall|');
+    fileMci = [{ code: 'CC', target: 'gwall', resolves: true, scopeSpecific: false }];
+
+    const user = userEvent.setup();
+    await openTheFile(user);
+
+    expect(await screen.findByText(/line 1, column 1: ~CC_gwall/)).toBeTruthy();
+    await user.click(await screen.findByRole('button', { name: 'remove' }));
+
+    expect(screen.queryByText(/~CC_gwall/)).toBeNull();
+  });
+
+  it('puts a code that points at nothing at the top of the list', async () => {
+    ansiBytes = new TextEncoder().encode('~CC_gwall|\r\n~CC_nosuchdoor|');
+    fileMci = [
+      { code: 'CC', target: 'gwall', resolves: true, scopeSpecific: false },
+      { code: 'CC', target: 'nosuchdoor', resolves: false, scopeSpecific: false },
+    ];
+
+    const user = userEvent.setup();
+    await openTheFile(user);
+
+    const items = await screen.findAllByText(/line \d+, column 1: ~CC_/);
+    expect(items[0].textContent).toContain('nosuchdoor');
+    expect(items[0].textContent).toContain('points at nothing');
   });
 
   it('offers no editor for a RIP screen, and says which phase owns it', async () => {

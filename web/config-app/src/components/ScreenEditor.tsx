@@ -7,8 +7,17 @@ import { canvasToScreen } from '../pages/screen-bytes';
 import {
   pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface,
 } from '../pages/screen-editor-state';
-import { findMciTokens, type MciReferenceShape } from '../pages/mci-tokens';
+import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
 import { MciPicker } from './MciPicker';
+import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
+
+/** The code exactly as it is written on the canvas, tilde to terminator. */
+function tokenText(canvas: { char?: string }[][], token: MciToken): string {
+  const row = canvas[token.line] ?? [];
+  return row.slice(token.column, token.column + token.length)
+    .map(cell => cell?.char ?? ' ')
+    .join('');
+}
 
 /**
  * A screen's art, editable.
@@ -60,6 +69,8 @@ export function ScreenEditor({
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
+  /** A code already on the canvas, opened for changing rather than adding. */
+  const [editingToken, setEditingToken] = useState<MciToken | null>(null);
 
   // Re-found on every change rather than tracked: a code is edited character by
   // character, and half of one is not a code.
@@ -219,14 +230,27 @@ export function ScreenEditor({
       </div>
 
       <MciPicker
-        open={pickingCode}
-        onClose={() => setPickingCode(false)}
+        open={pickingCode || editingToken !== null}
+        onClose={() => { setPickingCode(false); setEditingToken(null); }}
         canvas={surface.canvas}
-        cursor={cursor}
+        cursor={editingToken ? { x: editingToken.column, y: editingToken.line } : cursor}
+        editing={editingToken
+          ? { text: tokenText(surface.canvas, editingToken), length: editingToken.length }
+          : null}
         // The tilde that switches MCI on has to be the first character of the
         // first line, and the canvas is a grid, so that is cell 0,0.
         onEnable={() => onChange(typeText(surface, 0, 0, '~'))}
         onInsert={token => {
+          if (editingToken) {
+            // Written over the old code's cells, padded so no tail of it is
+            // left behind as art - `~CC_a|` over `~CC_gwall|` would otherwise
+            // read `~CC_a|all|`.
+            const edit = tokenEdit(token, editingToken.length);
+            onChange(typeText(surface, editingToken.column, editingToken.line, edit.text));
+            setEditingToken(null);
+            return;
+          }
+
           onChange(typeText(surface, cursor.x, cursor.y, token));
           setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + token.length) }));
         }}
@@ -237,15 +261,46 @@ export function ScreenEditor({
           <h4 className="text-content-primary">
             This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
           </h4>
-          <ul className="font-topaz text-base">
-            {tokens.map((token, index) => (
-              <li key={`${token.line}-${token.column}-${index}`}
-                className={token.resolves ? 'text-content-primary' : 'text-status-danger'}>
-                line {token.line + 1}, column {token.column + 1}: ~{token.code}
-                {token.target ? `_${token.target}` : '.'}
-                {token.resolves ? '' : ' - points at nothing'}
-              </li>
-            ))}
+          {/*
+            Broken first. A code pointing at nothing is a menu item that fails
+            only when a caller presses the key, so it is the one worth finding
+            in a list of nine.
+          */}
+          <ul className="space-y-1">
+            {[...tokens]
+              .sort((a, b) => Number(a.resolves) - Number(b.resolves))
+              .map((token, index) => (
+                <li
+                  key={`${token.line}-${token.column}-${index}`}
+                  className="flex flex-wrap items-baseline gap-2"
+                >
+                  <span className={`font-topaz text-base ${token.resolves ? 'text-content-primary' : 'text-status-danger'}`}>
+                    line {token.line + 1}, column {token.column + 1}: {tokenText(surface.canvas, token)}
+                    {token.resolves ? '' : ' - points at nothing'}
+                  </span>
+                  <button
+                    type="button"
+                    className="underline text-content-secondary"
+                    onClick={() => setEditingToken(token)}
+                  >
+                    change
+                  </button>
+                  <button
+                    type="button"
+                    className="underline text-content-secondary"
+                    onClick={() => {
+                      // Blanked in place: the canvas is a grid, so a code is
+                      // removed by returning its cells to spaces rather than
+                      // by closing the gap and shifting the art left.
+                      onChange(typeText(
+                        surface, token.column, token.line, tokenRemoval(token.length),
+                      ));
+                    }}
+                  >
+                    remove
+                  </button>
+                </li>
+              ))}
           </ul>
         </div>
       )}

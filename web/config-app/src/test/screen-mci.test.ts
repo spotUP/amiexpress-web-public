@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   groupMciCodes, filterMciCodes, describeMciUsage, buildMciToken,
   firstLineEnablesMci, canvasEnablesMci, textUnder, describeCarry,
+  tokenEdit, tokenRemoval, splitToken,
   type MciCodeShape, type MciCanvas,
 } from '../pages/screen-mci';
 
@@ -189,5 +190,77 @@ describe('what a replace costs', () => {
   it('is honest when nothing at all can be kept', () => {
     expect(describeCarry(verdict({ lost: [{ text: '~SP', line: 4 }] })))
       .toContain('No codes can be kept');
+  });
+});
+
+describe('changing a code already in a screen', () => {
+  it('pads a shorter replacement, so no tail of the old one is left as art', () => {
+    // `~CC_a|` written over `~CC_gwall|` without padding reads `~CC_a|all|`.
+    const edit = tokenEdit('~CC_a|', '~CC_gwall|'.length);
+
+    expect(edit.text).toBe('~CC_a|    ');
+    expect(edit.text).toHaveLength('~CC_gwall|'.length);
+    expect(edit.overwrites).toBe(0);
+  });
+
+  it('says how many cells a longer replacement will eat', () => {
+    const edit = tokenEdit('~CC_conference-top|', '~CC_a|'.length);
+
+    expect(edit.text).toBe('~CC_conference-top|');
+    expect(edit.overwrites).toBe('~CC_conference-top|'.length - '~CC_a|'.length);
+  });
+
+  it('replacing a code with one the same length disturbs nothing', () => {
+    expect(tokenEdit('~CC_ctop|', '~CC_ctop|'.length)).toEqual({ text: '~CC_ctop|', overwrites: 0 });
+  });
+
+  it('removing a code returns its cells to spaces', () => {
+    expect(tokenRemoval('~CC_gwall|'.length)).toBe('          ');
+  });
+});
+
+describe('taking a written code apart', () => {
+  const codes: MciCodeShape[] = [
+    code({ code: 'CC_', argument: { kind: 'command' }, takesWidth: false, terminator: '|' }),
+    code({ code: 'SS_', argument: { kind: 'screen' }, takesWidth: false, terminator: '|' }),
+    code({ code: 'SR_', argument: { kind: 'screen' }, takesWidth: true, terminator: '|' }),
+    code({ code: 'CL', argument: { kind: 'none' }, takesWidth: false, terminator: '.' }),
+    code({ code: 'S', argument: { kind: 'none' }, takesWidth: true, terminator: '|' }),
+  ];
+
+  it('splits code, argument and terminator', () => {
+    expect(splitToken('~CC_gwall|', codes)).toEqual({ code: 'CC_', argument: 'gwall', width: null });
+  });
+
+  it('reads the width prefix, which sits between the tilde and the code', () => {
+    expect(splitToken('~5SR_BBS:Screens/flt/flt|', codes))
+      .toEqual({ code: 'SR_', argument: 'BBS:Screens/flt/flt', width: 5 });
+  });
+
+  it('prefers the longest code, so SS_ is not read as S', () => {
+    expect(splitToken('~SS_BBS:screens/uprough.txt|', codes)!.code).toBe('SS_');
+  });
+
+  it('handles a code whose terminator is a period', () => {
+    expect(splitToken('~CL.', codes)).toEqual({ code: 'CL', argument: '', width: null });
+  });
+
+  it('keeps an argument that has no terminator on it', () => {
+    // This board writes `~CC_gwall` with no pipe, and a sysop editing it
+    // should see the argument, not the whole tail.
+    expect(splitToken('~CC_gwall', codes)).toEqual({ code: 'CC_', argument: 'gwall', width: null });
+  });
+
+  it('answers nothing for something that is not a code it knows', () => {
+    expect(splitToken('~ZZ_nonsense|', codes)).toBeNull();
+    expect(splitToken('not a code', codes)).toBeNull();
+  });
+
+  it('round-trips through buildMciToken', () => {
+    const written = '~CC_gwall|';
+    const split = splitToken(written, codes)!;
+    const entry = codes.find(c => c.code === split.code)!;
+
+    expect(buildMciToken(entry, split.argument, split.width)).toBe(written);
   });
 });

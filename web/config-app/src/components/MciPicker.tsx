@@ -25,7 +25,7 @@ import { apiClient } from '../api/client';
 import { Modal } from './ui/Modal';
 import {
   groupMciCodes, filterMciCodes, describeMciUsage, buildMciToken,
-  canvasEnablesMci, textUnder,
+  canvasEnablesMci, textUnder, splitToken,
   type MciCodeShape, type MciFamilyShape, type MciCanvas,
 } from '../pages/screen-mci';
 
@@ -45,9 +45,19 @@ interface MciPickerProps {
   /** Put a tilde on the first line, so the codes in this file run. */
   onEnable: () => void;
   onInsert: (token: string) => void;
+  /**
+   * A code already in the screen, being changed rather than added.
+   *
+   * The dialog opens on that code with its argument and width filled in, so
+   * editing is the same act as inserting - one picker, one place that knows
+   * how a code is written.
+   */
+  editing?: { text: string; length: number } | null;
 }
 
-export function MciPicker({ open, onClose, canvas, cursor, onEnable, onInsert }: MciPickerProps) {
+export function MciPicker({
+  open, onClose, canvas, cursor, onEnable, onInsert, editing = null,
+}: MciPickerProps) {
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<MciCodeShape | null>(null);
   const [argument, setArgument] = useState('');
@@ -85,6 +95,26 @@ export function MciPicker({ open, onClose, canvas, cursor, onEnable, onInsert }:
     }
   }, [open]);
 
+  /**
+   * Open on the code being edited, taken apart into the fields that wrote it.
+   *
+   * Waits for the catalog: which code `~SS_x|` is cannot be known without the
+   * list, and guessing it from the text is a second parser.
+   */
+  useEffect(() => {
+    if (!open || !editing || !catalog) return;
+
+    const split = splitToken(editing.text, catalog.codes);
+    if (!split) return;
+
+    const entry = catalog.codes.find(c => c.code === split.code);
+    if (!entry) return;
+
+    setChosen(entry);
+    setArgument(split.argument);
+    setWidth(split.width === null ? '' : String(split.width));
+  }, [open, editing, catalog]);
+
   const sections = useMemo(
     () => groupMciCodes(filterMciCodes(catalog?.codes ?? [], query), catalog?.families ?? []),
     [catalog, query],
@@ -109,7 +139,12 @@ export function MciPicker({ open, onClose, canvas, cursor, onEnable, onInsert }:
   const enabled = canvasEnablesMci(canvas);
 
   return (
-    <Modal open={open} onClose={onClose} title="Insert a code" maxWidth="max-w-4xl">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={editing ? 'Change this code' : 'Insert a code'}
+      maxWidth="max-w-4xl"
+    >
       <div className="space-y-3 p-4 text-sm">
         {!enabled && (
           <div className="border border-status-warn p-2 space-y-1">
@@ -221,10 +256,19 @@ export function MciPicker({ open, onClose, canvas, cursor, onEnable, onInsert }:
               </label>
             )}
 
-            {overwrites && (
+            {!editing && overwrites && (
               <p className="text-status-warn">
                 This lands on top of "{overwrites}" - typing paints over what is
                 already drawn there. Move the cursor somewhere blank first.
+              </p>
+            )}
+
+            {editing && preview.token.length > editing.length && (
+              <p className="text-status-warn">
+                This is {preview.token.length - editing.length} character
+                {preview.token.length - editing.length === 1 ? '' : 's'} longer
+                than the code it replaces, so it will paint over what is drawn
+                to its right.
               </p>
             )}
 
@@ -238,7 +282,7 @@ export function MciPicker({ open, onClose, canvas, cursor, onEnable, onInsert }:
               disabled={!preview.token}
               onClick={() => { onInsert(preview.token); onClose(); }}
             >
-              Insert it
+              {editing ? 'Change it' : 'Insert it'}
             </button>
           </div>
         )}
