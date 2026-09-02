@@ -84,6 +84,15 @@ interface BBSTerminalProps {
    * door-specific UI, such as the mobile game controls.
    */
   onDoorChange?: (doorId: string | null) => void;
+  /**
+   * Fires with the surface the session now renders on: 'xterm' for an ANSI
+   * session, 'canvas' once it turns out to be PETSCII (a simulated C64).
+   * The host page needs this because a focused <canvas> cannot raise a
+   * mobile soft keyboard and xterm's textarea is display:none while the
+   * canvas owns the session - so the on-screen keyboard is the ONLY way to
+   * type on a 'P' session, in any orientation.
+   */
+  onSurfaceChange?: (surface: PetsciiSurface) => void;
 }
 
 /**
@@ -160,6 +169,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   keepFocused,
   fillParent,
   onDoorChange,
+  onSurfaceChange,
 }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
@@ -250,16 +260,33 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [surface, dispatchSurface] = useReducer(petsciiSurfaceReducer, initialPetsciiSurface);
   const surfaceRef = useRef<PetsciiSurface>(initialPetsciiSurface);
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
+  // The same instance as petsciiMachineRef, held in state so the render
+  // reads it from state instead of a ref (a ref read during render is not
+  // safe under concurrent rendering). Written next to the ref, always.
+  const [petsciiMachine, setPetsciiMachine] = useState<PetsciiMachine | null>(null);
   const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
   const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
   const petsciiBpsRef = useRef<number>(0);
   const petsciiFeedQueue = useRef<number[]>([]);
   const petsciiDrainActiveRef = useRef<boolean>(false);
+  // Bumped by clearPetsciiSession so an in-flight drain loop (it may be
+  // parked in its 5ms await) orphans itself instead of feeding the next
+  // session's machine, and so the next drain starts on a fresh elapsed-time
+  // budget rather than inheriting a huge accumulated allowance and dumping
+  // its first screen unpaced.
+  const petsciiDrainGenerationRef = useRef<number>(0);
+  // Mirrors ModemEmulator.setDoorActive (modem-emulator.ts:56): a running
+  // door's repaints must feel instant, so the pace queue is emptied in one
+  // go while this is true. The pacing is for BBS navigation only.
+  const petsciiDoorActiveRef = useRef<boolean>(false);
   const clearPetsciiSession = useCallback(() => {
     surfaceRef.current = 'xterm';
     petsciiMachineRef.current = null;
+    setPetsciiMachine(null);
     petsciiTransducerRef.current = null;
     petsciiFeedQueue.current.length = 0;
+    petsciiDrainGenerationRef.current += 1;
+    petsciiDrainActiveRef.current = false;
     dispatchSurface({ type: 'session-reset' });
   }, []);
   // Published by the init effect so injectInput (imperative handle) and the
@@ -267,6 +294,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const processInputKeyRef = useRef<(key: string) => void>(() => {});
   const focusSurfaceRef = useRef<() => void>(() => {});
   const fitTerminalRef = useRef<() => void>(() => {});
+  // The write seam, published for the handlers that live OUTSIDE the socket
+  // effect (ZMODEM messages, the Ctrl+C door abort). Writing straight to
+  // terminalInstance there would drop the text into a hidden xterm.
+  const writeTermRef = useRef<(text: string) => void>(() => {});
 
   // Classic BBS behaviour: any keypress dumps the rest of the pending
   // screen instantly instead of making the user wait out the baud rate.
@@ -497,7 +528,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     if (!socket) return;
     if (!transferState.current.direction) return;
     socket.emit('transfer-raw:cancel');
-    terminalInstance.current?.writeln?.('\r\nTransfer cancelled.\r\n');
+    writeTermRef.current('\r\nTransfer cancelled.\r\n\r\n');
     resetZmodem();
   };
 
@@ -507,7 +538,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const Zmodem = requireZmodem();
     if (!Zmodem) return;
     if (!pendingUploadFiles.current.length) {
-      terminalInstance.current?.writeln?.('\r\nSelect a file to upload...\r\n');
+      writeTermRef.current('\r\nSelect a file to upload...\r\n\r\n');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
         fileInputRef.current.click();
@@ -525,7 +556,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const files = Array.from(e.target.files || []);
     pendingUploadFiles.current = files;
     if (!files.length) {
-      terminalInstance.current?.writeln?.('\r\nUpload cancelled.\r\n');
+      writeTermRef.current('\r\nUpload cancelled.\r\n\r\n');
       if (pendingZmodemInit.current) {
         socketRef.current?.emit('transfer-raw:cancel');
         pendingZmodemInit.current = null;
@@ -637,7 +668,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         clearTimeout(transferTimeout.current);
       }
       transferTimeout.current = setTimeout(() => {
-        terminalInstance.current?.writeln?.('\r\nUpload timed out. Cancelling.\r\n');
+        writeTermRef.current('\r\nUpload timed out. Cancelling.\r\n\r\n');
         socket.emit('transfer-raw:cancel');
         resetZmodem();
       }, 30000);
@@ -797,10 +828,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const startPetsciiDrain = () => {
       if (petsciiDrainActiveRef.current) return; // already draining
       petsciiDrainActiveRef.current = true;
+      const generation = petsciiDrainGenerationRef.current;
       const start = performance.now();
       let bytesSent = 0;
       const step = async () => {
         while (petsciiFeedQueue.current.length > 0) {
+          // A fresh session reset the surface while this loop was parked:
+          // its machine is gone and clearPetsciiSession already cleared the
+          // active flag, so orphan this loop rather than feed the new one.
+          if (petsciiDrainGenerationRef.current !== generation) return;
+          // Door output is not paced, exactly as ModemEmulator.write
+          // short-circuits on doorActive (modem-emulator.ts:119) - at 2400
+          // bps a paced 240 bytes/sec makes a door unusable.
+          if (petsciiDoorActiveRef.current) {
+            const queue = petsciiFeedQueue.current;
+            const chunk = queue.splice(0, queue.length);
+            petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
+            continue;
+          }
           const bps = petsciiBpsRef.current || PETSCII_MAX_SOFT_CAP_BPS;
           const bytesPerSecond = Math.max(1, Math.floor(bps / 10)); // 10 bits/byte
           const elapsedMs = performance.now() - start;
@@ -815,7 +860,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
           bytesSent += toSend;
         }
-        petsciiDrainActiveRef.current = false;
+        if (petsciiDrainGenerationRef.current === generation) petsciiDrainActiveRef.current = false;
       };
       void step();
     };
@@ -827,7 +872,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // machine both start from power-on state and see the same byte sequence
     // (transducer output + observed raw bytes), so they stay in lockstep.
     const ensurePetsciiSession = () => {
-      if (!petsciiMachineRef.current) petsciiMachineRef.current = new PetsciiMachine();
+      if (!petsciiMachineRef.current) {
+        petsciiMachineRef.current = new PetsciiMachine();
+        setPetsciiMachine(petsciiMachineRef.current);
+      }
       if (!petsciiTransducerRef.current) petsciiTransducerRef.current = new AnsiToPetsciiTransducer();
       if (surfaceRef.current !== 'canvas') {
         surfaceRef.current = 'canvas';
@@ -848,6 +896,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // session renders as ONE screen on the live surface instead of half on
     // the canvas and half into a hidden xterm.
     const writeTermLn = (text: string) => writeTerm(text + '\r\n');
+    writeTermRef.current = writeTerm;
     // Focus follows the surface: xterm's textarea is display:none while the
     // canvas owns the session, so it cannot hold focus there.
     const focusSurface = () => {
@@ -1323,7 +1372,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (ev.ctrlKey && ev.key === 'c' && (doorActive.current || gameMode.current) && socketRef.current?.connected) {
         ev.preventDefault();
         console.log('[BBSTerminal] Ctrl+C pressed in game mode - sending door:terminate');
-        terminalInstance.current?.write('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
+        writeTermRef.current('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
         socketRef.current.emit('door:terminate');
         return;
       }
@@ -2073,6 +2122,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // Simulated C64: the whole session renders on the canvas. The pace
         // queue (petsciiBpsRef, same 'modem-speed' as ModemEmulator) keeps
         // the baud feel; xterm stays hidden.
+        //
+        // NOT flushed per message on purpose: flush() DROPS a partially
+        // parsed escape sequence (ansi-to-petscii.ts:129-135), and
+        // ansi-output chunks do split mid-sequence - the overlay/sfx OSC
+        // buffers a few lines above exist for exactly that. Held state is
+        // resolved on the next chunk, or by the flush in processInputKeyRef
+        // when the user types (the case that matters: nothing of the BBS's
+        // may sit under the login echo).
         enqueuePetscii(petsciiTransducerRef.current!.transduce(output));
         return;
       }
@@ -2086,10 +2143,31 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     // Legacy PUA text (command.handler's C64 prompts, BBSApi.writePetsciiLine).
-    // A PETSCII session by definition: the transducer decodes U+E000-E1FF.
+    // This event does NOT select the canvas: screen.handler emits it as the
+    // SAFE degrade for a session that is not a C64 (and BBSApi.writePetscii
+    // (string) emits it ungated), so flipping the surface here would drag an
+    // ordinary ANSI session onto a 40x25 canvas it never asked for. Only
+    // 'petscii-bytes' and the 40x25 'terminal-resize' choose the surface;
+    // this renders on whichever one is already live.
     socket.on('petscii-output', (data: string) => {
-      ensurePetsciiSession();
-      enqueuePetscii(petsciiTransducerRef.current!.transduce(data));
+      if (surfaceRef.current === 'canvas') {
+        // The transducer decodes U+E000-E1FF back to the PETSCII bytes the
+        // glyphs stand for, so PUA text and raw .seq bytes end up in the
+        // same machine through the same queue.
+        enqueuePetscii(petsciiTransducerRef.current!.transduce(data));
+        return;
+      }
+      // xterm: the PUA string goes out exactly like ansi-output does. Its
+      // legibility depends on the session's font covering U+E000-E1FF -
+      // xterm is never switched to PetMe64 any more (that gate belonged to
+      // the hybrid overlay and is retired); a real PETSCII session renders
+      // on the canvas from the character ROM instead.
+      if (modemEmulatorRef.current) {
+        modemEmulatorRef.current.write(data);
+      } else {
+        term.write(data);
+      }
+      term.refresh(0, term.rows - 1);
     });
 
     // Raw .seq bytes (screen.handler emitPetsciiScreen, BBSApi.writePetscii(Buffer)).
@@ -2406,6 +2484,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Skip the modem soft-cap while a door is running — door output
       // should feel instant. The pacing is for BBS navigation only.
       modemEmulatorRef.current?.setDoorActive(active);
+      // Same rule for the canvas pace queue (see petsciiDoorActiveRef).
+      petsciiDoorActiveRef.current = active;
+      if (active) startPetsciiDrain(); // let anything already queued go at once
     });
 
     // Game mode: bypass OS key repeat for real-time game controls
@@ -2702,6 +2783,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // their split because onData also delivers pastes that never hit onKey.)
     processInputKeyRef.current = (key: string) => {
       flushPetsciiQueue();
+      // Anything the transducer is still holding belongs to the BBS's own
+      // output and must land BEFORE this keystroke's echo, not under it.
+      if (surfaceRef.current === 'canvas' && petsciiTransducerRef.current) {
+        enqueuePetscii(petsciiTransducerRef.current.flush());
+      }
       if (processLoginKey(key, loginCtx)) return;
       sendInput(key);
     };
@@ -2819,6 +2905,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // it the keyboard again. Only on a real canvas -> xterm transition: the
   // mount-time 'xterm' value must not trigger a fit (the terminal
   // deliberately does not auto-fit on mount - see fitTerminal's callers).
+  // The host page needs the surface: on mobile the on-screen keyboard is the
+  // only way to type on a canvas session, in any orientation.
+  useEffect(() => { onSurfaceChange?.(surface); }, [surface, onSurfaceChange]);
+
   const wasCanvasRef = useRef<boolean>(false);
   useEffect(() => {
     if (surface === 'canvas') { wasCanvasRef.current = true; return; }
@@ -3081,7 +3171,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     ripLingerHandle.current = null;
     setRipMode(false);
     // Typing continues at the prompt the picture was covering.
-    terminalInstance.current?.focus();
+    focusSurfaceRef.current();
   };
   finishRipPictureRef.current = () => {
     if (doorActive.current) {
@@ -3176,7 +3266,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           ...(surface === 'canvas' ? { display: 'none' } : {}),
         }}
       />
-      {surface === 'canvas' && petsciiMachineRef.current && (
+      {surface === 'canvas' && petsciiMachine && (
         <div
           style={{
             width: '100%',
@@ -3187,7 +3277,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         >
           <PetsciiCanvas
             ref={petsciiCanvasRef}
-            machine={petsciiMachineRef.current}
+            machine={petsciiMachine}
             focusable
             focusOnMount
             onData={(bytes) => {

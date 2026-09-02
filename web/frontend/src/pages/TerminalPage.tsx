@@ -58,6 +58,13 @@ const SPINNER_SEND_MS = 30;
 export function TerminalPage(): JSX.Element {
   const terminalRef = useRef<BBSTerminalRef>(null);
   const [isMobile, setIsMobile] = useState<boolean>(isPortraitMobile);
+  /**
+   * Which surface the terminal renders on. A PETSCII ('P') session draws on
+   * a <canvas> and xterm's textarea is display:none - and a focused canvas
+   * cannot raise a mobile soft keyboard - so the on-screen keyboard is the
+   * only way to type on one, landscape included.
+   */
+  const [surface, setSurface] = useState<'xterm' | 'canvas'>('xterm');
   const [fontSize, setFontSize] = useState<number>(() =>
     isHandheld() ? seedFontSize(window.innerWidth) : DESKTOP_FONT_SIZE
   );
@@ -364,7 +371,9 @@ export function TerminalPage(): JSX.Element {
     handleGameRelease(key, code);
   }, [handleGamePress, handleGameRelease]);
 
-  const showOnscreenInput = isMobile;
+  // Portrait mobile always gets it; a canvas session gets it in any
+  // orientation, because there is no other keyboard to reach.
+  const showOnscreenInput = isMobile || (isHandheld() && surface === 'canvas');
 
   return (
     <div className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}`}>
@@ -375,6 +384,7 @@ export function TerminalPage(): JSX.Element {
         fillParent
         onConnect={handleConnect}
         onDoorChange={setActiveDoorId}
+        onSurfaceChange={setSurface}
       />
       {showOnscreenInput && (
         gameControls === null
