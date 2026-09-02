@@ -11,6 +11,7 @@ import { EnvStat } from '../constants/env-codes';
 import { validateFilename, checkForFile } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { setEnvStat } from '../utils/acs.util';
+import { resetPetsciiModel } from '../utils/petscii-session-model';
 import { beginLogoff } from '../server/logoff';
 import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import * as path from 'path';
@@ -1407,6 +1408,15 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
         session.ansiEnabled = false; // C64 uses raw PETSCII, not ANSI
         session.screenWidth = 40;
         session.screenHeight = 25;
+        // The flip: from here the model describes a fresh 40x25 screen. The
+        // DEL-probe stamped terminalType='c64' in index.ts one dispatch ago,
+        // so anything still draining out of the 16ms AnsiBuffer since then -
+        // the connect screen's tail, a graphics prompt deferred behind
+        // session.pendingScreenCommand - was transduced into the model with
+        // sessionWantsPetscii already true. completeRealC64Connect's own
+        // ESC[2J ESC[H resync transduces on top of this, which is idempotent.
+        // Task OC-5.
+        resetPetsciiModel(session);
         await completeRealC64Connect(socket, session);
         return;
       }
@@ -1450,6 +1460,13 @@ console.log('[C64] DEL-probe classified caller as C64 at ANSI_PROMPT - auto-enab
         // (SyncTERM-style PETSCII clients still want ANSI color codes) —
         // a real C64 needs raw PETSCII with no ANSI escape parsing at all.
         session.ansiEnabled = false;
+        // Same flip, same window, one dispatch later: this caller was still
+        // being classified while the graphics prompt was already on screen.
+        // applyGraphicsAnswer above resets too and nothing model-visible is
+        // emitted between the two calls (terminal-resize is not), so this is
+        // a no-op in this order - it is here so the two flip branches cannot
+        // drift apart when one of them changes. Task OC-5.
+        resetPetsciiModel(session);
         await completeRealC64Connect(socket, session);
         return;
       }

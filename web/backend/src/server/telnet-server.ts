@@ -21,6 +21,7 @@ import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { resetPetsciiModel } from '../utils/petscii-session-model';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
 const IAC = 255;  // Interpret As Command
@@ -743,6 +744,14 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
         connection.session.screenHeight = 25;
         connection.session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
         connection.session.tempData = { inputBuffer: '' };
+        // The session is PETSCII from this line on, so the model describes a
+        // fresh 40x25 screen and not whatever drained onto the wire while the
+        // caller was still being classified: an emitText chunk sitting in the
+        // 16ms AnsiBuffer (`utils/ansi-buffer.util.ts`) leaves AFTER the
+        // DEL-probe stamped terminalType='c64' in index.ts, i.e. with
+        // sessionWantsPetscii already true, and is transduced into the model
+        // as if it were C64 screen content. Task OC-5.
+        resetPetsciiModel(connection.session);
         // Emit terminal detection event for index.ts to handle BBSTITLE display
         this.emit('c64-detected', connection);
       } else if (connection.session) {

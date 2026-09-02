@@ -8,6 +8,7 @@ import * as path from 'path';
 import { BBSSession } from '../../index';
 import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
+import { resetPetsciiModel } from '../../utils/petscii-session-model';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -57,6 +58,12 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
       session.ansiEnabled = false; // C64 uses raw PETSCII, not ANSI
       session.screenWidth = 40;
       session.screenHeight = 25;
+      // The flip: the model describes a fresh 40x25 screen from here, never
+      // the tail of the connect screen that drained out of the 16ms
+      // AnsiBuffer after the DEL-probe stamped terminalType='c64'. This
+      // branch is DEAD (command.handler.ts is the live dispatcher) - the
+      // reset is here so the two copies cannot drift apart. Task OC-5.
+      resetPetsciiModel(session);
 
       // Skip graphics prompt — but still honour the system password gate
       // express.e:29548-29550 Not(STEALTH_MODE) path fires before BBSTITLE
@@ -146,6 +153,12 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
     session.screenWidth = 40;
     session.screenHeight = 25;
 console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
+    // The flip for a web/SSH caller who ANSWERED the graphics prompt. Before
+    // this line sessionWantsPetscii was false and the session had no model at
+    // all; the reset fixes the ORIGIN everything after is modelled from - the
+    // terminal-resize below, the SIMULATING banner
+    // (`handlers/command.handler.ts`) and the first screen. Task OC-5.
+    resetPetsciiModel(session);
     socket.emit('terminal-resize', { cols: 40, rows: 25 });
   } else if (hasR) {
     // express.e:29545 - RIP mode: .rip screens served first, framed by
