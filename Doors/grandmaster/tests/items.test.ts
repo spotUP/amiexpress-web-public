@@ -119,12 +119,18 @@ export async function selfTargetItemsAreExactlyTheSixSupportItems(): Promise<voi
   }
 }
 
-export async function runtimeItemsExcludeTheSixUnimplementedOnes(): Promise<void> {
-  const notImplemented = [2, 3, 4, 5, 16, 20];
-  for (const id of notImplemented) {
-    assert.ok(!TGM_RUNTIME_ITEMS.includes(id), `${id} should not be drawable at runtime`);
+export async function runtimeItemsExcludeOnlyTheDeadOnes(): Promise<void> {
+  // X-RAY (4), COLOR (5), DARK (16) and TRANSFORM (20) have no live consumer
+  // in the reference - see the TGM_NOT_IMPLEMENTED_ITEMS note. ROLLROLL (2)
+  // and DEATH (3) DO, and are implemented, so they are drawable again.
+  const dead = [4, 5, 16, 20];
+  for (const id of dead) {
+    assert.ok(!TGM_RUNTIME_ITEMS.includes(id), `${id} has no effect and must not be drawable`);
   }
-  assert.strictEqual(TGM_RUNTIME_ITEMS.length, TGM_PRESET_ITEMS.length - notImplemented.length);
+  for (const id of [2, 3]) {
+    assert.ok(TGM_RUNTIME_ITEMS.includes(id), `${id} is implemented and must be drawable`);
+  }
+  assert.strictEqual(TGM_RUNTIME_ITEMS.length, TGM_PRESET_ITEMS.length - dead.length);
 }
 
 // ============================================================================

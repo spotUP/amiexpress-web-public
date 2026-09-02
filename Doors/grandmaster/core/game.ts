@@ -41,7 +41,9 @@ import {
   isSelfTargetItem,
   applySelfItem,
   applyEnemyItem,
+  ROLL_ROLL_PERIOD_FRAMES,
   type ItemPresetName,
+  type ItemEffectResult,
 } from './items';
 
 export class GameEngine {
@@ -114,6 +116,9 @@ export class GameEngine {
     5: 35, 6: 30, 7: 20, 8: 18, 9: 15
   };
 
+  /** Frames since ROLL ROLL was collected (gamestart.c's gametime % 30). */
+  private rollRollFrame = 0;
+
   private readonly startLevel: number;
 
   constructor(
@@ -144,6 +149,29 @@ export class GameEngine {
     // Sprint - modes where they were unreachable at any setting.
     if (settings.itemMode && settings.itemMode !== 'OFF') {
       this.enableItems(settings.itemMode);
+    }
+  }
+
+  /**
+   * Apply one item's ItemEffectResult to THIS engine.
+   *
+   * Board-shape effects (row deletes) and the timed ones (BIG, ROLL ROLL)
+   * both land here, so the versus router and single player's own fallback
+   * spend an item the same way instead of each handling a subset.
+   */
+  applyItemEffectResult(result: ItemEffectResult): void {
+    if (result.clearRows && result.clearRows.length > 0) {
+      clearLines(this.state.board, result.clearRows);
+    }
+    if (result.insertHardBlockNext) {
+      this.insertHardBlockNext();
+    }
+    if (result.bigPieces) {
+      this.state.bigPiecesRemaining = result.bigPieces;
+    }
+    if (result.rollRollPieces) {
+      this.state.rollRollPiecesRemaining = result.rollRollPieces;
+      this.rollRollFrame = 0;
     }
   }
 
@@ -261,6 +289,8 @@ export class GameEngine {
       torikanExpired: false,
       torikanCheckpointLevel: null,
       itemBanner: null,
+      bigPiecesRemaining: 0,
+      rollRollPiecesRemaining: 0,
     };
   }
 
@@ -350,7 +380,30 @@ export class GameEngine {
     const pieceType = this.state.nextQueue.shift()!;
     this.state.nextQueue.push(this.pieceManager.getRandomPiece());
 
+    // Timed item effects are counted in PIECES, not frames or seconds
+    // (gamestart.c:7092-7100 spends item_t once per piece and clears the
+    // flag when it passes the item's own limit).
+    const big = this.state.bigPiecesRemaining > 0;
+    if (big) this.state.bigPiecesRemaining--;
+    if (this.state.rollRollPiecesRemaining > 0) this.state.rollRollPiecesRemaining--;
+
     const spawnPos = this.pieceManager.getSpawnPosition(pieceType, this.state.board.width);
+
+    // A BIG piece is twice as wide, so the ordinary spawn column can put its
+    // right-hand cells off the board - an I piece spawning at x=3 reaches
+    // column 11 of a 10-wide field. HeborisCE never meets this because its
+    // own spawn columns are chosen inside a doubled coordinate space
+    // (judgeBigBlock, gamestart.c:16241); here the shape is doubled instead,
+    // so the spawn column is nudged back until the piece fits.
+    if (big) {
+      const shape = this.pieceManager.getShape(pieceType, 0, true);
+      let rightmost = 0;
+      for (const row of shape) {
+        for (let x = 0; x < row.length; x++) if (row[x]) rightmost = Math.max(rightmost, x);
+      }
+      const overflow = spawnPos.x + rightmost - (this.state.board.width - 1);
+      if (overflow > 0) spawnPos.x = Math.max(0, spawnPos.x - overflow);
+    }
 
     // Determine if piece should be invisible
     let invisible = false;
@@ -383,6 +436,7 @@ export class GameEngine {
       y: spawnPos.y,
       invisible,
       itemId: this.rollItemForNextPiece(),
+      big,
     };
 
     this.state.canHold = true;
@@ -420,7 +474,7 @@ export class GameEngine {
     }
 
     // Check if piece can spawn (game over if not)
-    const shape = this.pieceManager.getShape(pieceType, initialRotation);
+    const shape = this.pieceManager.getShape(pieceType, initialRotation, big);
     if (checkCollision(this.state.board, shape, spawnPos.x, spawnPos.y)) {
       this.state.status = 'gameover';
       this.state.endTime = Date.now();
@@ -482,6 +536,17 @@ export class GameEngine {
         this.spawnPiece();
       }
       return;
+    }
+
+    // ROLL ROLL (item 2): the piece rotates BY ITSELF while the item lasts.
+    // Every rotation module folds it straight into the rotation input -
+    // `move = (BTN_B || rolling) - ...` (ars.c:78, world.c:208) - and in
+    // versus and item mode the timing is `gametime % p_rollroll_timer == 0`
+    // (ars.c:66-70), 30 frames (init.c:729).
+    this.rollRollFrame++;
+    if (this.state.rollRollPiecesRemaining > 0
+        && this.rollRollFrame % ROLL_ROLL_PERIOD_FRAMES === 0) {
+      this.rotate(1);
     }
 
     // Apply gravity
@@ -553,7 +618,7 @@ export class GameEngine {
     if (!this.state.currentPiece) return;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
 
     // Accumulate gravity (supports fractional values < 1.0)
     this.gravityAccumulator += this.state.gravity;
@@ -590,7 +655,7 @@ export class GameEngine {
     if (!this.state.currentPiece) return false;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
 
     return checkCollision(this.state.board, shape, piece.x, piece.y + 1);
   }
@@ -602,7 +667,7 @@ export class GameEngine {
     if (!this.state.currentPiece || this.state.status !== 'playing') return false;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
     const newX = piece.x + direction;
 
     if (!checkCollision(this.state.board, shape, newX, piece.y)) {
@@ -642,7 +707,7 @@ export class GameEngine {
 
     const piece = this.state.currentPiece;
     const newRotation = ((piece.rotation + direction + 4) % 4) as 0 | 1 | 2 | 3;
-    const newShape = this.pieceManager.getShape(piece.type, newRotation);
+    const newShape = this.pieceManager.getShape(piece.type, newRotation, !!piece.big);
 
     // Try rotation with wall kicks
     const kicks = this.pieceManager.getKicks(piece.type, piece.rotation, newRotation);
@@ -699,7 +764,7 @@ export class GameEngine {
     if (!this.state.currentPiece || this.state.status !== 'playing') return false;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
 
     if (!checkCollision(this.state.board, shape, piece.x, piece.y + 1)) {
       piece.y++;
@@ -738,7 +803,7 @@ export class GameEngine {
     if (!this.state.currentPiece || this.state.status !== 'playing') return;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
     const ghostY = getGhostY(this.state.board, shape, piece.x, piece.y);
 
     const dropDistance = ghostY - piece.y;
@@ -780,7 +845,7 @@ export class GameEngine {
     if (!this.state.currentPiece || this.state.status !== 'playing') return false;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
     const ghostY = getGhostY(this.state.board, shape, piece.x, piece.y);
     const dropDistance = ghostY - piece.y;
     const locksOnUp = this.settings.rotationSystem === 'ACE-ARS';
@@ -1034,7 +1099,7 @@ export class GameEngine {
     this.state.piecesPlaced++;
 
     const piece = this.state.currentPiece;
-    const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+    const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
 
     // Detect T-Spin before placing piece (HeborisCE: confirm tspin_flag = 2)
     const tSpin = this.detectTSpin();
@@ -1677,13 +1742,7 @@ export class GameEngine {
     // "enemy = 1 - player", falling back to "enemy = player"). Without this
     // an item outside versus was collected, named on the HUD, and then did
     // nothing at all.
-    const result = applyEnemyItem(itemId, this.state.board, this.state.board);
-    if (result.clearRows && result.clearRows.length > 0) {
-      clearLines(this.state.board, result.clearRows);
-    }
-    if (result.insertHardBlockNext) {
-      this.insertHardBlockNext();
-    }
+    this.applyItemEffectResult(applyEnemyItem(itemId, this.state.board, this.state.board));
   }
 
   /**

@@ -15,6 +15,12 @@ export interface Piece {
      * means the piece carries no item.
      */
     itemId?: number | null;
+    /**
+     * BIG piece (DEATH BLOCK, item 3): every cell of the shape is a 2x2 block
+     * (gamestart.c:16241-16297). Set at spawn from the engine's remaining
+     * DEATH BLOCK pieces so a piece keeps its size for its whole life.
+     */
+    big?: boolean;
 }
 export type RotationSystem = 'SRS' | 'ARS' | 'NRS' | 'BARS' | 'TI-ARS' | 'ACE-ARS' | 'TI-WORLD' | 'ACE-SRS' | 'DS-WORLD' | 'SRS-X';
 export interface Cell {
@@ -109,6 +115,13 @@ export interface GameState {
         name: string;
         ttl: number;
     } | null;
+    /**
+     * Pieces left under DEATH BLOCK (item 3) and ROLL ROLL (item 2). Both are
+     * counted in PIECES, the way HeborisCE counts item_t
+     * (gamestart.c:7092-7100). 0 = not active.
+     */
+    bigPiecesRemaining: number;
+    rollRollPiecesRemaining: number;
 }
 /**
  * Gamepad bindings stored as trigger strings: "button:a", "dpad:left", "axis:left-x:negative"

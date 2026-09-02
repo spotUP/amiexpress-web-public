@@ -28,7 +28,15 @@ export declare class PieceManager {
      * Get piece shape at specified rotation
   
      */
-    getShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][];
+    /**
+     * BIG pieces: every cell becomes a 2x2 block (HeborisCE judgeBigBlock /
+     * setBigBlock, gamestart.c:16241-16297, which double every block offset
+     * and then fill `for(k=0;k<2;k++) for(l=0;l<2;l++)`). Scaling the SHAPE
+     * gives collision, ghost, lock and rendering the same behaviour without a
+     * second code path for any of them.
+     */
+    getShape(type: PieceType, rotation: 0 | 1 | 2 | 3, big?: boolean): number[][];
+    private getBaseShape;
     /**
 
 
@@ -87,4 +95,9 @@ export declare function getPieceCells(shape: number[][], x: number, y: number): 
     x: number;
     y: number;
 }>;
+/**
+ * Double a shape in both axes - one cell becomes a 2x2 block.
+ * See PieceManager.getShape()'s BIG note (gamestart.c:16241-16297).
+ */
+export declare function doubleShape(shape: number[][]): number[][];
 //# sourceMappingURL=pieces.d.ts.map

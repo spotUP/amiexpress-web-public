@@ -10,7 +10,7 @@ import { type Medal } from './medals';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
-import { type ItemPresetName } from './items';
+import { type ItemPresetName, type ItemEffectResult } from './items';
 export declare class GameEngine {
     private sounds;
     private state;
@@ -63,8 +63,18 @@ export declare class GameEngine {
     private devilNextRise;
     private readonly SHIRASE_RISE_MIN;
     private readonly SHIRASE_RISE_MAX;
+    /** Frames since ROLL ROLL was collected (gamestart.c's gametime % 30). */
+    private rollRollFrame;
     private readonly startLevel;
     constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager, startLevel?: number);
+    /**
+     * Apply one item's ItemEffectResult to THIS engine.
+     *
+     * Board-shape effects (row deletes) and the timed ones (BIG, ROLL ROLL)
+     * both land here, so the versus router and single player's own fallback
+     * spend an item the same way instead of each handling a subset.
+     */
+    applyItemEffectResult(result: ItemEffectResult): void;
     /**
      * Publish the grade for the mode being played.
      *

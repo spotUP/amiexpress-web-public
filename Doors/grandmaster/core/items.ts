@@ -86,17 +86,22 @@ export const TGM_PRESET_ITEMS: readonly number[] = [
 ];
 
 /**
- * Of TGM_PRESET_ITEMS, the six whose reference behaviour could not be
- * confirmed via a live (reachable) code path:
+ * Of TGM_PRESET_ITEMS, the four whose reference behaviour has NO live
+ * (reachable) code path to copy. ROLLROLL (2) and DEATH (3) used to be on
+ * this list; both turned out to be live and are implemented now:
  *
- *  - ROLLROLL (2): live effect is entangled with the "roll" scroll-mode
- *    subsystem (m_roll_blockframe, p_rollroll_interval) and only one narrow,
- *    cosmetic consequence (hold-swap piece colour, gamestart.c:7687-7690) is
- *    confidently traceable. Not enough to reconstruct the real mechanic.
- *  - DEATH (3): setBigBlock/judgeBigBlock (gamestart.c:16234-16297) are real
- *    and fully live, but doubling piece footprint touches spawn, rotation
- *    kicks, ghost and hold across the whole piece system - out of scope for
- *    "extend the board cell model minimally".
+ *  - ROLLROLL (2): the effect is not the "roll" scroll subsystem at all -
+ *    isrollroll feeds `move = (BTN_B || rolling) - ...` in every rotation
+ *    module (ars.c:52-78, world.c:182-208, classic.c:72, classic_D.c:113),
+ *    i.e. the piece rotates BY ITSELF. In versus and item mode the timing is
+ *    `gametime % p_rollroll_timer == 0` (ars.c:66-70), 30 frames
+ *    (init.c:729). The hold-swap colour line (gamestart.c:7687-7690) is a
+ *    cosmetic side effect of it, not the mechanic.
+ *  - DEATH (3): eraseItem sets IsBig (gamestart.c:13502), and judgeBlock /
+ *    setBlock hand the whole piece to judgeBigBlock / setBigBlock
+ *    (gamestart.c:16156, 16192), which double each block offset and fill
+ *    2x2. Doubling the SHAPE gives collision, ghost, lock and rendering the
+ *    same behaviour with no second code path.
  *  - X-RAY (4): its only consumer, getFieldBlock(..., opt=1) at
  *    gamestart.c:15353-15356, is dead code - grepping the file, every call
  *    site (gamestart.c:10457,10469) passes opt=0. No live effect to copy.
@@ -111,7 +116,14 @@ export const TGM_PRESET_ITEMS: readonly number[] = [
  * This engine never draws these six at runtime (see TGM_RUNTIME_ITEMS) so a
  * player never receives a pickup with no effect.
  */
-export const TGM_NOT_IMPLEMENTED_ITEMS: readonly number[] = [2, 3, 4, 5, 16, 20];
+export const TGM_NOT_IMPLEMENTED_ITEMS: readonly number[] = [4, 5, 16, 20];
+
+/** DEATH BLOCK's duration in pieces (gamestart.c:7097 `item_t > 1`). */
+export const DEATH_BLOCK_PIECES = 2;
+/** ROLL ROLL's duration in pieces (gamestart.c:7092 `item_t > 3`). */
+export const ROLL_ROLL_PIECES = 4;
+/** ROLL ROLL's rotation period in frames (init.c:729 p_rollroll_timer = 30). */
+export const ROLL_ROLL_PERIOD_FRAMES = 30;
 
 /** TGM_PRESET_ITEMS minus TGM_NOT_IMPLEMENTED_ITEMS - what the engine actually draws. */
 export const TGM_RUNTIME_ITEMS: readonly number[] = TGM_PRESET_ITEMS.filter(
@@ -434,6 +446,18 @@ export function flipVertical(board: Board, top = visibleTop(board)): void {
 // ============================================================================
 
 export interface ItemEffectResult {
+  /**
+   * Pieces the target spends under BIG (DEATH BLOCK, item 3): eraseItem sets
+   * IsBig (gamestart.c:13502-13503) and the per-piece expiry clears it once
+   * item_t passes 1 (gamestart.c:7097-7100) - two pieces.
+   */
+  bigPieces?: number;
+  /**
+   * Pieces the target spends auto-rotating (ROLL ROLL, item 2): eraseItem
+   * sets isrollroll (gamestart.c:13497-13500), expiry clears it once item_t
+   * passes 3 (gamestart.c:7092-7095) - four pieces.
+   */
+  rollRollPieces?: number;
   /** Rows that should be run through the caller's clearLines() (DEL items). */
   clearRows?: number[];
   /** Set when the item inserts a hard block into the target's next piece. */
@@ -473,6 +497,14 @@ export function applyEnemyItem(
     case 1:
       mirrorBoard(targetBoard);
       return {};
+    case 2:
+      // ROLL ROLL - the target's piece starts rotating on its own
+      // (gamestart.c:13497-13499 isrollroll, spent by the caller's engine).
+      return { rollRollPieces: ROLL_ROLL_PIECES };
+    case 3:
+      // DEATH BLOCK - the target's next pieces come out BIG
+      // (gamestart.c:13502-13503 IsBig).
+      return { bigPieces: DEATH_BLOCK_PIECES };
     case 21: {
       const x = Math.floor(rng() * targetBoard.width);
       laserColumn(targetBoard, x);

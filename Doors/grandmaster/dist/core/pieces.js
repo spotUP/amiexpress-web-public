@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PieceManager = exports.ARS_COLORS = exports.PIECE_COLORS = void 0;
 exports.getPieceCells = getPieceCells;
+exports.doubleShape = doubleShape;
 // ============================================================================
 // Piece Colors (for rendering)
 // ============================================================================
@@ -768,7 +769,18 @@ class PieceManager {
      * Get piece shape at specified rotation
   
      */
-    getShape(type, rotation) {
+    /**
+     * BIG pieces: every cell becomes a 2x2 block (HeborisCE judgeBigBlock /
+     * setBigBlock, gamestart.c:16241-16297, which double every block offset
+     * and then fill `for(k=0;k<2;k++) for(l=0;l<2;l++)`). Scaling the SHAPE
+     * gives collision, ghost, lock and rendering the same behaviour without a
+     * second code path for any of them.
+     */
+    getShape(type, rotation, big = false) {
+        const shape = this.getBaseShape(type, rotation);
+        return big ? doubleShape(shape) : shape;
+    }
+    getBaseShape(type, rotation) {
         switch (this.rotationSystem) {
             case 'SRS':
                 return SRS_SHAPES[type][rotation];
@@ -956,5 +968,20 @@ function getPieceCells(shape, x, y) {
         }
     }
     return cells;
+}
+/**
+ * Double a shape in both axes - one cell becomes a 2x2 block.
+ * See PieceManager.getShape()'s BIG note (gamestart.c:16241-16297).
+ */
+function doubleShape(shape) {
+    const doubled = [];
+    for (const row of shape) {
+        const wide = [];
+        for (const cell of row) {
+            wide.push(cell, cell);
+        }
+        doubled.push(wide, [...wide]);
+    }
+    return doubled;
 }
 //# sourceMappingURL=pieces.js.map

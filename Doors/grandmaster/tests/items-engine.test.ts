@@ -305,3 +305,122 @@ export async function theItemModeIsOnTheSettingsMenu(): Promise<void> {
     assert.ok(row!.includes('TGM'), `the row must show the current value, got: ${row}`);
   } finally { screen.destroy(); }
 }
+
+// ============================================================================
+// The two timed items - DEATH BLOCK (3) and ROLL ROLL (2).
+//
+// Both were on the "no live code path" list and both turned out to have one.
+// They are counted in PIECES, the way HeborisCE spends item_t
+// (gamestart.c:7092-7100), not in seconds.
+// ============================================================================
+
+/** Cells the ACTIVE piece occupies, from the engine's own shape lookup. */
+function activePieceCells(engine: any): number {
+  const piece = engine.getState().currentPiece;
+  const shape = (engine as any).pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
+  return shape.reduce((n: number, row: number[]) => n + row.filter((c: number) => c).length, 0);
+}
+
+export async function deathBlockMakesTheNextPiecesBig(): Promise<void> {
+  const engine: any = new GameEngine('master', { ...settings, itemMode: 'TGM' }, sounds);
+  engine.start();
+  assert.strictEqual(activePieceCells(engine), 4, 'a normal piece is four cells');
+
+  // gamestart.c:13502 - eraseItem sets IsBig on the target.
+  engine.applyItemEffectResult({ bigPieces: 2 });
+  assert.strictEqual(engine.getState().bigPiecesRemaining, 2);
+
+  const sizes: number[] = [];
+  for (let piece = 0; piece < 3; piece++) {
+    engine.getState().board.grid =
+      createBoard(engine.getState().board.width, engine.getState().board.height).grid;
+    engine.hardDrop();
+    for (let f = 0; f < 40 && !engine.getState().currentPiece; f++) engine.update(50);
+    assert.ok(engine.getState().currentPiece, 'a piece must have spawned');
+    sizes.push(activePieceCells(engine));
+  }
+
+  assert.deepStrictEqual(sizes, [16, 16, 4],
+    'two BIG pieces (each cell a 2x2 block), then back to normal - item_t > 1');
+}
+
+export async function aBigPieceLocksSixteenCells(): Promise<void> {
+  const engine: any = new GameEngine('master', settings, sounds);
+  engine.start();
+  engine.applyItemEffectResult({ bigPieces: 1 });
+  engine.hardDrop();                                   // spend the normal piece
+  for (let f = 0; f < 40 && !engine.getState().currentPiece; f++) engine.update(50);
+  engine.getState().board.grid =
+    createBoard(engine.getState().board.width, engine.getState().board.height).grid;
+
+  assert.strictEqual(activePieceCells(engine), 16, 'the spawned piece is BIG');
+  engine.hardDrop();
+
+  const filled = engine.getState().board.grid
+    .reduce((n: number, row: any[]) => n + row.filter(c => c.filled).length, 0);
+  assert.strictEqual(filled, 16, 'and it locks all sixteen cells (setBigBlock)');
+}
+
+export async function rollRollTurnsThePieceByItself(): Promise<void> {
+  // ars.c:66-70 - in versus and item mode, `gametime % p_rollroll_timer == 0`,
+  // p_rollroll_timer being 30 (init.c:729). The rotation is the same CW one
+  // the player's key would ask for: `move = (BTN_B || rolling) - ...`.
+  const engine: any = new GameEngine('master', settings, sounds);
+  engine.start();
+  engine.getState().currentPiece = { type: 'T', rotation: 0, x: 4, y: 5 };
+
+  engine.applyItemEffectResult({ rollRollPieces: 4 });
+
+  for (let frame = 0; frame < 29; frame++) engine.update(1000 / 60);
+  assert.strictEqual(engine.getState().currentPiece.rotation, 0, 'nothing turns before 30 frames');
+
+  engine.update(1000 / 60);
+  assert.strictEqual(engine.getState().currentPiece.rotation, 1, 'the 30th frame turns it clockwise');
+}
+
+export async function rollRollStopsAfterFourPieces(): Promise<void> {
+  const engine: any = new GameEngine('master', settings, sounds);
+  engine.start();
+  engine.applyItemEffectResult({ rollRollPieces: 4 });
+
+  for (let piece = 0; piece < 4; piece++) {
+    engine.getState().board.grid =
+      createBoard(engine.getState().board.width, engine.getState().board.height).grid;
+    engine.hardDrop();
+    for (let f = 0; f < 40 && !engine.getState().currentPiece; f++) engine.update(50);
+  }
+  assert.strictEqual(engine.getState().rollRollPiecesRemaining, 0, 'four pieces spend it');
+
+  const piece = engine.getState().currentPiece;
+  piece.type = 'T'; piece.rotation = 0; piece.x = 4; piece.y = 5;
+  for (let frame = 0; frame < 60; frame++) engine.update(1000 / 60);
+  assert.strictEqual(engine.getState().currentPiece.rotation, 0, 'and then it turns no more');
+}
+
+export async function aBigPieceSpawnsInsideTheBoard(): Promise<void> {
+  // A doubled I piece is eight columns wide; the ordinary I spawn column
+  // puts its right-hand cells past a 10-wide field, which used to top the
+  // game out at spawn (intermittently - it depends which piece is next).
+  for (const type of ['I', 'O', 'T', 'L', 'J', 'S', 'Z'] as const) {
+    const engine: any = new GameEngine('master', settings, sounds);
+    engine.start();
+    engine.applyItemEffectResult({ bigPieces: 4 });
+    engine.getState().nextQueue = [type, type, type, type, type, type];
+    engine.getState().board.grid =
+      createBoard(engine.getState().board.width, engine.getState().board.height).grid;
+    engine.hardDrop();
+    for (let f = 0; f < 40 && !engine.getState().currentPiece; f++) engine.update(50);
+
+    const state = engine.getState();
+    assert.strictEqual(state.status, 'playing', `a BIG ${type} must not top the game out at spawn`);
+    const piece = state.currentPiece;
+    const shape = (engine as any).pieceManager.getShape(piece.type, piece.rotation, true);
+    for (let y = 0; y < shape.length; y++) {
+      for (let x = 0; x < shape[y].length; x++) {
+        if (!shape[y][x]) continue;
+        assert.ok(piece.x + x >= 0 && piece.x + x < state.board.width,
+          `BIG ${type} cell at column ${piece.x + x} is off a ${state.board.width}-wide board`);
+      }
+    }
+  }
+}

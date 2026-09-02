@@ -224,9 +224,10 @@ class VersusScreen {
             const target = this.pickItemTarget(source);
             const targetEngine = target ?? engine; // reference's own-player fallback
             const result = (0, items_1.applyEnemyItem)(itemId, targetEngine.getBoard(), engine.getBoard());
-            if (result.insertHardBlockNext) {
-                targetEngine.insertHardBlockNext();
-            }
+            // One applier for every kind of effect (row deletes, the hard block,
+            // and the timed BIG / ROLL ROLL states) - this used to handle only
+            // insertHardBlockNext, so anything else the item returned was dropped.
+            targetEngine.applyItemEffectResult(result);
             if (target) {
                 this.sounds.playSfx('attack');
             }
@@ -1418,7 +1419,7 @@ class VersusScreen {
         let ghostY = null;
         if (currentPiece) {
             const pieceManager = this.engine.pieceManager;
-            const shape = pieceManager?.getShape(currentPiece.type, currentPiece.rotation);
+            const shape = pieceManager?.getShape(currentPiece.type, currentPiece.rotation, !!currentPiece.big);
             if (shape) {
                 pieceShape = shape;
                 if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {

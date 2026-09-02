@@ -1357,7 +1357,7 @@ export class GameScreen {
 
     if (currentPiece) {
       const pieceManager = (this.engine as any).pieceManager;
-      const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
+      const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation, !!currentPiece.big);
       if (shape) {
         pieceShape = shape;
         // Only calculate ghost if piece is visible or will land in visible area
@@ -1553,7 +1553,7 @@ export class GameScreen {
     }
 
     const pieceManager = (this.engine as any).pieceManager;
-    const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
+    const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation, !!currentPiece.big);
     if (!shape) {
       return;
     }

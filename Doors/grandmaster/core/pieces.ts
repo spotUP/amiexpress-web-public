@@ -1104,7 +1104,19 @@ export class PieceManager {
 
    */
 
-  getShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][] {
+  /**
+   * BIG pieces: every cell becomes a 2x2 block (HeborisCE judgeBigBlock /
+   * setBigBlock, gamestart.c:16241-16297, which double every block offset
+   * and then fill `for(k=0;k<2;k++) for(l=0;l<2;l++)`). Scaling the SHAPE
+   * gives collision, ghost, lock and rendering the same behaviour without a
+   * second code path for any of them.
+   */
+  getShape(type: PieceType, rotation: 0 | 1 | 2 | 3, big: boolean = false): number[][] {
+    const shape = this.getBaseShape(type, rotation);
+    return big ? doubleShape(shape) : shape;
+  }
+
+  private getBaseShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][] {
 
     switch (this.rotationSystem) {
 
@@ -1594,4 +1606,18 @@ export function getPieceCells(
   }
 
   return cells;
+}
+
+/**
+ * Double a shape in both axes - one cell becomes a 2x2 block.
+ * See PieceManager.getShape()'s BIG note (gamestart.c:16241-16297).
+ */
+export function doubleShape(shape: number[][]): number[][] {
+  const doubled: number[][] = [];
+  for (const row of shape) {
+    const wide: number[] = [];
+    for (const cell of row) { wide.push(cell, cell); }
+    doubled.push(wide, [...wide]);
+  }
+  return doubled;
 }
