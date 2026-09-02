@@ -29,10 +29,11 @@ jest.mock('../../src/handlers/command.handler', () => ({
 
 import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { displayScreen, loadScreenFile, parseMciCodes } from '../../src/handlers/screen.handler';
+import { petsciiMachineFor } from '../../src/handlers/petscii-screen.render';
 import {
-  disposePetsciiRenderCtx,
-  petsciiMachineFor,
-} from '../../src/handlers/petscii-screen.render';
+  disposePetsciiSessionModel,
+  installPetsciiModelChoke,
+} from '../../src/utils/petscii-session-model';
 import { processCommand } from '../../src/handlers/command.handler';
 import { ANSI_ART_SKIPPED_NOTICE } from '../../src/utils/ansi-art-detect.util';
 
@@ -41,12 +42,23 @@ interface Emit {
   data: any;
 }
 
-function makeSocket(emits: Emit[]) {
-  return {
+/**
+ * A socket with the session's terminal model choke on it, the way
+ * `registerSocketHandlers` installs it on every real web socket
+ * (`server/socket-handlers.ts`; `installPetsciiModelChoke`'s default resolver
+ * reads `socket.session`, which is why the mock carries one). An `~SS_` that
+ * resolves to a `.TXT` leaves on `ansi-output` and reaches the model there -
+ * no scoped tap, the same path a menu, a door or a pause prompt takes.
+ */
+function makeSocket(emits: Emit[], session: any) {
+  const socket = {
     id: `t7-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    session,
     emit: (event: string, data: any) => emits.push({ event, data }),
     on: () => {},
   } as any;
+  installPetsciiModelChoke(socket);
+  return socket;
 }
 
 /** Every `petscii-bytes` payload, decoded, in emission order. */
@@ -142,8 +154,8 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
-    expect(await displayScreen(makeSocket(emits), session, seqPath)).toBe(true);
+    disposePetsciiSessionModel(session);
+    expect(await displayScreen(makeSocket(emits, session), session, seqPath)).toBe(true);
 
     const all = Buffer.concat(petsciiPayloads(emits));
     expect(all.includes(includeArt)).toBe(true);
@@ -160,8 +172,8 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
-    await displayScreen(makeSocket(emits), session, seqPath);
+    disposePetsciiSessionModel(session);
+    await displayScreen(makeSocket(emits, session), session, seqPath);
 
     // The include is ANSI text: it must NOT arrive on the PETSCII transport.
     expect(Buffer.concat(petsciiPayloads(emits)).toString('latin1')).not.toContain('TEXTVERSION');
@@ -180,6 +192,13 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
    *
    * The discriminator is the mirror: a fresh terminal fed the whole wire the
    * way a real one consumes it. Oracle and terminal must agree.
+   *
+   * The include is no longer a SPECIAL case: it used to be covered by a
+   * scoped tap `displayIncludedScreen` installed around it, and is now
+   * covered by the transport choke, which sees every emit on the socket. The
+   * second half of this test is the proof of exactly that - an `ansi-output`
+   * emitted OUTSIDE any include, the way a door frame or a pause prompt
+   * arrives, moves the same oracle.
    */
   it('an ANSI .TXT include still reaches the oracle, so the value after it lands where the terminal is', async () => {
     const dir = tmpdir('ss-txt-oracle');
@@ -190,8 +209,9 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession({ user: { username: 'spot' } });
-    disposePetsciiRenderCtx(session);
-    expect(await displayScreen(makeSocket(emits), session, seqPath)).toBe(true);
+    disposePetsciiSessionModel(session);
+    const socket = makeSocket(emits, session);
+    expect(await displayScreen(socket, session, seqPath)).toBe(true);
 
     // The include really did take the ANSI arm.
     expect(wireText(emits)).toContain('hello');
@@ -201,6 +221,15 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
     expect(cursorState(petsciiMachineFor(session).state)).toEqual(cursorState(mirror));
     // The include moved the terminal off the host screen's row.
     expect(mirror.cursorY).toBeGreaterThan(0);
+
+    // ...and an `ansi-output` with no include and no screen around it at all
+    // moves the same oracle, because the choke is on the socket rather than
+    // scoped to a render.
+    const beforeLoose = cursorState(petsciiMachineFor(session).state);
+    socket.emit('ansi-output', '\x1b[20;7H');
+    const afterLoose = cursorState(petsciiMachineFor(session).state);
+    expect(afterLoose).not.toEqual(beforeLoose);
+    expect(afterLoose).toEqual(cursorState(wireMirror(emits).state));
   });
 
   it('~CC_ calls processCommand exactly once, with the same code the ANSI walker passes', async () => {
@@ -210,8 +239,8 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
-    await displayScreen(makeSocket(emits), session, seqPath);
+    disposePetsciiSessionModel(session);
+    await displayScreen(makeSocket(emits, session), session, seqPath);
 
     expect(processCommand as jest.Mock).toHaveBeenCalledTimes(1);
     const petsciiCall = (processCommand as jest.Mock).mock.calls[0];
@@ -225,7 +254,7 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
     // the flavour only decides how the text AROUND the token is encoded.
     (processCommand as jest.Mock).mockClear();
     const ansiEmits: Emit[] = [];
-    const ansiSocket = makeSocket(ansiEmits);
+    const ansiSocket = makeSocket(ansiEmits, { nodeId: 0 });
     await parseMciCodes(
       'AA~CC_JOIN|BB',
       { nodeId: 0, user: { username: 'spot' } } as any,
@@ -249,8 +278,8 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
-    await displayScreen(makeSocket(emits), session, seqPath);
+    disposePetsciiSessionModel(session);
+    await displayScreen(makeSocket(emits, session), session, seqPath);
 
     const payloads = petsciiPayloads(emits);
     expect(payloads.length).toBe(3);
@@ -270,8 +299,8 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
-    await displayScreen(makeSocket(emits), session, seqPath);
+    disposePetsciiSessionModel(session);
+    await displayScreen(makeSocket(emits, session), session, seqPath);
 
     // Cap 8 includes: the top-level render plus includes at depths 1..8.
     const xs = Buffer.concat(petsciiPayloads(emits)).toString('latin1').split('X').length - 1;
@@ -285,8 +314,8 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
 
     const emits: Emit[] = [];
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
-    await displayScreen(makeSocket(emits), session, seqPath);
+    disposePetsciiSessionModel(session);
+    await displayScreen(makeSocket(emits, session), session, seqPath);
 
     const all = Buffer.concat(petsciiPayloads(emits));
     expect(Array.from(all)).toEqual([0x20, 0x41, 0x41, 0x93, 0x42, 0x42]);

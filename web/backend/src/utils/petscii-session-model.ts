@@ -24,7 +24,18 @@
  */
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 
-/** The ONE predicate. Was duplicated in connection-emitter.ts, screen.handler.ts and index.ts. */
+/**
+ * The ONE predicate. Was duplicated in connection-emitter.ts, screen.handler.ts
+ * and index.ts.
+ *
+ * It answers a SESSION-MODE question, not just a transport choice: an ANSI web
+ * session can reach a `.seq` screen (the BBSTITLE fallback, an include)
+ * without ever having opted into PETSCII mode, and emitting `petscii-bytes`
+ * there would push the frontend's terminal irreversibly into canvas mode for a
+ * session that never asked for it. Only a session that already IS
+ * `petsciiMode`, or a real C64, gets the raw-byte transport; everyone else
+ * gets the legacy PUA `petscii-output`.
+ */
 export function sessionWantsPetscii(session: any): boolean {
   return !!session?.petsciiMode || session?.terminalType === 'c64';
 }
@@ -58,17 +69,21 @@ export function petsciiTerminalModelFor(session: any): AnsiToPetsciiTransducer {
  */
 const SELF_FED = Symbol('petsciiSelfFedPayload');
 
-/** The ONE way rendered PETSCII reaches the wire. Marks, emits, unmarks. */
+/** The ONE way rendered PETSCII reaches the wire. Marks, emits, restores. */
 export function emitPetsciiBytes(socket: any, session: any, bytes: Buffer): void {
   const payload = bytes.toString('base64');
+  const prior = session[SELF_FED];
   session[SELF_FED] = payload;
   try {
     socket.emit('petscii-bytes', payload);
   } finally {
-    // Cleared unconditionally: a wrapper above the choke that DROPS the event
-    // would otherwise leave a stale mark that swallows a later identical
-    // payload from a door.
-    session[SELF_FED] = undefined;
+    // Restored unconditionally, and to the PRIOR value rather than to
+    // `undefined`: a wrapper above the choke that DROPS the event would
+    // otherwise leave a stale mark that swallows a later identical payload
+    // from a door, and a wrapper that re-enters this function - a door
+    // adapter splitting one payload into several - would clear an OUTER
+    // call's mark and make the outer payload look like a door's raw bytes.
+    session[SELF_FED] = prior;
   }
 }
 

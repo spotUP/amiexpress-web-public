@@ -47,8 +47,8 @@ import { loadConfConfig } from '../../src/services/conf-config.service';
 import {
   renderPetsciiScreen,
   petsciiRenderCtxFor,
-  disposePetsciiRenderCtx,
 } from '../../src/handlers/petscii-screen.render';
+import { disposePetsciiSessionModel } from '../../src/utils/petscii-session-model';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 const LOGOFF_DIR = path.join(REPO_ROOT, 'Screens', 'logoff');
@@ -221,7 +221,7 @@ describe('Screens/logoff/00N.logoff.seq (data pin 3)', () => {
 
   it.each(NUMBERED)('%s.logoff.seq renders 40 columns wide at most and names the caller', async (n) => {
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
+    disposePetsciiSessionModel(session);
     // Non-inline: `~f` yields the raw `$93` here instead of the walker's
     // sentinel, so the whole file renders as bytes in one piece.
     const ctx = await petsciiRenderCtxFor(session, { inlineMode: false });

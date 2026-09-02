@@ -1,13 +1,15 @@
 /**
- * Task 6 of `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`:
- * the render context's disposal site.
+ * Task 6 of `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`, retargeted
+ * by task OC-4 of `thoughts/shared/plans/2026-09-02-petscii-oracle-at-the-choke.md`:
+ * the session terminal model's disposal site.
  *
- * `petsciiRenderCtxFor` caches ONE thing on the session - the
- * `PetsciiMachine` that is the render's positional bank/cursor/pen oracle.
- * It must not outlive the session: the disconnect cleanup in
- * `server/socket-handlers.ts` (which runs after the reconnect grace period
- * and is where the session record is dropped from the session maps) calls
- * `disposePetsciiRenderCtx`.
+ * `petsciiRenderCtxFor` caches nothing of its own any more - it reads the
+ * session's ONE terminal model (`session.petsciiTransducer`,
+ * `utils/petscii-session-model.ts`), whose `PetsciiMachine` is the positional
+ * bank/cursor/pen oracle every `.seq` value is clipped against. It must not
+ * outlive the session: the disconnect cleanup in `server/socket-handlers.ts`
+ * (which runs after the reconnect grace period and is where the session record
+ * is dropped from the session maps) calls `disposePetsciiSessionModel`.
  *
  * The test drives the REAL production path: the `disconnect` handler
  * `registerSocketHandlers` installs -> `finalizeDisconnectCleanup`. It calls
@@ -15,7 +17,7 @@
  * calls) rather than the whole registrar, which would also fire
  * EXECUTE_ON_CONNECT and the session log manager - side effects unrelated to
  * disposal that leave handles open in a test process. It never pokes
- * `disposePetsciiRenderCtx` itself: the point is that the cleanup calls it.
+ * `disposePetsciiSessionModel` itself: the point is that the cleanup calls it.
  *
  * `src/index.ts` runs a top-level IIFE that starts the HTTP/telnet/SSH
  * servers as a side effect of module load, so it is mocked away here (the
@@ -52,8 +54,8 @@ function makeSocket(id: string) {
   return { socket, handlers };
 }
 
-describe('Task 6: the PETSCII render context is disposed with the session', () => {
-  it('the disconnect cleanup drops the cached render machine', async () => {
+describe('Task 6: the PETSCII terminal model is disposed with the session', () => {
+  it('the disconnect cleanup drops the session terminal model', async () => {
     const socketId = `petscii-dispose-${Date.now()}`;
     const session: any = {
       nodeId: 91,
@@ -70,12 +72,13 @@ describe('Task 6: the PETSCII render context is disposed with the session', () =
     setSession(socketId, session);
     expect(getSession(socketId)).toBe(session);
 
-    // The render's oracle, created exactly the way emitPetsciiScreen creates
+    // The session's oracle, created exactly the way emitPetsciiScreen creates
     // it. It is a transducer, not a bare machine: a PETSCII terminal also
     // receives ANSI (an `~SS_` include that resolved to a `.TXT`, a pause
-    // prompt) and the oracle has to track both flavours.
+    // prompt) and the oracle has to track both flavours - which is why the
+    // transports feed this same object at their chokes.
     await petsciiRenderCtxFor(session);
-    expect(session.petsciiRenderTransducer).toBeInstanceOf(AnsiToPetsciiTransducer);
+    expect(session.petsciiTransducer).toBeInstanceOf(AnsiToPetsciiTransducer);
 
     // A `.seq` paused mid-screen parks its remaining segments together with
     // the ctx they must be rendered against; they must not outlive it.
@@ -96,7 +99,7 @@ describe('Task 6: the PETSCII render context is disposed with the session', () =
     expect(typeof onDisconnect).toBe('function');
     await onDisconnect!('transport close');
 
-    expect(session.petsciiRenderTransducer).toBeUndefined();
+    expect(session.petsciiTransducer).toBeUndefined();
     expect(session.screenSegments).toBeUndefined();
 
     deleteSession(socketId);

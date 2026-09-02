@@ -48,17 +48,10 @@ import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer } from '../utils/mci-tokenizer.util';
 import { petsciiTextScreenPlan, ANSI_ART_SKIPPED_NOTICE } from '../utils/ansi-art-detect.util';
 import { wrapForSession } from '../utils/wrap-for-session.util';
-/**
- * The ONE "is this session PETSCII" predicate (plan OC-2). `petscii-bytes` is
- * a SESSION-MODE gate, not just a transport choice: an ANSI web session can
- * reach a `.seq` screen (the BBSTITLE fallback, an include) without ever
- * having opted into PETSCII mode, and emitting `petscii-bytes` there would
- * push the frontend's terminal irreversibly into canvas mode for a session
- * that never asked for it. Only a session that already IS petsciiMode, or a
- * real C64, gets the raw-byte transport; everyone else gets the legacy PUA
- * `petscii-output`.
- */
-import { sessionWantsPetscii } from '../utils/petscii-session-model';
+// The ONE "is this session PETSCII" predicate and the ONE way rendered
+// PETSCII reaches the wire (plan OC-2, OC-4). Both are documented at their
+// definitions in `utils/petscii-session-model.ts`.
+import { sessionWantsPetscii, emitPetsciiBytes } from '../utils/petscii-session-model';
 import { buildMciDispatch, MCI_SENTINELS } from './mci-dispatch';
 import { applyMciPrePasses, MCI_GENERATED } from './mci-pre-passes';
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
@@ -68,7 +61,6 @@ import {
   preparePetsciiSeq,
   petsciiRenderCtxFor,
   petsciiMachineFor,
-  petsciiTransducerFor,
   type PetsciiSpan,
   type PetsciiRenderCtx,
 } from './petscii-screen.render';
@@ -398,19 +390,18 @@ async function displayIncludedScreen(
   }
   holder.screenIncludeDepth = depth + 1;
   // An include that resolves to a `.TXT` draws in ANSI (`displayScreen`'s
-  // text arm) while the host screen is PETSCII. The oracle has to watch it:
-  // the chunks after the include are encoded against the cursor it leaves.
-  const uninstallTap = installPetsciiOracleTap(socket, session);
+  // text arm) while the host screen is PETSCII. The transport choke watches
+  // it for free (`utils/petscii-session-model.ts`), so nothing is installed
+  // here any more; what remains is the ORDERING the `.seq` depends on.
   try {
     return await displayScreen(socket, session, target, false);
   } finally {
     // An include that took the ANSI arm may still be sitting in the output
     // buffer (`emitText`'s 16 ms batch). Draining it HERE keeps two things
     // in document order that a `.seq` depends on: the bytes on the wire,
-    // and the oracle's view of where the include left the cursor - the
+    // and the model's view of where the include left the cursor - the
     // chunks after this point are encoded against it.
     flushOutput(socket);
-    uninstallTap();
     holder.screenIncludeDepth = depth;
   }
 }
@@ -1418,91 +1409,6 @@ const PETSCII_MCI_GATE = 0x7e;
 /** PETSCII CLR ($93). A C64 has no `\x1b[2J\x1b[H`. */
 const PETSCII_CLS = '\x93';
 
-/** Marks the `emit` an oracle tap installed (see `installPetsciiOracleTap`). */
-const PETSCII_ORACLE_TAP = Symbol('petsciiOracleTap');
-
-/**
- * EVERY byte the C64 receives reaches the render oracle.
- *
- * The `.seq` render encodes and clips each value against
- * `petsciiMachineFor(session)` - the bank it is in, the row it may not
- * scroll off, the column it may not wrap past. That only holds while the
- * oracle has seen everything the terminal has, and a PETSCII session
- * receives ANSI too:
- *
- *   - `~SS_`/`~SR_` resolving to a `.TXT` legitimately takes the ANSI arm
- *     of `displayScreen` and goes out on `ansi-output` (Task 7);
- *   - the `(Pause)` prompt (`doPause`, `processNextScreenSegment`) and the
- *     pagination page break are ANSI text.
- *
- * Both transports convert that text before it reaches a screen - telnet in
- * `connection-emitter.ts:104`, the web `P` session in `BBSTerminal.tsx` - so
- * the tap runs the SAME conversion through the session's transducer, whose
- * machine IS the oracle. The wire is untouched: this only feeds the model.
- *
- * The tap is SCOPED, never left on the socket. Wrapping `socket.emit` is
- * this codebase's interception point (`socket-handlers.ts:176`,
- * `modem-emulator.util.ts:276`, `door.handler.ts:146`), and the C64 door
- * adapter tears its own wrapper off again on the way out
- * (`c64-door-adapter.ts:339`) - a permanent tap underneath it would be
- * restored in its place and outlive the door, which
- * `tests/doors/door-min-columns-gate.test.ts` rightly refuses. So each
- * caller installs the tap around the emits it is responsible for and takes
- * it back off, leaving `emit` exactly as it found it.
- *
- * @returns the uninstaller; a no-op when an OUTER scope already owns the tap
- * (nested includes) or the session is not a raw-PETSCII one.
- */
-function installPetsciiOracleTap(socket: any, session: BBSSession): () => void {
-  const noop = () => {};
-  if (!socket || typeof socket.emit !== 'function') return noop;
-  if (!sessionWantsPetscii(session)) return noop;
-  if ((socket.emit as any)[PETSCII_ORACLE_TAP]) return noop;
-
-  const transducer = petsciiTransducerFor(session);
-  // Raw PETSCII has reached the terminal since this transducer last
-  // converted anything (`renderChunkBytes` feeds the oracle as it encodes,
-  // straight past here), so its ANSI deferred-wrap latch no longer describes
-  // the cursor. Observing nothing clears exactly that and touches no cell.
-  transducer.observe([]);
-
-  const hadOwnEmit = Object.prototype.hasOwnProperty.call(socket, 'emit');
-  const original = socket.emit;
-  const tapped = (event: string, ...args: any[]): any => {
-    if (event === 'ansi-output' && typeof args[0] === 'string') {
-      // transduce() feeds its own machine as it converts - that machine is
-      // the oracle, so this call IS the feed. It sees the bytes as they
-      // actually go out, `wrapForSession` folding included.
-      transducer.transduce(args[0]);
-    } else if (event === 'petscii-bytes') {
-      // Already fed by `renderChunkBytes`; only the wrap latch is stale.
-      transducer.observe([]);
-    }
-    return original.call(socket, event, ...args);
-  };
-  (tapped as any)[PETSCII_ORACLE_TAP] = true;
-  socket.emit = tapped;
-
-  return () => {
-    // Someone wrapped us in the meantime (a door adapter, the modem
-    // emulator): removing ours now would uninstall theirs. Leave it - it is
-    // still feeding the right oracle.
-    if (socket.emit !== tapped) return;
-    if (hadOwnEmit) socket.emit = original;
-    else delete socket.emit;
-  };
-}
-
-/** `installPetsciiOracleTap` around one synchronous burst of emits. */
-function withPetsciiOracleTap<T>(socket: any, session: BBSSession, emit: () => T): T {
-  const uninstall = installPetsciiOracleTap(socket, session);
-  try {
-    return emit();
-  } finally {
-    uninstall();
-  }
-}
-
 /**
  * The ONE PETSCII chunk emitter (plan Task 6's divergence rule, Task 7).
  *
@@ -1549,6 +1455,7 @@ function stripSentinelRuns(text: string): string {
 
 function emitPetsciiChunk(
   socket: any,
+  session: BBSSession,
   ctx: { machine: PetsciiMachine },
   text: string,
   spans: readonly PetsciiSpan[] = [],
@@ -1572,7 +1479,11 @@ function emitPetsciiChunk(
     ctx.machine.feed(bytes);
   }
   if (bytes.length === 0) return false;
-  socket.emit('petscii-bytes', bytes.toString('base64'));
+  // `renderChunkBytes` fed the model as it encoded (it has to: a value is
+  // clipped against the LIVE cursor), so these bytes are marked self-fed and
+  // the choke clears only the stale ANSI wrap latch instead of feeding them
+  // a second time (`utils/petscii-session-model.ts`).
+  emitPetsciiBytes(socket, session, bytes);
   return true;
 }
 
@@ -1582,9 +1493,14 @@ function emitPetsciiChunk(
  * This is exactly what the express.e art gate does for a non-MCI `.seq`, so
  * the fallback is the board's previous behaviour rather than a guess.
  */
-function emitRawPetscii(socket: any, machine: PetsciiMachine, buffer: Buffer): void {
+function emitRawPetscii(
+  socket: any,
+  session: BBSSession,
+  machine: PetsciiMachine,
+  buffer: Buffer,
+): void {
   machine.feed(buffer);
-  socket.emit('petscii-bytes', buffer.toString('base64'));
+  emitPetsciiBytes(socket, session, buffer);
 }
 
 /**
@@ -1623,12 +1539,12 @@ async function renderPetsciiWalk(
 
   const walk = await walkInlineSentinels(socket, session, text, {
     emitChunk: (chunk, start) =>
-      emitPetsciiChunk(socket, ctx, chunk, spansIn(start, start + chunk.length)),
+      emitPetsciiChunk(socket, session, ctx, chunk, spansIn(start, start + chunk.length)),
     emitCls: () => {
-      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
+      emitPetsciiChunk(socket, session, ctx, PETSCII_CLS);
     },
     emitClsBeforeRandomFile: () => {
-      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
+      emitPetsciiChunk(socket, session, ctx, PETSCII_CLS);
     },
     isChunkSentinel: payload =>
       payload.startsWith(moveTag) || payload.startsWith(generatedTag),
@@ -1682,7 +1598,7 @@ export async function emitPetsciiScreenInline(
     // `.seq` - or a dispatch closure throwing on half-written user data -
     // must not escape displayScreen into a caller that does not wrap it.
     console.error(`[PETSCII] .seq render failed, emitting raw bytes:`, error);
-    emitRawPetscii(socket, ctx.machine, buffer);
+    emitRawPetscii(socket, session, ctx.machine, buffer);
     session.lastScreenHadPause = false;
     return;
   }
@@ -1690,7 +1606,7 @@ export async function emitPetsciiScreenInline(
   if (!plan.gated) {
     // Defensive: the caller checks the gate byte, so reaching here means the
     // file is art. Emit it exactly as the whole-file path would.
-    emitRawPetscii(socket, ctx.machine, buffer);
+    emitRawPetscii(socket, session, ctx.machine, buffer);
     session.lastScreenHadPause = false;
     return;
   }
@@ -1774,14 +1690,16 @@ export async function emitPetsciiScreen(
     const ctx = await petsciiRenderCtxFor(session);
     try {
       const rendered = await renderPetsciiScreen(result.petsciiBuffer, session, ctx);
-      socket.emit('petscii-bytes', rendered.toString('base64'));
+      // `renderPetsciiScreen` fed the ctx machine - the session's model - as
+      // it encoded, so the payload is marked self-fed for the choke.
+      emitPetsciiBytes(socket, session, rendered);
     } catch (error) {
       // Degrade, never stall (Task 8, from Task 6's review). The raw `.seq`
       // is what a non-MCI art file puts on the wire anyway, so the caller
       // sees the screen - unsubstituted - instead of an empty terminal and
       // a dead session.
       console.error(`[PETSCII] render failed for ${result.filePath}, emitting raw bytes:`, error);
-      emitRawPetscii(socket, ctx.machine, result.petsciiBuffer);
+      emitRawPetscii(socket, session, ctx.machine, result.petsciiBuffer);
     }
   } else {
     socket.emit('petscii-output', result.content);
@@ -1843,7 +1761,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         // the ONE PETSCII chunk emitter, so the render machine observes it -
         // otherwise the terminal is homed while the oracle still believes the
         // cursor is where the previous screen's art left it.
-        emitPetsciiChunk(socket, { machine: petsciiMachineFor(session) }, PETSCII_CLS);
+        emitPetsciiChunk(socket, session, { machine: petsciiMachineFor(session) }, PETSCII_CLS);
       } else {
         socket.emit('ansi-output', '\x1b[2J\x1b[H');
       }
@@ -2760,9 +2678,7 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   // express.e:5149 doPause(): aePuts('\b\n') — just newline, no cursor-up erase
   if (paged.kind !== 'doPause') {
     // More prompt (checkForPause): cursor up + erase to clear the '(Pause)...More(y/n/ns)?' line
-    withPetsciiOracleTap(socket, session, () =>
-      socket.emit(paged.eventName, '\x1b[1A\x1b[K'),
-    );
+    socket.emit(paged.eventName, '\x1b[1A\x1b[K');
   }
   // doPause: the lines[0] = '\r\n' will be emitted by emitPage below, matching express.e:5149
 
@@ -2771,10 +2687,9 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
     const chunk = lines.slice(startIdx, endIdx).join('\r\n');
     const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)? ' : '';
     // The page break and the `More` prompt move a PETSCII terminal's cursor
-    // like any other text; the oracle sees them through the tap.
-    withPetsciiOracleTap(socket, session, () =>
-      socket.emit(paged.eventName, chunk + promptLine),
-    );
+    // like any other text; the transport choke sees them, like every other
+    // emit on this socket.
+    socket.emit(paged.eventName, chunk + promptLine);
   };
 
   // NS: dump the rest without further prompts
@@ -2952,10 +2867,9 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
     };
     session.lastScreenHadPause = true;
     // Same reason as `doPause`: this prompt lands between two chunks of the
-    // SAME `.seq`, so the oracle must see the rows it moves through.
-    withPetsciiOracleTap(socket, session, () =>
-      emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m'),
-    );
+    // SAME `.seq`, so the model must see the rows it moves through - which
+    // the transport choke guarantees for every emit on this socket.
+    emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
     return true;
   }
 
@@ -3055,12 +2969,11 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
   // express.e uses \b\n but on xterm.js \n alone doesn't return to column 0.
   // After ANSI art that positions cursor anywhere, \r ensures we start at column 0.
   // The prompt is ANSI, and a PETSCII terminal turns it into cursor moves
-  // and colour bytes: the oracle has to see it, or the next `.seq` chunk is
-  // encoded against a cursor two rows above the real one. `emitPrompt`
-  // flushes immediately, so the bytes go out inside this scope.
-  withPetsciiOracleTap(socket, session, () =>
-    emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m'),
-  );
+  // and colour bytes: the model has to see it, or the next `.seq` chunk is
+  // encoded against a cursor two rows above the real one. The transport
+  // choke feeds it; `emitPrompt` flushes immediately, so the bytes reach the
+  // model in wire order.
+  emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
 
   // Install a minimal pagination gate so the next keypress is required.
   // express.e:5149 doPause() response: lineCount:=0; aePuts('\b\n') — just a newline.

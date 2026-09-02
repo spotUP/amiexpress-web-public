@@ -80,19 +80,13 @@ import {
 } from './mci-dispatch';
 import { applyMciPrePasses, MCI_GENERATED, type MciPrePassResult } from './mci-pre-passes';
 import { parseWipeMCI } from '../utils/screen-wipe.util';
+import { petsciiTerminalModelFor } from '../utils/petscii-session-model';
 
 /** express.e's MCI opt-in byte (`~`), tested on the file's FIRST byte only. */
 const GATE_BYTE = 0x7e;
 
 /** The only cursor-moving byte `encodePetsciiValue` can produce. */
 const PETSCII_RETURN = 0x0d;
-
-/**
- * A session carries its render-side oracle for the life of the connection.
- * Declared structurally here rather than only on `BBSSession` so the three
- * accessors below are the single place that knows the field name.
- */
-type PetsciiRenderSession = { petsciiRenderTransducer?: AnsiToPetsciiTransducer };
 
 export interface PetsciiRenderCtx {
   /**
@@ -140,30 +134,24 @@ export interface PetsciiRenderCtxOpts {
 }
 
 /**
- * The session's terminal model, created on first use.
+ * The session's terminal model - the SAME object the transports feed.
  *
  * It is an `AnsiToPetsciiTransducer` and not a bare `PetsciiMachine` because
- * a PETSCII session's terminal receives BOTH flavours and the oracle has to
- * track both. Raw PETSCII (`petscii-bytes`: `.seq` art, substituted values,
- * the `$93` clear) is fed to `machine` directly by the render. ANSI text
- * (`ansi-output`: an `~SS_` include that resolves to a `.TXT`, the `(Pause)`
- * prompt) is converted before it reaches a screen - by the telnet emitter
- * (`connection-emitter.ts:104`) and by the web `P` session's own transducer
- * (`BBSTerminal.tsx`) - so the SAME conversion has to run here, or the
- * render's cursor and the terminal's diverge silently.
+ * a PETSCII terminal receives BOTH flavours and BOTH reach it through a
+ * choke: `ansi-output` / `petscii-output` are transduced there
+ * (`server/connection-emitter.ts` for telnet/SSH/WS-terminal, the
+ * registration-time `socket.emit` wrapper in `server/socket-handlers.ts` for
+ * web), and every `petscii-bytes` payload is either observed there or - when
+ * THIS render produced it - fed here as it was encoded and marked, so the
+ * choke does not feed it twice (`utils/petscii-session-model.ts`).
  *
- * This is deliberately the same object the two transports keep, one layer
- * up: `connection-emitter.ts` caches one on `session.petsciiTransducer` for
- * a real C64 and the browser keeps one client-side. A web session has no
- * server-side emitter transducer at all, which is why the render owns this
- * one.
+ * The render therefore owns no model of its own. It reads the one the
+ * session already has, which is what makes the cursor it clips against the
+ * cursor the caller's terminal is actually at, no matter what put it there:
+ * a menu, a paginated `.TXT`, a door, a chat page from another node.
  */
 export function petsciiTransducerFor(session: BBSSession): AnsiToPetsciiTransducer {
-  const holder = session as unknown as PetsciiRenderSession;
-  if (!holder.petsciiRenderTransducer) {
-    holder.petsciiRenderTransducer = new AnsiToPetsciiTransducer();
-  }
-  return holder.petsciiRenderTransducer;
+  return petsciiTerminalModelFor(session);
 }
 
 /**
@@ -174,10 +162,10 @@ export function petsciiTransducerFor(session: BBSSession): AnsiToPetsciiTransduc
  * paying for a dispatch build (`buildMciDispatch` runs the message-base and
  * system-stats lookups its closures read).
  *
- * It IS the transducer's machine: one screen, one model of it.
+ * It IS the terminal model's machine: one screen, one model of it.
  */
 export function petsciiMachineFor(session: BBSSession): PetsciiMachine {
-  return petsciiTransducerFor(session).machine;
+  return petsciiTerminalModelFor(session).machine;
 }
 
 /**
@@ -185,8 +173,8 @@ export function petsciiMachineFor(session: BBSSession): PetsciiMachine {
  *
  * CACHED: the `PetsciiMachine` only. It is the positional oracle - a `~SS_`
  * include or a `~SP` resume must continue the same bank and cursor - and it
- * is stored on the session exactly the way `connection-emitter.ts` stores the
- * telnet transducer.
+ * is not cached HERE at all: it is the machine of the session's ONE terminal
+ * model (`utils/petscii-session-model.ts`), which the transports feed.
  *
  * REBUILT EVERY CALL: dispatch, prefix dispatch and state. Their closed-over
  * values are volatile (`~TL` time remaining, `~DT`/`~OT` clocks, `~CN` after
@@ -213,24 +201,6 @@ export async function petsciiRenderCtxFor(
     terminator: '|',
     inlineMode,
   };
-}
-
-/**
- * Drop the cached oracle. Called from the disconnect cleanup in
- * `server/socket-handlers.ts` (after the reconnect grace period, alongside
- * the existing teardown) and wherever a session record is deleted; like
- * `session.petsciiTransducer` it is otherwise collected with the session.
- *
- * `screenSegments` goes with it: a paused `.seq` parks its remaining
- * segments there TOGETHER with the ctx they must be rendered against
- * (`screen.handler.ts`'s `emitPetsciiScreenInline`). Leaving them behind
- * would hand the next paint segments whose `petsciiCtx.machine` is a
- * machine nobody else is feeding any more - the exact stale-cursor bug this
- * oracle exists to prevent.
- */
-export function disposePetsciiRenderCtx(session: BBSSession): void {
-  (session as unknown as PetsciiRenderSession).petsciiRenderTransducer = undefined;
-  session.screenSegments = undefined;
 }
 
 /**

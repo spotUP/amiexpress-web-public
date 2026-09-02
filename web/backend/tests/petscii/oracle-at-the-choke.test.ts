@@ -1,16 +1,17 @@
 /**
- * Task OC-1 of `thoughts/shared/plans/2026-09-02-petscii-oracle-at-the-choke.md`:
- * the RED suite.
+ * Task OC-1 of `thoughts/shared/plans/2026-09-02-petscii-oracle-at-the-choke.md`
+ * (the RED suite), turned GREEN by task OC-4.
  *
  * THE SYMPTOM: a PETSCII session's `.seq` render encodes and clips every
  * substituted value against `petsciiMachineFor(session)` - the bank it is in,
  * the row it may not scroll off, the column it may not wrap past. That only
- * holds while the oracle has seen everything the terminal has. Today the
- * oracle is fed by four SCOPED taps (`installPetsciiOracleTap`,
- * `screen.handler.ts:1521`) plus the render's own bytes, so everything
- * between two `.seq` screens - a paginated `.TXT`'s first page, a `.TXT`
- * displayed directly, a door's frame, a door's raw PETSCII - is invisible to
- * it. The next `.seq` is then encoded against a cursor nobody has.
+ * holds while the oracle has seen everything the terminal has. Before OC-4 the
+ * oracle was fed by four SCOPED taps in `screen.handler.ts` plus the render's
+ * own bytes, so everything between two `.seq` screens - a paginated `.TXT`'s
+ * first page, a `.TXT` displayed directly, a door's frame, a door's raw
+ * PETSCII - was invisible to it, and the next `.seq` was encoded against a
+ * cursor nobody had. The taps are gone; the model is fed at the per-session
+ * transport choke (`utils/petscii-session-model.ts`), which sees every emit.
  *
  * Every test below drives a PRODUCT entry point (`displayScreen`,
  * `handlePaginatedScreenInput`, the real `BBSApi` a door is handed) and then
@@ -19,9 +20,11 @@
  * `tests/petscii/seq-pause-and-colour.test.ts:105-119` - it is the definition
  * of "what the terminal has".
  *
- * These five are RED until OC-4 moves the model to the transport choke. They
- * fail on a cursor / bank / pen mismatch, never on a crash or a missing
- * fixture.
+ * These five were RED until OC-4 moved the model to the transport choke. They
+ * are GREEN for exactly one reason: the choke feeds the session's ONE terminal
+ * model every byte the socket emits, so the oracle the render reads IS the
+ * terminal. Take the `transducePetsciiAtChoke` call out of the choke and all
+ * five go red again on a cursor / bank / pen mismatch.
  *
  * Fixtures are byte arrays built in code. Never write a `.seq` fixture
  * through Edit/Write: the UTF-8 round-trip destroys every high-bit byte.
@@ -38,6 +41,7 @@ import {
   handlePaginatedScreenInput,
 } from '../../src/handlers/screen.handler';
 import { petsciiMachineFor } from '../../src/handlers/petscii-screen.render';
+import { installPetsciiModelChoke } from '../../src/utils/petscii-session-model';
 import { createBBSApi } from '../../src/doors/BBSApi';
 
 interface Emit {
@@ -56,9 +60,17 @@ function seqBytes(...parts: Array<string | number | number[]>): Buffer {
   return Buffer.from(out);
 }
 
-function makeSocket(emits: Emit[]) {
-  return {
+/**
+ * A socket with the session's terminal model choke on it, the way
+ * `registerSocketHandlers` installs it on every real web socket
+ * (`server/socket-handlers.ts`). `installPetsciiModelChoke`'s default resolver
+ * reads `socket.session`, which is why the mock carries one - the same
+ * default the connection emitter uses on telnet.
+ */
+function makeSocket(emits: Emit[], session: any) {
+  const socket = {
     id: `oracle-choke-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    session,
     emit: (event: string, data: any) => {
       emits.push({ event, data });
       return true;
@@ -67,6 +79,8 @@ function makeSocket(emits: Emit[]) {
     off: () => {},
     removeListener: () => {},
   } as any;
+  installPetsciiModelChoke(socket);
+  return socket;
 }
 
 const petsciiSession = (over: Record<string, any> = {}): any => ({
@@ -80,9 +94,13 @@ const petsciiSession = (over: Record<string, any> = {}): any => ({
   ...over,
 });
 
+/** Every temp dir this suite made, removed in `afterAll`. */
+const tempDirs: string[] = [];
+
 /** A screen file on disk, named so it is NOT in `SCREENS_REQUIRE_CLEAR`. */
 function writeScreen(base: string, bytes: Buffer): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-choke-'));
+  tempDirs.push(dir);
   const file = path.join(dir, base);
   fs.writeFileSync(file, bytes);
   return file;
@@ -140,11 +158,16 @@ function expectOracleMatchesWire(session: any, emits: Emit[]): void {
  */
 const VALUE_SEQ = seqBytes(0x7e, 0x20, '~N|', 'Z');
 
-describe('OC-1 RED: the oracle drifts from the terminal between screens', () => {
+describe('OC-1: the oracle follows the terminal between screens', () => {
+  afterAll(() => {
+    for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+    tempDirs.length = 0;
+  });
+
   it('a .seq shown after a paged .TXT is encoded against the real cursor', async () => {
     const session = petsciiSession();
     const emits: Emit[] = [];
-    const socket = makeSocket(emits);
+    const socket = makeSocket(emits, session);
 
     // A `.TXT` long enough to paginate: displayScreen parks a
     // `paginatedScreen` and puts the FIRST page on the wire through its own
@@ -169,7 +192,7 @@ describe('OC-1 RED: the oracle drifts from the terminal between screens', () => 
   it('a .seq shown straight after a .TXT is encoded against the real cursor', async () => {
     const session = petsciiSession();
     const emits: Emit[] = [];
-    const socket = makeSocket(emits);
+    const socket = makeSocket(emits, session);
 
     const txt = writeScreen('SHORT.TXT', Buffer.from('HELLO\r\nTHERE\r\n', 'latin1'));
     expect(await displayScreen(socket, session, txt)).toBe(true);
@@ -183,7 +206,7 @@ describe('OC-1 RED: the oracle drifts from the terminal between screens', () => 
   it("a door's output moves the oracle", async () => {
     const session = petsciiSession();
     const emits: Emit[] = [];
-    const socket = makeSocket(emits);
+    const socket = makeSocket(emits, session);
 
     // The seam every TypeScript door's prose and every blessed frame takes
     // (`BBSApi.write`, `doors/BBSApi.ts:166`).
@@ -199,7 +222,7 @@ describe('OC-1 RED: the oracle drifts from the terminal between screens', () => 
   it("a door's raw PETSCII moves the oracle", async () => {
     const session = petsciiSession();
     const emits: Emit[] = [];
-    const socket = makeSocket(emits);
+    const socket = makeSocket(emits, session);
 
     // `BBSApi.writePetscii(Buffer)` (`doors/BBSApi.ts:308`): clear, lower-case
     // bank, two cursor-downs. No server model observes it today.
@@ -215,7 +238,7 @@ describe('OC-1 RED: the oracle drifts from the terminal between screens', () => 
   it('a petscii-output string moves the oracle', async () => {
     const session = petsciiSession();
     const emits: Emit[] = [];
-    const socket = makeSocket(emits);
+    const socket = makeSocket(emits, session);
 
     // `BBSApi.writePetsciiLine(string)` (`doors/BBSApi.ts:322-324`) emits on
     // `petscii-output`, which the tap ignores (`screen.handler.ts:1536-1547`).

@@ -278,8 +278,8 @@ import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import {
   renderPetsciiScreen,
   petsciiRenderCtxFor,
-  disposePetsciiRenderCtx,
 } from '../../src/handlers/petscii-screen.render';
+import { disposePetsciiSessionModel } from '../../src/utils/petscii-session-model';
 
 /** Fixture builder: latin1 strings, single bytes and byte arrays, in order. */
 function seqBytes(...parts: Array<string | number | number[]>): Buffer {
@@ -314,7 +314,7 @@ const petsciiSession = (over: Record<string, any> = {}): any => ({
 
 /** Render one fixture through a fresh context (a fresh oracle per test). */
 async function render(fixture: Buffer, session: any): Promise<{ out: Buffer; machine: PetsciiMachine }> {
-  disposePetsciiRenderCtx(session);
+  disposePetsciiSessionModel(session);
   const ctx = await petsciiRenderCtxFor(session);
   const out = await renderPetsciiScreen(fixture, session, ctx);
   return { out, machine: ctx.machine };
@@ -523,7 +523,7 @@ describe('renderPetsciiScreen (Task 5)', () => {
     // freeze ~TL / ~DT / ~CN at login).
     expect(second.dispatch).not.toBe(first.dispatch);
 
-    disposePetsciiRenderCtx(session);
+    disposePetsciiSessionModel(session);
     const third = await petsciiRenderCtxFor(session);
     expect(third.machine).not.toBe(first.machine);
   });
@@ -536,7 +536,7 @@ describe('renderPetsciiScreen - structural tokens and the pre-pass hand-off (Tas
     // walker verbatim and must NOT be fed to the machine, or the art would
     // gain a stray "CC:TEST" and every later cursor reading would be wrong.
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
+    disposePetsciiSessionModel(session);
     const ctx = await petsciiRenderCtxFor(session, { inlineMode: true });
     const out = await renderPetsciiScreen(seqBytes(GATE, '~CC_TEST|', 'Z'), session, ctx);
 
@@ -548,7 +548,7 @@ describe('renderPetsciiScreen - structural tokens and the pre-pass hand-off (Tas
 
   it('runs the shared pre-passes: ~D. retargets the terminator and the ctx keeps it', async () => {
     const session = petsciiSession();
-    disposePetsciiRenderCtx(session);
+    disposePetsciiSessionModel(session);
     const ctx = await petsciiRenderCtxFor(session);
     const out = await renderPetsciiScreen(seqBytes(GATE, '~D.', '~N.'), session, ctx);
 
@@ -590,7 +590,7 @@ describe('renderPetsciiScreen - review follow-ups', () => {
     // (0-based 24) by ~y25|, its second row would `carriageReturn` off the
     // bottom and scroll row 0 away.
     const session = petsciiSession({ user: { username: 'AB\nCD\nEF' } });
-    disposePetsciiRenderCtx(session);
+    disposePetsciiSessionModel(session);
     const ctx = await petsciiRenderCtxFor(session);
 
     // Paint a marker on row 0 first, so a scroll is visible.

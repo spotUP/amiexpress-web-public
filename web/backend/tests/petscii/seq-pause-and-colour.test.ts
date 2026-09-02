@@ -43,6 +43,7 @@ import {
   handlePaginatedScreenInput,
 } from '../../src/handlers/screen.handler';
 import { petsciiMachineFor } from '../../src/handlers/petscii-screen.render';
+import { installPetsciiModelChoke } from '../../src/utils/petscii-session-model';
 
 interface Emit {
   event: string;
@@ -60,12 +61,23 @@ function seqBytes(...parts: Array<string | number | number[]>): Buffer {
   return Buffer.from(out);
 }
 
-function makeSocket(emits: Emit[]) {
-  return {
+/**
+ * A socket with the session's terminal model choke on it, the way
+ * `registerSocketHandlers` installs it on every real web socket
+ * (`server/socket-handlers.ts`; `installPetsciiModelChoke`'s default resolver
+ * reads `socket.session`, which is why the mock carries one). Every emit this
+ * screen makes therefore reaches the session's ONE model - which is what
+ * `wireMirror` below is the independent check on.
+ */
+function makeSocket(emits: Emit[], session: any) {
+  const socket = {
     id: `seq-pause-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    session,
     emit: (event: string, data: any) => emits.push({ event, data }),
     on: () => {},
   } as any;
+  installPetsciiModelChoke(socket);
+  return socket;
 }
 
 const petsciiSession = (over: Record<string, any> = {}): any => ({
@@ -136,7 +148,7 @@ function cursorState(state: PetsciiMachine['state']) {
  */
 async function paintAndResume(seqPath: string, session: any) {
   const emits: Emit[] = [];
-  const socket = makeSocket(emits);
+  const socket = makeSocket(emits, session);
 
   const shown = await displayScreen(socket, session, seqPath);
   expect(shown).toBe(true);
@@ -253,7 +265,7 @@ describe('Task 8: ~SP inside a .seq pauses and resumes on the same machine', () 
   it('sees its own pause prompts, so the oracle still matches the terminal after two of them', async () => {
     const session = petsciiSession();
     const emits: Emit[] = [];
-    const socket = makeSocket(emits);
+    const socket = makeSocket(emits, session);
     const seqPath = writeSeq(
       seqBytes(0x7e, 0x20, 0x0e, 'A', '~SP|', 'B', '~SP|', '~N|', 'Z'),
     );
@@ -300,7 +312,7 @@ describe('Task 8: ~b2 sets the C64 background (decision 8)', () => {
     const emits: Emit[] = [];
     const seqPath = writeSeq(seqBytes(0x7e, 0x20, '~b2|', 'X'));
 
-    expect(await displayScreen(makeSocket(emits), session, seqPath)).toBe(true);
+    expect(await displayScreen(makeSocket(emits, session), session, seqPath)).toBe(true);
 
     const payloads = petsciiPayloads(emits);
     expect(payloads).toHaveLength(1);

@@ -39,8 +39,8 @@ import { buildConnectionEmitter } from '../../src/server/connection-emitter';
 import {
   renderPetsciiScreen,
   petsciiRenderCtxFor,
-  disposePetsciiRenderCtx,
 } from '../../src/handlers/petscii-screen.render';
+import { disposePetsciiSessionModel } from '../../src/utils/petscii-session-model';
 
 interface Emit {
   event: string;
@@ -226,7 +226,7 @@ describe('Task 6: displayScreen renders MCI into the petscii-bytes wire', () => 
     await displayScreen(makeSocket(emits), petsciiSession(), seqPath);
 
     const reference = petsciiSession();
-    disposePetsciiRenderCtx(reference);
+    disposePetsciiSessionModel(reference);
     const ctx = await petsciiRenderCtxFor(reference);
     const expected = await renderPetsciiScreen(fixture, reference, ctx);
 

@@ -39,8 +39,8 @@ import { buildMciDispatch, MCI_SENTINELS } from '../../src/handlers/mci-dispatch
 import {
   renderPetsciiScreen,
   petsciiRenderCtxFor,
-  disposePetsciiRenderCtx,
 } from '../../src/handlers/petscii-screen.render';
+import { disposePetsciiSessionModel } from '../../src/utils/petscii-session-model';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 const LOGOFF_003 = path.join(REPO_ROOT, 'Screens', 'logoff', '003.logoff.seq');
@@ -124,7 +124,7 @@ describe('the shipped 003.logoff.seq stays inside 40 columns at any call count',
     'timesCalled=%s: no row over 40 columns and nothing wraps',
     async (timesCalled) => {
       const s = session(timesCalled);
-      disposePetsciiRenderCtx(s);
+      disposePetsciiSessionModel(s);
       const ctx = await petsciiRenderCtxFor(s, { inlineMode: false });
       const out = await renderPetsciiScreen(fs.readFileSync(LOGOFF_003), s, ctx);
 

@@ -37,8 +37,11 @@ import { runLogoffBatches, runExecuteOn } from '../services/batch-scheduler';
 import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
-import { disposePetsciiRenderCtx } from '../handlers/petscii-screen.render';
-import { installPetsciiModelChoke, flushPetsciiModel } from '../utils/petscii-session-model';
+import {
+  installPetsciiModelChoke,
+  flushPetsciiModel,
+  disposePetsciiSessionModel,
+} from '../utils/petscii-session-model';
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
@@ -1253,13 +1256,16 @@ console.error(`[LOGOFF] Error deleting node files:`, error);
   // Release node back to available pool
   await nodeManager.releaseSession(socketId);
 
-  // The PETSCII render context dies with the session. Its cached
-  // `PetsciiMachine` (`handlers/petscii-screen.render.ts`) is the render-side
-  // bank/cursor/pen oracle; sessions live in the module-level maps above, so
-  // dropping it here - alongside the rest of the teardown, after the
-  // reconnect grace period - is what keeps a reused session object from
-  // painting its first screen against the previous caller's cursor.
-  disposePetsciiRenderCtx(session);
+  // The session's ONE PETSCII terminal model dies with the session. It is
+  // the bank/cursor/pen oracle every `.seq` value is clipped against
+  // (`utils/petscii-session-model.ts`), fed at the transport choke; sessions
+  // live in the module-level maps above, so dropping it here - alongside the
+  // rest of the teardown, after the reconnect grace period - is what keeps a
+  // reused session object from painting its first screen against the
+  // previous caller's cursor. The parked `screenSegments` go with it: a
+  // `~SP`-paused `.seq` stores its remainder together with a `petsciiCtx`
+  // holding this very machine, and they are valid against nothing else.
+  disposePetsciiSessionModel(session);
 
   // Clean up session storage
   if (userId) {

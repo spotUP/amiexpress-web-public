@@ -34,7 +34,8 @@ process.env.SKIP_DB_INIT = '1';
 import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { config } from '../../src/config';
 import { displayScreen } from '../../src/handlers/screen.handler';
-import { petsciiRenderCtxFor, disposePetsciiRenderCtx } from '../../src/handlers/petscii-screen.render';
+import { petsciiRenderCtxFor } from '../../src/handlers/petscii-screen.render';
+import { disposePetsciiSessionModel } from '../../src/utils/petscii-session-model';
 
 interface Emit {
   event: string;
@@ -90,7 +91,7 @@ describe('a shouldClear PETSCII screen clears with $93, through the render machi
       currentConfName: 'Main',
       user: { username: 'spot' },
     };
-    disposePetsciiRenderCtx(session);
+    disposePetsciiSessionModel(session);
 
     const emits: Emit[] = [];
     const socket = makeSocket(emits);
