@@ -35,6 +35,14 @@ export interface Cell {
      * (gamestart.c:16230 fldi[...] = item[player]). null/undefined = no item.
      */
     item?: number | null;
+    /**
+     * HIDDEN's shadow timer (HeborisCE fldt): frames this locked cell stays
+     * visible. Set to p_shadow_timer on lock (gamestart.c:16224-16225,
+     * init.c:732 = 300) and counted down every frame (gamestart.c:4794-4803).
+     * At zero the cell is still solid - it just is not drawn.
+     * undefined = HIDDEN is off and the cell is drawn for ever.
+     */
+    shadowFrames?: number;
 }
 export interface Board {
     width: number;
@@ -158,6 +166,15 @@ export interface KeyBindings {
  * a board's players do not get items until they ask for them.
  */
 export type ItemMode = 'OFF' | 'TGM' | 'ALL' | 'FEW' | 'DS';
+/**
+ * HIDDEN - locked blocks vanish while staying solid.
+ *
+ * HeborisCE gives each locked cell a shadow timer of p_shadow_timer frames
+ * (init.c:732 = 300) and counts it down once a frame; the hidden level picks
+ * the rate: 1 normally, 2 at "UNDER M2" and 3 at "UNDER M3"
+ * (gamestart.c:4794-4803), i.e. 300, 150 or 100 frames of visibility.
+ */
+export type HiddenMode = 'OFF' | 'SLOW' | 'FAST' | 'FASTEST';
 export type { VersusWinType } from './versus-goal';
 import type { VersusWinType } from './versus-goal';
 export interface PlayerSettings {
@@ -178,6 +195,8 @@ export interface PlayerSettings {
      * `|| item_mode[player]` half, and it reaches every other mode.
      */
     itemMode?: ItemMode;
+    /** HIDDEN: locked blocks vanish after their shadow timer runs out. */
+    hiddenMode?: HiddenMode;
     /**
      * VS WIN TYPE (gamestart.c:12755-12765). 'survival' is what this door has
      * always played; 'level' and 'lines' are the reference's GOAL LV and GOAL

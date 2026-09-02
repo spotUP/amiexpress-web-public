@@ -25,6 +25,7 @@ import { AnimationManager, AnimationRenderer } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
 import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { ConnectedBlockRenderer } from '../effects/connected-blocks';
+import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden';
 
 /**
  * Main game screen
@@ -856,7 +857,13 @@ export class GameScreen {
     // tick, which defeated the render gate permanently - the board
     // repainted at full rate even with nothing moving.
     const shine = this.shineCells.size > 0 ? this.shineTimer : 0;
-    return `${piece}-${state.lines}-${shine}`;
+    // HIDDEN: a block going dark changes nothing else in this hash, so
+    // without counting them the stack stays painted until the next piece
+    // moves - the same class of bug as the frozen hard-drop trail above.
+    const hidden = shadowDecayRate(this.state.settings.hiddenMode) > 0
+      ? countHiddenCells(state.board)
+      : 0;
+    return `${piece}-${state.lines}-${shine}-${hidden}`;
   }
 
   private getPPS(state: any): string {
@@ -1415,7 +1422,12 @@ export class GameScreen {
           char = trailCharAt(this.hardDropTrails, x, y, now) ?? char;
         }
 
-        if (char === '  ' && cell.filled) {
+        // HIDDEN (core/hidden.ts): the block is still there - it just is
+        // not drawn any more. Checked before every other filled-cell
+        // treatment so glow, shine and connected blocks cannot bring it back.
+        if (char === '  ' && cell.filled && isCellHidden(cell) && !isMasterRoll) {
+          char = '  ';
+        } else if (char === '  ' && cell.filled) {
           // Check line clear animation fade
           const clearFade = this.clearAnimation.getCellFade(x, y);
 

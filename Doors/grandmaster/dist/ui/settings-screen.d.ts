@@ -60,6 +60,8 @@ export declare class SettingsScreen {
      * Handle menu selection
      */
     private handleSelection;
+    /** Cycle HIDDEN off -> 300 -> 150 -> 100 frames (the reference's 1/2/3 rates). */
+    private cycleHiddenMode;
     /** Cycle SURVIVAL -> GOAL LV -> GOAL LINE (gamestart.c's wintype 2/0/1). */
     private cycleVersusWinType;
     /**

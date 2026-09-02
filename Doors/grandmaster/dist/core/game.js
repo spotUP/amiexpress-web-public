@@ -17,6 +17,7 @@ const medals_1 = require("./medals");
 const credit_roll_1 = require("./credit-roll");
 const time_limit_1 = require("./time-limit");
 const devil_grade_1 = require("./devil-grade");
+const hidden_1 = require("./hidden");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 const items_1 = require("./items");
@@ -423,6 +424,20 @@ class GameEngine {
      * Update single frame
      */
     updateFrame() {
+        // HIDDEN: spend every locked cell's shadow timer. The reference counts
+        // these down in the frame handler itself (gamestart.c:4794-4803), so
+        // they keep running through ARE and line-clear delays too, not only
+        // while a piece is falling.
+        const shadowDecay = (0, hidden_1.shadowDecayRate)(this.settings.hiddenMode);
+        if (shadowDecay > 0) {
+            for (const row of this.state.board.grid) {
+                for (const cell of row) {
+                    if (cell.shadowFrames !== undefined && cell.shadowFrames > 0) {
+                        cell.shadowFrames -= shadowDecay;
+                    }
+                }
+            }
+        }
         if (this.state.itemBanner) {
             this.state.itemBanner.ttl--;
             if (this.state.itemBanner.ttl <= 0)
@@ -1413,6 +1428,11 @@ class GameEngine {
                             color: pieceType,
                             locked: true,
                             lockTime,
+                            // HIDDEN: the cell starts its shadow timer the moment it locks
+                            // (gamestart.c:16224-16225).
+                            shadowFrames: (0, hidden_1.shadowDecayRate)(this.settings.hiddenMode) > 0
+                                ? hidden_1.SHADOW_TIMER_FRAMES
+                                : undefined,
                         };
                     }
                 }

@@ -12,6 +12,7 @@ const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 const line_clear_animation_1 = require("../effects/line-clear-animation");
 const connected_blocks_1 = require("../effects/connected-blocks");
+const hidden_1 = require("../core/hidden");
 /**
  * Main game screen
  */
@@ -747,7 +748,13 @@ class GameScreen {
         // tick, which defeated the render gate permanently - the board
         // repainted at full rate even with nothing moving.
         const shine = this.shineCells.size > 0 ? this.shineTimer : 0;
-        return `${piece}-${state.lines}-${shine}`;
+        // HIDDEN: a block going dark changes nothing else in this hash, so
+        // without counting them the stack stays painted until the next piece
+        // moves - the same class of bug as the frozen hard-drop trail above.
+        const hidden = (0, hidden_1.shadowDecayRate)(this.state.settings.hiddenMode) > 0
+            ? (0, hidden_1.countHiddenCells)(state.board)
+            : 0;
+        return `${piece}-${state.lines}-${shine}-${hidden}`;
     }
     getPPS(state) {
         if (!state.startTime || state.piecesPlaced === 0)
@@ -1269,7 +1276,13 @@ class GameScreen {
                 if (char === '  ' && !cell.filled && !isMasterRoll) {
                     char = (0, board_effects_1.trailCharAt)(this.hardDropTrails, x, y, now) ?? char;
                 }
-                if (char === '  ' && cell.filled) {
+                // HIDDEN (core/hidden.ts): the block is still there - it just is
+                // not drawn any more. Checked before every other filled-cell
+                // treatment so glow, shine and connected blocks cannot bring it back.
+                if (char === '  ' && cell.filled && (0, hidden_1.isCellHidden)(cell) && !isMasterRoll) {
+                    char = '  ';
+                }
+                else if (char === '  ' && cell.filled) {
                     // Check line clear animation fade
                     const clearFade = this.clearAnimation.getCellFade(x, y);
                     if (clearFade >= 1.0) {

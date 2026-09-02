@@ -8,6 +8,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SettingsScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+/** What each HIDDEN setting costs a block, in frames of visibility. */
+const HIDDEN_LABELS = {
+    OFF: 'OFF',
+    SLOW: '300 FRAMES',
+    FAST: '150 FRAMES',
+    FASTEST: '100 FRAMES',
+};
 const versus_goal_1 = require("../core/versus-goal");
 /** The reference's own names for the three win types (gamestart.c:12756-12764). */
 const VERSUS_WIN_LABELS = {
@@ -252,6 +259,13 @@ class SettingsScreen {
                 run: () => this.cycleItemMode(),
             },
             {
+                // HIDDEN (gamestart.c:4794-4803): a locked block stops being drawn
+                // once its shadow timer runs out. It is still solid.
+                label: `Hidden:            ${yellow(HIDDEN_LABELS[s.hiddenMode ?? 'OFF'])}`,
+                description: 'Locked blocks vanish after 300, 150 or 100 frames - they are still there',
+                run: () => this.cycleHiddenMode(),
+            },
+            {
                 // WIN TYPE (gamestart.c:12755-12765). SURVIVAL is what this door
                 // always played, so it stays the default.
                 label: `Versus Win:        ${yellow(VERSUS_WIN_LABELS[s.versusWinType ?? 'survival'])}`,
@@ -389,6 +403,12 @@ class SettingsScreen {
         menu.setItems(this.getMenuItems());
         if (row.keepsSelection)
             menu.select(index);
+    }
+    /** Cycle HIDDEN off -> 300 -> 150 -> 100 frames (the reference's 1/2/3 rates). */
+    async cycleHiddenMode() {
+        const modes = ['OFF', 'SLOW', 'FAST', 'FASTEST'];
+        const current = modes.indexOf(this.state.settings.hiddenMode ?? 'OFF');
+        this.state.settings.hiddenMode = modes[(current + 1) % modes.length];
     }
     /** Cycle SURVIVAL -> GOAL LV -> GOAL LINE (gamestart.c's wintype 2/0/1). */
     async cycleVersusWinType() {

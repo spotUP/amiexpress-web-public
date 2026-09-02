@@ -29,6 +29,7 @@ import { MedalManager, type Medal } from './medals';
 import { CreditRollManager, InvisiblePieceManager } from './credit-roll';
 import { checkTorikan } from './time-limit';
 import { devilGradeForLevel, devilFinalGrade, DEVIL_END_LEVEL } from './devil-grade';
+import { SHADOW_TIMER_FRAMES, shadowDecayRate } from './hidden';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
@@ -524,6 +525,21 @@ export class GameEngine {
    * Update single frame
    */
   private updateFrame(): void {
+    // HIDDEN: spend every locked cell's shadow timer. The reference counts
+    // these down in the frame handler itself (gamestart.c:4794-4803), so
+    // they keep running through ARE and line-clear delays too, not only
+    // while a piece is falling.
+    const shadowDecay = shadowDecayRate(this.settings.hiddenMode);
+    if (shadowDecay > 0) {
+      for (const row of this.state.board.grid) {
+        for (const cell of row) {
+          if (cell.shadowFrames !== undefined && cell.shadowFrames > 0) {
+            cell.shadowFrames -= shadowDecay;
+          }
+        }
+      }
+    }
+
     if (this.state.itemBanner) {
       this.state.itemBanner.ttl--;
       if (this.state.itemBanner.ttl <= 0) this.state.itemBanner = null;
@@ -1660,6 +1676,11 @@ export class GameEngine {
               color: pieceType,
               locked: true,
               lockTime,
+              // HIDDEN: the cell starts its shadow timer the moment it locks
+              // (gamestart.c:16224-16225).
+              shadowFrames: shadowDecayRate(this.settings.hiddenMode) > 0
+                ? SHADOW_TIMER_FRAMES
+                : undefined,
             };
           }
         }
