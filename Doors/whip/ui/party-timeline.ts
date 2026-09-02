@@ -5,6 +5,7 @@ import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import type { PartyCalendar } from '../core/party-calendar';
 import { createProgressBar } from '../core/gamification';
+import { T } from '../door-theme';
 
 export async function showPartyTimeline(
   screen: Screen,
@@ -42,9 +43,9 @@ export async function showPartyTimeline(
         width: '100%',
         height: 3,
         border: { type: 'line' },
-        content: `{center}{bold}{cyan-fg}PARTY TIMELINE 2026{/cyan-fg}{/bold} - Upcoming Demo Parties{/center}\n` +
+        content: `{center}{bold}{${T.accent}-fg}PARTY TIMELINE 2026{/${T.accent}-fg}{/bold} - Upcoming Demo Parties{/center}\n` +
                  `{center}Upcoming: {bold}${upcomingParties.length}{/bold} parties{/center}`,
-        style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
         tags: true,
         focusable: false,
         mouse: false,
@@ -62,8 +63,8 @@ export async function showPartyTimeline(
         border: { type: 'line' },
         label: ' Parties ',
         style: {
-          border: { fg: 'cyan' },
-          bg: 'black'
+          border: { fg: T.accent },
+          bg: T.ground
         },
         scrollable: true,
         alwaysScroll: true,
@@ -74,7 +75,7 @@ export async function showPartyTimeline(
       });
 
       if (upcomingParties.length === 0) {
-        listBox.setContent('{center}{gray-fg}No upcoming parties found.{/gray-fg}{/center}');
+        listBox.setContent(`{center}{${T.dim}-fg}No upcoming parties found.{/${T.dim}-fg}{/center}`);
       } else {
         let content = '';
 
@@ -144,9 +145,9 @@ export async function showPartyTimeline(
         width: '100%',
         height: 3,
         border: { type: 'line' },
-        content: ` {cyan-fg}[Up/Down]{/cyan-fg} Scroll   {cyan-fg}[R]{/cyan-fg} Refresh from demoparty.net   {red-fg}[Q/ESC]{/red-fg} Back\n` +
-                 ` {gray-fg}Scrollwheel supported{/gray-fg}`,
-        style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+        content: ` {${T.accent}-fg}[Up/Down]{/${T.accent}-fg} Scroll   {${T.accent}-fg}[R]{/${T.accent}-fg} Refresh from demoparty.net   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
+                 ` {${T.dim}-fg}Scrollwheel supported{/${T.dim}-fg}`,
+        style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
         tags: true,
         focusable: false,
         mouse: false,

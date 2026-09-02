@@ -1,3 +1,4 @@
+import { T } from '../door-theme';
 /**
  * Voice Channel List Integration
  *
@@ -72,16 +73,16 @@ export function renderChannelItem(
 
     // Highlight if currently in this voice channel
     if (isInVoice) {
-      return `{green-fg}{bold}${icon} ${item.name} (${count}){/bold}{/green-fg}`;
+      return `{${T.ok}-fg}{bold}${icon} ${item.name} (${count}){/bold}{/${T.ok}-fg}`;
     }
 
     // Show participant count
     if (count > 0) {
-      return `{cyan-fg}${icon}{/cyan-fg} ${item.name} {gray-fg}(${count}){/gray-fg}`;
+      return `{${T.accent}-fg}${icon}{/${T.accent}-fg} ${item.name} {${T.dim}-fg}(${count}){/${T.dim}-fg}`;
     }
 
     // Empty voice channel
-    return `{gray-fg}${icon} ${item.name}{/gray-fg}`;
+    return `{${T.dim}-fg}${icon} ${item.name}{/${T.dim}-fg}`;
   }
 
   // Text channel
@@ -166,14 +167,14 @@ export function getVoiceChannelTooltip(voiceChannel: VoiceChannelInfo): string {
  * Create voice channel section header
  */
 export function createVoiceChannelHeader(): string {
-  return '{cyan-fg}{bold}VOICE CHANNELS{/bold}{/cyan-fg}';
+  return `{${T.accent}-fg}{bold}VOICE CHANNELS{/bold}{/${T.accent}-fg}`;
 }
 
 /**
  * Create text channel section header
  */
 export function createTextChannelHeader(): string {
-  return '{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}';
+  return `{${T.accent}-fg}{bold}TEXT CHANNELS{/bold}{/${T.accent}-fg}`;
 }
 
 /**

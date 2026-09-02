@@ -56,6 +56,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
+const door_theme_1 = require("./door-theme");
 const door = new bbs_door_sdk_1.CoreDoor({
     name: 'Voice Chat',
     version: '1.0.0',
@@ -63,6 +64,8 @@ const door = new bbs_door_sdk_1.CoreDoor({
     description: 'Multi-party voice chat with real-time audio streaming',
 });
 door.onStart(async (ctx) => {
+    // The board's theme, before any widget reads a colour from it.
+    (0, door_theme_1.applyTheme)(ctx.bbs);
     // Create blessed screen using SDK helper (connects output to BBS socket)
     const screen = (0, bbs_door_sdk_1.createScreen)(ctx.bbs, {
         title: 'Voice Chat',
@@ -87,8 +90,8 @@ door.onStart(async (ctx) => {
         width: '100%',
         height: '100%-4',
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
         },
     });
     // Title bar
@@ -98,13 +101,13 @@ door.onStart(async (ctx) => {
         left: 0,
         width: '100%',
         height: 3,
-        content: `{center}{cyan-fg}{bold}Voice Chat with Adaptive Quality{/bold}{/cyan-fg}{/center}\n` +
-            `{center}{white-fg}S:Start  M:Mute  A:Auto-Quality  +/-:Quality  Q:Quit{/white-fg}{/center}`,
+        content: `{center}{${door_theme_1.T.accent}-fg}{bold}Voice Chat with Adaptive Quality{/bold}{/${door_theme_1.T.accent}-fg}{/center}\n` +
+            `{center}{${door_theme_1.T.ink}-fg}S:Start  M:Mute  A:Auto-Quality  +/-:Quality  Q:Quit{/${door_theme_1.T.ink}-fg}{/center}`,
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'cyan',
+                fg: door_theme_1.T.accent,
             },
         },
         border: {
@@ -119,23 +122,23 @@ door.onStart(async (ctx) => {
         width: '50%-1',
         height: '100%-6',
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'green',
+                fg: door_theme_1.T.ok,
             },
         },
         border: {
             type: 'line',
         },
         label: ' Active Speakers ',
-        content: '{yellow-fg}No speakers connected{/yellow-fg}',
+        content: `{${door_theme_1.T.accentAlt}-fg}No speakers connected{/${door_theme_1.T.accentAlt}-fg}`,
         scrollable: true,
         alwaysScroll: true,
         scrollbar: {
             ch: ' ',
             style: {
-                bg: 'gray',
+                bg: door_theme_1.T.dim,
             },
         },
     });
@@ -147,17 +150,17 @@ door.onStart(async (ctx) => {
         width: '50%-1',
         height: 15,
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'magenta',
+                fg: door_theme_1.T.accentAlt,
             },
         },
         border: {
             type: 'line',
         },
         label: ' Your Audio Level ',
-        content: '{yellow-fg}Not streaming{/yellow-fg}',
+        content: `{${door_theme_1.T.accentAlt}-fg}Not streaming{/${door_theme_1.T.accentAlt}-fg}`,
     });
     // Status panel
     const statusBox = blessed_1.default.box({
@@ -167,17 +170,17 @@ door.onStart(async (ctx) => {
         width: '50%-1',
         height: 6,
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'yellow',
+                fg: door_theme_1.T.accentAlt,
             },
         },
         border: {
             type: 'line',
         },
         label: ' Status ',
-        content: '{yellow-fg}Ready to start{/yellow-fg}',
+        content: `{${door_theme_1.T.accentAlt}-fg}Ready to start{/${door_theme_1.T.accentAlt}-fg}`,
     });
     // Network quality panel
     const networkBox = blessed_1.default.box({
@@ -187,17 +190,17 @@ door.onStart(async (ctx) => {
         width: '50%-1',
         height: 7,
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'green',
+                fg: door_theme_1.T.ok,
             },
         },
         border: {
             type: 'line',
         },
         label: ' Network Quality ',
-        content: '{yellow-fg}Monitoring not started{/yellow-fg}',
+        content: `{${door_theme_1.T.accentAlt}-fg}Monitoring not started{/${door_theme_1.T.accentAlt}-fg}`,
     });
     // Quality profile panel
     const qualityBox = blessed_1.default.box({
@@ -207,17 +210,17 @@ door.onStart(async (ctx) => {
         width: '50%-1',
         height: 8,
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'magenta',
+                fg: door_theme_1.T.accentAlt,
             },
         },
         border: {
             type: 'line',
         },
         label: ' Quality Profile ',
-        content: '{yellow-fg}Not streaming{/yellow-fg}',
+        content: `{${door_theme_1.T.accentAlt}-fg}Not streaming{/${door_theme_1.T.accentAlt}-fg}`,
     });
     // Controls info panel
     const controlsBox = blessed_1.default.box({
@@ -227,22 +230,22 @@ door.onStart(async (ctx) => {
         width: '50%-1',
         height: '100%-42',
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: {
-                fg: 'cyan',
+                fg: door_theme_1.T.accent,
             },
         },
         border: {
             type: 'line',
         },
         label: ' Controls ',
-        content: `{cyan-fg}[S]{/cyan-fg} Start/Stop Streaming\n` +
-            `{cyan-fg}[M]{/cyan-fg} Mute/Unmute\n` +
-            `{cyan-fg}[A]{/cyan-fg} Toggle Auto-Quality\n` +
-            `{cyan-fg}[+/-]{/cyan-fg} Manual Quality\n` +
-            `{cyan-fg}[L]{/cyan-fg} List Active Speakers\n\n` +
-            `{red-fg}[Q]{/red-fg} Quit Voice Chat`,
+        content: `{${door_theme_1.T.accent}-fg}[S]{/${door_theme_1.T.accent}-fg} Start/Stop Streaming\n` +
+            `{${door_theme_1.T.accent}-fg}[M]{/${door_theme_1.T.accent}-fg} Mute/Unmute\n` +
+            `{${door_theme_1.T.accent}-fg}[A]{/${door_theme_1.T.accent}-fg} Toggle Auto-Quality\n` +
+            `{${door_theme_1.T.accent}-fg}[+/-]{/${door_theme_1.T.accent}-fg} Manual Quality\n` +
+            `{${door_theme_1.T.accent}-fg}[L]{/${door_theme_1.T.accent}-fg} List Active Speakers\n\n` +
+            `{${door_theme_1.T.alert}-fg}[Q]{/${door_theme_1.T.alert}-fg} Quit Voice Chat`,
     });
     // Footer help bar
     const footerBox = blessed_1.default.box({
@@ -252,8 +255,8 @@ door.onStart(async (ctx) => {
         width: '100%',
         height: 4,
         style: {
-            fg: 'black',
-            bg: 'cyan',
+            fg: door_theme_1.T.ground,
+            bg: door_theme_1.T.accent,
         },
         content: `{center}{bold}Real-Time Voice Chat{/bold}{/center}\n` +
             `{center}Opus Codec - 48kHz - Voice Activity Detection{/center}\n` +
@@ -295,7 +298,7 @@ door.onStart(async (ctx) => {
     // Listen for quality changes
     qualityManager.on('quality-change', (event) => {
         updateQualityDisplay(state);
-        updateStatus(state, `{cyan-fg}Quality changed to ${event.type}: ${event.to}{/cyan-fg}\n` +
+        updateStatus(state, `{${door_theme_1.T.accent}-fg}Quality changed to ${event.type}: ${event.to}{/${door_theme_1.T.accent}-fg}\n` +
             `Reason: ${event.reason}\n` +
             `Auto: ${event.automatic ? 'Yes' : 'No'}`);
     });
@@ -313,7 +316,7 @@ door.onStart(async (ctx) => {
                     lastUpdate: Date.now(),
                 });
                 updateSpeakersList(state);
-                updateStatus(state, `{green-fg}${data.username} joined the chat{/green-fg}`);
+                updateStatus(state, `{${door_theme_1.T.ok}-fg}${data.username} joined the chat{/${door_theme_1.T.ok}-fg}`);
             }
         });
         // Stream stopped by other users
@@ -323,7 +326,7 @@ door.onStart(async (ctx) => {
                 if (speaker) {
                     state.speakers.delete(data.userId);
                     updateSpeakersList(state);
-                    updateStatus(state, `{yellow-fg}${speaker.username} left the chat{/yellow-fg}`);
+                    updateStatus(state, `{${door_theme_1.T.accentAlt}-fg}${speaker.username} left the chat{/${door_theme_1.T.accentAlt}-fg}`);
                 }
             }
         });
@@ -349,7 +352,7 @@ door.onStart(async (ctx) => {
         });
         // Audio error from client
         ctx.socket.on('audio:error', (data) => {
-            updateStatus(state, `{red-fg}Audio Error: ${data.message}{/red-fg}`);
+            updateStatus(state, `{${door_theme_1.T.alert}-fg}Audio Error: ${data.message}{/${door_theme_1.T.alert}-fg}`);
         });
         // Update speaker list periodically (remove stale entries)
         setInterval(() => {
@@ -424,12 +427,12 @@ function updateSpeakersList(state) {
     }
     const speakers = Array.from(state.speakers.values());
     if (speakers.length === 0) {
-        state.speakersBox.setContent('{yellow-fg}No other speakers connected{/yellow-fg}');
+        state.speakersBox.setContent(`{${door_theme_1.T.accentAlt}-fg}No other speakers connected{/${door_theme_1.T.accentAlt}-fg}`);
     }
     else {
         let content = '';
         for (const speaker of speakers) {
-            const speakingIndicator = speaker.isSpeaking ? '{green-fg}[SPEAKING]{/green-fg}' : '{gray-fg}[IDLE]{/gray-fg}';
+            const speakingIndicator = speaker.isSpeaking ? `{${door_theme_1.T.ok}-fg}[SPEAKING]{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}[IDLE]{/${door_theme_1.T.dim}-fg}`;
             const audioBar = renderAudioBar(speaker.audioLevel);
             const username = speaker.isSpeaking ? `{bold}${speaker.username}{/bold}` : speaker.username;
             content += `${speakingIndicator} ${username}\n${audioBar}\n\n`;
@@ -451,39 +454,39 @@ function updateWaveform(state, levels) {
     // Simple waveform visualization
     let content = '';
     if (state.isMuted) {
-        content = '{red-fg}{bold}MUTED{/bold}{/red-fg}\n\n';
-        content += '{gray-fg}Audio input disabled{/gray-fg}';
+        content = `{${door_theme_1.T.alert}-fg}{bold}MUTED{/bold}{/${door_theme_1.T.alert}-fg}\n\n`;
+        content += `{${door_theme_1.T.dim}-fg}Audio input disabled{/${door_theme_1.T.dim}-fg}`;
     }
     else if (state.isStreaming) {
         // Audio level bar
         const bar = renderAudioBar(audioLevel);
-        content = `{cyan-fg}Input Level:{/cyan-fg}\n${bar}\n\n`;
+        content = `{${door_theme_1.T.accent}-fg}Input Level:{/${door_theme_1.T.accent}-fg}\n${bar}\n\n`;
         // Simple waveform (just show last few samples)
         if (waveform.length > 0) {
-            content += '{cyan-fg}Waveform:{/cyan-fg}\n';
+            content += `{${door_theme_1.T.accent}-fg}Waveform:{/${door_theme_1.T.accent}-fg}\n`;
             const samples = waveform.slice(-30);
             for (const sample of samples) {
                 const height = Math.floor(Math.abs(sample) * 10);
-                content += height > 0 ? '{green-fg}|{/green-fg}' : '{gray-fg}·{/gray-fg}';
+                content += height > 0 ? `{${door_theme_1.T.ok}-fg}|{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}·{/${door_theme_1.T.dim}-fg}`;
             }
         }
         const isSpeaking = audioLevel > 0.01;
         if (isSpeaking) {
-            content += '\n\n{green-fg}{bold}SPEAKING{/bold}{/green-fg}';
+            content += `\n\n{${door_theme_1.T.ok}-fg}{bold}SPEAKING{/bold}{/${door_theme_1.T.ok}-fg}`;
         }
         else {
-            content += '\n\n{gray-fg}Idle{/gray-fg}';
+            content += `\n\n{${door_theme_1.T.dim}-fg}Idle{/${door_theme_1.T.dim}-fg}`;
         }
     }
     else {
-        content = '{yellow-fg}Not streaming{/yellow-fg}';
+        content = `{${door_theme_1.T.accentAlt}-fg}Not streaming{/${door_theme_1.T.accentAlt}-fg}`;
     }
     state.waveformBox.setContent(content);
     state.screen.render();
 }
 async function toggleStreaming(ctx, state) {
     if (!ctx.socket) {
-        updateStatus(state, '{red-fg}Error: Socket not available{/red-fg}');
+        updateStatus(state, `{${door_theme_1.T.alert}-fg}Error: Socket not available{/${door_theme_1.T.alert}-fg}`);
         return;
     }
     try {
@@ -492,13 +495,13 @@ async function toggleStreaming(ctx, state) {
             ctx.socket.emit('audio:stop-streaming');
             state.isStreaming = false;
             state.isMuted = false;
-            updateStatus(state, '{yellow-fg}Stopped streaming{/yellow-fg}');
+            updateStatus(state, `{${door_theme_1.T.accentAlt}-fg}Stopped streaming{/${door_theme_1.T.accentAlt}-fg}`);
             updateWaveform(state, { input: 0, output: 0 });
             updateQualityDisplay(state);
         }
         else {
             // Start streaming - emit to client with quality settings
-            updateStatus(state, '{yellow-fg}Starting audio stream...{/yellow-fg}');
+            updateStatus(state, `{${door_theme_1.T.accentAlt}-fg}Starting audio stream...{/${door_theme_1.T.accentAlt}-fg}`);
             const audioOptions = state.qualityManager?.getAudioStreamOptions() || {
                 codec: 'opus',
                 sampleRate: 48000,
@@ -514,19 +517,19 @@ async function toggleStreaming(ctx, state) {
             state.isStreaming = true;
             state.isMuted = false;
             const audioProfile = state.qualityManager?.getAudioProfile();
-            updateStatus(state, `{green-fg}Streaming active{/green-fg}\n` +
+            updateStatus(state, `{${door_theme_1.T.ok}-fg}Streaming active{/${door_theme_1.T.ok}-fg}\n` +
                 `Stream ID: ${streamId.substring(0, 8)}...\n` +
                 `Quality: ${audioProfile?.name || 'High'} (${(audioOptions.bitrate || 32000) / 1000}kbps)`);
             updateQualityDisplay(state);
         }
     }
     catch (error) {
-        updateStatus(state, `{red-fg}Error: ${error.message}{/red-fg}`);
+        updateStatus(state, `{${door_theme_1.T.alert}-fg}Error: ${error.message}{/${door_theme_1.T.alert}-fg}`);
     }
 }
 async function toggleMute(ctx, state) {
     if (!state.isStreaming || !ctx.socket) {
-        updateStatus(state, '{yellow-fg}Not streaming - cannot mute{/yellow-fg}');
+        updateStatus(state, `{${door_theme_1.T.accentAlt}-fg}Not streaming - cannot mute{/${door_theme_1.T.accentAlt}-fg}`);
         return;
     }
     try {
@@ -534,37 +537,37 @@ async function toggleMute(ctx, state) {
         // Emit to client (browser) to mute/unmute
         ctx.socket.emit('audio:mute', { muted: state.isMuted });
         if (state.isMuted) {
-            updateStatus(state, '{red-fg}Microphone MUTED{/red-fg}');
+            updateStatus(state, `{${door_theme_1.T.alert}-fg}Microphone MUTED{/${door_theme_1.T.alert}-fg}`);
         }
         else {
-            updateStatus(state, '{green-fg}Microphone UNMUTED{/green-fg}');
+            updateStatus(state, `{${door_theme_1.T.ok}-fg}Microphone UNMUTED{/${door_theme_1.T.ok}-fg}`);
         }
         updateWaveform(state, { input: state.isMuted ? 0 : state.myAudioLevel, output: 0 });
     }
     catch (error) {
-        updateStatus(state, `{red-fg}Error: ${error.message}{/red-fg}`);
+        updateStatus(state, `{${door_theme_1.T.alert}-fg}Error: ${error.message}{/${door_theme_1.T.alert}-fg}`);
     }
 }
 async function listActiveSpeakers(ctx, state) {
     // List speakers from our local state (populated by socket events)
     const speakers = Array.from(state.speakers.values());
-    let content = `{cyan-fg}Active Speakers:{/cyan-fg} ${speakers.length + (state.isStreaming ? 1 : 0)}\n\n`;
+    let content = `{${door_theme_1.T.accent}-fg}Active Speakers:{/${door_theme_1.T.accent}-fg} ${speakers.length + (state.isStreaming ? 1 : 0)}\n\n`;
     // Add self if streaming
     if (state.isStreaming) {
-        const status = state.myAudioLevel > 0.01 ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
+        const status = state.myAudioLevel > 0.01 ? `{${door_theme_1.T.ok}-fg}SPEAKING{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}IDLE{/${door_theme_1.T.dim}-fg}`;
         const level = Math.floor(state.myAudioLevel * 100);
-        content += `{yellow-fg}[YOU]{/yellow-fg} ${ctx.user.username || 'You'} ${status}\n`;
+        content += `{${door_theme_1.T.accentAlt}-fg}[YOU]{/${door_theme_1.T.accentAlt}-fg} ${ctx.user.username || 'You'} ${status}\n`;
         content += `  Audio Level: ${level}%\n\n`;
     }
     // Add other speakers
     for (const speaker of speakers) {
-        const status = speaker.isSpeaking ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
+        const status = speaker.isSpeaking ? `{${door_theme_1.T.ok}-fg}SPEAKING{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}IDLE{/${door_theme_1.T.dim}-fg}`;
         const level = Math.floor(speaker.audioLevel * 100);
         content += `${speaker.username} ${status}\n`;
         content += `  Audio Level: ${level}%\n\n`;
     }
     if (speakers.length === 0 && !state.isStreaming) {
-        content += '{yellow-fg}No active speakers{/yellow-fg}\n';
+        content += `{${door_theme_1.T.accentAlt}-fg}No active speakers{/${door_theme_1.T.accentAlt}-fg}\n`;
     }
     updateStatus(state, content);
 }
@@ -575,7 +578,7 @@ function updateNetworkDisplay(state) {
     const metrics = state.currentMetrics;
     const rec = state.currentRecommendation;
     if (!metrics || !rec) {
-        state.networkBox.setContent('{yellow-fg}Measuring network quality...{/yellow-fg}');
+        state.networkBox.setContent(`{${door_theme_1.T.accentAlt}-fg}Measuring network quality...{/${door_theme_1.T.accentAlt}-fg}`);
         state.screen.render();
         return;
     }
@@ -588,11 +591,11 @@ function updateNetworkDisplay(state) {
     const qualitySymbol = state.networkMonitor.getQualitySymbol();
     let content = '';
     content += `{${statusColor}-fg}{bold}${qualitySymbol} ${rec.status.toUpperCase()}{/bold}{/${statusColor}-fg}\n`;
-    content += `RTT: {cyan-fg}${Math.floor(metrics.rtt)}ms{/cyan-fg} `;
-    content += `Loss: {cyan-fg}${metrics.packetLoss.toFixed(1)}%{/cyan-fg}\n`;
-    content += `Jitter: {cyan-fg}${Math.floor(metrics.jitter)}ms{/cyan-fg} `;
-    content += `BW: {cyan-fg}${Math.floor(metrics.bandwidth)}kbps{/cyan-fg}\n`;
-    content += `Score: {cyan-fg}${Math.floor(rec.quality)}%{/cyan-fg}`;
+    content += `RTT: {${door_theme_1.T.accent}-fg}${Math.floor(metrics.rtt)}ms{/${door_theme_1.T.accent}-fg} `;
+    content += `Loss: {${door_theme_1.T.accent}-fg}${metrics.packetLoss.toFixed(1)}%{/${door_theme_1.T.accent}-fg}\n`;
+    content += `Jitter: {${door_theme_1.T.accent}-fg}${Math.floor(metrics.jitter)}ms{/${door_theme_1.T.accent}-fg} `;
+    content += `BW: {${door_theme_1.T.accent}-fg}${Math.floor(metrics.bandwidth)}kbps{/${door_theme_1.T.accent}-fg}\n`;
+    content += `Score: {${door_theme_1.T.accent}-fg}${Math.floor(rec.quality)}%{/${door_theme_1.T.accent}-fg}`;
     state.networkBox.setContent(content);
     state.screen.render();
 }
@@ -601,19 +604,19 @@ function updateQualityDisplay(state) {
         return;
     }
     if (!state.isStreaming) {
-        state.qualityBox.setContent('{yellow-fg}Not streaming{/yellow-fg}');
+        state.qualityBox.setContent(`{${door_theme_1.T.accentAlt}-fg}Not streaming{/${door_theme_1.T.accentAlt}-fg}`);
         state.screen.render();
         return;
     }
     const audioProfile = state.qualityManager.getAudioProfile();
     const isAuto = state.qualityManager.isAutoAdjustEnabled();
     let content = '';
-    content += `{cyan-fg}Audio:{/cyan-fg} {bold}${audioProfile.name}{/bold}\n`;
+    content += `{${door_theme_1.T.accent}-fg}Audio:{/${door_theme_1.T.accent}-fg} {bold}${audioProfile.name}{/bold}\n`;
     content += `  Bitrate: ${audioProfile.bitrate / 1000}kbps\n`;
     content += `  Sample Rate: ${audioProfile.sampleRate / 1000}kHz\n`;
     content += `  Quality: ${audioProfile.quality}\n\n`;
-    content += `{cyan-fg}Auto-Adjust:{/cyan-fg} `;
-    content += isAuto ? '{green-fg}ON{/green-fg}' : '{yellow-fg}OFF{/yellow-fg}';
+    content += `{${door_theme_1.T.accent}-fg}Auto-Adjust:{/${door_theme_1.T.accent}-fg} `;
+    content += isAuto ? `{${door_theme_1.T.ok}-fg}ON{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.accentAlt}-fg}OFF{/${door_theme_1.T.accentAlt}-fg}`;
     state.qualityBox.setContent(content);
     state.screen.render();
 }
@@ -623,11 +626,11 @@ function toggleAutoQuality(state) {
     }
     if (state.qualityManager.isAutoAdjustEnabled()) {
         state.qualityManager.disableAutoAdjust();
-        updateStatus(state, '{yellow-fg}Auto-quality adjustment disabled{/yellow-fg}');
+        updateStatus(state, `{${door_theme_1.T.accentAlt}-fg}Auto-quality adjustment disabled{/${door_theme_1.T.accentAlt}-fg}`);
     }
     else {
         state.qualityManager.enableAutoAdjust();
-        updateStatus(state, '{green-fg}Auto-quality adjustment enabled{/green-fg}');
+        updateStatus(state, `{${door_theme_1.T.ok}-fg}Auto-quality adjustment enabled{/${door_theme_1.T.ok}-fg}`);
     }
     updateQualityDisplay(state);
 }
@@ -649,12 +652,12 @@ function adjustQuality(state, direction) {
         newIndex = currentIndex - 1;
     }
     else {
-        updateStatus(state, '{yellow-fg}Already at ' + (direction === 'up' ? 'maximum' : 'minimum') + ' quality{/yellow-fg}');
+        updateStatus(state, `{${door_theme_1.T.accentAlt}-fg}Already at ` + (direction === 'up' ? 'maximum' : 'minimum') + ` quality{/${door_theme_1.T.accentAlt}-fg}`);
         return;
     }
     const newProfile = audioProfiles[newIndex];
     state.qualityManager.setAudioQuality(newProfile);
-    updateStatus(state, `{cyan-fg}Quality manually set to: ${newProfile}{/cyan-fg}`);
+    updateStatus(state, `{${door_theme_1.T.accent}-fg}Quality manually set to: ${newProfile}{/${door_theme_1.T.accent}-fg}`);
     updateQualityDisplay(state);
 }
 exports.default = door;

@@ -132,6 +132,7 @@ import { createEventsCommand } from './commands/events';
 import { PRESENCE_INDICATORS } from './types';
 import type { PresenceStatus, BBSEvent, Message as ChatMessage } from './types';
 import type { SlashCommand } from './commands/types';
+import { T, applyTheme } from './door-theme';
 
 // Import widget types (Log already imported above)
 
@@ -175,6 +176,9 @@ export async function createApp(session: DoorSession) {
   // ========== CREATE NEO-BLESSED SCREEN ==========
   // ui/screen.ts already builds this responsive; what was missing was
   // anyone ASKING the terminal to grow (see the switch below).
+  // The board's theme, before any widget reads a colour from it.
+  applyTheme(bbs);
+
   const screen = createScreen(bbs);
   // Note: Optimized rendering is now enabled by default in the SDK
 
@@ -354,13 +358,13 @@ export async function createApp(session: DoorSession) {
     keys: true,
     vi: true,
     style: {
-      fg: 'cyan',
-      bg: 'black',
+      fg: T.accent,
+      bg: T.ground,
       // Selected line: white text on cyan bg. The previous black-on-cyan
       // was unreadable on terminals that render dark fg on saturated bg
       // identically (or where the selection bar inherited the fg from
       // the base style and produced cyan-on-cyan).
-      selected: { fg: 'white', bg: 'cyan' },
+      selected: { fg: T.ink, bg: T.accent },
       border: { fg: PANEL_BORDER },
     },
     scrollbar: {
@@ -383,8 +387,8 @@ export async function createApp(session: DoorSession) {
     tags: true,
     content: '',
     style: {
-      fg: 'gray',
-      bg: 'black',
+      fg: T.dim,
+      bg: T.ground,
     },
     // @ts-ignore - zIndex exists but not in types
     zIndex: 6000,  // Above input box (5000) but below command suggestions (10000)
@@ -438,14 +442,14 @@ export async function createApp(session: DoorSession) {
       const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
       const usage = (cmd.usage || '').padEnd(usageWidth).slice(0, usageWidth);
       const desc = (cmd.description || '').slice(0, descWidth);
-      // Don't hardcode `{cyan-fg}` for the slash-name -- blessed's tag
+      // Don't hardcode `{${T.accent}-fg}` for the slash-name -- blessed's tag
       // parser respects the latest color tag, so an inline cyan-fg
-      // overrides the List's `selected: { fg: 'white' }` wrapper and
+      // overrides the List's `selected: { fg: T.ink }` wrapper and
       // keeps the name cyan-on-cyan (invisible) when the row is the
-      // current selection. Let the base style's `fg: 'cyan'` colour the
+      // current selection. Let the base style's `fg: T.accent` colour the
       // name on non-selected rows and the selected style's white-fg
       // take over when highlighted.
-      return `/${name} {gray-fg}${usage}{/gray-fg} ${desc}`;
+      return `/${name} {${T.dim}-fg}${usage}{/${T.dim}-fg} ${desc}`;
     });
 
     // Ensure list width is updated to match screen
@@ -505,7 +509,7 @@ export async function createApp(session: DoorSession) {
 
         // Build content: typed portion in white, remaining in gray
         // TEMPORARILY DISABLED: Ghost text causes blessed coordinate corruption
-        // ghostText.setContent(`{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`);
+        // ghostText.setContent(`{${T.ink}-fg}${typedPortion}{/${T.ink}-fg}{${T.dim}-fg}${remainingPortion}{/${T.dim}-fg}`);
         // ghostText.show();
         // ghostText.setFront();
       } else {
@@ -591,8 +595,8 @@ export async function createApp(session: DoorSession) {
     border: { type: 'line' },
     fitContent: { width: true, height: false },  // Auto-expand width to fit content dynamically
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       // style.border.fg, NOT border.fg. Element reads the border colour from
       // style.border / border.style / style.fg and ignores a colour sitting
       // on the border object itself - so `border: { type: 'line', fg: blue }`
@@ -614,12 +618,12 @@ export async function createApp(session: DoorSession) {
     label: ' [Ch] Us ', // Tabs: [active] inactive
     border: { type: 'none' },
     style: {
-      fg: 'white',
+      fg: T.ink,
       // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
       // Use 'item.hover' and 'item.selected' for per-item styling
       item: {
-        hover: { fg: 'yellow', bg: 'blue' },
-        selected: { fg: 'white', bg: 'blue' },
+        hover: { fg: T.accentAlt, bg: T.bar },
+        selected: { fg: T.ink, bg: T.bar },
       },
     } as any,
     tags: true,  // CRITICAL: Enable tag parsing for colored channel names
@@ -803,7 +807,7 @@ export async function createApp(session: DoorSession) {
       // Wipe what's on screen so the previous channel's chat doesn't leak.
       try { (chatLog as any).setContent(''); } catch { /* ignore */ }
       voiceChannel.hideGrid();
-      addSystemMessage(`{cyan-fg}--- DM with ${channel.name} ---{/cyan-fg}`);
+      addSystemMessage(`{${T.accent}-fg}--- DM with ${channel.name} ---{/${T.accent}-fg}`);
       socket.emit('chat:dm-history', { threadId: channel.id, limit: 50 });
       updateChannelList();
       updateStatusBar();
@@ -886,12 +890,12 @@ export async function createApp(session: DoorSession) {
     tags: true,
     hidden: true,  // Hidden by default, channels shown first
     style: {
-      fg: 'white',
+      fg: T.ink,
       // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
       // Use 'item.hover' and 'item.selected' for per-item styling
       item: {
-        hover: { fg: 'yellow', bg: 'magenta' },
-        selected: { fg: 'black', bg: 'magenta' },
+        hover: { fg: T.accentAlt, bg: T.accentAlt },
+        selected: { fg: T.ground, bg: T.accentAlt },
       },
     } as any,
   });
@@ -961,8 +965,8 @@ export async function createApp(session: DoorSession) {
     mouse: false,
     clickable: false,
     style: {
-      fg: 'cyan',
-      bg: 'black',
+      fg: T.accent,
+      bg: T.ground,
     },
     content: '',
     hidden: true,  // Hide since typing previews are now in chat log
@@ -1158,8 +1162,8 @@ export async function createApp(session: DoorSession) {
     swipeThreshold: 3,     // Low threshold for easy swiping
     hidden: true,  // Start hidden, only show on mobile breakpoint
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
     },
     onPageChange: (page, _panel) => {
       audio.playSound('click');
@@ -1370,8 +1374,8 @@ export async function createApp(session: DoorSession) {
     hidden: true,
     ch: ' ',
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: { fg: PANEL_BORDER },
     },
     trapFocus: true,
@@ -1387,7 +1391,7 @@ export async function createApp(session: DoorSession) {
     inputOnFocus: true,
     mouse: true,
     style: {
-      fg: 'white',
+      fg: T.ink,
       border: { fg: PANEL_BORDER },
     },
   });
@@ -1401,10 +1405,10 @@ export async function createApp(session: DoorSession) {
     content: ' Join ',
     mouse: true,
     style: {
-      fg: 'white',
-      bg: 'green',
-      focus: { fg: 'white', bg: 'lightblue' },
-      hover: { fg: 'white', bg: 'lightblue' },
+      fg: T.ink,
+      bg: T.ok,
+      focus: { fg: T.ink, bg: 'lightblue' },
+      hover: { fg: T.ink, bg: 'lightblue' },
     },
   });
 
@@ -1449,8 +1453,8 @@ export async function createApp(session: DoorSession) {
     ch: '\u2588',  // Full block character
     pch: '\u2591', // Light shade character
     style: {
-      fg: 'green',
-      bg: 'black',
+      fg: T.ok,
+      bg: T.ground,
       border: { fg: PANEL_BORDER },
     },
     hidden: true,
@@ -1540,7 +1544,7 @@ export async function createApp(session: DoorSession) {
         if (!vg) return;
         if (vg.getViewMode() !== 'speaker') vg.toggleViewMode();
         vg.setActiveSpeaker(uid);
-        addSystemMessage(`{cyan-fg}Focused stream: user ${uid}{/cyan-fg}`);
+        addSystemMessage(`{${T.accent}-fg}Focused stream: user ${uid}{/${T.accent}-fg}`);
       },
       onHideTile: (uid) => {
         hiddenTiles.add(uid);
@@ -1550,7 +1554,7 @@ export async function createApp(session: DoorSession) {
       },
       onMuteRemote: (uid) => {
         socket.emit('voice:mute-remote', { userId: uid });
-        addSystemMessage(`{yellow-fg}Muted remote audio for user ${uid}{/yellow-fg}`);
+        addSystemMessage(`{${T.accentAlt}-fg}Muted remote audio for user ${uid}{/${T.accentAlt}-fg}`);
       },
       onToggleChannelExpand: (channelName) => {
         // Find the channel by name and flip its collapse state.
@@ -1600,7 +1604,7 @@ export async function createApp(session: DoorSession) {
     },
     onRenderModeChange: (mode) => {
       currentRenderMode = mode;
-      addSystemMessage(`{magenta-fg}Video render mode: ${mode}{/magenta-fg}`);
+      addSystemMessage(`{${T.accentAlt}-fg}Video render mode: ${mode}{/${T.accentAlt}-fg}`);
       updateChatHeader();
     },
     onTileRightClick: (uid, x, y) => {
@@ -1635,7 +1639,7 @@ export async function createApp(session: DoorSession) {
   socket.on('audio:device', (data: any) => {
     (cmdCtx as any).micDeviceId = data?.settings?.deviceId;
     if (data?.label) {
-      addSystemMessage(`{gray-fg}Microphone: ${data.label} - change it with /mic{/gray-fg}`);
+      addSystemMessage(`{${T.dim}-fg}Microphone: ${data.label} - change it with /mic{/${T.dim}-fg}`);
     }
   });
 
@@ -1917,7 +1921,7 @@ export async function createApp(session: DoorSession) {
   }
 
   function addSystemMessage(msg: string) {
-    appendLineToLog(`{gray-fg}*** ${msg} ***{/gray-fg}`);
+    appendLineToLog(`{${T.dim}-fg}*** ${msg} ***{/${T.dim}-fg}`);
     screen.render();
   }
 
@@ -1926,7 +1930,7 @@ export async function createApp(session: DoorSession) {
     const color = getUserColor(from);
     const parsed = parseContent(content);
     const highlighted = highlightMentions(parsed, username);
-    appendLineToLog(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
+    appendLineToLog(`{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
     screen.render();
   }
 
@@ -1949,7 +1953,7 @@ export async function createApp(session: DoorSession) {
       const time = formatTime(new Date());
       // Blinking cursor with user's chat color
       const cursor = cursorBlinkOn ? `{${color}-fg}{inverse} {/inverse}{/${color}-fg}` : ' ';
-      return `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}${cursor}`;
+      return `{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}${cursor}`;
     });
 
     // Start/stop cursor blink interval based on whether there are typing previews
@@ -2073,12 +2077,12 @@ export async function createApp(session: DoorSession) {
 
   // Events and activity now go to chat log (use appendLineToLog for proper tracking)
   function updateEventsFeed(event: string) {
-    appendLineToLog(`{gray-fg}[EVENT] ${event}{/gray-fg}`);
+    appendLineToLog(`{${T.dim}-fg}[EVENT] ${event}{/${T.dim}-fg}`);
     screen.render();
   }
 
   function addActivity(activity: string) {
-    appendLineToLog(`{yellow-fg}[${formatTime(new Date())}] ${activity}{/yellow-fg}`);
+    appendLineToLog(`{${T.accentAlt}-fg}[${formatTime(new Date())}] ${activity}{/${T.accentAlt}-fg}`);
     screen.render();
   }
 
@@ -2199,7 +2203,7 @@ export async function createApp(session: DoorSession) {
     const history = Array.isArray(d?.history) ? d.history : [];
     if (history.length === 0) return;
 
-    addSystemMessage(`{gray-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/gray-fg}`);
+    addSystemMessage(`{${T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${T.dim}-fg}`);
     for (const m of history) {
       const when = m.createdAt ? new Date(m.createdAt) : undefined;
       addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when);
@@ -2294,19 +2298,19 @@ export async function createApp(session: DoorSession) {
 
   // ========== MODERATION EVENT LISTENERS ==========
   socket.on('chat:kicked', (data: any) => {
-    addSystemMessage(`{red-fg}You have been kicked${data.reason ? ': ' + data.reason : ''}{/red-fg}`);
-    addSystemMessage(`{yellow-fg}Disconnecting...{/yellow-fg}`);
+    addSystemMessage(`{${T.alert}-fg}You have been kicked${data.reason ? ': ' + data.reason : ''}{/${T.alert}-fg}`);
+    addSystemMessage(`{${T.accentAlt}-fg}Disconnecting...{/${T.accentAlt}-fg}`);
     setTimeout(() => cleanup(), 2000);
   });
 
   socket.on('chat:banned', (data: any) => {
-    addSystemMessage(`{red-fg}You have been banned${data.duration ? ' for ' + data.duration + 's' : ''}${data.reason ? ': ' + data.reason : ''}{/red-fg}`);
-    addSystemMessage(`{yellow-fg}Disconnecting...{/yellow-fg}`);
+    addSystemMessage(`{${T.alert}-fg}You have been banned${data.duration ? ' for ' + data.duration + 's' : ''}${data.reason ? ': ' + data.reason : ''}{/${T.alert}-fg}`);
+    addSystemMessage(`{${T.accentAlt}-fg}Disconnecting...{/${T.accentAlt}-fg}`);
     setTimeout(() => cleanup(), 2000);
   });
 
   socket.on('chat:muted', (data: any) => {
-    addSystemMessage(`{yellow-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/yellow-fg}`);
+    addSystemMessage(`{${T.accentAlt}-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/${T.accentAlt}-fg}`);
   });
 
   // ========== DM SIDEBAR / CONTEXT EVENT LISTENERS ==========
@@ -2324,19 +2328,19 @@ export async function createApp(session: DoorSession) {
     onRetry: () => {
       reconnectAttempts++;
       if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-        addSystemMessage('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
+        addSystemMessage(`{${T.accentAlt}-fg}Attempting to reconnect...{/${T.accentAlt}-fg}`);
         // The socket will automatically try to reconnect via socket.io
         setTimeout(() => {
           if (!socket.connected) {
             disconnectionModal.showError(
-              `{red-fg}Lost connection to server{/red-fg}\n\n` +
+              `{${T.alert}-fg}Lost connection to server{/${T.alert}-fg}\n\n` +
               `Reconnection failed\n\n` +
               `Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`
             );
           }
         }, 3000);
       } else {
-        addSystemMessage('{red-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/red-fg}');
+        addSystemMessage(`{${T.alert}-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/${T.alert}-fg}`);
         disconnectionModal.hide();
         setTimeout(() => cleanup(), 2000);
       }
@@ -2353,7 +2357,7 @@ export async function createApp(session: DoorSession) {
     if (userCancelled) return;
 
     disconnectionModal.showError(
-      `{red-fg}Lost connection to server{/red-fg}\n\n` +
+      `{${T.alert}-fg}Lost connection to server{/${T.alert}-fg}\n\n` +
       `${errorMessage}\n\n` +
       `Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`
     );
@@ -2377,7 +2381,7 @@ export async function createApp(session: DoorSession) {
   socket.on('connect', () => {
     reconnectAttempts = 0;
     disconnectionModal.hide();
-    addSystemMessage('{green-fg}Reconnected to server!{/green-fg}');
+    addSystemMessage(`{${T.ok}-fg}Reconnected to server!{/${T.ok}-fg}`);
   });
 
   // ========== INPUT HANDLING ==========
@@ -2689,19 +2693,19 @@ export async function createApp(session: DoorSession) {
     onLeaveChannel: () => {
       const ch = state.currentChannel;
       if (!ch || ch === doorSettings.defaultChannel || ch === 'lobby') {
-        addSystemMessage('{yellow-fg}Cannot leave the default channel.{/yellow-fg}');
+        addSystemMessage(`{${T.accentAlt}-fg}Cannot leave the default channel.{/${T.accentAlt}-fg}`);
         return;
       }
       socket.emit('room:leave', { roomId: ch });
-      addSystemMessage(`Leaving {cyan-fg}${ch}{/cyan-fg}...`);
+      addSystemMessage(`Leaving {${T.accent}-fg}${ch}{/${T.accent}-fg}...`);
     },
     onThreads: () => {
       // No dedicated overlay yet — surface what /threads does.
-      addSystemMessage('{yellow-fg}Threads: use /threads or reply on any message to open the thread view.{/yellow-fg}');
+      addSystemMessage(`{${T.accentAlt}-fg}Threads: use /threads or reply on any message to open the thread view.{/${T.accentAlt}-fg}`);
     },
     onRenderMode: () => {
       if (!voiceChannel.isInVoiceChannel()) {
-        addSystemMessage('{yellow-fg}Render mode applies to the webcam stream — join a voice channel first.{/yellow-fg}');
+        addSystemMessage(`{${T.accentAlt}-fg}Render mode applies to the webcam stream — join a voice channel first.{/${T.accentAlt}-fg}`);
         return;
       }
       voiceChannel.cycleRenderMode().catch(() => {});
@@ -2710,7 +2714,7 @@ export async function createApp(session: DoorSession) {
       // Fullscreen (speaker mode) <-> grid split-view
       const vg = (voiceChannel as any).videoGrid;
       if (!vg) {
-        addSystemMessage('{yellow-fg}Video grid not active — join a voice channel and enable video.{/yellow-fg}');
+        addSystemMessage(`{${T.accentAlt}-fg}Video grid not active — join a voice channel and enable video.{/${T.accentAlt}-fg}`);
         return;
       }
       vg.toggleViewMode();
@@ -2727,10 +2731,10 @@ export async function createApp(session: DoorSession) {
     // repaint.
     onClearChat: clearChat,
     onAbout: () => {
-      addSystemMessage('{cyan-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/cyan-fg}');
+      addSystemMessage(`{${T.accent}-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/${T.accent}-fg}`);
     },
     onShortcuts: () => {
-      addSystemMessage('{cyan-fg}Shortcuts:{/cyan-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)');
+      addSystemMessage(`{${T.accent}-fg}Shortcuts:{/${T.accent}-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)`);
     },
     onQuit: () => {
       showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {
@@ -2893,12 +2897,12 @@ export async function createApp(session: DoorSession) {
 
         // Welcome messages
         addSystemMessage('Welcome to LiveChat v3.2!');
-        addChatMessage('{cyan-fg}Hotkeys:{/cyan-fg}', false);
-        addChatMessage('  {white-fg}F1{/white-fg}=Help  {white-fg}F2{/white-fg}=Sidebar  {white-fg}F3{/white-fg}=Switch Tab  {white-fg}F4{/white-fg}=Emoji Picker', false);
-        addChatMessage('  {white-fg}F5{/white-fg}=Art Channel  {white-fg}F6{/white-fg}=Files  {white-fg}Tab{/white-fg}=Focus Cycle', false);
-        addChatMessage('  {white-fg}^S{/white-fg}=Settings  {white-fg}^E{/white-fg}=Emoji  {white-fg}^C/^Q{/white-fg}=Quit  {white-fg}Esc{/white-fg}=Close/Return', false);
-        addChatMessage('{yellow-fg}Commands:{/yellow-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events', false);
-        addChatMessage('{gray-fg}Type a message and press Enter to send{/gray-fg}', false);
+        addChatMessage(`{${T.accent}-fg}Hotkeys:{/${T.accent}-fg}`, false);
+        addChatMessage(`  {${T.ink}-fg}F1{/${T.ink}-fg}=Help  {${T.ink}-fg}F2{/${T.ink}-fg}=Sidebar  {${T.ink}-fg}F3{/${T.ink}-fg}=Switch Tab  {${T.ink}-fg}F4{/${T.ink}-fg}=Emoji Picker`, false);
+        addChatMessage(`  {${T.ink}-fg}F5{/${T.ink}-fg}=Art Channel  {${T.ink}-fg}F6{/${T.ink}-fg}=Files  {${T.ink}-fg}Tab{/${T.ink}-fg}=Focus Cycle`, false);
+        addChatMessage(`  {${T.ink}-fg}^S{/${T.ink}-fg}=Settings  {${T.ink}-fg}^E{/${T.ink}-fg}=Emoji  {${T.ink}-fg}^C/^Q{/${T.ink}-fg}=Quit  {${T.ink}-fg}Esc{/${T.ink}-fg}=Close/Return`, false);
+        addChatMessage(`{${T.accentAlt}-fg}Commands:{/${T.accentAlt}-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events`, false);
+        addChatMessage(`{${T.dim}-fg}Type a message and press Enter to send{/${T.dim}-fg}`, false);
 
         // Request room list
         addSystemMessage('Loading rooms...');

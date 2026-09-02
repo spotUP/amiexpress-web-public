@@ -1,3 +1,4 @@
+import { T } from '../door-theme';
 /** Pure DM/Group-DM line formatter for blessed rendering. */
 export function formatDmLine(d: any): string {
   if (!d) return '';
@@ -9,11 +10,11 @@ export function formatDmLine(d: any): string {
       ? `[Group DM to ${list}]`
       : `[Group DM from ${d.from || '?'}]`;
     const color = d.direction === 'sent' ? 'magenta-fg' : 'cyan-fg';
-    const offlineHint = d.direction === 'sent' && d.delivered === false ? ' {gray-fg}(offline){/gray-fg}' : '';
+    const offlineHint = d.direction === 'sent' && d.delivered === false ? ` {${T.dim}-fg}(offline){/${T.dim}-fg}` : '';
     return `{${color}}${header}: ${d.message}${offlineHint}{/${color}}`;
   }
   const dir = d.direction === 'sent' ? `[DM to ${d.to || '?'}]` : `[DM from ${d.from || '?'}]`;
   const color = d.direction === 'sent' ? 'magenta-fg' : 'cyan-fg';
-  const offlineHint = d.direction === 'sent' && d.delivered === false ? ' {gray-fg}(offline){/gray-fg}' : '';
+  const offlineHint = d.direction === 'sent' && d.delivered === false ? ` {${T.dim}-fg}(offline){/${T.dim}-fg}` : '';
   return `{${color}}${dir}: ${d.message}${offlineHint}{/${color}}`;
 }

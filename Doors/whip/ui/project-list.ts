@@ -11,6 +11,7 @@ import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { v4 as uuidv4 } from 'uuid';
+import { T } from '../door-theme';
 
 const PROJECT_TYPES: ProjectType[] = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
 
@@ -39,9 +40,9 @@ export async function showProjectList(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: `{center}{bold}{cyan-fg}ALL PROJECTS{/cyan-fg}{/bold} - Manage your demo scene projects{/center}\n` +
+      content: `{center}{bold}{${T.accent}-fg}ALL PROJECTS{/${T.accent}-fg}{/bold} - Manage your demo scene projects{/center}\n` +
                `{center}Total: {bold}${projects.length}{/bold} projects{/center}`,
-      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
       tags: true,
       focusable: false,
       mouse: false,
@@ -59,8 +60,8 @@ export async function showProjectList(
       border: { type: 'line' },
       label: ' Projects ',
       style: {
-        border: { fg: 'cyan' },
-        bg: 'black'
+        border: { fg: T.accent },
+        bg: T.ground
       },
       focusable: false,
       mouse: false,
@@ -78,11 +79,11 @@ export async function showProjectList(
       mouse: true,
       items: projects.length > 0
         ? projects.map(p => `{bold}${p.name}{/bold} - ${p.type} (${p.status})`)
-        : ['{gray-fg}No projects yet. Press N to create one.{/gray-fg}'],
+        : [`{${T.dim}-fg}No projects yet. Press N to create one.{/${T.dim}-fg}`],
       style: {
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' },
-        bg: 'black'
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
       }
     });
 
@@ -95,9 +96,9 @@ export async function showProjectList(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: ` {cyan-fg}[N]{/cyan-fg} New   {cyan-fg}[E]{/cyan-fg} Edit   {cyan-fg}[D]{/cyan-fg} Delete   {cyan-fg}[Enter]{/cyan-fg} Select   {red-fg}[Q/ESC]{/red-fg} Back\n` +
-               ` {gray-fg}Arrow Keys to navigate | Mouse click supported{/gray-fg}`,
-      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      content: ` {${T.accent}-fg}[N]{/${T.accent}-fg} New   {${T.accent}-fg}[E]{/${T.accent}-fg} Edit   {${T.accent}-fg}[D]{/${T.accent}-fg} Delete   {${T.accent}-fg}[Enter]{/${T.accent}-fg} Select   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
+               ` {${T.dim}-fg}Arrow Keys to navigate | Mouse click supported{/${T.dim}-fg}`,
+      style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
       tags: true,
       focusable: false,
       mouse: false,
@@ -149,7 +150,7 @@ export async function showProjectList(
               projects = await dataManager.loadProjects();
               list.setItems(projects.length > 0
                 ? projects.map(p => `{bold}${p.name}{/bold} - ${p.type} (${p.status})`)
-                : ['{gray-fg}No projects yet. Press N to create one.{/gray-fg}']);
+                : [`{${T.dim}-fg}No projects yet. Press N to create one.{/${T.dim}-fg}`]);
               screen.render();
             }
           }
@@ -228,8 +229,8 @@ async function showProjectEditor(
       height: 22,  // Increased from 20 for more comfortable spacing
       border: { type: 'line' },
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       },
       label: isNew ? ' New Project ' : ' Edit Project ',
       focusable: false,
@@ -246,7 +247,7 @@ async function showProjectEditor(
       width: '100%-4',
       height: 1,
       content: 'Project Name:',
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
       clickable: false,
@@ -263,9 +264,9 @@ async function showProjectEditor(
       inputOnFocus: true,
       value: project.name,
       style: {
-        fg: 'white',
-        bg: 'blue',
-        focus: { bg: 'lightblue', fg: 'black' }
+        fg: T.ink,
+        bg: T.bar,
+        focus: { bg: 'lightblue', fg: T.ground }
       }
     });
 
@@ -278,7 +279,7 @@ async function showProjectEditor(
       width: 30,
       height: 1,
       content: 'Type:',
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
       clickable: false,
@@ -293,10 +294,10 @@ async function showProjectEditor(
       height: 7,
       border: { type: 'line' },
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
       },
       keys: true,
       vi: true,
@@ -314,7 +315,7 @@ async function showProjectEditor(
       width: 30,
       height: 1,
       content: 'Status:',
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
       clickable: false,
@@ -330,10 +331,10 @@ async function showProjectEditor(
       height: 7,
       border: { type: 'line' },
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
       },
       keys: true,
       vi: true,
@@ -351,7 +352,7 @@ async function showProjectEditor(
       width: '100%-4',
       height: 1,
       content: 'Description (optional):',
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
       clickable: false,
@@ -368,9 +369,9 @@ async function showProjectEditor(
       inputOnFocus: true,
       value: project.description,
       style: {
-        fg: 'white',
-        bg: 'blue',
-        focus: { bg: 'lightblue', fg: 'black' }
+        fg: T.ink,
+        bg: T.bar,
+        focus: { bg: 'lightblue', fg: T.ground }
       }
     });
 
@@ -386,10 +387,10 @@ async function showProjectEditor(
       keys: true,
       mouse: true,
       style: {
-        fg: 'white',
-        bg: 'green',
-        focus: { bg: 'lightgreen', fg: 'black' },
-        hover: { bg: 'lightgreen', fg: 'black' }
+        fg: T.ink,
+        bg: T.ok,
+        focus: { bg: 'lightgreen', fg: T.ground },
+        hover: { bg: 'lightgreen', fg: T.ground }
       }
     });
 
@@ -405,10 +406,10 @@ async function showProjectEditor(
       keys: true,
       mouse: true,
       style: {
-        fg: 'white',
-        bg: 'red',
-        focus: { bg: 'lightred', fg: 'black' },
-        hover: { bg: 'lightred', fg: 'black' }
+        fg: T.ink,
+        bg: T.alert,
+        focus: { bg: 'lightred', fg: T.ground },
+        hover: { bg: 'lightred', fg: T.ground }
       }
     });
 
@@ -435,8 +436,8 @@ async function showProjectEditor(
           padding: 2,
           border: { type: 'line' },
           style: {
-            border: { fg: 'red' },
-            bg: 'black'
+            border: { fg: T.alert },
+            bg: T.ground
           },
           label: ' Error '
         });
@@ -515,8 +516,8 @@ async function confirmDelete(screen: Screen, projectName: string): Promise<boole
       height: 7,
       border: { type: 'line' },
       style: {
-        border: { fg: 'red' },
-        bg: 'black'
+        border: { fg: T.alert },
+        bg: T.ground
       },
       label: ' Confirm Delete '
     });

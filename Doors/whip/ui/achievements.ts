@@ -2,6 +2,7 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats, Achievement } from '../types/user';
 import type { DataManager } from '../core/data-manager';
+import { T } from '../door-theme';
 
 /**
  * Smart text truncation with ellipsis
@@ -49,9 +50,9 @@ export async function showAchievements(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: `{center}{bold}{cyan-fg}YOUR ACHIEVEMENTS{/cyan-fg}{/bold} - Track your progress{/center}\n` +
-               `{center}Unlocked: {bold}{green-fg}${unlocked.length}{/green-fg}{/bold} / ${allAchievements.length}  |  Points from Achievements: {bold}${unlocked.reduce((sum, a) => sum + a.points, 0)}{/bold}{/center}`,
-      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      content: `{center}{bold}{${T.accent}-fg}YOUR ACHIEVEMENTS{/${T.accent}-fg}{/bold} - Track your progress{/center}\n` +
+               `{center}Unlocked: {bold}{${T.ok}-fg}${unlocked.length}{/${T.ok}-fg}{/bold} / ${allAchievements.length}  |  Points from Achievements: {bold}${unlocked.reduce((sum, a) => sum + a.points, 0)}{/bold}{/center}`,
+      style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
       tags: true,
       focusable: false,
       mouse: false,
@@ -75,36 +76,36 @@ export async function showAchievements(
       mouse: true,
       keys: true,
       vi: true,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       focusable: true,
     });
 
     let contentText = '';
 
     // Unlocked section
-    contentText += ' {bold}{green-fg}UNLOCKED ({/green-fg}{/bold}{bold}' + unlocked.length + '{/bold}{bold}{green-fg}):{/green-fg}{/bold}\n\n';
+    contentText += ` {bold}{${T.ok}-fg}UNLOCKED ({/${T.ok}-fg}{/bold}{bold}` + unlocked.length + `{/bold}{bold}{${T.ok}-fg}):{/${T.ok}-fg}{/bold}\n\n`;
 
     if (unlocked.length === 0) {
-      contentText += ' {gray-fg}No achievements unlocked yet. Start completing tasks!{/gray-fg}\n\n';
+      contentText += ` {${T.dim}-fg}No achievements unlocked yet. Start completing tasks!{/${T.dim}-fg}\n\n`;
     } else {
       for (const achievement of unlocked) {
         const name = padName(achievement.name, 25);
         const desc = truncateText(achievement.description, 35);
-        contentText += ` {green-fg}${achievement.icon}{/green-fg} {bold}${name}{/bold}${desc}  {yellow-fg}+${achievement.points} pts{/yellow-fg}\n`;
+        contentText += ` {${T.ok}-fg}${achievement.icon}{/${T.ok}-fg} {bold}${name}{/bold}${desc}  {${T.accentAlt}-fg}+${achievement.points} pts{/${T.accentAlt}-fg}\n`;
       }
       contentText += '\n';
     }
 
     // Locked section
-    contentText += ' {bold}{red-fg}LOCKED ({/red-fg}{/bold}{bold}' + locked.length + '{/bold}{bold}{red-fg}):{/red-fg}{/bold}\n\n';
+    contentText += ` {bold}{${T.alert}-fg}LOCKED ({/${T.alert}-fg}{/bold}{bold}` + locked.length + `{/bold}{bold}{${T.alert}-fg}):{/${T.alert}-fg}{/bold}\n\n`;
 
     if (locked.length === 0) {
-      contentText += ' {green-fg}All achievements unlocked! You are a legend!{/green-fg}\n';
+      contentText += ` {${T.ok}-fg}All achievements unlocked! You are a legend!{/${T.ok}-fg}\n`;
     } else {
       for (const achievement of locked) {
         const name = padName(achievement.name, 25);
         const desc = truncateText(achievement.description, 35);
-        contentText += ` {gray-fg}${achievement.icon}{/gray-fg} {gray-fg}${name}${desc}  +${achievement.points} pts{/gray-fg}\n`;
+        contentText += ` {${T.dim}-fg}${achievement.icon}{/${T.dim}-fg} {${T.dim}-fg}${name}${desc}  +${achievement.points} pts{/${T.dim}-fg}\n`;
       }
     }
 
@@ -120,9 +121,9 @@ export async function showAchievements(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: ` {cyan-fg}[Up/Down]{/cyan-fg} Scroll   {red-fg}[Q/ESC]{/red-fg} Back\n` +
-               ` {gray-fg}Scrollwheel supported{/gray-fg}`,
-      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      content: ` {${T.accent}-fg}[Up/Down]{/${T.accent}-fg} Scroll   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
+               ` {${T.dim}-fg}Scrollwheel supported{/${T.dim}-fg}`,
+      style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
       tags: true,
       focusable: false,
       mouse: false,

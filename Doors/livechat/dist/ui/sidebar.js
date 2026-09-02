@@ -7,6 +7,7 @@ exports.formatChannel = formatChannel;
 exports.renderChannels = renderChannels;
 const ansi_1 = require("../utils/ansi");
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 /** Create sidebar box config */
 function sidebarConfig() {
     return {
@@ -15,7 +16,7 @@ function sidebarConfig() {
         tags: true,
         scrollable: true,
         style: {
-            fg: 'white',
+            fg: door_theme_1.T.ink,
             border: { fg: theme_1.PANEL_BORDER },
             ...theme_1.PANEL_FOCUS_STYLE,
         }

@@ -5,6 +5,7 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { color } from '../utils/ansi';
 import { STATUS_HEIGHT } from './status-bar';
 import { INPUT_HEIGHT } from './input-box';
+import { T } from '../door-theme';
 
 // Height of the typing indicator bar (shows who is typing in real-time)
 export const TYPING_HEIGHT = 3;
@@ -26,7 +27,7 @@ export function createTypingPreview(screen: Screen): Box {
     width: '100%-16',
     height: TYPING_HEIGHT,
     border: { type: 'line' },
-    style: { fg: 'gray', border: { fg: PANEL_BORDER } },
+    style: { fg: T.dim, border: { fg: PANEL_BORDER } },
     tags: true,
     content: '',
     focusable: false,

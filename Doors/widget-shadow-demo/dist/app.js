@@ -11,6 +11,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const door_theme_1 = require("./door-theme");
 const lorem = 'Non eram nescius Brute cum quae summis ingeniis exquisitaque'
     + ' doctrina philosophi Graeco sermone tractavissent ea Latinis litteris mandaremus'
     + ' fore ut hic noster labor in varias reprehensiones incurreret nam quibusdam et'
@@ -57,6 +58,8 @@ const lorem = 'Non eram nescius Brute cum quae summis ingeniis exquisitaque'
     + ' legantur';
 async function createApp(session) {
     const { bbs, bbsSession } = session;
+    // The board's theme, before any widget reads a colour from it.
+    (0, door_theme_1.applyTheme)(bbs);
     let screen;
     try {
         // Create responsive screen with BBS output
@@ -107,10 +110,10 @@ async function createApp(session) {
         draggable: true,
         minWidth: 20,
         minHeight: 8,
-        border: { type: 'line', fg: 'yellow' },
+        border: { type: 'line', fg: door_theme_1.T.accentAlt },
         style: {
-            bg: 'yellow',
-            border: { fg: 'yellow' },
+            bg: door_theme_1.T.accentAlt,
+            border: { fg: door_theme_1.T.accentAlt },
         },
     });
     const under = (0, blessed_helpers_1.createBox)({
@@ -120,7 +123,7 @@ async function createApp(session) {
         width: '100%',
         height: '100%',
         style: {
-            bg: 'yellow',
+            bg: door_theme_1.T.accentAlt,
         },
     });
     // Red transparent "over" box - now as dockable panel
@@ -137,11 +140,11 @@ async function createApp(session) {
         draggable: true,
         minWidth: 30,
         minHeight: 10,
-        border: { type: 'line', fg: 'red' },
+        border: { type: 'line', fg: door_theme_1.T.alert },
         style: {
-            bg: 'red',
+            bg: door_theme_1.T.alert,
             transparent: true,
-            border: { fg: 'red' },
+            border: { fg: door_theme_1.T.alert },
         },
     });
     const over = (0, blessed_helpers_1.createBox)({
@@ -151,10 +154,10 @@ async function createApp(session) {
         width: '100%',
         height: '100%',
         style: {
-            bg: 'red',
+            bg: door_theme_1.T.alert,
             transparent: true,
         },
-        content: '{green-bg}{red-fg}{bold} --Drag Me-- {/}',
+        content: `{green-bg}{${door_theme_1.T.alert}-fg}{bold} --Drag Me-- {/}`,
     });
     // Helper to safely get/set position with bounds checking
     const getSafePosition = (panel, prop) => {

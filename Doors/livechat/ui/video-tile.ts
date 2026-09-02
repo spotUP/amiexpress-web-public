@@ -12,6 +12,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { resolveBoxSize } from '../features/video-layout';
 import { fitFrameToTile } from './frame-fit';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
 
 /**
  * What a tile with no picture yet should say.
@@ -324,7 +325,7 @@ export class VideoTile {
       width: options.width,
       height: options.height,
       border: undefined,
-      style: { bg: 'black' },
+      style: { bg: T.ground },
       tags: true,
     });
 
@@ -344,7 +345,7 @@ export class VideoTile {
       height: '100%',
       border: undefined,
       style: {
-        bg: 'black',
+        bg: T.ground,
       },
       // Frames are now emitted as blessed colour tags ({red-fg} etc.)
       // matching the backend/neoshowcase pipeline — blessed's cell
@@ -366,8 +367,8 @@ export class VideoTile {
       height: 1,
       content: this.renderStatusBar(),
       style: {
-        bg: 'black',
-        fg: 'white',
+        bg: T.ground,
+        fg: T.ink,
       },
       tags: true,
       // Over the picture, not beside it - see the video box above.
@@ -390,7 +391,7 @@ export class VideoTile {
         const topPadding = Math.max(0, Math.floor((height - 1) / 2));
         const placeholder = [
           ...Array(topPadding).fill(''),
-          `{center}{yellow-fg}{bold}${message}{/bold}{/yellow-fg}{/center}`,
+          `{center}{${T.accentAlt}-fg}{bold}${message}{/bold}{/${T.accentAlt}-fg}{/center}`,
         ];
         this.videoBox.setContent(placeholder.join('\n'));
       }
@@ -414,15 +415,15 @@ export class VideoTile {
    */
   private renderStatusBar(): string {
     const username = this.options.username;
-    const speakingIcon = this.options.isSpeaking ? '{green-fg}[*]{/green-fg}' : '[ ]';
-    const muteIcon = this.options.isMuted ? '{red-fg}[M]{/red-fg}' : '';
-    const videoIcon = this.options.hasVideo ? '{blue-fg}[V]{/blue-fg}' : '';
-    const youLabel = this.options.isCurrentUser ? ' {yellow-fg}(you){/yellow-fg}' : '';
+    const speakingIcon = this.options.isSpeaking ? `{${T.ok}-fg}[*]{/${T.ok}-fg}` : '[ ]';
+    const muteIcon = this.options.isMuted ? `{${T.alert}-fg}[M]{/${T.alert}-fg}` : '';
+    const videoIcon = this.options.hasVideo ? `{${T.bar}-fg}[V]{/${T.bar}-fg}` : '';
+    const youLabel = this.options.isCurrentUser ? ` {${T.accentAlt}-fg}(you){/${T.accentAlt}-fg}` : '';
     // Show the active render mode on the self-tile so the user can see
     // which encoder produced what they're looking at (ascii/color/
     // halfblock/braille all look quite different).
     const modeLabel = this.options.isCurrentUser && this.options.renderMode
-      ? ` {magenta-fg}[${this.options.renderMode.toUpperCase()}]{/magenta-fg}`
+      ? ` {${T.accentAlt}-fg}[${this.options.renderMode.toUpperCase()}]{/${T.accentAlt}-fg}`
       : '';
 
     return ` ${speakingIcon} ${username}${youLabel} ${muteIcon} ${videoIcon}${modeLabel}`.trim();

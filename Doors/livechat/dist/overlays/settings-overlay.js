@@ -10,6 +10,7 @@ const settings_checkboxes_events_1 = require("./settings-checkboxes-events");
 const settings_checkboxes_prefs_1 = require("./settings-checkboxes-prefs");
 const settings_status_radio_1 = require("./settings-status-radio");
 const settings_save_1 = require("./settings-save");
+const door_theme_1 = require("../door-theme");
 function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
     const w = Math.min(72, Math.max(46, s.width - 6));
     const h = Math.min(22, Math.max(18, s.height - 4));
@@ -30,7 +31,7 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         draggable: true,
         trapFocus: true,
         ch: ' ',
-        style: { fg: 'white', bg: 'black', border: { fg: theme_1.PANEL_BORDER } },
+        style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } },
         zIndex: 9990, // Modal overlays render above panels (1-10) but below dropdowns (9999)
     });
     o.enableResize();
@@ -43,7 +44,7 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         width: '100%-6',
         orientation: 'horizontal',
         type: 'line',
-        style: { fg: 'gray' },
+        style: { fg: door_theme_1.T.dim },
     });
     blessed_1.default.box({
         parent: o,
@@ -52,7 +53,7 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         width: 20,
         height: 1,
         content: 'Status:',
-        style: { fg: 'cyan' },
+        style: { fg: door_theme_1.T.accent },
     });
     (0, settings_status_radio_1.createStatusRadio)(o, l, pCb.nextRow + 3, Math.min(6, Math.max(4, h - pCb.nextRow - 7)), ps, se, uid, usb);
     const btn = blessed_1.default.button({
@@ -63,7 +64,7 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         height: 1,
         content: 'Close',
         mouse: true,
-        style: { fg: 'white', bg: 'blue', focus: { bg: 'cyan' } },
+        style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, focus: { bg: door_theme_1.T.accent } },
     });
     btn.on('press', () => {
         (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb);

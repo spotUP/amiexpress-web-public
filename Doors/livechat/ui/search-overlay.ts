@@ -4,6 +4,7 @@
 import { Screen, SearchModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PANEL_BORDER } from './theme';
 import type { SearchResult } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
 
 export function createSearchOverlay(
   screen: Screen,
@@ -19,7 +20,7 @@ export function createSearchOverlay(
     filters: [
       { id: 'username', label: 'Username (optional)' }
     ],
-    helpText: '{cyan-fg}Enter: Search | Tab: Next field | Esc: Close{/cyan-fg}',
+    helpText: `{${T.accent}-fg}Enter: Search | Tab: Next field | Esc: Close{/${T.accent}-fg}`,
     onSearch: (query, filters) => {
       onSearch(query, { username: filters.username || undefined });
     },
@@ -41,7 +42,7 @@ export function createSearchOverlay(
         const highlight = r.highlighted || r.message;
         return {
           id: String(idx),
-          content: `{cyan-fg}${idx + 1}.{/cyan-fg} {yellow-fg}${r.sender_username}{/yellow-fg} @ ${date}: ${highlight}`,
+          content: `{${T.accent}-fg}${idx + 1}.{/${T.accent}-fg} {${T.accentAlt}-fg}${r.sender_username}{/${T.accentAlt}-fg} @ ${date}: ${highlight}`,
           data: r,
         };
       });

@@ -17,6 +17,7 @@ exports.createVideoGrid = createVideoGrid;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const video_tile_1 = require("../ui/video-tile");
 const video_layout_1 = require("./video-layout");
+const door_theme_1 = require("../door-theme");
 /**
  * Calculate optimal grid dimensions based on participant count
  */
@@ -276,8 +277,8 @@ class VideoGrid {
             width: '100%',
             height: 1,
             tags: true,
-            content: `{center}{gray-fg}${text}{/gray-fg}{/center}`,
-            style: { bg: 'black' },
+            content: `{center}{${door_theme_1.T.dim}-fg}${text}{/${door_theme_1.T.dim}-fg}{/center}`,
+            style: { bg: door_theme_1.T.ground },
         });
     }
     updateGrid() {

@@ -1,3 +1,4 @@
+import { T } from '../door-theme';
 // Valid blessed colors (16-color palette)
 const VALID_COLORS = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'gray'];
 
@@ -13,12 +14,12 @@ export function parseMarkdown(text: string): string {
     // Inline code `code` - use inverse for contrast without setting bg
     .replace(/`([^`]+)`/g, '{inverse} $1 {/inverse}')
     // Strikethrough ~~text~~
-    .replace(/~~(.+?)~~/g, '{gray-fg}$1{/gray-fg}');
+    .replace(/~~(.+?)~~/g, `{${T.dim}-fg}$1{/${T.dim}-fg}`);
 }
 
 /** Parse color tags {color}text{/color} and {bg:color}text{/bg} */
 export function parseColors(text: string): string {
-  // Foreground colors: {red}text{/red} -> {red-fg}text{/red-fg}
+  // Foreground colors: {red}text{/red} -> {${T.alert}-fg}text{/${T.alert}-fg}
   // Use [^{]+ to prevent matching across multiple tags and causing bleed
   text = text.replace(/\{(\w+)\}([^{]+)\{\/\1\}/g, (match, color, content) => {
     if (VALID_COLORS.includes(color)) {
@@ -49,7 +50,7 @@ export function parseCodeBlock(text: string): string {
 
 /** Parse links [text](url) */
 export function parseLinks(text: string): string {
-  return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '{cyan-fg}[$1]{/cyan-fg}');
+  return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, `{${T.accent}-fg}[$1]{/${T.accent}-fg}`);
 }
 
 /** Parse emotes :name: */

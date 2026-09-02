@@ -9,6 +9,7 @@
 
 import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { T, applyTheme } from './door-theme';
 
 interface DoorSession {
   socket: any;
@@ -66,6 +67,9 @@ const lorem = 'Non eram nescius Brute cum quae summis ingeniis exquisitaque'
 export async function createApp(session: DoorSession) {
   const { bbs, bbsSession } = session;
 
+  // The board's theme, before any widget reads a colour from it.
+  applyTheme(bbs);
+
   let screen;
   try {
     // Create responsive screen with BBS output
@@ -119,10 +123,10 @@ export async function createApp(session: DoorSession) {
     draggable: true,
     minWidth: 20,
     minHeight: 8,
-    border: { type: 'line', fg: 'yellow' },
+    border: { type: 'line', fg: T.accentAlt },
     style: {
-      bg: 'yellow',
-      border: { fg: 'yellow' },
+      bg: T.accentAlt,
+      border: { fg: T.accentAlt },
     },
   });
 
@@ -133,7 +137,7 @@ export async function createApp(session: DoorSession) {
     width: '100%',
     height: '100%',
     style: {
-      bg: 'yellow',
+      bg: T.accentAlt,
     },
   });
 
@@ -151,11 +155,11 @@ export async function createApp(session: DoorSession) {
     draggable: true,
     minWidth: 30,
     minHeight: 10,
-    border: { type: 'line', fg: 'red' },
+    border: { type: 'line', fg: T.alert },
     style: {
-      bg: 'red',
+      bg: T.alert,
       transparent: true,
-      border: { fg: 'red' },
+      border: { fg: T.alert },
     },
   });
 
@@ -166,10 +170,10 @@ export async function createApp(session: DoorSession) {
     width: '100%',
     height: '100%',
     style: {
-      bg: 'red',
+      bg: T.alert,
       transparent: true,
     },
-    content: '{green-bg}{red-fg}{bold} --Drag Me-- {/}',
+    content: `{green-bg}{${T.alert}-fg}{bold} --Drag Me-- {/}`,
   });
 
   // Helper to safely get/set position with bounds checking

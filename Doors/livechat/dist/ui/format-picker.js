@@ -8,17 +8,18 @@ exports.getAllFormats = getAllFormats;
 exports.getFormatsByCategory = getFormatsByCategory;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 // Available formats grouped by category
 const FORMATS = {
     colors: [
-        { category: 'colors', name: 'Red', wrap: (t) => `{red-fg}${t}{/}` },
-        { category: 'colors', name: 'Green', wrap: (t) => `{green-fg}${t}{/}` },
-        { category: 'colors', name: 'Blue', wrap: (t) => `{blue-fg}${t}{/}` },
-        { category: 'colors', name: 'Yellow', wrap: (t) => `{yellow-fg}${t}{/}` },
-        { category: 'colors', name: 'Cyan', wrap: (t) => `{cyan-fg}${t}{/}` },
-        { category: 'colors', name: 'Magenta', wrap: (t) => `{magenta-fg}${t}{/}` },
-        { category: 'colors', name: 'White', wrap: (t) => `{white-fg}${t}{/}` },
-        { category: 'colors', name: 'Gray', wrap: (t) => `{gray-fg}${t}{/}` },
+        { category: 'colors', name: 'Red', wrap: (t) => `{${door_theme_1.T.alert}-fg}${t}{/}` },
+        { category: 'colors', name: 'Green', wrap: (t) => `{${door_theme_1.T.ok}-fg}${t}{/}` },
+        { category: 'colors', name: 'Blue', wrap: (t) => `{${door_theme_1.T.bar}-fg}${t}{/}` },
+        { category: 'colors', name: 'Yellow', wrap: (t) => `{${door_theme_1.T.accentAlt}-fg}${t}{/}` },
+        { category: 'colors', name: 'Cyan', wrap: (t) => `{${door_theme_1.T.accent}-fg}${t}{/}` },
+        { category: 'colors', name: 'Magenta', wrap: (t) => `{${door_theme_1.T.accentAlt}-fg}${t}{/}` },
+        { category: 'colors', name: 'White', wrap: (t) => `{${door_theme_1.T.ink}-fg}${t}{/}` },
+        { category: 'colors', name: 'Gray', wrap: (t) => `{${door_theme_1.T.dim}-fg}${t}{/}` },
     ],
     effects: [
         { category: 'effects', name: 'Rainbow', wrap: (t) => `~rainbow~${t}~/rainbow~` },
@@ -55,14 +56,14 @@ class FormatPicker {
             debounceMs: 80,
             borderColor: theme_1.PANEL_BORDER,
             categoryStyle: {
-                fg: 'white',
-                bg: 'black',
-                selected: { fg: 'black', bg: 'green' },
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
+                selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.ok },
             },
             itemStyle: {
-                fg: 'white',
-                bg: 'black',
-                selected: { fg: 'black', bg: 'yellow' },
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
+                selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accentAlt },
             },
             getItems: (category) => {
                 const formatCategory = CATEGORY_MAP[category] || 'colors';
@@ -87,17 +88,17 @@ class FormatPicker {
                         // Show effect name with visual representation
                         const effectName = format.name.toLowerCase();
                         if (effectName === 'rainbow')
-                            return ` {magenta-fg}{bold}${item.label}{/bold}{/}`;
+                            return ` {${door_theme_1.T.accentAlt}-fg}{bold}${item.label}{/bold}{/}`;
                         if (effectName === 'pulse')
-                            return ` {cyan-fg}{bold}${item.label}{/bold}{/}`;
+                            return ` {${door_theme_1.T.accent}-fg}{bold}${item.label}{/bold}{/}`;
                         if (effectName === 'sparkle')
-                            return ` {yellow-fg}{bold}${item.label}{/bold}{/}`;
+                            return ` {${door_theme_1.T.accentAlt}-fg}{bold}${item.label}{/bold}{/}`;
                         if (effectName === 'shake')
-                            return ` {red-fg}{bold}${item.label}{/bold}{/}`;
+                            return ` {${door_theme_1.T.alert}-fg}{bold}${item.label}{/bold}{/}`;
                         if (effectName === 'wave')
-                            return ` {blue-fg}{bold}${item.label}{/bold}{/}`;
+                            return ` {${door_theme_1.T.bar}-fg}{bold}${item.label}{/bold}{/}`;
                         if (effectName === 'gradient')
-                            return ` {cyan-fg}${item.label}{/}`;
+                            return ` {${door_theme_1.T.accent}-fg}${item.label}{/}`;
                         return ` ${item.label}`;
                     case 'markdown':
                         // Show markdown symbols applied
@@ -108,9 +109,9 @@ class FormatPicker {
                         if (format.name === 'Underline')
                             return ` {underline}${item.label}{/underline}`;
                         if (format.name === 'Strike')
-                            return ` {gray-fg}${item.label}{/}`;
+                            return ` {${door_theme_1.T.dim}-fg}${item.label}{/}`;
                         if (format.name === 'Code')
-                            return ` {black-bg}{white-fg}${item.label}{/}{/}`;
+                            return ` {black-bg}{${door_theme_1.T.ink}-fg}${item.label}{/}{/}`;
                         return ` ${item.label}`;
                     default:
                         return ` ${item.label}`;

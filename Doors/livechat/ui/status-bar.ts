@@ -6,6 +6,7 @@ import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PRESENCE_INDICATORS } from '../types';
 import type { AppState } from '../core/state';
 import type { PresenceService } from '../services';
+import { T } from '../door-theme';
 
 export const STATUS_HEIGHT = 1;
 
@@ -13,8 +14,8 @@ export function createStatusBar(screen: Screen): Box {
   const bar = new StatusBar({
     parent: screen,
     position: 'bottom',
-    fg: 'white',
-    bg: 'blue',
+    fg: T.ink,
+    bg: T.bar,
     separator: ' | ',
   });
 

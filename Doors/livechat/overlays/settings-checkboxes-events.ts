@@ -3,6 +3,7 @@
  */
 import blessed, { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { AppState } from '../core/state';
+import { T } from '../door-theme';
 
 export function createEventCheckboxes(p: Box, state: AppState, l: number, r: number) {
   blessed.box({
@@ -11,9 +12,9 @@ export function createEventCheckboxes(p: Box, state: AppState, l: number, r: num
     left: l,
     width: 20,
     height: 1,
-    content: '{cyan-fg}BBS Events:{/cyan-fg}',
+    content: `{${T.accent}-fg}BBS Events:{/${T.accent}-fg}`,
     tags: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   const showLogins = blessed.checkbox({
@@ -23,7 +24,7 @@ export function createEventCheckboxes(p: Box, state: AppState, l: number, r: num
     text: 'Show User Logins/Logouts',
     checked: state.prefs.showLogins,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   const showFileActivity = blessed.checkbox({
@@ -33,7 +34,7 @@ export function createEventCheckboxes(p: Box, state: AppState, l: number, r: num
     text: 'Show File Uploads/Downloads',
     checked: state.prefs.showFileActivity,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   const showDoorActivity = blessed.checkbox({
@@ -43,7 +44,7 @@ export function createEventCheckboxes(p: Box, state: AppState, l: number, r: num
     text: 'Show Door Activity',
     checked: state.prefs.showDoorActivity,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   const showMessages = blessed.checkbox({
@@ -53,7 +54,7 @@ export function createEventCheckboxes(p: Box, state: AppState, l: number, r: num
     text: 'Show New Messages',
     checked: state.prefs.showMessages,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   const showAnnouncements = blessed.checkbox({
@@ -63,7 +64,7 @@ export function createEventCheckboxes(p: Box, state: AppState, l: number, r: num
     text: 'Show System Announcements',
     checked: state.prefs.showSystemAnnouncements,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   return { showLogins, showFileActivity, showDoorActivity, showMessages, showAnnouncements, nextRow: r };

@@ -19,6 +19,7 @@ exports.createVoiceChannel = createVoiceChannel;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const theme_1 = require("../ui/theme");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const door_theme_1 = require("../door-theme");
 class VoiceChannel {
     constructor(options) {
         this.participants = new Map();
@@ -42,8 +43,8 @@ class VoiceChannel {
             width: '25%',
             height: '100%',
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
                 border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
@@ -61,13 +62,13 @@ class VoiceChannel {
             height: 3,
             content: ' Join Voice ',
             style: {
-                fg: 'black',
-                bg: 'green',
+                fg: door_theme_1.T.ground,
+                bg: door_theme_1.T.ok,
                 focus: {
-                    bg: 'cyan',
+                    bg: door_theme_1.T.accent,
                 },
                 hover: {
-                    bg: 'cyan',
+                    bg: door_theme_1.T.accent,
                 },
             },
             border: {
@@ -86,15 +87,15 @@ class VoiceChannel {
             width: '100%-2',
             height: 12,
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
                 border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
                 type: 'line',
             },
             label: ' Participants (0) ',
-            content: '{center}{gray-fg}No one in channel{/gray-fg}{/center}',
+            content: `{center}{${door_theme_1.T.dim}-fg}No one in channel{/${door_theme_1.T.dim}-fg}{/center}`,
             scrollable: true,
             alwaysScroll: true,
             mouse: true,
@@ -107,15 +108,15 @@ class VoiceChannel {
             width: '100%-2',
             height: 6,
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
                 border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
                 type: 'line',
             },
             label: ' Network ',
-            content: '{center}{gray-fg}Not connected{/gray-fg}{/center}',
+            content: `{center}{${door_theme_1.T.dim}-fg}Not connected{/${door_theme_1.T.dim}-fg}{/center}`,
         });
         // Quality profile panel
         this.qualityBox = blessed_1.default.box({
@@ -125,15 +126,15 @@ class VoiceChannel {
             width: '100%-2',
             height: 6,
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
                 border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
                 type: 'line',
             },
             label: ' Quality ',
-            content: '{center}{gray-fg}Not streaming{/gray-fg}{/center}',
+            content: `{center}{${door_theme_1.T.dim}-fg}Not streaming{/${door_theme_1.T.dim}-fg}{/center}`,
         });
         // Controls
         this.controlsBox = blessed_1.default.box({
@@ -143,19 +144,19 @@ class VoiceChannel {
             width: '100%-2',
             height: 8,
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
                 border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
                 type: 'line',
             },
             label: ' Controls ',
-            content: '{center}{cyan-fg}[M]{/cyan-fg} Toggle Mic{/center}\n' +
-                '{center}{cyan-fg}[V]{/cyan-fg} Toggle Video{/center}\n' +
-                '{center}{cyan-fg}[A]{/cyan-fg} Auto Quality{/center}\n' +
-                '{center}{cyan-fg}[+/-]{/cyan-fg} Quality{/center}\n' +
-                '{center}{red-fg}[ESC]{/red-fg} Leave{/center}',
+            content: `{center}{${door_theme_1.T.accent}-fg}[M]{/${door_theme_1.T.accent}-fg} Toggle Mic{/center}\n` +
+                `{center}{${door_theme_1.T.accent}-fg}[V]{/${door_theme_1.T.accent}-fg} Toggle Video{/center}\n` +
+                `{center}{${door_theme_1.T.accent}-fg}[A]{/${door_theme_1.T.accent}-fg} Auto Quality{/center}\n` +
+                `{center}{${door_theme_1.T.accent}-fg}[+/-]{/${door_theme_1.T.accent}-fg} Quality{/center}\n` +
+                `{center}{${door_theme_1.T.alert}-fg}[ESC]{/${door_theme_1.T.alert}-fg} Leave{/center}`,
         });
         // Key handlers
         this.screen.key(['m', 'M'], () => {
@@ -391,21 +392,21 @@ class VoiceChannel {
         const count = this.participants.size;
         this.participantsBox.setLabel(` Participants (${count}) `);
         if (count === 0) {
-            this.participantsBox.setContent('{center}{gray-fg}No one in channel{/gray-fg}{/center}');
+            this.participantsBox.setContent(`{center}{${door_theme_1.T.dim}-fg}No one in channel{/${door_theme_1.T.dim}-fg}{/center}`);
             this.screen.render();
             return;
         }
         let content = '';
         for (const p of this.participants.values()) {
             // Speaking indicator
-            const speakingIcon = p.isSpeaking ? '{green-fg}[*]{/green-fg}' : '{gray-fg}[ ]{/gray-fg}';
+            const speakingIcon = p.isSpeaking ? `{${door_theme_1.T.ok}-fg}[*]{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}[ ]{/${door_theme_1.T.dim}-fg}`;
             // Video indicator
-            const videoIcon = p.hasVideo ? '{cyan-fg}[V]{/cyan-fg}' : '   ';
+            const videoIcon = p.hasVideo ? `{${door_theme_1.T.accent}-fg}[V]{/${door_theme_1.T.accent}-fg}` : '   ';
             // Muted indicator
-            const mutedIcon = p.isMuted ? '{red-fg}[M]{/red-fg}' : '   ';
+            const mutedIcon = p.isMuted ? `{${door_theme_1.T.alert}-fg}[M]{/${door_theme_1.T.alert}-fg}` : '   ';
             // Audio level bar
             const level = Math.floor(p.audioLevel * 10);
-            const bar = '{cyan-fg}' + '='.repeat(level) + '{/cyan-fg}' + '-'.repeat(10 - level);
+            const bar = `{${door_theme_1.T.accent}-fg}` + '='.repeat(level) + `{/${door_theme_1.T.accent}-fg}` + '-'.repeat(10 - level);
             content += `${speakingIcon} ${videoIcon} ${mutedIcon} {bold}${p.username}{/bold}\n`;
             content += `  ${bar}\n\n`;
         }
@@ -416,7 +417,7 @@ class VoiceChannel {
         if (!this.networkBox)
             return;
         if (!metrics) {
-            this.networkBox.setContent('{center}{gray-fg}Not connected{/gray-fg}{/center}');
+            this.networkBox.setContent(`{center}{${door_theme_1.T.dim}-fg}Not connected{/${door_theme_1.T.dim}-fg}{/center}`);
             this.screen.render();
             return;
         }
@@ -441,7 +442,7 @@ class VoiceChannel {
         if (!this.qualityBox)
             return;
         if (!rec || !this.isInChannel) {
-            this.qualityBox.setContent('{center}{gray-fg}Not streaming{/gray-fg}{/center}');
+            this.qualityBox.setContent(`{center}{${door_theme_1.T.dim}-fg}Not streaming{/${door_theme_1.T.dim}-fg}{/center}`);
             this.screen.render();
             return;
         }
@@ -452,7 +453,7 @@ class VoiceChannel {
         let content = '';
         content += `{center}{bold}${audioProfile.name}{/bold}{/center}\n`;
         content += `{center}${audioProfile.bitrate / 1000}kbps @ ${audioProfile.sampleRate / 1000}kHz{/center}\n`;
-        content += `{center}Auto: ${isAuto ? '{green-fg}ON{/green-fg}' : '{yellow-fg}OFF{/yellow-fg}'}{/center}`;
+        content += `{center}Auto: ${isAuto ? `{${door_theme_1.T.ok}-fg}ON{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.accentAlt}-fg}OFF{/${door_theme_1.T.accentAlt}-fg}`}{/center}`;
         this.qualityBox.setContent(content);
         this.screen.render();
     }

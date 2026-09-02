@@ -9,15 +9,16 @@ const help_content_1_1 = require("./help-content-1");
 const help_content_2_1 = require("./help-content-2");
 const help_content_3_1 = require("./help-content-3");
 const help_content_4_1 = require("./help-content-4");
+const door_theme_1 = require("../door-theme");
 function createHelpScreen(screen, inputBox) {
     const helpModal = new blessed_1.DocModal({
         parent: screen,
         title: 'LiveChat v3.2 Help',
         header: 'HELP',
         content: help_content_1_1.HELP_PART_1 + help_content_2_1.HELP_PART_2 + help_content_3_1.HELP_PART_3 + help_content_4_1.HELP_PART_4,
-        headerStyle: { fg: 'cyan' },
-        contentStyle: { fg: 'white' },
-        footerStyle: { fg: 'black', bg: 'cyan' },
+        headerStyle: { fg: door_theme_1.T.accent },
+        contentStyle: { fg: door_theme_1.T.ink },
+        footerStyle: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent },
         zIndex: 9990,
         onClose: () => {
             inputBox.focus();

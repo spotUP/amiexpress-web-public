@@ -8,6 +8,7 @@ import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { v4 as uuidv4 } from 'uuid';
+import { T } from '../door-theme';
 
 const CATEGORIES: TaskCategory[] = ['code', 'music', 'gfx', 'design', 'effects', 'engine', '3d'];
 const PRIORITIES: TaskPriority[] = ['lamer', 'scener', 'elite', 'legend'];
@@ -68,8 +69,8 @@ async function showTaskEditor(
       height: 22,
       border: { type: 'line' },
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       },
       label: isNew ? ' New Task ' : ' Edit Task ',
       tags: true,
@@ -89,9 +90,9 @@ async function showTaskEditor(
       inputOnFocus: true,
       value: task.title,
       style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
       }
     });
 
@@ -112,10 +113,10 @@ async function showTaskEditor(
       items: CATEGORIES,
       selected: CATEGORIES.indexOf(task.category),
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white', bg: 'black' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground },
+        bg: T.ground
       },
     } as any);
 
@@ -136,10 +137,10 @@ async function showTaskEditor(
       items: PRIORITIES,
       selected: PRIORITIES.indexOf(task.priority),
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white', bg: 'black' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground },
+        bg: T.ground
       },
     } as any);
 
@@ -157,9 +158,9 @@ async function showTaskEditor(
       inputOnFocus: true,
       value: task.points.toString(),
       style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
       }
     });
 
@@ -177,9 +178,9 @@ async function showTaskEditor(
       inputOnFocus: true,
       value: task.description || '',
       style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
       }
     });
 
@@ -195,10 +196,10 @@ async function showTaskEditor(
       keys: true,
       mouse: true,
       style: {
-        fg: 'white',
-        bg: 'green',
-        focus: { bg: 'lightgreen', fg: 'black' },
-        hover: { bg: 'lightgreen', fg: 'black' }
+        fg: T.ink,
+        bg: T.ok,
+        focus: { bg: 'lightgreen', fg: T.ground },
+        hover: { bg: 'lightgreen', fg: T.ground }
       }
     });
 
@@ -213,10 +214,10 @@ async function showTaskEditor(
       keys: true,
       mouse: true,
       style: {
-        fg: 'white',
-        bg: 'red',
-        focus: { bg: 'lightred', fg: 'black' },
-        hover: { bg: 'lightred', fg: 'black' }
+        fg: T.ink,
+        bg: T.alert,
+        focus: { bg: 'lightred', fg: T.ground },
+        hover: { bg: 'lightred', fg: T.ground }
       }
     });
 
@@ -242,7 +243,7 @@ async function showTaskEditor(
           height: 'shrink',
           padding: 2,
           border: { type: 'line' },
-          style: { border: { fg: 'red' }, bg: 'black' },
+          style: { border: { fg: T.alert }, bg: T.ground },
           label: ' Error '
         });
         msg.display('Task title cannot be empty!', () => {

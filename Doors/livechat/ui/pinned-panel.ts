@@ -5,6 +5,7 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
 
 export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
   const overlay = createBox({
@@ -15,7 +16,7 @@ export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
     height: '70%',
     border: {
       type: 'line',
-      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+      labelStyle: { fg: T.ink, bg: T.bar }  // Blue background for label
     },
     style: { border: { fg: PANEL_BORDER }, ...PANEL_FOCUS_STYLE },
     label: ' Pinned Messages ',
@@ -31,20 +32,20 @@ export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
   });
 
   if (pinnedMessages.length === 0) {
-    overlay.setContent('{gray-fg}No pinned messages in this room.{/gray-fg}\n\n{cyan-fg}Press ESC to close{/cyan-fg}');
+    overlay.setContent(`{${T.dim}-fg}No pinned messages in this room.{/${T.dim}-fg}\n\n{${T.accent}-fg}Press ESC to close{/${T.accent}-fg}`);
   } else {
-    let content = `{bold}{yellow-fg}Pinned Messages (${pinnedMessages.length}):{/yellow-fg}{/bold}\n\n`;
+    let content = `{bold}{${T.accentAlt}-fg}Pinned Messages (${pinnedMessages.length}):{/${T.accentAlt}-fg}{/bold}\n\n`;
 
     pinnedMessages.forEach((pin, idx) => {
       const pinnedDate = new Date(pin.pinned_at * 1000).toLocaleString();
       const messageDate = new Date(pin.message_created_at * 1000).toLocaleString();
 
-      content += `{cyan-fg}${idx + 1}.{/cyan-fg} {yellow-fg}${pin.sender_username}{/yellow-fg}: ${pin.message}\n`;
-      content += `   {gray-fg}Sent: ${messageDate}{/gray-fg}\n`;
-      content += `   {gray-fg}Pinned by ${pin.pinned_by} on ${pinnedDate}{/gray-fg}\n\n`;
+      content += `{${T.accent}-fg}${idx + 1}.{/${T.accent}-fg} {${T.accentAlt}-fg}${pin.sender_username}{/${T.accentAlt}-fg}: ${pin.message}\n`;
+      content += `   {${T.dim}-fg}Sent: ${messageDate}{/${T.dim}-fg}\n`;
+      content += `   {${T.dim}-fg}Pinned by ${pin.pinned_by} on ${pinnedDate}{/${T.dim}-fg}\n\n`;
     });
 
-    content += `\n{cyan-fg}Press ESC to close{/cyan-fg}`;
+    content += `\n{${T.accent}-fg}Press ESC to close{/${T.accent}-fg}`;
     overlay.setContent(content);
   }
 

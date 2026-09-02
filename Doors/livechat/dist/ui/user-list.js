@@ -7,6 +7,7 @@ const theme_1 = require("./theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const types_1 = require("../types");
 const ansi_1 = require("../utils/ansi");
+const door_theme_1 = require("../door-theme");
 /** Create user list component */
 function createUserList(screen) {
     return (0, blessed_helpers_1.createList)({
@@ -19,9 +20,9 @@ function createUserList(screen) {
         border: { type: 'line' },
         hidden: true,
         style: {
-            fg: 'white',
+            fg: door_theme_1.T.ink,
             border: { fg: theme_1.PANEL_BORDER },
-            selected: { bg: 'blue', fg: 'white' },
+            selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink },
         },
         scrollbar: { ch: '█' },
         tags: true

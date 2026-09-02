@@ -11,14 +11,15 @@ const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
 const mentions_1 = require("../utils/mentions");
 const ansi_1 = require("../utils/ansi");
+const door_theme_1 = require("../door-theme");
 /** Format a message for display */
 function formatMessage(msg, currentUser, compact) {
-    const time = compact ? '' : `{gray-fg}[${(0, format_1.formatTime)(msg.createdAt)}]{/gray-fg} `;
+    const time = compact ? '' : `{${door_theme_1.T.dim}-fg}[${(0, format_1.formatTime)(msg.createdAt)}]{/${door_theme_1.T.dim}-fg} `;
     const name = (0, ansi_1.userName)(msg.username, getUserColor(msg.username));
     let content = (0, markdown_1.parseContent)(msg.content);
     content = (0, mentions_1.highlightMentions)(content, currentUser);
     if (msg.type === 'action') {
-        return `${time}{magenta-fg}* ${msg.username} ${content}{/magenta-fg}`;
+        return `${time}{${door_theme_1.T.accentAlt}-fg}* ${msg.username} ${content}{/${door_theme_1.T.accentAlt}-fg}`;
     }
     return `${time}${name}: ${content}`;
 }
@@ -28,7 +29,7 @@ function formatReactions(reactions) {
         return '';
     return ' ' + reactions.map(r => {
         const emoji = types_1.EMOJI_DISPLAY[r.emoji] || r.emoji;
-        return `{cyan-fg}[${emoji}${r.count > 1 ? r.count : ''}]{/cyan-fg}`;
+        return `{${door_theme_1.T.accent}-fg}[${emoji}${r.count > 1 ? r.count : ''}]{/${door_theme_1.T.accent}-fg}`;
     }).join(' ');
 }
 /** Format system message */
@@ -45,9 +46,9 @@ function getUserColor(username) {
 function formatThread(replyCount) {
     if (replyCount <= 0)
         return '';
-    return ` {gray-fg}[${replyCount} replies]{/gray-fg}`;
+    return ` {${door_theme_1.T.dim}-fg}[${replyCount} replies]{/${door_theme_1.T.dim}-fg}`;
 }
 /** Format pinned indicator */
 function formatPinned(isPinned) {
-    return isPinned ? ' {cyan-fg}[PIN]{/cyan-fg}' : '';
+    return isPinned ? ` {${door_theme_1.T.accent}-fg}[PIN]{/${door_theme_1.T.accent}-fg}` : '';
 }

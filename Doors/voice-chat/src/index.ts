@@ -28,6 +28,7 @@ import {
   type NetworkMetrics,
   type QualityRecommendation,
 } from '@amiexpress/bbs-door-sdk';
+import { T, applyTheme } from './door-theme';
 
 interface AudioLevels {
   input: number;
@@ -71,6 +72,9 @@ const door = new Door({
 });
 
 door.onStart(async (ctx: DoorContext) => {
+  // The board's theme, before any widget reads a colour from it.
+  applyTheme(ctx.bbs);
+
   // Create blessed screen using SDK helper (connects output to BBS socket)
   const screen = createScreen(ctx.bbs, {
     title: 'Voice Chat',
@@ -97,8 +101,8 @@ door.onStart(async (ctx: DoorContext) => {
     width: '100%',
     height: '100%-4',
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
     },
   });
 
@@ -110,13 +114,13 @@ door.onStart(async (ctx: DoorContext) => {
     width: '100%',
     height: 3,
     content:
-      `{center}{cyan-fg}{bold}Voice Chat with Adaptive Quality{/bold}{/cyan-fg}{/center}\n` +
-      `{center}{white-fg}S:Start  M:Mute  A:Auto-Quality  +/-:Quality  Q:Quit{/white-fg}{/center}`,
+      `{center}{${T.accent}-fg}{bold}Voice Chat with Adaptive Quality{/bold}{/${T.accent}-fg}{/center}\n` +
+      `{center}{${T.ink}-fg}S:Start  M:Mute  A:Auto-Quality  +/-:Quality  Q:Quit{/${T.ink}-fg}{/center}`,
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'cyan',
+        fg: T.accent,
       },
     },
     border: {
@@ -132,23 +136,23 @@ door.onStart(async (ctx: DoorContext) => {
     width: '50%-1',
     height: '100%-6',
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'green',
+        fg: T.ok,
       },
     },
     border: {
       type: 'line',
     },
     label: ' Active Speakers ',
-    content: '{yellow-fg}No speakers connected{/yellow-fg}',
+    content: `{${T.accentAlt}-fg}No speakers connected{/${T.accentAlt}-fg}`,
     scrollable: true,
     alwaysScroll: true,
     scrollbar: {
       ch: ' ',
       style: {
-        bg: 'gray',
+        bg: T.dim,
       },
     },
   });
@@ -161,17 +165,17 @@ door.onStart(async (ctx: DoorContext) => {
     width: '50%-1',
     height: 15,
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'magenta',
+        fg: T.accentAlt,
       },
     },
     border: {
       type: 'line',
     },
     label: ' Your Audio Level ',
-    content: '{yellow-fg}Not streaming{/yellow-fg}',
+    content: `{${T.accentAlt}-fg}Not streaming{/${T.accentAlt}-fg}`,
   });
 
   // Status panel
@@ -182,17 +186,17 @@ door.onStart(async (ctx: DoorContext) => {
     width: '50%-1',
     height: 6,
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'yellow',
+        fg: T.accentAlt,
       },
     },
     border: {
       type: 'line',
     },
     label: ' Status ',
-    content: '{yellow-fg}Ready to start{/yellow-fg}',
+    content: `{${T.accentAlt}-fg}Ready to start{/${T.accentAlt}-fg}`,
   });
 
   // Network quality panel
@@ -203,17 +207,17 @@ door.onStart(async (ctx: DoorContext) => {
     width: '50%-1',
     height: 7,
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'green',
+        fg: T.ok,
       },
     },
     border: {
       type: 'line',
     },
     label: ' Network Quality ',
-    content: '{yellow-fg}Monitoring not started{/yellow-fg}',
+    content: `{${T.accentAlt}-fg}Monitoring not started{/${T.accentAlt}-fg}`,
   });
 
   // Quality profile panel
@@ -224,17 +228,17 @@ door.onStart(async (ctx: DoorContext) => {
     width: '50%-1',
     height: 8,
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'magenta',
+        fg: T.accentAlt,
       },
     },
     border: {
       type: 'line',
     },
     label: ' Quality Profile ',
-    content: '{yellow-fg}Not streaming{/yellow-fg}',
+    content: `{${T.accentAlt}-fg}Not streaming{/${T.accentAlt}-fg}`,
   });
 
   // Controls info panel
@@ -245,10 +249,10 @@ door.onStart(async (ctx: DoorContext) => {
     width: '50%-1',
     height: '100%-42',
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: {
-        fg: 'cyan',
+        fg: T.accent,
       },
     },
     border: {
@@ -256,12 +260,12 @@ door.onStart(async (ctx: DoorContext) => {
     },
     label: ' Controls ',
     content:
-      `{cyan-fg}[S]{/cyan-fg} Start/Stop Streaming\n` +
-      `{cyan-fg}[M]{/cyan-fg} Mute/Unmute\n` +
-      `{cyan-fg}[A]{/cyan-fg} Toggle Auto-Quality\n` +
-      `{cyan-fg}[+/-]{/cyan-fg} Manual Quality\n` +
-      `{cyan-fg}[L]{/cyan-fg} List Active Speakers\n\n` +
-      `{red-fg}[Q]{/red-fg} Quit Voice Chat`,
+      `{${T.accent}-fg}[S]{/${T.accent}-fg} Start/Stop Streaming\n` +
+      `{${T.accent}-fg}[M]{/${T.accent}-fg} Mute/Unmute\n` +
+      `{${T.accent}-fg}[A]{/${T.accent}-fg} Toggle Auto-Quality\n` +
+      `{${T.accent}-fg}[+/-]{/${T.accent}-fg} Manual Quality\n` +
+      `{${T.accent}-fg}[L]{/${T.accent}-fg} List Active Speakers\n\n` +
+      `{${T.alert}-fg}[Q]{/${T.alert}-fg} Quit Voice Chat`,
   });
 
   // Footer help bar
@@ -272,8 +276,8 @@ door.onStart(async (ctx: DoorContext) => {
     width: '100%',
     height: 4,
     style: {
-      fg: 'black',
-      bg: 'cyan',
+      fg: T.ground,
+      bg: T.accent,
     },
     content:
       `{center}{bold}Real-Time Voice Chat{/bold}{/center}\n` +
@@ -325,7 +329,7 @@ door.onStart(async (ctx: DoorContext) => {
     updateQualityDisplay(state);
     updateStatus(
       state,
-      `{cyan-fg}Quality changed to ${event.type}: ${event.to}{/cyan-fg}\n` +
+      `{${T.accent}-fg}Quality changed to ${event.type}: ${event.to}{/${T.accent}-fg}\n` +
       `Reason: ${event.reason}\n` +
       `Auto: ${event.automatic ? 'Yes' : 'No'}`
     );
@@ -345,7 +349,7 @@ door.onStart(async (ctx: DoorContext) => {
           lastUpdate: Date.now(),
         });
         updateSpeakersList(state);
-        updateStatus(state, `{green-fg}${data.username} joined the chat{/green-fg}`);
+        updateStatus(state, `{${T.ok}-fg}${data.username} joined the chat{/${T.ok}-fg}`);
       }
     });
 
@@ -356,7 +360,7 @@ door.onStart(async (ctx: DoorContext) => {
         if (speaker) {
           state.speakers.delete(data.userId);
           updateSpeakersList(state);
-          updateStatus(state, `{yellow-fg}${speaker.username} left the chat{/yellow-fg}`);
+          updateStatus(state, `{${T.accentAlt}-fg}${speaker.username} left the chat{/${T.accentAlt}-fg}`);
         }
       }
     });
@@ -385,7 +389,7 @@ door.onStart(async (ctx: DoorContext) => {
 
     // Audio error from client
     ctx.socket.on('audio:error', (data: { message: string }) => {
-      updateStatus(state, `{red-fg}Audio Error: ${data.message}{/red-fg}`);
+      updateStatus(state, `{${T.alert}-fg}Audio Error: ${data.message}{/${T.alert}-fg}`);
     });
 
     // Update speaker list periodically (remove stale entries)
@@ -477,11 +481,11 @@ function updateSpeakersList(state: AppState): void {
   const speakers = Array.from(state.speakers.values());
 
   if (speakers.length === 0) {
-    state.speakersBox.setContent('{yellow-fg}No other speakers connected{/yellow-fg}');
+    state.speakersBox.setContent(`{${T.accentAlt}-fg}No other speakers connected{/${T.accentAlt}-fg}`);
   } else {
     let content = '';
     for (const speaker of speakers) {
-      const speakingIndicator = speaker.isSpeaking ? '{green-fg}[SPEAKING]{/green-fg}' : '{gray-fg}[IDLE]{/gray-fg}';
+      const speakingIndicator = speaker.isSpeaking ? `{${T.ok}-fg}[SPEAKING]{/${T.ok}-fg}` : `{${T.dim}-fg}[IDLE]{/${T.dim}-fg}`;
       const audioBar = renderAudioBar(speaker.audioLevel);
       const username = speaker.isSpeaking ? `{bold}${speaker.username}{/bold}` : speaker.username;
       content += `${speakingIndicator} ${username}\n${audioBar}\n\n`;
@@ -509,31 +513,31 @@ function updateWaveform(state: AppState, levels: any): void {
   let content = '';
 
   if (state.isMuted) {
-    content = '{red-fg}{bold}MUTED{/bold}{/red-fg}\n\n';
-    content += '{gray-fg}Audio input disabled{/gray-fg}';
+    content = `{${T.alert}-fg}{bold}MUTED{/bold}{/${T.alert}-fg}\n\n`;
+    content += `{${T.dim}-fg}Audio input disabled{/${T.dim}-fg}`;
   } else if (state.isStreaming) {
     // Audio level bar
     const bar = renderAudioBar(audioLevel);
-    content = `{cyan-fg}Input Level:{/cyan-fg}\n${bar}\n\n`;
+    content = `{${T.accent}-fg}Input Level:{/${T.accent}-fg}\n${bar}\n\n`;
 
     // Simple waveform (just show last few samples)
     if (waveform.length > 0) {
-      content += '{cyan-fg}Waveform:{/cyan-fg}\n';
+      content += `{${T.accent}-fg}Waveform:{/${T.accent}-fg}\n`;
       const samples = waveform.slice(-30);
       for (const sample of samples) {
         const height = Math.floor(Math.abs(sample) * 10);
-        content += height > 0 ? '{green-fg}|{/green-fg}' : '{gray-fg}·{/gray-fg}';
+        content += height > 0 ? `{${T.ok}-fg}|{/${T.ok}-fg}` : `{${T.dim}-fg}·{/${T.dim}-fg}`;
       }
     }
 
     const isSpeaking = audioLevel > 0.01;
     if (isSpeaking) {
-      content += '\n\n{green-fg}{bold}SPEAKING{/bold}{/green-fg}';
+      content += `\n\n{${T.ok}-fg}{bold}SPEAKING{/bold}{/${T.ok}-fg}`;
     } else {
-      content += '\n\n{gray-fg}Idle{/gray-fg}';
+      content += `\n\n{${T.dim}-fg}Idle{/${T.dim}-fg}`;
     }
   } else {
-    content = '{yellow-fg}Not streaming{/yellow-fg}';
+    content = `{${T.accentAlt}-fg}Not streaming{/${T.accentAlt}-fg}`;
   }
 
   state.waveformBox.setContent(content);
@@ -542,7 +546,7 @@ function updateWaveform(state: AppState, levels: any): void {
 
 async function toggleStreaming(ctx: DoorContext, state: AppState): Promise<void> {
   if (!ctx.socket) {
-    updateStatus(state, '{red-fg}Error: Socket not available{/red-fg}');
+    updateStatus(state, `{${T.alert}-fg}Error: Socket not available{/${T.alert}-fg}`);
     return;
   }
 
@@ -552,12 +556,12 @@ async function toggleStreaming(ctx: DoorContext, state: AppState): Promise<void>
       ctx.socket.emit('audio:stop-streaming');
       state.isStreaming = false;
       state.isMuted = false;
-      updateStatus(state, '{yellow-fg}Stopped streaming{/yellow-fg}');
+      updateStatus(state, `{${T.accentAlt}-fg}Stopped streaming{/${T.accentAlt}-fg}`);
       updateWaveform(state, { input: 0, output: 0 });
       updateQualityDisplay(state);
     } else {
       // Start streaming - emit to client with quality settings
-      updateStatus(state, '{yellow-fg}Starting audio stream...{/yellow-fg}');
+      updateStatus(state, `{${T.accentAlt}-fg}Starting audio stream...{/${T.accentAlt}-fg}`);
 
       const audioOptions = state.qualityManager?.getAudioStreamOptions() || {
         codec: 'opus',
@@ -580,20 +584,20 @@ async function toggleStreaming(ctx: DoorContext, state: AppState): Promise<void>
       const audioProfile = state.qualityManager?.getAudioProfile();
       updateStatus(
         state,
-        `{green-fg}Streaming active{/green-fg}\n` +
+        `{${T.ok}-fg}Streaming active{/${T.ok}-fg}\n` +
         `Stream ID: ${streamId.substring(0, 8)}...\n` +
         `Quality: ${audioProfile?.name || 'High'} (${(audioOptions.bitrate || 32000) / 1000}kbps)`
       );
       updateQualityDisplay(state);
     }
   } catch (error: any) {
-    updateStatus(state, `{red-fg}Error: ${error.message}{/red-fg}`);
+    updateStatus(state, `{${T.alert}-fg}Error: ${error.message}{/${T.alert}-fg}`);
   }
 }
 
 async function toggleMute(ctx: DoorContext, state: AppState): Promise<void> {
   if (!state.isStreaming || !ctx.socket) {
-    updateStatus(state, '{yellow-fg}Not streaming - cannot mute{/yellow-fg}');
+    updateStatus(state, `{${T.accentAlt}-fg}Not streaming - cannot mute{/${T.accentAlt}-fg}`);
     return;
   }
 
@@ -604,14 +608,14 @@ async function toggleMute(ctx: DoorContext, state: AppState): Promise<void> {
     ctx.socket.emit('audio:mute', { muted: state.isMuted });
 
     if (state.isMuted) {
-      updateStatus(state, '{red-fg}Microphone MUTED{/red-fg}');
+      updateStatus(state, `{${T.alert}-fg}Microphone MUTED{/${T.alert}-fg}`);
     } else {
-      updateStatus(state, '{green-fg}Microphone UNMUTED{/green-fg}');
+      updateStatus(state, `{${T.ok}-fg}Microphone UNMUTED{/${T.ok}-fg}`);
     }
 
     updateWaveform(state, { input: state.isMuted ? 0 : state.myAudioLevel, output: 0 });
   } catch (error: any) {
-    updateStatus(state, `{red-fg}Error: ${error.message}{/red-fg}`);
+    updateStatus(state, `{${T.alert}-fg}Error: ${error.message}{/${T.alert}-fg}`);
   }
 }
 
@@ -619,26 +623,26 @@ async function listActiveSpeakers(ctx: DoorContext, state: AppState): Promise<vo
   // List speakers from our local state (populated by socket events)
   const speakers = Array.from(state.speakers.values());
 
-  let content = `{cyan-fg}Active Speakers:{/cyan-fg} ${speakers.length + (state.isStreaming ? 1 : 0)}\n\n`;
+  let content = `{${T.accent}-fg}Active Speakers:{/${T.accent}-fg} ${speakers.length + (state.isStreaming ? 1 : 0)}\n\n`;
 
   // Add self if streaming
   if (state.isStreaming) {
-    const status = state.myAudioLevel > 0.01 ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
+    const status = state.myAudioLevel > 0.01 ? `{${T.ok}-fg}SPEAKING{/${T.ok}-fg}` : `{${T.dim}-fg}IDLE{/${T.dim}-fg}`;
     const level = Math.floor(state.myAudioLevel * 100);
-    content += `{yellow-fg}[YOU]{/yellow-fg} ${ctx.user.username || 'You'} ${status}\n`;
+    content += `{${T.accentAlt}-fg}[YOU]{/${T.accentAlt}-fg} ${ctx.user.username || 'You'} ${status}\n`;
     content += `  Audio Level: ${level}%\n\n`;
   }
 
   // Add other speakers
   for (const speaker of speakers) {
-    const status = speaker.isSpeaking ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
+    const status = speaker.isSpeaking ? `{${T.ok}-fg}SPEAKING{/${T.ok}-fg}` : `{${T.dim}-fg}IDLE{/${T.dim}-fg}`;
     const level = Math.floor(speaker.audioLevel * 100);
     content += `${speaker.username} ${status}\n`;
     content += `  Audio Level: ${level}%\n\n`;
   }
 
   if (speakers.length === 0 && !state.isStreaming) {
-    content += '{yellow-fg}No active speakers{/yellow-fg}\n';
+    content += `{${T.accentAlt}-fg}No active speakers{/${T.accentAlt}-fg}\n`;
   }
 
   updateStatus(state, content);
@@ -653,7 +657,7 @@ function updateNetworkDisplay(state: AppState): void {
   const rec = state.currentRecommendation;
 
   if (!metrics || !rec) {
-    state.networkBox.setContent('{yellow-fg}Measuring network quality...{/yellow-fg}');
+    state.networkBox.setContent(`{${T.accentAlt}-fg}Measuring network quality...{/${T.accentAlt}-fg}`);
     state.screen.render();
     return;
   }
@@ -667,11 +671,11 @@ function updateNetworkDisplay(state: AppState): void {
 
   let content = '';
   content += `{${statusColor}-fg}{bold}${qualitySymbol} ${rec.status.toUpperCase()}{/bold}{/${statusColor}-fg}\n`;
-  content += `RTT: {cyan-fg}${Math.floor(metrics.rtt)}ms{/cyan-fg} `;
-  content += `Loss: {cyan-fg}${metrics.packetLoss.toFixed(1)}%{/cyan-fg}\n`;
-  content += `Jitter: {cyan-fg}${Math.floor(metrics.jitter)}ms{/cyan-fg} `;
-  content += `BW: {cyan-fg}${Math.floor(metrics.bandwidth)}kbps{/cyan-fg}\n`;
-  content += `Score: {cyan-fg}${Math.floor(rec.quality)}%{/cyan-fg}`;
+  content += `RTT: {${T.accent}-fg}${Math.floor(metrics.rtt)}ms{/${T.accent}-fg} `;
+  content += `Loss: {${T.accent}-fg}${metrics.packetLoss.toFixed(1)}%{/${T.accent}-fg}\n`;
+  content += `Jitter: {${T.accent}-fg}${Math.floor(metrics.jitter)}ms{/${T.accent}-fg} `;
+  content += `BW: {${T.accent}-fg}${Math.floor(metrics.bandwidth)}kbps{/${T.accent}-fg}\n`;
+  content += `Score: {${T.accent}-fg}${Math.floor(rec.quality)}%{/${T.accent}-fg}`;
 
   state.networkBox.setContent(content);
   state.screen.render();
@@ -683,7 +687,7 @@ function updateQualityDisplay(state: AppState): void {
   }
 
   if (!state.isStreaming) {
-    state.qualityBox.setContent('{yellow-fg}Not streaming{/yellow-fg}');
+    state.qualityBox.setContent(`{${T.accentAlt}-fg}Not streaming{/${T.accentAlt}-fg}`);
     state.screen.render();
     return;
   }
@@ -692,12 +696,12 @@ function updateQualityDisplay(state: AppState): void {
   const isAuto = state.qualityManager.isAutoAdjustEnabled();
 
   let content = '';
-  content += `{cyan-fg}Audio:{/cyan-fg} {bold}${audioProfile.name}{/bold}\n`;
+  content += `{${T.accent}-fg}Audio:{/${T.accent}-fg} {bold}${audioProfile.name}{/bold}\n`;
   content += `  Bitrate: ${audioProfile.bitrate / 1000}kbps\n`;
   content += `  Sample Rate: ${audioProfile.sampleRate / 1000}kHz\n`;
   content += `  Quality: ${audioProfile.quality}\n\n`;
-  content += `{cyan-fg}Auto-Adjust:{/cyan-fg} `;
-  content += isAuto ? '{green-fg}ON{/green-fg}' : '{yellow-fg}OFF{/yellow-fg}';
+  content += `{${T.accent}-fg}Auto-Adjust:{/${T.accent}-fg} `;
+  content += isAuto ? `{${T.ok}-fg}ON{/${T.ok}-fg}` : `{${T.accentAlt}-fg}OFF{/${T.accentAlt}-fg}`;
 
   state.qualityBox.setContent(content);
   state.screen.render();
@@ -710,10 +714,10 @@ function toggleAutoQuality(state: AppState): void {
 
   if (state.qualityManager.isAutoAdjustEnabled()) {
     state.qualityManager.disableAutoAdjust();
-    updateStatus(state, '{yellow-fg}Auto-quality adjustment disabled{/yellow-fg}');
+    updateStatus(state, `{${T.accentAlt}-fg}Auto-quality adjustment disabled{/${T.accentAlt}-fg}`);
   } else {
     state.qualityManager.enableAutoAdjust();
-    updateStatus(state, '{green-fg}Auto-quality adjustment enabled{/green-fg}');
+    updateStatus(state, `{${T.ok}-fg}Auto-quality adjustment enabled{/${T.ok}-fg}`);
   }
 
   updateQualityDisplay(state);
@@ -737,13 +741,13 @@ function adjustQuality(state: AppState, direction: 'up' | 'down'): void {
   } else if (direction === 'down' && currentIndex > 0) {
     newIndex = currentIndex - 1;
   } else {
-    updateStatus(state, '{yellow-fg}Already at ' + (direction === 'up' ? 'maximum' : 'minimum') + ' quality{/yellow-fg}');
+    updateStatus(state, `{${T.accentAlt}-fg}Already at ` + (direction === 'up' ? 'maximum' : 'minimum') + ` quality{/${T.accentAlt}-fg}`);
     return;
   }
 
   const newProfile = audioProfiles[newIndex];
   state.qualityManager.setAudioQuality(newProfile);
-  updateStatus(state, `{cyan-fg}Quality manually set to: ${newProfile}{/cyan-fg}`);
+  updateStatus(state, `{${T.accent}-fg}Quality manually set to: ${newProfile}{/${T.accent}-fg}`);
   updateQualityDisplay(state);
 }
 

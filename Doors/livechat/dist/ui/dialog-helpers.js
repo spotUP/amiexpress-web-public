@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createDialogHelpers = createDialogHelpers;
+const door_theme_1 = require("../door-theme");
 function createDialogHelpers(showHelp, showModal, showPromptDialog, showMessageDialog, settingsOverlay, inputBox, screen, socket, state, onlineUsers, addSystemMessage, addChatMessage, replaceEmojis, PRESENCE_INDICATORS) {
     function showHelpDialog() {
         showHelp();
@@ -42,7 +43,7 @@ function createDialogHelpers(showHelp, showModal, showPromptDialog, showMessageD
             if (!err && value) {
                 const processedMsg = replaceEmojis(value);
                 socket.emit('chat:dm', { to: targetUser, message: processedMsg });
-                addChatMessage(`{magenta-fg}[DM to ${targetUser}]: ${processedMsg}{/magenta-fg}`);
+                addChatMessage(`{${door_theme_1.T.accentAlt}-fg}[DM to ${targetUser}]: ${processedMsg}{/${door_theme_1.T.accentAlt}-fg}`);
             }
             inputBox.focus();
             screen.render();

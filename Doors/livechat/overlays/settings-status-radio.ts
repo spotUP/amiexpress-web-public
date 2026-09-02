@@ -4,6 +4,7 @@
 import blessed, { Box, RadioSet } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { PresenceStatus } from '../types';
 import type { PresenceService, SocketEmitter } from '../services';
+import { T } from '../door-theme';
 
 export function createStatusRadio(
   p: Box,
@@ -31,7 +32,7 @@ export function createStatusRadio(
     selected: 0,
     vertical: true,
     spacing: 1,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
 
   radio.on('change', (v: string) => {

@@ -11,6 +11,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const status_bar_1 = require("./status-bar");
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 exports.INPUT_HEIGHT = 3;
 exports.EMOJI_BUTTON_WIDTH = 6; // Wide enough for :D with border and padding
 function createInputBox(screen) {
@@ -27,15 +28,15 @@ function createInputBox(screen) {
         label: ' Message ',
         border: {
             type: 'line',
-            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+            labelStyle: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar } // Blue background for label
         },
         inputOnFocus: true,
         // tags: true is forced by factory function
         mouse: true,
         ch: ' ', // CRITICAL: Fill background to prevent corruption from overlapping widgets
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: { fg: theme_1.PANEL_BORDER },
             focus: { border: { fg: theme_1.PANEL_BORDER_FOCUS } },
         },
@@ -54,22 +55,22 @@ function createEmojiButton(screen) {
         left: screenWidth - exports.EMOJI_BUTTON_WIDTH, // Position at right edge
         width: exports.EMOJI_BUTTON_WIDTH,
         height: exports.INPUT_HEIGHT,
-        content: '{center}{yellow-fg}:D{/yellow-fg}{/center}',
+        content: `{center}{${door_theme_1.T.accentAlt}-fg}:D{/${door_theme_1.T.accentAlt}-fg}{/center}`,
         border: { type: 'line' }, // colour lives in style.border - see below
         tags: true, // Enable tag parsing for content
         mouse: true,
         keys: true,
         clickable: true,
         style: {
-            fg: 'yellow',
-            bg: 'black',
+            fg: door_theme_1.T.accentAlt,
+            bg: door_theme_1.T.ground,
             focus: {
-                fg: 'black',
-                bg: 'yellow'
+                fg: door_theme_1.T.ground,
+                bg: door_theme_1.T.accentAlt
             },
             hover: {
-                fg: 'black',
-                bg: 'yellow'
+                fg: door_theme_1.T.ground,
+                bg: door_theme_1.T.accentAlt
             }
         },
     });

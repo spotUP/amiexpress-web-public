@@ -4,6 +4,7 @@ import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { ChannelMember, PresenceStatus } from '../types';
 import { PRESENCE_INDICATORS, PRESENCE_COLORS } from '../types';
 import { color, bold } from '../utils/ansi';
+import { T } from '../door-theme';
 
 /** Create user list component */
 export function createUserList(screen: Screen): List {
@@ -17,9 +18,9 @@ export function createUserList(screen: Screen): List {
     border: { type: 'line' },
     hidden: true,
     style: {
-      fg: 'white',
+      fg: T.ink,
       border: { fg: PANEL_BORDER },
-      selected: { bg: 'blue', fg: 'white' },
+      selected: { bg: T.bar, fg: T.ink },
     },
     scrollbar: { ch: '█' },
     tags: true

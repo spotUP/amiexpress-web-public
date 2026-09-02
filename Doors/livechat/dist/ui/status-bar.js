@@ -8,13 +8,14 @@ exports.updateStatusBar = updateStatusBar;
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const types_1 = require("../types");
+const door_theme_1 = require("../door-theme");
 exports.STATUS_HEIGHT = 1;
 function createStatusBar(screen) {
     const bar = new blessed_1.StatusBar({
         parent: screen,
         position: 'bottom',
-        fg: 'white',
-        bg: 'blue',
+        fg: door_theme_1.T.ink,
+        bg: door_theme_1.T.bar,
         separator: ' | ',
     });
     return bar;

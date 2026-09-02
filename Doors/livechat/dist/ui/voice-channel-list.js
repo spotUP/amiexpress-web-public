@@ -1,12 +1,4 @@
 "use strict";
-/**
- * Voice Channel List Integration
- *
- * Integrates voice channels into the main channel list (Discord-style)
- * - Shows voice channels with [V] prefix
- * - Displays participant count
- * - Click to join/leave
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.formatChannelListWithVoice = formatChannelListWithVoice;
 exports.renderChannelItem = renderChannelItem;
@@ -17,6 +9,7 @@ exports.getVoiceChannelTooltip = getVoiceChannelTooltip;
 exports.createVoiceChannelHeader = createVoiceChannelHeader;
 exports.createTextChannelHeader = createTextChannelHeader;
 exports.formatChannelListWithHeaders = formatChannelListWithHeaders;
+const door_theme_1 = require("../door-theme");
 /**
  * Format channel list items to include voice channels
  */
@@ -52,14 +45,14 @@ function renderChannelItem(item, currentVoiceChannel) {
         const isInVoice = item.id === currentVoiceChannel;
         // Highlight if currently in this voice channel
         if (isInVoice) {
-            return `{green-fg}{bold}${icon} ${item.name} (${count}){/bold}{/green-fg}`;
+            return `{${door_theme_1.T.ok}-fg}{bold}${icon} ${item.name} (${count}){/bold}{/${door_theme_1.T.ok}-fg}`;
         }
         // Show participant count
         if (count > 0) {
-            return `{cyan-fg}${icon}{/cyan-fg} ${item.name} {gray-fg}(${count}){/gray-fg}`;
+            return `{${door_theme_1.T.accent}-fg}${icon}{/${door_theme_1.T.accent}-fg} ${item.name} {${door_theme_1.T.dim}-fg}(${count}){/${door_theme_1.T.dim}-fg}`;
         }
         // Empty voice channel
-        return `{gray-fg}${icon} ${item.name}{/gray-fg}`;
+        return `{${door_theme_1.T.dim}-fg}${icon} ${item.name}{/${door_theme_1.T.dim}-fg}`;
     }
     // Text channel
     const prefix = '#';
@@ -121,13 +114,13 @@ function getVoiceChannelTooltip(voiceChannel) {
  * Create voice channel section header
  */
 function createVoiceChannelHeader() {
-    return '{cyan-fg}{bold}VOICE CHANNELS{/bold}{/cyan-fg}';
+    return `{${door_theme_1.T.accent}-fg}{bold}VOICE CHANNELS{/bold}{/${door_theme_1.T.accent}-fg}`;
 }
 /**
  * Create text channel section header
  */
 function createTextChannelHeader() {
-    return '{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}';
+    return `{${door_theme_1.T.accent}-fg}{bold}TEXT CHANNELS{/bold}{/${door_theme_1.T.accent}-fg}`;
 }
 /**
  * Format full channel list with section headers (Discord-style)

@@ -4,6 +4,7 @@ exports.createChannelHeader = createChannelHeader;
 exports.formatChannelHeader = formatChannelHeader;
 exports.updateChannelHeader = updateChannelHeader;
 exports.formatPinnedCount = formatPinnedCount;
+const door_theme_1 = require("../door-theme");
 /** Create channel header component */
 function createChannelHeader(blessed, screen) {
     return blessed.box({
@@ -12,7 +13,7 @@ function createChannelHeader(blessed, screen) {
         left: 16,
         width: '100%-16',
         height: 1,
-        style: { fg: 'cyan', bold: true },
+        style: { fg: door_theme_1.T.accent, bold: true },
         tags: true,
         content: ''
     });

@@ -5,6 +5,7 @@ exports.mentionsUser = mentionsUser;
 exports.hasBroadcastMention = hasBroadcastMention;
 exports.highlightMentions = highlightMentions;
 exports.getMentionedUsers = getMentionedUsers;
+const door_theme_1 = require("../door-theme");
 /** Extract mentions from text */
 function extractMentions(text) {
     const mentions = [];
@@ -42,12 +43,12 @@ function highlightMentions(text, currentUser) {
         const lower = name.toLowerCase();
         if (lower === currentUser.toLowerCase()) {
             // Use specific closing tags to avoid resetting ALL attributes
-            return `{yellow-bg}{black-fg}@${name}{/black-fg}{/yellow-bg}`;
+            return `{yellow-bg}{${door_theme_1.T.ground}-fg}@${name}{/${door_theme_1.T.ground}-fg}{/yellow-bg}`;
         }
         if (lower === 'everyone' || lower === 'here') {
-            return `{red-fg}@${name}{/red-fg}`;
+            return `{${door_theme_1.T.alert}-fg}@${name}{/${door_theme_1.T.alert}-fg}`;
         }
-        return `{cyan-fg}@${name}{/cyan-fg}`;
+        return `{${door_theme_1.T.accent}-fg}@${name}{/${door_theme_1.T.accent}-fg}`;
     });
 }
 /** Get list of mentioned usernames */

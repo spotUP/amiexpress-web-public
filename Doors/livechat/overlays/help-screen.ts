@@ -6,6 +6,7 @@ import { HELP_PART_1 } from './help-content-1';
 import { HELP_PART_2 } from './help-content-2';
 import { HELP_PART_3 } from './help-content-3';
 import { HELP_PART_4 } from './help-content-4';
+import { T } from '../door-theme';
 
 export function createHelpScreen(
   screen: Screen,
@@ -16,9 +17,9 @@ export function createHelpScreen(
     title: 'LiveChat v3.2 Help',
     header: 'HELP',
     content: HELP_PART_1 + HELP_PART_2 + HELP_PART_3 + HELP_PART_4,
-    headerStyle: { fg: 'cyan' },
-    contentStyle: { fg: 'white' },
-    footerStyle: { fg: 'black', bg: 'cyan' },
+    headerStyle: { fg: T.accent },
+    contentStyle: { fg: T.ink },
+    footerStyle: { fg: T.ground, bg: T.accent },
     zIndex: 9990,
     onClose: () => {
       inputBox.focus();

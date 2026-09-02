@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupChatHandlers = setupChatHandlers;
 const mute_list_1 = require("../core/mute-list");
 const dm_render_1 = require("./dm-render");
+const door_theme_1 = require("../door-theme");
 function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
     // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
@@ -48,7 +49,7 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         }
     });
     sock.on('chat:reaction', (d) => {
-        acm(`{cyan-fg}[${d.username} reacted ${d.emoji}]{/cyan-fg}`, false);
+        acm(`{${door_theme_1.T.accent}-fg}[${d.username} reacted ${d.emoji}]{/${door_theme_1.T.accent}-fg}`, false);
         aa(`${d.username}: ${d.emoji}`);
         aud.onReaction();
     });
@@ -76,12 +77,12 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
     sock.on('room:motd', (d) => {
         st.currentRoomMotd = d?.motd ?? null;
         if (d?.motd)
-            asm(`{yellow-fg}[MOTD] ${d.motd}{/yellow-fg}`);
+            asm(`{${door_theme_1.T.accentAlt}-fg}[MOTD] ${d.motd}{/${door_theme_1.T.accentAlt}-fg}`);
         else
-            asm('{yellow-fg}[MOTD] cleared{/yellow-fg}');
+            asm(`{${door_theme_1.T.accentAlt}-fg}[MOTD] cleared{/${door_theme_1.T.accentAlt}-fg}`);
     });
     sock.on('room:invite-received', (d) => {
-        asm(`{cyan-fg}[INVITE] ${d.from} invited you to ${d.roomName}. Use /join ${d.roomName}{/cyan-fg}`);
+        asm(`{${door_theme_1.T.accent}-fg}[INVITE] ${d.from} invited you to ${d.roomName}. Use /join ${d.roomName}{/${door_theme_1.T.accent}-fg}`);
     });
     sock.on('room:invited', (d) => {
         asm(`Invited ${d.username} to the room`);
@@ -92,7 +93,7 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
     sock.on('room:mode', (d) => {
         if (!d || !d.applied)
             return;
-        asm(`{yellow-fg}[${d.by || '?'}] set mode ${d.applied}{/yellow-fg}`);
+        asm(`{${door_theme_1.T.accentAlt}-fg}[${d.by || '?'}] set mode ${d.applied}{/${door_theme_1.T.accentAlt}-fg}`);
     });
     sock.on('chat:dm', (d) => {
         if (!d)
@@ -111,7 +112,7 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         // Group DMs (isGroup=true) include a `participants` array.
         acm((0, dm_render_1.formatDmLine)(d), false);
         if (d.direction === 'received') {
-            aa(`{cyan-fg}${d.isGroup ? 'Group DM' : 'DM'} from ${d.from}{/cyan-fg}`);
+            aa(`{${door_theme_1.T.accent}-fg}${d.isGroup ? 'Group DM' : 'DM'} from ${d.from}{/${door_theme_1.T.accent}-fg}`);
             if (typeof aud?.onDM === 'function')
                 aud.onDM();
         }
@@ -141,7 +142,7 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         // message - see chat-row-map.
         acm(f, false, m.id);
         if (im) {
-            aa(`{yellow-fg}@${m.username} mentioned you{/yellow-fg}`);
+            aa(`{${door_theme_1.T.accentAlt}-fg}@${m.username} mentioned you{/${door_theme_1.T.accentAlt}-fg}`);
             aud.onMessage(true);
         }
         else {
@@ -152,7 +153,7 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
     sock.on('chat:edited', (d) => {
         const t = ft(new Date(d.timestamp));
         const c = guc(d.username);
-        acm(`{gray-fg}[${t}]{/gray-fg} <{${c}-fg}${d.username}{/${c}-fg}> ${d.newText} {gray-fg}(edited){/gray-fg}`);
+        acm(`{${door_theme_1.T.dim}-fg}[${t}]{/${door_theme_1.T.dim}-fg} <{${c}-fg}${d.username}{/${c}-fg}> ${d.newText} {${door_theme_1.T.dim}-fg}(edited){/${door_theme_1.T.dim}-fg}`);
         s.render();
     });
 }

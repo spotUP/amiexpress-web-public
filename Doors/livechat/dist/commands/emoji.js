@@ -8,6 +8,7 @@ exports.createEmojiCommand = createEmojiCommand;
 exports.createEmojiListCommand = createEmojiListCommand;
 exports.createCustomEmojiCommand = createCustomEmojiCommand;
 const emojis_1 = require("../utils/emojis");
+const door_theme_1 = require("../door-theme");
 /**
  * /emoji [search] - Open emoji picker or search emojis
  */
@@ -25,7 +26,7 @@ function createEmojiCommand(screen, emojiPicker, inputBox, addSystemMessage) {
                     addSystemMessage(`No emojis found for "${searchQuery}"`);
                 }
                 else {
-                    addSystemMessage(`{cyan-fg}Emojis matching "${searchQuery}":{/cyan-fg}`);
+                    addSystemMessage(`{${door_theme_1.T.accent}-fg}Emojis matching "${searchQuery}":{/${door_theme_1.T.accent}-fg}`);
                     results.slice(0, 10).forEach(e => {
                         addSystemMessage(`  ${e.display}  ${e.code} (${e.keywords.join(', ')})`);
                     });
@@ -64,7 +65,7 @@ function createEmojiListCommand(addSystemMessage) {
             const categoryName = args[0]?.toLowerCase();
             if (!categoryName) {
                 // List all categories
-                addSystemMessage('{cyan-fg}Emoji Categories:{/cyan-fg}');
+                addSystemMessage(`{${door_theme_1.T.accent}-fg}Emoji Categories:{/${door_theme_1.T.accent}-fg}`);
                 addSystemMessage('  emotions - Smileys and emotions');
                 addSystemMessage('  actions - Kaomoji actions');
                 addSystemMessage('  symbols - Common symbols');
@@ -90,7 +91,7 @@ function createEmojiListCommand(addSystemMessage) {
                 }
                 else {
                     const emojis = (0, emojis_1.getEmojisByCategory)(category);
-                    addSystemMessage(`{cyan-fg}${category.charAt(0).toUpperCase() + category.slice(1)} Emojis:{/cyan-fg}`);
+                    addSystemMessage(`{${door_theme_1.T.accent}-fg}${category.charAt(0).toUpperCase() + category.slice(1)} Emojis:{/${door_theme_1.T.accent}-fg}`);
                     emojis.forEach(e => {
                         addSystemMessage(`  ${e.display}  ${e.code} (${e.keywords.join(', ')})`);
                     });

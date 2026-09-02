@@ -27,6 +27,7 @@ import { capStreamCells } from './video-layout';
 import { needsReshape, reshapeStream } from './stream-resize';
 import { decodeRichFrame } from '../video-codec';
 import { richToTags, fitRichToTile, modeCode, type RichFrame } from '../video-cells';
+import { T } from '../door-theme';
 
 /** Columns in the microphone meter - also its resolution in distinct values. */
 const VOICE_METER_WIDTH = 12;
@@ -117,8 +118,8 @@ export class VoiceControlBar {
       height: 5,
       tags: true,
       style: {
-        fg: 'white',
-        bg: 'black',
+        fg: T.ink,
+        bg: T.ground,
         border: { fg: PANEL_BORDER },
       },
       border: {
@@ -137,10 +138,10 @@ export class VoiceControlBar {
       height: 1,
       tags: true,
       border: undefined,  // Prevent Panel default border (blessed.box returns Panel)
-      content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 12)}`,
+      content: `{${T.dim}-fg}[ ]{/${T.dim}-fg} ${this.username.substring(0, 12)}`,
       style: {
-        fg: 'white',
-        bg: 'black',
+        fg: T.ink,
+        bg: T.ground,
       },
     });
 
@@ -154,13 +155,13 @@ export class VoiceControlBar {
       height: 1,
       tags: true,
       border: undefined,  // Prevent Panel default border
-      content: '{green-fg}[M]{/green-fg}',
+      content: `{${T.ok}-fg}[M]{/${T.ok}-fg}`,
       mouse: true,
       clickable: true,
       style: {
-        fg: 'green',
-        bg: 'black',
-        hover: { fg: 'white', bg: 'green' },
+        fg: T.ok,
+        bg: T.ground,
+        hover: { fg: T.ink, bg: T.ok },
       },
     }) as any;
 
@@ -177,13 +178,13 @@ export class VoiceControlBar {
       height: 1,
       tags: true,
       border: undefined,  // Prevent Panel default border
-      content: '{gray-fg}[V]{/gray-fg}',
+      content: `{${T.dim}-fg}[V]{/${T.dim}-fg}`,
       mouse: true,
       clickable: true,
       style: {
-        fg: 'gray',
-        bg: 'black',
-        hover: { fg: 'white', bg: 'cyan' },
+        fg: T.dim,
+        bg: T.ground,
+        hover: { fg: T.ink, bg: T.accent },
       },
     }) as any;
 
@@ -203,13 +204,13 @@ export class VoiceControlBar {
       height: 1,
       tags: true,
       border: undefined,  // Prevent Panel default border
-      content: '{yellow-fg}[F]{/yellow-fg}',
+      content: `{${T.accentAlt}-fg}[F]{/${T.accentAlt}-fg}`,
       mouse: true,
       clickable: true,
       style: {
-        fg: 'yellow',
-        bg: 'black',
-        hover: { fg: 'white', bg: 'yellow' },
+        fg: T.accentAlt,
+        bg: T.ground,
+        hover: { fg: T.ink, bg: T.accentAlt },
       },
     }) as any;
 
@@ -234,13 +235,13 @@ export class VoiceControlBar {
       height: 1,
       tags: true,
       border: undefined,  // Prevent Panel default border
-      content: '{red-fg}[X]{/red-fg}',
+      content: `{${T.alert}-fg}[X]{/${T.alert}-fg}`,
       mouse: true,
       clickable: true,
       style: {
-        fg: 'red',
-        bg: 'black',
-        hover: { fg: 'white', bg: 'red' },
+        fg: T.alert,
+        bg: T.ground,
+        hover: { fg: T.ink, bg: T.alert },
       },
     }) as any;
 
@@ -315,9 +316,9 @@ export class VoiceControlBar {
 
     // Update button with colored tags
     if (this.isMuted) {
-      this.muteButton.setContent('{red-fg}[M]{/red-fg}');
+      this.muteButton.setContent(`{${T.alert}-fg}[M]{/${T.alert}-fg}`);
     } else {
-      this.muteButton.setContent('{green-fg}[M]{/green-fg}');
+      this.muteButton.setContent(`{${T.ok}-fg}[M]{/${T.ok}-fg}`);
     }
 
     // Notify server
@@ -331,9 +332,9 @@ export class VoiceControlBar {
 
     // Update button with colored tags
     if (this.hasVideo) {
-      this.videoButton.setContent('{green-fg}[V]{/green-fg}');
+      this.videoButton.setContent(`{${T.ok}-fg}[V]{/${T.ok}-fg}`);
     } else {
-      this.videoButton.setContent('{gray-fg}[V]{/gray-fg}');
+      this.videoButton.setContent(`{${T.dim}-fg}[V]{/${T.dim}-fg}`);
     }
 
     // Call callback to update video grid
@@ -357,9 +358,9 @@ export class VoiceControlBar {
   public updateGridButtonLabel(viewMode: 'speaker' | 'grid') {
     // Speaker mode = [F] fullscreen/focus; grid = [G] split-view.
     if (viewMode === 'speaker') {
-      this.gridToggleButton.setContent('{yellow-fg}[F]{/yellow-fg}');
+      this.gridToggleButton.setContent(`{${T.accentAlt}-fg}[F]{/${T.accentAlt}-fg}`);
     } else {
-      this.gridToggleButton.setContent('{cyan-fg}[G]{/cyan-fg}');
+      this.gridToggleButton.setContent(`{${T.accent}-fg}[G]{/${T.accent}-fg}`);
     }
     this.screen.render();
   }
@@ -369,7 +370,7 @@ export class VoiceControlBar {
     // the current encoder at a glance.
     const map: Record<string, string> = { ascii: 'A', color: 'C', halfblock: 'H', braille: 'B' };
     const ch = map[mode] || 'R';
-    this.modeButton?.setContent(`{magenta-fg}[${ch}]{/magenta-fg}`);
+    this.modeButton?.setContent(`{${T.accentAlt}-fg}[${ch}]{/${T.accentAlt}-fg}`);
     this.screen.render();
   }
 
@@ -385,9 +386,9 @@ export class VoiceControlBar {
 
     // Discord-style: green ring when speaking
     if (this.isSpeaking) {
-      this.statusBox.setContent(`{green-fg}[*]{/green-fg} ${this.username.substring(0, 12)}`);
+      this.statusBox.setContent(`{${T.ok}-fg}[*]{/${T.ok}-fg} ${this.username.substring(0, 12)}`);
     } else {
-      this.statusBox.setContent(`{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 12)}`);
+      this.statusBox.setContent(`{${T.dim}-fg}[ ]{/${T.dim}-fg} ${this.username.substring(0, 12)}`);
     }
 
     this.screen.render();
@@ -907,7 +908,7 @@ export class EnhancedVoiceChannel {
         width: '100%',
         height: '100%',
         border: undefined,  // Prevent Panel default border
-        style: { bg: 'black', transparent: true },
+        style: { bg: T.ground, transparent: true },
         // @ts-ignore
         zIndex: 99998,
       });
@@ -921,12 +922,12 @@ export class EnhancedVoiceChannel {
         height: 11,
         border: { type: 'line' },
         style: {
-          fg: 'white',
-          bg: 'black',
+          fg: T.ink,
+          bg: T.ground,
           border: { fg: PANEL_BORDER },
         },
         tags: true,
-        label: ' {cyan-fg}Join Voice Channel{/cyan-fg} ',
+        label: ` {${T.accent}-fg}Join Voice Channel{/${T.accent}-fg} `,
         ch: ' ',
         // @ts-ignore
         zIndex: 99999,
@@ -940,7 +941,7 @@ export class EnhancedVoiceChannel {
         width: 48,
         content: 'Enable audio and video for this call?',
         tags: true,
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: T.ink, bg: T.ground },
       });
 
       // Instructions
@@ -949,9 +950,9 @@ export class EnhancedVoiceChannel {
         top: 2,
         left: 2,
         width: 48,
-        content: '{gray-fg}Tab to navigate, Space/Enter to toggle/select{/gray-fg}',
+        content: `{${T.dim}-fg}Tab to navigate, Space/Enter to toggle/select{/${T.dim}-fg}`,
         tags: true,
-        style: { bg: 'black' },
+        style: { bg: T.ground },
       });
 
       // Microphone checkbox - using proper Checkbox widget
@@ -964,10 +965,10 @@ export class EnhancedVoiceChannel {
         text: 'Enable Microphone',
         checked: true,
         style: {
-          fg: 'white',
-          bg: 'black',
-          focus: { fg: 'black', bg: 'cyan' },
-          hover: { fg: 'black', bg: 'blue' },
+          fg: T.ink,
+          bg: T.ground,
+          focus: { fg: T.ground, bg: T.accent },
+          hover: { fg: T.ground, bg: T.bar },
         },
       });
 
@@ -981,10 +982,10 @@ export class EnhancedVoiceChannel {
         text: 'Enable Camera',
         checked: true,
         style: {
-          fg: 'white',
-          bg: 'black',
-          focus: { fg: 'black', bg: 'cyan' },
-          hover: { fg: 'black', bg: 'blue' },
+          fg: T.ink,
+          bg: T.ground,
+          focus: { fg: T.ground, bg: T.accent },
+          hover: { fg: T.ground, bg: T.bar },
         },
       });
 
@@ -999,10 +1000,10 @@ export class EnhancedVoiceChannel {
         tags: true,
         mouse: true,
         style: {
-          fg: 'green',
-          bg: 'black',
-          focus: { fg: 'white', bg: 'green' },
-          hover: { fg: 'white', bg: 'green' },
+          fg: T.ok,
+          bg: T.ground,
+          focus: { fg: T.ink, bg: T.ok },
+          hover: { fg: T.ink, bg: T.ok },
         },
       });
 
@@ -1017,10 +1018,10 @@ export class EnhancedVoiceChannel {
         tags: true,
         mouse: true,
         style: {
-          fg: 'red',
-          bg: 'black',
-          focus: { fg: 'white', bg: 'red' },
-          hover: { fg: 'white', bg: 'red' },
+          fg: T.alert,
+          bg: T.ground,
+          focus: { fg: T.ink, bg: T.alert },
+          hover: { fg: T.ink, bg: T.alert },
         },
       });
 

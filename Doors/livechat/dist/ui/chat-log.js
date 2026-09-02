@@ -16,6 +16,7 @@ const input_box_1 = require("./input-box");
 const typing_preview_1 = require("./typing-preview");
 Object.defineProperty(exports, "TYPING_HEIGHT", { enumerable: true, get: function () { return typing_preview_1.TYPING_HEIGHT; } });
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 function createChatLog(screen, sidebarWidth) {
     // Create dockable panel for chat
     const screenWidth = screen.width || 80;
@@ -49,11 +50,11 @@ function createChatLog(screen, sidebarWidth) {
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
         border: {
             type: 'line',
-            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+            labelStyle: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar } // Blue background for label
         },
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             // style.border.fg, NOT border.fg - Element reads the border colour from
             // style.border / border.style / style.fg and ignores a colour sitting
             // on the border object itself. With it in the wrong place this panel
@@ -90,11 +91,11 @@ function createChatLog(screen, sidebarWidth) {
         tags: true,
         scrollbar: {
             ch: '█',
-            style: { fg: 'cyan' }
+            style: { fg: door_theme_1.T.accent }
         },
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
         },
     });
     return { panel: chatPanel, log: chatLog };

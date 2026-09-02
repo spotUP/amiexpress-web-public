@@ -9,6 +9,7 @@ import { replaceEmojis } from '../utils/emojis';
 import { formatTime, escapeContent } from '../utils/format';
 import { parseContent } from '../utils/markdown';
 import { getUserColor } from '../core/formatter';
+import { T } from '../door-theme';
 
 export function createSubmitHandler(
   socket: Socket,
@@ -153,7 +154,7 @@ export function createSubmitHandler(
           const processedMsg = replaceEmojis(r.message);
           socket.emit('room:message', { message: processedMsg });
           const action = processedMsg.replace('ACTION: ', '');
-          addChatMessage(`{magenta-fg}* ${action}{/magenta-fg}`, false);
+          addChatMessage(`{${T.accentAlt}-fg}* ${action}{/${T.accentAlt}-fg}`, false);
         }
 
         if (cmdName === 'away' || cmdName === 'afk') {
@@ -181,7 +182,7 @@ export function createSubmitHandler(
             socket.emit('room:motd', { motd: r.data.motd });
           } else if (r.data?.op === 'show') {
             const cached = state.currentRoomMotd;
-            if (cached) addSystemMessage(`{yellow-fg}[MOTD] ${cached}{/yellow-fg}`);
+            if (cached) addSystemMessage(`{${T.accentAlt}-fg}[MOTD] ${cached}{/${T.accentAlt}-fg}`);
             else addSystemMessage('No MOTD set. Use /motd <text> to set, /motd --clear to clear.');
           } else {
             addSystemMessage('Use /motd <text> to set, /motd --clear to clear.');
@@ -254,14 +255,14 @@ export function createSubmitHandler(
           const processedMsg = replaceEmojis(msg);
           const thread = (state.dmThreads || []).find((t: any) => t.threadId === state.currentDmThread);
           if (!thread) {
-            addSystemMessage('{red-fg}DM thread not found in sidebar; refreshing...{/red-fg}');
+            addSystemMessage(`{${T.alert}-fg}DM thread not found in sidebar; refreshing...{/${T.alert}-fg}`);
             socket.emit('chat:dm-threads:list');
           } else if (thread.isGroup) {
             socket.emit('chat:group-dm', { participants: thread.participants, message: processedMsg });
           } else {
             const target = thread.participants[0];
             if (!target) {
-              addSystemMessage('{red-fg}DM thread has no recipient.{/red-fg}');
+              addSystemMessage(`{${T.alert}-fg}DM thread has no recipient.{/${T.alert}-fg}`);
             } else {
               socket.emit('chat:dm', { to: target, message: processedMsg });
             }
@@ -292,7 +293,7 @@ export function createSubmitHandler(
           const time = formatTime(new Date());
           const color = getUserColor(username);
           const rendered = parseContent(processedMsg);
-          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
+          addChatMessage(`{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
 
           // Clear typing preview
           updateTypingPreview();
@@ -310,7 +311,7 @@ export function createSubmitHandler(
       inputBox.focus();
       screen.render();
     } catch (error) {
-      addSystemMessage(`{red-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/red-fg}`);
+      addSystemMessage(`{${T.alert}-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/${T.alert}-fg}`);
       inputBox.clearValue();
       inputBox.focus();
       screen.render();

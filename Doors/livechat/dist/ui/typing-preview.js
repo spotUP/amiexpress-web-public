@@ -8,6 +8,7 @@ const theme_1 = require("./theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const status_bar_1 = require("./status-bar");
 const input_box_1 = require("./input-box");
+const door_theme_1 = require("../door-theme");
 // Height of the typing indicator bar (shows who is typing in real-time)
 exports.TYPING_HEIGHT = 3;
 /** Create typing preview component */
@@ -19,7 +20,7 @@ function createTypingPreview(screen) {
         width: '100%-16',
         height: exports.TYPING_HEIGHT,
         border: { type: 'line' },
-        style: { fg: 'gray', border: { fg: theme_1.PANEL_BORDER } },
+        style: { fg: door_theme_1.T.dim, border: { fg: theme_1.PANEL_BORDER } },
         tags: true,
         content: '',
         focusable: false,

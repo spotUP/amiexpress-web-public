@@ -7,6 +7,7 @@ const emojis_1 = require("../utils/emojis");
 const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
 const formatter_1 = require("../core/formatter");
+const door_theme_1 = require("../door-theme");
 function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, tryJoinVoiceChannel) {
     return async (value) => {
         try {
@@ -98,7 +99,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const processedMsg = (0, emojis_1.replaceEmojis)(r.message);
                     socket.emit('room:message', { message: processedMsg });
                     const action = processedMsg.replace('ACTION: ', '');
-                    addChatMessage(`{magenta-fg}* ${action}{/magenta-fg}`, false);
+                    addChatMessage(`{${door_theme_1.T.accentAlt}-fg}* ${action}{/${door_theme_1.T.accentAlt}-fg}`, false);
                 }
                 if (cmdName === 'away' || cmdName === 'afk') {
                     presenceService.setStatus(userId, 'away', r.data?.message);
@@ -127,7 +128,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     else if (r.data?.op === 'show') {
                         const cached = state.currentRoomMotd;
                         if (cached)
-                            addSystemMessage(`{yellow-fg}[MOTD] ${cached}{/yellow-fg}`);
+                            addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}[MOTD] ${cached}{/${door_theme_1.T.accentAlt}-fg}`);
                         else
                             addSystemMessage('No MOTD set. Use /motd <text> to set, /motd --clear to clear.');
                     }
@@ -200,7 +201,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const processedMsg = (0, emojis_1.replaceEmojis)(msg);
                     const thread = (state.dmThreads || []).find((t) => t.threadId === state.currentDmThread);
                     if (!thread) {
-                        addSystemMessage('{red-fg}DM thread not found in sidebar; refreshing...{/red-fg}');
+                        addSystemMessage(`{${door_theme_1.T.alert}-fg}DM thread not found in sidebar; refreshing...{/${door_theme_1.T.alert}-fg}`);
                         socket.emit('chat:dm-threads:list');
                     }
                     else if (thread.isGroup) {
@@ -209,7 +210,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     else {
                         const target = thread.participants[0];
                         if (!target) {
-                            addSystemMessage('{red-fg}DM thread has no recipient.{/red-fg}');
+                            addSystemMessage(`{${door_theme_1.T.alert}-fg}DM thread has no recipient.{/${door_theme_1.T.alert}-fg}`);
                         }
                         else {
                             socket.emit('chat:dm', { to: target, message: processedMsg });
@@ -242,7 +243,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const time = (0, format_1.formatTime)(new Date());
                     const color = (0, formatter_1.getUserColor)(username);
                     const rendered = (0, markdown_1.parseContent)(processedMsg);
-                    addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
+                    addChatMessage(`{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
                     // Clear typing preview
                     updateTypingPreview();
                     // Add to history with ID
@@ -259,7 +260,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
             screen.render();
         }
         catch (error) {
-            addSystemMessage(`{red-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/red-fg}`);
+            addSystemMessage(`{${door_theme_1.T.alert}-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/${door_theme_1.T.alert}-fg}`);
             inputBox.clearValue();
             inputBox.focus();
             screen.render();

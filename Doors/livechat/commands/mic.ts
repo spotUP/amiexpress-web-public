@@ -1,4 +1,5 @@
 import type { SlashCommand } from './types';
+import { T } from '../door-theme';
 
 /**
  * Choosing which microphone the call actually listens to.
@@ -33,7 +34,7 @@ export function renderMicList(devices: MicDevice[], currentId?: string): string 
   }
 
   const lines = devices.map((device, index) => {
-    const current = currentId && device.deviceId === currentId ? ' {green-fg}(in use){/green-fg}' : '';
+    const current = currentId && device.deviceId === currentId ? ` {${T.ok}-fg}(in use){/${T.ok}-fg}` : '';
     return `  ${index + 1}. ${device.label}${current}`;
   });
 

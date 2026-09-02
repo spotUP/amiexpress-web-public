@@ -1,26 +1,4 @@
 "use strict";
-/**
- * Who the user has muted or ignored.
- *
- * The context menu offered Mute, Ignore and Block, and all three printed a
- * confirmation and did nothing at all - "Muted bob: their messages will be
- * hidden" while bob's messages kept arriving. A moderation control that
- * claims to work and does not is worse than one that says it is missing,
- * because the user stops watching for the thing they asked to be rid of.
- *
- * Three levels, because they are genuinely different things:
- *
- *   mute    their room messages are hidden; DMs still arrive
- *   ignore  their DMs are refused too
- *   block   both, and the server is told (see the note below)
- *
- * BLOCK IS NOT ENFORCED AT THE SERVER YET. There is no block API to call, so
- * this hides them from you but does not stop them sending. The menu says so
- * rather than promising protection this cannot deliver.
- *
- * Pure and separate from the socket handlers, so the filtering rules can be
- * tested without a chat running.
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createMuteList = createMuteList;
 exports.toggleMute = toggleMute;
@@ -32,6 +10,7 @@ exports.deserializeMuteList = deserializeMuteList;
 exports.muteMessage = muteMessage;
 exports.muteMenuLabels = muteMenuLabels;
 exports.muteLevelForLabel = muteLevelForLabel;
+const door_theme_1 = require("../door-theme");
 function createMuteList() {
     return new Map();
 }
@@ -90,13 +69,13 @@ function deserializeMuteList(saved) {
 /** What to tell the user, without overstating what actually happened. */
 function muteMessage(username, level) {
     if (level === null)
-        return `{cyan-fg}${username} is no longer hidden.{/cyan-fg}`;
+        return `{${door_theme_1.T.accent}-fg}${username} is no longer hidden.{/${door_theme_1.T.accent}-fg}`;
     if (level === 'mute')
-        return `{cyan-fg}Muted ${username} - their room messages are hidden.{/cyan-fg}`;
+        return `{${door_theme_1.T.accent}-fg}Muted ${username} - their room messages are hidden.{/${door_theme_1.T.accent}-fg}`;
     if (level === 'ignore')
-        return `{cyan-fg}Ignoring ${username} - their messages and DMs are hidden.{/cyan-fg}`;
+        return `{${door_theme_1.T.accent}-fg}Ignoring ${username} - their messages and DMs are hidden.{/${door_theme_1.T.accent}-fg}`;
     // Deliberately not "they cannot contact you": nothing stops them sending.
-    return `{red-fg}Blocked ${username} for you - they are hidden everywhere, but the server does not yet stop them sending.{/red-fg}`;
+    return `{${door_theme_1.T.alert}-fg}Blocked ${username} for you - they are hidden everywhere, but the server does not yet stop them sending.{/${door_theme_1.T.alert}-fg}`;
 }
 /**
  * The labels the user context menu should show for one person.

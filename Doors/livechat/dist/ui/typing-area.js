@@ -5,6 +5,7 @@ exports.formatTyping = formatTyping;
 exports.statusLineConfig = statusLineConfig;
 const theme_1 = require("./theme");
 const ansi_1 = require("../utils/ansi");
+const door_theme_1 = require("../door-theme");
 /** Create input box config */
 function inputBoxConfig() {
     return {
@@ -35,6 +36,6 @@ function statusLineConfig() {
     return {
         height: 1,
         tags: true,
-        style: { fg: 'gray' }
+        style: { fg: door_theme_1.T.dim }
     };
 }

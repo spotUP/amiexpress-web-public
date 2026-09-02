@@ -57,6 +57,7 @@ const video_layout_1 = require("./video-layout");
 const stream_resize_1 = require("./stream-resize");
 const video_codec_1 = require("../video-codec");
 const video_cells_1 = require("../video-cells");
+const door_theme_1 = require("../door-theme");
 /** Columns in the microphone meter - also its resolution in distinct values. */
 const VOICE_METER_WIDTH = 12;
 /** Floor on time between meter redraws, whatever the microphone does. */
@@ -104,8 +105,8 @@ class VoiceControlBar {
             height: 5,
             tags: true,
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
                 border: { fg: theme_1.PANEL_BORDER },
             },
             border: {
@@ -123,10 +124,10 @@ class VoiceControlBar {
             height: 1,
             tags: true,
             border: undefined, // Prevent Panel default border (blessed.box returns Panel)
-            content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 12)}`,
+            content: `{${door_theme_1.T.dim}-fg}[ ]{/${door_theme_1.T.dim}-fg} ${this.username.substring(0, 12)}`,
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
             },
         });
         // Controls row (row 1): [M] [V] [S] [X]
@@ -139,13 +140,13 @@ class VoiceControlBar {
             height: 1,
             tags: true,
             border: undefined, // Prevent Panel default border
-            content: '{green-fg}[M]{/green-fg}',
+            content: `{${door_theme_1.T.ok}-fg}[M]{/${door_theme_1.T.ok}-fg}`,
             mouse: true,
             clickable: true,
             style: {
-                fg: 'green',
-                bg: 'black',
-                hover: { fg: 'white', bg: 'green' },
+                fg: door_theme_1.T.ok,
+                bg: door_theme_1.T.ground,
+                hover: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ok },
             },
         });
         this.muteButton.on('click', () => {
@@ -160,13 +161,13 @@ class VoiceControlBar {
             height: 1,
             tags: true,
             border: undefined, // Prevent Panel default border
-            content: '{gray-fg}[V]{/gray-fg}',
+            content: `{${door_theme_1.T.dim}-fg}[V]{/${door_theme_1.T.dim}-fg}`,
             mouse: true,
             clickable: true,
             style: {
-                fg: 'gray',
-                bg: 'black',
-                hover: { fg: 'white', bg: 'cyan' },
+                fg: door_theme_1.T.dim,
+                bg: door_theme_1.T.ground,
+                hover: { fg: door_theme_1.T.ink, bg: door_theme_1.T.accent },
             },
         });
         this.videoButton.on('click', () => {
@@ -184,13 +185,13 @@ class VoiceControlBar {
             height: 1,
             tags: true,
             border: undefined, // Prevent Panel default border
-            content: '{yellow-fg}[F]{/yellow-fg}',
+            content: `{${door_theme_1.T.accentAlt}-fg}[F]{/${door_theme_1.T.accentAlt}-fg}`,
             mouse: true,
             clickable: true,
             style: {
-                fg: 'yellow',
-                bg: 'black',
-                hover: { fg: 'white', bg: 'yellow' },
+                fg: door_theme_1.T.accentAlt,
+                bg: door_theme_1.T.ground,
+                hover: { fg: door_theme_1.T.ink, bg: door_theme_1.T.accentAlt },
             },
         });
         this.gridToggleButton.on('click', () => {
@@ -212,13 +213,13 @@ class VoiceControlBar {
             height: 1,
             tags: true,
             border: undefined, // Prevent Panel default border
-            content: '{red-fg}[X]{/red-fg}',
+            content: `{${door_theme_1.T.alert}-fg}[X]{/${door_theme_1.T.alert}-fg}`,
             mouse: true,
             clickable: true,
             style: {
-                fg: 'red',
-                bg: 'black',
-                hover: { fg: 'white', bg: 'red' },
+                fg: door_theme_1.T.alert,
+                bg: door_theme_1.T.ground,
+                hover: { fg: door_theme_1.T.ink, bg: door_theme_1.T.alert },
             },
         });
         this.disconnectButton.on('click', () => {
@@ -281,10 +282,10 @@ class VoiceControlBar {
         }
         // Update button with colored tags
         if (this.isMuted) {
-            this.muteButton.setContent('{red-fg}[M]{/red-fg}');
+            this.muteButton.setContent(`{${door_theme_1.T.alert}-fg}[M]{/${door_theme_1.T.alert}-fg}`);
         }
         else {
-            this.muteButton.setContent('{green-fg}[M]{/green-fg}');
+            this.muteButton.setContent(`{${door_theme_1.T.ok}-fg}[M]{/${door_theme_1.T.ok}-fg}`);
         }
         // Notify server
         this.socket.emit('voice:mute', { isMuted: this.isMuted });
@@ -294,10 +295,10 @@ class VoiceControlBar {
         this.hasVideo = !this.hasVideo;
         // Update button with colored tags
         if (this.hasVideo) {
-            this.videoButton.setContent('{green-fg}[V]{/green-fg}');
+            this.videoButton.setContent(`{${door_theme_1.T.ok}-fg}[V]{/${door_theme_1.T.ok}-fg}`);
         }
         else {
-            this.videoButton.setContent('{gray-fg}[V]{/gray-fg}');
+            this.videoButton.setContent(`{${door_theme_1.T.dim}-fg}[V]{/${door_theme_1.T.dim}-fg}`);
         }
         // Call callback to update video grid
         if (this.onVideoToggleCallback) {
@@ -318,10 +319,10 @@ class VoiceControlBar {
     updateGridButtonLabel(viewMode) {
         // Speaker mode = [F] fullscreen/focus; grid = [G] split-view.
         if (viewMode === 'speaker') {
-            this.gridToggleButton.setContent('{yellow-fg}[F]{/yellow-fg}');
+            this.gridToggleButton.setContent(`{${door_theme_1.T.accentAlt}-fg}[F]{/${door_theme_1.T.accentAlt}-fg}`);
         }
         else {
-            this.gridToggleButton.setContent('{cyan-fg}[G]{/cyan-fg}');
+            this.gridToggleButton.setContent(`{${door_theme_1.T.accent}-fg}[G]{/${door_theme_1.T.accent}-fg}`);
         }
         this.screen.render();
     }
@@ -330,7 +331,7 @@ class VoiceControlBar {
         // the current encoder at a glance.
         const map = { ascii: 'A', color: 'C', halfblock: 'H', braille: 'B' };
         const ch = map[mode] || 'R';
-        this.modeButton?.setContent(`{magenta-fg}[${ch}]{/magenta-fg}`);
+        this.modeButton?.setContent(`{${door_theme_1.T.accentAlt}-fg}[${ch}]{/${door_theme_1.T.accentAlt}-fg}`);
         this.screen.render();
     }
     disconnect() {
@@ -344,10 +345,10 @@ class VoiceControlBar {
             return;
         // Discord-style: green ring when speaking
         if (this.isSpeaking) {
-            this.statusBox.setContent(`{green-fg}[*]{/green-fg} ${this.username.substring(0, 12)}`);
+            this.statusBox.setContent(`{${door_theme_1.T.ok}-fg}[*]{/${door_theme_1.T.ok}-fg} ${this.username.substring(0, 12)}`);
         }
         else {
-            this.statusBox.setContent(`{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 12)}`);
+            this.statusBox.setContent(`{${door_theme_1.T.dim}-fg}[ ]{/${door_theme_1.T.dim}-fg} ${this.username.substring(0, 12)}`);
         }
         this.screen.render();
     }
@@ -773,7 +774,7 @@ class EnhancedVoiceChannel {
                 width: '100%',
                 height: '100%',
                 border: undefined, // Prevent Panel default border
-                style: { bg: 'black', transparent: true },
+                style: { bg: door_theme_1.T.ground, transparent: true },
                 // @ts-ignore
                 zIndex: 99998,
             });
@@ -786,12 +787,12 @@ class EnhancedVoiceChannel {
                 height: 11,
                 border: { type: 'line' },
                 style: {
-                    fg: 'white',
-                    bg: 'black',
+                    fg: door_theme_1.T.ink,
+                    bg: door_theme_1.T.ground,
                     border: { fg: theme_1.PANEL_BORDER },
                 },
                 tags: true,
-                label: ' {cyan-fg}Join Voice Channel{/cyan-fg} ',
+                label: ` {${door_theme_1.T.accent}-fg}Join Voice Channel{/${door_theme_1.T.accent}-fg} `,
                 ch: ' ',
                 // @ts-ignore
                 zIndex: 99999,
@@ -804,7 +805,7 @@ class EnhancedVoiceChannel {
                 width: 48,
                 content: 'Enable audio and video for this call?',
                 tags: true,
-                style: { fg: 'white', bg: 'black' },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
             });
             // Instructions
             blessed_1.default.text({
@@ -812,9 +813,9 @@ class EnhancedVoiceChannel {
                 top: 2,
                 left: 2,
                 width: 48,
-                content: '{gray-fg}Tab to navigate, Space/Enter to toggle/select{/gray-fg}',
+                content: `{${door_theme_1.T.dim}-fg}Tab to navigate, Space/Enter to toggle/select{/${door_theme_1.T.dim}-fg}`,
                 tags: true,
-                style: { bg: 'black' },
+                style: { bg: door_theme_1.T.ground },
             });
             // Microphone checkbox - using proper Checkbox widget
             const micCheckbox = blessed_1.default.checkbox({
@@ -826,10 +827,10 @@ class EnhancedVoiceChannel {
                 text: 'Enable Microphone',
                 checked: true,
                 style: {
-                    fg: 'white',
-                    bg: 'black',
-                    focus: { fg: 'black', bg: 'cyan' },
-                    hover: { fg: 'black', bg: 'blue' },
+                    fg: door_theme_1.T.ink,
+                    bg: door_theme_1.T.ground,
+                    focus: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent },
+                    hover: { fg: door_theme_1.T.ground, bg: door_theme_1.T.bar },
                 },
             });
             // Camera checkbox - using proper Checkbox widget
@@ -842,10 +843,10 @@ class EnhancedVoiceChannel {
                 text: 'Enable Camera',
                 checked: true,
                 style: {
-                    fg: 'white',
-                    bg: 'black',
-                    focus: { fg: 'black', bg: 'cyan' },
-                    hover: { fg: 'black', bg: 'blue' },
+                    fg: door_theme_1.T.ink,
+                    bg: door_theme_1.T.ground,
+                    focus: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent },
+                    hover: { fg: door_theme_1.T.ground, bg: door_theme_1.T.bar },
                 },
             });
             // Join button - using proper Button widget
@@ -859,10 +860,10 @@ class EnhancedVoiceChannel {
                 tags: true,
                 mouse: true,
                 style: {
-                    fg: 'green',
-                    bg: 'black',
-                    focus: { fg: 'white', bg: 'green' },
-                    hover: { fg: 'white', bg: 'green' },
+                    fg: door_theme_1.T.ok,
+                    bg: door_theme_1.T.ground,
+                    focus: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ok },
+                    hover: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ok },
                 },
             });
             // Cancel button - using proper Button widget
@@ -876,10 +877,10 @@ class EnhancedVoiceChannel {
                 tags: true,
                 mouse: true,
                 style: {
-                    fg: 'red',
-                    bg: 'black',
-                    focus: { fg: 'white', bg: 'red' },
-                    hover: { fg: 'white', bg: 'red' },
+                    fg: door_theme_1.T.alert,
+                    bg: door_theme_1.T.ground,
+                    focus: { fg: door_theme_1.T.ink, bg: door_theme_1.T.alert },
+                    hover: { fg: door_theme_1.T.ink, bg: door_theme_1.T.alert },
                 },
             });
             // Focusable elements in tab order

@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createEventsCommand = createEventsCommand;
+const door_theme_1 = require("../door-theme");
 /**
  * /events [on|off|logins|files|doors|messages|announcements] - Manage event filtering
  */
@@ -17,7 +18,7 @@ function createEventsCommand(state, addSystemMessage, updateStatusBar) {
             const subcommand = args[0]?.toLowerCase();
             if (!subcommand) {
                 // Show current settings
-                addSystemMessage('{cyan-fg}BBS Event Display Settings:{/cyan-fg}');
+                addSystemMessage(`{${door_theme_1.T.accent}-fg}BBS Event Display Settings:{/${door_theme_1.T.accent}-fg}`);
                 addSystemMessage('');
                 addSystemMessage(`  User Logins/Logouts:     ${formatStatus(state.prefs.showLogins)}`);
                 addSystemMessage(`  File Uploads/Downloads:  ${formatStatus(state.prefs.showFileActivity)}`);
@@ -44,7 +45,7 @@ function createEventsCommand(state, addSystemMessage, updateStatusBar) {
                     state.prefs.showMessages = true;
                     state.prefs.showSystemAnnouncements = true;
                     state.prefs.muteAllEvents = false;
-                    addSystemMessage('{green-fg}All BBS events enabled{/green-fg}');
+                    addSystemMessage(`{${door_theme_1.T.ok}-fg}All BBS events enabled{/${door_theme_1.T.ok}-fg}`);
                     updateStatusBar();
                     break;
                 case 'off':
@@ -55,7 +56,7 @@ function createEventsCommand(state, addSystemMessage, updateStatusBar) {
                     state.prefs.showMessages = false;
                     state.prefs.showSystemAnnouncements = false;
                     state.prefs.muteAllEvents = true;
-                    addSystemMessage('{red-fg}All BBS events disabled{/red-fg}');
+                    addSystemMessage(`{${door_theme_1.T.alert}-fg}All BBS events disabled{/${door_theme_1.T.alert}-fg}`);
                     updateStatusBar();
                     break;
                 case 'logins':
@@ -108,7 +109,7 @@ function createEventsCommand(state, addSystemMessage, updateStatusBar) {
 }
 /** Format boolean status for display */
 function formatStatus(enabled) {
-    return enabled ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}';
+    return enabled ? `{${door_theme_1.T.ok}-fg}ON{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.alert}-fg}OFF{/${door_theme_1.T.alert}-fg}`;
 }
 /** Update muteAllEvents based on individual preferences */
 function updateMuteAllEvents(state) {

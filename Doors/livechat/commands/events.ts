@@ -5,6 +5,7 @@
 
 import type { SlashCommand } from './types';
 import type { AppState } from '../core/state';
+import { T } from '../door-theme';
 
 /**
  * /events [on|off|logins|files|doors|messages|announcements] - Manage event filtering
@@ -23,7 +24,7 @@ export function createEventsCommand(
 
       if (!subcommand) {
         // Show current settings
-        addSystemMessage('{cyan-fg}BBS Event Display Settings:{/cyan-fg}');
+        addSystemMessage(`{${T.accent}-fg}BBS Event Display Settings:{/${T.accent}-fg}`);
         addSystemMessage('');
         addSystemMessage(`  User Logins/Logouts:     ${formatStatus(state.prefs.showLogins)}`);
         addSystemMessage(`  File Uploads/Downloads:  ${formatStatus(state.prefs.showFileActivity)}`);
@@ -51,7 +52,7 @@ export function createEventsCommand(
           state.prefs.showMessages = true;
           state.prefs.showSystemAnnouncements = true;
           state.prefs.muteAllEvents = false;
-          addSystemMessage('{green-fg}All BBS events enabled{/green-fg}');
+          addSystemMessage(`{${T.ok}-fg}All BBS events enabled{/${T.ok}-fg}`);
           updateStatusBar();
           break;
 
@@ -63,7 +64,7 @@ export function createEventsCommand(
           state.prefs.showMessages = false;
           state.prefs.showSystemAnnouncements = false;
           state.prefs.muteAllEvents = true;
-          addSystemMessage('{red-fg}All BBS events disabled{/red-fg}');
+          addSystemMessage(`{${T.alert}-fg}All BBS events disabled{/${T.alert}-fg}`);
           updateStatusBar();
           break;
 
@@ -124,7 +125,7 @@ export function createEventsCommand(
 
 /** Format boolean status for display */
 function formatStatus(enabled: boolean): string {
-  return enabled ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}';
+  return enabled ? `{${T.ok}-fg}ON{/${T.ok}-fg}` : `{${T.alert}-fg}OFF{/${T.alert}-fg}`;
 }
 
 /** Update muteAllEvents based on individual preferences */

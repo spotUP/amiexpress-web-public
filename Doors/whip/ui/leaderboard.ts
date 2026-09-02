@@ -3,6 +3,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import { getLevelStars, getLevelColor, formatPoints } from '../core/gamification';
+import { T } from '../door-theme';
 
 export async function showLeaderboard(
   screen: Screen,
@@ -27,9 +28,9 @@ export async function showLeaderboard(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: `{center}{bold}{cyan-fg}TOP SCENERS{/cyan-fg}{/bold} - Demo Scene Leaderboard{/center}\n` +
+      content: `{center}{bold}{${T.accent}-fg}TOP SCENERS{/${T.accent}-fg}{/bold} - Demo Scene Leaderboard{/center}\n` +
                `{center}Total Sceners: {bold}${sortedUsers.length}{/bold} | Your Rank: {bold}#${currentUser.rank}{/bold}{/center}`,
-      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
       tags: true,
       focusable: false,
       mouse: false,
@@ -47,7 +48,7 @@ export async function showLeaderboard(
       height: 2,
       content: ' {bold}RANK  HANDLE          LEVEL      POINTS  TASKS  PROJECTS  ACHIEVEMENTS{/bold}\n' +
                ' ' + '='.repeat(tableHeaderWidth - 2),  // Dynamic separator width
-      style: { fg: 'cyan', bg: 'black' },
+      style: { fg: T.accent, bg: T.ground },
       tags: true,
       focusable: false,
       mouse: false,
@@ -69,7 +70,7 @@ export async function showLeaderboard(
       mouse: true,
       keys: true,
       vi: true,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       focusable: true,
     });
 
@@ -116,9 +117,9 @@ export async function showLeaderboard(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: ` {cyan-fg}[Up/Down]{/cyan-fg} Scroll   {red-fg}[Q/ESC]{/red-fg} Back\n` +
-               ` {gray-fg}Scrollwheel supported{/gray-fg}`,
-      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      content: ` {${T.accent}-fg}[Up/Down]{/${T.accent}-fg} Scroll   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
+               ` {${T.dim}-fg}Scrollwheel supported{/${T.dim}-fg}`,
+      style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
       tags: true,
       focusable: false,
       mouse: false,

@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const door_theme_1 = require("./door-theme");
 const door = new bbs_door_sdk_1.ServerDoor({
     name: 'Header Dropdown Demo',
     version: '1.0.0',
@@ -17,6 +18,8 @@ door.onStart(async (ctx) => {
         bbs.disableGameMode();
     }
     // 1. Create Screen (using helper for Amiga compatibility & tags)
+    // The board's theme, before any widget reads a colour from it.
+    (0, door_theme_1.applyTheme)(bbs);
     const screen = (0, bbs_door_sdk_1.createScreen)(bbs, {
         dockBorders: true,
         title: 'Header Dropdown Demo',
@@ -47,8 +50,8 @@ door.onStart(async (ctx) => {
         height: 1, // Single line
         tags: true,
         style: {
-            bg: 'blue',
-            fg: 'white',
+            bg: door_theme_1.T.bar,
+            fg: door_theme_1.T.ink,
         },
         // No border
     });
@@ -59,11 +62,11 @@ door.onStart(async (ctx) => {
         left: 0,
         width: '100%',
         height: '100%-1', // Fill rest of screen
-        label: ' {cyan-fg}Status{/} ',
+        label: ` {${door_theme_1.T.accent}-fg}Status{/} `,
         style: {
-            border: { fg: 'cyan' },
+            border: { fg: door_theme_1.T.accent },
         },
-        content: '{gray-fg}Use Tab/Shift+Tab to switch menus, Enter/Space to open, Esc to close.{/gray-fg}',
+        content: `{${door_theme_1.T.dim}-fg}Use Tab/Shift+Tab to switch menus, Enter/Space to open, Esc to close.{/${door_theme_1.T.dim}-fg}`,
     });
     const menuSpecs = [
         {
@@ -144,10 +147,10 @@ door.onStart(async (ctx) => {
             mouse: true,
             focusable: true,
             style: {
-                fg: 'white',
-                bg: 'blue',
-                hover: { bg: 'cyan', fg: 'black' },
-                focus: { bg: 'cyan', fg: 'black' },
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.bar,
+                hover: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
+                focus: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
             },
             content: labelText,
         });
@@ -190,14 +193,14 @@ door.onStart(async (ctx) => {
                         item.action();
                         return;
                     }
-                    updateStatus(`{cyan-fg}Selected:{/cyan-fg} ${spec.label} -> ${item.label}`);
+                    updateStatus(`{${door_theme_1.T.accent}-fg}Selected:{/${door_theme_1.T.accent}-fg} ${spec.label} -> ${item.label}`);
                 },
             })),
             // Set dropdown style to light blue (cyan)
             style: {
-                bg: 'cyan',
-                fg: 'black',
-                focus: { bg: 'blue', fg: 'white' }
+                bg: door_theme_1.T.accent,
+                fg: door_theme_1.T.ground,
+                focus: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink }
             }
         });
         dropdown.on('select', () => {

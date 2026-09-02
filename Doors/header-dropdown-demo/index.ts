@@ -13,6 +13,7 @@ import {
   DoorInputManager,
   createBox
 } from '@amiexpress/bbs-door-sdk';
+import { T, applyTheme } from './door-theme';
 
 const door = new Door({
   name: 'Header Dropdown Demo',
@@ -34,6 +35,9 @@ door.onStart(async (ctx: DoorContext) => {
   }
 
   // 1. Create Screen (using helper for Amiga compatibility & tags)
+  // The board's theme, before any widget reads a colour from it.
+  applyTheme(bbs);
+
   const screen = createScreen(bbs, {
     dockBorders: true,
     title: 'Header Dropdown Demo',
@@ -69,8 +73,8 @@ door.onStart(async (ctx: DoorContext) => {
     height: 1, // Single line
     tags: true,
     style: {
-      bg: 'blue',
-      fg: 'white',
+      bg: T.bar,
+      fg: T.ink,
     },
     // No border
   });
@@ -82,11 +86,11 @@ door.onStart(async (ctx: DoorContext) => {
     left: 0,
     width: '100%',
     height: '100%-1', // Fill rest of screen
-    label: ' {cyan-fg}Status{/} ',
+    label: ` {${T.accent}-fg}Status{/} `,
     style: {
-      border: { fg: 'cyan' },
+      border: { fg: T.accent },
     },
-    content: '{gray-fg}Use Tab/Shift+Tab to switch menus, Enter/Space to open, Esc to close.{/gray-fg}',
+    content: `{${T.dim}-fg}Use Tab/Shift+Tab to switch menus, Enter/Space to open, Esc to close.{/${T.dim}-fg}`,
   });
 
   const menuSpecs: MenuSpec[] = [
@@ -174,10 +178,10 @@ door.onStart(async (ctx: DoorContext) => {
       mouse: true,
       focusable: true,
       style: {
-        fg: 'white',
-        bg: 'blue',
-        hover: { bg: 'cyan', fg: 'black' },
-        focus: { bg: 'cyan', fg: 'black' },
+        fg: T.ink,
+        bg: T.bar,
+        hover: { bg: T.accent, fg: T.ground },
+        focus: { bg: T.accent, fg: T.ground },
       },
       content: labelText,
     });
@@ -225,14 +229,14 @@ door.onStart(async (ctx: DoorContext) => {
             item.action();
             return;
           }
-          updateStatus(`{cyan-fg}Selected:{/cyan-fg} ${spec.label} -> ${item.label}`);
+          updateStatus(`{${T.accent}-fg}Selected:{/${T.accent}-fg} ${spec.label} -> ${item.label}`);
         },
       })),
       // Set dropdown style to light blue (cyan)
       style: {
-        bg: 'cyan',
-        fg: 'black',
-        focus: { bg: 'blue', fg: 'white' }
+        bg: T.accent,
+        fg: T.ground,
+        focus: { bg: T.bar, fg: T.ink }
       } as any
     });
 

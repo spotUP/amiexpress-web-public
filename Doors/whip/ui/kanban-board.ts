@@ -10,6 +10,7 @@ import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { getPriorityColor, calculateLevel } from '../core/gamification';
 import { editTask, createTask } from './task-editor';
+import { T } from '../door-theme';
 
 const COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'testing', 'done'];
 const COLUMN_LABELS: Record<TaskStatus, string> = {
@@ -70,9 +71,9 @@ export async function showKanbanBoard(
       height: 3,
       fixed: true,
       border: { type: 'line' },
-      content: `{center}{bold}{cyan-fg}PROJECT: ${project.name}{/cyan-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
+      content: `{center}{bold}{${T.accent}-fg}PROJECT: ${project.name}{/${T.accent}-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
                `{center}Tasks: {bold}${tasks.length}{/bold} | Todo: {bold}${tasks.filter(t => t.status === 'todo').length}{/bold} | In Progress: {bold}${tasks.filter(t => t.status === 'in-progress').length}{/bold} | Done: {bold}${tasks.filter(t => t.status === 'done').length}{/bold}{/center}`,
-      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
       tags: true,
       focusable: false,
       mouse: false,
@@ -102,7 +103,7 @@ export async function showKanbanBoard(
         label: ` ${label} `,
         style: {
           border: { fg: i === currentColumn ? 'yellow' : 'cyan' },
-          bg: 'black'
+          bg: T.ground
         },
         focusable: false,
         mouse: false,
@@ -120,9 +121,9 @@ export async function showKanbanBoard(
         mouse: true,
         items: [],
         style: {
-          selected: { bg: 'cyan', fg: 'black' },
-          item: { fg: 'white' },
-          bg: 'black'
+          selected: { bg: T.accent, fg: T.ground },
+          item: { fg: T.ink },
+          bg: T.ground
         }
       });
 
@@ -142,9 +143,9 @@ export async function showKanbanBoard(
       height: 3,
       fixed: true,
       border: { type: 'line' },
-      content: ` {cyan-fg}[Arrows]{/cyan-fg} Navigate   {cyan-fg}[Enter]{/cyan-fg} Edit   {cyan-fg}[N]{/cyan-fg} New   {cyan-fg}[M]{/cyan-fg} Move   {cyan-fg}[D]{/cyan-fg} Delete   {red-fg}[Q/ESC]{/red-fg} Back\n` +
-               ` {yellow-fg}Drag & Drop:{/yellow-fg} Click and drag tasks between columns`,
-      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      content: ` {${T.accent}-fg}[Arrows]{/${T.accent}-fg} Navigate   {${T.accent}-fg}[Enter]{/${T.accent}-fg} Edit   {${T.accent}-fg}[N]{/${T.accent}-fg} New   {${T.accent}-fg}[M]{/${T.accent}-fg} Move   {${T.accent}-fg}[D]{/${T.accent}-fg} Delete   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
+               ` {${T.accentAlt}-fg}Drag & Drop:{/${T.accentAlt}-fg} Click and drag tasks between columns`,
+      style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
       tags: true,
       focusable: false,
       mouse: false,
@@ -197,7 +198,7 @@ export async function showKanbanBoard(
 
         // Update header with new counts
         header.setContent(
-          `{center}{bold}{cyan-fg}PROJECT: ${project.name}{/cyan-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
+          `{center}{bold}{${T.accent}-fg}PROJECT: ${project.name}{/${T.accent}-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
           `{center}Tasks: {bold}${tasks.length}{/bold} | Todo: {bold}${tasks.filter(t => t.status === 'todo').length}{/bold} | In Progress: {bold}${tasks.filter(t => t.status === 'in-progress').length}{/bold} | Done: {bold}${tasks.filter(t => t.status === 'done').length}{/bold}{/center}`
         );
 
@@ -255,9 +256,9 @@ export async function showKanbanBoard(
           border: { type: 'line' },
           content: task.title.length > 14 ? task.title.substring(0, 12) + '..' : task.title,
           style: {
-            fg: 'white',
-            bg: 'blue',
-            border: { fg: 'yellow' }
+            fg: T.ink,
+            bg: T.bar,
+            border: { fg: T.accentAlt }
           },
           tags: true,
         })
@@ -488,8 +489,8 @@ async function selectMoveDestination(screen: Screen): Promise<TaskStatus | null>
       border: { type: 'line' },
       label: ' Move Task To ',
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       },
       focusable: false,
       mouse: false,
@@ -507,9 +508,9 @@ async function selectMoveDestination(screen: Screen): Promise<TaskStatus | null>
       mouse: true,
       items: COLUMNS.map(col => COLUMN_LABELS[col]),
       style: {
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' },
-        bg: 'black'
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
       }
     });
 
@@ -632,8 +633,8 @@ async function confirmDelete(screen: Screen, taskTitle: string): Promise<boolean
       height: 7,
       border: { type: 'line' },
       style: {
-        border: { fg: 'red' },
-        bg: 'black'
+        border: { fg: T.alert },
+        bg: T.ground
       },
       label: ' Confirm Delete '
     });
@@ -656,15 +657,15 @@ async function showAchievementUnlock(screen: Screen, achievement: Achievement): 
       height: 10,
       border: { type: 'line' },
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       },
       label: ' Achievement Unlocked! '
     });
 
-    const content = `{center}{bold}{green-fg}${achievement.icon} ${achievement.name}{/green-fg}{/bold}{/center}\n\n` +
+    const content = `{center}{bold}{${T.ok}-fg}${achievement.icon} ${achievement.name}{/${T.ok}-fg}{/bold}{/center}\n\n` +
                    `{center}${achievement.description}{/center}\n\n` +
-                   `{center}{yellow-fg}+${achievement.points} points{/yellow-fg}{/center}\n\n` +
+                   `{center}{${T.accentAlt}-fg}+${achievement.points} points{/${T.accentAlt}-fg}{/center}\n\n` +
                    `{center}Press any key to continue{/center}`;
 
     msg.display(content, () => {

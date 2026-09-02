@@ -6,6 +6,7 @@ exports.createSearchOverlay = createSearchOverlay;
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 function createSearchOverlay(screen, onSearch, onClose) {
     const modal = new blessed_1.SearchModal({
         parent: screen,
@@ -16,7 +17,7 @@ function createSearchOverlay(screen, onSearch, onClose) {
         filters: [
             { id: 'username', label: 'Username (optional)' }
         ],
-        helpText: '{cyan-fg}Enter: Search | Tab: Next field | Esc: Close{/cyan-fg}',
+        helpText: `{${door_theme_1.T.accent}-fg}Enter: Search | Tab: Next field | Esc: Close{/${door_theme_1.T.accent}-fg}`,
         onSearch: (query, filters) => {
             onSearch(query, { username: filters.username || undefined });
         },
@@ -36,7 +37,7 @@ function createSearchOverlay(screen, onSearch, onClose) {
                 const highlight = r.highlighted || r.message;
                 return {
                     id: String(idx),
-                    content: `{cyan-fg}${idx + 1}.{/cyan-fg} {yellow-fg}${r.sender_username}{/yellow-fg} @ ${date}: ${highlight}`,
+                    content: `{${door_theme_1.T.accent}-fg}${idx + 1}.{/${door_theme_1.T.accent}-fg} {${door_theme_1.T.accentAlt}-fg}${r.sender_username}{/${door_theme_1.T.accentAlt}-fg} @ ${date}: ${highlight}`,
                     data: r,
                 };
             });

@@ -8,6 +8,7 @@ exports.createStatusRadio = createStatusRadio;
  * Settings status radio buttons
  */
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const door_theme_1 = require("../door-theme");
 function createStatusRadio(p, l, top, h, presenceService, socketEmitter, userId, updateStatusBar) {
     const radio = blessed_1.default.radioset({
         parent: p,
@@ -25,7 +26,7 @@ function createStatusRadio(p, l, top, h, presenceService, socketEmitter, userId,
         selected: 0,
         vertical: true,
         spacing: 1,
-        style: { fg: 'white' },
+        style: { fg: door_theme_1.T.ink },
     });
     radio.on('change', (v) => {
         presenceService.setStatus(userId, v);

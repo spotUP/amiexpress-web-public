@@ -2,6 +2,7 @@
  * Dialog helper functions for LiveChat
  */
 import type { Socket } from 'socket.io-client';
+import { T } from '../door-theme';
 
 export function createDialogHelpers(
   showHelp: () => void,
@@ -63,7 +64,7 @@ export function createDialogHelpers(
       if (!err && value) {
         const processedMsg = replaceEmojis(value);
         socket.emit('chat:dm', { to: targetUser, message: processedMsg });
-        addChatMessage(`{magenta-fg}[DM to ${targetUser}]: ${processedMsg}{/magenta-fg}`);
+        addChatMessage(`{${T.accentAlt}-fg}[DM to ${targetUser}]: ${processedMsg}{/${T.accentAlt}-fg}`);
       }
       inputBox.focus();
       screen.render();

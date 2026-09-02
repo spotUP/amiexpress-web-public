@@ -1,6 +1,7 @@
 import type { TypingUser } from '../types';
 import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
 import { color } from '../utils/ansi';
+import { T } from '../door-theme';
 
 /** Create input box config */
 export function inputBoxConfig() {
@@ -33,6 +34,6 @@ export function statusLineConfig() {
   return {
     height: 1,
     tags: true,
-    style: { fg: 'gray' }
+    style: { fg: T.dim }
   };
 }

@@ -2,6 +2,7 @@
  * Settings preference checkboxes
  */
 import blessed, { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
 
 export function createPrefCheckboxes(p: Box, l: number, r: number, g: number) {
   const muteSounds = blessed.checkbox({
@@ -11,7 +12,7 @@ export function createPrefCheckboxes(p: Box, l: number, r: number, g: number) {
     text: 'Mute Sounds',
     checked: false,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
   r += g;
 
@@ -22,7 +23,7 @@ export function createPrefCheckboxes(p: Box, l: number, r: number, g: number) {
     text: 'Show Typing Indicators',
     checked: true,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
   r += g;
 
@@ -33,7 +34,7 @@ export function createPrefCheckboxes(p: Box, l: number, r: number, g: number) {
     text: 'Show Timestamps',
     checked: true,
     mouse: true,
-    style: { fg: 'white' },
+    style: { fg: T.ink },
   });
   r += 2;
 

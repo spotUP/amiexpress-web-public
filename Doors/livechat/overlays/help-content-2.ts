@@ -1,70 +1,71 @@
+import { T } from '../door-theme';
 /** Help content part 2: Features */
 export const HELP_PART_2 = `
-{bold}{green-fg}--- FEATURES ---{/green-fg}{/bold}
+{bold}{${T.ok}-fg}--- FEATURES ---{/${T.ok}-fg}{/bold}
 
-{cyan-fg}Menu Bar:{/cyan-fg}
+{${T.accent}-fg}Menu Bar:{/${T.accent}-fg}
   Click menu items or use keyboard shortcuts.
   Chat | Rooms | Files | Draw | Settings | Help
 
-{cyan-fg}Channel Tree:{/cyan-fg}
+{${T.accent}-fg}Channel Tree:{/${T.accent}-fg}
   Left panel shows channels and DMs.
   Click to expand/collapse groups.
   Click channel to join.
 
-{cyan-fg}User List:{/cyan-fg}
+{${T.accent}-fg}User List:{/${T.accent}-fg}
   Right panel shows online users.
   Click user to view profile.
   Right-click for context menu.
 
-{cyan-fg}Context Menus (Right-Click):{/cyan-fg}
+{${T.accent}-fg}Context Menus (Right-Click):{/${T.accent}-fg}
   On users: Profile, DM, Mention, Ignore
   On chat: Copy, Reply, Quote
   On channels: Join, Leave, Info
 
-{cyan-fg}Chat Features:{/cyan-fg}
+{${T.accent}-fg}Chat Features:{/${T.accent}-fg}
   - Live typing indicators
   - @mentions (highlighted)
   - **bold** and *italic* markdown
   - Message reactions
   - Scrollable history (500 lines)
 
-{cyan-fg}Settings Panel (Ctrl+S):{/cyan-fg}
+{${T.accent}-fg}Settings Panel (Ctrl+S):{/${T.accent}-fg}
   - Mute BBS events
   - Mute sounds
   - Show/hide typing indicators
   - Show/hide timestamps
   - Set presence status
 
-{cyan-fg}Mouse Support:{/cyan-fg}
+{${T.accent}-fg}Mouse Support:{/${T.accent}-fg}
   - Click anywhere to interact
   - Scroll wheel in all panels
   - Drag to select (where supported)
 
-{bold}{green-fg}--- DRAWING CHANNELS (F5) ---{/green-fg}{/bold}
+{bold}{${T.ok}-fg}--- DRAWING CHANNELS (F5) ---{/${T.ok}-fg}{/bold}
 
-{cyan-fg}Create Drawing Channels:{/cyan-fg}
+{${T.accent}-fg}Create Drawing Channels:{/${T.accent}-fg}
   Press F5 or use /art <name> to create
   a collaborative whiteboard channel.
   Drawing channels are prefixed with art:
 
-{cyan-fg}Example:{/cyan-fg}
+{${T.accent}-fg}Example:{/${T.accent}-fg}
   /art doodles  - Creates art:doodles
 
-{cyan-fg}Drawing Controls:{/cyan-fg}
+{${T.accent}-fg}Drawing Controls:{/${T.accent}-fg}
   Mouse        Click and drag to draw
   C            Cycle through colors
   X            Clear the canvas
   Escape       Return to chat
 
-{cyan-fg}Colors:{/cyan-fg} White Red Green Blue Yellow Cyan Magenta Gray
+{${T.accent}-fg}Colors:{/${T.accent}-fg} White Red Green Blue Yellow Cyan Magenta Gray
 
-{bold}{green-fg}--- FILE SHARING (F6) ---{/green-fg}{/bold}
+{bold}{${T.ok}-fg}--- FILE SHARING (F6) ---{/${T.ok}-fg}{/bold}
 
-{cyan-fg}Share Files:{/cyan-fg}
+{${T.accent}-fg}Share Files:{/${T.accent}-fg}
   Browse and share files with chat users.
   Press F6 or use the Files menu.
 
-{cyan-fg}File Browser:{/cyan-fg}
+{${T.accent}-fg}File Browser:{/${T.accent}-fg}
   - Navigate with arrow keys
   - Enter to select directories
   - Press Share to send file link

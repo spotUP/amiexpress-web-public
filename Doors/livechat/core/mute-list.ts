@@ -1,3 +1,4 @@
+import { T } from '../door-theme';
 /**
  * Who the user has muted or ignored.
  *
@@ -91,11 +92,11 @@ export function deserializeMuteList(saved: unknown): MuteList {
 
 /** What to tell the user, without overstating what actually happened. */
 export function muteMessage(username: string, level: MuteLevel | null): string {
-  if (level === null) return `{cyan-fg}${username} is no longer hidden.{/cyan-fg}`;
-  if (level === 'mute') return `{cyan-fg}Muted ${username} - their room messages are hidden.{/cyan-fg}`;
-  if (level === 'ignore') return `{cyan-fg}Ignoring ${username} - their messages and DMs are hidden.{/cyan-fg}`;
+  if (level === null) return `{${T.accent}-fg}${username} is no longer hidden.{/${T.accent}-fg}`;
+  if (level === 'mute') return `{${T.accent}-fg}Muted ${username} - their room messages are hidden.{/${T.accent}-fg}`;
+  if (level === 'ignore') return `{${T.accent}-fg}Ignoring ${username} - their messages and DMs are hidden.{/${T.accent}-fg}`;
   // Deliberately not "they cannot contact you": nothing stops them sending.
-  return `{red-fg}Blocked ${username} for you - they are hidden everywhere, but the server does not yet stop them sending.{/red-fg}`;
+  return `{${T.alert}-fg}Blocked ${username} for you - they are hidden everywhere, but the server does not yet stop them sending.{/${T.alert}-fg}`;
 }
 
 /**

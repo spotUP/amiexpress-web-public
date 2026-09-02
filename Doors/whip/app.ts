@@ -17,6 +17,7 @@ import { showAchievements } from './ui/achievements';
 import { createTask } from './ui/task-editor';
 import { createProject } from './ui/project-editor';
 import { showMyTasks } from './ui/my-tasks';
+import { T, applyTheme } from './door-theme';
 
 export class WhipApp {
   private screen: Screen;
@@ -31,6 +32,9 @@ export class WhipApp {
 
   constructor(session: DoorSession) {
     this.session = session;
+
+    // The board's theme, before any widget reads a colour from it.
+    applyTheme(session.bbs);
 
     this.screen = createScreen(session.bbs, {
       title: 'WHIP v1.0 - Demo Scene Project Management',
@@ -286,8 +290,8 @@ export class WhipApp {
       tags: true,
       border: { type: 'line' },
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       }
     });
 

@@ -9,6 +9,7 @@ import { STATUS_HEIGHT } from './status-bar';
 import { INPUT_HEIGHT } from './input-box';
 import { TYPING_HEIGHT } from './typing-preview';
 import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
+import { T } from '../door-theme';
 
 // Re-export TYPING_HEIGHT for backward compatibility
 export { TYPING_HEIGHT };
@@ -51,11 +52,11 @@ export function createChatLog(
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
     border: {
       type: 'line',
-      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+      labelStyle: { fg: T.ink, bg: T.bar }  // Blue background for label
     },
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       // style.border.fg, NOT border.fg - Element reads the border colour from
       // style.border / border.style / style.fg and ignores a colour sitting
       // on the border object itself. With it in the wrong place this panel
@@ -96,11 +97,11 @@ export function createChatLog(
     tags: true,
     scrollbar: {
       ch: '█',
-      style: { fg: 'cyan' }
+      style: { fg: T.accent }
     },
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
     },
   });
 

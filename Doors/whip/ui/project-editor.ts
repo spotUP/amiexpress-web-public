@@ -8,6 +8,7 @@ import type { Party } from '../types/party';
 import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import { v4 as uuidv4 } from 'uuid';
+import { T } from '../door-theme';
 
 const PROJECT_TYPES: ProjectType[] = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
 const PROJECT_STATUSES: ProjectStatus[] = ['planning', 'active', 'released'];
@@ -68,8 +69,8 @@ async function showProjectEditor(
       height: 24,
       border: { type: 'line' },
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       },
       label: isNew ? ' New Project ' : ' Edit Project ',
       tags: true,
@@ -89,9 +90,9 @@ async function showProjectEditor(
       inputOnFocus: true,
       value: project.name,
       style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
       }
     });
 
@@ -112,10 +113,10 @@ async function showProjectEditor(
       items: PROJECT_TYPES,
       selected: PROJECT_TYPES.indexOf(project.type),
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white', bg: 'black' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground },
+        bg: T.ground
       },
     } as any);
 
@@ -136,10 +137,10 @@ async function showProjectEditor(
       items: PROJECT_STATUSES,
       selected: PROJECT_STATUSES.indexOf(project.status),
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white', bg: 'black' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground },
+        bg: T.ground
       },
     } as any);
 
@@ -165,10 +166,10 @@ async function showProjectEditor(
       items: partyOptions,
       selected: selectedPartyIndex,
       style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white', bg: 'black' },
-        bg: 'black'
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground },
+        bg: T.ground
       },
     } as any);
 
@@ -186,9 +187,9 @@ async function showProjectEditor(
       inputOnFocus: true,
       value: project.description || '',
       style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
       }
     });
 
@@ -204,10 +205,10 @@ async function showProjectEditor(
       keys: true,
       mouse: true,
       style: {
-        fg: 'white',
-        bg: 'green',
-        focus: { bg: 'lightgreen', fg: 'black' },
-        hover: { bg: 'lightgreen', fg: 'black' }
+        fg: T.ink,
+        bg: T.ok,
+        focus: { bg: 'lightgreen', fg: T.ground },
+        hover: { bg: 'lightgreen', fg: T.ground }
       }
     });
 
@@ -222,10 +223,10 @@ async function showProjectEditor(
       keys: true,
       mouse: true,
       style: {
-        fg: 'white',
-        bg: 'red',
-        focus: { bg: 'lightred', fg: 'black' },
-        hover: { bg: 'lightred', fg: 'black' }
+        fg: T.ink,
+        bg: T.alert,
+        focus: { bg: 'lightred', fg: T.ground },
+        hover: { bg: 'lightred', fg: T.ground }
       }
     });
 
@@ -257,7 +258,7 @@ async function showProjectEditor(
           height: 'shrink',
           padding: 2,
           border: { type: 'line' },
-          style: { border: { fg: 'red' }, bg: 'black' },
+          style: { border: { fg: T.alert }, bg: T.ground },
           label: ' Error '
         });
         msg.display('Project name cannot be empty!', () => {

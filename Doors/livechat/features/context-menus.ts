@@ -2,6 +2,7 @@ import { toggleMute, muteMessage, muteMenuLabels, muteLevelForLabel, type MuteLi
 import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
 
 export interface ContextMenuExtras {
   isSysop?: boolean;
@@ -14,7 +15,7 @@ export interface ContextMenuExtras {
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
-  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: 'white', bg: 'black', border: { fg: PANEL_BORDER }, selected: { fg: 'black', bg: 'cyan' } } } as any);
+  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER }, selected: { fg: T.ground, bg: T.accent } } } as any);
 
   // Set high z-index to ensure menu appears on top
   (cm as any).zi = 9999;
@@ -36,14 +37,14 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
         : ['Mute User', 'Ignore', 'Block'];
       its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', ...muteLabels);
       if (extras.isSysop) {
-        its.push('---', '{red-fg}Kick User{/red-fg}', '{red-fg}Ban User{/red-fg}');
+        its.push('---', `{${T.alert}-fg}Kick User{/${T.alert}-fg}`, `{${T.alert}-fg}Ban User{/${T.alert}-fg}`);
       }
     } else if (t === 'chat') {
       its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
     } else if (t === 'channel' && tgt) {
       its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', 'Pin Channel');
       if (extras.isSysop) {
-        its.push('---', 'Clear History', '{red-fg}Archive{/red-fg}', '{red-fg}Delete Channel{/red-fg}');
+        its.push('---', 'Clear History', `{${T.alert}-fg}Archive{/${T.alert}-fg}`, `{${T.alert}-fg}Delete Channel{/${T.alert}-fg}`);
       }
     } else if (t === 'video' && tgt) {
       its.push('Focus (Fullscreen)', 'Hide Stream', 'Mute Audio', '---', 'View Profile', 'Send Message');
@@ -72,7 +73,7 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
   cm.on('select', (it: any, idx: number) => {
     const raw = typeof it === 'string' ? it : (it as any).content || '';
     // Strip blessed color tags so we can compare plain labels (sysop items
-    // are styled like '{red-fg}Kick User{/red-fg}').
+    // are styled like `{${T.alert}-fg}Kick User{/${T.alert}-fg}`).
     const si = raw.replace(/\{[^}]*\}/g, '');
 
     // Ignore separator lines
@@ -119,7 +120,7 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
         case 'Block':
         case 'Unblock': {
           if (!extras.muteList) {
-            asm('{red-fg}Muting is unavailable.{/red-fg}');
+            asm(`{${T.alert}-fg}Muting is unavailable.{/${T.alert}-fg}`);
             break;
           }
           const level = muteLevelForLabel(si);
@@ -129,14 +130,14 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           break;
         }
         case 'Kick User':
-          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          if (!extras.isSysop) { asm(`{${T.alert}-fg}Sysop only.{/${T.alert}-fg}`); break; }
           sock.emit('admin:kick-user', { username: cmt });
-          asm(`{red-fg}Kick requested for ${cmt}{/red-fg}`);
+          asm(`{${T.alert}-fg}Kick requested for ${cmt}{/${T.alert}-fg}`);
           break;
         case 'Ban User':
-          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          if (!extras.isSysop) { asm(`{${T.alert}-fg}Sysop only.{/${T.alert}-fg}`); break; }
           sock.emit('admin:ban-user', { username: cmt });
-          asm(`{red-fg}Ban requested for ${cmt}{/red-fg}`);
+          asm(`{${T.alert}-fg}Ban requested for ${cmt}{/${T.alert}-fg}`);
           break;
       }
     } else if (cmty === 'chat') {
@@ -160,16 +161,16 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
         // than one that admits what it is.
         case 'React':
           asm(cmt
-            ? '{yellow-fg}Reactions are not supported by the server yet.{/yellow-fg}'
-            : '{yellow-fg}Right-click on a message first.{/yellow-fg}');
+            ? `{${T.accentAlt}-fg}Reactions are not supported by the server yet.{/${T.accentAlt}-fg}`
+            : `{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
           break;
         case 'Copy Text':
           asm('Copy to clipboard (not available in terminal)');
           break;
         case 'Pin Message':
           asm(cmt
-            ? '{yellow-fg}Pinning is not supported by the server yet.{/yellow-fg}'
-            : '{yellow-fg}Right-click on a message first.{/yellow-fg}');
+            ? `{${T.accentAlt}-fg}Pinning is not supported by the server yet.{/${T.accentAlt}-fg}`
+            : `{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
           break;
         case 'Mark Unread':
           asm('Marked as unread');
@@ -182,8 +183,8 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           break;
         case 'Delete':
           asm(cmt
-            ? '{yellow-fg}Deleting is not supported by the server yet.{/yellow-fg}'
-            : '{yellow-fg}Right-click on a message first.{/yellow-fg}');
+            ? `{${T.accentAlt}-fg}Deleting is not supported by the server yet.{/${T.accentAlt}-fg}`
+            : `{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
           break;
       }
     } else if (cmty === 'channel' && cmt) {
@@ -201,23 +202,23 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           extras.onToggleChannelExpand?.(cmt);
           break;
         case 'Pin Channel':
-          asm(`{cyan-fg}Pinned ${cmt}{/cyan-fg}`);
+          asm(`{${T.accent}-fg}Pinned ${cmt}{/${T.accent}-fg}`);
           // TODO: persist a local pinned-channels list in prefs
           break;
         case 'Clear History':
-          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          if (!extras.isSysop) { asm(`{${T.alert}-fg}Sysop only.{/${T.alert}-fg}`); break; }
           sock.emit('admin:clear-channel-history', { channel: cmt });
-          asm(`{red-fg}Clear history requested for ${cmt}{/red-fg}`);
+          asm(`{${T.alert}-fg}Clear history requested for ${cmt}{/${T.alert}-fg}`);
           break;
         case 'Archive':
-          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          if (!extras.isSysop) { asm(`{${T.alert}-fg}Sysop only.{/${T.alert}-fg}`); break; }
           sock.emit('admin:archive-channel', { channel: cmt });
-          asm(`{red-fg}Archive requested for ${cmt}{/red-fg}`);
+          asm(`{${T.alert}-fg}Archive requested for ${cmt}{/${T.alert}-fg}`);
           break;
         case 'Delete Channel':
-          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          if (!extras.isSysop) { asm(`{${T.alert}-fg}Sysop only.{/${T.alert}-fg}`); break; }
           sock.emit('admin:delete-channel', { channel: cmt });
-          asm(`{red-fg}Delete requested for ${cmt}{/red-fg}`);
+          asm(`{${T.alert}-fg}Delete requested for ${cmt}{/${T.alert}-fg}`);
           break;
       }
     } else if (cmty === 'video' && cmt) {

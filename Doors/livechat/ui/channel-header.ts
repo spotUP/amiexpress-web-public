@@ -1,4 +1,5 @@
 import type { Channel } from '../types';
+import { T } from '../door-theme';
 
 /** Create channel header component */
 export function createChannelHeader(blessed: any, screen: any) {
@@ -8,7 +9,7 @@ export function createChannelHeader(blessed: any, screen: any) {
     left: 16,
     width: '100%-16',
     height: 1,
-    style: { fg: 'cyan', bold: true },
+    style: { fg: T.accent, bold: true },
     tags: true,
     content: ''
   });

@@ -5,6 +5,7 @@
 import { Screen, CategoryPicker } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PANEL_BORDER } from './theme';
 import type { CategoryItem } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
 
 export type FormatCategory = 'colors' | 'effects' | 'markdown';
 
@@ -17,14 +18,14 @@ export interface Format {
 // Available formats grouped by category
 const FORMATS: Record<FormatCategory, Format[]> = {
   colors: [
-    { category: 'colors', name: 'Red', wrap: (t) => `{red-fg}${t}{/}` },
-    { category: 'colors', name: 'Green', wrap: (t) => `{green-fg}${t}{/}` },
-    { category: 'colors', name: 'Blue', wrap: (t) => `{blue-fg}${t}{/}` },
-    { category: 'colors', name: 'Yellow', wrap: (t) => `{yellow-fg}${t}{/}` },
-    { category: 'colors', name: 'Cyan', wrap: (t) => `{cyan-fg}${t}{/}` },
-    { category: 'colors', name: 'Magenta', wrap: (t) => `{magenta-fg}${t}{/}` },
-    { category: 'colors', name: 'White', wrap: (t) => `{white-fg}${t}{/}` },
-    { category: 'colors', name: 'Gray', wrap: (t) => `{gray-fg}${t}{/}` },
+    { category: 'colors', name: 'Red', wrap: (t) => `{${T.alert}-fg}${t}{/}` },
+    { category: 'colors', name: 'Green', wrap: (t) => `{${T.ok}-fg}${t}{/}` },
+    { category: 'colors', name: 'Blue', wrap: (t) => `{${T.bar}-fg}${t}{/}` },
+    { category: 'colors', name: 'Yellow', wrap: (t) => `{${T.accentAlt}-fg}${t}{/}` },
+    { category: 'colors', name: 'Cyan', wrap: (t) => `{${T.accent}-fg}${t}{/}` },
+    { category: 'colors', name: 'Magenta', wrap: (t) => `{${T.accentAlt}-fg}${t}{/}` },
+    { category: 'colors', name: 'White', wrap: (t) => `{${T.ink}-fg}${t}{/}` },
+    { category: 'colors', name: 'Gray', wrap: (t) => `{${T.dim}-fg}${t}{/}` },
   ],
   effects: [
     { category: 'effects', name: 'Rainbow', wrap: (t) => `~rainbow~${t}~/rainbow~` },
@@ -68,14 +69,14 @@ export class FormatPicker {
       debounceMs: 80,
       borderColor: PANEL_BORDER,
       categoryStyle: {
-        fg: 'white',
-        bg: 'black',
-        selected: { fg: 'black', bg: 'green' },
+        fg: T.ink,
+        bg: T.ground,
+        selected: { fg: T.ground, bg: T.ok },
       },
       itemStyle: {
-        fg: 'white',
-        bg: 'black',
-        selected: { fg: 'black', bg: 'yellow' },
+        fg: T.ink,
+        bg: T.ground,
+        selected: { fg: T.ground, bg: T.accentAlt },
       },
       getItems: (category: string) => {
         const formatCategory = CATEGORY_MAP[category] || 'colors';
@@ -100,12 +101,12 @@ export class FormatPicker {
           case 'effects':
             // Show effect name with visual representation
             const effectName = format.name.toLowerCase();
-            if (effectName === 'rainbow') return ` {magenta-fg}{bold}${item.label}{/bold}{/}`;
-            if (effectName === 'pulse') return ` {cyan-fg}{bold}${item.label}{/bold}{/}`;
-            if (effectName === 'sparkle') return ` {yellow-fg}{bold}${item.label}{/bold}{/}`;
-            if (effectName === 'shake') return ` {red-fg}{bold}${item.label}{/bold}{/}`;
-            if (effectName === 'wave') return ` {blue-fg}{bold}${item.label}{/bold}{/}`;
-            if (effectName === 'gradient') return ` {cyan-fg}${item.label}{/}`;
+            if (effectName === 'rainbow') return ` {${T.accentAlt}-fg}{bold}${item.label}{/bold}{/}`;
+            if (effectName === 'pulse') return ` {${T.accent}-fg}{bold}${item.label}{/bold}{/}`;
+            if (effectName === 'sparkle') return ` {${T.accentAlt}-fg}{bold}${item.label}{/bold}{/}`;
+            if (effectName === 'shake') return ` {${T.alert}-fg}{bold}${item.label}{/bold}{/}`;
+            if (effectName === 'wave') return ` {${T.bar}-fg}{bold}${item.label}{/bold}{/}`;
+            if (effectName === 'gradient') return ` {${T.accent}-fg}${item.label}{/}`;
             return ` ${item.label}`;
 
           case 'markdown':
@@ -113,8 +114,8 @@ export class FormatPicker {
             if (format.name === 'Bold') return ` {bold}${item.label}{/bold}`;
             if (format.name === 'Italic') return ` {underline}${item.label}{/underline}`; // Italic not supported, use underline
             if (format.name === 'Underline') return ` {underline}${item.label}{/underline}`;
-            if (format.name === 'Strike') return ` {gray-fg}${item.label}{/}`;
-            if (format.name === 'Code') return ` {black-bg}{white-fg}${item.label}{/}{/}`;
+            if (format.name === 'Strike') return ` {${T.dim}-fg}${item.label}{/}`;
+            if (format.name === 'Code') return ` {black-bg}{${T.ink}-fg}${item.label}{/}{/}`;
             return ` ${item.label}`;
 
           default:

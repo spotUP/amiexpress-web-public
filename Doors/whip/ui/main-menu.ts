@@ -5,6 +5,7 @@ import type { UserStats } from '../types/user';
 import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
 import { getLevelStars, getLevelColor, formatPoints } from '../core/gamification';
+import { T } from '../door-theme';
 
 export async function showMainMenu(
   screen: Screen,
@@ -43,11 +44,11 @@ export async function showMainMenu(
       height: 3,
       border: { type: 'line' },
       style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        border: { fg: T.accent },
       },
-      content: `{center}{bold}{cyan-fg}W H I P   v 1 . 0{/cyan-fg}{/bold} - Demo Scene Project Management{/center}\n` +
+      content: `{center}{bold}{${T.accent}-fg}W H I P   v 1 . 0{/${T.accent}-fg}{/bold} - Demo Scene Project Management{/center}\n` +
                `{center}Handle: {bold}${user.handle}{/bold}  |  Level: {${levelColor}-fg}${user.level.toUpperCase()}{/${levelColor}-fg} (${levelStars})  |  Points: {bold}${formatPoints(user.points)}{/bold}  |  Rank: {bold}#${user.rank}{/bold}{/center}`,
       tags: true,
       focusable: false,
@@ -65,8 +66,8 @@ export async function showMainMenu(
       width: '100%',
       height: '100%-6',  // Leave room for header (3) and footer (3)
       style: {
-        fg: 'white',
-        bg: 'black',
+        fg: T.ink,
+        bg: T.ground,
       },
       focusable: false,
       mouse: false,
@@ -96,8 +97,8 @@ export async function showMainMenu(
       border: { type: 'line' },
       label: ' MAIN MENU ',
       style: {
-        border: { fg: 'cyan' },
-        bg: 'black'
+        border: { fg: T.accent },
+        bg: T.ground
       },
       focusable: false,
       mouse: false,
@@ -118,29 +119,29 @@ export async function showMainMenu(
       mouse: true,
       focusable: true,
       style: {
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white', bg: 'black' }
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground }
       },
       padding: { left: 1 },
     } as any);
 
     // Build stats content
     let statsContent = '';
-    statsContent += `{cyan-fg}Projects:{/cyan-fg}  {bold}${projects.length}{/bold}\n`;
-    statsContent += `{cyan-fg}Tasks:{/cyan-fg}     {bold}${tasks.length}{/bold}\n`;
+    statsContent += `{${T.accent}-fg}Projects:{/${T.accent}-fg}  {bold}${projects.length}{/bold}\n`;
+    statsContent += `{${T.accent}-fg}Tasks:{/${T.accent}-fg}     {bold}${tasks.length}{/bold}\n`;
 
     const completedTasks = tasks.filter(t => t.status === 'done').length;
     const activeTasks = tasks.filter(t => t.status !== 'done').length;
-    statsContent += `{cyan-fg}Active:{/cyan-fg}    {bold}${activeTasks}{/bold}\n`;
-    statsContent += `{cyan-fg}Completed:{/cyan-fg} {bold}${completedTasks}{/bold}\n`;
+    statsContent += `{${T.accent}-fg}Active:{/${T.accent}-fg}    {bold}${activeTasks}{/bold}\n`;
+    statsContent += `{${T.accent}-fg}Completed:{/${T.accent}-fg} {bold}${completedTasks}{/bold}\n`;
     statsContent += '\n';
 
     if (upcomingParty && daysUntilParty !== null) {
-      statsContent += `{yellow-fg}UPCOMING PARTY:{/yellow-fg}\n`;
+      statsContent += `{${T.accentAlt}-fg}UPCOMING PARTY:{/${T.accentAlt}-fg}\n`;
       statsContent += `{bold}${upcomingParty.name}{/bold}\n`;
       statsContent += `in {bold}${daysUntilParty}{/bold} days`;
     } else {
-      statsContent += `{gray-fg}No upcoming parties{/gray-fg}`;
+      statsContent += `{${T.dim}-fg}No upcoming parties{/${T.dim}-fg}`;
     }
 
     // Stats box on right side - same height as menu box (13)
@@ -154,8 +155,8 @@ export async function showMainMenu(
       label: ' STATS ',
       content: statsContent,
       style: {
-        border: { fg: 'yellow' },
-        bg: 'black'
+        border: { fg: T.accentAlt },
+        bg: T.ground
       },
       padding: { left: 1, top: 1 },
       focusable: false,
@@ -174,13 +175,13 @@ export async function showMainMenu(
         height: 5,
         border: { type: 'line' },
         label: ' Getting Started ',
-        content: `{center}{bold}{cyan-fg}Welcome to WHIP!{/cyan-fg}{/bold}{/center}\n` +
+        content: `{center}{bold}{${T.accent}-fg}Welcome to WHIP!{/${T.accent}-fg}{/bold}{/center}\n` +
                  `{center}Press {bold}[T]{/bold} to create your first quick task{/center}\n` +
                  `{center}Press {bold}[N]{/bold} to create a new project{/center}`,
         style: {
-          border: { fg: 'green' },
-          fg: 'white',
-          bg: 'black'
+          border: { fg: T.ok },
+          fg: T.ink,
+          bg: T.ground
         },
         tags: true,
         focusable: false,
@@ -200,12 +201,12 @@ export async function showMainMenu(
       height: 3,
       border: { type: 'line' },
       style: {
-        fg: 'gray',
-        bg: 'black',
-        border: { fg: 'gray' },
+        fg: T.dim,
+        bg: T.ground,
+        border: { fg: T.dim },
       },
-      content: ` {cyan-fg}[Enter]{/cyan-fg} Select   {cyan-fg}[Hotkey]{/cyan-fg} Quick Action   {red-fg}[Q]{/red-fg} Quit\n` +
-               ` {gray-fg}Arrow Keys to navigate | Mouse click supported{/gray-fg}`,
+      content: ` {${T.accent}-fg}[Enter]{/${T.accent}-fg} Select   {${T.accent}-fg}[Hotkey]{/${T.accent}-fg} Quick Action   {${T.alert}-fg}[Q]{/${T.alert}-fg} Quit\n` +
+               ` {${T.dim}-fg}Arrow Keys to navigate | Mouse click supported{/${T.dim}-fg}`,
       tags: true,
       focusable: false,
       mouse: false,

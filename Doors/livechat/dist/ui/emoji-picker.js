@@ -8,6 +8,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const theme_1 = require("./theme");
 const emojis_1 = require("../utils/emojis");
 const emoji_label_1 = require("../utils/emoji-label");
+const door_theme_1 = require("../door-theme");
 const CATEGORY_MAP = {
     'Emotions': 'emotions',
     'Actions': 'actions',
@@ -46,14 +47,14 @@ class EmojiPicker {
             borderColor: theme_1.PANEL_BORDER,
             zIndex: 9990,
             categoryStyle: {
-                fg: 'white',
-                bg: 'black',
-                selected: { fg: 'black', bg: 'green' },
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
+                selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.ok },
             },
             itemStyle: {
-                fg: 'white',
-                bg: 'black',
-                selected: { fg: 'black', bg: 'cyan' },
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
+                selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent },
             },
             getItems: (category) => {
                 const emojiCategory = CATEGORY_MAP[category] || 'emotions';

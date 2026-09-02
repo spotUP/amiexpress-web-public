@@ -1,4 +1,8 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.visibleWidth = visibleWidth;
+exports.clipToWidth = clipToWidth;
+exports.fitFrameToTile = fitFrameToTile;
 /**
  * Making somebody else's video frame fit YOUR tile.
  *
@@ -17,10 +21,6 @@
  * must not be counted when measuring - and a clipped row must not end in the
  * middle of one.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.visibleWidth = visibleWidth;
-exports.clipToWidth = clipToWidth;
-exports.fitFrameToTile = fitFrameToTile;
 /** Visible columns a line occupies, ignoring blessed colour tags. */
 function visibleWidth(line) {
     return line.replace(/\{[^}]*\}/g, '').length;
@@ -29,7 +29,7 @@ function visibleWidth(line) {
  * Cut a line to `width` visible columns, keeping its tags intact.
  *
  * Tags are copied through and cost nothing; the cut lands on a character
- * boundary, never inside `{cyan-fg}`. A trailing reset is appended when the
+ * boundary, never inside `{${T.accent}-fg}`. A trailing reset is appended when the
  * line carried any tags, so a clipped row cannot leak its colour into
  * whatever the terminal draws next.
  */

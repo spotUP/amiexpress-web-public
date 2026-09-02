@@ -6,6 +6,7 @@ import { Screen, textarea, Button } from '@amiexpress/bbs-door-sdk/engines/ui/bl
 import { createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { STATUS_HEIGHT } from './status-bar';
 import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
+import { T } from '../door-theme';
 
 export const INPUT_HEIGHT = 3;
 export const EMOJI_BUTTON_WIDTH = 6;  // Wide enough for :D with border and padding
@@ -25,15 +26,15 @@ export function createInputBox(screen: Screen) {
     label: ' Message ',
     border: {
       type: 'line',
-      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+      labelStyle: { fg: T.ink, bg: T.bar }  // Blue background for label
     },
     inputOnFocus: true,
     // tags: true is forced by factory function
     mouse: true,
     ch: ' ',  // CRITICAL: Fill background to prevent corruption from overlapping widgets
     style: {
-      fg: 'white',
-      bg: 'black',
+      fg: T.ink,
+      bg: T.ground,
       border: { fg: PANEL_BORDER },
       focus: { border: { fg: PANEL_BORDER_FOCUS } },
     },
@@ -56,22 +57,22 @@ export function createEmojiButton(screen: Screen): Button {
     left: screenWidth - EMOJI_BUTTON_WIDTH,  // Position at right edge
     width: EMOJI_BUTTON_WIDTH,
     height: INPUT_HEIGHT,
-    content: '{center}{yellow-fg}:D{/yellow-fg}{/center}',
+    content: `{center}{${T.accentAlt}-fg}:D{/${T.accentAlt}-fg}{/center}`,
     border: { type: 'line' },  // colour lives in style.border - see below
     tags: true,  // Enable tag parsing for content
     mouse: true,
     keys: true,
     clickable: true,
     style: {
-      fg: 'yellow',
-      bg: 'black',
+      fg: T.accentAlt,
+      bg: T.ground,
       focus: {
-        fg: 'black',
-        bg: 'yellow'
+        fg: T.ground,
+        bg: T.accentAlt
       },
       hover: {
-        fg: 'black',
-        bg: 'yellow'
+        fg: T.ground,
+        bg: T.accentAlt
       }
     },
   });

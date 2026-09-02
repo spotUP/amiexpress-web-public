@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.micCmd = void 0;
 exports.renderMicList = renderMicList;
 exports.resolveMicChoice = resolveMicChoice;
+const door_theme_1 = require("../door-theme");
 /**
  * Render the device list for the user, one per line, numbered from one.
  *
@@ -13,7 +14,7 @@ function renderMicList(devices, currentId) {
         return 'No microphones reported yet - turn voice on first.';
     }
     const lines = devices.map((device, index) => {
-        const current = currentId && device.deviceId === currentId ? ' {green-fg}(in use){/green-fg}' : '';
+        const current = currentId && device.deviceId === currentId ? ` {${door_theme_1.T.ok}-fg}(in use){/${door_theme_1.T.ok}-fg}` : '';
         return `  ${index + 1}. ${device.label}${current}`;
     });
     return ['Microphones:', ...lines, 'Choose one with /mic <number>'].join('\n');

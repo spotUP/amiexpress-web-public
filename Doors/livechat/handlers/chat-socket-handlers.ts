@@ -1,5 +1,6 @@
 import { hidesRoomMessages, hidesDirectMessages } from '../core/mute-list';
 import { formatDmLine } from './dm-render';
+import { T } from '../door-theme';
 
 export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean, id?: string) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
   // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
@@ -44,7 +45,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:reaction', (d: any) => {
-    acm(`{cyan-fg}[${d.username} reacted ${d.emoji}]{/cyan-fg}`, false);
+    acm(`{${T.accent}-fg}[${d.username} reacted ${d.emoji}]{/${T.accent}-fg}`, false);
     aa(`${d.username}: ${d.emoji}`);
     aud.onReaction();
   });
@@ -70,12 +71,12 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
 
   sock.on('room:motd', (d: any) => {
     st.currentRoomMotd = d?.motd ?? null;
-    if (d?.motd) asm(`{yellow-fg}[MOTD] ${d.motd}{/yellow-fg}`);
-    else asm('{yellow-fg}[MOTD] cleared{/yellow-fg}');
+    if (d?.motd) asm(`{${T.accentAlt}-fg}[MOTD] ${d.motd}{/${T.accentAlt}-fg}`);
+    else asm(`{${T.accentAlt}-fg}[MOTD] cleared{/${T.accentAlt}-fg}`);
   });
 
   sock.on('room:invite-received', (d: any) => {
-    asm(`{cyan-fg}[INVITE] ${d.from} invited you to ${d.roomName}. Use /join ${d.roomName}{/cyan-fg}`);
+    asm(`{${T.accent}-fg}[INVITE] ${d.from} invited you to ${d.roomName}. Use /join ${d.roomName}{/${T.accent}-fg}`);
   });
   sock.on('room:invited', (d: any) => {
     asm(`Invited ${d.username} to the room`);
@@ -86,7 +87,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
 
   sock.on('room:mode', (d: any) => {
     if (!d || !d.applied) return;
-    asm(`{yellow-fg}[${d.by || '?'}] set mode ${d.applied}{/yellow-fg}`);
+    asm(`{${T.accentAlt}-fg}[${d.by || '?'}] set mode ${d.applied}{/${T.accentAlt}-fg}`);
   });
 
   sock.on('chat:dm', (d: any) => {
@@ -105,7 +106,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     // Group DMs (isGroup=true) include a `participants` array.
     acm(formatDmLine(d), false);
     if (d.direction === 'received') {
-      aa(`{cyan-fg}${d.isGroup ? 'Group DM' : 'DM'} from ${d.from}{/cyan-fg}`);
+      aa(`{${T.accent}-fg}${d.isGroup ? 'Group DM' : 'DM'} from ${d.from}{/${T.accent}-fg}`);
       if (typeof aud?.onDM === 'function') aud.onDM();
     }
   });
@@ -135,7 +136,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     // message - see chat-row-map.
     acm(f, false, m.id);
     if (im) {
-      aa(`{yellow-fg}@${m.username} mentioned you{/yellow-fg}`);
+      aa(`{${T.accentAlt}-fg}@${m.username} mentioned you{/${T.accentAlt}-fg}`);
       aud.onMessage(true);
     } else {
       aud.onMessage(false);
@@ -146,7 +147,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   sock.on('chat:edited', (d: any) => {
     const t = ft(new Date(d.timestamp));
     const c = guc(d.username);
-    acm(`{gray-fg}[${t}]{/gray-fg} <{${c}-fg}${d.username}{/${c}-fg}> ${d.newText} {gray-fg}(edited){/gray-fg}`);
+    acm(`{${T.dim}-fg}[${t}]{/${T.dim}-fg} <{${c}-fg}${d.username}{/${c}-fg}> ${d.newText} {${T.dim}-fg}(edited){/${T.dim}-fg}`);
     s.render();
   });
 }

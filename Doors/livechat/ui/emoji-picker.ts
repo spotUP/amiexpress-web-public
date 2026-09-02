@@ -7,6 +7,7 @@ import { PANEL_BORDER } from './theme';
 import type { CategoryItem } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { getEmojisByCategory, Emoji } from '../utils/emojis';
 import { emojiLabel } from '../utils/emoji-label';
+import { T } from '../door-theme';
 
 export { Emoji };
 
@@ -56,14 +57,14 @@ export class EmojiPicker {
       borderColor: PANEL_BORDER,
       zIndex: 9990,
       categoryStyle: {
-        fg: 'white',
-        bg: 'black',
-        selected: { fg: 'black', bg: 'green' },
+        fg: T.ink,
+        bg: T.ground,
+        selected: { fg: T.ground, bg: T.ok },
       },
       itemStyle: {
-        fg: 'white',
-        bg: 'black',
-        selected: { fg: 'black', bg: 'cyan' },
+        fg: T.ink,
+        bg: T.ground,
+        selected: { fg: T.ground, bg: T.accent },
       },
       getItems: (category: string) => {
         const emojiCategory = CATEGORY_MAP[category] || 'emotions';

@@ -5,6 +5,7 @@
 
 import type { Socket } from 'socket.io-client';
 import type { BBSEventPayload } from '../types/bbs-events';
+import { T } from '../door-theme';
 
 export class BBSEventHandler {
   private socket: Socket;
@@ -61,27 +62,27 @@ export class BBSEventHandler {
 
     switch (event.type) {
       case 'user_login':
-        return `{cyan-fg}[${timestamp}]{/} {green-fg}* ${this.escapeBlessedTags(event.username)}{/} logged in from ${this.escapeBlessedTags(event.data?.location || 'Unknown')} (Node ${event.nodeId})`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${T.ok}-fg}* ${this.escapeBlessedTags(event.username)}{/} logged in from ${this.escapeBlessedTags(event.data?.location || 'Unknown')} (Node ${event.nodeId})`;
 
       case 'user_logout':
         const duration = event.data?.duration;
         const durationText = duration ? ` after ${Math.floor(duration / 60)}m ${duration % 60}s` : '';
-        return `{cyan-fg}[${timestamp}]{/} {yellow-fg}* ${this.escapeBlessedTags(event.username)}{/} logged out${durationText} (Node ${event.nodeId})`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${T.accentAlt}-fg}* ${this.escapeBlessedTags(event.username)}{/} logged out${durationText} (Node ${event.nodeId})`;
 
       case 'upload':
         const uploadSize = event.data?.fileSize ? ` (${(event.data.fileSize / 1024).toFixed(1)}KB)` : '';
         const uploadConf = event.data?.conferenceName ? ` to ${this.escapeBlessedTags(event.data.conferenceName)}` : '';
-        return `{cyan-fg}[${timestamp}]{/} {blue-fg}* ${this.escapeBlessedTags(event.username)}{/} uploaded {white-fg}${this.escapeBlessedTags(event.data?.fileName)}${uploadSize}{/}${uploadConf}`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${T.bar}-fg}* ${this.escapeBlessedTags(event.username)}{/} uploaded {${T.ink}-fg}${this.escapeBlessedTags(event.data?.fileName)}${uploadSize}{/}${uploadConf}`;
 
       case 'download':
         const downloadSize = event.data?.fileSize ? ` (${(event.data.fileSize / 1024).toFixed(1)}KB)` : '';
         const downloadConf = event.data?.conferenceName ? ` from ${this.escapeBlessedTags(event.data.conferenceName)}` : '';
-        return `{cyan-fg}[${timestamp}]{/} {magenta-fg}* ${this.escapeBlessedTags(event.username)}{/} downloaded {white-fg}${this.escapeBlessedTags(event.data?.fileName)}${downloadSize}{/}${downloadConf}`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${T.accentAlt}-fg}* ${this.escapeBlessedTags(event.username)}{/} downloaded {${T.ink}-fg}${this.escapeBlessedTags(event.data?.fileName)}${downloadSize}{/}${downloadConf}`;
 
       case 'door_activity':
         const action = event.data?.action === 'entered' ? 'entered' : 'exited';
         const actionColor = action === 'entered' ? 'green-fg' : 'yellow-fg';
-        return `{cyan-fg}[${timestamp}]{/} {${actionColor}}* ${this.escapeBlessedTags(event.username)}{/} ${action} door {white-fg}${this.escapeBlessedTags(event.data?.doorName)}{/}`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${actionColor}}* ${this.escapeBlessedTags(event.username)}{/} ${action} door {${T.ink}-fg}${this.escapeBlessedTags(event.data?.doorName)}{/}`;
 
       case 'custom_door_event':
         const doorName = this.escapeBlessedTags(event.data?.doorName || 'Unknown');
@@ -108,18 +109,18 @@ export class BBSEventHandler {
         // Score events get a special trophy prefix
         if (eventType === 'score' || eventType === 'score_submitted') {
           const pbTag = event.data?.isPersonalBest ? ' {lightgreen-fg}[NEW PB!]{/}' : '';
-          return `{cyan-fg}[${timestamp}]{/} {${eventColor}}[${doorName}]{/} {white-fg}${username}{/}: ${message}${pbTag}`;
+          return `{${T.accent}-fg}[${timestamp}]{/} {${eventColor}}[${doorName}]{/} {${T.ink}-fg}${username}{/}: ${message}${pbTag}`;
         }
 
         // Match result events (winner/loser)
         if (eventType === 'match_result') {
-          return `{cyan-fg}[${timestamp}]{/} {yellow-fg}[${doorName}]{/} {white-fg}${username}{/} ${message}`;
+          return `{${T.accent}-fg}[${timestamp}]{/} {${T.accentAlt}-fg}[${doorName}]{/} {${T.ink}-fg}${username}{/} ${message}`;
         }
 
-        return `{cyan-fg}[${timestamp}]{/} {${eventColor}}[${doorName}]{/} {white-fg}${username}{/}: ${message}`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${eventColor}}[${doorName}]{/} {${T.ink}-fg}${username}{/}: ${message}`;
 
       default:
-        return `{cyan-fg}[${timestamp}]{/} {gray-fg}* Unknown event: ${event.type}{/}`;
+        return `{${T.accent}-fg}[${timestamp}]{/} {${T.dim}-fg}* Unknown event: ${event.type}{/}`;
     }
   }
 }

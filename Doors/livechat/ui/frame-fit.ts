@@ -1,3 +1,4 @@
+import { T } from '../door-theme';
 /**
  * Making somebody else's video frame fit YOUR tile.
  *
@@ -26,7 +27,7 @@ export function visibleWidth(line: string): number {
  * Cut a line to `width` visible columns, keeping its tags intact.
  *
  * Tags are copied through and cost nothing; the cut lands on a character
- * boundary, never inside `{cyan-fg}`. A trailing reset is appended when the
+ * boundary, never inside `{${T.accent}-fg}`. A trailing reset is appended when the
  * line carried any tags, so a clipped row cannot leak its colour into
  * whatever the terminal draws next.
  */

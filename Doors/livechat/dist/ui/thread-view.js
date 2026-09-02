@@ -6,6 +6,7 @@ exports.createThreadView = createThreadView;
  */
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 function createThreadView(screen, threadData) {
     const overlay = (0, blessed_helpers_1.createBox)({
         parent: screen,
@@ -15,7 +16,7 @@ function createThreadView(screen, threadData) {
         height: '80%',
         border: {
             type: 'line',
-            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+            labelStyle: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar } // Blue background for label
         },
         style: { border: { fg: theme_1.PANEL_BORDER }, ...theme_1.PANEL_FOCUS_STYLE },
         label: ` Thread: ${threadData.parent.message.substring(0, 40)}... `,
@@ -31,21 +32,21 @@ function createThreadView(screen, threadData) {
         zIndex: 9990,
     });
     // Parent message
-    let content = `{bold}{cyan-fg}Original Message:{/cyan-fg}{/bold}\n`;
-    content += `{yellow-fg}${threadData.parent.sender_username}{/yellow-fg}: ${threadData.parent.message}\n`;
-    content += `{gray-fg}${new Date(threadData.parent.created_at * 1000).toLocaleString()}{/gray-fg}\n\n`;
+    let content = `{bold}{${door_theme_1.T.accent}-fg}Original Message:{/${door_theme_1.T.accent}-fg}{/bold}\n`;
+    content += `{${door_theme_1.T.accentAlt}-fg}${threadData.parent.sender_username}{/${door_theme_1.T.accentAlt}-fg}: ${threadData.parent.message}\n`;
+    content += `{${door_theme_1.T.dim}-fg}${new Date(threadData.parent.created_at * 1000).toLocaleString()}{/${door_theme_1.T.dim}-fg}\n\n`;
     // Replies
     if (threadData.replies && threadData.replies.length > 0) {
-        content += `{bold}{green-fg}Replies (${threadData.replies.length}):{/green-fg}{/bold}\n\n`;
+        content += `{bold}{${door_theme_1.T.ok}-fg}Replies (${threadData.replies.length}):{/${door_theme_1.T.ok}-fg}{/bold}\n\n`;
         threadData.replies.forEach((reply, idx) => {
-            content += `{cyan-fg}${idx + 1}.{/cyan-fg} {yellow-fg}${reply.sender_username}{/yellow-fg}: ${reply.message}\n`;
-            content += `   {gray-fg}${new Date(reply.created_at * 1000).toLocaleString()}{/gray-fg}\n\n`;
+            content += `{${door_theme_1.T.accent}-fg}${idx + 1}.{/${door_theme_1.T.accent}-fg} {${door_theme_1.T.accentAlt}-fg}${reply.sender_username}{/${door_theme_1.T.accentAlt}-fg}: ${reply.message}\n`;
+            content += `   {${door_theme_1.T.dim}-fg}${new Date(reply.created_at * 1000).toLocaleString()}{/${door_theme_1.T.dim}-fg}\n\n`;
         });
     }
     else {
-        content += `{gray-fg}No replies yet. Be the first to reply!{/gray-fg}\n`;
+        content += `{${door_theme_1.T.dim}-fg}No replies yet. Be the first to reply!{/${door_theme_1.T.dim}-fg}\n`;
     }
-    content += `\n{cyan-fg}Press ESC to close{/cyan-fg}`;
+    content += `\n{${door_theme_1.T.accent}-fg}Press ESC to close{/${door_theme_1.T.accent}-fg}`;
     overlay.setContent(content);
     overlay.key(['escape', 'q'], () => {
         overlay.hide();

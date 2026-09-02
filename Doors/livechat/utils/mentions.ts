@@ -1,3 +1,4 @@
+import { T } from '../door-theme';
 /** Mention types */
 export type MentionType = 'user' | 'everyone' | 'here';
 
@@ -50,12 +51,12 @@ export function highlightMentions(text: string, currentUser: string): string {
     const lower = name.toLowerCase();
     if (lower === currentUser.toLowerCase()) {
       // Use specific closing tags to avoid resetting ALL attributes
-      return `{yellow-bg}{black-fg}@${name}{/black-fg}{/yellow-bg}`;
+      return `{yellow-bg}{${T.ground}-fg}@${name}{/${T.ground}-fg}{/yellow-bg}`;
     }
     if (lower === 'everyone' || lower === 'here') {
-      return `{red-fg}@${name}{/red-fg}`;
+      return `{${T.alert}-fg}@${name}{/${T.alert}-fg}`;
     }
-    return `{cyan-fg}@${name}{/cyan-fg}`;
+    return `{${T.accent}-fg}@${name}{/${T.accent}-fg}`;
   });
 }
 

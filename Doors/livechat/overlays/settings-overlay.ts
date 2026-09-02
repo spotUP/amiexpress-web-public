@@ -6,6 +6,7 @@ import { createEventCheckboxes } from './settings-checkboxes-events';
 import { createPrefCheckboxes } from './settings-checkboxes-prefs';
 import { createStatusRadio } from './settings-status-radio';
 import { saveSettings } from './settings-save';
+import { T } from '../door-theme';
 
 export function createSettingsOverlay(
   s: Screen,
@@ -36,7 +37,7 @@ export function createSettingsOverlay(
     draggable: true,
     trapFocus: true,
     ch: ' ',
-    style: { fg: 'white', bg: 'black', border: { fg: PANEL_BORDER } },
+    style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } },
     zIndex: 9990,  // Modal overlays render above panels (1-10) but below dropdowns (9999)
   });
 
@@ -52,7 +53,7 @@ export function createSettingsOverlay(
     width: '100%-6',
     orientation: 'horizontal',
     type: 'line',
-    style: { fg: 'gray' },
+    style: { fg: T.dim },
   });
 
   blessed.box({
@@ -62,7 +63,7 @@ export function createSettingsOverlay(
     width: 20,
     height: 1,
     content: 'Status:',
-    style: { fg: 'cyan' },
+    style: { fg: T.accent },
   });
 
   createStatusRadio(o, l, pCb.nextRow + 3, Math.min(6, Math.max(4, h - pCb.nextRow - 7)), ps, se, uid, usb);
@@ -75,7 +76,7 @@ export function createSettingsOverlay(
     height: 1,
     content: 'Close',
     mouse: true,
-    style: { fg: 'white', bg: 'blue', focus: { bg: 'cyan' } },
+    style: { fg: T.ink, bg: T.bar, focus: { bg: T.accent } },
   });
 
   btn.on('press', () => {

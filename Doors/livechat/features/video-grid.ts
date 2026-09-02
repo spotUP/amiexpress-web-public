@@ -12,6 +12,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { VideoTile, VideoTileOptions, emptyChannelNotice } from '../ui/video-tile';
 import { layoutSignature, pickSpeaker, resolveBoxSize, autoViewMode, bestColumns } from './video-layout';
+import { T } from '../door-theme';
 
 export interface VideoParticipant {
   userId: number | string;
@@ -341,8 +342,8 @@ export class VideoGrid {
       width: '100%',
       height: 1,
       tags: true,
-      content: `{center}{gray-fg}${text}{/gray-fg}{/center}`,
-      style: { bg: 'black' },
+      content: `{center}{${T.dim}-fg}${text}{/${T.dim}-fg}{/center}`,
+      style: { bg: T.ground },
     });
   }
 

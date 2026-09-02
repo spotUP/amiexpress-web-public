@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupRoomHandlers = setupRoomHandlers;
 const settings_1 = require("../settings");
+const door_theme_1 = require("../door-theme");
 function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, aa, aud, hl, sc, setCrl, smd, ib, s) {
     sock.on('room:list', (d) => {
         const rs = Array.isArray(d?.rooms) ? d.rooms : [];
@@ -93,7 +94,7 @@ function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, a
         }
     });
     sock.on('room:kicked', (d) => {
-        smd(`{red-fg}You were kicked from ${d.roomName}{/red-fg}\n\nReason: ${d.reason || 'No reason given'}\nBy: ${d.kickedBy}`, () => { ib.focus(); });
+        smd(`{${door_theme_1.T.alert}-fg}You were kicked from ${d.roomName}{/${door_theme_1.T.alert}-fg}\n\nReason: ${d.reason || 'No reason given'}\nBy: ${d.kickedBy}`, () => { ib.focus(); });
         st.currentChannel = '';
         setCrl('');
         usb();
@@ -101,7 +102,7 @@ function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, a
     });
     sock.on('room:error', (d) => {
         const em = typeof d === 'string' ? d : (d.error || d.message || 'An error occurred');
-        smd(`{red-fg}Error{/red-fg}\n\n${em}`, () => { ib.focus(); s.render(); });
+        smd(`{${door_theme_1.T.alert}-fg}Error{/${door_theme_1.T.alert}-fg}\n\n${em}`, () => { ib.focus(); s.render(); });
         aud.onError();
     });
 }

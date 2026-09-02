@@ -6,6 +6,7 @@
 import type { SlashCommand } from './types';
 import { searchEmojis, getEmojisByCategory } from '../utils/emojis';
 import type { EmojiPicker } from '../ui/emoji-picker';
+import { T } from '../door-theme';
 
 /**
  * /emoji [search] - Open emoji picker or search emojis
@@ -29,7 +30,7 @@ export function createEmojiCommand(
         if (results.length === 0) {
           addSystemMessage(`No emojis found for "${searchQuery}"`);
         } else {
-          addSystemMessage(`{cyan-fg}Emojis matching "${searchQuery}":{/cyan-fg}`);
+          addSystemMessage(`{${T.accent}-fg}Emojis matching "${searchQuery}":{/${T.accent}-fg}`);
           results.slice(0, 10).forEach(e => {
             addSystemMessage(`  ${e.display}  ${e.code} (${e.keywords.join(', ')})`);
           });
@@ -74,7 +75,7 @@ export function createEmojiListCommand(addSystemMessage: (msg: string) => void):
 
       if (!categoryName) {
         // List all categories
-        addSystemMessage('{cyan-fg}Emoji Categories:{/cyan-fg}');
+        addSystemMessage(`{${T.accent}-fg}Emoji Categories:{/${T.accent}-fg}`);
         addSystemMessage('  emotions - Smileys and emotions');
         addSystemMessage('  actions - Kaomoji actions');
         addSystemMessage('  symbols - Common symbols');
@@ -99,7 +100,7 @@ export function createEmojiListCommand(addSystemMessage: (msg: string) => void):
           addSystemMessage(`Unknown category "${categoryName}". Use /emojis to see all categories.`);
         } else {
           const emojis = getEmojisByCategory(category);
-          addSystemMessage(`{cyan-fg}${category.charAt(0).toUpperCase() + category.slice(1)} Emojis:{/cyan-fg}`);
+          addSystemMessage(`{${T.accent}-fg}${category.charAt(0).toUpperCase() + category.slice(1)} Emojis:{/${T.accent}-fg}`);
           emojis.forEach(e => {
             addSystemMessage(`  ${e.display}  ${e.code} (${e.keywords.join(', ')})`);
           });

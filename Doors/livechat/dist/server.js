@@ -122,6 +122,7 @@ const animations_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed/utils/
 const events_1 = require("./commands/events");
 // Types
 const types_1 = require("./types");
+const door_theme_1 = require("./door-theme");
 // Helper to invalidate coordinate cache after direct position modification
 function invalidateCache(element) {
     if (!element)
@@ -151,6 +152,8 @@ async function createApp(session) {
     // ========== CREATE NEO-BLESSED SCREEN ==========
     // ui/screen.ts already builds this responsive; what was missing was
     // anyone ASKING the terminal to grow (see the switch below).
+    // The board's theme, before any widget reads a colour from it.
+    (0, door_theme_1.applyTheme)(bbs);
     const screen = (0, screen_1.createScreen)(bbs);
     // Note: Optimized rendering is now enabled by default in the SDK
     const ctx = (0, initialization_1.initializeLiveChat)(session, screen);
@@ -300,13 +303,13 @@ async function createApp(session) {
         keys: true,
         vi: true,
         style: {
-            fg: 'cyan',
-            bg: 'black',
+            fg: door_theme_1.T.accent,
+            bg: door_theme_1.T.ground,
             // Selected line: white text on cyan bg. The previous black-on-cyan
             // was unreadable on terminals that render dark fg on saturated bg
             // identically (or where the selection bar inherited the fg from
             // the base style and produced cyan-on-cyan).
-            selected: { fg: 'white', bg: 'cyan' },
+            selected: { fg: door_theme_1.T.ink, bg: door_theme_1.T.accent },
             border: { fg: theme_1.PANEL_BORDER },
         },
         scrollbar: {
@@ -328,8 +331,8 @@ async function createApp(session) {
         tags: true,
         content: '',
         style: {
-            fg: 'gray',
-            bg: 'black',
+            fg: door_theme_1.T.dim,
+            bg: door_theme_1.T.ground,
         },
         // @ts-ignore - zIndex exists but not in types
         zIndex: 6000, // Above input box (5000) but below command suggestions (10000)
@@ -376,14 +379,14 @@ async function createApp(session) {
             const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
             const usage = (cmd.usage || '').padEnd(usageWidth).slice(0, usageWidth);
             const desc = (cmd.description || '').slice(0, descWidth);
-            // Don't hardcode `{cyan-fg}` for the slash-name -- blessed's tag
+            // Don't hardcode `{${T.accent}-fg}` for the slash-name -- blessed's tag
             // parser respects the latest color tag, so an inline cyan-fg
-            // overrides the List's `selected: { fg: 'white' }` wrapper and
+            // overrides the List's `selected: { fg: T.ink }` wrapper and
             // keeps the name cyan-on-cyan (invisible) when the row is the
-            // current selection. Let the base style's `fg: 'cyan'` colour the
+            // current selection. Let the base style's `fg: T.accent` colour the
             // name on non-selected rows and the selected style's white-fg
             // take over when highlighted.
-            return `/${name} {gray-fg}${usage}{/gray-fg} ${desc}`;
+            return `/${name} {${door_theme_1.T.dim}-fg}${usage}{/${door_theme_1.T.dim}-fg} ${desc}`;
         });
         // Ensure list width is updated to match screen
         commandSuggestions.position.width = chatWidth;
@@ -434,7 +437,7 @@ async function createApp(session) {
                 ghostText.position.left = cursorOffset;
                 // Build content: typed portion in white, remaining in gray
                 // TEMPORARILY DISABLED: Ghost text causes blessed coordinate corruption
-                // ghostText.setContent(`{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`);
+                // ghostText.setContent(`{${T.ink}-fg}${typedPortion}{/${T.ink}-fg}{${T.dim}-fg}${remainingPortion}{/${T.dim}-fg}`);
                 // ghostText.show();
                 // ghostText.setFront();
             }
@@ -512,8 +515,8 @@ async function createApp(session) {
         border: { type: 'line' },
         fitContent: { width: true, height: false }, // Auto-expand width to fit content dynamically
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             // style.border.fg, NOT border.fg. Element reads the border colour from
             // style.border / border.style / style.fg and ignores a colour sitting
             // on the border object itself - so `border: { type: 'line', fg: blue }`
@@ -534,12 +537,12 @@ async function createApp(session) {
         label: ' [Ch] Us ', // Tabs: [active] inactive
         border: { type: 'none' },
         style: {
-            fg: 'white',
+            fg: door_theme_1.T.ink,
             // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
             // Use 'item.hover' and 'item.selected' for per-item styling
             item: {
-                hover: { fg: 'yellow', bg: 'blue' },
-                selected: { fg: 'white', bg: 'blue' },
+                hover: { fg: door_theme_1.T.accentAlt, bg: door_theme_1.T.bar },
+                selected: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar },
             },
         },
         tags: true, // CRITICAL: Enable tag parsing for colored channel names
@@ -708,7 +711,7 @@ async function createApp(session) {
             }
             catch { /* ignore */ }
             voiceChannel.hideGrid();
-            addSystemMessage(`{cyan-fg}--- DM with ${channel.name} ---{/cyan-fg}`);
+            addSystemMessage(`{${door_theme_1.T.accent}-fg}--- DM with ${channel.name} ---{/${door_theme_1.T.accent}-fg}`);
             socket.emit('chat:dm-history', { threadId: channel.id, limit: 50 });
             updateChannelList();
             updateStatusBar();
@@ -791,12 +794,12 @@ async function createApp(session) {
         tags: true,
         hidden: true, // Hidden by default, channels shown first
         style: {
-            fg: 'white',
+            fg: door_theme_1.T.ink,
             // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
             // Use 'item.hover' and 'item.selected' for per-item styling
             item: {
-                hover: { fg: 'yellow', bg: 'magenta' },
-                selected: { fg: 'black', bg: 'magenta' },
+                hover: { fg: door_theme_1.T.accentAlt, bg: door_theme_1.T.accentAlt },
+                selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accentAlt },
             },
         },
     });
@@ -861,8 +864,8 @@ async function createApp(session) {
         mouse: false,
         clickable: false,
         style: {
-            fg: 'cyan',
-            bg: 'black',
+            fg: door_theme_1.T.accent,
+            bg: door_theme_1.T.ground,
         },
         content: '',
         hidden: true, // Hide since typing previews are now in chat log
@@ -1039,8 +1042,8 @@ async function createApp(session) {
         swipeThreshold: 3, // Low threshold for easy swiping
         hidden: true, // Start hidden, only show on mobile breakpoint
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
         },
         onPageChange: (page, _panel) => {
             audio.playSound('click');
@@ -1220,8 +1223,8 @@ async function createApp(session) {
         hidden: true,
         ch: ' ',
         style: {
-            fg: 'white',
-            bg: 'black',
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ground,
             border: { fg: theme_1.PANEL_BORDER },
         },
         trapFocus: true,
@@ -1236,7 +1239,7 @@ async function createApp(session) {
         inputOnFocus: true,
         mouse: true,
         style: {
-            fg: 'white',
+            fg: door_theme_1.T.ink,
             border: { fg: theme_1.PANEL_BORDER },
         },
     });
@@ -1249,10 +1252,10 @@ async function createApp(session) {
         content: ' Join ',
         mouse: true,
         style: {
-            fg: 'white',
-            bg: 'green',
-            focus: { fg: 'white', bg: 'lightblue' },
-            hover: { fg: 'white', bg: 'lightblue' },
+            fg: door_theme_1.T.ink,
+            bg: door_theme_1.T.ok,
+            focus: { fg: door_theme_1.T.ink, bg: 'lightblue' },
+            hover: { fg: door_theme_1.T.ink, bg: 'lightblue' },
         },
     });
     let pendingPrivateRoom = '';
@@ -1290,8 +1293,8 @@ async function createApp(session) {
         ch: '\u2588', // Full block character
         pch: '\u2591', // Light shade character
         style: {
-            fg: 'green',
-            bg: 'black',
+            fg: door_theme_1.T.ok,
+            bg: door_theme_1.T.ground,
             border: { fg: theme_1.PANEL_BORDER },
         },
         hidden: true,
@@ -1327,7 +1330,7 @@ async function createApp(session) {
             if (vg.getViewMode() !== 'speaker')
                 vg.toggleViewMode();
             vg.setActiveSpeaker(uid);
-            addSystemMessage(`{cyan-fg}Focused stream: user ${uid}{/cyan-fg}`);
+            addSystemMessage(`{${door_theme_1.T.accent}-fg}Focused stream: user ${uid}{/${door_theme_1.T.accent}-fg}`);
         },
         onHideTile: (uid) => {
             hiddenTiles.add(uid);
@@ -1337,7 +1340,7 @@ async function createApp(session) {
         },
         onMuteRemote: (uid) => {
             socket.emit('voice:mute-remote', { userId: uid });
-            addSystemMessage(`{yellow-fg}Muted remote audio for user ${uid}{/yellow-fg}`);
+            addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Muted remote audio for user ${uid}{/${door_theme_1.T.accentAlt}-fg}`);
         },
         onToggleChannelExpand: (channelName) => {
             // Find the channel by name and flip its collapse state.
@@ -1386,7 +1389,7 @@ async function createApp(session) {
         },
         onRenderModeChange: (mode) => {
             currentRenderMode = mode;
-            addSystemMessage(`{magenta-fg}Video render mode: ${mode}{/magenta-fg}`);
+            addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Video render mode: ${mode}{/${door_theme_1.T.accentAlt}-fg}`);
             updateChatHeader();
         },
         onTileRightClick: (uid, x, y) => {
@@ -1421,7 +1424,7 @@ async function createApp(session) {
     socket.on('audio:device', (data) => {
         cmdCtx.micDeviceId = data?.settings?.deviceId;
         if (data?.label) {
-            addSystemMessage(`{gray-fg}Microphone: ${data.label} - change it with /mic{/gray-fg}`);
+            addSystemMessage(`{${door_theme_1.T.dim}-fg}Microphone: ${data.label} - change it with /mic{/${door_theme_1.T.dim}-fg}`);
         }
     });
     // Be ready to SHOW video from the start, without joining voice first.
@@ -1671,7 +1674,7 @@ async function createApp(session) {
         screen.render();
     }
     function addSystemMessage(msg) {
-        appendLineToLog(`{gray-fg}*** ${msg} ***{/gray-fg}`);
+        appendLineToLog(`{${door_theme_1.T.dim}-fg}*** ${msg} ***{/${door_theme_1.T.dim}-fg}`);
         screen.render();
     }
     function addMessageFromUser(from, content, timestamp) {
@@ -1679,7 +1682,7 @@ async function createApp(session) {
         const color = (0, formatter_1.getUserColor)(from);
         const parsed = (0, markdown_1.parseContent)(content);
         const highlighted = (0, mentions_1.highlightMentions)(parsed, username);
-        appendLineToLog(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
+        appendLineToLog(`{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
         screen.render();
     }
     // Track logical chat messages separately
@@ -1700,7 +1703,7 @@ async function createApp(session) {
             const time = (0, format_1.formatTime)(new Date());
             // Blinking cursor with user's chat color
             const cursor = cursorBlinkOn ? `{${color}-fg}{inverse} {/inverse}{/${color}-fg}` : ' ';
-            return `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}${cursor}`;
+            return `{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}${cursor}`;
         });
         // Start/stop cursor blink interval based on whether there are typing previews
         if (previewLines.length > 0) {
@@ -1814,11 +1817,11 @@ async function createApp(session) {
     }
     // Events and activity now go to chat log (use appendLineToLog for proper tracking)
     function updateEventsFeed(event) {
-        appendLineToLog(`{gray-fg}[EVENT] ${event}{/gray-fg}`);
+        appendLineToLog(`{${door_theme_1.T.dim}-fg}[EVENT] ${event}{/${door_theme_1.T.dim}-fg}`);
         screen.render();
     }
     function addActivity(activity) {
-        appendLineToLog(`{yellow-fg}[${(0, format_1.formatTime)(new Date())}] ${activity}{/yellow-fg}`);
+        appendLineToLog(`{${door_theme_1.T.accentAlt}-fg}[${(0, format_1.formatTime)(new Date())}] ${activity}{/${door_theme_1.T.accentAlt}-fg}`);
         screen.render();
     }
     // ========== REGISTER EMOJI COMMANDS ==========
@@ -1920,7 +1923,7 @@ async function createApp(session) {
         const history = Array.isArray(d?.history) ? d.history : [];
         if (history.length === 0)
             return;
-        addSystemMessage(`{gray-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/gray-fg}`);
+        addSystemMessage(`{${door_theme_1.T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${door_theme_1.T.dim}-fg}`);
         for (const m of history) {
             const when = m.createdAt ? new Date(m.createdAt) : undefined;
             addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when);
@@ -2000,17 +2003,17 @@ async function createApp(session) {
     });
     // ========== MODERATION EVENT LISTENERS ==========
     socket.on('chat:kicked', (data) => {
-        addSystemMessage(`{red-fg}You have been kicked${data.reason ? ': ' + data.reason : ''}{/red-fg}`);
-        addSystemMessage(`{yellow-fg}Disconnecting...{/yellow-fg}`);
+        addSystemMessage(`{${door_theme_1.T.alert}-fg}You have been kicked${data.reason ? ': ' + data.reason : ''}{/${door_theme_1.T.alert}-fg}`);
+        addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Disconnecting...{/${door_theme_1.T.accentAlt}-fg}`);
         setTimeout(() => cleanup(), 2000);
     });
     socket.on('chat:banned', (data) => {
-        addSystemMessage(`{red-fg}You have been banned${data.duration ? ' for ' + data.duration + 's' : ''}${data.reason ? ': ' + data.reason : ''}{/red-fg}`);
-        addSystemMessage(`{yellow-fg}Disconnecting...{/yellow-fg}`);
+        addSystemMessage(`{${door_theme_1.T.alert}-fg}You have been banned${data.duration ? ' for ' + data.duration + 's' : ''}${data.reason ? ': ' + data.reason : ''}{/${door_theme_1.T.alert}-fg}`);
+        addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Disconnecting...{/${door_theme_1.T.accentAlt}-fg}`);
         setTimeout(() => cleanup(), 2000);
     });
     socket.on('chat:muted', (data) => {
-        addSystemMessage(`{yellow-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/yellow-fg}`);
+        addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/${door_theme_1.T.accentAlt}-fg}`);
     });
     // ========== DM SIDEBAR / CONTEXT EVENT LISTENERS ==========
     (0, dm_sidebar_handlers_1.setupDmSidebarHandlers)({ socket, state, userId, screen, updateChannelList, addChatMessage });
@@ -2024,18 +2027,18 @@ async function createApp(session) {
         onRetry: () => {
             reconnectAttempts++;
             if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-                addSystemMessage('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
+                addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Attempting to reconnect...{/${door_theme_1.T.accentAlt}-fg}`);
                 // The socket will automatically try to reconnect via socket.io
                 setTimeout(() => {
                     if (!socket.connected) {
-                        disconnectionModal.showError(`{red-fg}Lost connection to server{/red-fg}\n\n` +
+                        disconnectionModal.showError(`{${door_theme_1.T.alert}-fg}Lost connection to server{/${door_theme_1.T.alert}-fg}\n\n` +
                             `Reconnection failed\n\n` +
                             `Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
                     }
                 }, 3000);
             }
             else {
-                addSystemMessage('{red-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/red-fg}');
+                addSystemMessage(`{${door_theme_1.T.alert}-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/${door_theme_1.T.alert}-fg}`);
                 disconnectionModal.hide();
                 setTimeout(() => cleanup(), 2000);
             }
@@ -2050,7 +2053,7 @@ async function createApp(session) {
         // Don't show multiple dialogs or if user already cancelled
         if (userCancelled)
             return;
-        disconnectionModal.showError(`{red-fg}Lost connection to server{/red-fg}\n\n` +
+        disconnectionModal.showError(`{${door_theme_1.T.alert}-fg}Lost connection to server{/${door_theme_1.T.alert}-fg}\n\n` +
             `${errorMessage}\n\n` +
             `Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
     }
@@ -2070,7 +2073,7 @@ async function createApp(session) {
     socket.on('connect', () => {
         reconnectAttempts = 0;
         disconnectionModal.hide();
-        addSystemMessage('{green-fg}Reconnected to server!{/green-fg}');
+        addSystemMessage(`{${door_theme_1.T.ok}-fg}Reconnected to server!{/${door_theme_1.T.ok}-fg}`);
     });
     // ========== INPUT HANDLING ==========
     // Wrapper for handleCommandActions to match submit handler signature
@@ -2310,19 +2313,19 @@ async function createApp(session) {
         onLeaveChannel: () => {
             const ch = state.currentChannel;
             if (!ch || ch === doorSettings.defaultChannel || ch === 'lobby') {
-                addSystemMessage('{yellow-fg}Cannot leave the default channel.{/yellow-fg}');
+                addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Cannot leave the default channel.{/${door_theme_1.T.accentAlt}-fg}`);
                 return;
             }
             socket.emit('room:leave', { roomId: ch });
-            addSystemMessage(`Leaving {cyan-fg}${ch}{/cyan-fg}...`);
+            addSystemMessage(`Leaving {${door_theme_1.T.accent}-fg}${ch}{/${door_theme_1.T.accent}-fg}...`);
         },
         onThreads: () => {
             // No dedicated overlay yet — surface what /threads does.
-            addSystemMessage('{yellow-fg}Threads: use /threads or reply on any message to open the thread view.{/yellow-fg}');
+            addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Threads: use /threads or reply on any message to open the thread view.{/${door_theme_1.T.accentAlt}-fg}`);
         },
         onRenderMode: () => {
             if (!voiceChannel.isInVoiceChannel()) {
-                addSystemMessage('{yellow-fg}Render mode applies to the webcam stream — join a voice channel first.{/yellow-fg}');
+                addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Render mode applies to the webcam stream — join a voice channel first.{/${door_theme_1.T.accentAlt}-fg}`);
                 return;
             }
             voiceChannel.cycleRenderMode().catch(() => { });
@@ -2331,7 +2334,7 @@ async function createApp(session) {
             // Fullscreen (speaker mode) <-> grid split-view
             const vg = voiceChannel.videoGrid;
             if (!vg) {
-                addSystemMessage('{yellow-fg}Video grid not active — join a voice channel and enable video.{/yellow-fg}');
+                addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Video grid not active — join a voice channel and enable video.{/${door_theme_1.T.accentAlt}-fg}`);
                 return;
             }
             vg.toggleViewMode();
@@ -2348,10 +2351,10 @@ async function createApp(session) {
         // repaint.
         onClearChat: clearChat,
         onAbout: () => {
-            addSystemMessage('{cyan-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/cyan-fg}');
+            addSystemMessage(`{${door_theme_1.T.accent}-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/${door_theme_1.T.accent}-fg}`);
         },
         onShortcuts: () => {
-            addSystemMessage('{cyan-fg}Shortcuts:{/cyan-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)');
+            addSystemMessage(`{${door_theme_1.T.accent}-fg}Shortcuts:{/${door_theme_1.T.accent}-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)`);
         },
         onQuit: () => {
             showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {
@@ -2488,12 +2491,12 @@ async function createApp(session) {
                 inputBox.readInput();
                 // Welcome messages
                 addSystemMessage('Welcome to LiveChat v3.2!');
-                addChatMessage('{cyan-fg}Hotkeys:{/cyan-fg}', false);
-                addChatMessage('  {white-fg}F1{/white-fg}=Help  {white-fg}F2{/white-fg}=Sidebar  {white-fg}F3{/white-fg}=Switch Tab  {white-fg}F4{/white-fg}=Emoji Picker', false);
-                addChatMessage('  {white-fg}F5{/white-fg}=Art Channel  {white-fg}F6{/white-fg}=Files  {white-fg}Tab{/white-fg}=Focus Cycle', false);
-                addChatMessage('  {white-fg}^S{/white-fg}=Settings  {white-fg}^E{/white-fg}=Emoji  {white-fg}^C/^Q{/white-fg}=Quit  {white-fg}Esc{/white-fg}=Close/Return', false);
-                addChatMessage('{yellow-fg}Commands:{/yellow-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events', false);
-                addChatMessage('{gray-fg}Type a message and press Enter to send{/gray-fg}', false);
+                addChatMessage(`{${door_theme_1.T.accent}-fg}Hotkeys:{/${door_theme_1.T.accent}-fg}`, false);
+                addChatMessage(`  {${door_theme_1.T.ink}-fg}F1{/${door_theme_1.T.ink}-fg}=Help  {${door_theme_1.T.ink}-fg}F2{/${door_theme_1.T.ink}-fg}=Sidebar  {${door_theme_1.T.ink}-fg}F3{/${door_theme_1.T.ink}-fg}=Switch Tab  {${door_theme_1.T.ink}-fg}F4{/${door_theme_1.T.ink}-fg}=Emoji Picker`, false);
+                addChatMessage(`  {${door_theme_1.T.ink}-fg}F5{/${door_theme_1.T.ink}-fg}=Art Channel  {${door_theme_1.T.ink}-fg}F6{/${door_theme_1.T.ink}-fg}=Files  {${door_theme_1.T.ink}-fg}Tab{/${door_theme_1.T.ink}-fg}=Focus Cycle`, false);
+                addChatMessage(`  {${door_theme_1.T.ink}-fg}^S{/${door_theme_1.T.ink}-fg}=Settings  {${door_theme_1.T.ink}-fg}^E{/${door_theme_1.T.ink}-fg}=Emoji  {${door_theme_1.T.ink}-fg}^C/^Q{/${door_theme_1.T.ink}-fg}=Quit  {${door_theme_1.T.ink}-fg}Esc{/${door_theme_1.T.ink}-fg}=Close/Return`, false);
+                addChatMessage(`{${door_theme_1.T.accentAlt}-fg}Commands:{/${door_theme_1.T.accentAlt}-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events`, false);
+                addChatMessage(`{${door_theme_1.T.dim}-fg}Type a message and press Enter to send{/${door_theme_1.T.dim}-fg}`, false);
                 // Request room list
                 addSystemMessage('Loading rooms...');
                 socket.emit('room:list', {});
