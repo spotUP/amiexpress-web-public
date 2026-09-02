@@ -47,7 +47,21 @@ describe('SDK classify.ts equals ascii-art.util.ts', () => {
   it('positionsCursorAbsolutely agrees on every line', () => {
     for (const l of lines) expect({ l, pos: sdk.positionsCursorAbsolutely(l) }).toEqual({ l, pos: backend.positionsCursorAbsolutely(l) });
   });
-  // Fixture corpus lands in Task 7 (sdk/tests/petscii/frame/fixtures/*.ans
-  // does not exist yet); un-todo this once it does.
-  it.todo('covers real door output once fixtures exist (Task 7)');
+  // The fixture corpus landed with Task 7. This case is the coverage pin: the
+  // two cases above silently degrade to the hand-written TABLE if the captures
+  // disappear, so assert the captures are there AND report parity per file, so
+  // a disagreement names the door it came from.
+  it('covers real door output: every captured fixture agrees line for line', () => {
+    const files = fs.existsSync(FIXTURES) ? fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.ans')) : [];
+    expect(files.length).toBeGreaterThanOrEqual(8);
+    expect(fixtureLines().filter((l) => l.trim().length > 0).length).toBeGreaterThan(100);
+    for (const f of files) {
+      const lines = fs.readFileSync(path.join(FIXTURES, f), 'utf8').replace(STRIP, '').split(/\r?\n|\r/);
+      expect({ f, nonBlank: lines.some((l) => l.trim().length > 0) }).toEqual({ f, nonBlank: true });
+      for (const l of lines) {
+        expect({ f, l, art: sdk.looksLikeAsciiArt(l) }).toEqual({ f, l, art: backend.looksLikeAsciiArt(l) });
+        expect({ f, l, pos: sdk.positionsCursorAbsolutely(l) }).toEqual({ f, l, pos: backend.positionsCursorAbsolutely(l) });
+      }
+    }
+  });
 });
