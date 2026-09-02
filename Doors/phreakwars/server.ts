@@ -22,7 +22,7 @@ export const metadata = {
 // Import game modules
 import { PhreakWarsGameState } from './lib/types';
 import { gameStates, createNewGameState, checkAndResetDailyLimits } from './lib/player';
-import { displayMainMenu } from './lib/ui';
+import { displayMainMenu, titleBox, stateWidth } from './lib/ui';
 import {
   handleMainMenu,
   handleCharacterCreation,
@@ -65,6 +65,12 @@ door.onStart(async (ctx: DoorContext) => {
   // Check and reset daily limits if needed
   checkAndResetDailyLimits(gameState);
 
+  // The caller's REAL width, recorded on the per-user state (gameStates is
+  // shared across nodes, so this cannot be a module-level value). Cast:
+  // the SDK's BBSApi interface does not declare getTerminalSize, though the
+  // backend's implementation has it (web/backend/src/doors/BBSApi.ts:216).
+  gameState.terminalWidth = (ctx as any).bbs?.getTerminalSize?.().width ?? 80;
+
   // Store game state in context for onInput handler
   (ctx as any).gameState = gameState;
 
@@ -72,10 +78,11 @@ door.onStart(async (ctx: DoorContext) => {
   if (gameState.player.handle === '') {
     // New player - show character creation
     socket.emit('ansi-output', '\x1b[2J\x1b[H');
-    socket.emit('ansi-output', '\x1b[36m+==============================================================+\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[36m|\\x1b[0m                    \x1b[32mPHREAK WARS\x1b[0m                              \x1b[36m|\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[36m|\\x1b[0m              \x1b[33mTHE UNDERGROUND BBS EMPIRE\x1b[0m                   \x1b[36m|\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[36m+==============================================================+\x1b[0m\r\n\r\n');
+    for (const row of titleBox([
+      { text: 'PHREAK WARS', colour: '\x1b[32m' },
+      { text: 'THE UNDERGROUND BBS EMPIRE', colour: '\x1b[33m' },
+    ], stateWidth(gameState))) socket.emit('ansi-output', row);
+    socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', '\x1b[36mWelcome to the underground world of 1980s phone phreaking!\x1b[0m\r\n\r\n');
     socket.emit('ansi-output', '\x1b[33mEnter your hacker handle:\x1b[0m ');
     gameState.currentMode = 'character_creation';

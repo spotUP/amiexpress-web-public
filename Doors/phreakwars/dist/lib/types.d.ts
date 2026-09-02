@@ -80,6 +80,13 @@ export interface PhreakWarsGameState {
         bbsHacks: number;
     };
     currentMode: string;
+    /**
+     * The caller's terminal width, set at door start from the real session
+     * (server.ts). Per-state and not module-level on purpose: `gameStates` is
+     * shared across every node, so a module-level width would give an
+     * 80-column caller the C64's banner whenever the two overlap.
+     */
+    terminalWidth?: number;
     previousMode: string;
     inputBuffer: string;
     postingSubject?: string;

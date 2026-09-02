@@ -5,3 +5,4 @@ DESCRIPTION=Phreak Wars: The Underground BBS Empire - 1980s phone phreaking adve
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Adventure
+MIN_COLUMNS=40

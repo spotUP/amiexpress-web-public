@@ -10,6 +10,21 @@ import { PhreakWarsGameState } from './types';
  */
 export declare function displayProgressBar(socket: Socket, progress: number): void;
 /**
+ * The title box, drawn to the width the caller actually has.
+ *
+ * It used to be a literal 64-character frame, which on a 40-column C64
+ * screen folded into a second row of `=` and a stray `|` mid-line. The
+ * frame, the centring and the rule all come from the width now.
+ */
+export declare function titleBox(lines: Array<{
+    text: string;
+    colour: string;
+}>, width: number): string[];
+/** The caller's width, or the board default when nothing recorded one. */
+export declare function stateWidth(gameState: {
+    terminalWidth?: number;
+}): number;
+/**
  * Display main menu
  */
 export declare function displayMainMenu(socket: Socket, gameState: PhreakWarsGameState): void;

@@ -26,14 +26,41 @@ export function displayProgressBar(socket: Socket, progress: number): void {
 }
 
 /**
+ * The title box, drawn to the width the caller actually has.
+ *
+ * It used to be a literal 64-character frame, which on a 40-column C64
+ * screen folded into a second row of `=` and a stray `|` mid-line. The
+ * frame, the centring and the rule all come from the width now.
+ */
+export function titleBox(lines: Array<{ text: string; colour: string }>, width: number): string[] {
+  const w = Math.max(12, Math.min(width, 64));
+  const rule = `\x1b[36m+${'='.repeat(w - 2)}+\x1b[0m\r\n`;
+  const out = [rule];
+  for (const line of lines) {
+    const text = line.text.substring(0, w - 4);
+    const room = w - 2 - text.length;
+    const left = Math.floor(room / 2);
+    out.push(`\x1b[36m|\x1b[0m${' '.repeat(left)}${line.colour}${text}\x1b[0m${' '.repeat(room - left)}\x1b[36m|\x1b[0m\r\n`);
+  }
+  out.push(rule);
+  return out;
+}
+
+/** The caller's width, or the board default when nothing recorded one. */
+export function stateWidth(gameState: { terminalWidth?: number }): number {
+  return gameState.terminalWidth ?? 80;
+}
+
+/**
  * Display main menu
  */
 export function displayMainMenu(socket: Socket, gameState: PhreakWarsGameState): void {
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
-  socket.emit('ansi-output', '\x1b[36m+==============================================================+\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[36m|\x1b[0m                    \x1b[32mPHREAK WARS\x1b[0m                              \x1b[36m|\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[36m|\x1b[0m              \x1b[33mTHE UNDERGROUND BBS EMPIRE\x1b[0m                   \x1b[36m|\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[36m+==============================================================+\x1b[0m\r\n\r\n');
+  for (const row of titleBox([
+    { text: 'PHREAK WARS', colour: '\x1b[32m' },
+    { text: 'THE UNDERGROUND BBS EMPIRE', colour: '\x1b[33m' },
+  ], stateWidth(gameState))) socket.emit('ansi-output', row);
+  socket.emit('ansi-output', '\r\n');
 
   socket.emit('ansi-output', `\x1b[32mHandle:\x1b[0m ${gameState.player.handle}\r\n`);
   socket.emit('ansi-output', `\x1b[32mSkill Level:\x1b[0m ${gameState.player.skillLevel.toFixed(1)}\r\n`);
