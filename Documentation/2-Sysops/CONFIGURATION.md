@@ -69,6 +69,64 @@ detection is by file extension only — any file uploaded to a file area named
 `*.seq` will be read as PETSCII content by this same check if a screen path
 ever loads it.
 
+**MCI codes inside a `.seq` — the first byte opts the file in.** A `.seq` is
+normally raw PETSCII art and is sent to the caller byte for byte. If its
+**first byte is `~`** (`0x7E`), the BBS treats the whole file as an MCI screen
+instead and substitutes codes exactly as it does in a `.TXT` — this is
+express.e's own gate (`express.e:6800-6806`), evaluated ONCE, on byte 0, per
+FILE. Nothing else opts a file in: a `~` on line 3 of an art file changes
+nothing, and no shipped art file is affected (every `BBSTITLE.SEQ` on this
+board starts `0x20` or `0x1F`). The only gated files shipped are the twelve
+`Conf*/Screens/Logoff.seq`.
+
+**Authoring rule.** Once a `.seq` opens with `~`, EVERY `0x7E` in that file is
+a token candidate — including ones you meant as art. Write `~~` for a literal
+`~`. If your screen needs `~` as a graphic character, do not gate the file.
+
+**Which codes work.** All of them. There is no reduced set for PETSCII: the
+same dispatch table and the same pre-pass stages serve `.TXT` and `.seq`, and
+a parity test fails the build if a code is ever added to one and not the other.
+That includes the structural ones — `~SS_`, `~SR_`, `~CC_`, `~f` and `~SP` run
+in document order, so art before an include is painted before it and art after
+it is painted after, in the charset bank and cursor position the include left
+behind.
+
+**What the codes do on a C64.** A C64 is not an ANSI terminal, and several
+codes mean something narrower there:
+
+| Code | On a C64 |
+|---|---|
+| `~WX` (wipes) | Never animates — screen effects are off for a PETSCII session. The directive is stripped and never printed. |
+| `~c0`..`~c7` | One VIC pen byte. Holds until art or another code changes it. |
+| `~b0`..`~b7`, `~z0`..`~z7` | CCGMS `$02 <colour>`: sets background **and border** together. They cannot be set independently on a C64. Inert on SyncTERM's C64 mode. |
+| `~f` | `$93` CLR — clears, homes the cursor, and repaints in the current pen. |
+| `~q` | Reverse off plus the default pen. There is no all-attributes reset on a C64. |
+| `~CR`, `~n*` | `$0D`, which on a C64 also cancels reverse. Real KERNAL behaviour. |
+| `~x`, `~y` | A relative cursor walk (`$11`/`$1D`) from wherever the cursor is; the C64 has no absolute cursor address. Clamped to 40x25. |
+| `~AK` | Thirteen plain rows, no colour — the ANSI frame has no C64 equivalent worth faking. |
+| `~SP` | Pauses and resumes on the same screen: bank, cursor, pen and reverse continue across the pause. |
+
+Substituted values inherit the pen and reverse state your art left set — they
+never emit a colour byte or a bank switch of their own — they fold to uppercase
+in the upper-case/graphics bank rather than flipping the bank, and they **clip
+at the end of their row**: a long value stops at the right edge instead of
+wrapping onto your next line or scrolling the screen.
+
+**Include lookup prefers `.seq`.** `~SS_NAME` and `~SR_NAME` resolve `.seq`
+before `.TXT` for a caller in PETSCII mode (an ANSI caller's order is
+unchanged). A name that already carries a known extension has it **swapped**,
+not appended: `~SR_.../logoff/logoff.seq` looks for `001.logoff.seq` and then
+`001.logoff.txt`, rather than for `001.logoff.seq.seq`. Includes nest at most
+eight deep; a screen that includes itself stops there instead of taking the
+session down.
+
+**Author 40-column art for PETSCII callers.** An include that resolves to
+80-column ANSI is not reflowed — the caller is shown
+`[80-COLUMN ANSI SCREEN - SKIPPED]`. If a screen matters on a C64, ship a
+40-column `.seq` beside the `.TXT`. This is the reason a C64 caller currently
+sees that token at logoff: `Screens/logoff/` holds only 80-column `.txt` art.
+
+
 **Which doors a C64 may enter — `MIN_COLUMNS` and `C64_ADAPT`.** Both are
 tooltypes in the door's `Commands/BBSCmd/<CMD>.info` (or its installed 68K
 record), and both are **default-closed**: a door that declares neither is
