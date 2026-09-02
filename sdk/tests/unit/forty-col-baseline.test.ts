@@ -1,0 +1,168 @@
+/**
+ * 40-column (XXS / C64-PETSCII) render baseline - C64/40-col plan, Task 3.
+ *
+ * The sibling oracle to `sdk/tests/unit/eighty-col-baseline.test.ts`: the same
+ * three widget compositions, painted on a 40x25 PETSCII-sized screen instead
+ * of an 80x24 one, snapshotted with the same `chr`/`att` row pairs so a glyph
+ * OR a colour regression at 40 columns breaks a test. Where the 80-column
+ * baseline exists to prove nothing changed, this one exists to pin what the
+ * XXS tier renders, so Task 6's per-door adaptation has something to regress
+ * against.
+ *
+ * Geometry note: a PETSCII door screen is 40x25, not 40x24. The C64 text
+ * screen is 25 rows, and every backend site that turns a session PETSCII sets
+ * `screenHeight = 25` (`handlers/command-handler/pre-login.ts:59,147`,
+ * `server/telnet-server.ts:743`), which reaches the SDK through
+ * `BBSApi.getTerminalSize()` (`web/backend/src/doors/BBSApi.ts:202`). The 24
+ * of the 80-column baseline is the classic xterm/ANSI default, unchanged.
+ *
+ * HOW THE GOLDENS WERE PRODUCED (regeneration recipe for a reviewer):
+ *   cd sdk
+ *   rm tests/unit/__snapshots__/forty-col-baseline.test.ts.snap
+ *   npx jest --testPathPattern=forty-col-baseline
+ * Nothing in the .snap is hand-typed; jest writes it from the real painted
+ * `screen.buffer`.
+ */
+import { Screen } from '../../engines/ui/blessed/core/screen';
+import { Box } from '../../engines/ui/blessed/widgets/box';
+import { List } from '../../engines/ui/blessed/widgets/list';
+import { Panel } from '../../engines/ui/blessed/widgets/panel';
+import { createScreen } from '../../utils/blessed-helpers';
+import { getBreakpointName, getCompactProfile } from '../../engines/ui/blessed/core/responsive-constants';
+
+/** Every painted row of the screen, as plain strings. */
+function rows(screen: any): string[] {
+  const out: string[] = [];
+  for (let y = 0; y < screen.height; y++) {
+    const row = screen.buffer[y];
+    out.push(row ? row.map((c: [number, string]) => c[1]).join('') : '');
+  }
+  return out;
+}
+
+/** The packed attributes of one row, run-length encoded as `<hex>*<count>`. */
+function attrRuns(row: [number, string][] | undefined): string {
+  if (!row) return '';
+  const runs: string[] = [];
+  let current = row[0]?.[0];
+  let count = 0;
+  for (const cell of row) {
+    if (cell[0] === current) {
+      count++;
+    } else {
+      runs.push(`${(current >>> 0).toString(16)}*${count}`);
+      current = cell[0];
+      count = 1;
+    }
+  }
+  if (count > 0) runs.push(`${(current >>> 0).toString(16)}*${count}`);
+  return runs.join(' ');
+}
+
+/** The full painted screen: for each row, its glyphs AND its attributes. */
+function paintedScreen(screen: any): string[] {
+  const out: string[] = [];
+  const chars = rows(screen);
+  for (let y = 0; y < chars.length; y++) {
+    const label = String(y).padStart(2, '0');
+    out.push(`${label} chr |${chars[y]}|`);
+    out.push(`${label} att ${attrRuns(screen.buffer[y])}`);
+  }
+  return out;
+}
+
+/** Every painted row is exactly 40 cells wide - the byte-level invariant. */
+function expectFortyWide(painted: string[]): void {
+  for (const row of painted) {
+    expect(row).toHaveLength(40);
+  }
+}
+
+/** A BBSApi-shaped door host at PETSCII geometry. */
+function petsciiBbs(): any {
+  const written: string[] = [];
+  return {
+    written,
+    write: (t: string) => written.push(t),
+    connectionType: 'web',
+    getTerminalSize: () => ({ width: 40, height: 25 }),
+  };
+}
+
+describe('40-column baseline: XXS geometry', () => {
+  let screen: any;
+  afterEach(() => screen?.destroy());
+
+  it('a responsive 40x25 Screen keeps both dimensions', () => {
+    screen = new Screen({ title: 'xxs', width: 40, height: 25, responsive: true } as any);
+    expect(screen.getDimensions()).toEqual({ width: 40, height: 25 });
+    expect(getBreakpointName(screen.width)).toBe('xxs');
+  });
+
+  it('createScreen against a PETSCII BBS yields a 40x25 xxs screen', () => {
+    screen = createScreen(petsciiBbs(), { title: 'xxs' });
+    expect(screen.getDimensions()).toEqual({ width: 40, height: 25 });
+    expect(getBreakpointName(screen.width)).toBe('xxs');
+    expect(getCompactProfile(screen.width).singleColumn).toBe(true);
+  });
+});
+
+describe('40-column baseline: painted buffers', () => {
+  let screen: any;
+  afterEach(() => screen?.destroy());
+
+  it('masthead + footer + list/detail panel layout (doorman-shaped, via createScreen)', () => {
+    // Deliberately through createScreen: this is the exact call every blessed
+    // door makes, so the snapshot is of the screen a PETSCII caller gets.
+    //
+    // READ THE SNAPSHOT AS A SYMPTOM, NOT AS A TARGET. This composition is
+    // the UNADAPTED 80-column doorman layout - two bordered panels side by
+    // side - forced onto 40 columns, and the golden records it folding
+    // ("Alpha D" / "oor" on two rows), which is precisely the sysop's
+    // 2026-09-02 DOORMAN report. Task 3 only makes the screen honestly 40
+    // wide; Task 6 rebuilds this door's layout against getCompactProfile()
+    // (single column, no borders), and updating this snapshot is the
+    // expected, intended outcome of that task.
+    screen = createScreen(petsciiBbs(), { title: 'xxs' });
+    new Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3, tags: true, focusable: false } as any);
+    new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3, tags: true, focusable: false } as any);
+    const listPanel = new Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6', focusable: false } as any);
+    new List({
+      parent: listPanel, top: 1, left: 1, width: '100%-2', height: '100%-2',
+      keys: true, mouse: false, scrollable: true, tags: true,
+      items: ['Alpha Door', 'Beta Door', 'Gamma Door', 'Delta Door'],
+    } as any);
+    new Box({
+      parent: screen, top: 3, left: '35%', width: '65%', height: '100%-6',
+      border: { type: 'line' }, tags: true, content: 'Detail panel, forty columns wide.',
+    } as any);
+    screen.render();
+    expectFortyWide(rows(screen));
+    expect(paintedScreen(screen)).toMatchSnapshot();
+  });
+
+  it('centered bordered modal at the XXS dialog width', () => {
+    screen = new Screen({ title: 'xxs', width: 40, height: 25, responsive: true } as any);
+    new Box({
+      parent: screen, top: 'center', left: 'center', width: 38, height: 10,
+      border: { type: 'line' }, align: 'center', valign: 'middle', tags: true,
+      content: 'Are you sure you want to continue?',
+    } as any);
+    screen.render();
+    expectFortyWide(rows(screen));
+    expect(paintedScreen(screen)).toMatchSnapshot();
+  });
+
+  it('full-width list with selection', () => {
+    screen = new Screen({ title: 'xxs', width: 40, height: 25, responsive: true } as any);
+    const list = new List({
+      parent: screen, top: 0, left: 0, width: '100%', height: '100%',
+      keys: true, mouse: false, tags: true,
+      items: Array.from({ length: 10 }, (_, i) => `Item number ${i + 1} with some descriptive text`),
+    } as any);
+    (list as any).select(3);
+    screen.render();
+    expectFortyWide(rows(screen));
+    expect(paintedScreen(screen)).toMatchSnapshot();
+  });
+});

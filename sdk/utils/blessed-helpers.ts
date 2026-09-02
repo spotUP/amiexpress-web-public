@@ -922,8 +922,12 @@ export function createScreen(
   // Get initial terminal size from BBS if available
   const termSize = bbs?.getTerminalSize?.() || { width: 80, height: 25 };
 
-  // Enable responsive mode if terminal is wider than 80 or options.responsive is true
-  const responsive = options?.responsive || termSize.width > 80;
+  // Responsive whenever the session terminal is NOT the classic 80 wide:
+  // wider (fullscreen browser) OR narrower (40-col C64/PETSCII, XXS tier).
+  // At exactly 80 the legacy fixed pipeline is untouched byte-for-byte -
+  // proven by sdk/tests/unit/eighty-col-baseline.test.ts (Task 2).
+  // Callers can still force either way; `...options` spreads last.
+  const responsive = options?.responsive ?? (termSize.width !== 80 || undefined);
 
   // Check Unicode capability - use Amiga conversion only for non-Unicode terminals
   // Web terminals always support Unicode (xterm.js)
