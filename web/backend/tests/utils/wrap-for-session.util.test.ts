@@ -53,4 +53,15 @@ describe('wrapForSession', () => {
     const text = 'z'.repeat(70);
     expect(wrapForSession(text, { ...c64, doorInputHandler: () => {} } as any)).toBe(text);
   });
+  it('is identity for a non-PETSCII session even at a narrow width (mobile/resized xterm never pays for C64 support)', () => {
+    const text = 'word '.repeat(20).trim();
+    expect(wrapForSession(text, { screenWidth: 40, petsciiMode: false })).toBe(text);
+    expect(wrapForSession(text, { screenWidth: 40 })).toBe(text);
+  });
+  it('passes column/line positioning (ESC[nG, ESC[E) through untouched, matching positionsCursorAbsolutely', () => {
+    const columnPositioned = '\x1b[5G' + 'x'.repeat(70);
+    const nextLine = '\x1b[E' + 'y'.repeat(70);
+    expect(wrapForSession(columnPositioned, c64)).toBe(columnPositioned);
+    expect(wrapForSession(nextLine, c64)).toBe(nextLine);
+  });
 });

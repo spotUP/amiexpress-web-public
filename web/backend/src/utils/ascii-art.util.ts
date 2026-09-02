@@ -23,12 +23,20 @@
  *
  * Deliberately NOT matched: SGR (colour). Colour moves nothing, so a
  * coloured line is still a line and still needs wrapping.
+ *
+ * J/K (erase display/line) and s/u (save/restore cursor) joined the set for
+ * the petscii-full-canvas plan's Task 10 word-wrap choke: a door that
+ * clears or saves/restores cursor position is composing a screen the same
+ * way a door that moves the cursor is, and reflowing text around either one
+ * squeezes art the same way. This is also the single detector for that
+ * question now - web/backend/src/utils/wrap-for-session.util.ts imports it
+ * rather than keeping its own cursor-control regex.
  */
 export function positionsCursorAbsolutely(line: string): boolean {
   // CUP/HVP (ESC[row;colH, ESC[row;colf), cursor up/down/forward/back
-  // (ABCD), column and line positioning (GdE F), and the parameterless
-  // home (ESC[H).
-  return /\x1b\[[0-9;]*[HfABCDGdEF]/.test(line);
+  // (ABCD), column and line positioning (GdE F), erase display/line (JK),
+  // save/restore cursor (su), and the parameterless home (ESC[H).
+  return /\x1b\[[0-9;]*[HfABCDGdEFJKsu]/.test(line);
 }
 
 export function looksLikeAsciiArt(line: string): boolean {

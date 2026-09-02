@@ -13,9 +13,15 @@ import { Cell, isBlank } from './types';
 
 export type RowClass = 'blank' | 'art' | 'table' | 'prose';
 
-/** CUP/HVP, cursor up/down/forward/back, column and line positioning, bare home. SGR deliberately not matched. */
+/**
+ * CUP/HVP, cursor up/down/forward/back, column and line positioning, erase
+ * display/line, save/restore cursor, bare home. SGR deliberately not
+ * matched. Kept in lockstep with web/backend/src/utils/ascii-art.util.ts
+ * (see classify-parity.test.ts) - J/K/s/u added for Task 10 of the
+ * petscii-full-canvas plan.
+ */
 export function positionsCursorAbsolutely(line: string): boolean {
-  return /\x1b\[[0-9;]*[HfABCDGdEF]/.test(line);
+  return /\x1b\[[0-9;]*[HfABCDGdEFJKsu]/.test(line);
 }
 
 export function looksLikeAsciiArt(line: string): boolean {

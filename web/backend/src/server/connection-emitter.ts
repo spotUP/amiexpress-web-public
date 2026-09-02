@@ -61,6 +61,11 @@ function petsciiTransducerFor(session: any): AnsiToPetsciiTransducer {
 export function flushPendingPetscii(connection: { session?: { petsciiTransducer?: AnsiToPetsciiTransducer } | null; write: (b: Buffer) => void }): void {
   const transducer = connection.session?.petsciiTransducer;
   if (!transducer) return;
+  // transducer.flush() (sdk/petscii/ansi-to-petscii.ts) only resolves a
+  // held bare CR into its $9D-per-column walk; a held PARTIAL ESCAPE
+  // SEQUENCE is silently dropped instead (pre-existing transducer
+  // contract, not something this call site changes) - an output chunk
+  // that ends mid-escape right at the input boundary loses those bytes.
   const bytes = transducer.flush();
   if (bytes.length > 0) connection.write(Buffer.from(bytes));
 }
