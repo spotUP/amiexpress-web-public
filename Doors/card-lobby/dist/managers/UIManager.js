@@ -158,22 +158,28 @@ class UIManager {
             left += menu.label.length + 3;
         });
     }
+    /**
+     * The footer: who you are, what you have, where you are, and the last
+     * thing that happened.
+     *
+     * The SDK's StatusBar, not a Box the door writes a joined string into. It
+     * owns the sections and the separator, so a caller sets the part that
+     * changed instead of rebuilding the line - and it is the widget every
+     * other door's footer already is.
+     */
     buildStatusBar() {
-        this.statusBar = (0, blessed_helpers_1.createBox)({
-            // Panel adds a line border unless the key is present; these are
-            // bars and content areas, and the window around them carries the frame.
-            border: undefined,
+        this.statusBar = new blessed_1.StatusBar({
             parent: this.desktop,
-            bottom: 0,
-            left: 0,
-            width: '100%',
-            height: 1,
-            tags: true,
-            focusable: false,
-            mouse: false,
-            clickable: false,
-            style: constants_1.UI_THEME.statusBar,
-            content: ' Loading Card Lobby... ',
+            position: 'bottom',
+            separator: ' | ',
+            fg: constants_1.UI_THEME.statusBar.fg,
+            bg: constants_1.UI_THEME.statusBar.bg,
+            sections: [
+                { id: 'user', content: 'Loading Card Lobby...' },
+                { id: 'chips', content: '' },
+                { id: 'where', content: '' },
+                { id: 'notice', content: '' },
+            ],
         });
     }
     buildWindows(callbacks) {

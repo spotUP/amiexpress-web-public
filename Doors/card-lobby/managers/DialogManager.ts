@@ -3,7 +3,7 @@
  * Handles all modal dialogs, windows, and prompts
  */
 
-import blessed, { Screen, Box, Button, List, ScrollableBox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Box, Button, List, ScrollableBox, DocModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createTextbox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { UnoColor, HouseRule } from '../lib/uno-engine';
 import {
@@ -160,76 +160,44 @@ export class DialogManager {
     }
   }
 
+  /**
+   * A scrollable window of text: profiles, achievements, the leaderboard, a
+   * bulletin.
+   *
+   * This used to be a Box, a ScrollableBox and a footer Box assembled here,
+   * with its own escape handling - and the escape handling did not work,
+   * because focus never reached the widget the keys were bound to
+   * ("i can't exit them", 2026-09-02). DocModal is the SDK's answer to the
+   * same problem: it traps focus, closes on ESC/Q/F1, restores the focus it
+   * took, and lays itself out for a small screen.
+   */
   showTextWindow(title: string, content: string, opts?: { footer?: string; onKey?: (key: string) => string | void }): void {
     if (this.modalActive) return;
     this.modalActive = true;
 
-    this.overlayShade.show();
-    
-    const container = new Box({
-      parent: this.overlayShade,
-      top: 'center',
-      left: 'center',
-      width: 70,
-      height: 18,
-      border: { type: 'ascii' },
-      label: ` ${title} `,
-      style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
-    });
-
-    const textBottom = opts?.footer ? 2 : 1;
-    const text = new ScrollableBox({
-      parent: container,
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: textBottom,
-      tags: true,
-      scrollable: true,
-      alwaysScroll: true,
-      keys: true,
-      mouse: true,
+    const modal = new DocModal({
+      parent: this.screen as any,
+      title,
       content,
-      style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
-      scrollbar: {
-        ch: ' ',
-        style: { bg: UI_THEME.topBar.bg }
-      }
-    });
+      footerText: opts?.footer ?? '[ESC/Q] Close   [Up/Down/PgUp/PgDn] Scroll',
+      contentStyle: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
+      footerStyle: { fg: UI_THEME.accent, bg: UI_THEME.windowBg },
+      onClose: () => {
+        this.modalActive = false;
+        this.screen.render();
+      },
+    } as any);
 
-    if (opts?.footer) {
-      new Box({
-        parent: container,
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 1,
-        content: opts.footer,
-        style: { fg: UI_THEME.accent },
-        tags: true
+    // The leaderboard switches between daily, weekly and all-time in place.
+    if (opts?.onKey) {
+      (modal as any).key(['1', '2', '3'], (ch: string) => {
+        const next = opts.onKey?.(ch);
+        if (typeof next === 'string') modal.setContent(next);
+        this.screen.render();
       });
     }
 
-    const cleanup = (): void => {
-      container.destroy();
-      this.overlayShade.hide();
-      this.modalActive = false;
-      this.screen.render();
-    };
-
-    container.key(['escape', 'q'], cleanup);
-    text.key(['escape', 'q'], cleanup); // Ensure text widget also handles it
-    
-    container.key(['1', '2', '3'], (ch: string) => {
-      if (!opts?.onKey) return;
-      const next = opts.onKey(ch);
-      if (typeof next === 'string') {
-        text.setContent(next);
-        this.screen.render();
-      }
-    });
-
-    text.focus();
+    modal.display();
     this.screen.render();
   }
 

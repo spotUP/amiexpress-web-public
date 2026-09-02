@@ -699,10 +699,19 @@ class CardLobbyApp {
         const statusLabel = this.currentProfile.currentTableId
             ? `Table #${this.currentProfile.currentTableId}`
             : this.currentProfile.status;
-        const noticeText = this.notices.join(' | ');
-        const label = ` ${this.currentProfile.username} | Chips: ${this.currentProfile.wallet.chips} | ${statusLabel} `;
-        const padded = noticeText ? `${label} - ${noticeText}` : label;
-        this.statusBar.setContent(padded.slice(0, 80));
+        // Each part is its own section: the bar owns the separator and the
+        // widths, so a notice arriving does not rebuild the whole line.
+        const bar = this.statusBar;
+        if (bar.setSection) {
+            bar.setSection('user', this.currentProfile.username);
+            bar.setSection('chips', `Chips: ${this.currentProfile.wallet.chips}`);
+            bar.setSection('where', statusLabel);
+            bar.setSection('notice', this.notices.join(' '));
+        }
+        else {
+            const label = ` ${this.currentProfile.username} | Chips: ${this.currentProfile.wallet.chips} | ${statusLabel} `;
+            bar.setContent(label.slice(0, 80));
+        }
         this.screen.render();
     }
     updateTopInfoBar() {

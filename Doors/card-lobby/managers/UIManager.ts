@@ -3,7 +3,7 @@
  * Handles all UI building, layout, and rendering operations
  */
 
-import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu, ListTable, Overlay } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu, ListTable, Overlay, StatusBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
@@ -29,7 +29,7 @@ export class UIManager {
   private desktop: Box;
   public topBar!: Box;
   public topInfoBar!: Box;
-  public statusBar!: Box;
+  public statusBar!: StatusBar;
   public lobbyWindow!: Box;
   public tableWindow!: Box;
   public lobbyList!: ListTable;
@@ -183,23 +183,29 @@ export class UIManager {
     });
   }
 
+  /**
+   * The footer: who you are, what you have, where you are, and the last
+   * thing that happened.
+   *
+   * The SDK's StatusBar, not a Box the door writes a joined string into. It
+   * owns the sections and the separator, so a caller sets the part that
+   * changed instead of rebuilding the line - and it is the widget every
+   * other door's footer already is.
+   */
   buildStatusBar(): void {
-    this.statusBar = createBox({
-      // Panel adds a line border unless the key is present; these are
-      // bars and content areas, and the window around them carries the frame.
-      border: undefined,
+    this.statusBar = new StatusBar({
       parent: this.desktop,
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      tags: true,
-      focusable: false,
-      mouse: false,
-      clickable: false,
-      style: UI_THEME.statusBar,
-      content: ' Loading Card Lobby... ',
-    });
+      position: 'bottom',
+      separator: ' | ',
+      fg: UI_THEME.statusBar.fg,
+      bg: UI_THEME.statusBar.bg,
+      sections: [
+        { id: 'user', content: 'Loading Card Lobby...' },
+        { id: 'chips', content: '' },
+        { id: 'where', content: '' },
+        { id: 'notice', content: '' },
+      ],
+    }) as any;
   }
 
   buildWindows(callbacks: {

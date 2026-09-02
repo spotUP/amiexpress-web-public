@@ -93,9 +93,12 @@ export async function aTextWindowTakesTheFocusItBindsKeysOn(): Promise<void> {
   dm.showTextWindow('Probe', 'body');
   await h.settle();
 
+  // What matters is that focus MOVED into the window's scrollable area -
+  // not which class the SDK builds it from. DocModal uses ScrollableText;
+  // the hand-rolled version used ScrollableBox and focused nothing at all.
   const focused: any = h.app.screen.getFocused();
-  assert.strictEqual(focused?.constructor?.name, 'ScrollableBox',
-    'the text window holds the focus, or Escape reaches nothing');
+  assert.ok(/Scrollable/.test(String(focused?.constructor?.name)),
+    `the text window holds the focus, or Escape reaches nothing (focus was ${focused?.constructor?.name})`);
 
   h.escape();
   await h.settle();
@@ -113,6 +116,36 @@ export async function theDialogShadeDoesNotPaintTheBoardBlack(): Promise<void> {
     'the shade is the SDK Overlay, not a black box of the door\'s own');
   assert.notStrictEqual(shade.style?.bg, 'black',
     'a modal must not wipe out the board behind it');
+
+  await h.app.shutdown();
+  await h.finished;
+}
+
+export async function theDoorUsesTheSdkWidgetsRatherThanItsOwn(): Promise<void> {
+  // The through line of every defect reported on 2026-09-02: the door built
+  // its own version of something the SDK already ships, and the hand-rolled
+  // copy was the broken one. These are the pieces that were converted.
+  const h = await openDoor();
+  const ui = h.app.uiManager;
+
+  const built = (widget: unknown): string => String((widget as any)?.constructor?.name);
+
+  assert.strictEqual(built(ui.overlayShade), 'Overlay',
+    'the dialog shade is the SDK Overlay, not a black Box');
+  assert.strictEqual(built(ui.statusBar), 'StatusBar',
+    'the footer is the SDK StatusBar, not a Box the door writes a joined string into');
+  assert.strictEqual(built(ui.lobbyList), 'ListTable',
+    'the lobby is the SDK ListTable');
+
+  // And the text window is the SDK's document modal, which is why Escape
+  // closes it.
+  h.app.dialogManager.setModalActive(false);
+  h.app.dialogManager.showTextWindow('Probe', 'body');
+  await h.settle();
+  const focused: any = h.app.screen.getFocused();
+  assert.ok(/Scrollable/.test(String(focused?.constructor?.name)));
+  h.escape();
+  await h.settle();
 
   await h.app.shutdown();
   await h.finished;
