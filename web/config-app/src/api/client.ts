@@ -1,5 +1,7 @@
 import type { ApiResponse, User } from '../types';
-import { readAdminToken, writeAdminToken } from './auth-token';
+import {
+  readAdminToken, writeAdminToken, readAdminRefreshToken, writeAdminRefreshToken,
+} from './auth-token';
 
 const API_BASE = '/api';
 const AUTH_BASE = '/auth';
@@ -22,6 +24,14 @@ export class ApiError extends Error {
 class ApiClient {
   private token: string | null = null;
   private unauthorizedHandler: (() => void) | null = null;
+  /**
+   * The refresh in flight, if any.
+   *
+   * A page load fires a dozen requests at once, and an expired token fails all
+   * of them. One refresh, awaited by all of them - otherwise the first answer
+   * back invalidates the token the others are still refreshing with.
+   */
+  private refreshInFlight: Promise<boolean> | null = null;
 
   /**
    * Called when any request comes back 401.
@@ -38,7 +48,9 @@ class ApiClient {
 
   private failed(status: number, body: { error?: string; message?: string }, fallback: string): ApiError {
     if (status === 401) {
+      // Reached only after refreshAccessToken() has been tried and refused.
       this.setToken(null);
+      writeAdminRefreshToken(null);
       this.unauthorizedHandler?.();
     }
     return new ApiError(body.error || body.message || fallback, status);
@@ -55,6 +67,50 @@ class ApiClient {
     } else {
       writeAdminToken(null);
     }
+  }
+
+  /**
+   * Spend the refresh token for a new access token.
+   *
+   * The access token lasts eight hours and the refresh token seven days, and
+   * until now nothing ever called `/auth/refresh` - the first 401 ended the
+   * session, which is what the sysop met as "Token invalid, logging out" after
+   * a working day. Returns false when there is nothing to spend or the board
+   * refuses it, and clears both tokens in that case: the session really is
+   * over then.
+   */
+  private async refreshAccessToken(): Promise<boolean> {
+    if (this.refreshInFlight) return this.refreshInFlight;
+
+    const refreshToken = readAdminRefreshToken();
+    if (!refreshToken) return false;
+
+    this.refreshInFlight = (async () => {
+      try {
+        const response = await fetch(`${AUTH_BASE}/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!response.ok) return false;
+
+        const body = await response.json().catch(() => ({}));
+        if (!body?.accessToken) return false;
+
+        this.setToken(body.accessToken);
+        return true;
+      } catch {
+        // A network failure is not an expired session - the caller's own retry
+        // handles it, and the tokens stay put.
+        return false;
+      } finally {
+        this.refreshInFlight = null;
+      }
+    })();
+
+    const refreshed = await this.refreshInFlight;
+    if (!refreshed) writeAdminRefreshToken(null);
+    return refreshed;
   }
 
   getToken(): string | null {
@@ -133,6 +189,23 @@ class ApiClient {
           const error = await response.json().catch(() => ({
             error: response.statusText,
           }));
+
+          // An expired access token is not the end of the session: spend the
+          // refresh token once and repeat the request with the new one. Only
+          // if THAT fails is the sysop logged out.
+          if (response.status === 401 && !url.startsWith(`${AUTH_BASE}/refresh`)) {
+            if (await this.refreshAccessToken()) {
+              const retry = await fetch(url, {
+                ...options,
+                headers: { ...headers, Authorization: `Bearer ${this.token}` },
+              });
+              if (retry.ok) return await retry.json();
+
+              const retryError = await retry.json().catch(() => ({ error: retry.statusText }));
+              throw this.failed(retry.status, retryError, retry.statusText);
+            }
+          }
+
           throw this.failed(response.status, error, response.statusText);
         }
 
@@ -191,6 +264,9 @@ class ApiClient {
     if (response.accessToken) {
       this.setToken(response.accessToken);
     }
+    // Kept, not discarded: it is what stops an eight-hour access token from
+    // ending a seven-day session.
+    writeAdminRefreshToken(response.refreshToken ?? null);
     return { token: response.accessToken, user: response.user };
   }
 
@@ -200,6 +276,7 @@ class ApiClient {
 
   async logout() {
     this.setToken(null);
+    writeAdminRefreshToken(null);
   }
 
   // Generic HTTP methods for custom endpoints

@@ -267,7 +267,9 @@ console.error('Registration error:', error);
       res.json({ accessToken });
     } catch (error) {
 console.error('Token refresh error:', error);
-      res.status(403).json({ error: 'Invalid refresh token' });
+      // Same distinction as authenticateToken: a refresh token that will not
+      // verify means log in again, not "forbidden".
+      res.status(401).json({ error: 'Invalid refresh token' });
     }
   }
 }

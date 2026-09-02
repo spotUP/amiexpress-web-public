@@ -44,3 +44,32 @@ export function writeAdminToken(token: string | null): void {
     // this tab's lifetime.
   }
 }
+
+/**
+ * The refresh token, under the admin's own key for the same reason.
+ *
+ * Login is handed one good for seven days while the access token lasts eight
+ * hours. Storing it is what lets a session outlive the access token instead of
+ * ending at the first 401.
+ */
+export const ADMIN_REFRESH_TOKEN_KEY = 'adminRefreshToken';
+
+export function readAdminRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(ADMIN_REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeAdminRefreshToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(ADMIN_REFRESH_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(ADMIN_REFRESH_TOKEN_KEY);
+    }
+  } catch {
+    // Same as the access token: storage is a convenience, not a requirement.
+  }
+}

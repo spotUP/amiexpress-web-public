@@ -31,7 +31,13 @@ export const authenticateToken = (db: Database) => {
       req.user = decoded;
       next();
     } catch (error) {
-      return res.status(403).json({ error: 'Invalid or expired access token' });
+      // 401, not 403: the token is absent, malformed or past its eight hours,
+      // and the answer is "authenticate again" - which a client can act on by
+      // spending its refresh token. 403 is requireSysop's answer, for a caller
+      // who IS authenticated and still may not. The two were the same code, so
+      // the admin logged the sysop out on every expiry and threw away a
+      // refresh token good for seven days (reported live, 2026-09-02).
+      return res.status(401).json({ error: 'Invalid or expired access token' });
     }
   };
 };
