@@ -386,6 +386,10 @@ async function displayIncludedScreen(
     return false;
   }
   holder.screenIncludeDepth = depth + 1;
+  // An include that resolves to a `.TXT` draws in ANSI (`displayScreen`'s
+  // text arm) while the host screen is PETSCII. The oracle has to watch it:
+  // the chunks after the include are encoded against the cursor it leaves.
+  const uninstallTap = installPetsciiOracleTap(socket, session);
   try {
     return await displayScreen(socket, session, target, false);
   } finally {
@@ -395,6 +399,7 @@ async function displayIncludedScreen(
     // and the oracle's view of where the include left the cursor - the
     // chunks after this point are encoded against it.
     flushOutput(socket);
+    uninstallTap();
     holder.screenIncludeDepth = depth;
   }
 }
@@ -1416,7 +1421,7 @@ function sessionWantsRawPetscii(session: BBSSession): boolean {
   return !!session.petsciiMode || session.terminalType === 'c64';
 }
 
-/** Marks the socket's `emit` as already tapped (see `tapPetsciiOracle`). */
+/** Marks the `emit` an oracle tap installed (see `installPetsciiOracleTap`). */
 const PETSCII_ORACLE_TAP = Symbol('petsciiOracleTap');
 
 /**
@@ -1438,34 +1443,67 @@ const PETSCII_ORACLE_TAP = Symbol('petsciiOracleTap');
  * the tap runs the SAME conversion through the session's transducer, whose
  * machine IS the oracle. The wire is untouched: this only feeds the model.
  *
- * Wrapping `socket.emit` is this codebase's established interception point
- * (`socket-handlers.ts:176`, `modem-emulator.util.ts:276`,
- * `door.handler.ts:146`). The guard is on the FUNCTION, not the socket, so a
- * wrapper that saves and restores an earlier `emit` (BBSApi, the door
- * adapter) cannot leave us believing a dropped tap is still installed.
+ * The tap is SCOPED, never left on the socket. Wrapping `socket.emit` is
+ * this codebase's interception point (`socket-handlers.ts:176`,
+ * `modem-emulator.util.ts:276`, `door.handler.ts:146`), and the C64 door
+ * adapter tears its own wrapper off again on the way out
+ * (`c64-door-adapter.ts:339`) - a permanent tap underneath it would be
+ * restored in its place and outlive the door, which
+ * `tests/doors/door-min-columns-gate.test.ts` rightly refuses. So each
+ * caller installs the tap around the emits it is responsible for and takes
+ * it back off, leaving `emit` exactly as it found it.
+ *
+ * @returns the uninstaller; a no-op when an OUTER scope already owns the tap
+ * (nested includes) or the session is not a raw-PETSCII one.
  */
-function tapPetsciiOracle(socket: any, session: BBSSession): void {
-  if (!socket || typeof socket.emit !== 'function') return;
-  if (!sessionWantsRawPetscii(session)) return;
-  if ((socket.emit as any)[PETSCII_ORACLE_TAP]) return;
+function installPetsciiOracleTap(socket: any, session: BBSSession): () => void {
+  const noop = () => {};
+  if (!socket || typeof socket.emit !== 'function') return noop;
+  if (!sessionWantsRawPetscii(session)) return noop;
+  if ((socket.emit as any)[PETSCII_ORACLE_TAP]) return noop;
 
-  const inner = socket.emit.bind(socket);
+  const transducer = petsciiTransducerFor(session);
+  // Raw PETSCII has reached the terminal since this transducer last
+  // converted anything (`renderChunkBytes` feeds the oracle as it encodes,
+  // straight past here), so its ANSI deferred-wrap latch no longer describes
+  // the cursor. Observing nothing clears exactly that and touches no cell.
+  transducer.observe([]);
+
+  const hadOwnEmit = Object.prototype.hasOwnProperty.call(socket, 'emit');
+  const original = socket.emit;
   const tapped = (event: string, ...args: any[]): any => {
     if (event === 'ansi-output' && typeof args[0] === 'string') {
       // transduce() feeds its own machine as it converts - that machine is
-      // the oracle, so this call IS the feed.
-      petsciiTransducerFor(session).transduce(args[0]);
+      // the oracle, so this call IS the feed. It sees the bytes as they
+      // actually go out, `wrapForSession` folding included.
+      transducer.transduce(args[0]);
     } else if (event === 'petscii-bytes') {
-      // Already fed: `renderChunkBytes` feeds the oracle as it encodes.
-      // Only the transducer's ANSI deferred-wrap latch has to be told that
-      // raw PETSCII has since moved the cursor - observing nothing clears
-      // exactly that and touches no cell.
-      petsciiTransducerFor(session).observe([]);
+      // Already fed by `renderChunkBytes`; only the wrap latch is stale.
+      transducer.observe([]);
     }
-    return inner(event, ...args);
+    return original.call(socket, event, ...args);
   };
   (tapped as any)[PETSCII_ORACLE_TAP] = true;
   socket.emit = tapped;
+
+  return () => {
+    // Someone wrapped us in the meantime (a door adapter, the modem
+    // emulator): removing ours now would uninstall theirs. Leave it - it is
+    // still feeding the right oracle.
+    if (socket.emit !== tapped) return;
+    if (hadOwnEmit) socket.emit = original;
+    else delete socket.emit;
+  };
+}
+
+/** `installPetsciiOracleTap` around one synchronous burst of emits. */
+function withPetsciiOracleTap<T>(socket: any, session: BBSSession, emit: () => T): T {
+  const uninstall = installPetsciiOracleTap(socket, session);
+  try {
+    return emit();
+  } finally {
+    uninstall();
+  }
 }
 
 /**
@@ -1773,11 +1811,6 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   // CRITICAL: Flush any buffered output before displaying screen (express.e behavior)
   // This ensures prompts/content from previous operations are visible before screen transition
   flushOutput(socket);
-
-  // From here on every byte this socket carries is also fed to the render
-  // oracle - including the ANSI a PETSCII session legitimately receives (an
-  // `~SS_` include that resolved to a `.TXT`, a pause prompt).
-  tapPetsciiOracle(socket, session);
 
   screenFlowLog(screenName, `Display request for ${screenName} (runCommands=${runCommands}) state=${session.subState} node=${session.nodeId || 0}`);
   const upperName = screenName.toUpperCase();
@@ -2719,9 +2752,6 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
 console.log(`[handlePaginatedScreenInput] No paginatedScreen set, returning false`);
     return false;
   }
-  // The page break and the erase-line this function emits are ANSI; a
-  // PETSCII caller's oracle has to see them too.
-  tapPetsciiOracle(socket, session);
 
 console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.lines.length} nextIndex=${paged.nextIndex} pageSize=${paged.pageSize}`);
   const key = (data || '').trim().toUpperCase();
@@ -2733,7 +2763,9 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   // express.e:5149 doPause(): aePuts('\b\n') — just newline, no cursor-up erase
   if (paged.kind !== 'doPause') {
     // More prompt (checkForPause): cursor up + erase to clear the '(Pause)...More(y/n/ns)?' line
-    socket.emit(paged.eventName, '\x1b[1A\x1b[K');
+    withPetsciiOracleTap(socket, session, () =>
+      socket.emit(paged.eventName, '\x1b[1A\x1b[K'),
+    );
   }
   // doPause: the lines[0] = '\r\n' will be emitted by emitPage below, matching express.e:5149
 
@@ -2741,7 +2773,11 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
     const chunk = lines.slice(startIdx, endIdx).join('\r\n');
     const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)? ' : '';
-    socket.emit(paged.eventName, chunk + promptLine);
+    // The page break and the `More` prompt move a PETSCII terminal's cursor
+    // like any other text; the oracle sees them through the tap.
+    withPetsciiOracleTap(socket, session, () =>
+      socket.emit(paged.eventName, chunk + promptLine),
+    );
   };
 
   // NS: dump the rest without further prompts
@@ -2846,9 +2882,6 @@ export async function processNextScreenSegment(socket: any, session: BBSSession)
   if (!segState || segState.segments.length === 0) {
     return false;
   }
-  // Same reason as `doPause`: the `(Pause)` prompt this function prints
-  // between segments moves the real cursor, so the oracle must see it.
-  tapPetsciiOracle(socket, session);
 
   const segment = segState.segments.shift()!;  // Get and remove first segment
   const segmentSpans = segState.petsciiSpans?.shift();
@@ -2921,7 +2954,11 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
       kind: 'doPause',
     };
     session.lastScreenHadPause = true;
-    emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+    // Same reason as `doPause`: this prompt lands between two chunks of the
+    // SAME `.seq`, so the oracle must see the rows it moves through.
+    withPetsciiOracleTap(socket, session, () =>
+      emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m'),
+    );
     return true;
   }
 
@@ -3013,10 +3050,6 @@ export function hasKeysFileForResolvedPath(resolvedPath: string): boolean {
  * @param session - Current BBS session (for future enhancements)
  */
 export function doPause(socket: any, session: BBSSession, onComplete?: () => void): void {
-  // The prompt below is ANSI, and a PETSCII terminal turns it into cursor
-  // moves and colour bytes: the oracle has to see it or the next `.seq`
-  // chunk is encoded against a cursor two rows above the real one.
-  tapPetsciiOracle(socket, session);
 console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.subState})`);
   fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] doPause: CALLED, subState=${session.subState}\n`);
   // Express.e:5143-5144 - "\b\n(Pause)...Space To Resume:"
@@ -3024,7 +3057,13 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
   // NOTE: Use \r\n for web terminal (xterm.js) compatibility.
   // express.e uses \b\n but on xterm.js \n alone doesn't return to column 0.
   // After ANSI art that positions cursor anywhere, \r ensures we start at column 0.
-  emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  // The prompt is ANSI, and a PETSCII terminal turns it into cursor moves
+  // and colour bytes: the oracle has to see it, or the next `.seq` chunk is
+  // encoded against a cursor two rows above the real one. `emitPrompt`
+  // flushes immediately, so the bytes go out inside this scope.
+  withPetsciiOracleTap(socket, session, () =>
+    emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m'),
+  );
 
   // Install a minimal pagination gate so the next keypress is required.
   // express.e:5149 doPause() response: lineCount:=0; aePuts('\b\n') — just a newline.
