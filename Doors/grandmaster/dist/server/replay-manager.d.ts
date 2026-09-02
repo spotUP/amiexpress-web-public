@@ -13,7 +13,7 @@ import type { ReplayData } from './game-validator';
 /**
  * Input action types
  */
-export type InputAction = 'move_left' | 'move_right' | 'rotate_cw' | 'rotate_ccw' | 'soft_drop' | 'hard_drop' | 'hold' | 'irs_cw' | 'irs_ccw' | 'ihs';
+export type InputAction = 'move_left' | 'move_right' | 'rotate_cw' | 'rotate_ccw' | 'soft_drop' | 'hard_drop' | 'sonic_drop' | 'hold' | 'irs_cw' | 'irs_ccw' | 'ihs';
 /**
  * Recorded input with timestamp
  */

@@ -34,9 +34,11 @@
  *      - SRS-X (rots==7) locks instantly on down input once grounded,
  *        instead of just resetting the lock-delay timer (world.c:440).
  *
- * Not implemented, and said here rather than guessed: ACE-ARS's up-key
- * instant lock (ars.c:331,361,389, ACE-ARS only, not TI-ARS) has no
- * equivalent input in this door's control scheme; ACE-SRS/DS-WORLD's
+ *      - ACE-ARS (rots==4) turns the up key into a drop that LOCKS, and
+ *        locks a piece that is already grounded on the spot (ars.c:331,
+ *        361,389). Every other system's up key is a plain sonic drop.
+ *
+ * Not implemented, and said here rather than guessed: ACE-SRS/DS-WORLD's
  * distinct soft-drop gravity constant (world.c:405,452) would collide with
  * the player-configurable PlayerSettings.softDropSpeed multiplier this door
  * already has; ACE-ARS2's down-key instant lock (ars.c:320) and D.R.S are
@@ -371,4 +373,121 @@ export async function newSystemsAreSelectableInTheSettingsCycle(): Promise<void>
       `settings-screen's rotation system cycle must include ${system}`
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// ACE-ARS: the up key drops AND locks (ars.c:331, 361-389, rots==4 only).
+//
+// HeborisCE's up key is one key with two branches. Airborne (the T.L.S.
+// branch, ars.c:361-389) ACE-ARS drops the piece to the floor and locks it in
+// the same frame - `by[player] = bottom - 1`, then the lock block. Grounded
+// (ars.c:331) the same key adds a full lock delay to bk[player], which the
+// `bk > lockT` test on the next line turns into an immediate lock. Every
+// other rots takes the else branches, where the up key is a sonic drop that
+// leaves the piece live on the floor.
+//
+// This door models that key as the sonic_drop action (declared since the
+// input config was written, wired to nothing until now).
+// ---------------------------------------------------------------------------
+
+/** Cells the board is holding, i.e. cells belonging to locked pieces. */
+function filledCells(engine: any): number {
+  return engine.getState().board.grid
+    .reduce((n: number, row: any[]) => n + row.filter(c => c.filled).length, 0);
+}
+
+export async function aceArsUpKeyDropsToTheFloorAndLocks(): Promise<void> {
+  const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: 'ACE-ARS' }, sounds);
+  engine.start();
+  const state = engine.getState();
+  const startY = state.currentPiece.y;
+
+  const result = engine.sonicDrop();
+
+  assert.strictEqual(result, true, 'ACE-ARS sonic drop must report that it did something');
+  assert.strictEqual(filledCells(engine), 4, 'the piece must be locked into the board (ars.c:361-389)');
+  assert.strictEqual(
+    state.currentPiece, null,
+    'the piece is off the field - locked, with the next one waiting out ARE'
+  );
+  assert.ok(
+    state.board.grid[state.board.height - 1].some((c: any) => c.filled),
+    `the piece landed on the floor, not where it started (row ${startY})`
+  );
+}
+
+export async function aceArsUpKeyLocksAPieceThatIsAlreadyGrounded(): Promise<void> {
+  // ars.c:331 - the grounded branch. Walk the piece down with soft drops
+  // first (shape-agnostic: it stops when the floor is reached), then press up.
+  const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: 'ACE-ARS' }, sounds);
+  engine.start();
+  while (engine.softDrop()) { /* fall to the floor */ }
+  assert.strictEqual(filledCells(engine), 0, 'soft drop must not have locked it - that is SRS-X only');
+
+  const result = engine.sonicDrop();
+
+  assert.strictEqual(result, true, 'the grounded up key must report the lock');
+  assert.strictEqual(filledCells(engine), 4, 'a grounded ACE-ARS piece locks on the up key');
+}
+
+export async function everyOtherSystemSonicDropsWithoutLocking(): Promise<void> {
+  for (const system of ['ARS', 'TI-ARS', 'SRS', 'TI-WORLD', 'ACE-SRS', 'DS-WORLD', 'SRS-X'] as const) {
+    const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: system }, sounds);
+    engine.start();
+    const state = engine.getState();
+    const type = state.currentPiece.type;
+    const startY = state.currentPiece.y;
+
+    const result = engine.sonicDrop();
+
+    assert.strictEqual(result, true, `${system}: a sonic drop from the spawn row moves the piece`);
+    assert.strictEqual(filledCells(engine), 0, `${system} must NOT lock on a sonic drop`);
+    assert.ok(state.currentPiece.y > startY, `${system}: the piece must have fallen`);
+    assert.strictEqual(state.currentPiece.type, type, `${system}: still the same live piece`);
+
+    // Grounded now: a second press has nothing to do and must not lock either.
+    assert.strictEqual(engine.sonicDrop(), false, `${system}: a grounded sonic drop is a no-op`);
+    assert.strictEqual(filledCells(engine), 0, `${system} must still not have locked`);
+  }
+}
+
+export async function sonicDropIsBoundAndReachesTheEngine(): Promise<void> {
+  // End to end through the real dispatch: a key the player can actually
+  // press -> keyToAction -> InputHandler.triggerAction -> GameScreen's
+  // handler -> GameEngine. A binding nothing listens to is what this
+  // action was before (declared in KeyConfig, handled nowhere).
+  const { Screen } = await import('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+  const { InputHandler } = await import('../input/handler');
+  const { GameScreen } = await import('../ui/game-screen');
+  const { DEFAULT_KEYS, keyToAction } = await import('../input/config');
+
+  assert.strictEqual(
+    keyToAction('w', DEFAULT_KEYS), 'sonic_drop',
+    'the default layout must bind sonic drop to a key'
+  );
+
+  let down: ((key: string) => void) | null = null;
+  const session: any = {
+    bbs: {
+      onKeyDown: (cb: (key: string) => void) => { down = cb; },
+      onKeyUp: () => {},
+    },
+  };
+  const screen: any = new Screen({ title: 'sonic', width: 80, height: 30 });
+  const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: 'ACE-ARS' }, sounds);
+  engine.start();
+  const input: any = new InputHandler(screen, session);
+  const appState: any = { currentMode: 'marathon', playerName: 'sysop', settings: { ...baseSettings, rotationSystem: 'ACE-ARS' } };
+  const gameScreen: any = new GameScreen(screen, engine, input, sounds, appState, null);
+  gameScreen.setupUI();
+  gameScreen.setupInput();
+
+  assert.ok(down, 'the input handler must have registered a key-down listener');
+  down!('w');
+
+  assert.strictEqual(filledCells(engine), 4, 'pressing the sonic-drop key must reach the engine');
+
+  gameScreen.destroy?.();
+  input.destroy?.();
+  screen.destroy?.();
 }

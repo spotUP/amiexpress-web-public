@@ -39,8 +39,8 @@ export type RotationSystem =
   //     same offsets, the same wall/floor kick TABLE (classic.c:130-242, ars.c:112-223).
   //     They are still different systems: ACE-ARS runs ars.c's statAMove, which gives it an
   //     ARS1-style instant lock on the up key that TI-ARS's classic.c statCMove never has
-  //     (ars.c:331,361,389) - not implemented here; see core/pieces.ts's CLASSIC_ARS_KICKS
-  //     comment for why.
+  //     (ars.c:331,361,389) - modeled in core/game.ts's sonicDrop(), where ACE-ARS drops
+  //     AND locks while every other system's up key leaves the piece live on the floor.
   | 'TI-ARS'
   | 'ACE-ARS'
   // TI-WORLD / ACE-SRS / DS-WORLD / SRS-X all run statWMove (src/script/world.c:139-357),

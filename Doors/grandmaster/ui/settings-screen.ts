@@ -664,6 +664,7 @@ export class SettingsScreen {
       { key: 'rotate180', name: 'Rotate 180' },
       { key: 'softDrop',  name: 'Soft Drop' },
       { key: 'hardDrop',  name: 'Hard Drop' },
+      { key: 'sonicDrop', name: 'Sonic Drop' },
       { key: 'hold',      name: 'Hold' },
       { key: 'pause',     name: 'Pause' },
       // TetriNET specials. Absent from this wizard until 2026-08-26, which
@@ -902,6 +903,7 @@ export class SettingsScreen {
       { key: 'rotate_180', name: 'Rotate 180' },
       { key: 'soft_drop',  name: 'Soft Drop' },
       { key: 'hard_drop',  name: 'Hard Drop' },
+      { key: 'sonic_drop', name: 'Sonic Drop' },
       { key: 'hold',       name: 'Hold' },
       { key: 'pause',      name: 'Pause' },
       { key: 'use_special_self',   name: 'Special On Self' },

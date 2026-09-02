@@ -25,6 +25,7 @@ export type InputAction =
   | 'rotate_ccw'
   | 'soft_drop'
   | 'hard_drop'
+  | 'sonic_drop'
   | 'hold'
   | 'irs_cw'
   | 'irs_ccw'

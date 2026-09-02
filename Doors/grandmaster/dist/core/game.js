@@ -592,6 +592,50 @@ class GameEngine {
         this.lockPiece();
     }
     /**
+     * Sonic drop - the TGM-lineage up key: fall to the floor in one step.
+     *
+     * HeborisCE spends one key on this and gives ACE-ARS (rots==4) its own
+     * behavior for it:
+     *   - airborne, ars.c:361-389 (the T.L.S. branch): ACE-ARS sets
+     *     `by[player] = bottom - 1` and then runs the lock block in the same
+     *     frame - the piece drops AND locks. Every other rots takes the else
+     *     branch, where the piece drops and stays live on the floor.
+     *   - grounded, ars.c:331: the same key does `bk[player] += lockT`, which
+     *     the `if(bk[player] > lockT)` test on the next line turns into an
+     *     immediate lock. Every other rots leaves a grounded piece alone.
+     *
+     * Returns true when the press did something (moved the piece, locked it, or
+     * both), false when it was a no-op - the same contract as softDrop().
+     */
+    sonicDrop() {
+        if (!this.state.currentPiece || this.state.status !== 'playing')
+            return false;
+        const piece = this.state.currentPiece;
+        const shape = this.pieceManager.getShape(piece.type, piece.rotation);
+        const ghostY = (0, board_1.getGhostY)(this.state.board, shape, piece.x, piece.y);
+        const dropDistance = ghostY - piece.y;
+        const locksOnUp = this.settings.rotationSystem === 'ACE-ARS';
+        // Grounded and no lock to give: nothing happened.
+        if (dropDistance <= 0 && !locksOnUp)
+            return false;
+        if (dropDistance > 0) {
+            piece.y = ghostY;
+            this.state.lastMove = 'drop';
+            // Only the locking drop scores. A sonic drop that leaves the piece
+            // live is a positioning move, and TGM pays nothing for it.
+            if (locksOnUp)
+                this.state.score += dropDistance * 2;
+            if (locksOnUp && this.onHardDropCallback)
+                this.onHardDropCallback();
+        }
+        if (this.recorder) {
+            this.recorder.recordInput('sonic_drop', piece.type);
+        }
+        if (locksOnUp)
+            this.lockPiece();
+        return true;
+    }
+    /**
      * Hold current piece
      */
     hold() {

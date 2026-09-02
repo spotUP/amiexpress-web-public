@@ -923,6 +923,12 @@ export class VersusScreen {
       this.engine.hardDrop();
       this.sounds.playSfx('hard_drop');
     }));
+    // ACE-ARS's up key locks (ars.c:331,361-389); every other rotation system
+    // sonic drops and leaves the piece live, so only the lock gets the sound.
+    this.inputHandler.on('sonic_drop', act(() => {
+      const locks = this.state.settings.rotationSystem === 'ACE-ARS';
+      if (this.engine.sonicDrop() && locks) this.sounds.playSfx('hard_drop');
+    }));
     this.inputHandler.on('hold', act(() => {
       if (this.engine.hold()) {
         this.sounds.playSfx('hold');

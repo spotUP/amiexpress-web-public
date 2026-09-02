@@ -17,6 +17,10 @@ exports.keyToAction = keyToAction;
 // Space = rotate 180 (big key, easy to hit).
 // Up = hard drop (modern addition; TGM3 has sonic drop, not hard drop, but
 // we expose hard drop as a feature so map it to the natural key).
+// W = sonic drop (TGM's own up key: fall to the floor, stay live). Up is
+// already spoken for by hard drop in every preset here, so sonic drop takes
+// the nearest free key rather than displacing a binding players already use.
+// Under ACE-ARS this same key drops AND locks - see GameEngine.sonicDrop.
 // X/Z = rotate CW/CCW (TGM standard).
 exports.DEFAULT_KEYS = {
     left: ['left', 'a'],
@@ -26,7 +30,7 @@ exports.DEFAULT_KEYS = {
     rotate180: ['space'],
     softDrop: ['down', 's'],
     hardDrop: ['up', 'return', 'enter'],
-    sonicDrop: [],
+    sonicDrop: ['w'],
     hold: ['c', 'lshift', 'rshift'],
     pause: ['p'],
     // TetriNET specials, in the SAME layout as everything else - the door has
@@ -52,7 +56,7 @@ exports.KEY_PRESETS = {
         rotate180: ['space'],
         softDrop: ['down'],
         hardDrop: ['up'],
-        sonicDrop: [],
+        sonicDrop: ['w'],
         hold: ['c', 'lshift'],
         pause: ['p'],
     },
@@ -65,7 +69,7 @@ exports.KEY_PRESETS = {
         rotate180: ['r'],
         softDrop: ['s'],
         hardDrop: ['w'],
-        sonicDrop: [],
+        sonicDrop: ['up'], // W is the hard drop here, so sonic drop takes the arrow
         hold: ['lshift', 'c'],
         pause: ['p'],
     },
@@ -80,7 +84,7 @@ exports.KEY_PRESETS = {
         rotate180: [], // Not bound by default in Jstris
         softDrop: ['down', 's'],
         hardDrop: ['space'], // Space = hard drop (Jstris standard)
-        sonicDrop: [],
+        sonicDrop: ['w'],
         hold: ['c', 'lshift'],
         pause: ['p', 'escape'],
     },

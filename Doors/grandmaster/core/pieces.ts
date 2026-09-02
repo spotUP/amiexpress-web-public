@@ -895,9 +895,10 @@ const CLASSIC_SHAPES: Record<PieceType, number[][][]> = {
 // ars.c's statAMove also gives ACE-ARS (rots==4 only, not TI-ARS, not ACE-ARS2)
 // an ARS1-style instant lock on the up key while grounded (ars.c:331,361,389) --
 // a lock/landing mechanic with no equivalent in classic.c's statCMove at all, so
-// TI-ARS has no analog of it whatsoever. Not implemented in this door: there is
-// no "up key held while grounded" input distinct from rotate/hard-drop in this
-// door's control scheme, and inventing one risks a guessed key mapping.
+// TI-ARS has no analog of it whatsoever. It lives in core/game.ts's sonicDrop():
+// the reference's up key IS this door's sonic_drop action (declared in the input
+// config since it was written), so no key had to be invented -- under ACE-ARS that
+// action drops and locks, under every other system it just lands the piece.
 //
 // Left/right kick priority: classic.c/ars.c test left-then-right with two
 // independent `if`s, so when both directions are open the right kick's

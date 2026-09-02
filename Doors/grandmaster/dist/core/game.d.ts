@@ -142,6 +142,23 @@ export declare class GameEngine {
      */
     hardDrop(): void;
     /**
+     * Sonic drop - the TGM-lineage up key: fall to the floor in one step.
+     *
+     * HeborisCE spends one key on this and gives ACE-ARS (rots==4) its own
+     * behavior for it:
+     *   - airborne, ars.c:361-389 (the T.L.S. branch): ACE-ARS sets
+     *     `by[player] = bottom - 1` and then runs the lock block in the same
+     *     frame - the piece drops AND locks. Every other rots takes the else
+     *     branch, where the piece drops and stays live on the floor.
+     *   - grounded, ars.c:331: the same key does `bk[player] += lockT`, which
+     *     the `if(bk[player] > lockT)` test on the next line turns into an
+     *     immediate lock. Every other rots leaves a grounded piece alone.
+     *
+     * Returns true when the press did something (moved the piece, locked it, or
+     * both), false when it was a no-op - the same contract as softDrop().
+     */
+    sonicDrop(): boolean;
+    /**
      * Hold current piece
      */
     hold(): boolean;

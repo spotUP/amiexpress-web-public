@@ -686,6 +686,17 @@ export class GameScreen {
       this.sounds.playSfx('hard_drop');
     });
 
+    on('sonic_drop', () => {
+      // ACE-ARS locks on this key (ars.c:331,361-389), every other rotation
+      // system just lands the piece - so the trail and the landing sound are
+      // for the locking case only.
+      const locks = this.state.settings.rotationSystem === 'ACE-ARS';
+      if (locks) this.addHardDropTrail();
+      if (this.engine.sonicDrop() && locks) {
+        this.sounds.playSfx('hard_drop');
+      }
+    });
+
     on('hold', () => {
       if (this.engine.hold()) {
         this.sounds.playSfx('hold');
