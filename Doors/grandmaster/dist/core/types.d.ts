@@ -76,6 +76,15 @@ export interface GameState {
     status: 'ready' | 'countdown' | 'playing' | 'paused' | 'gameover' | 'complete';
     startTime: number | null;
     endTime: number | null;
+    /**
+     * Torikan: HeborisCE's qualifying time cutoff ("footcut", 足切り) for
+     * Master and DOOM/DEVIL ('death') mode. True when the run was forced to
+     * end at torikanCheckpointLevel because it crossed level 500 (or, in
+     * 'death', 1000) after the mode's deadline instead of before it.
+     * core/time-limit.ts, gamestart.c:10961 checkEnding().
+     */
+    torikanExpired: boolean;
+    torikanCheckpointLevel: 500 | 1000 | null;
 }
 /**
  * Gamepad bindings stored as trigger strings: "button:a", "dpad:left", "axis:left-x:negative"

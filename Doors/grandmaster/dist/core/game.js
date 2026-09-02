@@ -15,6 +15,7 @@ const finesse_1 = require("./finesse");
 const replay_manager_1 = require("../server/replay-manager");
 const medals_1 = require("./medals");
 const credit_roll_1 = require("./credit-roll");
+const time_limit_1 = require("./time-limit");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 class GameEngine {
@@ -137,6 +138,8 @@ class GameEngine {
             status: 'ready',
             startTime: null,
             endTime: null,
+            torikanExpired: false,
+            torikanCheckpointLevel: null,
         };
     }
     /**
@@ -680,6 +683,9 @@ class GameEngine {
     lockPiece() {
         if (!this.state.currentPiece)
             return;
+        // gamestart.c's tcbuf - the level as it stood before this lock's level-up,
+        // so the torikan check below can tell a checkpoint was JUST crossed.
+        const levelBeforeLock = this.state.level;
         this.state.piecesPlaced++;
         const piece = this.state.currentPiece;
         const shape = this.pieceManager.getShape(piece.type, piece.rotation);
@@ -735,6 +741,29 @@ class GameEngine {
         // Cap level at 999 for Master mode (unless in credit roll)
         if (this.state.mode === 'master' && this.state.level > 999 && !this.state.creditRollActive) {
             this.state.level = 999;
+        }
+        // Torikan: gamestart.c calls checkEnding(player, tcbuf) right here, once
+        // per lock, immediately after tc[player] (our state.level) is finalized
+        // for this piece. Missing the mode's qualifying deadline at the instant
+        // the level crosses 500 (or, in 'death', 1000) forces the run to end at
+        // that checkpoint instead of continuing. See core/time-limit.ts.
+        if (this.state.startTime !== null) {
+            const gametimeFrames = ((Date.now() - this.state.startTime) / 1000) * 60;
+            const torikan = (0, time_limit_1.checkTorikan)({
+                mode: this.state.mode,
+                levelBefore: levelBeforeLock,
+                levelAfter: this.state.level,
+                gametimeFrames,
+                rotationSystem: this.settings.rotationSystem,
+            });
+            if (torikan.expired) {
+                this.state.level = torikan.checkpointLevel;
+                this.state.torikanExpired = true;
+                this.state.torikanCheckpointLevel = torikan.checkpointLevel;
+                this.state.status = 'complete';
+                this.state.endTime = Date.now();
+                return;
+            }
         }
         const newSection = Math.floor(this.state.level / 100);
         if (lineCount > 0) {
