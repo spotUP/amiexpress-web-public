@@ -89,10 +89,11 @@ describe('Conf.DB is per-user conference state', () => {
 describe('the node logs a real board writes', () => {
   test('reads the callers out of a CallersLog', async () => {
     const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const node1 = nodes.find(n => n.nodeNumber === 1);
+    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
+    if (!callers) throw new Error('node 1 has no CallersLog');
 
-    expect(node1?.callersLog.length).toBeGreaterThan(0);
-    expect(node1?.callersLog[0].username).toBe('sysop');
+    expect(callers.length).toBeGreaterThan(0);
+    expect(callers[0].username).toBe('sysop');
   });
 
   test('puts the call in the right century, not the year 26 AD', async () => {
@@ -100,7 +101,9 @@ describe('the node logs a real board writes', () => {
     // the century as `IF days>=8035 THEN 20 ELSE 19` - 8035 days after the
     // 1978 epoch is 2000-01-01 - so 26 is 2026 and 95 would be 1995.
     const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const [call] = nodes.find(n => n.nodeNumber === 1)!.callersLog;
+    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
+    if (!callers) throw new Error('node 1 has no CallersLog');
+    const [call] = callers;
 
     expect(call.loginTime.getFullYear()).toBe(2026);
     expect(call.loginTime.getMonth()).toBe(0);
@@ -109,7 +112,9 @@ describe('the node logs a real board writes', () => {
 
   test('a stamp with no seconds is a time, not an Invalid Date', async () => {
     const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const [call] = nodes.find(n => n.nodeNumber === 1)!.callersLog;
+    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
+    if (!callers) throw new Error('node 1 has no CallersLog');
+    const [call] = callers;
 
     expect(Number.isNaN(call.loginTime.getTime())).toBe(false);
     expect(call.loginTime.getHours()).toBe(17);
@@ -118,7 +123,9 @@ describe('the node logs a real board writes', () => {
 
   test('keeps where the caller was and how they connected', async () => {
     const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const [call] = nodes.find(n => n.nodeNumber === 1)!.callersLog;
+    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
+    if (!callers) throw new Error('node 1 has no CallersLog');
+    const [call] = callers;
 
     expect(call.location).toBe('Unknown');
     expect(call.node).toBe(1);
