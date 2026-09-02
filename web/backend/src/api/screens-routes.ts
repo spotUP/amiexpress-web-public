@@ -444,11 +444,26 @@ screensRouter.post('/share', (req: Request, res: Response) => {
     gaining: c.check.gaining,
   }));
 
+  const canShare = checks.filter(c => c.check.ok).map(c => c.id);
+
   if (blocked.length) {
+    // A DRY RUN that finds blockers has answered the question it was asked:
+    // "which of these nodes could share this directory?". Answering 409 made
+    // the browser log it as a failed request and forced the page to read its
+    // own answer out of an exception. A real share keeps the 409 - that one is
+    // a refusal, and nothing was written.
+    if (dryRun) {
+      return sendOk(
+        res,
+        { blocked, canShare, wouldWrite: [], tooltype: null },
+        `${blocked.length} node${blocked.length === 1 ? '' : 's'} cannot share this directory`,
+      );
+    }
+
     return res.status(409).json({
       success: false,
       error: `${blocked.length} node${blocked.length === 1 ? '' : 's'} cannot share this directory`,
-      data: { blocked, canShare: checks.filter(c => c.check.ok).map(c => c.id) },
+      data: { blocked, canShare },
     });
   }
 

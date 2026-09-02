@@ -203,31 +203,48 @@ export function ScreenFilesPage() {
       .filter(n => Number.isFinite(n)) as number[];
     if (!nodes.length) return;
 
+    /** The board's per-node verdicts, in the shape summariseShare reads. */
+    const verdicts = (
+      canShare: number[],
+      blocked: { id: number; reasons: string[]; losing?: string[]; gaining?: string[] }[],
+    ) => ({
+      ...Object.fromEntries(canShare.map(id => [id, {
+        ok: true, reasons: [], losing: [], gaining: [], nodeHasNoScreens: false,
+      }])),
+      ...Object.fromEntries(blocked.map(b => [b.id, {
+        ok: false, reasons: b.reasons, losing: b.losing ?? [], gaining: b.gaining ?? [],
+        nodeHasNoScreens: false,
+      }])),
+    });
+
     try {
+      // A dry run ANSWERS - including "these five cannot, here is why" - so the
+      // whole verdict arrives on the success path. It used to come back as a
+      // 409, which the browser logged as a failed request and the page had to
+      // read out of an exception.
       const res = await apiClient.shareScreens(nodes, sharedDir, true);
-      setShareSummary(summariseShare(
-        Object.fromEntries(nodes.map(id => [id, {
-          ok: true, reasons: [], losing: [], gaining: [], nodeHasNoScreens: false,
-        }])),
-      ));
-      showSuccess(`${res.data?.wouldWrite?.length ?? nodes.length} node icons would be written`);
+      const data = res.data as {
+        blocked?: { id: number; reasons: string[]; losing?: string[]; gaining?: string[] }[];
+        canShare?: number[];
+        wouldWrite?: string[];
+      } | undefined;
+
+      const blocked = data?.blocked ?? [];
+      const canShare = data?.canShare ?? (blocked.length ? [] : nodes);
+      setShareSummary(summariseShare(verdicts(canShare, blocked)));
+
+      if (!blocked.length) {
+        showSuccess(`${data?.wouldWrite?.length ?? nodes.length} node icons would be written`);
+      }
     } catch (error) {
-      // The board answers a refusal with the whole picture: which nodes are
-      // blocked, what each would lose and gain, and which could share anyway.
+      // A real refusal still arrives as an error, and still carries the facts.
       const payload = (error as ApiError).data as {
-        blocked?: { id: number; reasons: string[]; losing: string[]; gaining: string[] }[];
+        blocked?: { id: number; reasons: string[]; losing?: string[]; gaining?: string[] }[];
         canShare?: number[];
       } | undefined;
+
       if (payload?.blocked) {
-        setShareSummary(summariseShare({
-          ...Object.fromEntries((payload.canShare ?? []).map(id => [id, {
-            ok: true, reasons: [], losing: [], gaining: [], nodeHasNoScreens: false,
-          }])),
-          ...Object.fromEntries(payload.blocked.map(b => [b.id, {
-            ok: false, reasons: b.reasons, losing: b.losing ?? [], gaining: b.gaining ?? [],
-            nodeHasNoScreens: false,
-          }])),
-        }));
+        setShareSummary(summariseShare(verdicts(payload.canShare ?? [], payload.blocked)));
       } else {
         showError((error as Error).message);
       }
