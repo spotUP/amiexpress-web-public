@@ -6,7 +6,7 @@ import { Server } from "socket.io";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import multer from "multer";
-import { buildConnectionEmitter } from "./server/connection-emitter";
+import { buildConnectionEmitter, flushPendingPetscii } from "./server/connection-emitter";
 import { handleC64Detected } from "./server/c64-detected-handler";
 import { resolveTelnetPetsciiPort } from "./utils/telnet-petscii-port.util";
 import {
@@ -1122,6 +1122,14 @@ console.log(
 
   // Handle incoming data (user input)
   connection.on("data", async (data: Buffer) => {
+    // Task 10 controller add: this is the single boundary where output
+    // stops and input begins for telnet/SSH (every door/BBS input path
+    // below is downstream of it) - flush any PETSCII bytes the session's
+    // transducer is still holding (a bare trailing CR) before this
+    // keystroke is processed. See flushPendingPetscii's doc comment for
+    // why this exact call site and not AnsiBuffer.flush().
+    flushPendingPetscii(connection);
+
     if (connection.session?.transferRawActive) {
       const sink =
         (connection.session as any).transferRawSink ||

@@ -18,6 +18,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { wrapForSession } from './wrap-for-session.util';
 
 export class AnsiBuffer {
   private buffer: string[] = [];
@@ -192,8 +193,13 @@ export function getAnsiBuffer(socket: Socket): AnsiBuffer {
  * @param immediate - Force immediate flush (default: false)
  */
 export function emitText(socket: Socket, text: string, immediate: boolean = false): void {
+  // Session-width choke point. Web sockets carry the session
+  // (index.ts:787); telnet/SSH emitters expose it via a getter
+  // (connection-emitter.ts, Task 5). wrapForSession is identity at >=80
+  // columns, for door-owned sessions, and for positioned/art payloads.
+  const session = (socket as any).session;
   const buffer = getAnsiBuffer(socket);
-  buffer.append(text);
+  buffer.append(wrapForSession(text, session));
 
   if (immediate) {
     buffer.flushImmediate();

@@ -30,6 +30,41 @@ function petsciiTransducerFor(session: any): AnsiToPetsciiTransducer {
   return session.petsciiTransducer;
 }
 
+/**
+ * Flush the session's PETSCII transducer's held bytes straight to the wire
+ * (Task 10 controller add). `transduce()` holds a trailing bare CR in
+ * `pending` until it sees whether a `\n` completes it into one CRLF - call
+ * this too early (every emit) and a CRLF legitimately split across two
+ * output chunks turns into a lone CR ($0D-worth of $9D) plus a lone LF, a
+ * doubled line move. Call it too late (never) and a chunk that ends mid-CR
+ * with no further output ever arriving (the common case: a prompt ending
+ * "...ready\r" with the newline coming from the terminal's own echo) leaves
+ * those bytes stuck in `pending` forever, past the input wait.
+ *
+ * The correct boundary is where output stops and input begins. For
+ * telnet/SSH that is `connection.on('data', ...)` in index.ts: the single
+ * choke point every keystroke passes through before ANY handler sees it -
+ * BBS commands via `handleCommand`, DoorManager's synthetic 'command'
+ * event, `session.doorInputHandler`, and the `door:input` fallback
+ * (DoorMessageHandler.setupInputHandler) all sit downstream of it. Calling
+ * this once at the top of that handler, before dispatch, covers every one
+ * of those paths with one call site instead of instrumenting each.
+ *
+ * NOT `AnsiBuffer.flush()`: that also fires on a 16ms timer and on the 8KB
+ * buffer-size-forced-flush path, neither of which means input is about to
+ * be awaited - hooking there would tear apart an ordinary in-flight CRLF.
+ *
+ * No-op for web sessions: their transducer lives client-side (Task 8), so
+ * `session.petsciiTransducer` is never set server-side for them - only a
+ * telnet/SSH emitter's `petsciiTransducerFor` call creates one.
+ */
+export function flushPendingPetscii(connection: { session?: { petsciiTransducer?: AnsiToPetsciiTransducer } | null; write: (b: Buffer) => void }): void {
+  const transducer = connection.session?.petsciiTransducer;
+  if (!transducer) return;
+  const bytes = transducer.flush();
+  if (bytes.length > 0) connection.write(Buffer.from(bytes));
+}
+
 export function buildConnectionEmitter(connection: TelnetConnection | SSHConnection): any {
   const eventBus = new EventEmitter();
   eventBus.setMaxListeners(50);

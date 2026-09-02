@@ -24,3 +24,4 @@ export {
 } from './ansi-to-petscii';
 export { UNICODE_TO_PETSCII } from './unicode-to-petscii';
 export { petsciiInputToAscii } from './petscii-input';
+export { printableLength, wrapLineToWidth } from './wrap';
