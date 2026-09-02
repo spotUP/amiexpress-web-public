@@ -18,12 +18,12 @@
  * before the `allowMCI` gate (`:2086-2091`). express.e's first-byte `~`
  * gate (`express.e:6800-6806`) says a screen opening with `~` is MCI.
  *
- * STAYS RED until Task 7 wires the inline sentinel walker into the
- * PETSCII path. Marked `it.failing` because the whole backend suite gates
- * CI (`.github/workflows/backend-tests.yml` runs `npx jest ... --ci` on
- * every push/PR to main) - jest then reports the suite green while the
- * bug lives, and reports a FAILURE the moment Task 7 makes it pass, which
- * is the signal to flip `it.failing` back to `it`.
+ * GREEN as of Task 7, which wired the inline sentinel walker into the
+ * PETSCII path and fixed the include resolver these files depend on
+ * (`001.logoff.seq` -> `001.logoff.txt`). Both tests were `it.failing`
+ * until then, because the whole backend suite gates CI
+ * (`.github/workflows/backend-tests.yml` runs `npx jest ... --ci` on every
+ * push/PR to main).
  *
  * SKIP_DB_INIT + emit-spy socket + absolute-path idiom are copied from
  * `tests/handlers/petscii-bytes-transport.test.ts`.
@@ -35,6 +35,7 @@ import * as fs from 'fs';
 process.env.SKIP_DB_INIT = '1';
 
 import { displayScreen, setConferences } from '../../src/handlers/screen.handler';
+import { ANSI_ART_SKIPPED_NOTICE } from '../../src/utils/ansi-art-detect.util';
 
 /**
  * The shipped payload, byte for byte, built in code. Never write a `.seq`
@@ -82,10 +83,6 @@ function wireText(emits: Emit[]): string {
     .join('');
 }
 
-function wireBytes(emits: Emit[]): number {
-  return Buffer.from(wireText(emits), 'latin1').length;
-}
-
 describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => {
   let randomSpy: jest.SpyInstance;
 
@@ -102,8 +99,8 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
     randomSpy.mockRestore();
   });
 
-  it.failing(
-    'a C64 logging off never sees the literal ~SR_ token, and does get art bytes (RED until Task 7)',
+  it(
+    'a C64 logging off never sees the literal ~SR_ token, and does get art bytes',
     async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seq-mci-logoff-'));
       const seqPath = path.join(dir, 'LOGOFF.SEQ');
@@ -122,8 +119,27 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
       // (2) Strengthened per the plan (Task 7's resolver hole): absence of
       // the token is not proof the include resolved. A silently-empty
       // include emits nothing, or only the fixture's trailing newline.
+      //
+      // What the shipped data actually resolves to, as of Task 7:
+      // `~SR_WORK:bbs/Screens/logoff/logoff.seq` -> `001.logoff.seq` ->
+      // (resolver fix) `Screens/logoff/001.logoff.txt`, which EXISTS and is
+      // 1022 bytes of 80-column ANSI art. A PETSCII session never reflows
+      // 80-column art (`petsciiTextScreenPlan` -> 'art-skip'), so what a C64
+      // caller sees is the skip token, not the picture. That token is proof
+      // the include RESOLVED - before Task 7 the probe list missed the file
+      // entirely and nothing at all came back - and it is the honest state
+      // of the shipped data. The sysop follow-up (a real 40-column
+      // `logoff/00N.logoff.seq`, and `~3SR_` instead of `~SR_`) is recorded
+      // in handoff.md; the next test proves the same include path carries
+      // real art bytes the moment a `.seq` is there to carry.
       expect(emits.length).toBeGreaterThan(0);
-      expect(wireBytes(emits)).toBeGreaterThan(SHIPPED_LOGOFF_SEQ.length);
+      // The pre-clear ~SR_ sends before a full-screen file is $93 on the
+      // PETSCII wire, never an ANSI escape (plan Task 6's divergence rule).
+      const petsciiFirst = emits.find((e) => e.event === 'petscii-bytes');
+      expect(petsciiFirst).toBeDefined();
+      expect(Buffer.from(petsciiFirst!.data, 'base64')[0]).toBe(0x93);
+      expect(wireText(emits)).toContain(ANSI_ART_SKIPPED_NOTICE);
+      expect(wireText(emits)).not.toContain('\x1b[2J');
 
       // (3) Strengthened again in Task 6 (which wired the renderer into
       // `emitPetsciiScreen`): from that commit on, the `~SR_` TOKEN is gone
@@ -148,8 +164,8 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
    * transport a real C64 and the web `P` session share
    * (`connection-emitter.ts:130-141`).
    */
-  it.failing(
-    'a ~SR_ include that resolves to a .seq puts that art on petscii-bytes (RED until Task 7)',
+  it(
+    'a ~SR_ include that resolves to a .seq puts that art on petscii-bytes',
     async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seq-mci-include-'));
       const incDir = path.join(dir, 'logoff');

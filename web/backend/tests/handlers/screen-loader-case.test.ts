@@ -64,8 +64,11 @@ describe('loadScreenFile — filename-variant ordering (regression)', () => {
     // next `const add` helper or end of variants block).
     const body = src.match(/addAnsiVariants[\s\S]*?return\s+Array\.from\(variants\)/)?.[0];
     expect(body).toBeDefined();
-    const txtIdx = body!.indexOf('`${name}.txt`');
-    const TXTIdx = body!.indexOf('`${name}.TXT`');
+    // The interpolated variable is the STEM (a known screen extension
+    // stripped, plan Task 7), not the raw name - match on the extension so
+    // this pin survives that rename and any future one.
+    const txtIdx = body!.search(/\$\{\w+\}\.txt`/);
+    const TXTIdx = body!.search(/\$\{\w+\}\.TXT`/);
     expect(txtIdx).toBeGreaterThanOrEqual(0);
     expect(TXTIdx).toBeGreaterThanOrEqual(0);
     expect(txtIdx).toBeLessThan(TXTIdx);

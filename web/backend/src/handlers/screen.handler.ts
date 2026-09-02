@@ -49,8 +49,16 @@ import { processMci as processMciTokenizer } from '../utils/mci-tokenizer.util';
 import { petsciiTextScreenPlan, ANSI_ART_SKIPPED_NOTICE } from '../utils/ansi-art-detect.util';
 import { wrapForSession } from '../utils/wrap-for-session.util';
 import { buildMciDispatch, MCI_SENTINELS } from './mci-dispatch';
-import { applyMciPrePasses } from './mci-pre-passes';
-import { renderPetsciiScreen, petsciiRenderCtxFor } from './petscii-screen.render';
+import { applyMciPrePasses, MCI_GENERATED } from './mci-pre-passes';
+import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
+import {
+  renderPetsciiScreen,
+  renderChunkBytes,
+  preparePetsciiSeq,
+  petsciiRenderCtxFor,
+  petsciiMachineFor,
+  type PetsciiSpan,
+} from './petscii-screen.render';
 
 /**
  * Detect if content is an ANSI animation that should play at modem speed
@@ -214,6 +222,24 @@ function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): stri
 }
 
 /**
+ * The screen-file extensions this BBS knows.
+ *
+ * A name that ALREADY ends in one is not a stem waiting for an extension -
+ * it is a stem whose extension has to be SWAPPED when that file is missing.
+ * `~SR_WORK:bbs/Screens/logoff/logoff.seq` is the shipped case:
+ * `formatNumberedFilename` turns it into `001.logoff.seq`, only
+ * `001.logoff.txt` exists on disk, and every variant probed
+ * `001.logoff.seq.seq`, `001.logoff.seq.txt`, ... - so the include silently
+ * resolved to nothing (plan Task 7).
+ */
+const SCREEN_EXTENSION_RE = /\.(seq|txt|rip)$/i;
+
+/** `001.logoff.seq` -> `001.logoff`; `MENU` -> `MENU` (unchanged). */
+function stripScreenExtension(name: string): string {
+  return name.replace(SCREEN_EXTENSION_RE, '');
+}
+
+/**
  * Check if a file is a RIP graphics file
  * express.e:6765 - StriCmp(extension,'.rip')
  */
@@ -321,6 +347,238 @@ let observedDispatchKeys: string[] | null = null;
 export function mciDispatchKeys(): string[] {
   return observedDispatchKeys ? [...observedDispatchKeys] : [];
 }
+
+/**
+ * Include-recursion cap for `~SS_` and `~SR_`.
+ *
+ * There was NO guard here before plan Task 7 - not on the PETSCII path and
+ * not on the ANSI one. A screen whose include names itself (or any `~SS_` /
+ * `~SR_` cycle) recursed through `displayScreen` -> `parseMciCodes` ->
+ * this walker until the stack blew. express.e has no guard either because
+ * its screens are hand-written data; ours are editable from the config app.
+ */
+const MAX_SCREEN_INCLUDE_DEPTH = 8;
+
+/**
+ * The depth counter lives on the session (one caller, one nesting) and is
+ * declared structurally so `BBSSession` in the 2000-line `src/index.ts` does
+ * not have to change for it.
+ */
+type ScreenIncludeDepthHolder = { screenIncludeDepth?: number };
+
+/**
+ * Display an included screen (`~SS_`, `~SR_`) under the depth cap. Over the
+ * cap nothing is emitted - a truncated screen beats a crashed node.
+ */
+async function displayIncludedScreen(
+  socket: any,
+  session: BBSSession,
+  target: string,
+): Promise<boolean> {
+  const holder = session as unknown as ScreenIncludeDepthHolder;
+  const depth = holder.screenIncludeDepth ?? 0;
+  if (depth >= MAX_SCREEN_INCLUDE_DEPTH) {
+    screenDebug(
+      `[MCI] include depth cap (${MAX_SCREEN_INCLUDE_DEPTH}) reached - refusing ${target}`,
+    );
+    return false;
+  }
+  holder.screenIncludeDepth = depth + 1;
+  try {
+    return await displayScreen(socket, session, target, false);
+  } finally {
+    holder.screenIncludeDepth = depth;
+  }
+}
+
+/**
+ * How the inline sentinel walker puts bytes on the wire.
+ *
+ * ONE walker serves both flavours (plan Task 7): the ANSI path
+ * (`parseMciCodes`) and the PETSCII `.seq` path (`emitPetsciiScreenInline`)
+ * differ ONLY in how a run of screen text and a screen clear are encoded -
+ * never in the document-order flow, and never in the side effects.
+ */
+interface InlineSentinelHooks {
+  /**
+   * Emit the text between two sentinels. `start` is its offset in `parsed`
+   * so a PETSCII caller can rebase its substitution spans onto the chunk.
+   * Returns true when anything went out.
+   */
+  emitChunk: (chunk: string, start: number) => boolean;
+  /** express.e:5469-5471 sendCLS(), for the inline `~f` sentinel. */
+  emitCls: () => void;
+  /** The full-screen clear `~SR_` sends before drawing its art file. */
+  emitClsBeforeRandomFile: () => void;
+  /**
+   * Sentinels this walker must NOT split on: they are the chunk renderer's
+   * business (the PETSCII `~x`/`~y` MOVE walk and pre-pass-generated text,
+   * both of which are resolved positionally while the chunk is encoded).
+   */
+  isChunkSentinel?: (payload: string) => boolean;
+}
+
+interface InlineSentinelWalkResult {
+  inlineEmitted: boolean;
+  hasPause: boolean;
+  /** Set ONLY when a `~SP` stopped the walk: the unprocessed remainder. */
+  pendingInlineContent?: string;
+}
+
+/**
+ * The inline sentinel walker.
+ *
+ * express.e:5768-5802 processMci() iterates through content sequentially,
+ * emitting text-before each MCI code, then running the side effect, then
+ * continuing. We achieve the same flow post-tokenizer: the inline-only
+ * dispatch entries replaced each side-effecting code with a NUL-delimited
+ * sentinel, so we walk `parsed` splitting on those, emitting the surrounding
+ * text chunks (in document order) and applying side effects (CLS / pause /
+ * cmd / displayFile / random file) as they appear.
+ *
+ * `~SP` stops the walk with `pendingInlineContent` set: the rest of the
+ * post-tokenizer string, sentinels and all. When the pagination state machine
+ * resumes, `displayScreen` calls back with that content. The tokenizer pass
+ * is idempotent for already-substituted text - no `~` left for it to consume
+ * - and the sentinels look like plain bytes to the tokenizer (no `~`), so
+ * they ride through to the next walk intact.
+ */
+async function walkInlineSentinels(
+  socket: any,
+  session: BBSSession,
+  parsed: string,
+  hooks: InlineSentinelHooks,
+): Promise<InlineSentinelWalkResult> {
+  const { processCommand } = require('./command.handler');
+  let inlineEmitted = false;
+  let hasPause = false;
+
+  // indexOf-based scanner (see SENTINEL_REGEX_SOURCE comment above —
+  // a stateful /g regex would be clobbered by recursive
+  // parseMciCodes calls from inside the SS_/SR_ handlers).
+  //
+  // Two cursors, not one: `lastIndex` is where the current text chunk STARTS,
+  // `scan` is where to look for the next sentinel. They differ only while
+  // stepping over a sentinel the chunk renderer owns (`isChunkSentinel`),
+  // which travels inside the chunk instead of breaking it.
+  let lastIndex = 0;
+  let scan = 0;
+  while (true) {
+    const startNul = parsed.indexOf('\x00', scan);
+    if (startNul < 0) break;
+    const endNul = parsed.indexOf('\x00', startNul + 1);
+    if (endNul < 0) break;
+    const sentinel = parsed.substring(startNul + 1, endNul);
+
+    if (hooks.isChunkSentinel?.(sentinel)) {
+      scan = endNul + 1;
+      continue;
+    }
+
+    // express.e:5793-5794 — emit text BEFORE the side effect.
+    if (hooks.emitChunk(parsed.substring(lastIndex, startNul), lastIndex)) {
+      inlineEmitted = true;
+    }
+    lastIndex = endNul + 1;
+    scan = lastIndex;
+
+    if (sentinel === 'F') {
+      // express.e:5469-5471 — sendCLS()
+      hooks.emitCls();
+      inlineEmitted = true;
+      screenDebug('[MCI] Sentinel: ~f sendCLS()');
+      continue;
+    }
+
+    if (sentinel === 'SP') {
+      // express.e:5455-5461 — doPause(). Stop here, return the
+      // unprocessed remainder so the pause state machine can
+      // resume the rest of the screen after keypress.
+      const remainingParsed = parsed.substring(lastIndex);
+      screenDebug('[MCI] Sentinel: ~SP — pausing, ' + remainingParsed.length + ' bytes pending');
+      return { inlineEmitted: true, hasPause: true, pendingInlineContent: remainingParsed };
+    }
+
+    if (sentinel.startsWith('CC:')) {
+      // express.e:5555-5563 — processSysCommand()
+      const commandStr = sentinel.substring(3).trim();
+      const spacePos = commandStr.indexOf(' ');
+      const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
+      const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
+      const subStateBeforeInlineCmd = session.subState;
+      // Save subState so any door launched here (68K or TS) can't
+      // clobber it. Door executors set DOOR_RUNNING and may not
+      // restore it on early exit.
+      const result = await processCommand(socket, session, cmdCode, cmdParams, true);
+      if (session.subState !== subStateBeforeInlineCmd) {
+        session.subState = subStateBeforeInlineCmd;
+      }
+      screenDebug('[MCI] Sentinel: ~CC_ ' + commandStr + ' → ' + result);
+      inlineEmitted = true;
+      continue;
+    }
+
+    if (sentinel.startsWith('SS:')) {
+      // express.e:5496-5504 — displayFile()
+      const filename = sentinel.substring(3).trim();
+      screenDebug('[MCI] Sentinel: ~SS_ displayFile: ' + filename);
+      await displayIncludedScreen(socket, session, filename);
+      inlineEmitted = true;
+      continue;
+    }
+
+    if (sentinel.startsWith('SR:')) {
+      // express.e:5533-5554 — display random numbered file.
+      // Sentinel format: SR:<width>|<basePath>. width=-1 means
+      // "no width prefix" (caller's default of 99 applies).
+      const body = sentinel.substring(3);
+      const pipePos = body.indexOf('|');
+      const widthRaw = pipePos >= 0 ? body.substring(0, pipePos) : '';
+      let basePath = (pipePos >= 0 ? body.substring(pipePos + 1) : body).trim();
+      const widthVal = parseInt(widthRaw, 10);
+
+      if (basePath.includes(':')) {
+        const { config: cfgMod } = require('../config');
+        const baseDir = cfgMod.getConfig().dataDir;
+        const colonIdx = basePath.indexOf(':');
+        const assign = basePath.substring(0, colonIdx).toUpperCase();
+        const subpath = basePath.substring(colonIdx + 1);
+        if (assign === 'WORK' || assign === 'BBS') {
+          let resolvedSubpath = subpath;
+          if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
+            resolvedSubpath = resolvedSubpath.substring(4);
+          }
+          basePath = path.join(baseDir, resolvedSubpath);
+        } else if (assign === 'SCREENS') {
+          basePath = path.join(baseDir, 'Screens', subpath);
+        }
+      }
+
+      const maxCount = Math.max(1, Number.isFinite(widthVal) && widthVal > 0 ? widthVal : 99);
+      const randomNum = Math.floor(Math.random() * maxCount) + 1;
+      const randomFile = formatNumberedFilename(basePath, randomNum);
+      screenDebug('[MCI] Sentinel: ~SR_ selected: ' + randomFile);
+      // ~SR_ always shows a full-screen art file — clear before
+      // drawing so previous door output doesn't bleed through.
+      hooks.emitClsBeforeRandomFile();
+      await displayIncludedScreen(socket, session, randomFile);
+      inlineEmitted = true;
+      continue;
+    }
+
+    // Unknown sentinel type — emit nothing, log for visibility.
+    screenDebug('[MCI] Sentinel: unknown type ' + JSON.stringify(sentinel));
+  }
+
+  // Emit any tail text after the last sentinel (or all of it if
+  // no sentinels were found).
+  if (hooks.emitChunk(parsed.substring(lastIndex), lastIndex)) {
+    inlineEmitted = true;
+  }
+
+  return { inlineEmitted, hasPause };
+}
+
 
 /**
  * Parse MCI codes and return both parsed content and commands to execute
@@ -475,135 +733,36 @@ export async function parseMciCodes(
   // the tokenizer (no `~`), so they ride through to the next walk
   // intact.
   if (inlineMode) {
-    const { processCommand } = require('./command.handler');
-
-    const emitChunk = (chunk: string): boolean => {
-      if (chunk.length === 0) return false;
-      let toEmit = addAnsiEscapes(chunk);
-      toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-      emitText(socket, toEmit);
-      return true;
-    };
-
-    // indexOf-based scanner (see SENTINEL_REGEX_SOURCE comment above —
-    // a stateful /g regex would be clobbered by recursive
-    // parseMciCodes calls from inside the SS_/SR_ handlers).
-    let lastIndex = 0;
-    while (true) {
-      const startNul = parsed.indexOf('\x00', lastIndex);
-      if (startNul < 0) break;
-      const endNul = parsed.indexOf('\x00', startNul + 1);
-      if (endNul < 0) break;
-      const sentinel = parsed.substring(startNul + 1, endNul);
-
-      // express.e:5793-5794 — emit text BEFORE the side effect.
-      if (emitChunk(parsed.substring(lastIndex, startNul))) {
-        inlineEmitted = true;
-      }
-      lastIndex = endNul + 1;
-
-      if (sentinel === 'F') {
-        // express.e:5469-5471 — sendCLS()
-        emitText(socket, '\x1b[2J\x1b[H');
-        inlineEmitted = true;
-        screenDebug('[MCI] Sentinel: ~f sendCLS()');
-        continue;
-      }
-
-      if (sentinel === 'SP') {
-        // express.e:5455-5461 — doPause(). Stop here, return the
-        // unprocessed remainder so the pause state machine can
-        // resume the rest of the screen after keypress.
-        hasPause = true;
-        inlineEmitted = true;
-        const remainingParsed = parsed.substring(lastIndex);
-        screenDebug('[MCI] Sentinel: ~SP — pausing, ' + remainingParsed.length + ' bytes pending');
-        return {
-          parsed: '',
-          commands: commandsToExecute,
-          hasPause: true,
-          slowmo: slowmoApplied,
-          slowmoCount: slowmoAppliedCount,
-          inlineEmitted: true,
-          pendingInlineContent: remainingParsed,
-        };
-      }
-
-      if (sentinel.startsWith('CC:')) {
-        // express.e:5555-5563 — processSysCommand()
-        const commandStr = sentinel.substring(3).trim();
-        const spacePos = commandStr.indexOf(' ');
-        const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
-        const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
-        const subStateBeforeInlineCmd = session.subState;
-        // Save subState so any door launched here (68K or TS) can't
-        // clobber it. Door executors set DOOR_RUNNING and may not
-        // restore it on early exit.
-        const result = await processCommand(socket, session, cmdCode, cmdParams, true);
-        if (session.subState !== subStateBeforeInlineCmd) {
-          session.subState = subStateBeforeInlineCmd;
-        }
-        screenDebug('[MCI] Sentinel: ~CC_ ' + commandStr + ' → ' + result);
-        inlineEmitted = true;
-        continue;
-      }
-
-      if (sentinel.startsWith('SS:')) {
-        // express.e:5496-5504 — displayFile()
-        const filename = sentinel.substring(3).trim();
-        screenDebug('[MCI] Sentinel: ~SS_ displayFile: ' + filename);
-        await displayScreen(socket, session, filename, false);
-        inlineEmitted = true;
-        continue;
-      }
-
-      if (sentinel.startsWith('SR:')) {
-        // express.e:5533-5554 — display random numbered file.
-        // Sentinel format: SR:<width>|<basePath>. width=-1 means
-        // "no width prefix" (caller's default of 99 applies).
-        const body = sentinel.substring(3);
-        const pipePos = body.indexOf('|');
-        const widthRaw = pipePos >= 0 ? body.substring(0, pipePos) : '';
-        let basePath = (pipePos >= 0 ? body.substring(pipePos + 1) : body).trim();
-        const widthVal = parseInt(widthRaw, 10);
-
-        if (basePath.includes(':')) {
-          const { config: cfgMod } = require('../config');
-          const baseDir = cfgMod.getConfig().dataDir;
-          const colonIdx = basePath.indexOf(':');
-          const assign = basePath.substring(0, colonIdx).toUpperCase();
-          const subpath = basePath.substring(colonIdx + 1);
-          if (assign === 'WORK' || assign === 'BBS') {
-            let resolvedSubpath = subpath;
-            if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
-              resolvedSubpath = resolvedSubpath.substring(4);
-            }
-            basePath = path.join(baseDir, resolvedSubpath);
-          } else if (assign === 'SCREENS') {
-            basePath = path.join(baseDir, 'Screens', subpath);
-          }
-        }
-
-        const maxCount = Math.max(1, Number.isFinite(widthVal) && widthVal > 0 ? widthVal : 99);
-        const randomNum = Math.floor(Math.random() * maxCount) + 1;
-        const randomFile = formatNumberedFilename(basePath, randomNum);
-        screenDebug('[MCI] Sentinel: ~SR_ selected: ' + randomFile);
-        // ~SR_ always shows a full-screen art file — clear before
-        // drawing so previous door output doesn't bleed through.
-        socket.emit('ansi-output', '\x1b[2J\x1b[H');
-        await displayScreen(socket, session, randomFile, false);
-        inlineEmitted = true;
-        continue;
-      }
-
-      // Unknown sentinel type — emit nothing, log for visibility.
-      screenDebug('[MCI] Sentinel: unknown type ' + JSON.stringify(sentinel));
+    const walk = await walkInlineSentinels(socket, session, parsed, {
+      emitChunk: (chunk) => {
+        if (chunk.length === 0) return false;
+        let toEmit = addAnsiEscapes(chunk);
+        toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+        emitText(socket, toEmit);
+        return true;
+      },
+      // express.e:5469-5471 sendCLS(). Buffered, like the text around it.
+      emitCls: () => emitText(socket, '\x1b[2J\x1b[H'),
+      // The pre-clear ~SR_ sends before a full-screen art file: direct, not
+      // buffered, exactly as it was written.
+      emitClsBeforeRandomFile: () => socket.emit('ansi-output', '\x1b[2J\x1b[H'),
+    });
+    if (walk.hasPause) {
+      hasPause = true;
     }
-
-    // Emit any tail text after the last sentinel (or all of it if
-    // no sentinels were found).
-    if (emitChunk(parsed.substring(lastIndex))) {
+    if (walk.inlineEmitted) {
       inlineEmitted = true;
+    }
+    if (walk.pendingInlineContent !== undefined) {
+      return {
+        parsed: '',
+        commands: commandsToExecute,
+        hasPause: true,
+        slowmo: slowmoApplied,
+        slowmoCount: slowmoAppliedCount,
+        inlineEmitted: true,
+        pendingInlineContent: walk.pendingInlineContent,
+      };
     }
 
     // Clear parsed since everything has been emitted to the socket.
@@ -910,6 +1069,10 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
   // Preserve explicit extensions; build variant lists depending on ANSI vs PETSCII
   const addAnsiVariants = (name: string) => {
     const variants = new Set<string>();
+    // The name exactly as asked for wins; the stem (a known screen extension
+    // stripped) drives every fallback, so `001.logoff.seq` can land on
+    // `001.logoff.txt` instead of probing `001.logoff.seq.txt`.
+    const stem = stripScreenExtension(name);
     variants.add(name);
     // Lowercase variant FIRST. Our image ships lowercase
     // (`BBSTITLE.txt`); admin TUI and modern editors also default
@@ -920,43 +1083,45 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     // wins. Previously uppercase-first caused stale BBSTITLE.TXT
     // on the live volume to shadow a fresh BBSTITLE.txt, which
     // broke the login-prompt placement.
-    variants.add(`${name}.txt`);
-    variants.add(`${name}.TXT`);
-    variants.add(`${name}.logoff`);
-    variants.add(`${name}.logoff.txt`);
-    variants.add(`${name}.LOGOFF.TXT`);
+    variants.add(`${stem}.txt`);
+    variants.add(`${stem}.TXT`);
+    variants.add(`${stem}.logoff`);
+    variants.add(`${stem}.logoff.txt`);
+    variants.add(`${stem}.LOGOFF.TXT`);
     return Array.from(variants);
   };
 
   const addPetsciiVariants = (name: string) => {
     const variants = new Set<string>();
+    const stem = stripScreenExtension(name);
     // Prefer PETSCII .seq first
-    variants.add(`${name}.seq`);
-    variants.add(`${name}.SEQ`);
+    variants.add(`${stem}.seq`);
+    variants.add(`${stem}.SEQ`);
     // Also allow explicit name as-is (in case a .txt was provided)
     variants.add(name);
     // Fall back to ANSI text if no .seq exists (lowercase first; see addAnsiVariants).
-    variants.add(`${name}.txt`);
-    variants.add(`${name}.TXT`);
-    variants.add(`${name}.logoff`);
-    variants.add(`${name}.logoff.txt`);
-    variants.add(`${name}.LOGOFF.TXT`);
+    variants.add(`${stem}.txt`);
+    variants.add(`${stem}.TXT`);
+    variants.add(`${stem}.logoff`);
+    variants.add(`${stem}.logoff.txt`);
+    variants.add(`${stem}.LOGOFF.TXT`);
     return Array.from(variants);
   };
 
   const addRipVariants = (name: string) => {
     const variants = new Set<string>();
+    const stem = stripScreenExtension(name);
     // Prefer RIP .rip first
-    variants.add(`${name}.rip`);
-    variants.add(`${name}.RIP`);
+    variants.add(`${stem}.rip`);
+    variants.add(`${stem}.RIP`);
     // Also allow explicit name as-is
     variants.add(name);
     // Fall back to ANSI text if no .rip exists (lowercase first; see addAnsiVariants).
-    variants.add(`${name}.txt`);
-    variants.add(`${name}.TXT`);
-    variants.add(`${name}.logoff`);
-    variants.add(`${name}.logoff.txt`);
-    variants.add(`${name}.LOGOFF.TXT`);
+    variants.add(`${stem}.txt`);
+    variants.add(`${stem}.TXT`);
+    variants.add(`${stem}.logoff`);
+    variants.add(`${stem}.logoff.txt`);
+    variants.add(`${stem}.LOGOFF.TXT`);
     return Array.from(variants);
   };
 
@@ -1097,10 +1262,17 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
       const candidatePath = resolvePetsciiPath(filePath, !!session?.petsciiMode);
       // Try the path as-is, then with common extensions (.txt, .TXT, .ans, .ANS)
       // This handles ~SR_ which generates paths like "001.logoff" but files are "001.logoff.txt"
-      const pathsToTry = [candidatePath];
-      if (!candidatePath.match(/\.(txt|ans|seq)$/i)) {
-        pathsToTry.push(candidatePath + '.txt', candidatePath + '.TXT', candidatePath + '.ans', candidatePath + '.ANS');
-      }
+      // Same rule as the variant builders above, for the arm an absolute or
+      // assign path takes (`~SR_`/`~SS_` resolve to absolute paths). A name
+      // that already carries a known screen extension gets that extension
+      // SWAPPED, not appended: `001.logoff.seq` must be able to land on
+      // `001.logoff.txt`, which is the only file the shipped board ships.
+      const pathStem = stripScreenExtension(candidatePath);
+      const extOrder = session?.petsciiMode
+        ? ['.seq', '.SEQ', '.txt', '.TXT', '.ans', '.ANS']
+        : ['.txt', '.TXT', '.ans', '.ANS'];
+      const pathsToTry = [candidatePath, ...extOrder.map(ext => pathStem + ext)]
+        .filter((p, idx, all) => all.indexOf(p) === idx);
 
       for (const tryPath of pathsToTry) {
         if (amigafs.existsSync(tryPath)) {
@@ -1215,6 +1387,115 @@ export function addAnsiEscapes(content: string): string {
   });
 }
 
+/** express.e's MCI opt-in byte (`~`), tested on a `.seq`'s FIRST byte only. */
+const PETSCII_MCI_GATE = 0x7e;
+
+/** PETSCII CLR ($93). A C64 has no `\x1b[2J\x1b[H`. */
+const PETSCII_CLS = '\x93';
+
+/**
+ * `petscii-bytes` is a SESSION-MODE gate, not just a transport choice.
+ *
+ * An ANSI web session can reach a `.seq` screen (the BBSTITLE fallback, an
+ * include) without ever having opted into PETSCII mode; emitting
+ * `petscii-bytes` there would push the frontend's terminal irreversibly into
+ * canvas mode for a session that never asked for it. Only a session that
+ * already IS petsciiMode, or a real C64, gets the raw-byte transport;
+ * everyone else gets the legacy PUA `petscii-output`.
+ */
+function sessionWantsRawPetscii(session: BBSSession): boolean {
+  return !!session.petsciiMode || session.terminalType === 'c64';
+}
+
+/**
+ * The ONE PETSCII chunk emitter (plan Task 6's divergence rule, Task 7).
+ *
+ * EVERY byte a PETSCII session receives goes through here - art, substituted
+ * values and the screen clears alike - so the render-side oracle, the telnet
+ * emitter's transducer and the web client's machine can never disagree about
+ * the bank, the pen or where the cursor is. An ANSI escape emitted around a
+ * PETSCII payload is the silent bug class this closes: the render machine
+ * would believe the cursor is where the art left it while the terminal has
+ * been homed.
+ */
+function emitPetsciiChunk(
+  socket: any,
+  ctx: { machine: PetsciiMachine },
+  text: string,
+  spans: readonly PetsciiSpan[] = [],
+): boolean {
+  if (text.length === 0) return false;
+  const bytes = renderChunkBytes(text, ctx, spans);
+  if (bytes.length === 0) return false;
+  socket.emit('petscii-bytes', bytes.toString('base64'));
+  return true;
+}
+
+/**
+ * A gated `.seq` (first byte `~`) rendered through the inline sentinel
+ * walker: art chunk, side effect, art chunk, in document order.
+ *
+ * Plan Task 7. The file is scanned ONCE (`preparePetsciiSeq`: gate,
+ * pre-passes, tokenizer) and rendered in PIECES, because the oracle has to
+ * observe the pieces in the order the terminal receives them - an `~SS_`
+ * include draws with the same machine, so the bytes after it must be encoded
+ * against the bank and cursor the include left behind, not against a state
+ * computed before it ran.
+ *
+ * `~SP` (decision 7) stops the walk with the remainder in
+ * `pendingInlineContent`; resuming it after the keypress is Task 8, so for
+ * now the pause flag is recorded and the remainder is dropped rather than
+ * painted over the pause prompt.
+ */
+export async function emitPetsciiScreenInline(
+  socket: any,
+  session: BBSSession,
+  buffer: Buffer,
+): Promise<void> {
+  const ctx = await petsciiRenderCtxFor(session);
+  const plan = await preparePetsciiSeq(buffer, session, ctx);
+
+  if (!plan.gated) {
+    // Defensive: the caller checks the gate byte, so reaching here means the
+    // file is art. Emit it exactly as the whole-file path would.
+    ctx.machine.feed(buffer);
+    socket.emit('petscii-bytes', buffer.toString('base64'));
+    session.lastScreenHadPause = false;
+    return;
+  }
+
+  /** The plan's substitution spans that fall inside one chunk, rebased to it. */
+  const spansIn = (start: number, end: number): PetsciiSpan[] =>
+    plan.spans
+      .filter(sp => sp.start >= start && sp.start + sp.len <= end)
+      .map(sp => ({ start: sp.start - start, len: sp.len, cmd: sp.cmd }));
+
+  // The two sentinel kinds the CHUNK renderer owns: they are resolved against
+  // the LIVE cursor while the chunk is encoded, so they must not break it.
+  const moveTag = MCI_SENTINELS.MOVE.slice(1);
+  const generatedTag = MCI_GENERATED.START.slice(1);
+
+  const walk = await walkInlineSentinels(socket, session, plan.text, {
+    emitChunk: (chunk, start) =>
+      emitPetsciiChunk(socket, ctx, chunk, spansIn(start, start + chunk.length)),
+    emitCls: () => {
+      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
+    },
+    emitClsBeforeRandomFile: () => {
+      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
+    },
+    isChunkSentinel: payload =>
+      payload.startsWith(moveTag) || payload.startsWith(generatedTag),
+  });
+
+  if (walk.pendingInlineContent !== undefined) {
+    screenDebug(
+      `[MCI] PETSCII ~SP: ${walk.pendingInlineContent.length} bytes pending (Task 8 resumes them)`,
+    );
+  }
+  session.lastScreenHadPause = walk.hasPause;
+}
+
 /**
  * Emit a PETSCII screen result: the ONE server-side render of a `.seq`
  * (plan `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`, Task 6).
@@ -1262,8 +1543,7 @@ export async function emitPetsciiScreen(
   session: BBSSession,
   result: { content: string; isPetscii: boolean; isRip: boolean; filePath: string; petsciiBuffer?: Buffer }
 ): Promise<void> {
-  const sessionWantsRawPetscii = !!session.petsciiMode || session.terminalType === 'c64';
-  if (result.petsciiBuffer && sessionWantsRawPetscii) {
+  if (result.petsciiBuffer && sessionWantsRawPetscii(session)) {
     // ONE render, before the base64 and therefore before the transports
     // split. The context caches only the session's PetsciiMachine (the
     // positional bank/cursor/pen oracle); the dispatch is rebuilt here every
@@ -1322,8 +1602,20 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Clear screen BEFORE any processing (including inline MCI that sets inlineEmitted=true).
     // Must be early — the frame-buffer path also prepends the clear, but inlineEmitted screens
     // (CONF_BULL with ~CC_ dRE!WAll etc.) bypass that path entirely, leaving old door content visible.
+    // The raw-PETSCII transport is decided once, here: it gates BOTH the
+    // clear below and the render path underneath it.
+    const rawPetscii = isPetscii && !!petsciiBuffer && sessionWantsRawPetscii(session);
+
     if (shouldClear) {
-      socket.emit('ansi-output', '\x1b[2J\x1b[H');
+      if (rawPetscii) {
+        // A C64 does not speak ANSI. The clear is $93 and it goes out through
+        // the ONE PETSCII chunk emitter, so the render machine observes it -
+        // otherwise the terminal is homed while the oracle still believes the
+        // cursor is where the previous screen's art left it.
+        emitPetsciiChunk(socket, { machine: petsciiMachineFor(session) }, PETSCII_CLS);
+      } else {
+        socket.emit('ansi-output', '\x1b[2J\x1b[H');
+      }
     }
 
     // === PETSCII screens with a raw buffer go out as binary (Task 9) ===
@@ -1337,7 +1629,19 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // loadScreenFile's return shape), fall back to the legacy PUA emit.
     if (isPetscii) {
       screenFlowLog(screenName, `PETSCII screen ${filePath}: ${petsciiBuffer ? petsciiBuffer.length + ' raw bytes (petscii-bytes)' : content.length + ' PUA chars (legacy petscii-output)'}`);
-      await emitPetsciiScreen(socket, session, screenData);
+      // express.e:6800-6806 - a screen whose FIRST byte is `~` is MCI. Such a
+      // .seq goes through the inline sentinel walker, so `~SS_`/`~SR_`/`~CC_`
+      // run as side effects in document order; anything else is art and is
+      // painted as one frame.
+      if (rawPetscii && petsciiBuffer![0] === PETSCII_MCI_GATE) {
+        await emitPetsciiScreenInline(socket, session, petsciiBuffer!);
+      } else {
+        await emitPetsciiScreen(socket, session, screenData);
+      }
+      // BOTH arms return here. A .seq must never fall through to the 40-column
+      // prose-reflow / ANSI-art-skip path below: that operates on `content`,
+      // the legacy Unicode-PUA conversion, and reflowing it smears the art -
+      // or, for an art-scoring screen, silently skips it and drops its MCI.
       return true;
     }
 

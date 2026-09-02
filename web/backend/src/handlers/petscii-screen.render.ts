@@ -108,6 +108,20 @@ export interface PetsciiRenderCtxOpts {
 }
 
 /**
+ * The session's bank / cursor / pen oracle, created on first use.
+ *
+ * Exported because a caller that only needs to put a control byte on the wire
+ * - the `$93` screen clear - must feed that byte to the SAME machine without
+ * paying for a dispatch build (`buildMciDispatch` runs the message-base and
+ * system-stats lookups its closures read).
+ */
+export function petsciiMachineFor(session: BBSSession): PetsciiMachine {
+  const holder = session as unknown as PetsciiRenderSession;
+  if (!holder.petsciiRenderMachine) holder.petsciiRenderMachine = new PetsciiMachine();
+  return holder.petsciiRenderMachine;
+}
+
+/**
  * The context for one render.
  *
  * CACHED: the `PetsciiMachine` only. It is the positional oracle - a `~SS_`
@@ -124,8 +138,7 @@ export async function petsciiRenderCtxFor(
   session: BBSSession,
   opts: PetsciiRenderCtxOpts = {},
 ): Promise<PetsciiRenderCtx> {
-  const holder = session as unknown as PetsciiRenderSession;
-  if (!holder.petsciiRenderMachine) holder.petsciiRenderMachine = new PetsciiMachine();
+  const machine = petsciiMachineFor(session);
   const inlineMode = opts.inlineMode ?? true;
   const { dispatch, prefixDispatch, state } = await buildMciDispatch(session, {
     flavour: 'petscii',
@@ -134,7 +147,7 @@ export async function petsciiRenderCtxFor(
     now: opts.now,
   });
   return {
-    machine: holder.petsciiRenderMachine,
+    machine,
     dispatch,
     prefixDispatch,
     state,
@@ -168,42 +181,48 @@ function isRawSpan(cmd: string): boolean {
   return PETSCII_RAW_CMDS.has(cmd) || (cmd.length > 0 && PETSCII_RAW_PREFIXES.has(cmd[0]));
 }
 
-interface Span {
+/** Where `processMci` substituted a value, as offsets on its OWN output. */
+export interface PetsciiSpan {
   start: number;
   len: number;
   cmd: string;
 }
 
 /**
- * Render one `.seq` buffer's MCI into PETSCII bytes. No socket, no file I/O.
- *
- * Structural tokens (`~SS_` / `~SR_` / `~CC_` / `~SP` / inline `~f`) arrive as
- * NUL-delimited sentinels - from the dispatch as a substitution, or from the
- * pre-passes as plain text - and pass through UNTOUCHED and UNFED for the
- * caller's walker: they are not screen bytes, so the oracle must not see
- * their letters printed. `~x` / `~y` are the one exception: their MOVE
- * sentinel is resolved here, against the live cursor.
- *
- * `$02` edge case (the real C64 behaviour, not a workaround): `$02` arms the
- * machine's background prefix and is consumed ONLY if the next byte is itself
- * a PETSCII colour byte (`petscii-machine.ts:91-100`); otherwise the prefix
- * clears and that byte prints normally. So art ending in `$02` cannot eat the
- * first letter of a substituted value - the only span it can bite is a raw
- * colour span (`~c*` / `~b*` / `~q`), exactly as it would on hardware.
+ * One `.seq`, scanned ONCE: the express.e gate, the pre-passes and the
+ * tokenizer. Scanning and rendering are separate because a screen with a
+ * structural token is rendered in PIECES - the walker (`screen.handler.ts`)
+ * emits the text before a `~SS_`, runs the include, then renders the rest -
+ * and the oracle must observe those pieces in document order. The scan
+ * itself must still happen once for the whole file: sentinel offsets are
+ * only meaningful on `processMci`'s immediate output.
  */
-export async function renderPetsciiScreen(
+export interface PetsciiSeqPlan {
+  /** express.e's first-byte `~` gate (`:6800-6806`). false = art, verbatim. */
+  gated: boolean;
+  /** `processMci`'s output: art, substituted values and NUL sentinels. */
+  text: string;
+  /** Where the tokenizer substituted, on `text`. */
+  spans: PetsciiSpan[];
+}
+
+/**
+ * Gate, pre-pass and tokenize one `.seq` buffer. No bytes are emitted and
+ * the oracle is not fed - `renderChunkBytes` does both, per chunk.
+ *
+ * A non-gated file returns `{ gated: false }` with no text: it is art and
+ * the caller must put its ORIGINAL bytes on the wire (and feed them to the
+ * machine), which is what `renderPetsciiScreen` does below.
+ */
+export async function preparePetsciiSeq(
   bytes: Buffer,
   session: BBSSession,
   ctx: PetsciiRenderCtx,
-): Promise<Buffer> {
-  const machine = ctx.machine;
-
+): Promise<PetsciiSeqPlan> {
   // 1. The gate (decision 3, express.e:6800-6806), evaluated ONCE per file on
-  //    its first byte - never per `~SP` segment. The machine still observes
-  //    the art so the oracle stays truthful for whatever follows.
+  //    its first byte - never per `~SP` segment.
   if (bytes.length === 0 || bytes[0] !== GATE_BYTE) {
-    machine.feed(bytes);
-    return bytes;
+    return { gated: false, text: '', spans: [] };
   }
 
   // 2. latin1: one char per byte, lossless for $00-$FF. NEVER utf8 - it
@@ -223,8 +242,8 @@ export async function renderPetsciiScreen(
   //    path. Offsets are only meaningful on processMci's immediate output,
   //    which is why the renderer calls it directly instead of going through
   //    parseMciCodes' regex stages.
-  const spans: Span[] = [];
-  const out = processMci(
+  const spans: PetsciiSpan[] = [];
+  const text = processMci(
     pre.text,
     {
       dispatch: ctx.dispatch,
@@ -238,14 +257,48 @@ export async function renderPetsciiScreen(
     ctx.terminator,
   );
 
-  const spanAt = new Map<number, Span>();
+  return { gated: true, text, spans };
+}
+
+/**
+ * Render one run of a prepared plan (or any ad-hoc PETSCII text, such as the
+ * lone `$93` a screen clear puts on the wire) into bytes, feeding EVERY byte
+ * to the oracle as it goes.
+ *
+ * `spans` are the substitution spans that fall inside `text`, with offsets
+ * REBASED to it - a caller slicing a chunk out of `plan.text` must rebase.
+ * Text with no span is art and is copied byte for byte.
+ *
+ * Structural sentinels (`~SS_` / `~SR_` / `~CC_` / `~SP` / inline `~f`) pass
+ * through UNTOUCHED and UNFED: they are not screen bytes, so the oracle must
+ * not see their letters printed. The walker splits chunks on them, so they
+ * only reach here when a caller renders a whole file at once (a `.seq` with
+ * no socket behind it). `~x` / `~y` are the one exception: their MOVE
+ * sentinel is resolved here, against the live cursor.
+ *
+ * `$02` edge case (the real C64 behaviour, not a workaround): `$02` arms the
+ * machine's background prefix and is consumed ONLY if the next byte is itself
+ * a PETSCII colour byte (`petscii-machine.ts:91-100`); otherwise the prefix
+ * clears and that byte prints normally. So art ending in `$02` cannot eat the
+ * first letter of a substituted value - the only span it can bite is a raw
+ * colour span (`~c*` / `~b*` / `~q`), exactly as it would on hardware.
+ */
+export function renderChunkBytes(
+  text: string,
+  ctx: { machine: PetsciiMachine },
+  spans: readonly PetsciiSpan[] = [],
+): Buffer {
+  const machine = ctx.machine;
+  const out = text;
+
+  const spanAt = new Map<number, PetsciiSpan>();
   const insideSpan = new Uint8Array(out.length);
   for (const span of spans) {
     spanAt.set(span.start, span);
     insideSpan.fill(1, span.start, span.start + span.len);
   }
 
-  // 4. One walk over the tokenizer's output, span cursor in hand.
+  // One walk over the tokenizer's output, span cursor in hand.
   const cols = machine.state.cols;   // the ONE width source - no literal 40
   const rows = machine.state.rows;
   const bytesOut: number[] = [];
@@ -260,9 +313,9 @@ export async function renderPetsciiScreen(
   const emitUnfed = (b: number[]): void => {
     bytesOut.push(...b);
   };
-  const latin1Bytes = (text: string): number[] => {
+  const latin1Bytes = (t: string): number[] => {
     const result: number[] = [];
-    for (let i = 0; i < text.length; i++) result.push(text.charCodeAt(i) & 0xff);
+    for (let i = 0; i < t.length; i++) result.push(t.charCodeAt(i) & 0xff);
     return result;
   };
   const clamp = (n: number, limit: number): number =>
@@ -285,8 +338,8 @@ export async function renderPetsciiScreen(
    * never reads `reverseState`, so passing one would be a knob that moves
    * nothing.
    */
-  const emitEncoded = (text: string): void => {
-    for (const b of encodePetsciiValue(text, machine.state.charsetBank)) {
+  const emitEncoded = (value: string): void => {
+    for (const b of encodePetsciiValue(value, machine.state.charsetBank)) {
       // Decision 4, the ROW half: `$0D` is the only cursor-moving byte the
       // encoder produces, and on the bottom row `carriageReturn` SCROLLS the
       // whole screen (`petscii-machine.ts` :131-146, :157-170). A value must
@@ -306,7 +359,7 @@ export async function renderPetsciiScreen(
 
   let i = 0;
   while (i < out.length) {
-    // 4a. Structural sentinel - from a substitution or from a pre-pass.
+    // Structural sentinel - from a substitution or from a pre-pass.
     if (out.charCodeAt(i) === 0) {
       const end = out.indexOf(MCI_SENTINELS.END, i + 1);
       if (end < 0) {
@@ -342,21 +395,21 @@ export async function renderPetsciiScreen(
       continue;
     }
 
-    // 4b. A substituted value.
+    // A substituted value.
     const span = spanAt.get(i);
     if (span) {
-      const text = out.slice(span.start, span.start + span.len);
+      const value = out.slice(span.start, span.start + span.len);
       if (isRawSpan(span.cmd)) {
         // Already PETSCII (colour, clear, DELETE, RETURN, the cursor walks).
-        emit(latin1Bytes(text));
+        emit(latin1Bytes(value));
       } else {
-        emitEncoded(text);
+        emitEncoded(value);
       }
       i += span.len;
       continue;
     }
 
-    // 4c. Art. `~~` -> `~` is the LAST pass, exactly as in parseMciCodes:
+    // Art. `~~` -> `~` is the LAST pass, exactly as in parseMciCodes:
     // the tokenizer's strict fall-through can re-emit an unknown code
     // verbatim, so a literal-tilde pair can still reach the output here.
     // Only art collapses - a substituted value is data, not source.
@@ -374,4 +427,26 @@ export async function renderPetsciiScreen(
   }
 
   return Buffer.from(bytesOut);
+}
+
+/**
+ * Render one `.seq` buffer's MCI into PETSCII bytes, in one piece. No socket,
+ * no file I/O. This is the WHOLE-FILE path (`emitPetsciiScreen`); a screen
+ * carrying a structural token is rendered chunk by chunk by the inline
+ * sentinel walker instead, from the same plan and through the same
+ * `renderChunkBytes`.
+ */
+export async function renderPetsciiScreen(
+  bytes: Buffer,
+  session: BBSSession,
+  ctx: PetsciiRenderCtx,
+): Promise<Buffer> {
+  const plan = await preparePetsciiSeq(bytes, session, ctx);
+  if (!plan.gated) {
+    // Art: byte-identical out, and the machine still observes it so the bank
+    // and cursor stay truthful for whatever is drawn next.
+    ctx.machine.feed(bytes);
+    return bytes;
+  }
+  return renderChunkBytes(plan.text, ctx, plan.spans);
 }
