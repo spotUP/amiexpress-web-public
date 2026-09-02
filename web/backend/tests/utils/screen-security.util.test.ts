@@ -311,6 +311,58 @@ describe('Screen Security Utility (Security-Aware Screen Finding)', () => {
     });
   });
 
+    describe('PETSCII mode (WEB_ extension over express.e, live BBSTITLE bug)', () => {
+      it('should prefer .SEQ over .TXT when petsciiMode is true', () => {
+        const basePath = path.join(screensDir, 'BBSTITLE');
+        fs.writeFileSync(`${basePath}.TXT`, 'ANSI title');
+        fs.writeFileSync(`${basePath}.SEQ`, Buffer.from([0x93, 0xa1, 0xff]));
+
+        const result = findSecurityScreen(basePath, 10, '.TXT', false, false, true);
+
+        expect(result).toBe(`${basePath}.SEQ`);
+      });
+
+      it('should keep returning .TXT when petsciiMode is false (parity preserved)', () => {
+        const basePath = path.join(screensDir, 'BBSTITLE');
+        fs.writeFileSync(`${basePath}.TXT`, 'ANSI title');
+        fs.writeFileSync(`${basePath}.SEQ`, Buffer.from([0x93, 0xa1, 0xff]));
+
+        const result = findSecurityScreen(basePath, 10, '.TXT', false, false, false);
+
+        expect(result).toBe(`${basePath}.TXT`);
+      });
+
+      it('should prefer .SEQ over .RIP when both ripMode and petsciiMode are true (a PETSCII session is never RIP, but SEQ still wins if it happens)', () => {
+        const basePath = path.join(screensDir, 'BBSTITLE');
+        fs.writeFileSync(`${basePath}.RIP`, 'RIP graphics');
+        fs.writeFileSync(`${basePath}.TXT`, 'ANSI title');
+        fs.writeFileSync(`${basePath}.SEQ`, Buffer.from([0x93, 0xa1, 0xff]));
+
+        const result = findSecurityScreen(basePath, 10, '.TXT', true, false, true);
+
+        expect(result).toBe(`${basePath}.SEQ`);
+      });
+
+      it('should fall back to .TXT when petsciiMode is true but no .SEQ exists', () => {
+        const basePath = path.join(screensDir, 'BBSTITLE');
+        fs.writeFileSync(`${basePath}.TXT`, 'ANSI title');
+
+        const result = findSecurityScreen(basePath, 10, '.TXT', false, false, true);
+
+        expect(result).toBe(`${basePath}.TXT`);
+      });
+
+      it('should check .SEQ at security levels too', () => {
+        const basePath = path.join(screensDir, 'Menu');
+        fs.writeFileSync(`${basePath}10.SEQ`, Buffer.from([0x93]));
+        fs.writeFileSync(`${basePath}10.TXT`, 'Security 10 TXT');
+
+        const result = findSecurityScreen(basePath, 10, null, false, false, true);
+
+        expect(result).toBe(`${basePath}10.SEQ`);
+      });
+    });
+
   describe('findBulletinFile', () => {
     let conf1Dir: string;
     let bulletinsDir: string;

@@ -70,6 +70,10 @@ function normalizeScreenTypeExtension(screenTypeExt: string): string {
  * @param userScreenTypeExt - User's preferred screen type extension (e.g., ".TXT.GR", ".IBM")
  * @param ripMode - Whether RIP mode is enabled (prefer .RIP files)
  * @param defScreens - DEF_SCREENS tooltype (if true, check non-security first)
+ * @param petsciiMode - WEB_ extension over express.e (no Amiga equivalent):
+ *   web C64 terminal / real-C64 PETSCII sessions prefer a .SEQ variant over
+ *   everything else. See resolvePetsciiPath() in screen.handler.ts for the
+ *   sibling non-security-lookup preference this mirrors.
  * @returns Full path to found screen file, or null if not found
  */
 export function findSecurityScreen(
@@ -77,7 +81,8 @@ export function findSecurityScreen(
   userSecLevel: number = 0,
   userScreenTypeExt: string | null = null,
   ripMode: boolean = false,
-  defScreens: boolean = false
+  defScreens: boolean = false,
+  petsciiMode: boolean = false
 ): string | null {
   const minLevel = 5;
 
@@ -86,11 +91,25 @@ export function findSecurityScreen(
    * express.e:6258-6288
    *
    * Priority:
+   * 0. WEB_ extension (not in express.e): PETSCII mode: .SEQ
    * 1. RIP mode: .RIP
    * 2. User screen type: .TXT.GR, .IBM, etc.
    * 3. Plain text: .TXT
    */
   const checkScreen = (basePath: string): string | null => {
+    // WEB_ extension over express.e:6258-6270 - PETSCII sessions prefer .SEQ
+    // ahead of RIP/screen-type/TXT. A PETSCII session is never simultaneously
+    // a RIP session on this BBS, but if both flags were ever set, PETSCII
+    // still wins here (matches resolvePetsciiPath()'s priority elsewhere).
+    if (petsciiMode) {
+      const seqPath = `${basePath}.SEQ`;
+      const resolved = resolveCaseInsensitivePath(seqPath);
+      if (resolved) {
+console.log(`[SCREEN] Found PETSCII screen: ${resolved}`);
+        return resolved;
+      }
+    }
+
     // express.e:6258-6260 - IF ripMode check .RIP first
     if (ripMode) {
       const ripPath = `${basePath}.RIP`;

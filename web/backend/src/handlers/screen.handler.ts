@@ -1525,7 +1525,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
-      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false);
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, !!session?.petsciiMode);
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
@@ -1601,7 +1601,7 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false);
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, !!session?.petsciiMode);
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {

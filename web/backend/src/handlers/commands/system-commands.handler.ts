@@ -22,7 +22,7 @@ import { finalizeCommand } from '../../utils/command-response.util';
 
 // Injected dependencies
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => Promise<boolean>;
-let _findSecurityScreen: (screenBasePath: string, userSecLevel: number, petsciiMode?: boolean, ripMode?: boolean) => string | null;
+let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean, petsciiMode?: boolean) => string | null;
 
 // Injection function
 export function setSystemCommandsDependencies(deps: {
@@ -269,7 +269,12 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
   const helpBasePath = 'BBSHelp';
 
   // express.e:25084 - findSecurityScreen()
-  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
+  // NOTE: previously passed session.petsciiMode into the userScreenTypeExt
+  // slot (a mistyped shim masked by `as any` at the injection site in
+  // initialization.ts) - this was never live PETSCII logic, just a no-op
+  // (".true" was never a real extension). Fixed to call the real,
+  // petsciiMode-aware findSecurityScreen (screen-security.util.ts).
+  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, session.petsciiMode);
 
   if (helpScreenPath) {
     // express.e:25085 - displayFile(screen)
