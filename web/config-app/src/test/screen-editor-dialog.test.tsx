@@ -63,6 +63,11 @@ vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
+/** The gallery opens first; these cases are about the tables behind it. */
+async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
+  await user.click(await screen.findByRole('tab', { name }));
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -74,6 +79,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 async function openEditor(user: ReturnType<typeof userEvent.setup>) {
   render(<ScreenFilesPage />, { wrapper });
+  await openScreenTab(user);
   await user.click(await screen.findByText('BBSTITLE'));
   // The row opens the art; there is no Edit button any more.
   const rows = await screen.findAllByText('Node1/BBSTITLE.txt');

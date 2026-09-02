@@ -10,6 +10,7 @@ import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenArt } from '../components/ScreenArt';
+import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { Modal } from '../components/ui/Modal';
@@ -442,7 +443,63 @@ export function ScreenFilesPage() {
     />
   );
 
+  /**
+   * Every screen on the board as a picture.
+   *
+   * "How can we make it easy for artists to find everything? render mugshots
+   * of all screen files?" A designer recognises the art, never the path.
+   */
+  const galleryItems: GalleryItem[] = useMemo(() => {
+    if (!data) return [];
+
+    const bulletinTitles = new Map((data.bulletins ?? []).map(b => [b.file, b] as const));
+
+    return Object.values(data.files)
+      .filter(file => file.format === 'ansi' || file.format === 'text')
+      .map(file => {
+        const bulletin = bulletinTitles.get(file.relPath);
+        const reader = file.readBy?.[0];
+
+        return {
+          path: file.relPath,
+          label: bulletin
+            ? `Bulletin ${bulletin.number}${bulletin.title ? ` - ${bulletin.title}` : ''}`
+            : reader?.screen ?? file.relPath,
+          detail: file.problems?.length
+            ? file.problems.map(describeProblem).join('; ')
+            : reader
+              ? describeReader(reader, data.callersByLevel)
+              : 'read by nothing',
+          credit: file.sauce?.author
+            ? `${file.sauce.title || 'untitled'} by ${file.sauce.author}`
+            : undefined,
+          problem: (file.problems?.length ?? 0) > 0,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [data]);
+
   const tabs: TabDefinition[] = [
+    {
+      id: 'gallery',
+      label: `Gallery ${galleryItems.length}`,
+      render: () => (
+        <div className="space-y-2">
+          <p className="text-sm text-content-secondary">
+            Every screen and bulletin on the board, drawn. Click one to open it.
+            Thumbnails load as you scroll.
+          </p>
+          <ScreenGallery
+            items={query.trim()
+              ? galleryItems.filter(item =>
+                  item.label.toLowerCase().includes(query.trim().toLowerCase())
+                  || item.path.toLowerCase().includes(query.trim().toLowerCase()))
+              : galleryItems}
+            onOpen={setOpenFile}
+          />
+        </div>
+      ),
+    },
     {
       id: 'node',
       label: `Node screens ${byScope.node.length}`,

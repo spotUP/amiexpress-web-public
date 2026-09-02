@@ -76,6 +76,11 @@ vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
+/** The gallery opens first; these cases are about the tables behind it. */
+async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
+  await user.click(await screen.findByRole('tab', { name }));
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -104,6 +109,8 @@ describe('a refused share', () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
+    await openScreenTab(user);
+
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByRole('button', { name: /check this directory/i }));
 
@@ -117,6 +124,8 @@ describe('a refused share', () => {
   it('still offers to point the nodes that CAN share', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+
+    await openScreenTab(user);
 
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByRole('button', { name: /check this directory/i }));

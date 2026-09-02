@@ -126,6 +126,25 @@ export interface ConferenceFacts {
   name: string;
   /** The directory it reads, relative to the board root. */
   dir: string;
+  /** How many file areas it declares (NDIRS). Neither areas nor bases are named on disk. */
+  fileAreas: number;
+  /** How many message bases sit in it. */
+  messageBases: number;
+}
+
+/**
+ * A bulletin: art a caller reads by number.
+ *
+ * The board publishes their titles in `Bulletins/BullHelp.txt` - "#20 Card
+ * Lobby Weekly Leaders" - and nothing was reading it, so a designer looking for
+ * the weekly leaders bulletin had a numbered file and no way in.
+ */
+export interface BulletinFacts {
+  number: number;
+  /** Relative path of the art itself. */
+  file: string;
+  /** The title the board publishes, when it publishes one. */
+  title?: string;
 }
 
 export interface ScreenIndex {
@@ -134,6 +153,7 @@ export interface ScreenIndex {
   unused: ScreenFileFacts[];
   files: Record<string, ScreenFileFacts>;
   conferences: ConferenceFacts[];
+  bulletins: BulletinFacts[];
   builtAt: string;
 }
 
@@ -279,6 +299,51 @@ function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
   return problems;
 }
 
+/**
+ * The titles the board publishes for its bulletins.
+ *
+ * BullHelp.txt is the menu a caller reads: a `#<number>` and a title, with any
+ * amount of decoration around it. Parsed loosely on purpose - it is art, and
+ * every board's is laid out differently.
+ */
+function bulletinTitles(baseDir: string): Map<number, string> {
+  const titles = new Map<number, string>();
+  const help = amigafs.findCaseInsensitive(path.join(baseDir, 'Bulletins'), 'BullHelp.txt');
+  if (!help) return titles;
+
+  try {
+    const text = fs.readFileSync(help, 'latin1');
+    // Strip colour so a title does not arrive wearing its escape codes.
+    for (const line of text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split(/\r?\n/)) {
+      const match = /^\s*#\s*(\d+)\s+(.+?)\s*$/.exec(line);
+      if (!match) continue;
+      titles.set(parseInt(match[1], 10), match[2].trim());
+    }
+  } catch { /* an unreadable help screen simply names nothing */ }
+
+  return titles;
+}
+
+/** Every bulletin on the board, named where the board names it. */
+function listBulletins(baseDir: string): BulletinFacts[] {
+  const dir = path.join(baseDir, 'Bulletins');
+  const titles = bulletinTitles(baseDir);
+
+  try {
+    return fs.readdirSync(dir)
+      .map(name => ({ name, match: /^bull(\d+)\.[^.]+$/i.exec(name) }))
+      .filter((entry): entry is { name: string; match: RegExpExecArray } => entry.match !== null)
+      .map(entry => ({
+        number: parseInt(entry.match[1], 10),
+        file: path.relative(baseDir, path.join(dir, entry.name)),
+        title: titles.get(parseInt(entry.match[1], 10)),
+      }))
+      .sort((a, b) => a.number - b.number);
+  } catch {
+    return [];
+  }
+}
+
 function commandName(baseDir: string, command: string): string | undefined {
   const dir = path.join(baseDir, 'Commands', 'BBSCmd');
   const file = amigafs.findCaseInsensitive(dir, `${command}.info`);
@@ -406,11 +471,29 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
   const readers = new Map<string, ScreenReader[]>();
 
   const confConfig = loadConfConfig(baseDir);
-  const conferences: ConferenceFacts[] = conferenceNumbers(baseDir).map(id => ({
-    id,
-    name: confConfig?.entries[id - 1]?.name?.trim() || `Conference ${id}`,
-    dir: path.relative(baseDir, conferenceDir(baseDir, id)),
-  }));
+  const conferences: ConferenceFacts[] = conferenceNumbers(baseDir).map(id => {
+    const dir = conferenceDir(baseDir, id);
+
+    // NDIRS is the count express.e reads; neither the areas nor the message
+    // bases carry names on this board, so the count is the honest answer.
+    let fileAreas = 0;
+    try {
+      fileAreas = parseInt(fs.readFileSync(path.join(dir, 'NDIRS'), 'latin1').trim(), 10) || 0;
+    } catch { /* a conference with no NDIRS declares none */ }
+
+    let messageBases = 0;
+    try {
+      messageBases = fs.existsSync(path.join(dir, 'MsgBase')) ? 1 : 0;
+    } catch { /* likewise */ }
+
+    return {
+      id,
+      name: confConfig?.entries[id - 1]?.name?.trim() || `Conference ${id}`,
+      dir: path.relative(baseDir, dir),
+      fileAreas,
+      messageBases,
+    };
+  });
   const conferenceNames = new Map(conferences.map(conf => [conf.id, conf.name]));
   // The board names its own screen types; `.GR` means nothing to a designer.
   const typeNames = screenTypeNames(baseDir);
@@ -549,7 +632,23 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
     files[rel] = facts;
   }
 
-  return { screens, unused, files, conferences, builtAt: new Date().toISOString() };
+  const bulletins = listBulletins(baseDir);
+  // A bulletin is read by number, not by a screen name, so the catalogue walk
+  // never sees one - and it would otherwise be reported as read by nothing.
+  for (const bulletin of bulletins) {
+    const facts = files[bulletin.file] ?? factsFor(path.join(baseDir, bulletin.file));
+    files[bulletin.file] = facts;
+  }
+  const bulletinFiles = new Set(bulletins.map(b => b.file));
+
+  return {
+    screens,
+    unused: unused.filter(file => !bulletinFiles.has(file.relPath)),
+    files,
+    conferences,
+    bulletins,
+    builtAt: new Date().toISOString(),
+  };
 }
 
 let cached: { key: string; index: ScreenIndex } | null = null;

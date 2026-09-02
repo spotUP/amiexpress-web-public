@@ -74,6 +74,16 @@ export interface ConferenceShape {
   id: number;
   name: string;
   dir: string;
+  /** How many file areas and message bases it holds - neither is named on disk. */
+  fileAreas?: number;
+  messageBases?: number;
+}
+
+/** A bulletin: art a caller reads by number, titled by the board's own BullHelp. */
+export interface BulletinShape {
+  number: number;
+  file: string;
+  title?: string;
 }
 
 export interface ScopeResolutionShape {
@@ -97,6 +107,7 @@ export interface ScreenIndexShape {
   screens: ScreenIndexEntryShape[];
   unused: ScreenFileShape[];
   conferences?: ConferenceShape[];
+  bulletins?: BulletinShape[];
   /** How many accounts sit at each security level, for "95 callers". */
   callersByLevel?: Record<number, number>;
   files: Record<string, ScreenFileShape>;

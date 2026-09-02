@@ -78,6 +78,11 @@ vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
+/** The gallery opens first; these cases are about the tables behind it. */
+async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
+  await user.click(await screen.findByRole('tab', { name }));
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -90,6 +95,7 @@ function wrapper({ children }: { children: ReactNode }) {
 /** Open BBSTITLE, then the file under it - what a sysop clicks to get here. */
 async function openTheFile(user: ReturnType<typeof userEvent.setup>) {
   render(<ScreenFilesPage />, { wrapper });
+  await openScreenTab(user);
   await user.click(await screen.findByText('BBSTITLE'));
   // The resolution row is the affordance now, not a button in the cell. The
   // path appears in the row and again in the dialog title, so take the row's.
@@ -210,6 +216,8 @@ describe('reaching the editor', () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
+    await openScreenTab(user);
+
     await user.click(await screen.findByText('BBSTITLE'));
     // One click on the row - no Edit button in it, which is the point.
     await user.click((await screen.findAllByText('Node1/BBSTITLE.txt'))[0]);
@@ -220,6 +228,8 @@ describe('reaching the editor', () => {
   it('says a screen is openable, rather than leaving the row silent', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+
+    await openScreenTab(user);
 
     await user.click(await screen.findByText('BBSTITLE'));
 

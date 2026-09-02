@@ -66,6 +66,11 @@ vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
+/** The gallery opens first; these cases are about the tables behind it. */
+async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
+  await user.click(await screen.findByRole('tab', { name }));
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -82,6 +87,8 @@ describe('opening a screen from its row', () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
+    await openScreenTab(user);
+
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByText('Node1/BBSTITLE.txt'));
 
@@ -93,6 +100,8 @@ describe('opening a screen from its row', () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
+    await openScreenTab(user);
+
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByText('nothing resolves'));
 
@@ -102,6 +111,8 @@ describe('opening a screen from its row', () => {
   it('offers Download inside the dialog, not on every row', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+
+    await openScreenTab(user);
 
     await user.click(await screen.findByText('BBSTITLE'));
     // The row itself carries no actions any more.
@@ -117,6 +128,8 @@ describe('opening a screen from its row', () => {
   it('loads a local ANSI file into the canvas it is editing', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+
+    await openScreenTab(user);
 
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByText('Node1/BBSTITLE.txt'));

@@ -15,6 +15,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // The page's tabs keep the active one in the URL, so it needs a router.
 import { MemoryRouter } from 'react-router-dom';
@@ -77,6 +78,11 @@ vi.mock('../components/ScreenPreview', () => ({
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
+/** The gallery opens first; these cases are about the tables behind it. */
+async function openScreenTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -88,7 +94,9 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('the Screen Files page', () => {
   it('renders the screens the API answers with, without throwing', async () => {
+    const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+    await openScreenTab(user);
 
     await waitFor(() => {
       expect(screen.getByText('BBSTITLE')).toBeTruthy();
@@ -96,7 +104,9 @@ describe('the Screen Files page', () => {
   });
 
   it('shows the scope and the counts the index carries', async () => {
+    const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+    await openScreenTab(user);
 
     await waitFor(() => {
       expect(screen.getByText('node scope')).toBeTruthy();

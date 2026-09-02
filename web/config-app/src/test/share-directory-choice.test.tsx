@@ -73,6 +73,7 @@ describe('choosing the directory to share from', () => {
   it('offers the directories the board actually has', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+    await openScreenTab(user);
     await user.click(await screen.findByText('BBSTITLE'));
 
     const picker = await screen.findByLabelText(/share from/i);
@@ -83,6 +84,7 @@ describe('choosing the directory to share from', () => {
   it('asks the board about the chosen one, not a hardcoded name', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
+    await openScreenTab(user);
     await user.click(await screen.findByText('BBSTITLE'));
 
     await user.selectOptions(await screen.findByLabelText(/share from/i), 'Screens');
@@ -99,3 +101,8 @@ describe('choosing the directory to share from', () => {
 });
 
 import { within } from '@testing-library/react';
+
+/** The gallery opens first; these cases are about the tables behind it. */
+async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
+  await user.click(await screen.findByRole('tab', { name }));
+}
