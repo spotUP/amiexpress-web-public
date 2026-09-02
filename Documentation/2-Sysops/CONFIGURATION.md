@@ -86,9 +86,24 @@ own output and is the right mark for a TypeScript door that lays itself out
 from the terminal width. `C64_ADAPT` is a statement about an unmodified
 80-column Amiga binary: the BBS replays the door's ANSI onto a virtual 80x25
 grid and reduces each finished frame to 40 columns, keeping table columns side
-by side and ending any column that lost characters with `>`. Marking such a
-door `MIN_COLUMNS=40` would put a false claim in the registry, so it is not
-accepted as one; a door is never shown both markers.
+by side and ending any column that lost characters with `>`. A door is never
+shown both markers - `[40]` wins when both tooltypes are present.
+
+**`MIN_COLUMNS` is a claim the BBS cannot check.** The gate reads a number, not
+a door type. Putting `MIN_COLUMNS=40` on a 68K door (`XIM`, `DD`, `AMI`, `SIM`,
+`FIM`) therefore DOES open it to a 40-column caller - and that caller then gets
+the door's raw 80-column bytes, unadapted, because nothing in an unmodified
+Amiga binary narrows its own output. It is a false claim in the registry, not a
+rejected one. The board says so at registration:
+
+```
+[initializeDoors] WARN: door WHO is TYPE=XIM and declares MIN_COLUMNS=40 - a
+68K door cannot narrow its own output, so it will serve raw 80-column bytes to
+a 40-column caller. Use C64_ADAPT=40 instead.
+```
+
+Use `C64_ADAPT` for those doors. `MIN_COLUMNS=40` belongs on a door whose own
+layout is width-driven.
 
 `C64_ADAPT` only has an effect on the 68K door types whose output crosses the
 adapter's seam — `XIM`, `DD`, `AMI`, `SIM`, `FIM`. Setting it on a TypeScript,
@@ -114,6 +129,16 @@ npx tsx web/backend/src/scripts/info-editor.ts Commands/BBSCmd/WHO.info set C64_
 
 The BBS re-reads `Commands/BBSCmd` whenever its mtime moves, so the new
 tooltype takes effect on the next command without a restart.
+
+**A conference's `MENU_PROMPT` tooltype is yours to size.** The board's own
+command prompt has a 40-column form (no board name, no the word "Menu",
+`mins` for `mins. left`, the conference name clamped to the room left). A
+`MENU_PROMPT` you write in a conference's `.info` replaces that prompt whole,
+and the BBS does not rebuild it: only you know which of your words may be
+dropped. It is not left to run off the edge, though — a sysop prompt crosses
+the same width choke as every other piece of prose the board sends, so a
+40-column caller gets it word-wrapped at forty rather than smeared. If you want
+a C64 caller to see a short prompt, write a short one.
 
 **Deployment follow-up — port not yet exposed.** `TELNET_PETSCII_PORT` is
 wired on the backend only. Nothing outside the container can reach it yet:
