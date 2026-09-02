@@ -103,3 +103,26 @@ export async function theHandFitsThePanelItIsDrawnIn(): Promise<void> {
     }
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function aResizeAtATableKeepsTheTableFullWidth(): Promise<void> {
+  // The screenshot that started this: Alt+Enter at a table, and the table sat
+  // in the right two-thirds of a wide terminal with the left third black.
+  // applyViewMode returns early when the mode has not changed, and UIManager's
+  // relayout() re-imposed the lobby/table SPLIT - so the resize undid the view.
+  const app = await openApp();
+  try {
+    app.applyViewMode('table');
+    const win = app.uiManager.tableWindow;
+    assert.strictEqual(win.position.left, 0, 'full width before the resize');
+
+    // Through the door's own resize path, not by calling the fix directly.
+    app.terminalMode.toggle();
+    await new Promise((r) => setTimeout(r, 100));
+
+    assert.strictEqual(win.position.left, 0,
+      'a resize at a table must not push the table back into the right-hand column');
+    assert.ok(app.uiManager.lobbyWindow.hidden, 'and the lobby pane stays hidden');
+    assert.strictEqual(Number(win.position.width), Number(app.screen.width),
+      'the table is as wide as the terminal it was just given');
+  } finally { app.screen?.destroy?.(); }
+}

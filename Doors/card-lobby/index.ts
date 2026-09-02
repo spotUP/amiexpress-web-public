@@ -112,6 +112,7 @@ import {
   mergeColumns,
   visibleWidth,
 } from './lib';
+import { buildActivityHints } from './lib/activity-hints';
 import { UIManager, DialogManager, GameStateManager } from './managers';
 export const metadata = {
   name: 'Card Lobby',
@@ -470,8 +471,11 @@ export class CardLobbyApp {
       start: 'fixed',
       onRelayout: () => {
         // The windows carry absolute width/height, so following a resize is
-        // a re-layout, not just a repaint.
+        // a re-layout, not just a repaint. relayout() recomputes the SPLIT;
+        // applyViewGeometry then puts the windows where the current view
+        // wants them, which for a table is the whole screen.
         this.uiManager.relayout();
+        this.applyViewGeometry();
         this.updateAllPanels();
         this.screen.render();
       },
@@ -977,48 +981,22 @@ export class CardLobbyApp {
       table = this.findTableById(this.currentProfile.currentTableId) ?? null;
     }
 
-    const hintLines: string[] = [];
-    if (this.viewMode === 'table' && table && this.currentProfile) {
-      const engine = engineOverride ?? this.loadTableHand(table)?.engine ?? null;
-      if (!engine) {
-        const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
-        if (seatedPlayers.length < table.minPlayers) {
-          hintLines.push(`{${UI_THEME.warning}-fg}Waiting for players to join...{/}`);
-        } else {
-          hintLines.push(`{${UI_THEME.warning}-fg}Ready to deal. Press D or use Deal to start.{/}`);
-        }
-      } else {
-        const actionSeat = engine.state.actionTo;
-        if (actionSeat === null || actionSeat === undefined) {
-          hintLines.push(`{${UI_THEME.warning}-fg}Dealing in progress...{/}`);
-        } else {
-          const actor = engine.state.players[actionSeat];
-          if (actor?.id === this.currentProfile.userId) {
-            hintLines.push(`{${UI_THEME.warning}-fg}Your turn. Choose an action below.{/}`);
-          } else if (actor?.name) {
-            hintLines.push(`{${UI_THEME.warning}-fg}Waiting for ${actor.name} to act...{/}`);
-          }
-        }
-      }
-
-      hintLines.push(`{${UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
-    }
+    const hintLines = buildActivityHints({
+      viewMode: this.viewMode,
+      table: table as any,
+      isUno: table ? isUnoTable(table) : false,
+      userId: this.currentProfile?.userId ?? null,
+      engine: (engineOverride ?? (table ? this.loadTableHand(table)?.engine : null) ?? null) as any,
+    });
 
     const eventLines = this.lobby.events.length > 0
       ? [...this.lobby.events].reverse().map((event) => event.message)
       : ['No activity yet.'];
     const lines = hintLines.length > 0 ? [...hintLines, '', ...eventLines] : eventLines;
 
-    const previousScroll = this.activityContent.getScroll();
-    const previousHeight = this.activityContent.getScrollHeight();
-    const isAtBottom = previousHeight === 0 || previousScroll >= Math.max(0, previousHeight - 1);
-    this.activityContent.setContent(lines.join('\n'));
-    const newHeight = this.activityContent.getScrollHeight();
-    if (isAtBottom) {
-      this.activityContent.setScroll(newHeight);
-    } else {
-      this.activityContent.setScroll(Math.min(previousScroll, newHeight));
-    }
+    // One painter owns the panel: it wraps to the panel's own width and holds
+    // the reader's scroll position (UIManager.paintActivity).
+    this.uiManager.setActivityBody(lines);
   }
 
   public updateAllPanels(): void {
@@ -1647,12 +1625,27 @@ export class CardLobbyApp {
     if (!this.layout) return;
     if (this.viewMode === mode) return;
     this.viewMode = mode;
+    this.applyViewGeometry();
+    this.screen.render();
+  }
 
+  /**
+   * Put the two windows where the CURRENT view wants them.
+   *
+   * This used to live inside applyViewMode, which returns early when the mode
+   * has not changed - so a resize could not re-apply it, and UIManager's own
+   * relayout() re-imposed the lobby/table SPLIT whatever was on screen. Alt+
+   * Enter at a table therefore produced a table pinned to the right of a wide
+   * terminal with a third of the screen black (reported 2026-09-02, with a
+   * screenshot). Both callers come through here now.
+   */
+  public applyViewGeometry(): void {
+    if (!this.layout) return;
     const { width, leftWidth, rightWidth, mainHeight, tableHeight } = this.layout;
 
     // LIVE properties, not `options`: that seeds a widget once and is never
     // read again, so writing it left the window as narrow as it was built.
-    if (mode === 'table') {
+    if (this.viewMode === 'table') {
       this.lobbyWindow.hide();
       this.tableWindow.show();
       this.tableWindow.left = 0;
@@ -1663,6 +1656,7 @@ export class CardLobbyApp {
       this.topInfoBar.hide();
     } else {
       this.lobbyWindow.show();
+      this.lobbyWindow.left = 0;
       this.lobbyWindow.width = leftWidth;
       this.tableWindow.show();
       this.tableWindow.left = leftWidth;
@@ -1674,7 +1668,6 @@ export class CardLobbyApp {
     }
 
     this.layoutTablePanels();
-    this.screen.render();
   }
 
   private toggleFilters(): void {

@@ -46,6 +46,9 @@ const utils_1 = require("../lib/utils");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
 class UIManager {
     constructor(screen, desktop) {
+        /** Lines above the log (UNO context) and the door's own lines below it. */
+        this.activityHeader = [];
+        this.activityBody = [];
         this.dealAnimationInProgress = false;
         this.menuButtons = [];
         this.menus = [];
@@ -94,22 +97,15 @@ class UIManager {
             style: { fg: constants_1.UI_THEME.topBar.fg, bg: constants_1.UI_THEME.topBar.bg },
             content: ' Card Lobby v2.0.2-SDK ',
         });
+        // Two menus that held one entry each are folded into Views: a menu bar
+        // is for choosing what to look at, and "Lobby > Focus Lobby" said the
+        // same word twice to say it (2026-09-02).
         const menuDefs = [
-            {
-                label: 'Lobby',
-                items: [
-                    { label: 'Focus Lobby', action: () => runAction(focusLobby) },
-                ],
-            },
-            {
-                label: 'Table',
-                items: [
-                    { label: 'Focus Table', action: () => runAction(focusTable) },
-                ],
-            },
             {
                 label: 'Views',
                 items: [
+                    { label: 'Lobby', action: () => runAction(focusLobby) },
+                    { label: 'Table', action: () => runAction(focusTable) },
                     { label: 'Profile', action: () => runAction(showProfileWindow) },
                     { label: 'Leaders', action: () => runAction(showLeaderboardWindow) },
                     { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
@@ -985,6 +981,15 @@ class UIManager {
         lines.push(`{${constants_1.UI_THEME.dim}-fg}Press 1-9,0 to select, Enter to play{/}`);
         this.handContent.setContent(lines.join('\n'));
     }
+    /**
+     * The UNO context lines that sit above the log: whose action was last, and
+     * a challenge window while one is open.
+     *
+     * This used to PREPEND straight into activityContent while the door's own
+     * renderer replaced the whole thing from the other side. Two writers, two
+     * strategies, one widget - which is why the panel jumped (2026-09-02). It
+     * hands its lines to the one painter now.
+     */
     renderUnoActivity(lastAction, challengeWindow) {
         const lines = [];
         if (lastAction) {
@@ -999,14 +1004,43 @@ class UIManager {
             lines.push(`{${constants_1.UI_THEME.warning}-fg}Time remaining: ${timeLeft}s{/}`);
             lines.push('');
         }
-        if (this.activityContent) {
-            const existingContent = this.activityContent.getContent();
-            const newContent = lines.join('\n') + (existingContent ? '\n\n' + existingContent : '');
-            // Keep last 20 lines to prevent overflow
-            const allLines = newContent.split('\n');
-            const trimmed = allLines.slice(0, 20).join('\n');
-            this.activityContent.setContent(trimmed);
+        this.activityHeader = lines;
+        this.paintActivity();
+    }
+    /** The door's own lines: hints for the moment, then the event log. */
+    setActivityBody(lines) {
+        this.activityBody = lines;
+        this.paintActivity();
+    }
+    /**
+     * Paint header + body into the activity log, wrapped to the panel's own
+     * width and holding the reader's scroll position.
+     *
+     * The wrap has to be tag-aware: blessed counts `{yellow-fg}` against the
+     * width and breaks wherever it runs out, which is how the panel came to
+     * show "D Dea" on one row and "l" on the next.
+     */
+    paintActivity() {
+        if (!this.activityContent)
+            return;
+        const coords = this.activityContent._getCoords?.();
+        const width = (coords ? coords.xl - coords.xi : 0)
+            || Number(this.activityContent.width)
+            || 30;
+        const wrapped = [];
+        for (const line of [...this.activityHeader, ...this.activityBody]) {
+            if (line === '') {
+                wrapped.push('');
+                continue;
+            }
+            wrapped.push(...(0, utils_1.wrapTagged)(line, Math.max(1, width)));
         }
+        const previousScroll = this.activityContent.getScroll();
+        const previousHeight = this.activityContent.getScrollHeight();
+        const wasAtBottom = previousHeight === 0 || previousScroll >= Math.max(0, previousHeight - 1);
+        this.activityContent.setContent(wrapped.join('\n'));
+        const newHeight = this.activityContent.getScrollHeight();
+        this.activityContent.setScroll(wasAtBottom ? newHeight : Math.min(previousScroll, newHeight));
     }
     /**
      * Hide all UI elements (for browser mode)

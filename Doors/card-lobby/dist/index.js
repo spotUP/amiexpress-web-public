@@ -19,6 +19,7 @@ const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
 const lib_1 = require("./lib");
+const activity_hints_1 = require("./lib/activity-hints");
 const managers_1 = require("./managers");
 exports.metadata = {
     name: 'Card Lobby',
@@ -323,8 +324,11 @@ class CardLobbyApp {
             start: 'fixed',
             onRelayout: () => {
                 // The windows carry absolute width/height, so following a resize is
-                // a re-layout, not just a repaint.
+                // a re-layout, not just a repaint. relayout() recomputes the SPLIT;
+                // applyViewGeometry then puts the windows where the current view
+                // wants them, which for a table is the whole screen.
                 this.uiManager.relayout();
+                this.applyViewGeometry();
                 this.updateAllPanels();
                 this.screen.render();
             },
@@ -771,50 +775,20 @@ class CardLobbyApp {
         if (!table && this.currentProfile?.currentTableId) {
             table = this.findTableById(this.currentProfile.currentTableId) ?? null;
         }
-        const hintLines = [];
-        if (this.viewMode === 'table' && table && this.currentProfile) {
-            const engine = engineOverride ?? this.loadTableHand(table)?.engine ?? null;
-            if (!engine) {
-                const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
-                if (seatedPlayers.length < table.minPlayers) {
-                    hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Waiting for players to join...{/}`);
-                }
-                else {
-                    hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Ready to deal. Press D or use Deal to start.{/}`);
-                }
-            }
-            else {
-                const actionSeat = engine.state.actionTo;
-                if (actionSeat === null || actionSeat === undefined) {
-                    hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Dealing in progress...{/}`);
-                }
-                else {
-                    const actor = engine.state.players[actionSeat];
-                    if (actor?.id === this.currentProfile.userId) {
-                        hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Your turn. Choose an action below.{/}`);
-                    }
-                    else if (actor?.name) {
-                        hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Waiting for ${actor.name} to act...{/}`);
-                    }
-                }
-            }
-            hintLines.push(`{${lib_1.UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
-        }
+        const hintLines = (0, activity_hints_1.buildActivityHints)({
+            viewMode: this.viewMode,
+            table: table,
+            isUno: table ? (0, lib_1.isUnoTable)(table) : false,
+            userId: this.currentProfile?.userId ?? null,
+            engine: (engineOverride ?? (table ? this.loadTableHand(table)?.engine : null) ?? null),
+        });
         const eventLines = this.lobby.events.length > 0
             ? [...this.lobby.events].reverse().map((event) => event.message)
             : ['No activity yet.'];
         const lines = hintLines.length > 0 ? [...hintLines, '', ...eventLines] : eventLines;
-        const previousScroll = this.activityContent.getScroll();
-        const previousHeight = this.activityContent.getScrollHeight();
-        const isAtBottom = previousHeight === 0 || previousScroll >= Math.max(0, previousHeight - 1);
-        this.activityContent.setContent(lines.join('\n'));
-        const newHeight = this.activityContent.getScrollHeight();
-        if (isAtBottom) {
-            this.activityContent.setScroll(newHeight);
-        }
-        else {
-            this.activityContent.setScroll(Math.min(previousScroll, newHeight));
-        }
+        // One painter owns the panel: it wraps to the panel's own width and holds
+        // the reader's scroll position (UIManager.paintActivity).
+        this.uiManager.setActivityBody(lines);
     }
     updateAllPanels() {
         if (this.viewMode === 'table' && !this.currentProfile?.currentTableId) {
@@ -1394,10 +1368,26 @@ class CardLobbyApp {
         if (this.viewMode === mode)
             return;
         this.viewMode = mode;
+        this.applyViewGeometry();
+        this.screen.render();
+    }
+    /**
+     * Put the two windows where the CURRENT view wants them.
+     *
+     * This used to live inside applyViewMode, which returns early when the mode
+     * has not changed - so a resize could not re-apply it, and UIManager's own
+     * relayout() re-imposed the lobby/table SPLIT whatever was on screen. Alt+
+     * Enter at a table therefore produced a table pinned to the right of a wide
+     * terminal with a third of the screen black (reported 2026-09-02, with a
+     * screenshot). Both callers come through here now.
+     */
+    applyViewGeometry() {
+        if (!this.layout)
+            return;
         const { width, leftWidth, rightWidth, mainHeight, tableHeight } = this.layout;
         // LIVE properties, not `options`: that seeds a widget once and is never
         // read again, so writing it left the window as narrow as it was built.
-        if (mode === 'table') {
+        if (this.viewMode === 'table') {
             this.lobbyWindow.hide();
             this.tableWindow.show();
             this.tableWindow.left = 0;
@@ -1409,6 +1399,7 @@ class CardLobbyApp {
         }
         else {
             this.lobbyWindow.show();
+            this.lobbyWindow.left = 0;
             this.lobbyWindow.width = leftWidth;
             this.tableWindow.show();
             this.tableWindow.left = leftWidth;
@@ -1419,7 +1410,6 @@ class CardLobbyApp {
             this.topInfoBar.hide();
         }
         this.layoutTablePanels();
-        this.screen.render();
     }
     toggleFilters() {
         if (this.modalActive)

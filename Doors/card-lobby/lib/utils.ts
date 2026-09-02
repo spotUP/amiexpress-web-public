@@ -27,6 +27,74 @@ export const stripBlessedTags = (value: string): string => value.replace(/\{[^}]
 export const stripAnsiCodes = (value: string): string => value.replace(/\x1b\[[0-9;]*m/g, '');
 export const visibleWidth = (value: string): number => stripAnsiCodes(stripBlessedTags(value)).length;
 
+/**
+ * Wrap one line to `width` VISIBLE columns, breaking at spaces.
+ *
+ * blessed's own wrap counts the characters of `{yellow-fg}` against the
+ * width and breaks wherever it runs out, which is how the activity panel
+ * came to show "D Dea" on one row and "l" on the next (reported 2026-09-02).
+ * Tags are copied through without being counted, and a word only gets split
+ * when it cannot fit a line on its own.
+ */
+export function wrapTagged(value: string, width: number): string[] {
+  if (width <= 0) return [value];
+
+  const lines: string[] = [];
+  let line = '';
+  let visible = 0;
+  let breakAt = -1;          // index in `line` of the last space
+  let visibleAtBreak = 0;
+
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+
+    // A tag costs no columns.
+    if (ch === '{') {
+      const end = value.indexOf('}', i);
+      if (end !== -1) {
+        line += value.slice(i, end + 1);
+        i = end;
+        continue;
+      }
+    }
+
+    // The line is full: break BEFORE this character, not after it, or every
+    // line comes out one column too wide.
+    if (visible === width) {
+      if (ch === ' ') {
+        lines.push(line);
+        line = '';
+        visible = 0;
+        breakAt = -1;
+        continue;                       // the space is the break; drop it
+      }
+      if (breakAt >= 0) {
+        lines.push(line.slice(0, breakAt));
+        line = line.slice(breakAt + 1);
+        visible = visible - visibleAtBreak - 1;
+      } else {
+        // One word longer than the whole line: split it rather than let the
+        // panel do it at a place that owes nothing to the text.
+        lines.push(line);
+        line = '';
+        visible = 0;
+      }
+      breakAt = -1;
+    }
+
+    if (ch === ' ') {
+      breakAt = line.length;
+      visibleAtBreak = visible;
+    }
+
+    line += ch;
+    visible++;
+  }
+
+  lines.push(line);
+  return lines;
+}
+
 export const sliceVisible = (value: string, width: number): string => {
   if (width <= 0) return '';
   let visible = 0;

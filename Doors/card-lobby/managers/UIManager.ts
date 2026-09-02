@@ -8,7 +8,7 @@ import { createBox, createList, createButton, createText, createLog, ansiToTags 
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoColor as EngineUnoColor, UnoValue as EngineUnoValue } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
-import { renderCardLines, stripBlessedTags } from '../lib/utils';
+import { renderCardLines, stripBlessedTags, wrapTagged } from '../lib/utils';
 import type { UnoCard, UnoColor, UnoPlayer } from '../lib/uno-engine';
 
 const cardEngine = new CardEngine();
@@ -47,6 +47,9 @@ export class UIManager {
   public handContent!: Box;
   public activityPanel!: Box;
   public activityContent!: Log;
+  /** Lines above the log (UNO context) and the door's own lines below it. */
+  private activityHeader: string[] = [];
+  private activityBody: string[] = [];
   public overlayShade!: Box;
   public layout!: LayoutMetrics;
   private dealAnimationInProgress = false;
@@ -113,22 +116,15 @@ export class UIManager {
       content: ' Card Lobby v2.0.2-SDK ',
     });
 
+    // Two menus that held one entry each are folded into Views: a menu bar
+    // is for choosing what to look at, and "Lobby > Focus Lobby" said the
+    // same word twice to say it (2026-09-02).
     const menuDefs = [
-      {
-        label: 'Lobby',
-        items: [
-          { label: 'Focus Lobby', action: () => runAction(focusLobby) },
-        ],
-      },
-      {
-        label: 'Table',
-        items: [
-          { label: 'Focus Table', action: () => runAction(focusTable) },
-        ],
-      },
       {
         label: 'Views',
         items: [
+          { label: 'Lobby', action: () => runAction(focusLobby) },
+          { label: 'Table', action: () => runAction(focusTable) },
           { label: 'Profile', action: () => runAction(showProfileWindow) },
           { label: 'Leaders', action: () => runAction(showLeaderboardWindow) },
           { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
@@ -1147,6 +1143,15 @@ export class UIManager {
     this.handContent.setContent(lines.join('\n'));
   }
 
+  /**
+   * The UNO context lines that sit above the log: whose action was last, and
+   * a challenge window while one is open.
+   *
+   * This used to PREPEND straight into activityContent while the door's own
+   * renderer replaced the whole thing from the other side. Two writers, two
+   * strategies, one widget - which is why the panel jumped (2026-09-02). It
+   * hands its lines to the one painter now.
+   */
   renderUnoActivity(
     lastAction: string,
     challengeWindow?: { type: string; expiresAt: number } | null,
@@ -1168,16 +1173,48 @@ export class UIManager {
       lines.push('');
     }
 
-    if (this.activityContent) {
-      const existingContent = this.activityContent.getContent();
-      const newContent = lines.join('\n') + (existingContent ? '\n\n' + existingContent : '');
+    this.activityHeader = lines;
+    this.paintActivity();
+  }
 
-      // Keep last 20 lines to prevent overflow
-      const allLines = newContent.split('\n');
-      const trimmed = allLines.slice(0, 20).join('\n');
+  /** The door's own lines: hints for the moment, then the event log. */
+  setActivityBody(lines: string[]): void {
+    this.activityBody = lines;
+    this.paintActivity();
+  }
 
-      this.activityContent.setContent(trimmed);
+  /**
+   * Paint header + body into the activity log, wrapped to the panel's own
+   * width and holding the reader's scroll position.
+   *
+   * The wrap has to be tag-aware: blessed counts `{yellow-fg}` against the
+   * width and breaks wherever it runs out, which is how the panel came to
+   * show "D Dea" on one row and "l" on the next.
+   */
+  private paintActivity(): void {
+    if (!this.activityContent) return;
+
+    const coords = (this.activityContent as any)._getCoords?.();
+    const width = (coords ? coords.xl - coords.xi : 0)
+      || Number(this.activityContent.width)
+      || 30;
+
+    const wrapped: string[] = [];
+    for (const line of [...this.activityHeader, ...this.activityBody]) {
+      if (line === '') { wrapped.push(''); continue; }
+      wrapped.push(...wrapTagged(line, Math.max(1, width)));
     }
+
+    const previousScroll = this.activityContent.getScroll();
+    const previousHeight = this.activityContent.getScrollHeight();
+    const wasAtBottom = previousHeight === 0 || previousScroll >= Math.max(0, previousHeight - 1);
+
+    this.activityContent.setContent(wrapped.join('\n'));
+
+    const newHeight = this.activityContent.getScrollHeight();
+    this.activityContent.setScroll(
+      wasAtBottom ? newHeight : Math.min(previousScroll, newHeight),
+    );
   }
 
   /**

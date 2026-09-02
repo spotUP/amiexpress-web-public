@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildWeeklyBulletin = exports.getPlayerBet = exports.getCurrentBet = exports.calculateRake = exports.calculateEntryFee = exports.buildBotName = exports.buildBotId = exports.isBotId = exports.isBotPlayer = exports.isUnoTable = exports.getGameById = exports.formatChips = exports.formatAge = exports.pad = exports.safeNumber = exports.initProfile = exports.initStatsBucket = exports.initLobbyState = exports.renderCardLines = exports.mergeColumns = exports.padColumn = exports.appendReset = exports.sliceVisible = exports.visibleWidth = exports.stripAnsiCodes = exports.stripBlessedTags = exports.ansiToBlessedTags = void 0;
+exports.wrapTagged = wrapTagged;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const constants_1 = require("./constants");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
@@ -19,6 +20,68 @@ const stripAnsiCodes = (value) => value.replace(/\x1b\[[0-9;]*m/g, '');
 exports.stripAnsiCodes = stripAnsiCodes;
 const visibleWidth = (value) => (0, exports.stripAnsiCodes)((0, exports.stripBlessedTags)(value)).length;
 exports.visibleWidth = visibleWidth;
+/**
+ * Wrap one line to `width` VISIBLE columns, breaking at spaces.
+ *
+ * blessed's own wrap counts the characters of `{yellow-fg}` against the
+ * width and breaks wherever it runs out, which is how the activity panel
+ * came to show "D Dea" on one row and "l" on the next (reported 2026-09-02).
+ * Tags are copied through without being counted, and a word only gets split
+ * when it cannot fit a line on its own.
+ */
+function wrapTagged(value, width) {
+    if (width <= 0)
+        return [value];
+    const lines = [];
+    let line = '';
+    let visible = 0;
+    let breakAt = -1; // index in `line` of the last space
+    let visibleAtBreak = 0;
+    for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        // A tag costs no columns.
+        if (ch === '{') {
+            const end = value.indexOf('}', i);
+            if (end !== -1) {
+                line += value.slice(i, end + 1);
+                i = end;
+                continue;
+            }
+        }
+        // The line is full: break BEFORE this character, not after it, or every
+        // line comes out one column too wide.
+        if (visible === width) {
+            if (ch === ' ') {
+                lines.push(line);
+                line = '';
+                visible = 0;
+                breakAt = -1;
+                continue; // the space is the break; drop it
+            }
+            if (breakAt >= 0) {
+                lines.push(line.slice(0, breakAt));
+                line = line.slice(breakAt + 1);
+                visible = visible - visibleAtBreak - 1;
+            }
+            else {
+                // One word longer than the whole line: split it rather than let the
+                // panel do it at a place that owes nothing to the text.
+                lines.push(line);
+                line = '';
+                visible = 0;
+            }
+            breakAt = -1;
+        }
+        if (ch === ' ') {
+            breakAt = line.length;
+            visibleAtBreak = visible;
+        }
+        line += ch;
+        visible++;
+    }
+    lines.push(line);
+    return lines;
+}
 const sliceVisible = (value, width) => {
     if (width <= 0)
         return '';
