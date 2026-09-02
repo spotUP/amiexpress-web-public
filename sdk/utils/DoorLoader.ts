@@ -2,7 +2,7 @@
  * DoorLoader - Loading screen with ANSI progress bar for SDK doors
  *
  * Displays a centered loading dialog with:
- * - Animated progress bar using neo-blessed Gauge widget
+ * - Animated progress bar drawn in cells, not glyphs
  * - Status message that can be updated
  * - Percentage display
  * - Optional spinner for indeterminate loading
@@ -29,7 +29,7 @@
  */
 
 import { Loading } from '../engines/ui/blessed/widgets/loading';
-import { Gauge } from '../engines/ui/blessed/widgets/gauge';
+import { ProgressBar } from '../engines/ui/blessed/widgets/progressbar';
 import type { Screen } from '../engines/ui/blessed/core/screen';
 
 export interface DoorLoaderOptions {
@@ -50,7 +50,7 @@ export interface DoorLoaderOptions {
 export class DoorLoader {
   private screen: Screen;
   private loader: Loading;
-  private gauge: Gauge;
+  private bar: ProgressBar;
   private isVisible: boolean = false;
 
   constructor(screen: Screen, options: DoorLoaderOptions = {}) {
@@ -66,7 +66,7 @@ export class DoorLoader {
       border: { type: 'line' },
       label: ' Loading ',
       width: 60,
-      height: 7, // Increased height for gauge
+      height: 7, // room for the message, the spinner and the bar
       style: {
         bg: 'black',
         fg: 'white',
@@ -74,20 +74,28 @@ export class DoorLoader {
       },
     });
 
-    // Add progress bar to the loader
-    this.gauge = new Gauge({
+    // The bar is CELLS, not glyphs.
+    //
+    // This used to be a `Gauge`, which draws on a drawille canvas - braille
+    // (U+2800+) painted as FOREGROUND colour. A real Amiga terminal has no
+    // braille, so the one door with a working progress bar was drawing it in
+    // characters the board cannot render. `ProgressBar` fills with spaces and
+    // an ANSI background colour instead: nothing but a space ever reaches the
+    // wire, and the colour IS the bar (asked for by the sysop, 2026-09-02).
+    this.bar = new ProgressBar({
       parent: this.loader,
       top: 3, // Below message (0) and spinner (1)
       left: 1,
       right: 1,
       height: 1,
-      stroke: options.barColor || 'cyan',
-      fill: 'white',
-      showLabel: true, // Show percent on the gauge
+      border: undefined,   // one row: a frame would leave it no interior
+      // ProgressBar paints `style.fg` as the BACKGROUND of the filled run,
+      // over `style.bg` for the rest of the track.
+      style: { fg: options.barColor || 'cyan', bg: 'black' },
     });
-    
-    // Hide gauge initially (spinner mode by default)
-    this.gauge.hide();
+
+    // Hidden initially (spinner mode by default)
+    this.bar.hide();
   }
 
   /**
@@ -98,7 +106,7 @@ export class DoorLoader {
       this.loader.setText(message);
     }
     
-    this.gauge.hide(); // Hide gauge in indeterminate mode
+    this.bar.hide(); // Indeterminate mode shows the spinner alone
     this.loader.load();
     this.isVisible = true;
   }
@@ -116,9 +124,9 @@ export class DoorLoader {
       this.loader.setText(message);
     }
 
-    // Show gauge and update it
-    this.gauge.show();
-    this.gauge.setPercent(Math.max(0, Math.min(100, percent)));
+    // Show the bar and update it
+    this.bar.show();
+    this.bar.setProgress(Math.max(0, Math.min(100, percent)));
     
     // In progress mode, we might want to hide spinner or keep it?
     // Loading widget always shows spinner. We'll keep it.
