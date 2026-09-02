@@ -190,7 +190,7 @@
     "build": "npm run build:cjs && npm run build:esm && npm run copy-assets",
     "build:dev": "npm run build:cjs && npm run build:esm && npm run copy-assets",
     "build:cjs": "tsc",
-    "build:esm": "tsc -p tsconfig.client.json",
+    "build:esm": "tsc -p tsconfig.client.json && node -e \"require('fs').writeFileSync('dist-esm/package.json', JSON.stringify({ type: 'module' }, null, 2) + '\\n')\"",
     "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true && cp engines/ui/neo-blessed.d.ts dist/engines/ui/ 2>/dev/null || true",
     "minify": "node scripts/minify.mjs",
     "dev": "tsc --watch",
