@@ -95,6 +95,18 @@ export interface ScreenFileFacts {
    *   text was right, and nothing said why.
    */
   problems: ScreenProblem[];
+  /**
+   * Why a designer would never edit this file.
+   *
+   * `backup` - an old copy kept beside the real one: `.bak`, `.old`,
+   *   `.backup-<stamp>`, `.stale`.
+   * `runtime` - the board writes it for itself, so an edit is overwritten.
+   *
+   * Flagged, never hidden by the index: a file the manager refuses to show is
+   * a file a sysop cannot find, and this board has already been told once that
+   * its live screens were read by nothing.
+   */
+  generated?: 'backup' | 'runtime';
 }
 
 export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
@@ -283,6 +295,31 @@ function readSauce(buf: Buffer): SauceFacts | undefined {
  * history, and the board prints the codes at the caller instead of colouring
  * the line.
  */
+/**
+ * An old copy kept beside the real file. Every board grows these.
+ *
+ * Deliberately about the NAME: content cannot tell a backup from the screen it
+ * was copied from - that is what makes it a backup.
+ */
+const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.prev\b|\bcopy\b|\bcopy \d+\b)/i;
+
+/**
+ * Files the BOARD writes, which an edit would simply lose.
+ *
+ * express.e writes `Node<n>/CallersLog` and the other logs without a screen
+ * extension, so they were never listed. `Screens/Callers.txt` is the last-
+ * callers display in screen form; the sysop identified it, and it is named
+ * here rather than guessed at from content.
+ */
+const RUNTIME_NAME = /^(callers!?\.txt|callerslog.*|.*\.log)$/i;
+
+function classifyGenerated(relPath: string): 'backup' | 'runtime' | undefined {
+  const name = path.basename(relPath);
+  if (BACKUP_NAME.test(name)) return 'backup';
+  if (RUNTIME_NAME.test(name)) return 'runtime';
+  return undefined;
+}
+
 function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
   const problems: ScreenProblem[] = [];
   if (buf.length === 0) problems.push('empty');
@@ -405,6 +442,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     readBy: [],
     sauce: readSauce(buf),
     problems: fileProblems(buf, format),
+    generated: classifyGenerated(path.relative(baseDir, absPath)),
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,

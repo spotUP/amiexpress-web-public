@@ -39,6 +39,23 @@ const index = {
       relPath: 'Screens/BROKEN.TXT', bytes: 30, format: 'text', sha256: 'c', mci: [],
       problems: ['colour-codes-without-escape'], readBy: [],
     },
+    // Two more nodes carrying the very same bytes as Conf2/bull20.txt.
+    'Node1/BBSTITLE.txt': {
+      relPath: 'Node1/BBSTITLE.txt', bytes: 20, format: 'ansi', sha256: 'a', mci: [], problems: [],
+      readBy: [{ screen: 'BBSTITLE', scope: 'node', id: 1, via: 'variant' }],
+    },
+    'Node2/BBSTITLE.txt': {
+      relPath: 'Node2/BBSTITLE.txt', bytes: 20, format: 'ansi', sha256: 'a', mci: [], problems: [],
+      readBy: [{ screen: 'BBSTITLE', scope: 'node', id: 2, via: 'variant' }],
+    },
+    'Screens/Callers.txt': {
+      relPath: 'Screens/Callers.txt', bytes: 40, format: 'text', sha256: 'd', mci: [],
+      problems: [], readBy: [], generated: 'runtime',
+    },
+    'Conf2/Menu copy.txt': {
+      relPath: 'Conf2/Menu copy.txt', bytes: 50, format: 'ansi', sha256: 'e', mci: [],
+      problems: [], readBy: [], generated: 'backup',
+    },
   },
 };
 
@@ -102,6 +119,28 @@ describe('the gallery', () => {
     render(<ScreenFilesPage />, { wrapper });
 
     expect(await screen.findByText(/lost their escape byte/i)).toBeTruthy();
+  });
+
+  it('shows one card per piece of art, not per copy', async () => {
+    render(<ScreenFilesPage />, { wrapper });
+
+    // Conf2/bull20.txt and the two node copies are the same bytes: one card,
+    // saying how many copies there are.
+    expect(await screen.findByText(/and 2 identical copies/)).toBeTruthy();
+  });
+
+  it('leaves out leftovers and files the board writes, until asked', async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+    await screen.findByTestId('screen-gallery');
+
+    expect(screen.queryByText(/Screens\/Callers\.txt/)).toBeNull();
+    expect(screen.queryByText(/Menu copy\.txt/)).toBeNull();
+
+    await user.click(screen.getByLabelText(/show leftovers/i));
+
+    expect(await screen.findByText(/written by the board/)).toBeTruthy();
+    expect(screen.getByText(/a leftover copy/)).toBeTruthy();
   });
 
   it('opens the file when a card is clicked', async () => {

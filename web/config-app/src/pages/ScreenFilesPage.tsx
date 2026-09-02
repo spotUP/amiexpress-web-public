@@ -68,6 +68,14 @@ export function ScreenFilesPage() {
    * which was not true either. The board reports what it has; this asks.
    */
   const [sharedDir, setSharedDir] = useState('');
+  /**
+   * Whether to draw files a designer never edits.
+   *
+   * "It shows generated screens as well. those are not relevant." Off by
+   * default; a toggle rather than a filter in the code, because a file the
+   * manager refuses to show is a file nobody can find.
+   */
+  const [showGenerated, setShowGenerated] = useState(false);
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -471,22 +479,48 @@ export function ScreenFilesPage() {
 
     const bulletinTitles = new Map((data.bulletins ?? []).map(b => [b.file, b] as const));
 
-    return Object.values(data.files)
+    const drawable = Object.values(data.files)
       .filter(file => file.format === 'ansi' || file.format === 'text')
-      .map(file => {
+      .filter(file => showGenerated || !file.generated);
+
+    /**
+     * One card per piece of ART, not per file.
+     *
+     * This board has 71 identical Node<n>/BBSTITLE.txt - one screen,
+     * provisioned per node - and 43 more copies under Node<n>/Screens. Drawing
+     * each as its own card buries the art nobody has seen in the art everybody
+     * has. Grouped by content hash, which is what "identical" means here.
+     */
+    const byContent = new Map<string, ScreenFileShape[]>();
+    for (const file of drawable) {
+      byContent.set(file.sha256, [...(byContent.get(file.sha256) ?? []), file]);
+    }
+
+    return [...byContent.values()]
+      .map(copies => {
+        // The copy a screen actually resolves to leads; failing that, the first.
+        const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
         const bulletin = bulletinTitles.get(file.relPath);
         const reader = file.readBy?.[0];
 
-        return {
-          path: file.relPath,
-          label: bulletin
-            ? `Bulletin ${bulletin.number}${bulletin.title ? ` - ${bulletin.title}` : ''}`
-            : reader?.screen ?? file.relPath,
-          detail: file.problems?.length
+        const label = bulletin
+          ? `Bulletin ${bulletin.number}${bulletin.title ? ` - ${bulletin.title}` : ''}`
+          : reader?.screen ?? file.relPath;
+
+        const detail = file.generated
+          ? file.generated === 'backup' ? 'a leftover copy' : 'written by the board'
+          : file.problems?.length
             ? file.problems.map(describeProblem).join('; ')
             : reader
               ? describeReader(reader, data.callersByLevel)
-              : 'read by nothing',
+              : 'read by nothing';
+
+        return {
+          path: file.relPath,
+          label,
+          detail: copies.length > 1
+            ? `${detail} - and ${copies.length - 1} identical ${copies.length === 2 ? 'copy' : 'copies'}`
+            : detail,
           credit: file.sauce?.author
             ? `${file.sauce.title || 'untitled'} by ${file.sauce.author}`
             : undefined,
@@ -494,7 +528,7 @@ export function ScreenFilesPage() {
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [data]);
+  }, [data, showGenerated]);
 
   const tabs: TabDefinition[] = [
     {
@@ -502,10 +536,20 @@ export function ScreenFilesPage() {
       label: `Gallery ${galleryItems.length}`,
       render: () => (
         <div className="space-y-2">
-          <p className="text-sm text-content-secondary">
-            Every screen and bulletin on the board, drawn. Click one to open it.
-            Thumbnails load as you scroll.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-content-secondary">
+              Every screen and bulletin on the board, drawn - identical copies
+              shown once. Click one to open it; thumbnails load as you scroll.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-content-secondary">
+              <input
+                type="checkbox"
+                checked={showGenerated}
+                onChange={e => setShowGenerated(e.target.checked)}
+              />
+              Show leftovers and files the board writes
+            </label>
+          </div>
           <ScreenGallery
             items={query.trim()
               ? galleryItems.filter(item =>
