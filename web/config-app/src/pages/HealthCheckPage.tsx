@@ -43,8 +43,8 @@ export function HealthCheckPage() {
   const autoFixMutation = useMutation({
     mutationFn: () => apiClient.autoFixHealth(),
     onSuccess: (response) => {
-      const { fixed, failed, failures } = response.data as {
-        fixed: number; failed: number; failures?: string[];
+      const { fixed, failed, failures, report } = response.data as {
+        fixed: number; failed: number; failures?: string[]; report?: BBSHealthReport;
       };
       // A failure with no reason is a failure a sysop cannot act on, and this
       // page reported "47 fixed" over an untouched board for long enough.
@@ -56,7 +56,23 @@ export function HealthCheckPage() {
       } else {
         showSuccess(`Auto-fix complete: ${fixed} issue${fixed === 1 ? '' : 's'} fixed`);
       }
-      queryClient.invalidateQueries({ queryKey: ['health'] });
+      /*
+       * The server re-ran the whole check after fixing and sent the result
+       * back. Throwing it away to refetch left the OLD counts and the OLD
+       * issue list on screen until a second full pass over 872 screens
+       * returned - so a sysop who pressed Auto-Fix saw the same warnings
+       * sitting there and concluded nothing had happened.
+       */
+      if (report) {
+        queryClient.setQueryData(['health'], (previous: any) => ({
+          ...(previous ?? {}),
+          // Merged, not replaced: the GET adds bbsRoot to the report and the
+          // auto-fix response does not carry it.
+          data: { ...(previous?.data ?? {}), ...report },
+        }));
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['health'] });
+      }
     },
     onError: (error: Error) => {
       showError(`Auto-fix failed: ${error.message}`);
