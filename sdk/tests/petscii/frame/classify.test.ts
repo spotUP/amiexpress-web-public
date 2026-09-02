@@ -36,6 +36,8 @@ describe('positionsCursorAbsolutely (port)', () => {
     expect(positionsCursorAbsolutely('\x1b[5;1f-')).toBe(true);
     expect(positionsCursorAbsolutely('\x1b[3AX')).toBe(true);
     expect(positionsCursorAbsolutely('\x1b[HX')).toBe(true);
+    expect(positionsCursorAbsolutely('\x1b[2Jx')).toBe(true);   // erase display, clearing before a paint
+    expect(positionsCursorAbsolutely('\x1b[u')).toBe(true);     // restore cursor, resuming a paint
     expect(positionsCursorAbsolutely('\x1b[0;37;40mplain')).toBe(false);
     expect(positionsCursorAbsolutely('')).toBe(false);
   });

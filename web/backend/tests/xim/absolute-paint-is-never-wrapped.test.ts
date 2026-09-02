@@ -38,6 +38,8 @@ describe('recognising a door that paints rather than prints', () => {
     expect(positionsCursorAbsolutely('\x1b[3AX')).toBe(true);     // cursor up
     expect(positionsCursorAbsolutely('\x1b[10CX')).toBe(true);    // cursor right
     expect(positionsCursorAbsolutely('\x1b[HX')).toBe(true);      // home, no parameters
+    expect(positionsCursorAbsolutely('\x1b[2Jx')).toBe(true);     // erase display, clearing before a paint
+    expect(positionsCursorAbsolutely('\x1b[u')).toBe(true);       // restore cursor, resuming a paint
   });
 
   it('leaves ordinary door output alone', () => {

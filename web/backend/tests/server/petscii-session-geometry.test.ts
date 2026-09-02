@@ -132,4 +132,13 @@ describe('both reporters go through the one gate', () => {
     expect(body).not.toMatch(/session\.screenWidth\s*=/);
     expect(body).not.toMatch(/session\.screenHeight\s*=/);
   });
+
+  it('index.ts terminal-type (TTYPE) assigns no geometry of its own', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
+    const handler = src.slice(src.indexOf('connection.on(\n    "terminal-type"'));
+    const body = handler.slice(0, handler.indexOf('\n  );'));
+    expect(body).toContain('applyClientReportedGeometry(connection.session, info.width, info.height)');
+    expect(body).not.toMatch(/session\.screenWidth\s*=/);
+    expect(body).not.toMatch(/session\.screenHeight\s*=/);
+  });
 });

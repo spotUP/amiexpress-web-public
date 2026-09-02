@@ -1255,9 +1255,12 @@ console.log('[TELNET] Door active but no handler - emitting door:input');
     }) => {
       if (connection.session) {
         connection.session.terminalType = info.isC64 ? "c64" : "modern";
-        connection.session.screenWidth = info.width;
-        connection.session.screenHeight = info.height;
         connection.session.petsciiMode = info.isC64;
+        // A C64 TTYPE answer can still carry an 80-column width in the
+        // payload; applyClientReportedGeometry is the single gate (shared
+        // with the NAWS handler below and socket-handlers.ts terminal-size)
+        // that keeps a PETSCII session at 40x25 regardless.
+        applyClientReportedGeometry(connection.session, info.width, info.height);
 console.log(
           `[${type.toUpperCase()}] Terminal detected: ${info.terminalType} (${
             info.isC64 ? "C64" : "Modern"
