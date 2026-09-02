@@ -100,7 +100,7 @@ export class PetsciiMachine {
    */
   private carriageReturn(): void {
     const s = this.state;
-    const end = this.logicalLineEnd(s.cursorY);
+    const end = this.logicalLineEndRow(s.cursorY);
     s.cursorX = 0;
     for (let r = s.cursorY + 1; r <= end; r++) this.rowLinked[r] = false;
     if (end >= ROWS - 1) {
@@ -178,7 +178,7 @@ export class PetsciiMachine {
   }
 
   /** Last physical row of the logical line containing row y, found by following the link chain forward. */
-  private logicalLineEnd(y: number): number {
+  logicalLineEndRow(y: number): number {
     let end = y;
     while (end + 1 < ROWS && this.rowLinked[end + 1]) end++;
     return end;
@@ -199,7 +199,7 @@ export class PetsciiMachine {
     const s = this.state;
     this.cursorLeft();
     const startIdx = s.cursorY * COLS + s.cursorX;
-    const endRow = this.logicalLineEnd(s.cursorY);
+    const endRow = this.logicalLineEndRow(s.cursorY);
     const endIdx = endRow * COLS + (COLS - 1);
     for (let i = startIdx; i < endIdx; i++) {
       s.screen[i] = s.screen[i + 1];
@@ -217,7 +217,7 @@ export class PetsciiMachine {
   private insertChar(): void {
     const s = this.state;
     const startIdx = s.cursorY * COLS + s.cursorX;
-    const endRow = this.logicalLineEnd(s.cursorY);
+    const endRow = this.logicalLineEndRow(s.cursorY);
     const endIdx = endRow * COLS + (COLS - 1);
     for (let i = endIdx; i > startIdx; i--) {
       s.screen[i] = s.screen[i - 1];

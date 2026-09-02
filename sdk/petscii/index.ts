@@ -14,3 +14,12 @@ export {
   vicToSgrBackground,
 } from './c64-palette';
 export { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
+export {
+  AnsiToPetsciiTransducer,
+  type AnsiToPetsciiOptions,
+  nearestVicForRgb,
+  vicColorToPetscii,
+  sgrColorToVic,
+  xterm256ToRgb,
+} from './ansi-to-petscii';
+export { UNICODE_TO_PETSCII } from './unicode-to-petscii';

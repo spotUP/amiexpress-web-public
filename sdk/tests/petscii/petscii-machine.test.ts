@@ -151,4 +151,12 @@ describe('PetsciiMachine', () => {
     expect(m.state.charsetBank).toBe(0);
     expect(repaints).toBe(0);
   });
+
+  it('logicalLineEndRow follows the link chain a wrapping print created', () => {
+    const m = new PetsciiMachine();
+    m.feed(new Array(45).fill(0x41)); // 45 printables: row 1 is a continuation of row 0
+    expect(m.logicalLineEndRow(0)).toBe(1);
+    expect(m.logicalLineEndRow(1)).toBe(1);
+    expect(m.logicalLineEndRow(5)).toBe(5);
+  });
 });
