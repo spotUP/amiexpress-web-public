@@ -12,6 +12,7 @@
  * is allowed to reach.
  */
 
+import { isUnoTable } from '../lib/utils';
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 import type { DoorSession, LobbyTable, PlayerProfile } from '../lib';
 
@@ -87,7 +88,7 @@ export function attachGamepadBindings(session: DoorSession, host: GamepadHost): 
       if (table) {
         if (table.gameId === 'poker' || table.gameId === 'poker-house') {
           host.triggerCall();
-        } else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+        } else if (isUnoTable(table)) {
           // Select the first card in hand; selectUnoCard loads the
           // game itself and does nothing when there is no game.
           host.selectUnoCard(0);
@@ -116,7 +117,7 @@ export function attachGamepadBindings(session: DoorSession, host: GamepadHost): 
     if (table) {
       if (table.gameId === 'poker' || table.gameId === 'poker-house') {
         host.triggerFold();
-      } else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+      } else if (isUnoTable(table)) {
         host.triggerUnoDrawCard();
       }
     }
@@ -133,7 +134,7 @@ export function attachGamepadBindings(session: DoorSession, host: GamepadHost): 
     if (table) {
       if (table.gameId === 'poker' || table.gameId === 'poker-house') {
         host.triggerRaise();
-      } else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+      } else if (isUnoTable(table)) {
         host.triggerUnoCallUno();
       }
     }

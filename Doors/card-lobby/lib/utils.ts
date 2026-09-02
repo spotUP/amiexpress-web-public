@@ -168,6 +168,18 @@ export const getGameById = (id: string): GameDefinition | undefined => {
   return GAME_CATALOG.find((game) => game.id === id);
 };
 
+/**
+ * Is this table playing UNO rather than poker?
+ *
+ * Both game ids were spelled out inline at a dozen call sites, and the two
+ * that forgot handed an UNO snapshot to `PokerEngine.restore`, which answered
+ * "cannot restore undefined" on the table screen every time it drew
+ * (reported live 2026-09-02, straight after pressing D to deal).
+ */
+export const isUnoTable = (table: { gameId: string }): boolean => {
+  return table.gameId === 'uno' || table.gameId === 'uno-house';
+};
+
 export const isBotPlayer = (player: TablePlayer): boolean => {
   return Boolean(player.isBot || player.userId.startsWith('cpu:'));
 };

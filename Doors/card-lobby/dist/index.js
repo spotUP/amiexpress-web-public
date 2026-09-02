@@ -265,7 +265,7 @@ class CardLobbyApp {
                 const table = this.currentProfile?.currentTableId
                     ? this.findTableById(this.currentProfile.currentTableId)
                     : null;
-                if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+                if (table && ((0, lib_1.isUnoTable)(table))) {
                     this.selectUnoCard(i - 1); // Convert 1-based to 0-based index
                 }
             });
@@ -276,7 +276,7 @@ class CardLobbyApp {
             const table = this.currentProfile?.currentTableId
                 ? this.findTableById(this.currentProfile.currentTableId)
                 : null;
-            if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+            if (table && ((0, lib_1.isUnoTable)(table))) {
                 this.selectUnoCard(9); // 0 key = 10th card (index 9)
             }
         });
@@ -518,6 +518,15 @@ class CardLobbyApp {
     }
     loadTableHand(table) {
         if (!table.hand)
+            return null;
+        // An UNO table has no poker hand. Both games keep their state in
+        // `table.hand.snapshot`, so this used to hand an UnoGameSnapshot to
+        // PokerEngine.restore, which threw "cannot restore undefined" - and the
+        // table screen calls this on every draw, so the notice appeared the
+        // moment a game was dealt (reported live 2026-09-02). The guard lives
+        // HERE rather than at the call sites: two of the twelve had already
+        // forgotten it, and a thirteenth would have too.
+        if ((0, lib_1.isUnoTable)(table))
             return null;
         try {
             const engine = bbs_door_sdk_2.PokerEngine.restore(table.hand.snapshot);
@@ -947,7 +956,7 @@ class CardLobbyApp {
             this.tableActions.show();
             this.layoutTablePanels();
             // Detect game type and render appropriately
-            if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+            if ((0, lib_1.isUnoTable)(table)) {
                 this.gameViews.renderUnoGameView(table);
             }
             else {
@@ -1064,7 +1073,7 @@ class CardLobbyApp {
         if (this.currentProfile?.currentTableId && this.lobby) {
             const table = this.findTableById(this.currentProfile.currentTableId);
             // Route to appropriate game handler
-            if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+            if (table && ((0, lib_1.isUnoTable)(table))) {
                 const gameState = this.loadUnoGameState(table);
                 if (!gameState) {
                     this.runAction(() => this.dealHand());
@@ -1095,7 +1104,7 @@ class CardLobbyApp {
         // Route to UNO handler if UNO game
         if (this.currentProfile?.currentTableId && this.lobby) {
             const table = this.findTableById(this.currentProfile.currentTableId);
-            if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+            if (table && ((0, lib_1.isUnoTable)(table))) {
                 this.triggerUnoDrawCard();
                 return;
             }
@@ -1111,7 +1120,7 @@ class CardLobbyApp {
         // Route to UNO handler if UNO game
         if (this.currentProfile?.currentTableId && this.lobby) {
             const table = this.findTableById(this.currentProfile.currentTableId);
-            if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+            if (table && ((0, lib_1.isUnoTable)(table))) {
                 this.triggerUnoCallUno();
                 return;
             }
@@ -1127,7 +1136,7 @@ class CardLobbyApp {
         // Route to UNO handler if UNO game
         if (this.currentProfile?.currentTableId && this.lobby) {
             const table = this.findTableById(this.currentProfile.currentTableId);
-            if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+            if (table && ((0, lib_1.isUnoTable)(table))) {
                 this.triggerUnoChallenge();
                 return;
             }
@@ -1259,7 +1268,7 @@ class CardLobbyApp {
         this.tableActions.show();
         const table = this.findTableById(this.currentProfile.currentTableId);
         // Detect game type and update button labels
-        if (table && (table.gameId === 'uno' || table.gameId === 'uno-house')) {
+        if (table && ((0, lib_1.isUnoTable)(table))) {
             this.updateUnoActionButtons(table);
         }
         else {
@@ -1466,7 +1475,7 @@ class CardLobbyApp {
         if (table.gameId === 'holdem') {
             await this.startHoldemHand(table);
         }
-        else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+        else if ((0, lib_1.isUnoTable)(table)) {
             await this.startUnoGame(table);
         }
         else {

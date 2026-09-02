@@ -14,6 +14,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.attachGamepadBindings = attachGamepadBindings;
+const utils_1 = require("../lib/utils");
 const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-input-manager");
 /** Wire the pad to the door and hand back the manager to clean up later. */
 function attachGamepadBindings(session, host) {
@@ -66,7 +67,7 @@ function attachGamepadBindings(session, host) {
                 if (table.gameId === 'poker' || table.gameId === 'poker-house') {
                     host.triggerCall();
                 }
-                else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+                else if ((0, utils_1.isUnoTable)(table)) {
                     // Select the first card in hand; selectUnoCard loads the
                     // game itself and does nothing when there is no game.
                     host.selectUnoCard(0);
@@ -93,7 +94,7 @@ function attachGamepadBindings(session, host) {
             if (table.gameId === 'poker' || table.gameId === 'poker-house') {
                 host.triggerFold();
             }
-            else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+            else if ((0, utils_1.isUnoTable)(table)) {
                 host.triggerUnoDrawCard();
             }
         }
@@ -109,7 +110,7 @@ function attachGamepadBindings(session, host) {
             if (table.gameId === 'poker' || table.gameId === 'poker-house') {
                 host.triggerRaise();
             }
-            else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+            else if ((0, utils_1.isUnoTable)(table)) {
                 host.triggerUnoCallUno();
             }
         }

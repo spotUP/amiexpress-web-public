@@ -4,7 +4,7 @@
  * Helper functions for rendering, formatting, and calculations
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildWeeklyBulletin = exports.getPlayerBet = exports.getCurrentBet = exports.calculateRake = exports.calculateEntryFee = exports.buildBotName = exports.buildBotId = exports.isBotId = exports.isBotPlayer = exports.getGameById = exports.formatChips = exports.formatAge = exports.pad = exports.safeNumber = exports.initProfile = exports.initStatsBucket = exports.initLobbyState = exports.renderCardLines = exports.mergeColumns = exports.padColumn = exports.appendReset = exports.sliceVisible = exports.visibleWidth = exports.stripAnsiCodes = exports.stripBlessedTags = exports.ansiToBlessedTags = void 0;
+exports.buildWeeklyBulletin = exports.getPlayerBet = exports.getCurrentBet = exports.calculateRake = exports.calculateEntryFee = exports.buildBotName = exports.buildBotId = exports.isBotId = exports.isBotPlayer = exports.isUnoTable = exports.getGameById = exports.formatChips = exports.formatAge = exports.pad = exports.safeNumber = exports.initProfile = exports.initStatsBucket = exports.initLobbyState = exports.renderCardLines = exports.mergeColumns = exports.padColumn = exports.appendReset = exports.sliceVisible = exports.visibleWidth = exports.stripAnsiCodes = exports.stripBlessedTags = exports.ansiToBlessedTags = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const constants_1 = require("./constants");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
@@ -161,6 +161,18 @@ const getGameById = (id) => {
     return constants_1.GAME_CATALOG.find((game) => game.id === id);
 };
 exports.getGameById = getGameById;
+/**
+ * Is this table playing UNO rather than poker?
+ *
+ * Both game ids were spelled out inline at a dozen call sites, and the two
+ * that forgot handed an UNO snapshot to `PokerEngine.restore`, which answered
+ * "cannot restore undefined" on the table screen every time it drew
+ * (reported live 2026-09-02, straight after pressing D to deal).
+ */
+const isUnoTable = (table) => {
+    return table.gameId === 'uno' || table.gameId === 'uno-house';
+};
+exports.isUnoTable = isUnoTable;
 const isBotPlayer = (player) => {
     return Boolean(player.isBot || player.userId.startsWith('cpu:'));
 };
