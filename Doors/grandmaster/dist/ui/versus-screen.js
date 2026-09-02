@@ -1218,7 +1218,8 @@ class VersusScreen {
         }
         this.renderBoard(gameState);
         // Render next queue
-        this.renderNextQueue(gameState.nextQueue ?? []);
+        // HIDE NEXT (item 7) - versus is where the item is thrown in the first place.
+        this.renderNextQueue(gameState.hideNextFrames > 0 ? [] : (gameState.nextQueue ?? []));
         // Render hold piece
         this.renderHold(gameState);
         // Render garbage strip

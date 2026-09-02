@@ -90,7 +90,7 @@ class GameScreen {
     async showReadyGo() {
         const state = this.engine.getState();
         // Show next queue preview during countdown
-        this.renderNext(state.nextQueue);
+        this.renderNext(state.hideNextFrames > 0 ? [] : state.nextQueue);
         const readyBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 10,
@@ -688,9 +688,13 @@ class GameScreen {
             needsRender = true;
         }
         // Update next/hold if changed
-        if (JSON.stringify(state.nextQueue.slice(0, 3)) !== JSON.stringify(this.lastNext)) {
-            this.renderNext(state.nextQueue.slice(0, 3));
-            this.lastNext = [...state.nextQueue.slice(0, 3)];
+        // HIDE NEXT (item 7): draw an empty queue rather than the real one, and
+        // keep lastNext in step so the preview comes back the frame it expires.
+        const hideNext = state.hideNextFrames > 0;
+        const nextToDraw = hideNext ? [] : state.nextQueue.slice(0, 3);
+        if (JSON.stringify(nextToDraw) !== JSON.stringify(this.lastNext)) {
+            this.renderNext(nextToDraw);
+            this.lastNext = [...nextToDraw];
             needsRender = true;
         }
         if (state.holdPiece !== this.lastHold) {

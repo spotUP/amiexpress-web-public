@@ -125,6 +125,39 @@ export const ROLL_ROLL_PIECES = 4;
 /** ROLL ROLL's rotation period in frames (init.c:729 p_rollroll_timer = 30). */
 export const ROLL_ROLL_PERIOD_FRAMES = 30;
 
+/**
+ * Frame durations for the timed attack items, from eraseItem
+ * (gamestart.c:13527, 13537, 13558, 13563). The reference shortens several of
+ * them at high gravity; this door uses the base value, which is the one a
+ * player meets at any ordinary speed.
+ */
+export const ROTATE_LOCK_FRAMES = 600;
+export const HIDE_NEXT_FRAMES = 900;
+export const LR_REVERSE_FRAMES = 600;
+export const BOOST_FRAMES = 600;
+
+/**
+ * Every item id this engine can actually carry out.
+ *
+ * The TGM preset was already filtered to these (TGM_RUNTIME_ITEMS); ALL, FEW
+ * and DS were not, so with those presets most pickups did nothing at all -
+ * the DS pool in particular is {6,7,12,13,18,26} and only one of those six
+ * had an effect. drawItem() rejects the rest now, exactly as the TGM draw
+ * already rejected its own.
+ */
+export const IMPLEMENTED_ITEMS: readonly number[] = [
+  1,   // MIRROR
+  2,   // ROLL ROLL
+  3,   // DEATH BLOCK
+  6,   // ROTATE LOCK
+  7,   // HIDE NEXT
+  11,  // <->REV
+  12,  // BOOST
+  17, 18, 19,          // ^DEL, vDEL, DELEVEN
+  21, 22, 23, 24, 25,  // LASER, NEGA, SHOTGUN, EXCHG, HARD
+  28, 29, 30, 31,      // FREEFALL, <-MOV, ->MOV, 180DEG
+];
+
 /** TGM_PRESET_ITEMS minus TGM_NOT_IMPLEMENTED_ITEMS - what the engine actually draws. */
 export const TGM_RUNTIME_ITEMS: readonly number[] = TGM_PRESET_ITEMS.filter(
   (id) => !TGM_NOT_IMPLEMENTED_ITEMS.includes(id)
@@ -192,7 +225,7 @@ export function drawItem(
       let id: number;
       do {
         id = Math.floor(rng() * ITEM_COUNT) + 1;
-      } while (id >= 6 || id === history[0]);
+      } while (id >= 6 || id === history[0] || !IMPLEMENTED_ITEMS.includes(id));
       history[0] = id;
       return id;
     }
@@ -205,12 +238,13 @@ export function drawItem(
       do {
         id = Math.floor(rng() * ITEM_COUNT) + 1;
         if (id === 6) id = Math.floor(rng() * ITEM_COUNT) + 1;
-      } while (!DS_SET.has(id) || id === history[0]);
+      } while (!DS_SET.has(id) || id === history[0] || !IMPLEMENTED_ITEMS.includes(id));
       history[0] = id;
       return id;
     }
     case 'TGM': {
-      const inTgmRange = (id: number) => TGM_PRESET_ITEMS.includes(id);
+      const inTgmRange = (id: number) =>
+        TGM_PRESET_ITEMS.includes(id) && IMPLEMENTED_ITEMS.includes(id);
       let id: number;
       do {
         id = drawWeightedItem(rng);
@@ -221,9 +255,11 @@ export function drawItem(
     case 'ALL':
     default: {
       let id: number;
+      let guard = 0;
       do {
         id = drawWeightedItem(rng);
-      } while (history.includes(id));
+        guard++;
+      } while ((history.includes(id) || !IMPLEMENTED_ITEMS.includes(id)) && guard < 500);
       shiftHistory(history, id);
       return id;
     }
@@ -458,6 +494,18 @@ export interface ItemEffectResult {
    * passes 3 (gamestart.c:7092-7095) - four pieces.
    */
   rollRollPieces?: number;
+  /**
+   * Frame-timed effects (HeborisCE item_timer, gamestart.c:13517-13563) as
+   * opposed to the piece-counted ones above:
+   *   ROTATE LOCK (6)  600 frames - the piece cannot be turned (ars.c:83)
+   *   HIDE NEXT (7)    900 frames - the NEXT queue is not drawn
+   *   <->REV (11)      600 frames - left and right swap (ars.c:238)
+   *   BOOST (12)       600 frames - the piece falls at 20G (ars.c:34-38)
+   */
+  rotateLockFrames?: number;
+  hideNextFrames?: number;
+  lrReverseFrames?: number;
+  boostFrames?: number;
   /** Rows that should be run through the caller's clearLines() (DEL items). */
   clearRows?: number[];
   /** Set when the item inserts a hard block into the target's next piece. */
@@ -505,6 +553,18 @@ export function applyEnemyItem(
       // DEATH BLOCK - the target's next pieces come out BIG
       // (gamestart.c:13502-13503 IsBig).
       return { bigPieces: DEATH_BLOCK_PIECES };
+    case 6:
+      // ROTATE LOCK (gamestart.c:13517-13527, ars.c:83).
+      return { rotateLockFrames: ROTATE_LOCK_FRAMES };
+    case 7:
+      // HIDE NEXT (gamestart.c:13536-13537).
+      return { hideNextFrames: HIDE_NEXT_FRAMES };
+    case 11:
+      // <->REV: left and right swap (gamestart.c:13557-13558, ars.c:238).
+      return { lrReverseFrames: LR_REVERSE_FRAMES };
+    case 12:
+      // BOOST: the piece falls at 20G (gamestart.c:13563, ars.c:34-38).
+      return { boostFrames: BOOST_FRAMES };
     case 21: {
       const x = Math.floor(rng() * targetBoard.width);
       laserColumn(targetBoard, x);

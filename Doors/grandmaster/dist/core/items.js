@@ -20,7 +20,7 @@
  * restricted pool) - a drawn item always has a real effect.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SELF_TARGET_ITEMS = exports.TGM_RUNTIME_ITEMS = exports.ROLL_ROLL_PERIOD_FRAMES = exports.ROLL_ROLL_PIECES = exports.DEATH_BLOCK_PIECES = exports.TGM_NOT_IMPLEMENTED_ITEMS = exports.TGM_PRESET_ITEMS = exports.DS_PRESET_ITEMS = exports.FEW_PRESET_ITEMS = exports.ITEM_WEIGHTS = exports.HARD_BLOCK_ITEM = exports.ITEM_COUNT = exports.ITEM_NAMES = void 0;
+exports.SELF_TARGET_ITEMS = exports.TGM_RUNTIME_ITEMS = exports.IMPLEMENTED_ITEMS = exports.BOOST_FRAMES = exports.LR_REVERSE_FRAMES = exports.HIDE_NEXT_FRAMES = exports.ROTATE_LOCK_FRAMES = exports.ROLL_ROLL_PERIOD_FRAMES = exports.ROLL_ROLL_PIECES = exports.DEATH_BLOCK_PIECES = exports.TGM_NOT_IMPLEMENTED_ITEMS = exports.TGM_PRESET_ITEMS = exports.DS_PRESET_ITEMS = exports.FEW_PRESET_ITEMS = exports.ITEM_WEIGHTS = exports.HARD_BLOCK_ITEM = exports.ITEM_COUNT = exports.ITEM_NAMES = void 0;
 exports.totalItemWeight = totalItemWeight;
 exports.drawWeightedItem = drawWeightedItem;
 exports.createItemHistory = createItemHistory;
@@ -127,6 +127,37 @@ exports.DEATH_BLOCK_PIECES = 2;
 exports.ROLL_ROLL_PIECES = 4;
 /** ROLL ROLL's rotation period in frames (init.c:729 p_rollroll_timer = 30). */
 exports.ROLL_ROLL_PERIOD_FRAMES = 30;
+/**
+ * Frame durations for the timed attack items, from eraseItem
+ * (gamestart.c:13527, 13537, 13558, 13563). The reference shortens several of
+ * them at high gravity; this door uses the base value, which is the one a
+ * player meets at any ordinary speed.
+ */
+exports.ROTATE_LOCK_FRAMES = 600;
+exports.HIDE_NEXT_FRAMES = 900;
+exports.LR_REVERSE_FRAMES = 600;
+exports.BOOST_FRAMES = 600;
+/**
+ * Every item id this engine can actually carry out.
+ *
+ * The TGM preset was already filtered to these (TGM_RUNTIME_ITEMS); ALL, FEW
+ * and DS were not, so with those presets most pickups did nothing at all -
+ * the DS pool in particular is {6,7,12,13,18,26} and only one of those six
+ * had an effect. drawItem() rejects the rest now, exactly as the TGM draw
+ * already rejected its own.
+ */
+exports.IMPLEMENTED_ITEMS = [
+    1, // MIRROR
+    2, // ROLL ROLL
+    3, // DEATH BLOCK
+    6, // ROTATE LOCK
+    7, // HIDE NEXT
+    11, // <->REV
+    12, // BOOST
+    17, 18, 19, // ^DEL, vDEL, DELEVEN
+    21, 22, 23, 24, 25, // LASER, NEGA, SHOTGUN, EXCHG, HARD
+    28, 29, 30, 31, // FREEFALL, <-MOV, ->MOV, 180DEG
+];
 /** TGM_PRESET_ITEMS minus TGM_NOT_IMPLEMENTED_ITEMS - what the engine actually draws. */
 exports.TGM_RUNTIME_ITEMS = exports.TGM_PRESET_ITEMS.filter((id) => !exports.TGM_NOT_IMPLEMENTED_ITEMS.includes(id));
 // ============================================================================
@@ -186,7 +217,7 @@ function drawItem(preset, history, rng = Math.random) {
             let id;
             do {
                 id = Math.floor(rng() * exports.ITEM_COUNT) + 1;
-            } while (id >= 6 || id === history[0]);
+            } while (id >= 6 || id === history[0] || !exports.IMPLEMENTED_ITEMS.includes(id));
             history[0] = id;
             return id;
         }
@@ -200,12 +231,12 @@ function drawItem(preset, history, rng = Math.random) {
                 id = Math.floor(rng() * exports.ITEM_COUNT) + 1;
                 if (id === 6)
                     id = Math.floor(rng() * exports.ITEM_COUNT) + 1;
-            } while (!DS_SET.has(id) || id === history[0]);
+            } while (!DS_SET.has(id) || id === history[0] || !exports.IMPLEMENTED_ITEMS.includes(id));
             history[0] = id;
             return id;
         }
         case 'TGM': {
-            const inTgmRange = (id) => exports.TGM_PRESET_ITEMS.includes(id);
+            const inTgmRange = (id) => exports.TGM_PRESET_ITEMS.includes(id) && exports.IMPLEMENTED_ITEMS.includes(id);
             let id;
             do {
                 id = drawWeightedItem(rng);
@@ -216,9 +247,11 @@ function drawItem(preset, history, rng = Math.random) {
         case 'ALL':
         default: {
             let id;
+            let guard = 0;
             do {
                 id = drawWeightedItem(rng);
-            } while (history.includes(id));
+                guard++;
+            } while ((history.includes(id) || !exports.IMPLEMENTED_ITEMS.includes(id)) && guard < 500);
             shiftHistory(history, id);
             return id;
         }
@@ -471,6 +504,18 @@ function applyEnemyItem(itemId, targetBoard, selfBoard, rng = Math.random) {
             // DEATH BLOCK - the target's next pieces come out BIG
             // (gamestart.c:13502-13503 IsBig).
             return { bigPieces: exports.DEATH_BLOCK_PIECES };
+        case 6:
+            // ROTATE LOCK (gamestart.c:13517-13527, ars.c:83).
+            return { rotateLockFrames: exports.ROTATE_LOCK_FRAMES };
+        case 7:
+            // HIDE NEXT (gamestart.c:13536-13537).
+            return { hideNextFrames: exports.HIDE_NEXT_FRAMES };
+        case 11:
+            // <->REV: left and right swap (gamestart.c:13557-13558, ars.c:238).
+            return { lrReverseFrames: exports.LR_REVERSE_FRAMES };
+        case 12:
+            // BOOST: the piece falls at 20G (gamestart.c:13563, ars.c:34-38).
+            return { boostFrames: exports.BOOST_FRAMES };
         case 21: {
             const x = Math.floor(rng() * targetBoard.width);
             laserColumn(targetBoard, x);

@@ -226,6 +226,15 @@ export interface GameState {
    */
   bigPiecesRemaining: number;
   rollRollPiecesRemaining: number;
+  /**
+   * Frame-timed item effects (HeborisCE item_timer, gamestart.c:13517-13563).
+   * ROTATE LOCK stops rotation, HIDE NEXT blanks the preview, <->REV swaps
+   * left and right, BOOST drops the piece at 20G. 0 = not active.
+   */
+  rotateLockFrames: number;
+  hideNextFrames: number;
+  lrReverseFrames: number;
+  boostFrames: number;
 }
 
 // ============================================================================

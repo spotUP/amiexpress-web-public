@@ -87,6 +87,26 @@ export declare const DEATH_BLOCK_PIECES = 2;
 export declare const ROLL_ROLL_PIECES = 4;
 /** ROLL ROLL's rotation period in frames (init.c:729 p_rollroll_timer = 30). */
 export declare const ROLL_ROLL_PERIOD_FRAMES = 30;
+/**
+ * Frame durations for the timed attack items, from eraseItem
+ * (gamestart.c:13527, 13537, 13558, 13563). The reference shortens several of
+ * them at high gravity; this door uses the base value, which is the one a
+ * player meets at any ordinary speed.
+ */
+export declare const ROTATE_LOCK_FRAMES = 600;
+export declare const HIDE_NEXT_FRAMES = 900;
+export declare const LR_REVERSE_FRAMES = 600;
+export declare const BOOST_FRAMES = 600;
+/**
+ * Every item id this engine can actually carry out.
+ *
+ * The TGM preset was already filtered to these (TGM_RUNTIME_ITEMS); ALL, FEW
+ * and DS were not, so with those presets most pickups did nothing at all -
+ * the DS pool in particular is {6,7,12,13,18,26} and only one of those six
+ * had an effect. drawItem() rejects the rest now, exactly as the TGM draw
+ * already rejected its own.
+ */
+export declare const IMPLEMENTED_ITEMS: readonly number[];
 /** TGM_PRESET_ITEMS minus TGM_NOT_IMPLEMENTED_ITEMS - what the engine actually draws. */
 export declare const TGM_RUNTIME_ITEMS: readonly number[];
 /** Sum of ITEM_WEIGHTS (gamestart.c:3320-3324 item_pronum). */
@@ -210,6 +230,18 @@ export interface ItemEffectResult {
      * passes 3 (gamestart.c:7092-7095) - four pieces.
      */
     rollRollPieces?: number;
+    /**
+     * Frame-timed effects (HeborisCE item_timer, gamestart.c:13517-13563) as
+     * opposed to the piece-counted ones above:
+     *   ROTATE LOCK (6)  600 frames - the piece cannot be turned (ars.c:83)
+     *   HIDE NEXT (7)    900 frames - the NEXT queue is not drawn
+     *   <->REV (11)      600 frames - left and right swap (ars.c:238)
+     *   BOOST (12)       600 frames - the piece falls at 20G (ars.c:34-38)
+     */
+    rotateLockFrames?: number;
+    hideNextFrames?: number;
+    lrReverseFrames?: number;
+    boostFrames?: number;
     /** Rows that should be run through the caller's clearLines() (DEL items). */
     clearRows?: number[];
     /** Set when the item inserts a hard block into the target's next piece. */

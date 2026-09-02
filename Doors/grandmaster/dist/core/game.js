@@ -149,6 +149,14 @@ class GameEngine {
             this.state.rollRollPiecesRemaining = result.rollRollPieces;
             this.rollRollFrame = 0;
         }
+        if (result.rotateLockFrames)
+            this.state.rotateLockFrames = result.rotateLockFrames;
+        if (result.hideNextFrames)
+            this.state.hideNextFrames = result.hideNextFrames;
+        if (result.lrReverseFrames)
+            this.state.lrReverseFrames = result.lrReverseFrames;
+        if (result.boostFrames)
+            this.state.boostFrames = result.boostFrames;
     }
     /**
      * Publish the grade for the mode being played.
@@ -252,6 +260,10 @@ class GameEngine {
             itemBanner: null,
             bigPiecesRemaining: 0,
             rollRollPiecesRemaining: 0,
+            rotateLockFrames: 0,
+            hideNextFrames: 0,
+            lrReverseFrames: 0,
+            boostFrames: 0,
         };
     }
     /**
@@ -478,6 +490,16 @@ class GameEngine {
                 }
             }
         }
+        // Frame-timed item effects run down whatever else is happening
+        // (gamestart.c's item_timer, spent in the same frame handler).
+        if (this.state.rotateLockFrames > 0)
+            this.state.rotateLockFrames--;
+        if (this.state.hideNextFrames > 0)
+            this.state.hideNextFrames--;
+        if (this.state.lrReverseFrames > 0)
+            this.state.lrReverseFrames--;
+        if (this.state.boostFrames > 0)
+            this.state.boostFrames--;
         // PRACTICE: a time goal comes due whether or not a piece is falling.
         if (this.checkPracticeGoal())
             return;
@@ -565,8 +587,12 @@ class GameEngine {
             return;
         const piece = this.state.currentPiece;
         const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
-        // Accumulate gravity (supports fractional values < 1.0)
-        this.gravityAccumulator += this.state.gravity;
+        // Accumulate gravity (supports fractional values < 1.0).
+        // BOOST (item 12) overrides it with 20G while it lasts (ars.c:34-38,
+        // `bs[player] = 1200`, 1200 being the file's own 20G constant).
+        this.gravityAccumulator += this.state.boostFrames > 0
+            ? Math.max(this.state.gravity, 20)
+            : this.state.gravity;
         // Calculate how many rows to drop
         const dropAmount = Math.floor(this.gravityAccumulator);
         if (dropAmount > 0) {
@@ -606,6 +632,11 @@ class GameEngine {
     move(direction) {
         if (!this.state.currentPiece || this.state.status !== 'playing')
             return false;
+        // <->REV (item 11): left and right swap while it lasts (ars.c:238,
+        // `if(isLRreverse[player]) move = 0 - move`).
+        if (this.state.lrReverseFrames > 0) {
+            direction = -direction;
+        }
         const piece = this.state.currentPiece;
         const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
         const newX = piece.x + direction;
@@ -637,6 +668,10 @@ class GameEngine {
      */
     rotate(direction) {
         if (!this.state.currentPiece || this.state.status !== 'playing')
+            return false;
+        // ROTATE LOCK (item 6): the piece cannot be turned at all
+        // (ars.c:83 `if((move) && (isrotatelock[player] == 0))`).
+        if (this.state.rotateLockFrames > 0)
             return false;
         const piece = this.state.currentPiece;
         const newRotation = ((piece.rotation + direction + 4) % 4);

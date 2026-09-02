@@ -424,3 +424,108 @@ export async function aBigPieceSpawnsInsideTheBoard(): Promise<void> {
     }
   }
 }
+
+// ============================================================================
+// The four frame-timed attack items (gamestart.c:13517-13563, item_timer).
+// ============================================================================
+
+export async function rotateLockStopsTheDoorFromTurningThePiece(): Promise<void> {
+  const engine: any = new GameEngine('master', settings, sounds);
+  engine.start();
+  engine.getState().currentPiece = { type: 'T', rotation: 0, x: 4, y: 5 };
+
+  engine.applyItemEffectResult({ rotateLockFrames: 600 });
+  assert.strictEqual(engine.rotate(1), false, 'ars.c:83 - no rotation while locked');
+  assert.strictEqual(engine.getState().currentPiece.rotation, 0);
+
+  for (let f = 0; f < 600; f++) engine.update(1000 / 60);
+  assert.strictEqual(engine.getState().rotateLockFrames, 0, 'the timer runs out');
+  assert.strictEqual(engine.rotate(1), true, 'and the piece turns again');
+}
+
+export async function lrReverseSwapsLeftAndRight(): Promise<void> {
+  const engine: any = new GameEngine('master', settings, sounds);
+  engine.start();
+  engine.getState().currentPiece = { type: 'T', rotation: 0, x: 4, y: 5 };
+
+  engine.applyItemEffectResult({ lrReverseFrames: 600 });
+  engine.move(1);
+  assert.strictEqual(engine.getState().currentPiece.x, 3, 'ars.c:238 - right goes left');
+  engine.move(-1);
+  assert.strictEqual(engine.getState().currentPiece.x, 4, 'and left goes right');
+
+  for (let f = 0; f < 600; f++) engine.update(1000 / 60);
+  assert.strictEqual(engine.getState().lrReverseFrames, 0, 'the timer runs out');
+
+  // A fresh piece: 600 frames of play locked whatever was falling.
+  engine.getState().currentPiece = { type: 'T', rotation: 0, x: 4, y: 5 };
+  engine.move(1);
+  assert.strictEqual(engine.getState().currentPiece.x, 5, 'and right is right again');
+}
+
+export async function boostDropsThePieceAtTwentyG(): Promise<void> {
+  // ars.c:34-38 `bs[player] = 1200` - 1200 is the file's own 20G constant.
+  const engine: any = new GameEngine('marathon', settings, sounds);  // opens at 0.02G
+  engine.start();
+  engine.getState().currentPiece = { type: 'T', rotation: 0, x: 4, y: 2 };
+  const startY = engine.getState().currentPiece.y;
+
+  engine.update(1000 / 60);
+  assert.strictEqual(engine.getState().currentPiece.y, startY, 'marathon gravity moves nothing in one frame');
+
+  engine.applyItemEffectResult({ boostFrames: 600 });
+  engine.getState().currentPiece = { type: 'T', rotation: 0, x: 4, y: 2 };
+  engine.update(1000 / 60);
+  assert.ok(engine.getState().currentPiece === null
+    || engine.getState().currentPiece.y > startY + 10,
+    'one boosted frame takes the piece to the floor');
+}
+
+export async function hideNextBlanksThePreview(): Promise<void> {
+  const { Screen } = await import('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+  const { GameScreen } = await import('../ui/game-screen');
+  const screen: any = new Screen({ title: 'hidenext', width: 80, height: 30 });
+  try {
+    const appState: any = { currentMode: 'marathon', playerName: 'sysop', settings: appStateSettings() };
+    const engine: any = new GameEngine('marathon', appState.settings, sounds);
+    engine.start();
+    const gameScreen: any = new GameScreen(screen, engine, null, sounds, appState, null);
+    gameScreen.setupUI();
+
+    gameScreen.render();
+    const withPreview = gameScreen.nextBox.getContent();
+
+    engine.applyItemEffectResult({ hideNextFrames: 900 });
+    gameScreen.render();
+    const hidden = gameScreen.nextBox.getContent();
+
+    assert.notStrictEqual(withPreview, hidden, 'the preview must repaint');
+    const blocks = (s: string) => (s.match(/█/g) ?? []).length;
+    assert.strictEqual(blocks(hidden), 0, 'and show nothing at all');
+    assert.ok(blocks(withPreview) > 0, 'where it showed pieces before');
+  } finally { screen.destroy(); }
+}
+
+/** The renderer touches more settings than the engine does. */
+function appStateSettings(): any {
+  return {
+    ...settings,
+    clearDirection: 'in', clearAnimationSpeed: 1, placementEffects: false,
+    floatTextMode: 'off', b2bGlowEnabled: false, connectedBlocks: false,
+    animationIntensity: 'normal', gamepadBindings: {},
+  };
+}
+
+export async function noPresetHandsOutAnItemWithNoEffect(): Promise<void> {
+  // FEW draws 1-5 and DS draws {6,7,12,13,18,26}; before the pools were
+  // filtered, most of those pickups did nothing at all.
+  const { drawItem, createItemHistory, IMPLEMENTED_ITEMS } = await import('../core/items');
+  for (const preset of ['ALL', 'FEW', 'DS', 'TGM'] as const) {
+    const history = createItemHistory();
+    for (let draw = 0; draw < 200; draw++) {
+      const id = drawItem(preset, history);
+      assert.ok(IMPLEMENTED_ITEMS.includes(id),
+        `${preset} drew item ${id}, which this engine cannot carry out`);
+    }
+  }
+}
