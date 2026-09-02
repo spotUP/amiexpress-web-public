@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenPreview } from '../components/ScreenPreview';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { Modal } from '../components/ui/Modal';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
@@ -54,6 +55,14 @@ export function ScreenFilesPage() {
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [editing, setEditing] = useState<EditorSurface | null>(null);
+  /**
+   * True while the pending write came from the editor.
+   *
+   * The fan-out choice renders in the page for an uploaded file and inside the
+   * dialog for an edited one - "the page is extremely tall and unmanageable",
+   * and hunting for the choice after the editor closed was part of that.
+   */
+  const [editorWrite, setEditorWrite] = useState(false);
   /**
    * A file whose editor should open as soon as its bytes arrive.
    *
@@ -561,6 +570,66 @@ export function ScreenFilesPage() {
         </section>
       )}
 
+      {/*
+        The editor is a dialog, not another section.
+
+        An 80x25 canvas plus its tools under a table, a resolutions list and a
+        preview made a page nobody could work in - reported as "the page is
+        extremely tall and unmanageable". Saving stays in here too: the fan-out
+        choice is the last step of editing, not something to find afterwards.
+      */}
+      <Modal
+        open={!!editing || (editorWrite && !!pendingUpload)}
+        title={openFile ? `Editing ${openFile}` : 'Editing a screen'}
+        maxWidth="max-w-5xl"
+        onClose={() => { setEditing(null); setEditorWrite(false); setPendingUpload(null); }}
+      >
+        {editing && !pendingUpload && (
+          <ScreenEditor
+            surface={editing}
+            mci={file?.mci ?? []}
+            onChange={setEditing}
+            // An edit produces bytes, and bytes go out the way an uploaded file
+            // does - the same fan-out, the same backup, the same refusals. The
+            // editor is not a second write path.
+            onSave={bytes => {
+              setPendingUpload({ bytes, name: 'the edited screen' });
+              setEditorWrite(true);
+            }}
+            onCancel={() => { setEditing(null); setEditorWrite(false); }}
+          />
+        )}
+
+        {editorWrite && pendingUpload && (
+          <div className="space-y-2 p-4">
+            <p className="text-sm text-bbs-text">
+              Write <span className="font-mono">{openFile}</span> where?
+            </p>
+            {options.map(option => (
+              <button
+                key={option.choice}
+                className="block text-left underline"
+                onClick={async () => {
+                  await applyWrite(option);
+                  setEditing(null);
+                  setEditorWrite(false);
+                }}
+              >
+                {option.label}
+                {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
+                {option.suggested && <span className="text-bbs-muted"> (suggested)</span>}
+              </button>
+            ))}
+            <button
+              className="block text-left text-bbs-muted underline"
+              onClick={() => { setPendingUpload(null); setEditorWrite(false); }}
+            >
+              back to the editor
+            </button>
+          </div>
+        )}
+      </Modal>
+
       {openFile && file && (
         <section className="space-y-2">
           <h3 className="text-bbs-text font-mono">{openFile}</h3>
@@ -603,7 +672,7 @@ export function ScreenFilesPage() {
             </button>
           </div>
 
-          {pendingUpload && (
+          {pendingUpload && !editorWrite && (
             <div className="border border-bbs-border p-3 space-y-2">
               <p className="text-sm text-bbs-text">
                 Replace <span className="font-mono">{openFile}</span> with{' '}
@@ -624,22 +693,6 @@ export function ScreenFilesPage() {
                 cancel
               </button>
             </div>
-          )}
-
-          {editing && (
-            <ScreenEditor
-              surface={editing}
-              mci={file.mci ?? []}
-              onChange={setEditing}
-              // An edit produces bytes, and bytes go out the way an uploaded
-              // file does - through the same fan-out choice, the same backup
-              // and the same refusals. The editor is not a second write path.
-              onSave={bytes => {
-                setPendingUpload({ bytes, name: 'the edited screen' });
-                setEditing(null);
-              }}
-              onCancel={() => setEditing(null)}
-            />
           )}
 
           {file.format === 'ansi' || file.format === 'text' ? (
