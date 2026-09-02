@@ -242,6 +242,13 @@ export interface KeyBindings {
   discardSpecial?: string[];
 }
 
+/**
+ * HeborisCE's item_mode[player] (gamestart.c:6994), plus the door's four
+ * selection presets from core/items.ts. 'OFF' (or absent) is the default:
+ * a board's players do not get items until they ask for them.
+ */
+export type ItemMode = 'OFF' | 'TGM' | 'ALL' | 'FEW' | 'DS';
+
 export interface PlayerSettings {
   rotationSystem: RotationSystem;
   das: number;              // Delayed Auto-Shift (ms)
@@ -254,6 +261,12 @@ export interface PlayerSettings {
   sfxVolume: number;
   keyBindings: KeyBindings;
   gamepadBindings?: GamepadBindings;
+  /**
+   * TGM item pickups outside versus. Versus enables items itself
+   * (gamestart.c:6994's `gameMode[player] == 4` half); this is the
+   * `|| item_mode[player]` half, and it reaches every other mode.
+   */
+  itemMode?: ItemMode;
 
   // Visual Effects Settings
   blockGlow: boolean;                 // Enable/disable block glow system

@@ -39,6 +39,7 @@ import {
   drawItem,
   isSelfTargetItem,
   applySelfItem,
+  applyEnemyItem,
   type ItemPresetName,
 } from './items';
 
@@ -135,6 +136,14 @@ export class GameEngine {
     this.finesseEvaluator = new FinesseEvaluator();
     this.attackManager = attackManager;
     this.state = this.createInitialState(mode);
+
+    // gamestart.c:6994 `gameMode[player] == 4 || item_mode[player]`. Versus
+    // calls enableItems() itself for the first half; this is the second,
+    // and it is what makes items reachable in Master, Death, Marathon and
+    // Sprint - modes where they were unreachable at any setting.
+    if (settings.itemMode && settings.itemMode !== 'OFF') {
+      this.enableItems(settings.itemMode);
+    }
   }
 
   /**
@@ -1630,11 +1639,24 @@ export class GameEngine {
 
     // Enemy-targeted (attack) item - HARD (25) and EXCHG (24) included.
     // GameEngine has no notion of an opponent; the caller (VersusScreen)
-    // resolves a target engine and applies core/items.ts's applyEnemyItem,
-    // falling back to the collector per gamestart.c:14358-14365 ("enemy =
-    // 1-player, falling back to enemy = player outside versus") when no
-    // opponent is reachable.
-    this.onItemCollectedCallback?.(itemId);
+    // resolves a target engine and applies core/items.ts's applyEnemyItem.
+    if (this.onItemCollectedCallback) {
+      this.onItemCollectedCallback(itemId);
+      return;
+    }
+
+    // Nobody is listening, which is single player: the reference's own
+    // fallback applies the attack to the collector (gamestart.c:14358-14365,
+    // "enemy = 1 - player", falling back to "enemy = player"). Without this
+    // an item outside versus was collected, named on the HUD, and then did
+    // nothing at all.
+    const result = applyEnemyItem(itemId, this.state.board, this.state.board);
+    if (result.clearRows && result.clearRows.length > 0) {
+      clearLines(this.state.board, result.clearRows);
+    }
+    if (result.insertHardBlockNext) {
+      this.insertHardBlockNext();
+    }
   }
 
   /**

@@ -37,6 +37,18 @@ export declare class SettingsScreen {
      */
     show(): Promise<void>;
     /**
+     * Every settings row, in one place.
+     *
+     * The menu used to exist three times over - a list of label strings, a
+     * parallel array of descriptions, and a `switch (index)` of actions - all
+     * keyed by POSITION. They had already drifted apart: the descriptions
+     * array stopped at the joypad section, so every DISPLAY row described the
+     * wrong thing, and the Save & Exit index had been renumbered by hand in a
+     * comment. One table ends that class of bug - adding a row cannot
+     * renumber anything, because nothing is numbered.
+     */
+    private menuRows;
+    /**
      * Get menu items
      */
     private getMenuItems;
@@ -48,6 +60,11 @@ export declare class SettingsScreen {
      * Handle menu selection
      */
     private handleSelection;
+    /**
+     * Cycle the item mode - HeborisCE's item_mode[player], over the four
+     * selection presets core/items.ts implements.
+     */
+    private cycleItemMode;
     /**
      * Cycle rotation system
      */

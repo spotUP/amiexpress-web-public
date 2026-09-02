@@ -7,7 +7,23 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { GamepadInputManager, GamepadAxis } from '@amiexpress/bbs-door-sdk';
-import type { AppState, PlayerSettings, RotationSystem, KeyBindings, GamepadBindings } from '../core/types';
+import type {
+  AppState, PlayerSettings, RotationSystem, KeyBindings, GamepadBindings, ItemMode,
+} from '../core/types';
+
+/**
+ * One row of the settings menu: what it reads, what it says, what it does.
+ * A row with no `run` is a separator or a section header.
+ */
+interface SettingsRow {
+  label: string;
+  description?: string;
+  run?: () => void | Promise<void>;
+  /** Screen Size rebuilds the list under the cursor and wants it kept. */
+  keepsSelection?: boolean;
+  /** Save & Exit - handled by the list's own select handler. */
+  exits?: boolean;
+}
 import type { SoundEngine } from '../audio/sounds';
 import { KEY_PRESETS } from '../input/config';
 
@@ -172,10 +188,9 @@ export class SettingsScreen {
 
       // Handle item selection - wrap async handler for blessed's sync event requirement
       menu.on('select', (_item: any, index: number) => {
-        // Check for Save & Exit (last item). The DISPLAY section added
-        // three entries above it - blank, header, Screen Size - so this
-        // moved from 30 to 33.
-        if (index === 33) {
+        // Save & Exit says so itself now - this used to be a hardcoded
+        // index that had already been renumbered once by hand.
+        if (this.menuRows()[index]?.exits) {
           this.sounds.playSfx('menu_ok');
           exitSettings();
           return;
@@ -200,167 +215,206 @@ export class SettingsScreen {
   }
 
   /**
+   * Every settings row, in one place.
+   *
+   * The menu used to exist three times over - a list of label strings, a
+   * parallel array of descriptions, and a `switch (index)` of actions - all
+   * keyed by POSITION. They had already drifted apart: the descriptions
+   * array stopped at the joypad section, so every DISPLAY row described the
+   * wrong thing, and the Save & Exit index had been renumbered by hand in a
+   * comment. One table ends that class of bug - adding a row cannot
+   * renumber anything, because nothing is numbered.
+   */
+  private menuRows(): SettingsRow[] {
+    const s = this.state.settings;
+    const yellow = (value: string | number) => `{yellow-fg}${value}{/yellow-fg}`;
+    const separator: SettingsRow = { label: '' };
+    const header = (text: string): SettingsRow => ({ label: `{cyan-fg}--- ${text} ---{/cyan-fg}` });
+
+    return [
+      {
+        label: `Rotation System:   ${yellow(s.rotationSystem)}`,
+        description: 'Rotation system (SRS, ARS, NRS, BARS and the HeborisCE rulesets)',
+        run: () => this.cycleRotationSystem(),
+      },
+      {
+        label: `DAS (ms):          ${yellow(s.das)}`,
+        description: 'Delayed Auto-Shift: time before auto-repeat starts',
+        run: () => this.adjustValue('das', 10, 50, 300, 10),
+      },
+      {
+        label: `ARR (ms):          ${yellow(s.arr)}`,
+        description: 'Auto-Repeat Rate: time between repeats',
+        run: () => this.adjustValue('arr', 0, 1, 50, 1),
+      },
+      {
+        label: `Soft Drop Speed:   ${yellow(`${s.softDropSpeed}x`)}`,
+        description: 'Soft drop speed multiplier',
+        run: () => this.adjustValue('softDropSpeed', 1, 1, 40, 1),
+      },
+      {
+        label: `Ghost Piece:       ${yellow(s.ghostPiece ? 'ON' : 'OFF')}`,
+        description: 'Show ghost piece at drop position',
+        run: () => { s.ghostPiece = !s.ghostPiece; },
+      },
+      {
+        label: `Lock Delay (ms):   ${yellow(s.lockDelay)}`,
+        description: 'Lock delay: time before piece locks',
+        run: () => this.adjustValue('lockDelay', 100, 100, 2000, 50),
+      },
+      {
+        label: `Preview Count:     ${yellow(s.previewCount)}`,
+        description: 'Number of next pieces to preview',
+        run: () => this.adjustValue('previewCount', 1, 1, 6, 1),
+      },
+      {
+        // gamestart.c:6994 `gameMode[player] == 4 || item_mode[player]` -
+        // versus always has items, every other mode has them when the
+        // player switched them on. This row is that second half; versus
+        // still forces its own TGM item play regardless.
+        label: `Items:             ${yellow(s.itemMode ?? 'OFF')}`,
+        description: 'TGM item pickups outside versus (OFF, TGM, ALL, FEW, DS)',
+        run: () => this.cycleItemMode(),
+      },
+      {
+        label: `Music Volume:      ${yellow(`${Math.floor(s.musicVolume * 100)}%`)}`,
+        description: 'Background music volume',
+        run: () => this.adjustVolume('musicVolume'),
+      },
+      {
+        label: `SFX Volume:        ${yellow(`${Math.floor(s.sfxVolume * 100)}%`)}`,
+        description: 'Sound effects volume',
+        run: () => this.adjustVolume('sfxVolume'),
+      },
+      separator,
+      header('VISUAL EFFECTS'),
+      {
+        label: `Block Glow:        ${yellow(s.blockGlow ? 'ON' : 'OFF')}`,
+        description: 'Enable/disable block glow effects',
+        run: () => { s.blockGlow = !s.blockGlow; },
+      },
+      {
+        label: `Glow Intensity:    ${yellow(`${Math.floor(s.glowIntensity * 100)}%`)}`,
+        description: 'Glow intensity (0-100%)',
+        run: () => this.adjustGlowIntensity(),
+      },
+      {
+        label: `Clear Style:       ${yellow(s.clearStyle.toUpperCase())}`,
+        description: 'Line clear animation style (inward/outward/instant/directional)',
+        run: () => this.cycleClearStyle(),
+      },
+      {
+        label: `Clear Direction:   ${yellow(s.clearDirection.toUpperCase())}`,
+        description: 'Clear direction for directional style (in/out)',
+        run: () => { s.clearDirection = s.clearDirection === 'in' ? 'out' : 'in'; },
+      },
+      {
+        label: `Placement Effects: ${yellow(s.placementEffects ? 'ON' : 'OFF')}`,
+        description: 'Enable/disable piece placement effects',
+        run: () => { s.placementEffects = !s.placementEffects; },
+      },
+      {
+        label: `Floating Text:     ${yellow(s.floatTextMode.toUpperCase())}`,
+        description: 'Floating text mode (off/offboard/all)',
+        run: () => this.cycleFloatTextMode(),
+      },
+      {
+        label: `B2B Glow:          ${yellow(s.b2bGlowEnabled ? 'ON' : 'OFF')}`,
+        description: 'Enable/disable back-to-back glow bonus',
+        run: () => { s.b2bGlowEnabled = !s.b2bGlowEnabled; },
+      },
+      {
+        label: `Connected Blocks:  ${yellow(s.connectedBlocks ? 'ON' : 'OFF')}`,
+        description: 'Enable/disable connected block rendering',
+        run: () => { s.connectedBlocks = !s.connectedBlocks; },
+      },
+      separator,
+      header('KEY BINDINGS'),
+      {
+        label: `Bind Keys:         ${yellow('[Enter to run wizard]')}`,
+        description: 'Open wizard to bind all keys in sequence',
+        run: () => this.bindAllKeys(),
+      },
+      {
+        label: `Key Preset:        ${yellow('[Enter to pick layout]')}`,
+        description: 'Pick a key layout preset (TGM Classic, WASD, Modern)',
+        run: () => this.pickKeyPreset(),
+      },
+      {
+        label: `Clear Keys:        ${yellow('[Enter to clear]')}`,
+        description: 'Clear all key bindings',
+        run: () => { this.clearKeyBindings(); },
+      },
+      separator,
+      header('JOYPAD BINDINGS'),
+      {
+        label: `Bind Joypad:       ${yellow('[Enter to run wizard]')}`,
+        description: 'Open wizard to bind all joypad buttons in sequence',
+        run: () => this.editAllGamepadBindings(0),
+      },
+      {
+        label: `Joypad Preset:     ${yellow('[Enter to pick layout]')}`,
+        description: 'Pick a joypad layout preset (Standard, Stick)',
+        run: () => this.pickGamepadPreset(),
+      },
+      {
+        label: `Clear Joypad:      ${yellow('[Enter to clear all]')}`,
+        description: 'Clear all joypad bindings (restores defaults)',
+        run: () => { this.clearGamepadBindings(); },
+      },
+      separator,
+      header('DISPLAY'),
+      {
+        label: `Screen Size:       ${yellow(this.terminalMode?.mode() === 'wide' ? 'RESPONSIVE' : '80x25')}  {gray-fg}(Alt+Enter){/gray-fg}`,
+        description: 'Fixed 80x25, or the terminal you really have (Alt+Enter does the same)',
+        run: () => { this.terminalMode?.toggle(); },
+        keepsSelection: true,
+      },
+      separator,
+      {
+        label: '{green-fg}Save & Exit{/green-fg}',
+        description: 'Save changes and return to menu',
+        exits: true,
+      },
+    ];
+  }
+
+  /**
    * Get menu items
    */
   private getMenuItems(): string[] {
-    const s = this.state.settings;
-    const kb = s.keyBindings;
-    const gp = s.gamepadBindings ?? {};
-    return [
-      `Rotation System:   {yellow-fg}${s.rotationSystem}{/yellow-fg}`,
-      `DAS (ms):          {yellow-fg}${s.das}{/yellow-fg}`,
-      `ARR (ms):          {yellow-fg}${s.arr}{/yellow-fg}`,
-      `Soft Drop Speed:   {yellow-fg}${s.softDropSpeed}x{/yellow-fg}`,
-      `Ghost Piece:       {yellow-fg}${s.ghostPiece ? 'ON' : 'OFF'}{/yellow-fg}`,
-      `Lock Delay (ms):   {yellow-fg}${s.lockDelay}{/yellow-fg}`,
-      `Preview Count:     {yellow-fg}${s.previewCount}{/yellow-fg}`,
-      `Music Volume:      {yellow-fg}${Math.floor(s.musicVolume * 100)}%{/yellow-fg}`,
-      `SFX Volume:        {yellow-fg}${Math.floor(s.sfxVolume * 100)}%{/yellow-fg}`,
-      '',
-      '{cyan-fg}--- VISUAL EFFECTS ---{/cyan-fg}',
-      `Block Glow:        {yellow-fg}${s.blockGlow ? 'ON' : 'OFF'}{/yellow-fg}`,
-      `Glow Intensity:    {yellow-fg}${Math.floor(s.glowIntensity * 100)}%{/yellow-fg}`,
-      `Clear Style:       {yellow-fg}${s.clearStyle.toUpperCase()}{/yellow-fg}`,
-      `Clear Direction:   {yellow-fg}${s.clearDirection.toUpperCase()}{/yellow-fg}`,
-      `Placement Effects: {yellow-fg}${s.placementEffects ? 'ON' : 'OFF'}{/yellow-fg}`,
-      `Floating Text:     {yellow-fg}${s.floatTextMode.toUpperCase()}{/yellow-fg}`,
-      `B2B Glow:          {yellow-fg}${s.b2bGlowEnabled ? 'ON' : 'OFF'}{/yellow-fg}`,
-      `Connected Blocks:  {yellow-fg}${s.connectedBlocks ? 'ON' : 'OFF'}{/yellow-fg}`,
-      '',
-      '{cyan-fg}--- KEY BINDINGS ---{/cyan-fg}',
-      `Bind Keys:         {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
-      `Key Preset:        {yellow-fg}[Enter to pick layout]{/yellow-fg}`,
-      `Clear Keys:        {yellow-fg}[Enter to clear]{/yellow-fg}`,
-      '',
-      '{cyan-fg}--- JOYPAD BINDINGS ---{/cyan-fg}',
-      `Bind Joypad:       {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
-      `Joypad Preset:     {yellow-fg}[Enter to pick layout]{/yellow-fg}`,
-      `Clear Joypad:      {yellow-fg}[Enter to clear all]{/yellow-fg}`,
-      '',
-      '{cyan-fg}--- DISPLAY ---{/cyan-fg}',
-      `Screen Size:       {yellow-fg}${this.terminalMode?.mode() === 'wide' ? 'RESPONSIVE' : '80x25'}{/yellow-fg}  {gray-fg}(Alt+Enter){/gray-fg}`,
-      '',
-      '{green-fg}Save & Exit{/green-fg}',
-    ];
+    return this.menuRows().map(row => row.label);
   }
 
   /**
    * Get description for menu item
    */
   private getDescription(index: number): string {
-    const descriptions = [
-      'Rotation system (SRS, ARS, NRS, BARS)',
-      'Delayed Auto-Shift: time before auto-repeat starts',
-      'Auto-Repeat Rate: time between repeats',
-      'Soft drop speed multiplier',
-      'Show ghost piece at drop position',
-      'Lock delay: time before piece locks',
-      'Number of next pieces to preview',
-      'Background music volume',
-      'Sound effects volume',
-      '',
-      '',  // VISUAL EFFECTS header
-      'Enable/disable block glow effects',
-      'Glow intensity (0-100%)',
-      'Line clear animation style (inward/outward/instant/directional)',
-      'Clear direction for directional style (in/out)',
-      'Enable/disable piece placement effects',
-      'Floating text mode (off/offboard/all)',
-      'Enable/disable back-to-back glow bonus',
-      'Enable/disable connected block rendering',
-      '',
-      '',  // KEY BINDINGS header
-      'Open wizard to bind all keys in sequence',
-      'Pick a key layout preset (TGM Classic, WASD, Modern)',
-      'Clear all key bindings',
-      '',
-      '',  // JOYPAD BINDINGS header
-      'Open wizard to bind all joypad buttons in sequence',
-      'Pick a joypad layout preset (Standard, Stick)',
-      'Clear all joypad bindings (restores defaults)',
-      '',
-      'Save changes and return to menu',
-    ];
-    return `${descriptions[index] || ''}`;
+    return this.menuRows()[index]?.description ?? '';
   }
 
   /**
    * Handle menu selection
    */
   private async handleSelection(index: number, menu: any): Promise<void> {
-    const s = this.state.settings;
+    const row = this.menuRows()[index];
+    if (!row?.run) return;
 
-    switch (index) {
-      case 0:  // Rotation System
-        await this.cycleRotationSystem();
-        break;
-      case 1:  // DAS
-        await this.adjustValue('das', 10, 50, 300, 10);
-        break;
-      case 2:  // ARR
-        await this.adjustValue('arr', 0, 1, 50, 1);
-        break;
-      case 3:  // Soft Drop Speed
-        await this.adjustValue('softDropSpeed', 1, 1, 40, 1);
-        break;
-      case 4:  // Ghost Piece
-        s.ghostPiece = !s.ghostPiece;
-        break;
-      case 5:  // Lock Delay
-        await this.adjustValue('lockDelay', 100, 100, 2000, 50);
-        break;
-      case 6:  // Preview Count
-        await this.adjustValue('previewCount', 1, 1, 6, 1);
-        break;
-      case 7:  // Music Volume
-        await this.adjustVolume('musicVolume');
-        break;
-      case 8:  // SFX Volume
-        await this.adjustVolume('sfxVolume');
-        break;
-      // Visual Effects (index 10 = header, 11-18 = settings)
-      case 11:  // Block Glow
-        s.blockGlow = !s.blockGlow;
-        break;
-      case 12:  // Glow Intensity
-        await this.adjustGlowIntensity();
-        break;
-      case 13:  // Clear Style
-        await this.cycleClearStyle();
-        break;
-      case 14:  // Clear Direction
-        s.clearDirection = s.clearDirection === 'in' ? 'out' : 'in';
-        break;
-      case 15:  // Placement Effects
-        s.placementEffects = !s.placementEffects;
-        break;
-      case 16:  // Floating Text
-        await this.cycleFloatTextMode();
-        break;
-      case 17:  // B2B Glow
-        s.b2bGlowEnabled = !s.b2bGlowEnabled;
-        break;
-      case 18:  // Connected Blocks
-        s.connectedBlocks = !s.connectedBlocks;
-        break;
-      // Key bindings (index 20 = header, 21 = wizard, 22 = preset, 23 = clear)
-      case 21: await this.bindAllKeys(); break;
-      case 22: await this.pickKeyPreset(); break;
-      case 23: this.clearKeyBindings(); break;
-      // Joypad bindings (index 25 = header, 26 = wizard, 27 = preset, 28 = clear)
-      case 26: await this.editAllGamepadBindings(0); break;
-      case 27: await this.pickGamepadPreset(); break;
-      case 28: this.clearGamepadBindings(); break;
-      case 31:  // Screen Size - the same switch Alt+Enter drives
-        this.terminalMode?.toggle();
-        menu.setItems(this.getMenuItems());
-        menu.select(index);
-        break;
-      // Note: Save & Exit (case 30) is handled directly in menu.on('select')
-    }
+    await row.run();
 
     // Update menu items
     menu.setItems(this.getMenuItems());
+    if (row.keepsSelection) menu.select(index);
+  }
+
+  /**
+   * Cycle the item mode - HeborisCE's item_mode[player], over the four
+   * selection presets core/items.ts implements.
+   */
+  private async cycleItemMode(): Promise<void> {
+    const modes: ItemMode[] = ['OFF', 'TGM', 'ALL', 'FEW', 'DS'];
+    const current = modes.indexOf(this.state.settings.itemMode ?? 'OFF');
+    this.state.settings.itemMode = modes[(current + 1) % modes.length];
   }
 
   /**

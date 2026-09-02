@@ -134,7 +134,10 @@ export async function theSettingsMenuOffersTheSizeToo(): Promise<void> {
 }
 
 export async function saveAndExitIsStillTheLastLine(): Promise<void> {
-  // Adding a section moves it; the select handler knows it by index.
+  // Adding a section moves it. The select handler used to know it by a
+  // hardcoded index (renumbered by hand once already); it now asks the row
+  // itself, so what this pins is that exactly one row exits and it is the
+  // one that says Save & Exit.
   const { SettingsScreen } = await import('../ui/settings-screen');
   const state: any = { settings: { rotationSystem: 'SRS', das: 100, arr: 20, softDropSpeed: 20,
     ghostPiece: true, lockDelay: 500, previewCount: 4, musicVolume: 0, sfxVolume: 0,
@@ -144,6 +147,12 @@ export async function saveAndExitIsStillTheLastLine(): Promise<void> {
   const settings: any = new (SettingsScreen as any)({}, state, { playSfx() {} }, null, null);
   const items: string[] = settings.getMenuItems();
   const index = items.findIndex(i => i.includes('Save & Exit'));
-  assert.strictEqual(index, 33,
-    `the select handler exits on index 33; Save & Exit is at ${index}`);
+  assert.ok(index >= 0, 'the settings list must offer Save & Exit');
+  assert.strictEqual(index, items.length - 1, 'and it must be the last line');
+
+  const rows: any[] = settings.menuRows();
+  assert.strictEqual(rows.length, items.length, 'one row per line, no drift');
+  const exiting = rows.map((r, i) => (r.exits ? i : -1)).filter(i => i >= 0);
+  assert.deepStrictEqual(exiting, [index], 'exactly the Save & Exit row exits');
+  assert.ok(!rows[index].run, 'and it is not also a setting');
 }

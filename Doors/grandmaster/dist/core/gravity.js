@@ -89,10 +89,18 @@ exports.MASTER_SPEED_CURVE = [
 ];
 /**
  * Death mode (Shirase) speed curve
- * Fast gravity and aggressive delays
+ * 20G from the first piece, with aggressive delays.
  *
- * Checked against HeborisCE speed.c and found already correct - no change
- * made here. Death Mode's are/arelinelock/das/lockDelay columns are an
+ * The gravity column used to ramp 1.0 -> 20.0 at level 500 and contradicted
+ * the door's own manual ("20G from the START"). HeborisCE settles it:
+ * gamestart.c:6097 sets `sp[pl] = 1200` - the file's own comment for 1200 is
+ * "20G" - BEFORE the per-mode jump at 6112, and the Devil/DOOM arm (case 3 ->
+ * `ldvl:`, 6197-6250) sets only wait1/wait2/wait3/waitt from the doom tables
+ * and never touches sp again. Beginner and Master DO overwrite it
+ * (lvTableBeg/lvTableTgm, 6130-6142); the mode these delay columns come from
+ * does not. Reported live by the sysop, 2026-09-02.
+ *
+ * Death Mode's are/arelinelock/das/lockDelay columns are an
  * exact match, level for level, for wait1_doom_tbl/wait2_doom_tbl/
  * wait3_doom_tbl/waitt_doom_tbl (the current Devil-DOOM table,
  * speed.c:174-193, indexed every 100 levels from 0), including the
@@ -100,10 +108,10 @@ exports.MASTER_SPEED_CURVE = [
  * there (levels 400, 700, 800, 900, 1300 repeat their predecessor).
  */
 exports.DEATH_SPEED_CURVE = [
-    { level: 0, gravity: 1.0, are: 11, arelinelock: 8, das: 9, lockDelay: 20 },
-    { level: 100, gravity: 1.0, are: 10, arelinelock: 5, das: 8, lockDelay: 18 },
-    { level: 200, gravity: 1.0, are: 9, arelinelock: 5, das: 7, lockDelay: 16 },
-    { level: 300, gravity: 1.0, are: 6, arelinelock: 4, das: 7, lockDelay: 13 },
+    { level: 0, gravity: 20.0, are: 11, arelinelock: 8, das: 9, lockDelay: 20 },
+    { level: 100, gravity: 20.0, are: 10, arelinelock: 5, das: 8, lockDelay: 18 },
+    { level: 200, gravity: 20.0, are: 9, arelinelock: 5, das: 7, lockDelay: 16 },
+    { level: 300, gravity: 20.0, are: 6, arelinelock: 4, das: 7, lockDelay: 13 },
     { level: 500, gravity: 20.0, are: 5, arelinelock: 3, das: 6, lockDelay: 12 },
     { level: 600, gravity: 20.0, are: 4, arelinelock: 3, das: 5, lockDelay: 11 },
     { level: 1000, gravity: 20.0, are: 6, arelinelock: 2, das: 5, lockDelay: 11 },

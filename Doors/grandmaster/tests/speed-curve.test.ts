@@ -13,7 +13,7 @@
  */
 
 import assert from 'assert';
-import { MASTER_SPEED_CURVE, getSpeedParams } from '../core/gravity';
+import { MASTER_SPEED_CURVE, getSpeedParams, is20G } from '../core/gravity';
 
 export async function theCurveStartsWhereHeborisStartsIt(): Promise<void> {
   // speed.c:86-89 - Master mode initial values, held until level 500.
@@ -85,4 +85,45 @@ export async function everyBreakpointCitesAKnownTableValue(): Promise<void> {
     assert.ok(wait3.has(entry.lockDelay), `level ${entry.level} lockDelay=${entry.lockDelay} is not a value from wait3_master_tbl`);
     assert.ok(waitt.has(entry.das), `level ${entry.level} das=${entry.das} is not a value from waitt_master_tbl`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Death mode gravity.
+//
+// Reported by the sysop 2026-09-02 ("death mode starts at 20 when i play"),
+// and the curve disagreed with its own manual entry, which says 20G from the
+// start. HeborisCE settles it: gamestart.c:6097 sets sp[pl] = 1200 (the file's
+// own comment for 1200 is "20G") BEFORE the per-mode jump at 6112, and the
+// Devil/DOOM arm (case 3 -> ldvl:, gamestart.c:6197-6250) sets wait1/wait2/
+// wait3/waitt from the doom tables and NEVER touches sp again. Beginner and
+// Master overwrite it from lvTableBeg/lvTableTgm (6130-6142); Devil-DOOM, the
+// mode this curve's delay columns come from, does not. So it falls at 20G from
+// level 0, and the gravity column that ramped 1.0 -> 20.0 at level 500 was the
+// wrong half of the table.
+// ---------------------------------------------------------------------------
+
+export async function deathModeFallsAt20GFromTheFirstLevel(): Promise<void> {
+  for (const level of [0, 100, 200, 300, 500, 1200]) {
+    const params = getSpeedParams(level, 'death');
+    assert.strictEqual(
+      params.gravity, 20.0,
+      `death level ${level} must be 20G (gamestart.c:6097, never overwritten by ldvl:), got ${params.gravity}`
+    );
+    assert.strictEqual(is20G(level, 'death'), true, `is20G must agree at level ${level}`);
+  }
+}
+
+export async function deathModesDelayColumnsAreUntouchedByTheGravityFix(): Promise<void> {
+  // The are/arelinelock/das/lockDelay columns were checked against
+  // wait*_doom_tbl and found correct; only gravity moved.
+  const opening = getSpeedParams(0, 'death');
+  assert.strictEqual(opening.are, 11, 'wait1_doom_tbl[0]');
+  assert.strictEqual(opening.arelinelock, 8, 'wait2_doom_tbl[0]');
+  assert.strictEqual(opening.das, 9, 'waitt_doom_tbl[0]');
+  assert.strictEqual(opening.lockDelay, 20, 'wait3_doom_tbl[0]');
+}
+
+export async function masterModeStillRampsItsGravity(): Promise<void> {
+  // The fix is Death-only: Master opens slow and climbs, per lvTableTgm.
+  assert.ok(getSpeedParams(0, 'master').gravity < 20.0, 'master must not open at 20G');
 }

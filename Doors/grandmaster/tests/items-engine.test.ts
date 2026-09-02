@@ -235,3 +235,73 @@ export async function spawnedPiecesEventuallyCarryAnItemOnceTheGaugeFills(): Pro
   }
   assert.ok(sawItem, 'no spawned piece carried an item within the expected gauge window');
 }
+
+// ============================================================================
+// The item SETTING - HeborisCE's other half of the gate.
+//
+// gamestart.c:6994 reads `gameMode[player] == 4 || item_mode[player]`: versus
+// ALWAYS has items, and any other mode has them when the player turned
+// item_mode on. This door implemented the versus half only, so items were
+// unreachable in Master, Death, Marathon and Sprint - reported by the sysop
+// on 2026-09-02 ("i saw no items i tried grandmaster mode").
+// ============================================================================
+
+export async function theItemSettingTurnsItemsOnOutsideVersus(): Promise<void> {
+  const off: any = new GameEngine('master', settings, sounds);
+  assert.strictEqual(off.itemsEnabled(), false, 'items stay off when the setting is absent');
+
+  const explicitlyOff: any = new GameEngine('master', { ...settings, itemMode: 'OFF' }, sounds);
+  assert.strictEqual(explicitlyOff.itemsEnabled(), false, "'OFF' means off");
+
+  for (const preset of ['TGM', 'ALL', 'FEW', 'DS'] as const) {
+    const on: any = new GameEngine('master', { ...settings, itemMode: preset }, sounds);
+    assert.strictEqual(on.itemsEnabled(), true, `${preset} must enable items in a single-player mode`);
+  }
+}
+
+export async function aSinglePlayerPickupLandsOnTheCollector(): Promise<void> {
+  // gamestart.c:14358-14365 - "enemy = 1 - player, falling back to enemy =
+  // player". Single player has no VersusScreen to route through, so the
+  // engine itself must apply an enemy-targeted item to the collector rather
+  // than dropping it (which is what an unhandled callback did).
+  const engine: any = new GameEngine('master', { ...settings, itemMode: 'TGM' }, sounds);
+  engine.start();
+
+  // Same seeding as the versus fallback test: one row above the bottom,
+  // because clearing the last row shifts everything down by one.
+  engine.getBoard().grid[20][0] = { filled: true, color: 'I', locked: true, item: null };
+  engine.getBoard().grid[20][3] = { filled: true, color: 'I', locked: true, item: null };
+
+  rigOneLineClear(engine, 1); // MIRROR - enemy-targeted
+  assert.doesNotThrow(() => engine.hardDrop());
+
+  const xs: number[] = [];
+  for (let x = 0; x < 10; x++) if (engine.getBoard().grid[21][x].filled) xs.push(x);
+  assert.deepStrictEqual(xs, [6, 9], 'the mirror applied to the collector\'s own board');
+  assert.ok(engine.getState().itemBanner, 'and the HUD said which item it was');
+}
+
+export async function theItemModeIsOnTheSettingsMenu(): Promise<void> {
+  const { SettingsScreen } = await import('../ui/settings-screen');
+  const screen: any = new Screen({ title: 'items-settings' });
+  try {
+    const state: any = {
+      ...appState,
+      settings: {
+        ...appState.settings,
+        itemMode: 'TGM',
+        clearDirection: 'in',
+        placementEffects: false,
+        floatTextMode: 'off',
+        b2bGlowEnabled: false,
+        connectedBlocks: false,
+        gamepadBindings: {},
+      },
+    };
+    const settingsScreen: any = new SettingsScreen(screen, state, sounds, null);
+    const items: string[] = settingsScreen.getMenuItems();
+    const row = items.find(i => i.toLowerCase().includes('item'));
+    assert.ok(row, 'the settings menu must offer the item mode');
+    assert.ok(row!.includes('TGM'), `the row must show the current value, got: ${row}`);
+  } finally { screen.destroy(); }
+}
