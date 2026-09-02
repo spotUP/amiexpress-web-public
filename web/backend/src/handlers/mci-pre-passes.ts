@@ -514,7 +514,7 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   // ~NSF - non-stop flag (sets nonStopText to suppress further pauses).
   parsed = parsed.replace(/~NSF/g, () => {
     if (session) {
-      (session as any).nonStopText = true;
+      session.nonStopText = true;
     }
     return '';
   });

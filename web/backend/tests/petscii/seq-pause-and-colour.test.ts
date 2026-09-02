@@ -36,7 +36,7 @@ import * as fs from 'fs';
 
 process.env.SKIP_DB_INIT = '1';
 
-import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
+import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import {
   displayScreen,
   doPause,
@@ -88,6 +88,46 @@ function petsciiPayloads(emits: Emit[]): Buffer[] {
   return emits
     .filter((e) => e.event === 'petscii-bytes')
     .map((e) => Buffer.from(e.data, 'base64'));
+}
+
+/**
+ * A fresh terminal fed EVERYTHING this socket put on the wire, consumed the
+ * way a real one consumes it: `petscii-bytes` are raw PETSCII (`observe`),
+ * `ansi-output` is ANSI that BOTH transports transduce before it reaches a
+ * screen - the telnet emitter (`connection-emitter.ts:104`) and the web `P`
+ * session's client-side transducer (`BBSTerminal.tsx`, the enqueuePetscii
+ * feed).
+ *
+ * The session's own oracle has to agree with this mirror, field for field.
+ * That agreement IS the invariant the whole `.seq` render rests on: a value
+ * is clipped and encoded against the cursor the oracle reports, so any byte
+ * the terminal receives without the oracle seeing it puts the next value in
+ * the wrong place.
+ */
+function wireMirror(emits: Emit[]): PetsciiMachine {
+  const terminal = new AnsiToPetsciiTransducer();
+  for (const e of emits) {
+    if (e.event === 'petscii-bytes') {
+      terminal.observe(Buffer.from(e.data, 'base64'));
+    } else if (
+      (e.event === 'ansi-output' || e.event === 'petscii-output') &&
+      typeof e.data === 'string'
+    ) {
+      terminal.transduce(e.data);
+    }
+  }
+  return terminal.machine;
+}
+
+/** The five machine fields a chunk is encoded against. */
+function cursorState(state: PetsciiMachine['state']) {
+  return {
+    bank: state.charsetBank,
+    x: state.cursorX,
+    y: state.cursorY,
+    pen: state.pen,
+    reverse: state.reverse,
+  };
 }
 
 /**
@@ -152,27 +192,19 @@ describe('Task 8: ~SP inside a .seq pauses and resumes on the same machine', () 
     expect(Array.from(payloads[1])).toEqual(PAYLOAD_2);
     expect(payloads[1][0]).toBe(0x7e);
 
-    // (2, continued) The session's oracle agrees, byte for byte, with a
-    // fresh machine fed everything the terminal received.
+    // (2, continued) The session's oracle agrees, field for field, with a
+    // fresh terminal fed EVERYTHING that went out - the two PETSCII payloads
+    // AND the ANSI `(Pause)` prompt between them, which moves the real
+    // cursor by two rows and a colour.
     const oracle = petsciiMachineFor(session).state;
-    const mirror = new PetsciiMachine();
-    mirror.feed(Buffer.concat(payloads));
-    expect({
-      bank: oracle.charsetBank,
-      x: oracle.cursorX,
-      y: oracle.cursorY,
-      pen: oracle.pen,
-      reverse: oracle.reverse,
-    }).toEqual({
-      bank: mirror.state.charsetBank,
-      x: mirror.state.cursorX,
-      y: mirror.state.cursorY,
-      pen: mirror.state.pen,
-      reverse: mirror.state.reverse,
-    });
+    const mirror = wireMirror(emits).state;
+    expect(cursorState(oracle)).toEqual(cursorState(mirror));
+
     // The art really did move the cursor off row 0 before the pause.
+    const afterArt = new PetsciiMachine();
+    afterArt.feed(payloads[0]);
     expect(oracle.charsetBank).toBe(1);
-    expect(mirror.state.cursorY).toBe(1);
+    expect(afterArt.state.cursorY).toBe(1);
 
     // (4) Nothing ANSI and no LF on the PETSCII wire, and the resume never
     // touches `petscii-output` or emits an all-attributes reset.
@@ -204,6 +236,55 @@ describe('Task 8: ~SP inside a .seq pauses and resumes on the same machine', () 
     expect(payloads).toHaveLength(2);
     expect(Array.from(payloads[0])).toEqual([0x20, 0xa0, 0x41, 0x42, 0xa0]);
     expect(Array.from(payloads[1])).toEqual([0xa0, 0x43, 0x44, 0xa0]);
+  });
+
+  /**
+   * TWO pauses, because that is what puts `processNextScreenSegment`'s OWN
+   * `(Pause)` prompt on the wire: the first prompt comes from the caller's
+   * `doPause`, the second from the segment machine's
+   * `if (segState.segments.length > 0)` arm (screen.handler.ts).
+   *
+   * Both prompts are ANSI text on `ansi-output`, and both transports turn
+   * that into PETSCII before it reaches a screen - so both move the REAL
+   * cursor by two rows. A value encoded afterwards is clipped and placed
+   * against whatever the oracle believes, so the oracle has to have seen
+   * them: the discriminator is the mirror, not the value's bytes.
+   */
+  it('sees its own pause prompts, so the oracle still matches the terminal after two of them', async () => {
+    const session = petsciiSession();
+    const emits: Emit[] = [];
+    const socket = makeSocket(emits);
+    const seqPath = writeSeq(
+      seqBytes(0x7e, 0x20, 0x0e, 'A', '~SP|', 'B', '~SP|', '~N|', 'Z'),
+    );
+
+    expect(await displayScreen(socket, session, seqPath)).toBe(true);
+    expect(session.lastScreenHadPause).toBe(true);
+
+    // Pause 1: armed by the caller, dismissed by a keypress.
+    doPause(socket, session);
+    expect(await handlePaginatedScreenInput(socket, session, '')).toBe(true);
+
+    // Pause 2: armed by the segment machine itself, which printed its own
+    // prompt on the way in.
+    expect(session.screenSegments?.segments.length).toBe(1);
+    const prompts = emits.filter(
+      (e) => typeof e.data === 'string' && e.data.includes('Pause'),
+    );
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    expect(await handlePaginatedScreenInput(socket, session, '')).toBe(true);
+
+    const payloads = petsciiPayloads(emits);
+    expect(payloads).toHaveLength(3);
+    // The name still encodes in the art's lower-case bank ($D3 = 'S').
+    expect(Array.from(payloads[2])).toEqual([0xd3, 0x50, 0x4f, 0x54, 0x5a]);
+
+    // ...and the oracle that placed it agrees with the real terminal.
+    expect(cursorState(petsciiMachineFor(session).state)).toEqual(
+      cursorState(wireMirror(emits).state),
+    );
+    // Two prompts and a page newline really did move the cursor down.
+    expect(wireMirror(emits).state.cursorY).toBeGreaterThan(1);
   });
 });
 

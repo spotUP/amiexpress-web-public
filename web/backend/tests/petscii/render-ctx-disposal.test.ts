@@ -26,7 +26,7 @@ process.env.SKIP_DB_INIT = '1';
 
 jest.mock('../../src/index', () => ({}));
 
-import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
+import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 import { petsciiRenderCtxFor } from '../../src/handlers/petscii-screen.render';
 import { registerDisconnectHandler } from '../../src/server/socket-handlers';
 import { setSession, deleteSession, getSession } from '../../src/server/session-manager';
@@ -70,9 +70,24 @@ describe('Task 6: the PETSCII render context is disposed with the session', () =
     setSession(socketId, session);
     expect(getSession(socketId)).toBe(session);
 
-    // The render's oracle, created exactly the way emitPetsciiScreen creates it.
+    // The render's oracle, created exactly the way emitPetsciiScreen creates
+    // it. It is a transducer, not a bare machine: a PETSCII terminal also
+    // receives ANSI (an `~SS_` include that resolved to a `.TXT`, a pause
+    // prompt) and the oracle has to track both flavours.
     await petsciiRenderCtxFor(session);
-    expect(session.petsciiRenderMachine).toBeInstanceOf(PetsciiMachine);
+    expect(session.petsciiRenderTransducer).toBeInstanceOf(AnsiToPetsciiTransducer);
+
+    // A `.seq` paused mid-screen parks its remaining segments together with
+    // the ctx they must be rendered against; they must not outlive it.
+    session.screenSegments = {
+      segments: ['leftover'],
+      currentIndex: 0,
+      screenName: 'T',
+      inlineMode: true,
+      eventName: 'petscii-output',
+      isFlowScreen: true,
+      petscii: true,
+    };
 
     const { socket, handlers } = makeSocket(socketId);
     registerDisconnectHandler(socket);
@@ -81,7 +96,8 @@ describe('Task 6: the PETSCII render context is disposed with the session', () =
     expect(typeof onDisconnect).toBe('function');
     await onDisconnect!('transport close');
 
-    expect(session.petsciiRenderMachine).toBeUndefined();
+    expect(session.petsciiRenderTransducer).toBeUndefined();
+    expect(session.screenSegments).toBeUndefined();
 
     deleteSession(socketId);
   });

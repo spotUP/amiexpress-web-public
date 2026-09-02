@@ -27,8 +27,12 @@ jest.mock('../../src/handlers/command.handler', () => ({
   processCommand: jest.fn(async () => true),
 }));
 
+import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { displayScreen, loadScreenFile, parseMciCodes } from '../../src/handlers/screen.handler';
-import { disposePetsciiRenderCtx } from '../../src/handlers/petscii-screen.render';
+import {
+  disposePetsciiRenderCtx,
+  petsciiMachineFor,
+} from '../../src/handlers/petscii-screen.render';
 import { processCommand } from '../../src/handlers/command.handler';
 import { ANSI_ART_SKIPPED_NOTICE } from '../../src/utils/ansi-art-detect.util';
 
@@ -61,6 +65,41 @@ function wireText(emits: Emit[]): string {
           : '',
     )
     .join('');
+}
+
+/**
+ * A fresh terminal fed EVERYTHING the socket put on the wire, consumed the
+ * way a real one consumes it: `petscii-bytes` are raw PETSCII (`observe`),
+ * `ansi-output` is ANSI that both transports transduce before it reaches a
+ * screen - telnet in `connection-emitter.ts:104`, the web `P` session in
+ * `BBSTerminal.tsx`. An `~SS_` that resolves to a `.TXT` legitimately takes
+ * that ANSI arm, so this is the only honest model of where the cursor ends
+ * up after an include.
+ */
+function wireMirror(emits: Emit[]): PetsciiMachine {
+  const terminal = new AnsiToPetsciiTransducer();
+  for (const e of emits) {
+    if (e.event === 'petscii-bytes') {
+      terminal.observe(Buffer.from(e.data, 'base64'));
+    } else if (
+      (e.event === 'ansi-output' || e.event === 'petscii-output') &&
+      typeof e.data === 'string'
+    ) {
+      terminal.transduce(e.data);
+    }
+  }
+  return terminal.machine;
+}
+
+/** The five machine fields a chunk is encoded against. */
+function cursorState(state: PetsciiMachine['state']) {
+  return {
+    bank: state.charsetBank,
+    x: state.cursorX,
+    y: state.cursorY,
+    pen: state.pen,
+    reverse: state.reverse,
+  };
 }
 
 const petsciiSession = (over: Record<string, any> = {}): any => ({
@@ -130,6 +169,38 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
     expect(wireText(emits)).toContain('TEXTVERSION');
     // The host screen's own art still went out as PETSCII bytes.
     expect(Buffer.concat(petsciiPayloads(emits)).toString('latin1')).toContain('AA');
+  });
+
+  /**
+   * The ANSI arm above leaves the oracle BLIND unless the include's bytes
+   * are transduced into it: the terminal has drawn two lines and moved its
+   * cursor, while the render machine still believes it is where the host
+   * screen's art left it. Every chunk after the include - here a `~N|`
+   * value - is then clipped and placed against a stale cursor.
+   *
+   * The discriminator is the mirror: a fresh terminal fed the whole wire the
+   * way a real one consumes it. Oracle and terminal must agree.
+   */
+  it('an ANSI .TXT include still reaches the oracle, so the value after it lands where the terminal is', async () => {
+    const dir = tmpdir('ss-txt-oracle');
+    fs.writeFileSync(path.join(dir, 'INC.TXT'), 'hello\r\nthere\r\n', 'latin1');
+
+    const seqPath = path.join(dir, 'HOST.SEQ');
+    fs.writeFileSync(seqPath, seqBytes('~ AA~SS_', path.join(dir, 'INC'), '|~N|'));
+
+    const emits: Emit[] = [];
+    const session = petsciiSession({ user: { username: 'spot' } });
+    disposePetsciiRenderCtx(session);
+    expect(await displayScreen(makeSocket(emits), session, seqPath)).toBe(true);
+
+    // The include really did take the ANSI arm.
+    expect(wireText(emits)).toContain('hello');
+    expect(Buffer.concat(petsciiPayloads(emits)).toString('latin1')).not.toContain('hello');
+
+    const mirror = wireMirror(emits).state;
+    expect(cursorState(petsciiMachineFor(session).state)).toEqual(cursorState(mirror));
+    // The include moved the terminal off the host screen's row.
+    expect(mirror.cursorY).toBeGreaterThan(0);
   });
 
   it('~CC_ calls processCommand exactly once, with the same code the ANSI walker passes', async () => {

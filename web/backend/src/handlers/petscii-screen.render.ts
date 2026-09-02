@@ -60,6 +60,7 @@
  */
 import { Buffer } from 'buffer';
 import {
+  AnsiToPetsciiTransducer,
   PetsciiMachine,
   encodePetsciiValue,
   petsciiMoveTo,
@@ -88,10 +89,10 @@ const PETSCII_RETURN = 0x0d;
 
 /**
  * A session carries its render-side oracle for the life of the connection.
- * Declared structurally here rather than only on `BBSSession` so the two
+ * Declared structurally here rather than only on `BBSSession` so the three
  * accessors below are the single place that knows the field name.
  */
-type PetsciiRenderSession = { petsciiRenderMachine?: PetsciiMachine };
+type PetsciiRenderSession = { petsciiRenderTransducer?: AnsiToPetsciiTransducer };
 
 export interface PetsciiRenderCtx {
   /**
@@ -139,17 +140,44 @@ export interface PetsciiRenderCtxOpts {
 }
 
 /**
+ * The session's terminal model, created on first use.
+ *
+ * It is an `AnsiToPetsciiTransducer` and not a bare `PetsciiMachine` because
+ * a PETSCII session's terminal receives BOTH flavours and the oracle has to
+ * track both. Raw PETSCII (`petscii-bytes`: `.seq` art, substituted values,
+ * the `$93` clear) is fed to `machine` directly by the render. ANSI text
+ * (`ansi-output`: an `~SS_` include that resolves to a `.TXT`, the `(Pause)`
+ * prompt) is converted before it reaches a screen - by the telnet emitter
+ * (`connection-emitter.ts:104`) and by the web `P` session's own transducer
+ * (`BBSTerminal.tsx`) - so the SAME conversion has to run here, or the
+ * render's cursor and the terminal's diverge silently.
+ *
+ * This is deliberately the same object the two transports keep, one layer
+ * up: `connection-emitter.ts` caches one on `session.petsciiTransducer` for
+ * a real C64 and the browser keeps one client-side. A web session has no
+ * server-side emitter transducer at all, which is why the render owns this
+ * one.
+ */
+export function petsciiTransducerFor(session: BBSSession): AnsiToPetsciiTransducer {
+  const holder = session as unknown as PetsciiRenderSession;
+  if (!holder.petsciiRenderTransducer) {
+    holder.petsciiRenderTransducer = new AnsiToPetsciiTransducer();
+  }
+  return holder.petsciiRenderTransducer;
+}
+
+/**
  * The session's bank / cursor / pen oracle, created on first use.
  *
  * Exported because a caller that only needs to put a control byte on the wire
  * - the `$93` screen clear - must feed that byte to the SAME machine without
  * paying for a dispatch build (`buildMciDispatch` runs the message-base and
  * system-stats lookups its closures read).
+ *
+ * It IS the transducer's machine: one screen, one model of it.
  */
 export function petsciiMachineFor(session: BBSSession): PetsciiMachine {
-  const holder = session as unknown as PetsciiRenderSession;
-  if (!holder.petsciiRenderMachine) holder.petsciiRenderMachine = new PetsciiMachine();
-  return holder.petsciiRenderMachine;
+  return petsciiTransducerFor(session).machine;
 }
 
 /**
@@ -192,9 +220,17 @@ export async function petsciiRenderCtxFor(
  * `server/socket-handlers.ts` (after the reconnect grace period, alongside
  * the existing teardown) and wherever a session record is deleted; like
  * `session.petsciiTransducer` it is otherwise collected with the session.
+ *
+ * `screenSegments` goes with it: a paused `.seq` parks its remaining
+ * segments there TOGETHER with the ctx they must be rendered against
+ * (`screen.handler.ts`'s `emitPetsciiScreenInline`). Leaving them behind
+ * would hand the next paint segments whose `petsciiCtx.machine` is a
+ * machine nobody else is feeding any more - the exact stale-cursor bug this
+ * oracle exists to prevent.
  */
 export function disposePetsciiRenderCtx(session: BBSSession): void {
-  (session as unknown as PetsciiRenderSession).petsciiRenderMachine = undefined;
+  (session as unknown as PetsciiRenderSession).petsciiRenderTransducer = undefined;
+  session.screenSegments = undefined;
 }
 
 /**
@@ -473,11 +509,16 @@ export function renderChunkBytes(
 }
 
 /**
- * Render one `.seq` buffer's MCI into PETSCII bytes, in one piece. No socket,
- * no file I/O. This is the WHOLE-FILE path (`emitPetsciiScreen`); a screen
- * carrying a structural token is rendered chunk by chunk by the inline
- * sentinel walker instead, from the same plan and through the same
- * `renderChunkBytes`.
+ * Render one `.seq` buffer's PETSCII bytes, in one piece. No socket, no file
+ * I/O. This is the WHOLE-FILE path (`emitPetsciiScreen`).
+ *
+ * In PRODUCTION only the art arm below runs: `displayScreen` reads the gate
+ * byte itself and sends every gated (`~`) screen to
+ * `emitPetsciiScreenInline`, so a file whose MCI is actually substituted
+ * here is one a test handed straight to this function. The gated arm is kept
+ * because it is the definition of the render - one `preparePetsciiSeq`, one
+ * `renderChunkBytes` - and the inline walker is the same two calls spread
+ * over the file's chunks.
  */
 export async function renderPetsciiScreen(
   bytes: Buffer,

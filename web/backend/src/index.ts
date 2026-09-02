@@ -405,6 +405,11 @@ export interface BBSSession {
   conferences?: import("./database/types").Conference[]; // Cached conference accounting stats (express.e confBases)
   queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
+  // express.e's non-stop text flag (`~NS` / `~NSF`): suppresses further
+  // pauses for the rest of the display. Set by the MCI dispatch and the
+  // pre-passes, read by the XIM bridge (`XIMProtocol.ts:150`) and ARexx
+  // (BB_NONSTOPTEXT).
+  nonStopText?: boolean;
   lastScreenFilePath?: string; // Resolved path of last displayed screen (used for .keys lookup)
   // Login retry counters — express.e:29629-29637 keeps these separate.
   // Conflating them (audit A-5) meant entering several wrong usernames

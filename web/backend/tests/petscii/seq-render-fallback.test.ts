@@ -32,6 +32,7 @@ jest.mock('../../src/handlers/petscii-screen.render', () => {
     ...actual,
     renderPetsciiScreen: jest.fn(actual.renderPetsciiScreen),
     preparePetsciiSeq: jest.fn(actual.preparePetsciiSeq),
+    renderChunkBytes: jest.fn(actual.renderChunkBytes),
   };
 });
 
@@ -39,6 +40,7 @@ import { displayScreen } from '../../src/handlers/screen.handler';
 import {
   renderPetsciiScreen,
   preparePetsciiSeq,
+  renderChunkBytes,
 } from '../../src/handlers/petscii-screen.render';
 
 interface Emit {
@@ -78,6 +80,7 @@ describe('Task 8: a throwing PETSCII render degrades to raw bytes', () => {
   beforeEach(() => {
     (renderPetsciiScreen as jest.Mock).mockClear();
     (preparePetsciiSeq as jest.Mock).mockClear();
+    (renderChunkBytes as jest.Mock).mockClear();
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -115,6 +118,38 @@ describe('Task 8: a throwing PETSCII render degrades to raw bytes', () => {
     const payloads = petsciiPayloads(emits);
     expect(payloads).toHaveLength(1);
     expect(payloads[0].equals(GATED_SEQ)).toBe(true);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  /**
+   * The THIRD fallback, and the one that can put INTERNAL bytes on a
+   * terminal. `emitPetsciiChunk`'s catch falls back to
+   * `Buffer.from(text, 'latin1')`, but by then `text` is POST-tokenizer: a
+   * `~x`/`~y` arrives as `\x00MOVE:<x>|<y>\x00` and pre-pass output as
+   * `\x00G:<text>\x00`. Copied byte for byte, a C64 is sent a NUL and the
+   * literal word MOVE in the middle of the art.
+   *
+   * A degraded screen shows the sysop's art with unsubstituted MCI; it never
+   * shows the renderer's own scaffolding.
+   */
+  it('never puts an internal NUL marker on the wire when the chunk renderer throws', async () => {
+    (renderChunkBytes as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('encoder blew up');
+    });
+
+    const emits: Emit[] = [];
+    const session: any = { petsciiMode: true, nodeId: 0, user: { username: 'Spot' } };
+    // `~x10|` becomes a MOVE sentinel; the art around it must survive.
+    const seq = Buffer.from('~ AA~x10|Z', 'latin1');
+
+    expect(await displayScreen(makeSocket(emits), session, writeSeq(seq))).toBe(true);
+
+    const wire = Buffer.concat(petsciiPayloads(emits));
+    expect(wire.includes(0x00)).toBe(false);
+    expect(wire.toString('latin1')).not.toContain('MOVE');
+    // The art the sysop drew is still there.
+    expect(wire.toString('latin1')).toContain('AA');
+    expect(wire.toString('latin1')).toContain('Z');
     expect(errorSpy).toHaveBeenCalled();
   });
 

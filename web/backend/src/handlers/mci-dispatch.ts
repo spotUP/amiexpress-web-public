@@ -356,7 +356,7 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     // pause prompts for this file render.
     NS: () => {
       if (session) {
-        (session as any).nonStopText = true;
+        session.nonStopText = true;
       }
       return '';
     },
