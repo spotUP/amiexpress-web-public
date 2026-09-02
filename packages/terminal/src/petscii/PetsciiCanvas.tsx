@@ -239,6 +239,11 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
           height: 'auto',
           maxWidth: '100%',
           maxHeight: '100%',
+          // The canvas is the focus owner (tabIndex + focus()); without this
+          // the browser draws its default focus ring around it, which reads
+          // as a blue border the C64 never had. The blinking cursor is the
+          // focus indicator.
+          outline: 'none',
         }}
       />
     </div>
