@@ -244,7 +244,9 @@ export async function buildMciDispatch(
   // `Screens/logoff/003.logoff.seq` row that carries `~TC` has no room for
   // a wider number, and an over-wide value wraps the row on a C64.
   const timesCalled = (user.timesCalled || 0) & 0xffff;
-  const messagesPosted = user.messagesPosted || 0;
+  // express.e:5321 - `~M` prints `loggedOnUser.messagesPosted AND $FFFF`,
+  // the same 16-bit mask `~TC` carries one row above. Five digits at most.
+  const messagesPosted = (user.messagesPosted || 0) & 0xffff;
   const uploads = user.uploads || 0;
   const downloads = user.downloads || 0;
   const uploadBytes = user.uploadBytes || 0;
