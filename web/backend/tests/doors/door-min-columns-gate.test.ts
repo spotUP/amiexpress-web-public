@@ -52,7 +52,7 @@ jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({
 
 import { executeDoor, formatDoorLine, setHelpers } from '../../src/handlers/door.handler';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
-import { DOOR_NEEDS_80_NOTICE } from '../../src/utils/door-min-columns.util';
+import { DOOR_NEEDS_80_NOTICE, doorOpensForC64 } from '../../src/utils/door-min-columns.util';
 import { config } from '../../src/config';
 import { C64_ADAPT_TICK_MS, c64AdapterFor } from '../../src/server/c64-door-adapter';
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
@@ -286,6 +286,24 @@ describe('formatDoorLine 40-ok marker', () => {
     expect(row.length).toBeLessThanOrEqual(40);
     expect(row).toContain('[C64]');
     expect(row).toContain('VERYLONG');
+  });
+
+  // The marker must promise exactly what the gate honours. Both of these
+  // were marked [C64] and then refused at door.handler.ts:1716 - the marker
+  // asked only "does a C64_ADAPT value parse", the gate asks three questions.
+  it('a TS door tagged C64_ADAPT=40 shows NO marker: the adapter never sees a blessed screen', () => {
+    const door = { name: 'Theme', command: 'THEME', type: 'TS', toolTypes: { C64_ADAPT: '40' } };
+    expect(formatDoorLine(door, false)).not.toContain('[C64]');
+    expect(formatDoorLine(door, false, true)).not.toContain('[C64]');
+    // ... and the marker agrees with the gate, which is the point.
+    expect(doorOpensForC64(door, { petsciiMode: true, screenWidth: 40 })).toBe(false);
+  });
+
+  it('a door tagged C64_ADAPT=64 shows NO marker: a C64 has forty columns, not sixty-four', () => {
+    const door = { name: 'Who', command: 'WHO', type: 'XIM', toolTypes: { C64_ADAPT: '64' } };
+    expect(formatDoorLine(door, false)).not.toContain('[C64]');
+    expect(formatDoorLine(door, false, true)).not.toContain('[C64]');
+    expect(doorOpensForC64(door, { petsciiMode: true, screenWidth: 40 })).toBe(false);
   });
 
   it('a long 40-ok door name truncates rather than widening the row', () => {

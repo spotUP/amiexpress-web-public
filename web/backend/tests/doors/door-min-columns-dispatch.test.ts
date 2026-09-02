@@ -219,6 +219,66 @@ describe('the [40] marker and the gate read one MIN_COLUMNS source', () => {
 
 
 /**
+ * MIN_COLUMNS on a 68K door is a claim the BBS cannot check.
+ *
+ * The gate is type-blind by design (resolveDoorMinColumns reads a number, not
+ * a door type), so `MIN_COLUMNS=40` on an XIM binary opens it to a C64 and
+ * then serves the raw 80-column bytes - which the gate suite pins as the
+ * documented behaviour. The only honest thing the BBS can do is say so at
+ * registration, once, where the sysop is looking.
+ */
+describe('initializeDoors warns about MIN_COLUMNS on an adapter-type door', () => {
+  async function registerOnly(name: string, cmdDef: any) {
+    const { commandCache } = require('../../src/handlers/command-execution.handler');
+    commandCache.bbscmd.clear();
+    commandCache.bbscmd.set(name, cmdDef);
+    await initializeDoors();
+  }
+
+  it('warns for a TYPE=XIM door declaring MIN_COLUMNS=40, naming C64_ADAPT instead', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await registerOnly('LIAR', {
+      name: 'LIAR',
+      type: 'XIM',
+      location: 'Doors/Liar/Liar',
+      access: 0,
+      toolTypes: { LOCATION: 'Doors:Liar/Liar', TYPE: 'XIM', MIN_COLUMNS: '40' },
+    });
+
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    const hit = lines.find((l) => l.includes('LIAR') && l.includes('MIN_COLUMNS=40'));
+    expect(hit).toBeDefined();
+    expect(hit).toContain('C64_ADAPT=40');
+  });
+
+  it('says nothing for a TS door at MIN_COLUMNS=40 - that one lays itself out', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await registerOnly('HONEST', {
+      name: 'HONEST',
+      type: 'TS',
+      location: 'Doors/Honest',
+      access: 0,
+      toolTypes: { LOCATION: 'Doors:Honest', TYPE: 'TS', MIN_COLUMNS: '40' },
+    });
+
+    expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('MIN_COLUMNS'))).toEqual([]);
+  });
+
+  it('says nothing for a TYPE=XIM door at MIN_COLUMNS=80 - no claim, no lie', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await registerOnly('WIDE', {
+      name: 'WIDE',
+      type: 'XIM',
+      location: 'Doors/Wide/Wide',
+      access: 0,
+      toolTypes: { LOCATION: 'Doors:Wide/Wide', TYPE: 'XIM', MIN_COLUMNS: '80' },
+    });
+
+    expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('MIN_COLUMNS'))).toEqual([]);
+  });
+});
+
+/**
  * Reachability for the C64 adapter gate hook (Phase 3 Task 5).
  *
  * Same chain as above - initializeDoors() -> getDoors() ->

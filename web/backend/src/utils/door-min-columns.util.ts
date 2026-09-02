@@ -32,7 +32,7 @@
  * is the FIRST thing this resolver reads - so every later reader, marker and
  * gate alike, sees the same number on the same object.
  */
-import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
+import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 
 /** Uppercase-only ASCII: legible on a power-on C64 in up/gfx charset
  *  (same rule as ANSI_GRAPHICS_PROMPT, login-connect.service.ts:57). */
@@ -177,9 +177,39 @@ export function doorOpensForC64(
   door: MinColumnsDoorShape | null | undefined,
   session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined,
 ): boolean {
-  if (!door || session?.petsciiMode !== true) return false;
-  const type = String(door.type ?? door.doorType ?? '').toUpperCase();
-  if (!ADAPTED_DOOR_TYPES.has(type)) return false;
-  const claim = resolveDoorAdaptColumns(door);
+  if (session?.petsciiMode !== true) return false;
+  const claim = adaptClaimFor(door);
   return claim !== null && sessionColumns(session) >= claim;
+}
+
+/**
+ * The door half of doorOpensForC64(), on its own: the type is one the adapter
+ * seam actually sees AND the claim parses. Null when either fails, so the two
+ * readers below share these clauses instead of restating them - a copy is
+ * precisely how the marker and the gate came to disagree.
+ */
+function adaptClaimFor(door: MinColumnsDoorShape | null | undefined): number | null {
+  if (!door) return null;
+  const type = String(door.type ?? door.doorType ?? '').toUpperCase();
+  if (!ADAPTED_DOOR_TYPES.has(type)) return null;
+  return resolveDoorAdaptColumns(door);
+}
+
+/**
+ * Does this door earn the [C64] marker in the DOORS list?
+ *
+ * The marker is drawn per DOOR, from a row that is only ever built for a
+ * caller the gate will judge at 40 columns, so it asks the same two door-side
+ * questions doorOpensForC64() asks - the type is adaptable and the claim
+ * parses - plus the caller-side one in its only meaningful form: the claim
+ * must reach a C64's forty columns.
+ *
+ * It exists because `resolveDoorAdaptColumns(door) !== null` alone promised
+ * what the gate then refused: a TS door tagged C64_ADAPT=40 (wrong type - the
+ * adapter never sees a blessed screen) and any door tagged C64_ADAPT=64 (a
+ * claim a 40-column caller cannot meet) were both marked and both bounced.
+ */
+export function doorShowsC64Mark(door: MinColumnsDoorShape | null | undefined): boolean {
+  const claim = adaptClaimFor(door);
+  return claim !== null && claim <= C64_COLUMNS;
 }

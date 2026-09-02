@@ -24,7 +24,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorShowsC64Mark, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
@@ -1355,7 +1355,12 @@ export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean =
   // ([C64]). Both are read from the SAME resolved Door object the gate will
   // judge, so a marker can never promise what the gate then refuses.
   const fortyOk = resolveDoorMinColumns(door) <= 40;
-  const mark = fortyOk ? ' [40]' : (resolveDoorAdaptColumns(door) !== null ? ' [C64]' : '');
+  // doorShowsC64Mark, not "a claim parses": the marker has to promise exactly
+  // what doorOpensForC64() will honour at the gate, and it shares that
+  // predicate's door-side clauses (adaptable TYPE, a claim that parses and
+  // reaches forty). A TS door tagged C64_ADAPT=40, or any door tagged
+  // C64_ADAPT=64, used to be marked here and then refused at :1716.
+  const mark = fortyOk ? ' [40]' : (doorShowsC64Mark(door) ? ' [C64]' : '');
   // Narrow row arithmetic, worst case (the widest type token is '[XIM]'):
   //   ' ' + '[XIM]'(5) + ' ' + command(8) + ' ' + name(24) = 40 columns,
   // which a CRLF-terminated row may use in full (see table-format.util.ts
@@ -4313,6 +4318,14 @@ console.warn(`[initializeDoors] installed-door scan unavailable for MIN_COLUMNS 
     });
     if (declared !== null) {
       door.minColumns = declared;
+      // MIN_COLUMNS is a claim about the door's OWN layout, and the gate is
+      // type-blind: a 68K binary marked MIN_COLUMNS=40 is let straight in and
+      // then serves its raw 80-column bytes to a C64. The BBS cannot detect
+      // the lie, so it says so out loud at registration - C64_ADAPT is the
+      // tooltype that means "reaches forty through the adapter".
+      if (declared < DEFAULT_MIN_COLUMNS && ADAPTED_DOOR_TYPES.has(String(door.type ?? '').toUpperCase())) {
+        console.warn(`[initializeDoors] WARN: door ${door.command} is TYPE=${door.type} and declares MIN_COLUMNS=${declared} - a 68K door cannot narrow its own output, so it will serve raw 80-column bytes to a 40-column caller. Use C64_ADAPT=${declared} instead.`);
+      }
     }
 
     // Same fold for C64_ADAPT, for the same reason: the [C64] marker is drawn
