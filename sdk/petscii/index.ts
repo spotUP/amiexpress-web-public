@@ -17,11 +17,18 @@ export { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-code
 export {
   AnsiToPetsciiTransducer,
   type AnsiToPetsciiOptions,
+  petsciiMoveTo,
   nearestVicForRgb,
   vicColorToPetscii,
   sgrColorToVic,
   xterm256ToRgb,
 } from './ansi-to-petscii';
+export {
+  asciiToPetsciiByte,
+  encodePetsciiValue,
+  type PetsciiByteMapping,
+  type EncodePetsciiValueOptions,
+} from './ascii-to-petscii';
 export { UNICODE_TO_PETSCII } from './unicode-to-petscii';
 export { petsciiInputToAscii } from './petscii-input';
 export { printableLength, wrapLineToWidth } from './wrap';

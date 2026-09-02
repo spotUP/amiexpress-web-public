@@ -29,7 +29,7 @@
 import * as fs from 'fs';
 import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground } from './c64-palette';
 import { SCREENCODE_TO_UNICODE } from './petscii-unicode-map';
-import { petsciiInputToAscii, AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
+import { petsciiInputToAscii, AnsiToPetsciiTransducer, encodePetsciiValue } from '@amiexpress/bbs-door-sdk/petscii';
 
 /**
  * PETSCII Control Codes - Complete Reference
@@ -564,14 +564,23 @@ export function getPetsciiColorName(byte: number): string {
 }
 
 /**
- * Convert ASCII text to PETSCII bytes for C64 display (shifted mode)
+ * Convert ASCII text to PETSCII bytes for C64 display (shifted mode).
  *
- * In PETSCII shifted mode (text mode), the character mapping is:
- * - To display uppercase letters: send 0xC1-0xDA (PETSCII shifted uppercase)
- * - To display lowercase letters: send 0x41-0x5A (PETSCII shifted lowercase)
- * - Numbers and punctuation: same as ASCII (0x20-0x3F, some 0x5B-0x5F)
+ * ONE-LINE DELEGATE. The mapping itself is the SDK's `encodePetsciiValue`
+ * (`sdk/petscii/ascii-to-petscii.ts`) - the ONE ASCII -> PETSCII table, also
+ * behind the transducer's `printChar` and the MCI value encoder. The body
+ * that used to live here was a second copy and it disagreed with the SDK on
+ * four inputs; the SDK's mappings win (plan
+ * `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`, Task 2):
  *
- * This is the reverse of convertPetsciiInputToAscii().
+ *   `\` (0x5C)  $5C (pound glyph)  ->  $2F ('/')
+ *   `_` (0x5F)  $5F                ->  $A4 (PETSCII underline)
+ *   unknown     $20 (space)        ->  $3F ('?')
+ *   0x08/0x7F   $14                ->  $14 (unchanged; folded into the SDK table)
+ *
+ * This function has no production caller - `convertAnsiToPetscii` (and
+ * through it `writePetsciiSeqFile`) is its only consumer - but the chain is
+ * exported and tested, so the name stays.
  *
  * @param text - ASCII string to convert
  * @param opts.charsetPrelude - When true, push the PETSCII $0E "switch to
@@ -579,68 +588,13 @@ export function getPetsciiColorName(byte: number): string {
  *   power-on C64 boots in unshifted/graphics mode; without this prelude
  *   the shifted-mode bytes this function emits for letters render as
  *   graphics characters instead of mixed-case text (audit E4).
+ *   `encodePetsciiValue` never emits a bank switch of its own, so the
+ *   prelude is the caller's decision here and stays.
  * @returns Buffer containing PETSCII bytes for C64 display
  */
 export function convertAsciiToPetsciiOutput(text: string, opts?: { charsetPrelude?: boolean }): Buffer {
-  const bytes: number[] = [];
-
-  if (opts?.charsetPrelude) {
-    bytes.push(0x0E);
-  }
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const code = char.charCodeAt(0);
-
-    // Carriage return
-    if (char === '\r') {
-      bytes.push(0x0D);
-      continue;
-    }
-
-    // Line feed -> CR (C64 uses CR for newline)
-    if (char === '\n') {
-      bytes.push(0x0D);
-      continue;
-    }
-
-    // Space, numbers, and basic punctuation (0x20-0x3F) - same as ASCII
-    if (code >= 0x20 && code <= 0x3F) {
-      bytes.push(code);
-      continue;
-    }
-
-    // ASCII uppercase A-Z (0x41-0x5A) -> PETSCII uppercase (0xC1-0xDA)
-    // In shifted mode, 0x41-0x5A displays as lowercase, so we use 0xC1-0xDA
-    if (code >= 0x41 && code <= 0x5A) {
-      bytes.push(code + 0x80); // 0x41 -> 0xC1, etc.
-      continue;
-    }
-
-    // Additional punctuation [ \ ] ^ _ @ (0x40, 0x5B-0x5F)
-    if (code === 0x40 || (code >= 0x5B && code <= 0x5F)) {
-      bytes.push(code);
-      continue;
-    }
-
-    // ASCII lowercase a-z (0x61-0x7A) -> PETSCII lowercase (0x41-0x5A)
-    // In shifted mode, 0x41-0x5A displays as lowercase
-    if (code >= 0x61 && code <= 0x7A) {
-      bytes.push(code - 0x20); // 0x61 -> 0x41, etc.
-      continue;
-    }
-
-    // Backspace
-    if (code === 0x08 || code === 0x7F) {
-      bytes.push(0x14); // PETSCII delete
-      continue;
-    }
-
-    // Default: space for unknown characters
-    bytes.push(0x20);
-  }
-
-  return Buffer.from(bytes);
+  const bytes = encodePetsciiValue(text, 1);
+  return Buffer.from(opts?.charsetPrelude ? [0x0E, ...bytes] : bytes);
 }
 
 /**

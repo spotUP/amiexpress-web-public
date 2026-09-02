@@ -15,10 +15,10 @@
  * Reference: thoughts/shared/research/2026-09-01_true-petscii-reference.md
  * sections 1.1 (control codes), 1.2-1.3 (KERNAL semantics), 3 (palette).
  */
-import { PetsciiMachine } from './petscii-machine';
+import { PetsciiMachine, type PetsciiMachineState } from './petscii-machine';
 import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-palette';
 import { screenCodeToPetscii } from './screen-codes';
-import { UNICODE_TO_PETSCII } from './unicode-to-petscii';
+import { asciiToPetsciiByte } from './ascii-to-petscii';
 
 const COLS = 40;
 const ROWS = 25;
@@ -84,6 +84,28 @@ export function xterm256ToRgb(n: number, palette: readonly string[] = C64_PALETT
   }
   const grey = 8 + 10 * (Math.min(n, 255) - 232);
   return [grey, grey, grey];
+}
+
+/**
+ * The ONE absolute-cursor walk: HOME ($13) when the target is (0,0), else
+ * $11/$91 runs to the row followed by $1D/$9D runs to the column, appended to
+ * `out`. Extracted from the transducer's `moveTo` so the PETSCII `~x`/`~y`
+ * renderer walks with the same bytes instead of growing a second writer.
+ *
+ * `state` is READ, never fed - the caller owns the machine and feeds the
+ * bytes this appends. Deltas never wrap or scroll: the target is inside
+ * 40x25, so $1D stops before column 40, $11 stops before row 25, and $9D/$91
+ * are only emitted when the cursor is right of / below the target.
+ */
+export function petsciiMoveTo(state: PetsciiMachineState, x: number, y: number, out: number[]): void {
+  if (x === 0 && y === 0) {
+    if (state.cursorX !== 0 || state.cursorY !== 0) out.push(0x13);
+    return;
+  }
+  for (let row = state.cursorY; row < y; row++) out.push(0x11);
+  for (let row = state.cursorY; row > y; row--) out.push(0x91);
+  for (let col = state.cursorX; col < x; col++) out.push(0x1D);
+  for (let col = state.cursorX; col > x; col--) out.push(0x9D);
 }
 
 export class AnsiToPetsciiTransducer {
@@ -307,28 +329,19 @@ export class AnsiToPetsciiTransducer {
     for (let k = 0; k < x; k++) this.emit(out, 0x9D);
   }
 
+  /**
+   * The byte mapping itself lives in `asciiToPetsciiByte` - the ONE table,
+   * shared with the MCI value encoder. Transduced text is always printed in
+   * bank 1 (`printByte`/`ensureBank` force it), so bank 1 is passed here
+   * unconditionally and the table's bank-0 fold never applies.
+   */
   private printChar(out: number[], code: number): void {
-    if (code >= 0x61 && code <= 0x7A) return this.printByte(out, code - 0x20);   // a-z -> $41-$5A
-    if (code >= 0x41 && code <= 0x5A) return this.printByte(out, code + 0x80);   // A-Z -> $C1-$DA
-    if (code >= 0x20 && code <= 0x3F) return this.printByte(out, code);
-    switch (code) {
-      case 0x40: case 0x5B: case 0x5D: return this.printByte(out, code); // @ [ ]
-      case 0x5C: return this.printByte(out, 0x2F);   // backslash: PETSCII has pound there -> '/'
-      case 0x5E: return this.printByte(out, 0x5E);   // ^ -> up-arrow glyph
-      case 0x5F: return this.printByte(out, 0xA4);   // _ -> lower one-eighth block (PETSCII underline)
-      case 0x60: return this.printByte(out, 0x27);   // ` -> '
-      case 0x7B: return this.printByte(out, 0x28);   // { -> (
-      case 0x7D: return this.printByte(out, 0x29);   // } -> )
-      case 0x7C: return this.printByte(out, 0xDD);   // | -> vertical bar graphic (same glyph in both banks)
-      case 0x7E: return this.printByte(out, 0x2D);   // ~ -> -
-    }
-    const mapped = UNICODE_TO_PETSCII.get(String.fromCodePoint(code));
-    if (mapped === undefined) return this.printByte(out, 0x3F);          // unsupported glyph -> '?'
-    if (typeof mapped === 'number') return this.printByte(out, mapped);
+    const { byte, needsReverse } = asciiToPetsciiByte(code, 1);
+    if (!needsReverse) return this.printByte(out, byte);
     // Glyph only exists as the inverse of another PETSCII glyph.
     this.ensureBank(1, out);
     this.setReverse(true, out);
-    this.emitPrintable(out, mapped.rvs);
+    this.emitPrintable(out, byte);
     this.setReverse(this.ansiReverse, out);
   }
 
@@ -427,19 +440,15 @@ export class AnsiToPetsciiTransducer {
   private clampRow(y: number): number { return Math.max(0, Math.min(ROWS - 1, y)); }
 
   /**
-   * Absolute positioning as deltas against the oracle. HOME ($13) when the
-   * target is (0,0). Deltas never wrap or scroll: the target is inside
-   * 40x25, so $1D stops before column 40, $11 stops before row 25, and $9D/$91
-   * are only emitted when the cursor is right of / below the target.
+   * Absolute positioning. The walk itself is `petsciiMoveTo` (below) - the
+   * ONE $13/$11/$1D writer, shared with the PETSCII `~x`/`~y` renderer. Only
+   * `pendingWrap` (a transducer concern) and feeding the oracle stay here.
    */
   private moveTo(x: number, y: number, out: number[]): void {
-    const st = this.machine.state;
     this.pendingWrap = false; // any explicit cursor move settles the deferred wrap
-    if (x === 0 && y === 0) { if (st.cursorX !== 0 || st.cursorY !== 0) this.emit(out, 0x13); return; }
-    while (st.cursorY < y) this.emit(out, 0x11);
-    while (st.cursorY > y) this.emit(out, 0x91);
-    while (st.cursorX < x) this.emit(out, 0x1D);
-    while (st.cursorX > x) this.emit(out, 0x9D);
+    const start = out.length;
+    petsciiMoveTo(this.machine.state, x, y, out);
+    if (out.length > start) this.machine.feed(out.slice(start));
   }
 
   private sgr(codes: number[], out: number[]): void {

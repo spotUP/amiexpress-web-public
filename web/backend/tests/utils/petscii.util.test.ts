@@ -385,13 +385,17 @@ describe('petscii.util', () => {
       expect(result[5]).toBe(0x25); // %
     });
 
-    it('should convert unknown characters to space', () => {
+    // DELIBERATE CHANGE (2026-09-02 MCI-in-.seq plan, task 2): the retired
+    // local table turned every unmapped glyph into a space, which silently
+    // ate whatever the sysop wrote. The ONE SDK table prints '?' instead, so
+    // a bad glyph is visible on the C64 rather than invisible.
+    it('should convert unknown characters to ? (SDK table)', () => {
       const text = String.fromCharCode(0x80) + String.fromCharCode(0xFF);
       const result = convertAnsiToPetscii(text);
 
       expect(result[0]).toBe(0x0E); // Charset prelude
-      expect(result[1]).toBe(0x20); // Space
-      expect(result[2]).toBe(0x20); // Space
+      expect(result[1]).toBe(0x3F); // '?'
+      expect(result[2]).toBe(0x3F); // '?'
     });
 
     it('should still emit the charset prelude for an empty string', () => {
@@ -402,6 +406,10 @@ describe('petscii.util', () => {
     });
   });
 
+  // convertAsciiToPetsciiOutput is a one-line delegate over the SDK's
+  // encodePetsciiValue since the 2026-09-02 MCI-in-.seq plan (task 2): ONE
+  // ASCII -> PETSCII table for the transducer, the MCI value encoder and this
+  // chain. The cases below still pin the backend-visible behaviour.
   describe('convertAsciiToPetsciiOutput', () => {
     it('should convert uppercase letters to PETSCII uppercase', () => {
       const text = 'ABC';
@@ -462,23 +470,35 @@ describe('petscii.util', () => {
       expect(result[3]).toBe(0x14); // PETSCII delete
     });
 
-    it('should handle brackets and special chars', () => {
+    // DELIBERATE CHANGES (2026-09-02 MCI-in-.seq plan, task 2). Two of these
+    // five bytes moved when the local table was retired in favour of the ONE
+    // SDK table (sdk/petscii/ascii-to-petscii.ts), and both moves are the SDK
+    // being right about the C64:
+    //   \ (0x5C) was passed through as $5C, which is the POUND glyph in
+    //     PETSCII - it now maps to $2F ('/'), the transducer's long-standing
+    //     substitution.
+    //   _ (0x5F) was passed through as $5F, which is a left-arrow glyph - it
+    //     now maps to $A4, the lower one-eighth block PETSCII uses as an
+    //     underline.
+    it('should handle brackets and special chars (SDK table substitutions)', () => {
       const text = '[\\]^_';
       const result = convertAsciiToPetsciiOutput(text);
 
       expect(result[0]).toBe(0x5B); // [
-      expect(result[1]).toBe(0x5C); // \
+      expect(result[1]).toBe(0x2F); // \ -> '/' (PETSCII has the pound sign at $5C)
       expect(result[2]).toBe(0x5D); // ]
-      expect(result[3]).toBe(0x5E); // ^
-      expect(result[4]).toBe(0x5F); // _
+      expect(result[3]).toBe(0x5E); // ^ (up arrow)
+      expect(result[4]).toBe(0xA4); // _ -> PETSCII underline block
     });
 
-    it('should convert unknown characters to space', () => {
+    // DELIBERATE CHANGE (same plan/task): unmapped glyph is '?' now, not a
+    // space - see the convertAnsiToPetscii case above.
+    it('should convert unknown characters to ? (SDK table)', () => {
       const text = String.fromCharCode(0x80) + String.fromCharCode(0xFF);
       const result = convertAsciiToPetsciiOutput(text);
 
-      expect(result[0]).toBe(0x20); // Space
-      expect(result[1]).toBe(0x20); // Space
+      expect(result[0]).toBe(0x3F); // '?'
+      expect(result[1]).toBe(0x3F); // '?'
     });
   });
 
