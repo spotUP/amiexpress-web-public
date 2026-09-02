@@ -741,13 +741,6 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
         connection.session.ansiEnabled = false;
         connection.session.screenWidth = 40;
         connection.session.screenHeight = 25;
-        // One-shot flag (task 4 / audit E4, task 10): a power-on/reset C64
-        // boots in unshifted/graphics mode, so the very first PETSCII write
-        // must be preceded by the $0E charset prelude. pre-login.ts sets
-        // this same flag for the ANSI-prompt "P" answer and the ANSI_PROMPT
-        // real-C64 branch; this is the third caller of the identical
-        // contract (DEL-probe / dedicated-PETSCII-port fast path).
-        (connection.session as any).needsCharsetPrelude = true;
         connection.session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
         connection.session.tempData = { inputBuffer: '' };
         // Emit terminal detection event for index.ts to handle BBSTITLE display

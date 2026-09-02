@@ -105,7 +105,6 @@ describe('dedicated PETSCII port (petsciiDefault)', () => {
     expect(connection.session?.petsciiMode).toBe(true);
     expect(connection.session?.screenWidth).toBe(40);
     expect(connection.session?.screenHeight).toBe(25);
-    expect((connection.session as any)?.needsCharsetPrelude).toBe(true);
   });
 
   it('a plain (non-petsciiDefault) telnet port does not synthesize a terminal-type event', async () => {

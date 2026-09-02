@@ -21,7 +21,6 @@
 import { BBSState } from "../constants/bbs-states";
 import type { TelnetConnection } from "./telnet-server";
 import { buildConnectionEmitter } from "./connection-emitter";
-import { convertAsciiToPetsciiOutput } from "../utils/petscii.util";
 
 export async function handleC64Detected(connection: TelnetConnection): Promise<void> {
   if (!connection.session) {
@@ -30,8 +29,9 @@ export async function handleC64Detected(connection: TelnetConnection): Promise<v
 console.log("[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE");
   const { displayScreen } = await import("../handlers/screen.handler");
   // Same emitter contract every other telnet/SSH connection uses — handles
-  // petscii-bytes (raw .seq transport), petscii-output (legacy PUA) and
-  // ansi-output (case-swap + charset prelude) identically to the main
+  // petscii-bytes (raw .seq transport, fed to the session's transducer via
+  // observe()), petscii-output (legacy PUA) and ansi-output (transduced,
+  // charset bank ensured against the oracle) identically to the main
   // session pipeline.
   const emitter = buildConnectionEmitter(connection);
   await displayScreen(emitter as any, connection.session, "BBSTITLE");
@@ -40,7 +40,8 @@ console.log("[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE");
   connection.session.subState = undefined;
   connection.session.tempData = connection.session.tempData || {};
   connection.session.tempData.loginPhase = "username";
-  connection.write(Buffer.from([0x0d, 0x0d])); // Two CR for spacing
-  // Send Username: prompt in proper PETSCII (uppercase displays correctly)
-  connection.write(convertAsciiToPetsciiOutput("Username: "));
+  // Through the emitter, not connection.write: the session's transducer
+  // must see this text so its cursor/charset oracle matches the screen.
+  emitter.emit("ansi-output", "\r\n\r\n");
+  emitter.emit("ansi-output", "Username: ");
 }

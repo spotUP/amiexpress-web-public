@@ -382,6 +382,8 @@ export interface BBSSession {
   mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
   petsciiMode?: boolean; // Whether PETSCII mode is enabled (40x25, .seq files)
+  /** Per-session ANSI->PETSCII transducer for real C64 callers (connection-emitter.ts). Lazily created; shared by every emitter built for the connection so cursor/charset/reverse state never forks. */
+  petsciiTransducer?: import("@amiexpress/bbs-door-sdk/petscii").AnsiToPetsciiTransducer;
   ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)
   terminalType?: "c64" | "modern" | "unknown"; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
   screenWidth?: number; // Terminal width (40 for C64, 80 for modern)

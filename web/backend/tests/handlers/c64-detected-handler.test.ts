@@ -98,6 +98,20 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     });
   });
 
+  it('the post-title "Username: " prompt goes through the emitter (case-correct, oracle-tracked), not a raw write', async () => {
+    const written: Buffer[] = [];
+    const connection: any = {
+      write: (b: Buffer | string) => written.push(Buffer.isBuffer(b) ? b : Buffer.from(b)),
+      session: { terminalType: 'c64', petsciiMode: true, tempData: {} },
+      sessionId: 'c64-test', on() {}, off() {}, close() {},
+    };
+    await handleC64Detected(connection);
+    const all = Buffer.concat(written);
+    const tail = Array.from(all.subarray(all.length - 10));
+    expect(tail).toEqual([0xD5, 0x53, 0x45, 0x52, 0x4E, 0x41, 0x4D, 0x45, 0x3A, 0x20]);
+    expect(connection.session.petsciiTransducer).toBeDefined();
+  });
+
   it('does nothing when the connection has no session yet', async () => {
     const connection: any = {
       write: jest.fn(),

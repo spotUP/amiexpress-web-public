@@ -199,7 +199,6 @@ describe('C64 DEL-probe reaches the live command.handler.ts dispatcher (task 6 f
     expect(session.ansiEnabled).toBe(false);
     expect(session.screenWidth).toBe(40);
     expect(session.screenHeight).toBe(25);
-    expect(session.needsCharsetPrelude).toBe(true);
     expect(session.state).toBe(BBSState.LOGON);
     expect(session.subState).toBeUndefined();
 
@@ -228,7 +227,6 @@ describe('C64 DEL-probe reaches the live command.handler.ts dispatcher (task 6 f
 
     expect(session.petsciiMode).toBe(true);
     expect(session.ansiEnabled).toBe(false);
-    expect(session.needsCharsetPrelude).toBe(true);
     expect(session.state).toBe(BBSState.LOGON);
     expect(session.subState).toBeUndefined();
 

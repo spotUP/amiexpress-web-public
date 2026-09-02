@@ -1399,11 +1399,6 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
         session.ansiEnabled = false; // C64 uses raw PETSCII, not ANSI
         session.screenWidth = 40;
         session.screenHeight = 25;
-        // One-shot flag: a power-on/reset C64 boots in unshifted/graphics
-        // mode. index.ts's ansi-output C64 branch consumes this to send
-        // the PETSCII $0E charset prelude before the first output, then
-        // clears it (task 4 / audit E4).
-        (session as any).needsCharsetPrelude = true;
         await completeRealC64Connect(socket, session);
         return;
       }
@@ -1447,7 +1442,6 @@ console.log('[C64] DEL-probe classified caller as C64 at ANSI_PROMPT - auto-enab
         // (SyncTERM-style PETSCII clients still want ANSI color codes) —
         // a real C64 needs raw PETSCII with no ANSI escape parsing at all.
         session.ansiEnabled = false;
-        (session as any).needsCharsetPrelude = true;
         await completeRealC64Connect(socket, session);
         return;
       }

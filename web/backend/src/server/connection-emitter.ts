@@ -17,11 +17,18 @@
 import { EventEmitter } from "events";
 import type { TelnetConnection } from "./telnet-server";
 import type { SSHConnection } from "./ssh-server";
-import {
-  convertAsciiToPetsciiOutput,
-  convertUnicodePuaToPetscii,
-  convertPetsciiToPetMe64,
-} from "../utils/petscii.util";
+import { convertPetsciiToPetMe64 } from "../utils/petscii.util";
+import { AnsiToPetsciiTransducer } from "@amiexpress/bbs-door-sdk/petscii";
+
+function isPetsciiSession(session: any): boolean {
+  return session?.terminalType === "c64" || !!session?.petsciiMode;
+}
+
+/** The session's one transducer (created on first use). Keyed on the session, not the emitter: handleC64Detected builds a second emitter for the same connection. */
+function petsciiTransducerFor(session: any): AnsiToPetsciiTransducer {
+  if (!session.petsciiTransducer) session.petsciiTransducer = new AnsiToPetsciiTransducer();
+  return session.petsciiTransducer;
+}
 
 export function buildConnectionEmitter(connection: TelnetConnection | SSHConnection): any {
   const eventBus = new EventEmitter();
@@ -46,28 +53,15 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
     },
     emitInternal: (event: string, ...args: any[]) => eventBus.emit(event, ...args),
     emit: (event: string, data: any) => {
+      const session = connection.session;
       if (event === "ansi-output") {
-        // Check if this is a C64/PETSCII terminal
-        if (
-          connection.session?.terminalType === "c64" ||
-          connection.session?.petsciiMode
-        ) {
-          // C64 terminal - convert ASCII text to PETSCII with proper case handling
-          // This handles prompts like "Username:", "Password:", etc.
+        if (isPetsciiSession(session)) {
+          // C64 caller: the ANSI stream (prompts, menus, blessed door frames)
+          // becomes PETSCII with cursor positioning, colors and reverse video
+          // computed against the session's KERNAL oracle. Binary payloads
+          // (ZMODEM) pass untouched.
           if (typeof data === "string") {
-            // Strip ANSI escape sequences (C64 doesn't understand them)
-            const strippedData = data.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-            // One-shot charset prelude (task 4 / audit E4): pre-login.ts
-            // sets needsCharsetPrelude when it detects a real C64 or a
-            // telnet session picks PETSCII mode, since a power-on/reset
-            // C64 boots in unshifted/graphics mode. Send $0E once, on the
-            // very first PETSCII write, then clear the flag.
-            const needsPrelude = !!(connection.session as any)?.needsCharsetPrelude;
-            const petsciiBytes = convertAsciiToPetsciiOutput(strippedData, { charsetPrelude: needsPrelude });
-            if (needsPrelude) {
-              (connection.session as any).needsCharsetPrelude = false;
-            }
-            connection.write(petsciiBytes);
+            connection.write(Buffer.from(petsciiTransducerFor(session).transduce(data)));
           } else {
             connection.write(data);
           }
@@ -86,34 +80,30 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
           }
         }
       } else if (event === "petscii-output") {
-        // Handle PETSCII output based on terminal type
-        if (connection.session?.terminalType === "c64") {
-          // Real C64 - send raw PETSCII bytes (data is already in Unicode PUA format)
-          // Need to convert Unicode PUA back to raw PETSCII bytes
-          const petsciiBytes = convertUnicodePuaToPetscii(data);
-          connection.write(petsciiBytes);
+        if (isPetsciiSession(session)) {
+          // Legacy PUA text: the transducer understands U+E000-E1FF glyphs
+          // and keeps bank/reverse state in step with everything else.
+          connection.write(Buffer.from(petsciiTransducerFor(session).transduce(String(data))));
         } else {
-          // Modern terminal - send Unicode PUA for PetMe64 font rendering
           connection.write(data);
         }
       } else if (event === "petscii-bytes") {
         // Raw-byte transport (Task 9): `data` is base64 of the exact .seq
         // bytes the loader read off disk.
         const raw = Buffer.from(data as string, "base64");
-        if (connection.session?.terminalType === "c64" || connection.session?.petsciiMode) {
-          // Real C64 (or a telnet session that picked PETSCII mode) - send
-          // the raw bytes untouched. TelnetConnection.write (telnet-server.ts:433)
-          // already doubles IAC ($FF) bytes per RFC 854 - do NOT double them
-          // again here, or ZMODEM-style binary transfers desync (see the
-          // 'ansi-output' binary-passthrough comment above for the same
-          // lesson learned the hard way).
+        if (isPetsciiSession(session)) {
+          // Forward untouched (TelnetConnection.write doubles IAC itself) and
+          // let the oracle see what the screen now looks like.
+          petsciiTransducerFor(session).observe(raw);
           connection.write(raw);
         } else {
-          // Non-PETSCII terminal somehow reached PETSCII content: degrade
-          // to the Unicode-PUA text representation instead of dropping it.
           connection.write(convertPetsciiToPetMe64(raw));
         }
       }
+    },
+    /** Live view of the connection's session (emitText's wrap choke, Task 10, reads it). A getter: connection.session is assigned after this emitter is built. */
+    get session() {
+      return connection.session;
     },
     id: connection.sessionId,
     // Telnet/SSH emitter doesn't have Socket.IO's `.connected` property.
