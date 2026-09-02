@@ -17,51 +17,87 @@ exports.gravityToDropRate = gravityToDropRate;
 /**
  * Master mode speed curve (Classic TGM3)
  * Levels correspond to breakpoints where timing values change
+ *
+ * are/arelinelock/das/lockDelay sourced from HeborisCE speed.c:
+ * - Levels 0-499 hold the Master mode INITIAL values (speed.c:86-89):
+ *     wait1_master_half=26 (are), wait2_master_half=40 (arelinelock),
+ *     wait3_master_half=28 (lockDelay), waitt_master_half=15 (das).
+ *   The curve used to open with the level-500 breakpoint's values
+ *   (25/29/10/28) instead - the wrong end of the table.
+ * - From level 500, wait1_master_tbl/wait2_master_tbl/wait3_master_tbl/
+ *   waitt_master_tbl (speed.c:98-117) are indexed every 50 levels starting
+ *   at 500 (column headers at speed.c:100,105,110,115). Breakpoints below
+ *   list only the indices where a column actually changes value; the door
+ *   previously reached are:14/arelinelock:6 at level 500 - Heboris does not
+ *   reach those values until level 800 (index 6 of the *_tbl arrays).
  */
 exports.MASTER_SPEED_CURVE = [
     // level, gravity, are, arelinelock (Line clear), das, lockDelay
-    { level: 0, gravity: 4 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 30, gravity: 6 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 35, gravity: 8 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 40, gravity: 10 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 50, gravity: 12 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 60, gravity: 15 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 70, gravity: 30 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 80, gravity: 45 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 90, gravity: 60 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 100, gravity: 90 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 120, gravity: 120 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 140, gravity: 150 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 160, gravity: 180 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 170, gravity: 210 / 60, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
-    { level: 200, gravity: 1.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 220, gravity: 2.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 230, gravity: 3.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 233, gravity: 4.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 236, gravity: 5.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 239, gravity: 6.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 243, gravity: 8.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 247, gravity: 10.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 251, gravity: 15.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
-    { level: 300, gravity: 1.0, are: 19, arelinelock: 9, das: 10, lockDelay: 28 },
-    { level: 330, gravity: 2.0, are: 19, arelinelock: 9, das: 10, lockDelay: 28 },
-    { level: 360, gravity: 3.0, are: 19, arelinelock: 9, das: 10, lockDelay: 28 },
-    { level: 400, gravity: 4.0, are: 14, arelinelock: 6, das: 10, lockDelay: 28 },
-    { level: 420, gravity: 5.0, are: 14, arelinelock: 6, das: 10, lockDelay: 28 },
-    { level: 450, gravity: 5.0, are: 14, arelinelock: 6, das: 10, lockDelay: 28 },
-    { level: 500, gravity: 20.0, are: 14, arelinelock: 6, das: 10, lockDelay: 28 },
-    { level: 600, gravity: 20.0, are: 8, arelinelock: 6, das: 9, lockDelay: 18 },
-    { level: 700, gravity: 20.0, are: 7, arelinelock: 6, das: 9, lockDelay: 16 },
-    { level: 800, gravity: 20.0, are: 7, arelinelock: 6, das: 8, lockDelay: 15 },
-    { level: 1100, gravity: 20.0, are: 6, arelinelock: 6, das: 8, lockDelay: 14 },
-    { level: 1200, gravity: 20.0, are: 5, arelinelock: 4, das: 7, lockDelay: 12 },
-    { level: 1300, gravity: 20.0, are: 4, arelinelock: 4, das: 6, lockDelay: 11 },
-    { level: 1400, gravity: 20.0, are: 3, arelinelock: 3, das: 6, lockDelay: 10 },
-    { level: 1500, gravity: 20.0, are: 2, arelinelock: 1, das: 6, lockDelay: 9 },
+    { level: 0, gravity: 4 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 30, gravity: 6 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 35, gravity: 8 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 40, gravity: 10 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 50, gravity: 12 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 60, gravity: 15 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 70, gravity: 30 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 80, gravity: 45 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 90, gravity: 60 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 100, gravity: 90 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 120, gravity: 120 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 140, gravity: 150 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 160, gravity: 180 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 170, gravity: 210 / 60, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 200, gravity: 1.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 220, gravity: 2.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 230, gravity: 3.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 233, gravity: 4.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 236, gravity: 5.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 239, gravity: 6.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 243, gravity: 8.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 247, gravity: 10.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 251, gravity: 15.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 300, gravity: 1.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 330, gravity: 2.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 360, gravity: 3.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 400, gravity: 4.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 420, gravity: 5.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    { level: 450, gravity: 5.0, are: 26, arelinelock: 40, das: 15, lockDelay: 28 },
+    // speed.c:98-117, *_tbl index 0 (column header "500")
+    { level: 500, gravity: 20.0, are: 25, arelinelock: 29, das: 10, lockDelay: 28 },
+    // index 2 ("600"): wait2 29->19
+    { level: 600, gravity: 20.0, are: 25, arelinelock: 19, das: 10, lockDelay: 28 },
+    // index 4 ("700"): wait1 25->19, wait2 19->9
+    { level: 700, gravity: 20.0, are: 19, arelinelock: 9, das: 10, lockDelay: 28 },
+    // index 6 ("800"): wait1 19->14, wait2 9->6
+    { level: 800, gravity: 20.0, are: 14, arelinelock: 6, das: 10, lockDelay: 28 },
+    // index 8 ("900"): wait3 28->18, waitt 10->9
+    { level: 900, gravity: 20.0, are: 14, arelinelock: 6, das: 9, lockDelay: 18 },
+    // index 10 ("1000"): wait1 14->8, wait3 18->16
+    { level: 1000, gravity: 20.0, are: 8, arelinelock: 6, das: 9, lockDelay: 16 },
+    // index 12 ("1100"): wait1 8->7, wait3 16->15, waitt 9->8
+    { level: 1100, gravity: 20.0, are: 7, arelinelock: 6, das: 8, lockDelay: 15 },
+    // index 22 ("1600"): wait1 7->6, wait3 15->14
+    { level: 1600, gravity: 20.0, are: 6, arelinelock: 6, das: 8, lockDelay: 14 },
+    // index 24 ("1700"): wait1 6->5, wait2 6->4, wait3 14->12, waitt 8->7
+    { level: 1700, gravity: 20.0, are: 5, arelinelock: 4, das: 7, lockDelay: 12 },
+    // index 25 ("1750"): wait1 5->4, wait3 12->11, waitt 7->6
+    { level: 1750, gravity: 20.0, are: 4, arelinelock: 4, das: 6, lockDelay: 11 },
+    // index 26 ("1800"): wait1 4->3, wait2 4->3, wait3 11->10
+    { level: 1800, gravity: 20.0, are: 3, arelinelock: 3, das: 6, lockDelay: 10 },
+    // index 27 ("1850", last column): wait1 3->2, wait2 3->1, wait3 10->9
+    { level: 1850, gravity: 20.0, are: 2, arelinelock: 1, das: 6, lockDelay: 9 },
 ];
 /**
  * Death mode (Shirase) speed curve
  * Fast gravity and aggressive delays
+ *
+ * Checked against HeborisCE speed.c and found already correct - no change
+ * made here. Death Mode's are/arelinelock/das/lockDelay columns are an
+ * exact match, level for level, for wait1_doom_tbl/wait2_doom_tbl/
+ * wait3_doom_tbl/waitt_doom_tbl (the current Devil-DOOM table,
+ * speed.c:174-193, indexed every 100 levels from 0), including the
+ * breakpoints this curve omits because the table doesn't change value
+ * there (levels 400, 700, 800, 900, 1300 repeat their predecessor).
  */
 exports.DEATH_SPEED_CURVE = [
     { level: 0, gravity: 1.0, are: 11, arelinelock: 8, das: 9, lockDelay: 20 },

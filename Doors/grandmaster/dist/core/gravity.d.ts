@@ -8,11 +8,32 @@ import type { GameMode, SpeedLevel } from './types';
 /**
  * Master mode speed curve (Classic TGM3)
  * Levels correspond to breakpoints where timing values change
+ *
+ * are/arelinelock/das/lockDelay sourced from HeborisCE speed.c:
+ * - Levels 0-499 hold the Master mode INITIAL values (speed.c:86-89):
+ *     wait1_master_half=26 (are), wait2_master_half=40 (arelinelock),
+ *     wait3_master_half=28 (lockDelay), waitt_master_half=15 (das).
+ *   The curve used to open with the level-500 breakpoint's values
+ *   (25/29/10/28) instead - the wrong end of the table.
+ * - From level 500, wait1_master_tbl/wait2_master_tbl/wait3_master_tbl/
+ *   waitt_master_tbl (speed.c:98-117) are indexed every 50 levels starting
+ *   at 500 (column headers at speed.c:100,105,110,115). Breakpoints below
+ *   list only the indices where a column actually changes value; the door
+ *   previously reached are:14/arelinelock:6 at level 500 - Heboris does not
+ *   reach those values until level 800 (index 6 of the *_tbl arrays).
  */
 export declare const MASTER_SPEED_CURVE: SpeedLevel[];
 /**
  * Death mode (Shirase) speed curve
  * Fast gravity and aggressive delays
+ *
+ * Checked against HeborisCE speed.c and found already correct - no change
+ * made here. Death Mode's are/arelinelock/das/lockDelay columns are an
+ * exact match, level for level, for wait1_doom_tbl/wait2_doom_tbl/
+ * wait3_doom_tbl/waitt_doom_tbl (the current Devil-DOOM table,
+ * speed.c:174-193, indexed every 100 levels from 0), including the
+ * breakpoints this curve omits because the table doesn't change value
+ * there (levels 400, 700, 800, 900, 1300 repeat their predecessor).
  */
 export declare const DEATH_SPEED_CURVE: SpeedLevel[];
 /**
