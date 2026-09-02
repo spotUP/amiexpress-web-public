@@ -19,8 +19,10 @@ export const scLower = (ch: string) => 0x01 + (ch.charCodeAt(0) - 0x61);
 function sameState(a: PetsciiMachine, b: PetsciiMachine) {
   expect(Array.from(a.state.screen)).toEqual(Array.from(b.state.screen));
   expect(Array.from(a.state.colorRam)).toEqual(Array.from(b.state.colorRam));
-  expect([a.state.cursorX, a.state.cursorY, a.state.charsetBank, a.state.reverse, a.state.pen])
-    .toEqual([b.state.cursorX, b.state.cursorY, b.state.charsetBank, b.state.reverse, b.state.pen]);
+  expect([a.state.cursorX, a.state.cursorY, a.state.charsetBank, a.state.reverse, a.state.pen,
+    a.state.background, a.state.border])
+    .toEqual([b.state.cursorX, b.state.cursorY, b.state.charsetBank, b.state.reverse, b.state.pen,
+      b.state.background, b.state.border]);
 }
 
 describe('AnsiToPetsciiTransducer core', () => {
@@ -273,6 +275,61 @@ describe('AnsiToPetsciiTransducer cursor, erase and graphics', () => {
     expect(run(String.fromCodePoint(0xE081, 0xE001)).out).toEqual([0x12, 0x41, 0x92, 0x41]);
     expect(run(String.fromCodePoint(0xE141)).out[0]).toBe(0x0E);
     expect(run('\x1b[7m' + String.fromCodePoint(0xE001)).out).toEqual([0x12, 0x92, 0x41]);
+  });
+});
+
+describe('AnsiToPetsciiTransducer CCGMS screen background ($02 <colour>)', () => {
+  it('an ANSI background active at a full clear becomes the screen background: $93 then $02 <colour>', () => {
+    const { t, out, display } = run('\x1b[44m\x1b[2J');
+    expect(out).toEqual([0x93, 0x02, 0x1F]);       // CLR, then background/border := blue (VIC 6)
+    expect(t.machine.state.background).toBe(6);
+    expect(t.machine.state.border).toBe(6);
+    expect(display.state.background).toBe(6);
+  });
+
+  it('text after a coloured clear re-sends $02 <colour> after the $0E the bank switch emits', () => {
+    const { out, display } = run('\x1b[44m\x1b[2Jhi');
+    expect(out).toEqual([0x93, 0x02, 0x1F, 0x0E, 0x02, 0x1F, 0x48, 0x49]);
+    expect(display.state.background).toBe(6);       // $0E blacked it, the re-send restored it
+    expect(display.state.border).toBe(6);
+    expect(display.state.charsetBank).toBe(1);
+  });
+
+  it('a clear with no ANSI background emits $93 alone', () => {
+    const { out, display } = run('abc\x1b[2J');
+    expect(out.filter((b) => b === 0x02)).toEqual([]);
+    // $93 then the cursor walked back to column 3 (ANSI 2J does not home).
+    expect(out.slice(out.indexOf(0x93))).toEqual([0x93, 0x1D, 0x1D, 0x1D]);
+    expect(display.state.background).toBe(0);
+  });
+
+  it('a per-cell background without a clear sends no $02 (plan decision 5: per-cell bg is dropped)', () => {
+    const { out, display } = run('\x1b[44mhi');
+    expect(out).toEqual([0x0E, 0x48, 0x49]);
+    expect(display.state.background).toBe(0);
+  });
+
+  it('the alternate screen carries the background too, and SGR 49 / SGR 0 clear it again', () => {
+    expect(Array.from(run('\x1b[41m\x1b[?1049h').out)).toEqual([0x93, 0x02, 0x1C]);
+    const t = new AnsiToPetsciiTransducer();
+    t.transduce('\x1b[44m\x1b[2J');
+    expect(t.machine.state.background).toBe(6);
+    expect(Array.from(t.transduce('\x1b[49m\x1b[2J'))).toEqual([0x93]); // no new bg committed
+    const t2 = new AnsiToPetsciiTransducer();
+    expect(Array.from(t2.transduce('\x1b[44m\x1b[0m\x1b[2J'))).toEqual([0x05, 0x93]); // SGR 0 drops the bg (and sets the white pen)
+  });
+
+  it('256-colour and truecolor backgrounds map through the same nearest-VIC path', () => {
+    expect(Array.from(run('\x1b[48;5;2m\x1b[2J').out)).toEqual([0x93, 0x02, 0x1E]);       // xterm green -> VIC 5
+    expect(Array.from(run('\x1b[48;2;46;44;155m\x1b[2J').out)).toEqual([0x93, 0x02, 0x1F]); // exact Colodore blue -> VIC 6
+  });
+
+  it('reset() forgets the screen background', () => {
+    const t = new AnsiToPetsciiTransducer();
+    t.transduce('\x1b[44m\x1b[2J');
+    t.reset();
+    expect(t.machine.state.background).toBe(0);
+    expect(Array.from(t.transduce('hi'))).toEqual([0x0E, 0x48, 0x49]);
   });
 });
 

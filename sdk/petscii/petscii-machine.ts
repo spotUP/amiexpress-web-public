@@ -17,9 +17,19 @@
  * Background/border power on to C64 TERMINAL defaults (CCGMS/Novaterm: black
  * screen, black border), NOT the KERNAL BASIC power-on defaults (blue/light
  * blue) referenced in section 3 of that doc. This machine simulates a BBS
- * terminal, never the BASIC READY. prompt, and PETSCII carries no
- * background-colour byte - the terminal's default IS the background the BBS
- * gets, so it must be black to match every C64 BBS's PETSCII art.
+ * terminal, never the BASIC READY. prompt.
+ *
+ * Native PETSCII has no background byte, but every C64 TERMINAL follows the
+ * CCGMS convention (also in Novaterm and PyCGMS), which this machine
+ * implements:
+ *  - `$02` followed by one of the 16 standard PETSCII colour bytes sets the
+ *    BACKGROUND and the BORDER to that VIC colour. The two are always tied -
+ *    no independent border control exists. `$02` followed by anything else is
+ *    inert and that byte is processed normally.
+ *  - `$0E` - the lowercase-charset switch - ALSO resets background and border
+ *    to black. A sender that wants a coloured screen must re-send
+ *    `$02 <colour>` after every `$0E` (AnsiToPetsciiTransducer does).
+ * Both changes repaint the whole canvas, so `apply` reports a full repaint.
  */
 import { PETSCII_COLOR_TO_VIC } from './c64-palette';
 import { printablePetsciiToScreenCode } from './screen-codes';
@@ -34,8 +44,8 @@ export interface PetsciiMachineState {
   charsetBank: 0 | 1;    // 0 = uppercase/graphics (power-on), 1 = lowercase/uppercase
   reverse: boolean;
   pen: number;           // VIC index, power-on 14
-  background: number;    // VIC index, fixed 0 (no PETSCII code changes it)
-  border: number;        // VIC index, fixed 0
+  background: number;    // VIC index, power-on 0 (CCGMS $02 <colour> sets it, $0E blacks it)
+  border: number;        // VIC index, power-on 0 (always tied to `background`)
 }
 
 export class PetsciiMachine {
@@ -48,6 +58,8 @@ export class PetsciiMachine {
   };
   /** rowLinked[y] = true when row y is the continuation of row y-1 (logical 80-char line) */
   private rowLinked: boolean[] = new Array(ROWS).fill(false);
+  /** A `$02` has been seen and the NEXT byte is a candidate background colour. Survives chunk boundaries. */
+  private bgPrefix = false;
   onUpdate?: (fullRepaint: boolean) => void;
 
   feed(bytes: Uint8Array | Buffer | number[]): void {
@@ -67,14 +79,28 @@ export class PetsciiMachine {
     s.pen = 14;
     s.background = 0;
     s.border = 0;
+    this.bgPrefix = false;
     this.rowLinked.fill(false);
   }
 
   private apply(b: number): boolean {
     const s = this.state;
+    if (this.bgPrefix) {
+      this.bgPrefix = false;
+      // CCGMS: `$02 <colour>` sets background AND border. Anything else after
+      // a `$02` is not a background command - fall through and process the
+      // byte normally.
+      if (b in PETSCII_COLOR_TO_VIC) return this.setScreenColor(PETSCII_COLOR_TO_VIC[b]);
+    }
     if (b in PETSCII_COLOR_TO_VIC) { s.pen = PETSCII_COLOR_TO_VIC[b]; return false; }
     switch (b) {
-      case 0x0E: if (s.charsetBank !== 1) { s.charsetBank = 1; return true; } return false;
+      case 0x02: this.bgPrefix = true; return false;
+      case 0x0E: {
+        // CCGMS ties the lowercase-charset switch to a background/border reset.
+        const changed = this.setScreenColor(0);
+        if (s.charsetBank !== 1) { s.charsetBank = 1; return true; }
+        return changed;
+      }
       case 0x8E: if (s.charsetBank !== 0) { s.charsetBank = 0; return true; } return false;
       case 0x12: s.reverse = true; return false;
       case 0x92: s.reverse = false; return false;
@@ -161,6 +187,19 @@ export class PetsciiMachine {
     }
     s.cursorY++;
     return false;
+  }
+
+  /**
+   * Set background and border together (they are never independent on a C64
+   * terminal). Returns true when anything changed, so the caller can report
+   * the full repaint the whole canvas needs.
+   */
+  private setScreenColor(vic: number): boolean {
+    const s = this.state;
+    if (s.background === vic && s.border === vic) return false;
+    s.background = vic;
+    s.border = vic;
+    return true;
   }
 
   /** CLR: fills the screen with spaces in the current pen color, homes the cursor, and clears all link flags. */

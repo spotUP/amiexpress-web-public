@@ -106,6 +106,21 @@ export class AnsiToPetsciiTransducer {
    * cursor-moving operation, consumed by newline().
    */
   private pendingWrap = false;
+  /**
+   * VIC index the ANSI stream currently asks the BACKGROUND to be (SGR
+   * 40-47/100-107/48;5/48;2), or null for "default". Per-cell background has
+   * no C64 equivalent and is dropped (plan decision 5); this latch only
+   * matters at the moment of a full clear.
+   */
+  private ansiBg: number | null = null;
+  /**
+   * The screen-level background committed by the last full clear, i.e. what
+   * `$02 <colour>` was sent for. Null when the screen is on the terminal
+   * default. It is an INTENT, not a mirror: whether the C64 currently has it
+   * is read from the oracle (`machine.state.background`), because `$0E` blacks
+   * the screen behind our back on CCGMS and must be undone.
+   */
+  private screenBg: number | null = null;
 
   constructor(opts: AnsiToPetsciiOptions = {}) {
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
@@ -118,6 +133,8 @@ export class AnsiToPetsciiTransducer {
     this.ansiReverse = false;
     this.savedCursor = null;
     this.pendingWrap = false;
+    this.ansiBg = null;
+    this.screenBg = null;
   }
 
   /** Raw PETSCII bytes that reached the terminal without passing through transduce(). */
@@ -179,8 +196,22 @@ export class AnsiToPetsciiTransducer {
     this.machine.feed([byte]);
   }
 
+  /**
+   * `$0E` is both the lowercase-charset switch and, on CCGMS, a
+   * background/border reset to black - so every bank-1 switch is followed by
+   * re-asserting the screen background the last clear committed.
+   */
   private ensureBank(bank: 0 | 1, out: number[]): void {
-    if (this.machine.state.charsetBank !== bank) this.emit(out, bank === 1 ? 0x0E : 0x8E);
+    if (this.machine.state.charsetBank === bank) return;
+    this.emit(out, bank === 1 ? 0x0E : 0x8E);
+    this.restoreScreenBg(out);
+  }
+
+  /** Send `$02 <colour>` when the oracle's background is not the one `screenBg` asks for. */
+  private restoreScreenBg(out: number[]): void {
+    if (this.screenBg === null || this.machine.state.background === this.screenBg) return;
+    this.emit(out, 0x02);
+    this.emit(out, vicColorToPetscii(this.screenBg));
   }
 
   private setReverse(on: boolean, out: number[]): void {
@@ -375,7 +406,7 @@ export class AnsiToPetsciiTransducer {
     let p = 0;
     while (p < codes.length) {
       const c = codes[p];
-      if (c === 0) { this.bold = false; this.ansiReverse = false; this.setReverse(false, out); this.setPen(1, out); p++; continue; }
+      if (c === 0) { this.bold = false; this.ansiReverse = false; this.ansiBg = null; this.setReverse(false, out); this.setPen(1, out); p++; continue; }
       if (c === 1) { this.bold = true; p++; continue; }
       if (c === 22) { this.bold = false; p++; continue; }
       if (c === 7) { this.ansiReverse = true; this.setReverse(true, out); p++; continue; }
@@ -389,13 +420,20 @@ export class AnsiToPetsciiTransducer {
         // left in this SGR belongs to it, not to the SGR vocabulary - a
         // trailing '0' is a color component, never a reset.
         if (!rgb) break;
-        if (c === 38) this.setPen(nearestVicForRgb(rgb[0], rgb[1], rgb[2], this.palette), out);
+        const vic = nearestVicForRgb(rgb[0], rgb[1], rgb[2], this.palette);
+        if (c === 38) this.setPen(vic, out);
+        else this.ansiBg = vic;
         p += mode === 2 ? 5 : 3;
         continue;
       }
+      // Background: latched only, never emitted per cell. 40-47 map like
+      // 30-37 and 100-107 like 90-97 (bold does not brighten a background),
+      // 49 is the terminal default.
+      if (c === 49) { this.ansiBg = null; p++; continue; }
+      if ((c >= 40 && c <= 47) || (c >= 100 && c <= 107)) { this.ansiBg = sgrColorToVic(c - 10, false); p++; continue; }
       const vic = sgrColorToVic(c, this.bold);
       if (vic !== null) this.setPen(vic, out);
-      p++; // 40-47, 49, 100-107 (bg), 2/3/4/5/24/25 ... : no C64 equivalent, dropped
+      p++; // 2/3/4/5/24/25 ... : no C64 equivalent, dropped
     }
   }
 
@@ -462,10 +500,22 @@ export class AnsiToPetsciiTransducer {
     this.withCursorRestored(out, () => this.fillRow(y, x, x + count - 1, out));
   }
 
-  /** $93 clears AND homes on the C64; ANSI 2J does not home, so the cursor goes back to (x,y) afterwards. */
+  /**
+   * $93 clears AND homes on the C64; ANSI 2J does not home, so the cursor goes
+   * back to (x,y) afterwards.
+   *
+   * A full clear is also the one moment a background belongs on a C64: the
+   * ANSI background in force is committed as the SCREEN background and sent
+   * as CCGMS `$02 <colour>` right after the `$93` (per-cell background stays
+   * dropped - plan decision 5). With no ANSI background in force nothing is
+   * sent: a bare `ESC[2J` must not repaint the screen black behind art that
+   * already set its own backdrop.
+   */
   private clearKeepingCursor(out: number[], x: number, y: number): void {
     this.pendingWrap = false;
     this.emit(out, 0x93);
+    this.screenBg = this.ansiBg;
+    this.restoreScreenBg(out);
     this.moveTo(x, y, out);
   }
 }

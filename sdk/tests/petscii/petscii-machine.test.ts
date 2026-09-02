@@ -153,6 +153,73 @@ describe('PetsciiMachine', () => {
     expect(repaints).toBe(0);
   });
 
+  // ---- CCGMS background/border convention ($02 <colour>, $0E) ----------
+
+  it('$02 + a PETSCII colour byte sets BOTH background and border, leaves cells and pen alone', () => {
+    const m = new PetsciiMachine();
+    let repaints = 0;
+    m.onUpdate = (full) => { if (full) repaints++; };
+    m.feed([0x41]);            // 'A' at (0,0), pen still 14
+    m.feed([0x02, 0x1C]);      // CCGMS: background + border := red (VIC 2)
+    expect(m.state.background).toBe(2);
+    expect(m.state.border).toBe(2);
+    expect(m.state.pen).toBe(14);      // the colour byte is consumed by $02, not by the pen
+    expect(cell(m, 0, 0)).toBe(0x01);  // screen untouched
+    expect(color(m, 0, 0)).toBe(14);
+    expect(m.state.cursorX).toBe(1);   // cursor untouched
+    expect(repaints).toBeGreaterThan(0);
+  });
+
+  it('$0E blacks background and border as well as switching to the lowercase bank (CCGMS)', () => {
+    const m = new PetsciiMachine();
+    m.feed([0x02, 0x1F]);      // blue screen
+    expect(m.state.background).toBe(6);
+    m.feed([0x0E]);
+    expect(m.state.background).toBe(0);
+    expect(m.state.border).toBe(0);
+    expect(m.state.charsetBank).toBe(1);
+  });
+
+  it('$0E on the lowercase bank still blacks a set background, and fires a repaint', () => {
+    const m = new PetsciiMachine();
+    m.feed([0x0E, 0x02, 0x1F]);
+    let repaints = 0;
+    m.onUpdate = (full) => { if (full) repaints++; };
+    m.feed([0x0E]);            // bank already 1; the bg reset alone must repaint
+    expect(m.state.background).toBe(0);
+    expect(m.state.border).toBe(0);
+    expect(repaints).toBe(1);
+  });
+
+  it('$02 followed by a non-colour byte changes nothing and the byte is processed normally', () => {
+    const m = new PetsciiMachine();
+    m.feed([0x02, 0x41]);      // 'A' is not a colour byte
+    expect(m.state.background).toBe(0);
+    expect(m.state.border).toBe(0);
+    expect(cell(m, 0, 0)).toBe(0x01);
+    expect(m.state.cursorX).toBe(1);
+  });
+
+  it('the $02 prefix survives a chunk boundary', () => {
+    const m = new PetsciiMachine();
+    m.feed([0x02]);
+    m.feed([0x1E]);            // green
+    expect(m.state.background).toBe(5);
+    expect(m.state.border).toBe(5);
+    expect(cell(m, 0, 0)).toBe(0x20);
+  });
+
+  it('reset() returns background and border to black', () => {
+    const m = new PetsciiMachine();
+    m.feed([0x02, 0x1C, 0x02]); // trailing $02 leaves a colour prefix pending
+    m.reset();
+    expect(m.state.background).toBe(0);
+    expect(m.state.border).toBe(0);
+    m.feed([0x1C]);            // a bare colour byte after reset must still be a PEN change
+    expect(m.state.pen).toBe(2);
+    expect(m.state.background).toBe(0);
+  });
+
   it('logicalLineEndRow follows the link chain a wrapping print created', () => {
     const m = new PetsciiMachine();
     m.feed(new Array(45).fill(0x41)); // 45 printables: row 1 is a continuation of row 0
