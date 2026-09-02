@@ -6,6 +6,9 @@
  * Uses SDK blessed helpers (no duplicate code).
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildCategoryRow = buildCategoryRow;
+exports.buildDoorRow = buildDoorRow;
+exports.buildFooterContent = buildFooterContent;
 exports.createApp = createApp;
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
@@ -13,6 +16,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 // the default and reproduces exactly what this door drew before, so the
 // migration is verifiable: identical output until somebody picks a theme.
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 /**
  * Format file size for display
  */
@@ -116,6 +120,83 @@ function getAllDoorsInCategory(node) {
     }
     return doors;
 }
+/**
+ * Row builders, width-driven.
+ *
+ * Every one of these takes the LIVE screen width and asks the SDK's single
+ * compact profile what to do with it - there is no 40 and no 80 in this
+ * door. At the XXS tier (a C64/PETSCII caller) the secondary columns are
+ * dropped rather than allowed to fold: a row one character too long does
+ * not clip on this canvas, it wraps and eats the row beneath it, which is
+ * how a 40-column caller lost half of this list.
+ */
+/** Clip to `max` printable characters (the styles wrap, they do not pad). */
+function clip(text, max) {
+    return max <= 0 ? '' : text.substring(0, max);
+}
+/** One category row: icon, name, and the door count. */
+function buildCategoryRow(catName, doorCount, hasSubcats, s, width) {
+    // "has children" vs "is a leaf" is structure, not severity, so both
+    // take accents rather than the semantic ok/warn colours.
+    //
+    // The leaf marker is `-` rather than `>`: in Topaz a `[` immediately
+    // followed by `>` merges into something that reads as a capital D,
+    // which is why these rows looked like `D]` and not `[>]`. The bytes
+    // were always correct - it is the glyph pair that is not.
+    const icon = hasSubcats ? s.accent('[+]') : s.accentAlt('[-]');
+    const compact = (0, blessed_1.getCompactProfile)(width);
+    if (!compact.singleColumn) {
+        return `${icon} ${s.ink(catName.padEnd(25))} ${s.accentAlt(`(${doorCount} door${doorCount !== 1 ? 's' : ''})`)}`;
+    }
+    // XXS: the count loses the word "doors" - the parentheses already say it.
+    const count = `(${doorCount})`;
+    // icon(3) + space + name + space + count, one column short of the edge.
+    const room = Math.max(1, width - 1 - 3 - 1 - 1 - count.length);
+    return `${icon} ${s.ink(clip(catName, room))} ${s.accentAlt(count)}`;
+}
+/** One door row: type badge, command, name and (wide only) the size. */
+function buildDoorRow(door, s, width) {
+    const typeLabel = formatType(door.type);
+    const compact = (0, blessed_1.getCompactProfile)(width);
+    if (!compact.singleColumn) {
+        const sizeLabel = formatSize(door.size || 0);
+        return (`${s.accent(`[${typeLabel.padEnd(3)}]`)} ` +
+            `${s.ok(door.command.padEnd(12))} ` +
+            `${s.ink(door.name.padEnd(25))} ` +
+            `${s.accentAlt(sizeLabel.padStart(8))}`);
+    }
+    // XXS: the size column goes first - it is the least useful thing on the
+    // row and the only one nobody navigates by - and the command column
+    // shrinks to what a BBS command actually is.
+    const CMD = 10;
+    const cmd = clip(door.command, CMD).padEnd(CMD);
+    const room = Math.max(1, width - 1 - 5 - 1 - CMD - 1);
+    return `${s.accent(`[${typeLabel.padEnd(3)}]`)} ${s.ok(cmd)} ${s.ink(clip(door.name, room))}`;
+}
+/** The footer hint line. XXS keeps the navigation keys and drops the rest. */
+function buildFooterContent(s, width) {
+    const compact = (0, blessed_1.getCompactProfile)(width);
+    // The key CAP is the part worth reading - which letter to press. The
+    // word after it is a reminder, so it sits dim and the caps carry the
+    // accent. Bright text throughout made the hint line compete with the
+    // content above it.
+    const hints = compact.collapseChrome
+        ? [
+            `${s.key('Up/Dn:')} ${s.dim('Move')}`,
+            `${s.key('Ent:')} ${s.dim('Go')}`,
+            `${s.key('BS:')} ${s.dim('Back')}`,
+            `${s.key('Q:')} ${s.dim('Quit')}`,
+        ]
+        : [
+            `${s.key('Up/Down:')} ${s.dim('Navigate')}`,
+            `${s.key('Enter:')} ${s.dim('Select')}`,
+            `${s.key('T:')} ${s.dim('Filter Type')}`,
+            `${s.key('Backspace:')} ${s.dim('Back')}`,
+            `${s.key('Q:')} ${s.dim('Quit')}`,
+        ];
+    // The rail tail is decoration and the XXS row has no spare cells for it.
+    return hints.join('  ') + (s.rail && !compact.collapseChrome ? `  ${s.dim(s.rail)}` : '');
+}
 async function createApp(session) {
     const { bbs, user } = session;
     // One resolve per run. `s` carries every colour this door draws.
@@ -188,6 +269,10 @@ async function createApp(session) {
     });
     // Enable input
     inputManager.enable();
+    // Every width decision below comes from the LIVE screen through the SDK's
+    // one compact profile - never a door-local 40 or 80.
+    const screenWidth = screen.width || 80;
+    const compact = (0, blessed_1.getCompactProfile)(screenWidth);
     const TITLE = 'DOOR GAMES & UTILITIES';
     /**
      * The masthead: a run of slashes with the headline right-aligned at the
@@ -343,6 +428,10 @@ async function createApp(session) {
     function updateScrollLeader() {
         if (!s.rail)
             return; // classic keeps its plain footer
+        // 26 cells of dotted leader on a 40-column footer would sit on top of
+        // the key hints. The hints win.
+        if (compact.collapseChrome)
+            return;
         if (currentRows.length === 0)
             return;
         const items = currentRows;
@@ -460,13 +549,7 @@ async function createApp(session) {
         // word after it is a reminder, so it sits dim and the caps carry the
         // accent. Bright text throughout made the hint line compete with the
         // content above it.
-        content: [
-            `${s.key('Up/Down:')} ${s.dim('Navigate')}`,
-            `${s.key('Enter:')} ${s.dim('Select')}`,
-            `${s.key('T:')} ${s.dim('Filter Type')}`,
-            `${s.key('Backspace:')} ${s.dim('Back')}`,
-            `${s.key('Q:')} ${s.dim('Quit')}`,
-        ].join('  ') + (s.rail ? `  ${s.dim(s.rail)}` : '')
+        content: buildFooterContent(s, screenWidth)
     });
     /**
      * Update breadcrumb display
@@ -546,15 +629,7 @@ async function createApp(session) {
             const child = currentCategory.children.get(catName);
             const doorCount = countDoorsInCategory(child);
             const hasSubcats = child.children.size > 0;
-            // "has children" vs "is a leaf" is structure, not severity, so both
-            // take accents rather than the semantic ok/warn colours.
-            //
-            // The leaf marker is `-` rather than `>`: in Topaz a `[` immediately
-            // followed by `>` merges into something that reads as a capital D,
-            // which is why these rows looked like `D]` and not `[>]`. The bytes
-            // were always correct - it is the glyph pair that is not.
-            const icon = hasSubcats ? s.accent('[+]') : s.accentAlt('[-]');
-            items.push(`${icon} ${s.ink(catName.padEnd(25))} ${s.accentAlt(`(${doorCount} door${doorCount !== 1 ? 's' : ''})`)}`);
+            items.push(buildCategoryRow(catName, doorCount, hasSubcats, s, screenWidth));
         }
         // Add "View All Doors" option if there are doors at this level or children
         const directDoors = currentCategory.doors.length;
@@ -585,12 +660,7 @@ async function createApp(session) {
         // Add doors sorted by name
         const sortedDoors = filteredDoors.sort((a, b) => a.name.localeCompare(b.name));
         for (const door of sortedDoors) {
-            const typeLabel = formatType(door.type);
-            const sizeLabel = formatSize(door.size);
-            items.push(`${s.accent(`[${typeLabel.padEnd(3)}]`)} ` +
-                `${s.ok(door.command.padEnd(12))} ` +
-                `${s.ink(door.name.padEnd(25))} ` +
-                `${s.accentAlt(sizeLabel.padStart(8))}`);
+            items.push(buildDoorRow(door, s, screenWidth));
         }
         // Show count with filter info
         if (currentTypeFilter !== 'ALL') {
@@ -728,7 +798,10 @@ async function createApp(session) {
     // row redrawn per tick, which is the budget a moving row is allowed - see
     // the cost table in the SDK's chrome.ts.
     let mastheadTimer = null;
-    if (s.rail) {
+    // A 40-column screen has no spare cells for decoration, and a 20fps row
+    // repaint is a lot of PETSCII bytes for a C64 to swallow. The masthead
+    // still draws - it just stops moving. (SDK: effectsAllowed().)
+    if (s.rail && (0, blessed_1.effectsAllowed)(screenWidth)) {
         const width = Math.max(1, (screen.width || 80) - 1);
         const runWidth = Math.max(0, width - TITLE.length - 1);
         const frames = (0, theme_1.barGrowFrames)(s.rail, runWidth, 6);
@@ -765,7 +838,9 @@ async function createApp(session) {
     // Attached to the LIST because it is the only thing on screen with rows
     // to spare: damaging the header or the key hints would read as the door
     // being broken rather than as atmosphere.
-    const stopGlitches = (0, theme_1.attachGlitches)(mainList, theme, () => screen.render(), 
+    // Glitches damage rows on purpose. On a 40-column canvas that damage is
+    // the "stray glyphs mid-row" the sysop reported, so at XXS no timer runs.
+    const stopGlitches = (0, blessed_1.effectsAllowed)(screenWidth) ? (0, theme_1.attachGlitches)(mainList, theme, () => screen.render(), 
     // The list owns the keyboard here, so "busy" is about the filter
     // prompt: a scrambled row while somebody is typing a filter reads as
     // the door having eaten the input.
@@ -776,7 +851,7 @@ async function createApp(session) {
         // under the gap no matter what the constants say.
         tickMs: 400,
         isBusy: () => Boolean(screen._filterPromptOpen),
-    });
+    }) : () => undefined;
     // Return promise that resolves when screen is destroyed
     return new Promise((resolve) => {
         let resolved = false;

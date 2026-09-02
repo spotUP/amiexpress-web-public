@@ -21,6 +21,7 @@ import {
   themeStyles, themeById, attachGlitches,
   mastheadLine, railStream, barGrowFrames, selectionMark, leaderProgress,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { getCompactProfile, effectsAllowed } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 interface DoorSession {
   socket: any;
@@ -159,6 +160,100 @@ function getAllDoorsInCategory(node: CategoryNode): DoorInfo[] {
   return doors;
 }
 
+/**
+ * Row builders, width-driven.
+ *
+ * Every one of these takes the LIVE screen width and asks the SDK's single
+ * compact profile what to do with it - there is no 40 and no 80 in this
+ * door. At the XXS tier (a C64/PETSCII caller) the secondary columns are
+ * dropped rather than allowed to fold: a row one character too long does
+ * not clip on this canvas, it wraps and eats the row beneath it, which is
+ * how a 40-column caller lost half of this list.
+ */
+
+/** Clip to `max` printable characters (the styles wrap, they do not pad). */
+function clip(text: string, max: number): string {
+  return max <= 0 ? '' : text.substring(0, max);
+}
+
+/** One category row: icon, name, and the door count. */
+export function buildCategoryRow(
+  catName: string,
+  doorCount: number,
+  hasSubcats: boolean,
+  s: any,
+  width: number
+): string {
+  // "has children" vs "is a leaf" is structure, not severity, so both
+  // take accents rather than the semantic ok/warn colours.
+  //
+  // The leaf marker is `-` rather than `>`: in Topaz a `[` immediately
+  // followed by `>` merges into something that reads as a capital D,
+  // which is why these rows looked like `D]` and not `[>]`. The bytes
+  // were always correct - it is the glyph pair that is not.
+  const icon = hasSubcats ? s.accent('[+]') : s.accentAlt('[-]');
+  const compact = getCompactProfile(width);
+  if (!compact.singleColumn) {
+    return `${icon} ${s.ink(catName.padEnd(25))} ${s.accentAlt(`(${doorCount} door${doorCount !== 1 ? 's' : ''})`)}`;
+  }
+  // XXS: the count loses the word "doors" - the parentheses already say it.
+  const count = `(${doorCount})`;
+  // icon(3) + space + name + space + count, one column short of the edge.
+  const room = Math.max(1, width - 1 - 3 - 1 - 1 - count.length);
+  return `${icon} ${s.ink(clip(catName, room))} ${s.accentAlt(count)}`;
+}
+
+/** One door row: type badge, command, name and (wide only) the size. */
+export function buildDoorRow(
+  door: { type: string; command: string; name: string; size?: number },
+  s: any,
+  width: number
+): string {
+  const typeLabel = formatType(door.type);
+  const compact = getCompactProfile(width);
+  if (!compact.singleColumn) {
+    const sizeLabel = formatSize(door.size || 0);
+    return (
+      `${s.accent(`[${typeLabel.padEnd(3)}]`)} ` +
+      `${s.ok(door.command.padEnd(12))} ` +
+      `${s.ink(door.name.padEnd(25))} ` +
+      `${s.accentAlt(sizeLabel.padStart(8))}`
+    );
+  }
+  // XXS: the size column goes first - it is the least useful thing on the
+  // row and the only one nobody navigates by - and the command column
+  // shrinks to what a BBS command actually is.
+  const CMD = 10;
+  const cmd = clip(door.command, CMD).padEnd(CMD);
+  const room = Math.max(1, width - 1 - 5 - 1 - CMD - 1);
+  return `${s.accent(`[${typeLabel.padEnd(3)}]`)} ${s.ok(cmd)} ${s.ink(clip(door.name, room))}`;
+}
+
+/** The footer hint line. XXS keeps the navigation keys and drops the rest. */
+export function buildFooterContent(s: any, width: number): string {
+  const compact = getCompactProfile(width);
+  // The key CAP is the part worth reading - which letter to press. The
+  // word after it is a reminder, so it sits dim and the caps carry the
+  // accent. Bright text throughout made the hint line compete with the
+  // content above it.
+  const hints = compact.collapseChrome
+    ? [
+        `${s.key('Up/Dn:')} ${s.dim('Move')}`,
+        `${s.key('Ent:')} ${s.dim('Go')}`,
+        `${s.key('BS:')} ${s.dim('Back')}`,
+        `${s.key('Q:')} ${s.dim('Quit')}`,
+      ]
+    : [
+        `${s.key('Up/Down:')} ${s.dim('Navigate')}`,
+        `${s.key('Enter:')} ${s.dim('Select')}`,
+        `${s.key('T:')} ${s.dim('Filter Type')}`,
+        `${s.key('Backspace:')} ${s.dim('Back')}`,
+        `${s.key('Q:')} ${s.dim('Quit')}`,
+      ];
+  // The rail tail is decoration and the XXS row has no spare cells for it.
+  return hints.join('  ') + (s.rail && !compact.collapseChrome ? `  ${s.dim(s.rail)}` : '');
+}
+
 export async function createApp(session: DoorSession) {
   const { bbs, user } = session;
   // One resolve per run. `s` carries every colour this door draws.
@@ -242,6 +337,11 @@ export async function createApp(session: DoorSession) {
 
   // Enable input
   inputManager.enable();
+
+  // Every width decision below comes from the LIVE screen through the SDK's
+  // one compact profile - never a door-local 40 or 80.
+  const screenWidth = ((screen as any).width as number) || 80;
+  const compact = getCompactProfile(screenWidth);
 
   const TITLE = 'DOOR GAMES & UTILITIES';
 
@@ -410,6 +510,9 @@ export async function createApp(session: DoorSession) {
 
   function updateScrollLeader(): void {
     if (!s.rail) return;                       // classic keeps its plain footer
+    // 26 cells of dotted leader on a 40-column footer would sit on top of
+    // the key hints. The hints win.
+    if (compact.collapseChrome) return;
     if (currentRows.length === 0) return;
     const items = currentRows;
     const at = ((mainList as any).selected ?? 0) + 1;
@@ -531,13 +634,7 @@ export async function createApp(session: DoorSession) {
     // word after it is a reminder, so it sits dim and the caps carry the
     // accent. Bright text throughout made the hint line compete with the
     // content above it.
-    content: [
-      `${s.key('Up/Down:')} ${s.dim('Navigate')}`,
-      `${s.key('Enter:')} ${s.dim('Select')}`,
-      `${s.key('T:')} ${s.dim('Filter Type')}`,
-      `${s.key('Backspace:')} ${s.dim('Back')}`,
-      `${s.key('Q:')} ${s.dim('Quit')}`,
-    ].join('  ') + (s.rail ? `  ${s.dim(s.rail)}` : '')
+    content: buildFooterContent(s, screenWidth)
   });
 
   /**
@@ -625,15 +722,7 @@ export async function createApp(session: DoorSession) {
       const child = currentCategory.children.get(catName)!;
       const doorCount = countDoorsInCategory(child);
       const hasSubcats = child.children.size > 0;
-      // "has children" vs "is a leaf" is structure, not severity, so both
-      // take accents rather than the semantic ok/warn colours.
-      //
-      // The leaf marker is `-` rather than `>`: in Topaz a `[` immediately
-      // followed by `>` merges into something that reads as a capital D,
-      // which is why these rows looked like `D]` and not `[>]`. The bytes
-      // were always correct - it is the glyph pair that is not.
-      const icon = hasSubcats ? s.accent('[+]') : s.accentAlt('[-]');
-      items.push(`${icon} ${s.ink(catName.padEnd(25))} ${s.accentAlt(`(${doorCount} door${doorCount !== 1 ? 's' : ''})`)}`);
+      items.push(buildCategoryRow(catName, doorCount, hasSubcats, s, screenWidth));
     }
 
     // Add "View All Doors" option if there are doors at this level or children
@@ -671,14 +760,7 @@ export async function createApp(session: DoorSession) {
     // Add doors sorted by name
     const sortedDoors = filteredDoors.sort((a, b) => a.name.localeCompare(b.name));
     for (const door of sortedDoors) {
-      const typeLabel = formatType(door.type);
-      const sizeLabel = formatSize(door.size);
-      items.push(
-        `${s.accent(`[${typeLabel.padEnd(3)}]`)} ` +
-        `${s.ok(door.command.padEnd(12))} ` +
-        `${s.ink(door.name.padEnd(25))} ` +
-        `${s.accentAlt(sizeLabel.padStart(8))}`
-      );
+      items.push(buildDoorRow(door, s, screenWidth));
     }
 
     // Show count with filter info
@@ -828,7 +910,10 @@ export async function createApp(session: DoorSession) {
   // row redrawn per tick, which is the budget a moving row is allowed - see
   // the cost table in the SDK's chrome.ts.
   let mastheadTimer: ReturnType<typeof setInterval> | null = null;
-  if (s.rail) {
+  // A 40-column screen has no spare cells for decoration, and a 20fps row
+  // repaint is a lot of PETSCII bytes for a C64 to swallow. The masthead
+  // still draws - it just stops moving. (SDK: effectsAllowed().)
+  if (s.rail && effectsAllowed(screenWidth)) {
     const width = Math.max(1, ((screen as any).width || 80) - 1);
     const runWidth = Math.max(0, width - TITLE.length - 1);
     const frames = barGrowFrames(s.rail, runWidth, 6);
@@ -867,7 +952,9 @@ export async function createApp(session: DoorSession) {
   // Attached to the LIST because it is the only thing on screen with rows
   // to spare: damaging the header or the key hints would read as the door
   // being broken rather than as atmosphere.
-  const stopGlitches = attachGlitches(
+  // Glitches damage rows on purpose. On a 40-column canvas that damage is
+  // the "stray glyphs mid-row" the sysop reported, so at XXS no timer runs.
+  const stopGlitches = effectsAllowed(screenWidth) ? attachGlitches(
     mainList as any,
     theme,
     () => screen.render(),
@@ -882,7 +969,7 @@ export async function createApp(session: DoorSession) {
       tickMs: 400,
       isBusy: () => Boolean((screen as any)._filterPromptOpen),
     }
-  );
+  ) : () => undefined;
 
   // Return promise that resolves when screen is destroyed
   return new Promise<void>((resolve) => {
