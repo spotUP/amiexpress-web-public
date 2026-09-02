@@ -65,26 +65,6 @@ RUN echo "[Build] Starting frontend vite build" && \
 # ============================================================================
 FROM node:20-alpine AS config-builder
 
-WORKDIR /app
-
-# The admin imports two things from OUTSIDE its own directory, both from
-# SOURCE, and both resolved by aliases in vite.config.ts / tsconfig.json:
-#
-#   sdk/engines/ui/ansi-editor  - the door's ANSI editor core, so the browser
-#                                 editor and the door run one implementation
-#   web/backend/src/screens,
-#   .../services/config-services - the board's own MCI parser and the
-#                                 findAcsLevel rule, rather than a second copy
-#
-# Source only: no dist, no node_modules. A stage that copies just
-# web/config-app builds fine on a developer's machine, where those paths exist
-# above it, and fails here with "Could not load .../core/file-ops" - which is
-# exactly how this was found. tests/dockerfile-copies-admin-sources.test.ts
-# fails when an import escapes what is copied here.
-COPY sdk/engines/ui/ansi-editor ./sdk/engines/ui/ansi-editor
-COPY web/backend/src/screens ./web/backend/src/screens
-COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
-
 WORKDIR /app/web/config-app
 
 COPY web/config-app/package*.json ./
@@ -193,22 +173,31 @@ RUN set -eux; \
     for p in sz rz sb rb sx rx; do ln -sf "/usr/local/bin/l$p" "/usr/local/bin/$p"; done; \
     /usr/local/bin/sz --version
 
-# The SDK, built, before npm ci resolves `file:../../sdk`.
-#
-# The backend's SDK imports used to be runtime `require()` calls, which tsc
-# never resolves - so this stage could build without the SDK present at all.
-# The PETSCII work introduced static `import ... from
-# '@amiexpress/bbs-door-sdk/petscii'`, which IS typechecked, and the deploy
-# died with "Cannot find module '@amiexpress/bbs-door-sdk/petscii'" while every
-# local build stayed green - on a developer's machine ../../sdk is simply
-# there.
-COPY --from=sdk-builder /app/sdk /app/sdk
-
 WORKDIR /app/web/backend
 
+# web/backend/package.json depends on "@amiexpress/bbs-door-sdk": "file:../../sdk",
+# so npm ci below creates a dangling symlink node_modules/@amiexpress/bbs-door-sdk
+# -> /app/sdk. Without this, tsc fails to resolve deep imports like
+# "@amiexpress/bbs-door-sdk/petscii" (TS2307) because /app/sdk never existed in
+# this stage. node_modules is copied too so .d.ts imports of the SDK's own deps
+# (e.g. blessed types) resolve, mirroring the runtime stage below. Only dist/ is
+# needed (not the SDK source): the backend's moduleResolution:node would normally
+# resolve a deep import like "@amiexpress/bbs-door-sdk/petscii" by walking the
+# package's real directory, but sdk/package.json's typesVersions maps that
+# subpath straight to dist/petscii/index.d.ts, so tsc never looks for source.
+COPY --from=sdk-builder /app/sdk/dist /app/sdk/dist
+COPY --from=sdk-builder /app/sdk/package.json /app/sdk/package.json
+COPY --from=sdk-builder /app/sdk/node_modules /app/sdk/node_modules
+
 COPY web/backend/package*.json ./
-# Skip postinstall script (web assets built in separate stages)
-RUN npm ci --ignore-scripts
+# Skip postinstall script (web assets built in separate stages). SKIP_SDK_PREPARE=1
+# is required too: npm still runs the file:-linked SDK's "prepare" script even with
+# --ignore-scripts (documented in the doors-builder stage above and in
+# backend-tests.yml/corpus-integration.yml), and here /app/sdk has no source/tsconfig
+# for that rebuild to compile against - it fails the whole install. The guard in
+# sdk/package.json's prepare script short-circuits that rebuild since dist is already
+# copied in above.
+RUN SKIP_SDK_PREPARE=1 npm ci --ignore-scripts
 
 COPY web/backend ./
 # Run tsc directly since dependencies are already installed via npm ci

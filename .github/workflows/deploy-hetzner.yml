@@ -82,6 +82,46 @@
               # Keep the last twenty; they are small and the disk is not.
               ls -1t "$BACKUP_DIR"/bbs-config-*.tar.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
 
+              # The doors' own data: scores, stats, message bases, anything a
+              # door wrote and cannot regenerate.
+              #
+              # The .info backup above covers configuration and nothing else,
+              # so when GRANDMASTER's match history vanished on 2026-09-01
+              # there was nothing to restore from - the file was simply gone.
+              # A deploy is the moment worth capturing, because a deploy is
+              # what replaces the code that owns the data.
+              #
+              # WAL files are included ON PURPOSE. These databases run in WAL
+              # mode, and grandmaster.db was a 4 KB header with 540 KB of
+              # uncheckpointed WAL beside it: backing up the .db alone would
+              # have preserved an empty database and thrown the scores away.
+              #
+              # Only node_modules is pruned. dist/ is NOT: frogger and
+              # super-qix keep their high scores inside dist/, which is also
+              # why the deploy's dist cleanup whitelists compiled extensions
+              # rather than deleting whatever the image lacks. The filters
+              # below match data, not code, so scanning dist costs nothing.
+              echo "== backup: the doors' data =="
+              docker run --rm \
+                -v amiexpress-bbs-data:/data:ro \
+                -v "$BACKUP_DIR":/backup \
+                alpine:3 \
+                sh -c "cd /data && find bbs/Doors -name node_modules -prune -o \
+                       -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' \
+                                 -o -name '*.sqlite' -o -name '*.sqlite3' \
+                                 -o -name '*scores*.json' -o -name '*.dat' \
+                                 -o -path '*/data/*' \) -print \
+                       | tar -czf /backup/bbs-doordata-$STAMP.tar.gz -T -" \
+                || echo "WARNING: door data backup failed, continuing"
+              if [ -f "$BACKUP_DIR/bbs-doordata-$STAMP.tar.gz" ]; then
+                echo "Backup: $BACKUP_DIR/bbs-doordata-$STAMP.tar.gz ($(du -h "$BACKUP_DIR/bbs-doordata-$STAMP.tar.gz" | cut -f1), $(tar -tzf "$BACKUP_DIR/bbs-doordata-$STAMP.tar.gz" | wc -l) files)"
+              else
+                echo "WARNING: no door data archive was written"
+              fi
+              # Twenty of these as well. They are bigger than the .info
+              # archive and still nothing next to the disk.
+              ls -1t "$BACKUP_DIR"/bbs-doordata-*.tar.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
+
               # Always sync to origin/main exactly. `git pull` can silently
               # leave the checkout behind when the working tree has local
               # edits (which the server should never have, but accumulates
