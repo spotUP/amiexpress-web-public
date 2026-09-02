@@ -199,5 +199,7 @@ describe('fixed 80x25 mode leaves the page ground to the page', () => {
     expect(box.style.padding).toBe('var(--bbs-terminal-bezel, 16px)');
     expect(box.style.borderRadius).toBe('var(--bbs-terminal-radius, 12px)');
     expect(box.style.overflow).toBe('hidden');
+    // the bezel must live inside the box's 100% width, or the outer wrapper clips the right corners square
+    expect(box.style.boxSizing).toBe('border-box');
   });
 });

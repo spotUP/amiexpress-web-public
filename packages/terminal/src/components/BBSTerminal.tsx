@@ -3168,6 +3168,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                 // page ground (sysop, 2026-09-02). Tokens owned by the host
                 // page; the fallbacks keep the package self-contained.
                 padding: 'var(--bbs-terminal-bezel, 16px)',
+                // border-box: the bezel lives INSIDE the 100% width, otherwise the
+                // box is 32px wider than its parent and the outer wrapper's
+                // overflow clips its right edge square (sysop, 2026-09-02).
+                boxSizing: 'border-box',
                 borderRadius: 'var(--bbs-terminal-radius, 12px)',
                 overflow: 'hidden',
               }
