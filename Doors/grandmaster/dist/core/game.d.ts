@@ -10,6 +10,7 @@ import { type Medal } from './medals';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
+import { type ItemPresetName } from './items';
 export declare class GameEngine {
     private sounds;
     private state;
@@ -26,6 +27,22 @@ export declare class GameEngine {
     private onHardDropCallback?;
     private animations;
     private glowManager;
+    private itemsPreset;
+    private itemHistory;
+    /** gamestart.c:834 `item_interval = 20`. */
+    private itemInterval;
+    /** gamestart.c:831 item_g[player] - counts up toward itemInterval. */
+    private itemGauge;
+    /** gamestart.c:3896-3907 item_nblk[0] override (HARD BLOCK, item 25). */
+    private pendingItemOverride;
+    /**
+     * Enemy-targeted item collected this lock; the caller (VersusScreen) is
+     * responsible for picking a target engine and applying the effect via
+     * core/items.ts's applyEnemyItem, since a single GameEngine has no
+     * knowledge of any opponent. Self-targeted items are applied internally
+     * and never reach this callback.
+     */
+    private onItemCollectedCallback?;
     private tetrisCount;
     private tSpinCount;
     private perfectClearCount;
@@ -61,12 +78,29 @@ export declare class GameEngine {
      */
     private createInitialState;
     /**
+     * Enable the TGM item system for this engine (gamestart.c:6994 `gameMode
+     * == 4 || item_mode[player]` gate). Call once, before start(), for TGM
+     * item versus play; every other mode leaves items off.
+     */
+    enableItems(preset?: ItemPresetName): void;
+    itemsEnabled(): boolean;
+    /** See onItemCollectedCallback above. */
+    onItemCollected(callback: (itemId: number) => void): void;
+    /**
      * Start the game
      */
     start(): void;
     /**
      * Spawn new piece
      */
+    /**
+     * Decide whether the piece about to spawn carries an item.
+     * gamestart.c:6994-6996: `if((gameMode==4 || item_mode) && (item_g >
+     * item_inter)) { ...draw... item_g = 0; }` else no item this spawn.
+     * gamestart.c:6930 increments item_g by 1 per spawn (guarded here by
+     * itemsEnabled()).
+     */
+    private rollItemForNextPiece;
     private spawnPiece;
     /**
      * Update game state (called every frame)
@@ -205,6 +239,48 @@ export declare class GameEngine {
      * Place piece with lock timestamp for credit roll fade
      */
     private placePieceWithTimestamp;
+    /**
+     * Stamp an item id onto every cell of a just-locked piece.
+     * gamestart.c:16230/16317: `fldi[bx2+by2*w+pl*220] = item[player]` inside
+     * the same 4-cell loop that locks the piece into fld[] - the whole piece
+     * carries the item, not one cell of it.
+     */
+    private stampItemOnPiece;
+    /**
+     * Scan a set of about-to-clear rows for a collectible item, matching
+     * gamestart.c:10127-10138: for each cleared row, ascending column, the
+     * LAST item cell found wins (item_waiting is overwritten each hit); across
+     * multiple simultaneously-cleared rows the loop runs row-ascending too, so
+     * the bottom-most cleared row's item wins ties. Hard block cells never
+     * reach here since getClearableLines() already excluded their whole row
+     * (see core/board.ts) - a simplification of an edge case in the reference
+     * where a hard block elsewhere in an otherwise-cancelled row could still
+     * leave an item_waiting write before the row-level cancellation landed.
+     */
+    private collectItemFromLines;
+    /**
+     * Apply a collected item's effect and show the HUD banner.
+     * gamestart.c:10383 `eraseItem(player, item_waiting[player]);` and
+     * gamestart.c:13451-13454 target selection (self-targeted "support"
+     * items vs. enemy-targeted "attack" items - see SELF_TARGET_ITEMS).
+     */
+    private processCollectedItem;
+    /**
+     * Force the next spawned piece to carry a specific item id, bypassing the
+     * normal gauge/draw (gamestart.c:3896-3907 item_nblk[0] override). Used
+     * by insertHardBlockNext() and by tests that need a deterministic item
+     * without waiting out the 20-piece gauge.
+     */
+    setPendingItem(itemId: number): void;
+    /**
+     * Insert a HARD BLOCK (item 25) into this engine's very next piece.
+     * gamestart.c:13600-13603 `item_nblk[0+enemy*6] = fldihardno;` - called by
+     * the caller-side item-effect resolution when this engine is an item's
+     * target.
+     */
+    insertHardBlockNext(): void;
+    /** Board accessor for cross-engine item effects (mirror/exchg/laser/etc). */
+    getBoard(): GameState['board'];
     /**
      * Pause game
      */

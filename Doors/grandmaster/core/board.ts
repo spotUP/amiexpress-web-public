@@ -10,6 +10,7 @@
 
 import type { Board, Cell, Piece, PieceType } from './types';
 import { getPieceCells } from './pieces';
+import { HARD_BLOCK_ITEM } from './items';
 
 /**
  * Create empty board
@@ -135,6 +136,22 @@ export function getCompleteLines(board: Board): number[] {
   }
 
   return completeLines;
+}
+
+/**
+ * Of a set of "complete" row indices, drop any row that carries a HARD
+ * BLOCK item cell (HeborisCE gamestart.c:1409 fldihardno; item 25 HARD).
+ *
+ * gamestart.c:10127-10131,10148: when a would-be-cleared row contains the
+ * hard block sentinel, the whole row's erase flag is cancelled
+ * (`if(hardblock2) erase[i+player*22]=0;`) - the row stays on the board
+ * even though every cell is filled. Games without items never populate
+ * Cell.item, so this is a no-op for every mode except TGM item versus.
+ */
+export function getClearableLines(board: Board, completeLines: number[]): number[] {
+  return completeLines.filter(
+    (y) => !board.grid[y].some((cell) => cell.item === HARD_BLOCK_ITEM)
+  );
 }
 
 /**

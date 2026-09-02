@@ -18,6 +18,11 @@ const particles_1 = require("../effects/particles");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 const line_clear_animation_1 = require("../effects/line-clear-animation");
+const items_1 = require("../core/items");
+/** Background colour used to render a TGM item cell, keyed by piece type. */
+const ITEM_CELL_COLORS = {
+    I: 'cyan', O: 'yellow', T: 'magenta', S: 'green', Z: 'red', J: 'blue', L: 'white',
+};
 /**
  * Versus Screen
  *
@@ -102,6 +107,7 @@ class VersusScreen {
             this.setupNetworkListeners();
         }
         this.setupAttackRouting();
+        this.setupItemRouting();
     }
     /** Lobby "Garbage Lines" toggle. Call before run(). */
     setGarbageEnabled(enabled) {
@@ -175,6 +181,76 @@ class VersusScreen {
     /** Stable id used as `from` in outgoing network attacks. */
     localAttackId() {
         return this.network?.getLocalPlayerId?.() ?? 'local';
+    }
+    /**
+     * TGM item wiring - the smallest reachable path from core/items.ts to a
+     * live TGM versus game. Enables item pickups on the human engine and, for
+     * CPU battle, on each AI opponent's engine too, then routes collected
+     * items to a target the same way setupAttackRouting() routes garbage.
+     *
+     * Networked human-vs-human versus only enables the local engine: an
+     * opponent's own GameEngine lives in their own process, so an
+     * enemy-targeted item collected here has no reachable remote target and
+     * falls back to the collector - exactly the reference's own fallback rule
+     * (gamestart.c:14358-14365, cited in the task: "enemy = 1 - player,
+     * falling back to enemy = player" when there's no second player to hit).
+     * Extending item effects across the network is a protocol change, out of
+     * scope for this pass.
+     */
+    setupItemRouting() {
+        this.engine.enableItems('TGM');
+        this.wireItemCollection(this.engine);
+        if (this.versusAI) {
+            // Some opponent stand-ins (tracker-only seeding, before their real
+            // GameEngine exists) carry no `engine` - skip those, they get no item
+            // pickups of their own but remain valid attack/item targets once
+            // wireItemCollection() on other engines looks them up fresh each time.
+            for (const opp of this.versusAI.getOpponents()) {
+                if (!opp?.engine)
+                    continue;
+                opp.engine.enableItems('TGM');
+                this.wireItemCollection(opp.engine, opp);
+            }
+        }
+    }
+    /**
+     * Route one engine's collected enemy-targeted items to a living opponent,
+     * applying the effect via core/items.ts's pure board transforms. `source`
+     * is the AI opponent record for a bot's own engine (undefined for the
+     * human), used to exclude that bot from its own target pool.
+     */
+    wireItemCollection(engine, source) {
+        engine.onItemCollected((itemId) => {
+            const target = this.pickItemTarget(source);
+            const targetEngine = target ?? engine; // reference's own-player fallback
+            const result = (0, items_1.applyEnemyItem)(itemId, targetEngine.getBoard(), engine.getBoard());
+            if (result.insertHardBlockNext) {
+                targetEngine.insertHardBlockNext();
+            }
+            if (target) {
+                this.sounds.playSfx('attack');
+            }
+        });
+    }
+    /**
+     * A random living opponent engine for an item attack.
+     * `source` identifies the AI bot whose own pickup this is (undefined for
+     * the human), so it can be excluded from its own target pool while still
+     * being targetable by everyone else.
+     */
+    pickItemTarget(source) {
+        if (!this.versusAI)
+            return null;
+        const pool = this.versusAI.getOpponents()
+            .filter((o) => o.alive && o.id !== source?.id && o.engine)
+            .map((o) => o.engine);
+        if (source) {
+            // A bot's pickup can also land on the human.
+            pool.push(this.engine);
+        }
+        if (pool.length === 0)
+            return null;
+        return pool[Math.floor(Math.random() * pool.length)];
     }
     /**
      * Setup UI layout — 80x24 terminal
@@ -1382,6 +1458,11 @@ class VersusScreen {
                     if (clearFade >= 1.0) {
                         char = '  ';
                     }
+                    else if (cell.item) {
+                        // TGM item cell: distinct from a normal locked piece at a
+                        // glance (see getItemCellChar).
+                        char = this.getItemCellChar(cell.item, cell.color);
+                    }
                     else {
                         char = this.getBlockChar(cell.color);
                         // Block glow
@@ -1396,6 +1477,20 @@ class VersusScreen {
                         if (clearFade > 0 && clearFade < 1.0) {
                             char = line_clear_animation_1.LineClearAnimationManager.applyFade(char, clearFade);
                         }
+                    }
+                }
+                // TGM item HUD: the collected item's name, top-right of the field
+                // (HeborisCE shows item_name[player] in a fixed HUD slot near the
+                // field - gamestart.c:12725-12744 is the equivalent setup-screen
+                // display). Right-aligned across the top visible row.
+                if (y === 4 && state.itemBanner) {
+                    const width2 = board.width * 2;
+                    const text = ` ${state.itemBanner.name}`.slice(-width2);
+                    const startCol = width2 - text.length;
+                    const charCol = x * 2;
+                    if (charCol >= startCol) {
+                        const chunk = text.slice(charCol - startCol, charCol - startCol + 2).padEnd(2, ' ');
+                        char = `{yellow-bg}{black-fg}${chunk}{/black-fg}{/yellow-bg}`;
                     }
                 }
                 // Board overlay (highest priority)
@@ -1517,7 +1612,9 @@ class VersusScreen {
                     continue;
                 }
                 const cell = board.grid[y]?.[x];
-                content += cell?.filled ? this.getBlockChar(cell.color ?? '') : '  ';
+                content += cell?.item
+                    ? this.getItemCellChar(cell.item, cell.color)
+                    : (cell?.filled ? this.getBlockChar(cell.color ?? '') : '  ');
             }
         }
         box.setContent(content);
@@ -1536,6 +1633,19 @@ class VersusScreen {
             L: '{white-fg}██{/white-fg}',
         };
         return colors[type] || '{gray-fg}██{/gray-fg}';
+    }
+    /**
+     * Render a TGM item cell (see core/items.ts) - inverse-video diamonds so a
+     * piece carrying an item is visually distinct from a normal locked piece.
+     * A hard block (item 25's target cell, HARD_BLOCK_ITEM) gets its own grey
+     * marker since it can never be collected or cleared.
+     */
+    getItemCellChar(item, color) {
+        if (item === items_1.HARD_BLOCK_ITEM) {
+            return '{white-bg}{black-fg}##{/black-fg}{/white-bg}';
+        }
+        const bg = ITEM_CELL_COLORS[color ?? ''] ?? 'gray';
+        return `{${bg}-bg}{black-fg}◆◆{/black-fg}{/${bg}-bg}`;
     }
     /**
      * Apply glow effect to block character

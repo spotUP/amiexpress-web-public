@@ -99,6 +99,36 @@ export declare class VersusScreen {
     /** Stable id used as `from` in outgoing network attacks. */
     private localAttackId;
     /**
+     * TGM item wiring - the smallest reachable path from core/items.ts to a
+     * live TGM versus game. Enables item pickups on the human engine and, for
+     * CPU battle, on each AI opponent's engine too, then routes collected
+     * items to a target the same way setupAttackRouting() routes garbage.
+     *
+     * Networked human-vs-human versus only enables the local engine: an
+     * opponent's own GameEngine lives in their own process, so an
+     * enemy-targeted item collected here has no reachable remote target and
+     * falls back to the collector - exactly the reference's own fallback rule
+     * (gamestart.c:14358-14365, cited in the task: "enemy = 1 - player,
+     * falling back to enemy = player" when there's no second player to hit).
+     * Extending item effects across the network is a protocol change, out of
+     * scope for this pass.
+     */
+    private setupItemRouting;
+    /**
+     * Route one engine's collected enemy-targeted items to a living opponent,
+     * applying the effect via core/items.ts's pure board transforms. `source`
+     * is the AI opponent record for a bot's own engine (undefined for the
+     * human), used to exclude that bot from its own target pool.
+     */
+    private wireItemCollection;
+    /**
+     * A random living opponent engine for an item attack.
+     * `source` identifies the AI bot whose own pickup this is (undefined for
+     * the human), so it can be excluded from its own target pool while still
+     * being targetable by everyone else.
+     */
+    private pickItemTarget;
+    /**
      * Setup UI layout — 80x24 terminal
      *
      * Col  0-21 : player board  (22w, 22h, top=1)
@@ -230,6 +260,13 @@ export declare class VersusScreen {
      * Get colored block character for piece type
      */
     private getBlockChar;
+    /**
+     * Render a TGM item cell (see core/items.ts) - inverse-video diamonds so a
+     * piece carrying an item is visually distinct from a normal locked piece.
+     * A hard block (item 25's target cell, HARD_BLOCK_ITEM) gets its own grey
+     * marker since it can never be collected or cleared.
+     */
+    private getItemCellChar;
     /**
      * Apply glow effect to block character
      */

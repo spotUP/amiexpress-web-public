@@ -18,9 +18,21 @@ const credit_roll_1 = require("./credit-roll");
 const time_limit_1 = require("./time-limit");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
+const items_1 = require("./items");
 class GameEngine {
     constructor(mode, settings, sounds, attackManager, startLevel = 0) {
         this.sounds = sounds;
+        // TGM item system (see core/items.ts). Disabled unless enableItems() is
+        // called - every non-versus mode leaves this off, so Cell.item stays
+        // undefined everywhere except TGM item versus play.
+        this.itemsPreset = null;
+        this.itemHistory = (0, items_1.createItemHistory)();
+        /** gamestart.c:834 `item_interval = 20`. */
+        this.itemInterval = 20;
+        /** gamestart.c:831 item_g[player] - counts up toward itemInterval. */
+        this.itemGauge = 0;
+        /** gamestart.c:3896-3907 item_nblk[0] override (HARD BLOCK, item 25). */
+        this.pendingItemOverride = null;
         // Stats tracking
         this.tetrisCount = 0;
         this.tSpinCount = 0;
@@ -148,7 +160,26 @@ class GameEngine {
             endTime: null,
             torikanExpired: false,
             torikanCheckpointLevel: null,
+            itemBanner: null,
         };
+    }
+    /**
+     * Enable the TGM item system for this engine (gamestart.c:6994 `gameMode
+     * == 4 || item_mode[player]` gate). Call once, before start(), for TGM
+     * item versus play; every other mode leaves items off.
+     */
+    enableItems(preset = 'TGM') {
+        this.itemsPreset = preset;
+        this.itemHistory = (0, items_1.createItemHistory)();
+        this.itemGauge = 0;
+        this.pendingItemOverride = null;
+    }
+    itemsEnabled() {
+        return this.itemsPreset !== null;
+    }
+    /** See onItemCollectedCallback above. */
+    onItemCollected(callback) {
+        this.onItemCollectedCallback = callback;
     }
     /**
      * Start the game
@@ -172,6 +203,43 @@ class GameEngine {
     /**
      * Spawn new piece
      */
+    /**
+     * Decide whether the piece about to spawn carries an item.
+     * gamestart.c:6994-6996: `if((gameMode==4 || item_mode) && (item_g >
+     * item_inter)) { ...draw... item_g = 0; }` else no item this spawn.
+     * gamestart.c:6930 increments item_g by 1 per spawn (guarded here by
+     * itemsEnabled()).
+     */
+    rollItemForNextPiece() {
+        if (this.pendingItemOverride !== null) {
+            const id = this.pendingItemOverride;
+            this.pendingItemOverride = null;
+            return id;
+        }
+        if (!this.itemsPreset)
+            return null;
+        this.itemGauge++;
+        if (this.itemGauge <= this.itemInterval)
+            return null;
+        this.itemGauge = 0;
+        if (this.itemsPreset !== 'TGM') {
+            // ALL/FEW/DS are implemented as pure selection data (see core/items.ts)
+            // but nothing wires them into a live engine in this pass - no runtime
+            // filtering to apply here.
+            return (0, items_1.drawItem)(this.itemsPreset, this.itemHistory);
+        }
+        // Redraw past any of the six TGM items with no implemented effect (see
+        // TGM_NOT_IMPLEMENTED_ITEMS in core/items.ts) so a pickup is always
+        // meaningful. Bounded: TGM_RUNTIME_ITEMS is non-empty and every retry
+        // still respects the reference's weighted draw + history rejection.
+        let id;
+        let guard = 0;
+        do {
+            id = (0, items_1.drawItem)(this.itemsPreset, this.itemHistory);
+            guard++;
+        } while (!items_1.TGM_RUNTIME_ITEMS.includes(id) && guard < 200);
+        return id;
+    }
     spawnPiece() {
         const pieceType = this.state.nextQueue.shift();
         this.state.nextQueue.push(this.pieceManager.getRandomPiece());
@@ -206,6 +274,7 @@ class GameEngine {
             x: spawnPos.x,
             y: spawnPos.y,
             invisible,
+            itemId: this.rollItemForNextPiece(),
         };
         this.state.canHold = true;
         this.state.lockDelayRemaining = this.state.lockDelay;
@@ -277,6 +346,11 @@ class GameEngine {
      * Update single frame
      */
     updateFrame() {
+        if (this.state.itemBanner) {
+            this.state.itemBanner.ttl--;
+            if (this.state.itemBanner.ttl <= 0)
+                this.state.itemBanner = null;
+        }
         if (!this.state.currentPiece) {
             // During ARE (Appearance Delay), count down frames
             this.state.areRemaining--;
@@ -726,6 +800,12 @@ class GameEngine {
         // Place piece on board with timestamp for credit roll fade
         const lockTime = Date.now();
         this.placePieceWithTimestamp(shape, piece.x, piece.y, piece.type, lockTime);
+        // TGM item: stamp every cell of the piece with its item id
+        // (gamestart.c:16230 `fldi[bx2+by2*w+pl*220] = item[player]` - the whole
+        // piece becomes the item, not just one cell of it).
+        if (piece.itemId) {
+            this.stampItemOnPiece(shape, piece.x, piece.y, piece.itemId);
+        }
         // Get locked cells for visual effects
         const lockedCells = shape.map(([dx, dy]) => ({ x: piece.x + dx, y: piece.y + dy }));
         // LOCK OUT: the board (24 rows) is taller than the rendered playfield
@@ -750,9 +830,16 @@ class GameEngine {
         }
         // Evaluate finesse for this placement
         const hadFinesse = this.finesseEvaluator.evaluatePlacement(piece);
-        // Check for line clears
-        const clearedLines = (0, board_1.getCompleteLines)(this.state.board);
+        // Check for line clears. A row carrying a HARD BLOCK item cell (item 25)
+        // is excluded even when every cell is filled - gamestart.c:10127-10131,
+        // 10148: the whole row's erase flag is cancelled. getClearableLines() is
+        // a no-op outside item mode (Cell.item is never set there).
+        const allCompleteLines = (0, board_1.getCompleteLines)(this.state.board);
+        const clearedLines = (0, board_1.getClearableLines)(this.state.board, allCompleteLines);
         const lineCount = clearedLines.length;
+        // TGM item: collect (but don't yet apply) any item riding a row that's
+        // actually about to clear - gamestart.c:10127-10138.
+        const collectedItemId = lineCount > 0 ? this.collectItemFromLines(clearedLines) : null;
         // TGM Level Stop Logic:
         // Level stops at xx9 (99, 199, etc.) and only advances when a piece locks.
         // If lines were cleared, level advances by lines.
@@ -806,6 +893,11 @@ class GameEngine {
             this.glowManager.addLockGlow(lockedCells, isCombo, isTSpin);
             // Clear lines
             (0, board_1.clearLines)(this.state.board, clearedLines);
+            // TGM item: apply the collected item's effect now that the normal
+            // clear has resolved (gamestart.c:10380-10383, end of the erase loop).
+            if (collectedItemId !== null) {
+                this.processCollectedItem(collectedItemId);
+            }
             // Dig mode: track remaining garbage lines
             if (this.state.mode === 'dig' && this.state.digLinesRemaining > 0) {
                 this.state.digLinesRemaining = Math.max(0, this.state.digLinesRemaining - lineCount);
@@ -1187,6 +1279,95 @@ class GameEngine {
                 }
             }
         }
+    }
+    /**
+     * Stamp an item id onto every cell of a just-locked piece.
+     * gamestart.c:16230/16317: `fldi[bx2+by2*w+pl*220] = item[player]` inside
+     * the same 4-cell loop that locks the piece into fld[] - the whole piece
+     * carries the item, not one cell of it.
+     */
+    stampItemOnPiece(shape, x, y, itemId) {
+        const board = this.state.board;
+        for (let row = 0; row < shape.length; row++) {
+            for (let col = 0; col < shape[row].length; col++) {
+                if (!shape[row][col])
+                    continue;
+                const boardX = x + col;
+                const boardY = y + row;
+                if (boardY >= 0 && boardY < board.height && board.grid[boardY]?.[boardX]) {
+                    board.grid[boardY][boardX].item = itemId;
+                }
+            }
+        }
+    }
+    /**
+     * Scan a set of about-to-clear rows for a collectible item, matching
+     * gamestart.c:10127-10138: for each cleared row, ascending column, the
+     * LAST item cell found wins (item_waiting is overwritten each hit); across
+     * multiple simultaneously-cleared rows the loop runs row-ascending too, so
+     * the bottom-most cleared row's item wins ties. Hard block cells never
+     * reach here since getClearableLines() already excluded their whole row
+     * (see core/board.ts) - a simplification of an edge case in the reference
+     * where a hard block elsewhere in an otherwise-cancelled row could still
+     * leave an item_waiting write before the row-level cancellation landed.
+     */
+    collectItemFromLines(rows) {
+        let found = null;
+        for (const y of [...rows].sort((a, b) => a - b)) {
+            const row = this.state.board.grid[y];
+            for (let x = 0; x < row.length; x++) {
+                const item = row[x].item;
+                if (item && item !== items_1.HARD_BLOCK_ITEM) {
+                    found = item;
+                }
+            }
+        }
+        return found;
+    }
+    /**
+     * Apply a collected item's effect and show the HUD banner.
+     * gamestart.c:10383 `eraseItem(player, item_waiting[player]);` and
+     * gamestart.c:13451-13454 target selection (self-targeted "support"
+     * items vs. enemy-targeted "attack" items - see SELF_TARGET_ITEMS).
+     */
+    processCollectedItem(itemId) {
+        this.state.itemBanner = { name: items_1.ITEM_NAMES[itemId] ?? `ITEM ${itemId}`, ttl: 90 };
+        if ((0, items_1.isSelfTargetItem)(itemId)) {
+            const result = (0, items_1.applySelfItem)(itemId, this.state.board);
+            if (result.clearRows && result.clearRows.length > 0) {
+                (0, board_1.clearLines)(this.state.board, result.clearRows);
+            }
+            return;
+        }
+        // Enemy-targeted (attack) item - HARD (25) and EXCHG (24) included.
+        // GameEngine has no notion of an opponent; the caller (VersusScreen)
+        // resolves a target engine and applies core/items.ts's applyEnemyItem,
+        // falling back to the collector per gamestart.c:14358-14365 ("enemy =
+        // 1-player, falling back to enemy = player outside versus") when no
+        // opponent is reachable.
+        this.onItemCollectedCallback?.(itemId);
+    }
+    /**
+     * Force the next spawned piece to carry a specific item id, bypassing the
+     * normal gauge/draw (gamestart.c:3896-3907 item_nblk[0] override). Used
+     * by insertHardBlockNext() and by tests that need a deterministic item
+     * without waiting out the 20-piece gauge.
+     */
+    setPendingItem(itemId) {
+        this.pendingItemOverride = itemId;
+    }
+    /**
+     * Insert a HARD BLOCK (item 25) into this engine's very next piece.
+     * gamestart.c:13600-13603 `item_nblk[0+enemy*6] = fldihardno;` - called by
+     * the caller-side item-effect resolution when this engine is an item's
+     * target.
+     */
+    insertHardBlockNext() {
+        this.setPendingItem(items_1.HARD_BLOCK_ITEM);
+    }
+    /** Board accessor for cross-engine item effects (mirror/exchg/laser/etc). */
+    getBoard() {
+        return this.state.board;
     }
     /**
      * Pause game

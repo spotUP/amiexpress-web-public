@@ -15,6 +15,7 @@ exports.checkCollision = checkCollision;
 exports.placePiece = placePiece;
 exports.getGhostY = getGhostY;
 exports.getCompleteLines = getCompleteLines;
+exports.getClearableLines = getClearableLines;
 exports.clearLines = clearLines;
 exports.isTopOut = isTopOut;
 exports.getVisibleTop = getVisibleTop;
@@ -26,6 +27,7 @@ exports.getBumpiness = getBumpiness;
 exports.addGarbage = addGarbage;
 exports.addGarbageLines = addGarbageLines;
 exports.cloneBoard = cloneBoard;
+const items_1 = require("./items");
 /**
  * Create empty board
  */
@@ -119,6 +121,19 @@ function getCompleteLines(board) {
         }
     }
     return completeLines;
+}
+/**
+ * Of a set of "complete" row indices, drop any row that carries a HARD
+ * BLOCK item cell (HeborisCE gamestart.c:1409 fldihardno; item 25 HARD).
+ *
+ * gamestart.c:10127-10131,10148: when a would-be-cleared row contains the
+ * hard block sentinel, the whole row's erase flag is cancelled
+ * (`if(hardblock2) erase[i+player*22]=0;`) - the row stays on the board
+ * even though every cell is filled. Games without items never populate
+ * Cell.item, so this is a no-op for every mode except TGM item versus.
+ */
+function getClearableLines(board, completeLines) {
+    return completeLines.filter((y) => !board.grid[y].some((cell) => cell.item === items_1.HARD_BLOCK_ITEM));
 }
 /**
  * Clear completed lines from board

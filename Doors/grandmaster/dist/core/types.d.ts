@@ -8,6 +8,13 @@ export interface Piece {
     x: number;
     y: number;
     invisible?: boolean;
+    /**
+     * TGM item carried by this piece (HeborisCE gamestart.c:3896-3907 item_nblk
+     * lookahead queue -> item[player]). Set when the piece spawns; stamped onto
+     * every cell the piece occupies when it locks (gamestart.c:16230). null/undefined
+     * means the piece carries no item.
+     */
+    itemId?: number | null;
 }
 export type RotationSystem = 'SRS' | 'ARS' | 'NRS' | 'BARS' | 'TI-ARS' | 'ACE-ARS' | 'TI-WORLD' | 'ACE-SRS' | 'DS-WORLD' | 'SRS-X';
 export interface Cell {
@@ -15,6 +22,13 @@ export interface Cell {
     color: PieceType | null;
     locked: boolean;
     lockTime?: number;
+    /**
+     * TGM item id (1-39) carried by this cell, or the hard-block sentinel
+     * (see core/items.ts HARD_BLOCK_ITEM, HeborisCE gamestart.c:1409 fldihardno).
+     * Set for every cell of a piece that was carrying an item when it locked
+     * (gamestart.c:16230 fldi[...] = item[player]). null/undefined = no item.
+     */
+    item?: number | null;
 }
 export interface Board {
     width: number;
@@ -85,6 +99,16 @@ export interface GameState {
      */
     torikanExpired: boolean;
     torikanCheckpointLevel: 500 | 1000 | null;
+    /**
+     * TGM item HUD banner (HeborisCE shows the collected item's name; see
+     * gamestart.c:12725-12744 for the item-name display in the setup screen,
+     * and item_name[player] for the in-game equivalent). Set when an item is
+     * collected, ticks down every frame, cleared at 0.
+     */
+    itemBanner: {
+        name: string;
+        ttl: number;
+    } | null;
 }
 /**
  * Gamepad bindings stored as trigger strings: "button:a", "dpad:left", "axis:left-x:negative"

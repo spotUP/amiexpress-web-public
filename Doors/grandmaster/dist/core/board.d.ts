@@ -29,6 +29,17 @@ export declare function getGhostY(board: Board, shape: number[][], x: number, st
  */
 export declare function getCompleteLines(board: Board): number[];
 /**
+ * Of a set of "complete" row indices, drop any row that carries a HARD
+ * BLOCK item cell (HeborisCE gamestart.c:1409 fldihardno; item 25 HARD).
+ *
+ * gamestart.c:10127-10131,10148: when a would-be-cleared row contains the
+ * hard block sentinel, the whole row's erase flag is cancelled
+ * (`if(hardblock2) erase[i+player*22]=0;`) - the row stays on the board
+ * even though every cell is filled. Games without items never populate
+ * Cell.item, so this is a no-op for every mode except TGM item versus.
+ */
+export declare function getClearableLines(board: Board, completeLines: number[]): number[];
+/**
  * Clear completed lines from board
  */
 export declare function clearLines(board: Board, lines: number[]): void;
