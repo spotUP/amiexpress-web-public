@@ -310,11 +310,21 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  * Files the BOARD writes, which an edit would simply lose.
  *
  * express.e writes `Node<n>/CallersLog` and the other logs without a screen
- * extension, so they were never listed. `Screens/Callers.txt` is the last-
- * callers display in screen form; the sysop identified it, and it is named
- * here rather than guessed at from content.
+ * extension, so they were never listed.
+ *
+ * `Callers.txt` and `callers!.txt` used to be here on the sysop's word and are
+ * NOT board-written: express.e's only writer is `callersLog()`, which builds
+ * `Node<n>/CallersLog` (express.e:9499) and never a `.txt`. On this board all
+ * 62 copies are one of two hashes, the oldest stamped 2008, and not one is
+ * dirty in git while every `Node<n>/CallersLog` is - the board rewrites the
+ * log and leaves the screen alone. They are hand-drawn ANSI: a framed
+ * `Spee N Name Location On-Time Action H:MM` header a designer may want to
+ * edit.
+ *
+ * `Bulletins/lastc.txt` stays: Super-AmiLog (`Utils/lastcallers`) signs it in
+ * the art, and RUNTIME_CONTENT's last-callers marker catches it too.
  */
-const RUNTIME_NAME = /^(callers!?\.txt|callerslog.*|lastc\.txt|.*\.log)$/i;
+const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|.*\.log)$/i;
 
 /**
  * Signatures of the tools that WRITE screens on this board.

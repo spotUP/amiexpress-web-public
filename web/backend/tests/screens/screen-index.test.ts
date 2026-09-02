@@ -105,6 +105,22 @@ describe('the screen index', () => {
     expect(index.files[path.join('Node1', 'BBSTITLE.txt')].format).toBe('text');
   });
 
+  test('the callers SCREEN is art; only the callers LOG is board-written', () => {
+    // express.e's callersLog() writes `Node<n>/CallersLog` (express.e:9499) and
+    // never a `.txt`. Classifying the hand-drawn `Callers.txt` as board-written
+    // hid it from the gallery and told the sysop an edit would be lost.
+    write('Screens/Callers.txt', '\x1b[34m.----.\n\x1b[36mSpee N Name\n');
+    write('Screens/callers!.txt', '\x1b[34m.----.\n\x1b[36mSpee N Name\n');
+    write('Node1/CallersLog', '01-Jan-26 someone\n');
+    write('Screens/lastc.txt', 'Super-AmiLog\nlAST cALLERS\n');
+    const index = buildScreenIndex(root);
+    expect(index.files[path.join('Screens', 'Callers.txt')].generated).toBeUndefined();
+    expect(index.files[path.join('Screens', 'callers!.txt')].generated).toBeUndefined();
+    // The log carries no screen extension, so it is not a screen at all.
+    expect(index.files[path.join('Node1', 'CallersLog')]).toBeUndefined();
+    expect(index.files[path.join('Screens', 'lastc.txt')].generated).toBe('runtime');
+  });
+
   test('a node pointed at a shared directory reports it as shared', () => {
     write('Node9/.keep', '');
     write('Screens/Shared/BBSTITLE.txt', 'shared title\n');
