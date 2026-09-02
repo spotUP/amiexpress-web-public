@@ -24,6 +24,8 @@ import {
 import { countMciCodes } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
+import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
+import { BBSPaths } from '../utils/bbs-paths.util';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
@@ -491,9 +493,36 @@ export function listBbsCommands(baseDir: string): BbsCommandChoice[] {
   return choices.sort((a, b) => a.command.localeCompare(b.command));
 }
 
+/**
+ * Whether pressing that key does anything.
+ *
+ * An icon is not enough. `Commands/BBSCmd/<name>.info` can survive a door that
+ * has been uninstalled, and the loader then SKIPS the registration - so the
+ * screen still advertises the key, the caller still presses it, and nothing
+ * happens. Reported from the live board 2026-09-02: "we have an mci command
+ * that doesnt find its door as its not installed but its not listed as a
+ * health issue".
+ *
+ * The liveness rule is the board's own - commandLocationIsLive - and not a
+ * second one written here. It has to be, because the obvious rule is wrong:
+ * nothing named `Doors/bbslink/bbslink` has ever existed on this board and 24
+ * live commands point at it, so a missing FILE inside a door directory is
+ * normal and only a missing DIRECTORY means the door is gone.
+ */
 function commandExists(baseDir: string, command: string): boolean {
   const dir = path.join(baseDir, 'Commands', 'BBSCmd');
-  return !!amigafs.findCaseInsensitive(dir, `${command}.info`);
+  const icon = amigafs.findCaseInsensitive(dir, `${command}.info`);
+  if (!icon) return false;
+
+  try {
+    const definition = loadCommandFromInfo(icon);
+    // An icon with no tooltypes at all reads as null; the board keeps such a
+    // registration, so this does too rather than calling art dead.
+    if (!definition) return true;
+    return commandLocationIsLive(baseDir, definition);
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -501,10 +530,22 @@ function commandExists(baseDir: string, command: string): boolean {
  *
  * `BBS:screens/x.txt` and `screens/x.txt` mean the same file, and the volume is
  * case-insensitive, so the answer is whatever findCaseInsensitive turns up.
+ *
+ * Through BBSPaths, because a screen names its target in Amiga assigns and
+ * `BBS:` is not the only one this board uses - `WORK:bbs/Screens/logoff/logoff`
+ * appears in 42 of them. Stripping `BBS:` by hand answered for one assign and
+ * treated the rest as literal directory names, which is a different verdict
+ * from the one the loader reaches at runtime. Same resolver, same answer.
  */
+function boardPath(baseDir: string, target: string): string {
+  const resolved = new BBSPaths(baseDir).resolveAmigaPath(target);
+  return path.isAbsolute(resolved)
+    ? resolved
+    : path.join(baseDir, resolved.replace(/\//g, path.sep));
+}
+
 function resolveScreenReference(baseDir: string, target: string): string | null {
-  const rel = target.replace(/^BBS:/i, '').replace(/\//g, path.sep);
-  const full = path.join(baseDir, rel);
+  const full = boardPath(baseDir, target);
   return amigafs.findCaseInsensitive(path.dirname(full), path.basename(full));
 }
 
@@ -517,8 +558,7 @@ function resolveScreenReference(baseDir: string, target: string): string | null 
  * from at random, and art somebody drew.
  */
 function numberedPool(baseDir: string, target: string): string[] {
-  const rel = target.replace(/^BBS:/i, '').replace(/\//g, path.sep);
-  const full = path.join(baseDir, rel);
+  const full = boardPath(baseDir, target);
   const dir = path.dirname(full);
   const basename = path.basename(full);
   const stem = basename.replace(/\.[^.]*$/, '');
@@ -537,6 +577,37 @@ function screenRefExists(baseDir: string, target: string): boolean {
 }
 
 /**
+ * Whether each reference still points at something, and what the board calls
+ * it.
+ *
+ * Deliberately NOT cached with the rest of a file's facts. These two answers
+ * are the only ones that come from OTHER files: install the missing door and
+ * the screen's own bytes have not changed, so a cached `resolves: false` would
+ * outlive the problem and the health page would go on reporting a door that is
+ * now sitting there.
+ */
+function resolveRefs(baseDir: string, refs: MciReference[]): MciReference[] {
+  return refs.map(ref => ({
+    ...ref,
+    resolves: ref.code === 'CL'
+      ? true
+      : ref.code === 'CC'
+        ? commandExists(baseDir, ref.target)
+        // `~SR_` names a BASE, not a file: the board picks at random from
+        // `001.logoff.txt`..`999.logoff.txt` beside it, and nothing called
+        // plain `logoff` ever exists. Asking whether the base itself is on
+        // disk called 12 live references dead.
+        : ref.code === 'SR'
+          ? numberedPool(baseDir, ref.target).length > 0
+            || screenRefExists(baseDir, ref.target)
+          : screenRefExists(baseDir, ref.target),
+    // "~CC_gwall" is a command name; "Global Wall" is what the sysop calls
+    // it. The icon knows, so the manager can say it.
+    targetName: ref.code === 'CC' ? commandName(baseDir, ref.target) : undefined,
+  }));
+}
+
+/**
  * The facts for a file, remembered until the file changes.
  *
  * Every fact here comes from the BYTES - the sha256, the MCI references, the
@@ -544,6 +615,9 @@ function screenRefExists(baseDir: string, target: string): boolean {
  * file. Keyed on size and mtime: an edit through the manager changes both, and
  * a build that re-reads 1,145 unchanged files to say the same thing again is
  * what a sysop experiences as "why does it take so long".
+ *
+ * The one thing it does NOT hold settled is whether each MCI reference
+ * resolves - see resolveRefs.
  */
 const factsCache = new Map<string, { mtimeMs: number; size: number; facts: ScreenFileFacts }>();
 
@@ -553,8 +627,13 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     const cached = factsCache.get(absPath);
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
       // A copy: callers fill in readBy, which belongs to a build and not to
-      // the file.
-      return { ...cached.facts, readBy: [] };
+      // the file, and the references are re-resolved because what they point
+      // at can appear or vanish without this file being touched.
+      return {
+        ...cached.facts,
+        readBy: [],
+        mci: resolveRefs(baseDir, cached.facts.mci),
+      };
     }
   } catch { /* a file that will not stat is read below and fails there */ }
 
@@ -566,17 +645,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
   // noise that looks like references.
   const mci = format === 'rip' || format === 'petscii'
     ? []
-    : parseMciReferences(buf.toString('latin1')).map(ref => ({
-        ...ref,
-        resolves: ref.code === 'CL'
-          ? true
-          : ref.code === 'CC'
-            ? commandExists(baseDir, ref.target)
-            : screenRefExists(baseDir, ref.target),
-        // "~CC_gwall" is a command name; "Global Wall" is what the sysop calls
-        // it. The icon knows, so the manager can say it.
-        targetName: ref.code === 'CC' ? commandName(baseDir, ref.target) : undefined,
-      }));
+    : resolveRefs(baseDir, parseMciReferences(buf.toString('latin1')));
 
   const facts: ScreenFileFacts = {
     // Readers are filled in by buildScreenIndex, which is the only place that
