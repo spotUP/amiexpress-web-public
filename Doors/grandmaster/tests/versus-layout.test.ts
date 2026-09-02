@@ -16,7 +16,7 @@ import {
   LEFT_PANEL_COLS, OPPONENT_BOARD_COLS, OPPONENT_BOARD_ROWS, VS_INFO_COLS,
 } from '../ui/versus-layout';
 
-export async function eightyColumnsBehavesExactlyAsItDoesToday(): Promise<void> {
+export async function eightyColumnsShowsABoardAndTheStandings(): Promise<void> {
   // One opponent: full board plus the VS panel. That is 22 + 21 = 43, and
   // 80 - 37 = 43 exactly, which is why the old layout could be written in
   // literals that happened to fit.
@@ -24,10 +24,27 @@ export async function eightyColumnsBehavesExactlyAsItDoesToday(): Promise<void> 
   assert.strictEqual(oneVsOne.fullBoards, 1);
   assert.strictEqual(oneVsOne.showInfo, true);
 
-  // More than one: the minimap grid, as before.
-  for (const count of [2, 3, 4, 5, 8]) {
+  // A small field still goes all-or-nothing to the miniature grid: two to
+  // five opponents are few enough to read as tiles, and a board plus four
+  // tiles would read as "this one is the threat" when it is not.
+  for (const count of [2, 3, 4, 5]) {
     assert.strictEqual(versusLayout(80, count, 0).fullBoards, 0,
-      `${count} opponents do not fit in 80 columns and must stay miniatures`);
+      `${count} opponents are a small field and stay miniatures`);
+  }
+
+  // A real battle royale does NOT. "when gmaster is in 80x25 mode i only see
+  // myself but there is room for 1 fullsize board and the list" (2026-09-02)
+  // - and there is: 37 + 22 + 21 is exactly 80, the same arithmetic the 1v1
+  // VS panel has always used.
+  for (const count of [6, 8, 20, 98]) {
+    const l = versusLayout(80, 1, count - 1, 25);
+    assert.strictEqual(l.fullBoards, 1, `${count} opponents: one of them is a board`);
+    assert.strictEqual(l.minimaps, 0, 'and none of them are miniatures');
+    assert.strictEqual(l.listed, count - 1, 'the rest are the standings');
+    assert.strictEqual(l.listLeft, LEFT_PANEL_COLS + OPPONENT_BOARD_COLS,
+      'which sit beside the board');
+    assert.strictEqual(l.listWidth, VS_INFO_COLS,
+      'in the columns the VS panel would have had');
   }
 }
 
@@ -36,23 +53,27 @@ export async function aWideTerminalShowsEveryOpponentInFull(): Promise<void> {
   assert.strictEqual(versusLayout(160, 5).fullBoards, 5);
 }
 
-export async function humansGetTheBoardsAndBotsTakeTheMiniatures(): Promise<void> {
+export async function humansGetTheBoardsWhileTheFieldIsSmall(): Promise<void> {
   // "the normal case is probably that we have enough room for all human
-  // players." A match with two people and six bots should not force the
-  // people into miniatures because the bots do not fit.
+  // players." That still holds - but only while the field is small enough
+  // for the rest to be miniatures. Two people and six bots is eight
+  // opponents, which is a battle royale, and a battle royale cascades:
+  // boards and a standings list, not a wall of tiles.
   const wide = versusLayout(120, 2, 6);
-  assert.strictEqual(wide.fullBoards, 2, 'both humans get boards');
-  assert.strictEqual(wide.minimaps, 6, 'the bots go to the grid');
+  assert.strictEqual(wide.minimaps, 0, 'no miniatures in a field this size');
+  assert.ok(wide.fullBoards >= 2, 'the boards that fit are drawn');
+  assert.strictEqual(wide.fullBoards + wide.listed, 8, 'and everyone is accounted for');
 
   // If everyone fits, everyone gets a board - bots included.
   const veryWide = versusLayout(220, 2, 6);
   assert.strictEqual(veryWide.fullBoards, 8);
   assert.strictEqual(veryWide.minimaps, 0);
 
-  // And when even the humans do not fit, nobody does.
-  const narrow = versusLayout(80, 2, 6, 25);
-  assert.strictEqual(narrow.fullBoards, 0);
-  assert.strictEqual(narrow.minimaps + narrow.listed, 8);
+  // A genuinely small field keeps the old all-or-nothing rule: five
+  // opponents at 80 columns are five tiles, not one board and four tiles.
+  const small = versusLayout(80, 2, 3);
+  assert.strictEqual(small.fullBoards, 0);
+  assert.strictEqual(small.minimaps, 5);
 }
 
 export async function anAllBotMatchStillBehavesAsItDidAtEighty(): Promise<void> {
@@ -170,15 +191,17 @@ export async function nothingRunsOffTheEdgeAtAnySize(): Promise<void> {
   }
 }
 
-export async function eightyColumnsIsStillOnePanel(): Promise<void> {
-  // 43 columns hold one board and nothing else, and 25 rows leave nothing
-  // under the player's own - so the caller on a board-sized terminal gets
-  // the single ranked panel they always had.
+export async function eightyColumnsPutsTheStandingsBesideOneBoard(): Promise<void> {
+  // 43 columns beside the player hold a board and a 21-column strip, and 25
+  // rows leave nothing underneath - so the standings go where the VS panel
+  // goes in a 1v1. This used to demand 22 columns for the list, one more
+  // than an 80-column terminal can spare, and gave up the board instead.
   const narrow = versusLayout(80, 0, 98, 25);
-  assert.strictEqual(narrow.fullBoards, 0);
-  assert.strictEqual(narrow.listLeft, LEFT_PANEL_COLS, 'beside the player, as always');
-  assert.strictEqual(narrow.listWidth, 80 - LEFT_PANEL_COLS);
-  assert.strictEqual(narrow.listed + narrow.minimaps, 98);
+  assert.strictEqual(narrow.fullBoards, 1, 'one opponent is a real playfield');
+  assert.strictEqual(narrow.listLeft, LEFT_PANEL_COLS + OPPONENT_BOARD_COLS,
+    'and the standings sit beside it');
+  assert.strictEqual(narrow.listWidth, 80 - LEFT_PANEL_COLS - OPPONENT_BOARD_COLS);
+  assert.strictEqual(narrow.listed + narrow.minimaps + narrow.fullBoards, 98);
 }
 
 export async function aSmallFieldIsNeverCascaded(): Promise<void> {
@@ -201,13 +224,15 @@ export async function anEnormousWindowIsAllPlayfields(): Promise<void> {
   assert.strictEqual(enormous.minimaps, 0);
 }
 
-export async function theHumansAreStillFirstInLine(): Promise<void> {
-  // Two people and 96 CPUs: the people fit as boards, so they get them and
-  // the cascade never runs.
+export async function aHugeFieldCascadesRatherThanTiling(): Promise<void> {
+  // Two people and 96 CPUs. The humans-first rule used to fire here - two
+  // boards and NINETY-SIX miniatures - because one human always "fits".
+  // A field this size is what the cascade exists for.
   const l = versusLayout(160, 2, 96);
-  assert.strictEqual(l.fullBoards, 2);
-  assert.strictEqual(l.minimaps, 96);
-  assert.strictEqual(l.listed, 0);
+  assert.strictEqual(l.minimaps, 0, 'nothing is a miniature at this size');
+  assert.ok(l.fullBoards >= 2, 'the widest terminal draws the boards it can');
+  assert.strictEqual(l.fullBoards + l.listed, 98, 'and the rest are ranked');
+  assert.ok(l.listWidth >= 20, 'the standings get a readable column');
 }
 
 /**

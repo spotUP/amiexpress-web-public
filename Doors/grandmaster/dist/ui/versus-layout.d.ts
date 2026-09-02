@@ -42,7 +42,16 @@ export declare const BUCKET_SLOT_COLS = 4;
 /** Bars are not worth a section below three of them, borders included. */
 export declare const MIN_BUCKETS_COLS: number;
 /** One leaderboard column: rank, name, level, height, plus borders. */
-export declare const LIST_COLUMN_COLS = 20;
+export declare const LIST_COLUMN_COLS = 19;
+/**
+ * The narrowest standings strip, which is the same 21 columns the 1v1 VS
+ * panel gets - and for the same reason: 37 + 22 + 21 is exactly 80.
+ *
+ * It was 22, one column more than an 80-column terminal can spare beside a
+ * board, so at 80x25 the cascade gave up the board and drew a list on its
+ * own: "when gmaster is in 80x25 mode i only see myself but there is room
+ * for 1 fullsize board and the list" (2026-09-02).
+ */
 export declare const MIN_LIST_COLS: number;
 /** Bars stop being readable past this many, however wide the panel is. */
 export declare const MAX_BUCKETS = 10;

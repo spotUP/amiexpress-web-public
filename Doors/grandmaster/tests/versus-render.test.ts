@@ -314,17 +314,18 @@ export async function nobodyIsInTwoPlacesAtOnce(): Promise<void> {
   } finally { h.destroy(); }
 }
 
-export async function eightyColumnsKeepsOnePanelBesideThePlayer(): Promise<void> {
-  // 43 columns hold one board and nothing else, and 25 rows leave nothing
-  // under the player's own - so the standings take the whole right side,
-  // exactly where the grid panel always was.
+export async function eightyColumnsDrawsABoardAndTheStandings(): Promise<void> {
+  // 43 columns beside the player hold one board and a 21-column strip - the
+  // same arithmetic the 1v1 VS panel uses. The screen used to draw the
+  // standings across the whole right side with no board at all: "when
+  // gmaster is in 80x25 mode i only see myself" (2026-09-02).
   const field = bigField();
   const h = harness(80, field);
   try {
-    assert.strictEqual(h.boards().length, 0);
+    assert.strictEqual(h.boards().length, 1, 'one opponent is a real playfield');
     assert.strictEqual(h.list.hidden, false);
-    assert.strictEqual(h.list.left, LEFT_PANEL_COLS);
-    assert.strictEqual(h.list.width, 80 - LEFT_PANEL_COLS);
+    assert.strictEqual(h.list.left, LEFT_PANEL_COLS + 22, 'the standings sit beside the board');
+    assert.strictEqual(h.list.width, 80 - LEFT_PANEL_COLS - 22);
     assert.strictEqual(h.minimap.hidden, true);
   } finally { h.destroy(); }
 }

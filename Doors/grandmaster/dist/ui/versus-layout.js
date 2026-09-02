@@ -49,7 +49,16 @@ exports.BUCKET_SLOT_COLS = 4;
 /** Bars are not worth a section below three of them, borders included. */
 exports.MIN_BUCKETS_COLS = 3 * exports.BUCKET_SLOT_COLS + 2;
 /** One leaderboard column: rank, name, level, height, plus borders. */
-exports.LIST_COLUMN_COLS = 20;
+exports.LIST_COLUMN_COLS = 19;
+/**
+ * The narrowest standings strip, which is the same 21 columns the 1v1 VS
+ * panel gets - and for the same reason: 37 + 22 + 21 is exactly 80.
+ *
+ * It was 22, one column more than an 80-column terminal can spare beside a
+ * board, so at 80x25 the cascade gave up the board and drew a list on its
+ * own: "when gmaster is in 80x25 mode i only see myself but there is room
+ * for 1 fullsize board and the list" (2026-09-02).
+ */
 exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS + 2;
 /** Bars stop being readable past this many, however wide the panel is. */
 exports.MAX_BUCKETS = 10;
@@ -112,7 +121,14 @@ function versusLayout(screenWidth, humanCount, botCount = 0, screenHeight = 25) 
     if (fits(total)) {
         return grid(total, total === 1 && available >= exports.OPPONENT_BOARD_COLS + exports.VS_INFO_COLS);
     }
-    if (humanCount > 0 && fits(humanCount)) {
+    // Humans before bots, but only while the field is small enough for the
+    // rest to be miniatures. With one human and a lobby of bots this branch
+    // used to fire every time -  is true on any terminal - so a
+    // battle royale showed one board and a wall of minimaps, and a WIDER
+    // terminal changed nothing at all. Past the cascade's threshold the
+    // cascade decides, which is what puts boards and a standings list on
+    // screen instead ("the minimaps made no sense in gmaster battle royal").
+    if (humanCount > 0 && fits(humanCount) && total < exports.CASCADE_MIN_OPPONENTS) {
         return grid(humanCount, humanCount === 1 && total === 1
             && available >= exports.OPPONENT_BOARD_COLS + exports.VS_INFO_COLS);
     }
