@@ -175,6 +175,7 @@ export const initLobbyState = (): LobbyState => ({
   lastDailyReset: Date.now(),
   lastBulletinAt: 0,
   events: [],
+  chat: [],
 });
 
 export const initStatsBucket = (): StatBucket => ({

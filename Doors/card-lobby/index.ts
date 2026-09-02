@@ -17,6 +17,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { themeById, themeStyles, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { openThemeMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { ChatManager } from './managers/ChatManager';
 import { GamepadButton } from '@amiexpress/bbs-door-sdk/types/gamepad';
 import type {
   Screen,
@@ -372,6 +373,11 @@ export class CardLobbyApp {
       }
     });
 
+    this.screen.key(['t'], () => {
+      if (this.modalActive) return;
+      this.runAction(() => this.saySomething());
+    });
+
     this.screen.key(['r'], () => {
       if (this.modalActive) return;
       if (this.viewMode === 'table') {
@@ -495,6 +501,7 @@ export class CardLobbyApp {
       showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
       showCardStyleWindow: () => this.chooseCardStyle(),
       showThemeWindow: () => this.chooseTheme(),
+      saySomething: () => this.saySomething(),
       exitDoor: this.exitDoor.bind(this),
       runAction: this.runAction.bind(this),
     });
@@ -910,6 +917,7 @@ export class CardLobbyApp {
     }
     this.logWindow.log(message);
     this.updateActivityPanel();
+    this.chat.paint();
   }
 
   /**
@@ -927,6 +935,38 @@ export class CardLobbyApp {
    * builds AFTER the switch - a dialog, a repainted panel - is built in the
    * new colours rather than the old ones.
    */
+  /**
+   * The lobby's chat. The door is the host, the way it is for the UNO event
+   * bus: the state, the dialogs and the panels all live here already.
+   */
+  private chat = new ChatManager(this);
+
+  /** The table this player is sitting at, for tagging what they say. */
+  public get currentTableId(): number | null {
+    return this.currentProfile?.currentTableId ?? null;
+  }
+
+  public chatHasItsOwnPanel(): boolean {
+    return this.uiManager.chatHasItsOwnPanel();
+  }
+
+  public setChatLines(lines: string[]): void {
+    this.uiManager.setChatLines(lines);
+  }
+
+  public promptForLine(title: string, text: string): Promise<string | null> {
+    return this.dialogManager.showPromptDialog(title, text, '');
+  }
+
+  public render(): void {
+    this.screen.render();
+  }
+
+  /** T talks. The lobby had no way to say anything at all until now. */
+  private async saySomething(): Promise<void> {
+    await this.chat.saySomething();
+  }
+
   private async chooseTheme(): Promise<void> {
     await openThemeMenu({
       screen: this.screen,

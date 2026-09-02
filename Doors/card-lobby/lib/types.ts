@@ -1,3 +1,5 @@
+import type { ChatMessage } from './chat';
+
 /**
  * Card Lobby - Type Definitions
  * All interfaces and types for the card lobby system
@@ -170,6 +172,11 @@ export interface LobbyState {
   lastDailyReset: number;
   lastBulletinAt: number;
   events: LobbyEvent[];
+  /**
+   * What people have said, newest last. Shared like the rest of the state,
+   * so a message reaches the other nodes on their next refresh (lib/chat.ts).
+   */
+  chat?: ChatMessage[];
 }
 
 export interface GameStake {
