@@ -91,6 +91,18 @@ const SOURCE_COLS = 80;
 const ROWS = 25;
 /** Property name the adapter is parked under, on the session. */
 const MARK = '_c64DoorAdapter';
+/**
+ * The SAME adapter, parked on the socket as well whenever the holder is a
+ * session. A connection's `session` is a live getter onto the connection
+ * object, and a connection can be handed a NEW session mid-door (a re-login,
+ * a node reassignment, c64-detected-handler building a second emitter). If
+ * that happens the old session still carries the mark and the new one carries
+ * nothing, so a lookup from the socket would answer null - and the socket
+ * would keep a patched `emit` feeding a reconstructor with no owner for the
+ * rest of the connection. The back-reference is keyed to the object whose
+ * `emit` was actually patched, which never changes.
+ */
+const SOCKET_MARK = '_c64DoorAdapterOnSocket';
 
 export interface AdapterSession {
   petsciiMode?: boolean;
@@ -129,6 +141,16 @@ function holderOf(socket: any): any {
   return (socket && socket.session) || socket;
 }
 
+/**
+ * The adapter reachable from this socket by EITHER route - the current
+ * holder's mark, or the back-reference parked on the socket itself.
+ */
+function lookup(socket: any): C64DoorFrameAdapter | null {
+  if (!socket) return null;
+  const holder = holderOf(socket);
+  return (holder && holder[MARK]) || socket[SOCKET_MARK] || null;
+}
+
 export class C64DoorFrameAdapter {
   private readonly screen = new FrameReconstructor({ cols: SOURCE_COLS, rows: ROWS });
   private prev: Frame | null = null;
@@ -145,6 +167,8 @@ export class C64DoorFrameAdapter {
   hadOwnEmit = false;
   /** Did WE create socket._directEmit? Only then may uninstall remove it. */
   seededDirectEmit = false;
+  /** The object install() wrote MARK onto - which may no longer be socket.session. */
+  holder: any = null;
 
   constructor(
     private readonly downstream: (event: string, ...args: any[]) => any,
@@ -214,8 +238,7 @@ export class C64DoorFrameAdapter {
 
 /** The adapter driving this socket OR session, or null. */
 export function c64AdapterFor(socket: any): C64DoorFrameAdapter | null {
-  const holder = holderOf(socket);
-  return (holder && holder[MARK]) || null;
+  return lookup(socket);
 }
 
 export function installC64DoorAdapter(
@@ -224,8 +247,9 @@ export function installC64DoorAdapter(
   opts: C64AdapterOptions = {},
 ): C64DoorFrameAdapter | null {
   if (!socket) return null;
+  const existing = lookup(socket);
+  if (existing) return existing;
   const holder = holderOf(socket);
-  if (holder[MARK]) return holder[MARK];
   if (!c64AdapterDrives(session)) return null; // the 80-column non-negotiable
   const cols = Math.min(C64_COLUMNS, doorScreenWidth(session, C64_COLUMNS));
   // `emit` is an own property on a connection-emitter object literal and a
@@ -248,7 +272,9 @@ export function installC64DoorAdapter(
   adapter.original = hadOwnEmit ? socket.emit : null;
   adapter.hadOwnEmit = hadOwnEmit;
   adapter.seededDirectEmit = seededDirectEmit;
+  adapter.holder = holder;
   holder[MARK] = adapter;
+  if (holder !== socket) socket[SOCKET_MARK] = adapter;
   const patched = (event: string, ...args: any[]) => {
     // A disposed adapter that could not be unpatched (something layered above
     // us owns `emit` now) degrades to a pass-through rather than buffering
@@ -278,13 +304,22 @@ export interface C64UninstallOptions {
 }
 
 export function uninstallC64DoorAdapter(socket: any, opts: C64UninstallOptions = {}): void {
-  const holder = holderOf(socket);
-  const adapter: C64DoorFrameAdapter | undefined = holder && holder[MARK];
+  const adapter = lookup(socket);
   if (!adapter) return;
   if (opts.silent) adapter.disposeSilently();
   else adapter.dispose();
   restoreEmit(adapter);
-  delete holder[MARK];
+  // Clear BOTH routes, and clear the holder install() actually wrote to
+  // rather than whatever socket.session happens to be now: a session swapped
+  // in mid-door would otherwise leave the mark on the session that is gone.
+  if (adapter.holder) delete adapter.holder[MARK];
+  const holder = holderOf(socket);
+  if (holder) delete holder[MARK];
+  if (socket) delete socket[SOCKET_MARK];
+  // ...and on the object install() actually patched, which for a telnet/SSH
+  // session may be a DIFFERENT emitter from the one uninstall was called
+  // with (connection-emitter builds more than one for a connection).
+  if (adapter.target) delete adapter.target[SOCKET_MARK];
 }
 
 /**

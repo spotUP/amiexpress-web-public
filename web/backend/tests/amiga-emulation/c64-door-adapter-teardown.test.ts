@@ -91,6 +91,41 @@ describe('AmigaDoorSession.removeSocketHandlers uninstalls the C64 door adapter'
     expect(socket.listenerCount('disconnect')).toBe(0);
   });
 
+  // SILENT. This path is reached because the caller went away or the door was
+  // killed: a frame still pending belongs to a door that has already ended,
+  // and painting it drops a stale door screen on top of the menu the caller
+  // sees next - or writes to a socket nobody is reading.
+  it('emits NOTHING on the way out: the pending frame is dropped, not painted', () => {
+    const socket = makeSocket(c64());
+    const ctx = teardownContext(socket);
+
+    installC64DoorAdapter(socket, socket.session);
+    socket.emit('ansi-output', '\x1b[2J\x1b[HHALF A DOOR SCREEN');
+    socket.out.length = 0;                                // only what teardown emits
+
+    AmigaDoorSession.prototype['removeSocketHandlers'].call(ctx);
+
+    expect(socket.out.filter(([ev]: [string, any]) => ev === 'ansi-output')).toEqual([]);
+    expect(c64AdapterFor(socket)).toBeNull();
+  });
+
+  // The same live-getter hazard the adapter suite covers, at the teardown that
+  // actually runs on a disconnect.
+  it('still tears down when the connection was handed a new session mid-door', () => {
+    const socket = makeSocket(c64());
+    const originalEmit = socket.emit;
+    const ctx = teardownContext(socket);
+
+    installC64DoorAdapter(socket, socket.session);
+    socket.session = c64();                               // re-login / node reassignment
+
+    AmigaDoorSession.prototype['removeSocketHandlers'].call(ctx);
+
+    expect(c64AdapterFor(socket)).toBeNull();
+    expect(socket.emit).toBe(originalEmit);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('is a no-op for an 80-column session, which never had an adapter', () => {
     const socket = makeSocket({ petsciiMode: false, screenWidth: 80 });
     const originalEmit = socket.emit;

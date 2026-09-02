@@ -1276,7 +1276,13 @@ debugLog("[AmigaDoorSession] Refactored door session terminated");
     // can restore the socket's emit is here. Leaving it patched would send
     // the menu, the logoff screen and the next door through a reconstructor
     // that no longer has an owner.
-    uninstallC64DoorAdapter(this.socket);
+    //
+    // SILENT: this path is reached because the caller went away or the door
+    // was killed. A frame still pending belongs to a door that has already
+    // ended; painting it would drop a stale door screen on top of whatever
+    // the caller sees next (the menu, the logoff screen) - or emit onto a
+    // dead socket. Same argument as executeDoor's defensive uninstall.
+    uninstallC64DoorAdapter(this.socket, { silent: true });
   }
 
   /**

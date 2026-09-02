@@ -352,6 +352,67 @@ describe('C64DoorFrameAdapter', () => {
     uninstallC64DoorAdapter(f.socket);
   });
 
+  // A connection's `session` is a LIVE getter. Hand the connection a new
+  // session mid-door - a re-login, a node reassignment, a second emitter
+  // built for the same connection - and a lookup keyed only on
+  // socket.session answers null, leaving the socket's emit patched and
+  // feeding a reconstructor nobody owns for the rest of the connection.
+  it('a session reassigned mid-door is still found, uninstalled and unpatched', () => {
+    const f = fakeSocket(c64());
+    const originalEmit = f.socket.emit;
+    const installed = installC64DoorAdapter(f.socket, f.socket.session);
+    expect(installed).not.toBeNull();
+
+    // The connection is handed a DIFFERENT session object.
+    const staleSession = f.socket.session;
+    f.socket.session = c64();
+
+    expect(c64AdapterFor(f.socket)).toBe(installed);
+
+    uninstallC64DoorAdapter(f.socket);
+
+    expect(c64AdapterFor(f.socket)).toBeNull();
+    expect(f.socket.emit).toBe(originalEmit);
+    // Neither session object keeps a reference to a disposed adapter.
+    expect(staleSession._c64DoorAdapter).toBeUndefined();
+    expect(f.socket.session._c64DoorAdapter).toBeUndefined();
+  });
+
+  it('a session reassigned mid-door does not get a SECOND adapter installed', () => {
+    const f = fakeSocket(c64());
+    const first = installC64DoorAdapter(f.socket, f.socket.session);
+    f.socket.session = c64();
+    const second = installC64DoorAdapter(f.socket, f.socket.session);
+    expect(second).toBe(first);
+    uninstallC64DoorAdapter(f.socket);
+    expect(c64AdapterFor(f.socket)).toBeNull();
+  });
+
+  it('a web socket with no session is unchanged: one mark, cleaned up', () => {
+    const f = fakeSocket(undefined);
+    const originalEmit = f.socket.emit;
+    delete f.socket.session;
+    installC64DoorAdapter(f.socket, c64());
+    expect(c64AdapterFor(f.socket)).not.toBeNull();
+    uninstallC64DoorAdapter(f.socket);
+    expect(c64AdapterFor(f.socket)).toBeNull();
+    expect(f.socket.emit).toBe(originalEmit);
+  });
+
+  it('silent uninstall emits nothing, ordinary uninstall paints the pending frame', () => {
+    const quiet = fakeSocket(c64());
+    installC64DoorAdapter(quiet.socket, quiet.socket.session);
+    quiet.socket.emit('ansi-output', '\x1b[2J\x1b[HPENDING');
+    uninstallC64DoorAdapter(quiet.socket, { silent: true });
+    expect(quiet.ansi()).toBe('');
+
+    const loud = fakeSocket(c64());
+    installC64DoorAdapter(loud.socket, loud.socket.session);
+    loud.socket.emit('ansi-output', '\x1b[2J\x1b[HPENDING');
+    uninstallC64DoorAdapter(loud.socket);
+    expect(painted(loud.ansi())).toContain('PENDING');
+  });
+
   it('reduces an 80-column door row to 40 columns before it reaches the caller', () => {
     const f = fakeSocket(c64());
     installC64DoorAdapter(f.socket, f.socket.session);
