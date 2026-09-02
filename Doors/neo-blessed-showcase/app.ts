@@ -1365,6 +1365,7 @@ export async function createApp(session: DoorSession) {
       parent: demoBox, bottom: 0, left: 0, right: 0, height: 1,
       tags: true,
       content: '{yellow-fg}Donut Chart:{/} halfblock mode, arcWidth 4. Browser market share.',
+      border: undefined,   // one row: a frame would leave it no interior
     });
 
     screen.render();
@@ -1689,6 +1690,7 @@ export async function createApp(session: DoorSession) {
       parent: demoBox, bottom: 0, left: 0, width: '100%', height: 1,
       tags: true,
       content: '{yellow-fg}Test:{/} Grid divides space into quadrants.',
+      border: undefined,   // one row: a frame would leave it no interior
     });
 
     screen.render();
@@ -1856,6 +1858,7 @@ End of sample markdown.`;
         top: y, left: 0, width: '100%', height: 1,
         style: { bg: colors[y % colors.length] },
         content: ' '.repeat(60),
+        border: undefined,   // one row: a frame would leave it no interior
       });
     }
 
@@ -1959,6 +1962,7 @@ End of sample markdown.`;
         top: y, left: 0, width: '100%', height: 1,
         style: { bg: colors[y % colors.length] },
         content: ' '.repeat(70),
+        border: undefined,   // one row: a frame would leave it no interior
       });
     }
 
@@ -2359,6 +2363,7 @@ End of sample markdown.`;
     blessed.box({
       parent: demoBox, top: 0, left: 0, right: 0, height: 1, tags: true,
       content: '{cyan-fg}Username completion{/} — type {bold}@{/} then letters (e.g. @sp, @ad)',
+      border: undefined,   // one row: a frame would leave it no interior
     });
     const usernameInput = new AutocompleteTextbox({
       parent: demoBox,
@@ -2387,6 +2392,7 @@ End of sample markdown.`;
     blessed.box({
       parent: demoBox, top: 5, left: 0, right: 0, height: 1, tags: true,
       content: '{yellow-fg}BBSCode completion{/} — type {bold}[{/} then letters (e.g. [bo, [co)',
+      border: undefined,   // one row: a frame would leave it no interior
     });
     const bbsInput = new AutocompleteTextbox({
       parent: demoBox,
@@ -2409,6 +2415,7 @@ End of sample markdown.`;
     blessed.box({
       parent: demoBox, top: 10, left: 0, right: 0, height: 1, tags: true,
       content: '{green-fg}Word completion{/} — type 3+ letters from the word list below',
+      border: undefined,   // one row: a frame would leave it no interior
     });
     const WORDS = ['amiga', 'assembly', 'awesome', 'blessed', 'bulletin',
                    'commodore', 'cursor', 'debug', 'demo', 'door',
