@@ -124,31 +124,6 @@ export function c64AdapterDrives(session: AdapterSession | null | undefined): bo
  * would have run such a door UNADAPTED after the gate had let it in.
  */
 
-/**
- * The per-DOOR half of the decision: has this door been adapted and verified
- * for a 40-column caller?
- *
- * The tooltype is C64_ADAPT, read from the registration exactly where
- * MIN_COLUMNS is read (door-min-columns.util.ts) so the two can never disagree
- * about which registration object carries the truth. PRESENCE is what counts
- * today - the value is reserved for Task 5, which extends this into the full
- * per-door clause (region pins, opt-out for doors that paint their own 40
- * columns). Absent means unadapted, and an unadapted door runs exactly as it
- * runs now: 80-column bytes straight through, no reconstructor.
- */
-export interface C64AdaptDoorShape {
-  toolTypes?: Record<string, string>;
-  doorInfo?: { toolTypes?: Record<string, string> };
-}
-
-export function doorRequestsC64Adapt(door: C64AdaptDoorShape | null | undefined): boolean {
-  if (!door) return false;
-  return (
-    door.toolTypes?.['C64_ADAPT'] !== undefined ||
-    door.doorInfo?.toolTypes?.['C64_ADAPT'] !== undefined
-  );
-}
-
 /** Where the adapter is stored: the session when the socket has one, else the socket. */
 function holderOf(socket: any): any {
   return (socket && socket.session) || socket;
