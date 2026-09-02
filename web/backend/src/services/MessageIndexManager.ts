@@ -256,13 +256,25 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
       return [];
     }
 
-    const buffer = fs.readFileSync(headerPath);
+    return this.parseHeaderFile(fs.readFileSync(headerPath));
+  }
+
+  /**
+   * The headers in a HeaderFile's bytes, wherever those bytes came from.
+   *
+   * Split out from `readHeaderFile` so the IMPORTER can read ANOTHER board's
+   * message base: this class resolves its paths against the board it is
+   * running, and an import is by definition reading a different one. The
+   * alternative was a second copy of the 110-byte record layout, and this
+   * importer already carried second copies of the .info and user formats,
+   * both of which were wrong.
+   */
+  parseHeaderFile(buffer: Buffer): MsgHeader[] {
     const messageCount = Math.floor(buffer.length / this.MSGHEADER_SIZE);
     const headers: MsgHeader[] = [];
 
     for (let i = 0; i < messageCount; i++) {
-      const offset = i * this.MSGHEADER_SIZE;
-      headers.push(this.deserializeMsgHeader(buffer, offset));
+      headers.push(this.deserializeMsgHeader(buffer, i * this.MSGHEADER_SIZE));
     }
 
     return headers;

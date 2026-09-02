@@ -14,6 +14,9 @@ import { InfoFileParser } from './info-file-parser';
 // files through it rather than keeping a second field layout.
 import { userFileManager } from './UserFileManager';
 import { readTooltypeMap } from '../utils/info-file.util';
+// The AmiExpress on-disk header layout, which is NOT MessageIndexManager's -
+// see amiga-msgheader.ts for the two alignment pads and why they matter here.
+import { parseAmigaHeaderFile } from './amiga-msgheader';
 import { UserFileManager } from './UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import type {
@@ -23,6 +26,7 @@ import type {
   ConferenceDatabase,
   AmigaFileArea,
   AmigaMessageBase,
+  AmigaMessage,
   AmigaCommand,
   AmigaAccessLevel,
   AmigaBBSConfig,
@@ -554,7 +558,7 @@ console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
         // used the phrase.
         name: declared?.get(`NAME.${n}`)?.trim() || `Message base ${n}`,
         path: basePath,
-        messages: [],
+        messages: await this.readMessages(basePath),
       });
     }
 
@@ -569,6 +573,62 @@ console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
     }
 
     return bases;
+  }
+
+  /**
+   * The messages in one message base.
+   *
+   * `HeaderFile` is an array of 110-byte records holding from, to, subject,
+   * date and the message number; the body of message N is the file `N` beside
+   * it.
+   *
+   * Parsed by `amiga-msgheader.ts`, NOT by MessageIndexManager: the port's
+   * own records put their two alignment pads at the END of the struct, and a
+   * real Amiga board puts them after `status` and after `subject`. Reading a
+   * real board with the port's layout gives message number 0 for every
+   * message and names overlapped by the previous record.
+   *
+   * This used to return nothing at all, under a comment saying the format
+   * `requires reverse engineering` - written before the project had read it.
+   * An import brought conferences and no conversations.
+   */
+  private async readMessages(basePath: string): Promise<AmigaMessage[]> {
+    const headerPath = path.join(basePath, 'HeaderFile');
+
+    let headerBuffer: Buffer;
+    try {
+      headerBuffer = await fs.readFile(headerPath);
+    } catch {
+      // A base with no HeaderFile has no messages; an empty base is normal.
+      return [];
+    }
+
+    const messages: AmigaMessage[] = [];
+
+    for (const header of parseAmigaHeaderFile(headerBuffer)) {
+      // A body that is gone is not a reason to lose the header: the message
+      // still existed, and importing it with an empty body keeps the thread
+      // readable.
+      let body = '';
+      try {
+        body = await fs.readFile(path.join(basePath, String(header.msgNumb)), 'latin1');
+      } catch {
+        body = '';
+      }
+
+      messages.push({
+        number: header.msgNumb,
+        from: header.fromName,
+        to: header.toName,
+        subject: header.subject,
+        // msgDate is a Unix timestamp in the record (axobjects.e).
+        date: new Date(header.msgDate * 1000),
+        body: body.endsWith('\n') ? body.slice(0, -1) : body,
+        flags: header.status,
+      });
+    }
+
+    return messages;
   }
 
   /** The `<conf>/MsgBases` icon's tooltypes, or undefined when there is none. */
