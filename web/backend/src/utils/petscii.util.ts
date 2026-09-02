@@ -29,6 +29,7 @@
 import * as fs from 'fs';
 import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground, C64_PALETTE_COLODORE } from './c64-palette';
 import { SCREENCODE_TO_UNICODE } from './petscii-unicode-map';
+import { petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
 
 /**
  * PETSCII Control Codes - Complete Reference
@@ -785,88 +786,18 @@ export function convertAsciiToPetsciiOutput(text: string, opts?: { charsetPrelud
 }
 
 /**
- * Convert PETSCII input bytes to ASCII string
+ * Convert PETSCII input bytes to ASCII/ANSI string.
  *
- * When a real C64 terminal (like SyncTERM in C64 mode) sends input,
- * the characters are in PETSCII encoding, not ASCII. This function
- * converts those PETSCII bytes to standard ASCII for processing.
- *
- * PETSCII character mapping for user input:
- * - 0x0D = RETURN (carriage return) -> '\r'
- * - 0x14 = DELETE (backspace) -> '\x7f'
- * - 0x20-0x3F = Same as ASCII (space, numbers, punctuation)
- * - 0x41-0x5A = Uppercase A-Z (same as ASCII)
- * - 0xC1-0xDA = Lowercase a-z in PETSCII (convert to ASCII 0x61-0x7A)
- * - Control codes are stripped
+ * When a real C64 terminal (like SyncTERM in C64 mode) sends input, the
+ * characters are in PETSCII encoding, not ASCII. This thin wrapper hands
+ * off to the SDK's petsciiInputToAscii (sdk/petscii/petscii-input.ts),
+ * which is the ONE table shared with the web canvas's keyboard path
+ * (packages/terminal, BBSTerminal.tsx) - see that module's header for the
+ * full byte mapping and the case-convention rationale.
  *
  * @param data - Buffer containing raw PETSCII bytes from terminal
- * @returns ASCII string suitable for processing as user input
+ * @returns ASCII/ANSI string suitable for processing as user input
  */
 export function convertPetsciiInputToAscii(data: Buffer): string {
-  let result = '';
-
-  for (let i = 0; i < data.length; i++) {
-    const byte = data[i];
-
-    // Carriage return (0x0D) or shifted return (0x8D)
-    if (byte === 0x0D || byte === 0x8D) {
-      result += '\r';
-      continue;
-    }
-
-    // Line feed (sometimes sent with CR) - skip in PETSCII mode
-    // C64 doesn't typically send LF, but telnet layer might add it
-    if (byte === 0x0A) {
-      // Skip LF - C64 uses CR only for line endings
-      continue;
-    }
-
-    // DELETE/backspace (PETSCII delete is 0x14)
-    if (byte === 0x14 || byte === 0x7F) {
-      result += '\x7f';
-      continue;
-    }
-
-    // Space, numbers, and punctuation (0x20-0x3F) - same as ASCII
-    if (byte >= 0x20 && byte <= 0x3F) {
-      result += String.fromCharCode(byte);
-      continue;
-    }
-
-    // Uppercase letters A-Z (0x41-0x5A) - same as ASCII
-    if (byte >= 0x41 && byte <= 0x5A) {
-      result += String.fromCharCode(byte);
-      continue;
-    }
-
-    // Additional punctuation/symbols that are same as ASCII
-    if (byte === 0x40) { // @
-      result += '@';
-      continue;
-    }
-    if (byte >= 0x5B && byte <= 0x5F) { // [ \ ] ^ _
-      result += String.fromCharCode(byte);
-      continue;
-    }
-
-    // PETSCII lowercase letters (0xC1-0xDA) -> ASCII lowercase (0x61-0x7A)
-    // In PETSCII, lowercase 'a' is 0xC1, not 0x61 like ASCII
-    if (byte >= 0xC1 && byte <= 0xDA) {
-      result += String.fromCharCode(byte - 0xC1 + 0x61); // Convert to ASCII lowercase
-      continue;
-    }
-
-    // PETSCII also uses 0x61-0x7A for graphics in unshifted mode,
-    // but in shifted/text mode they can be lowercase letters
-    // SyncTERM typically sends 0xC1-0xDA for lowercase
-    if (byte >= 0x61 && byte <= 0x7A) {
-      result += String.fromCharCode(byte); // Pass through as lowercase
-      continue;
-    }
-
-    // Skip other bytes (control codes, graphics, etc.)
-    // These are typically not relevant for text input
-  }
-
-  return result;
+  return petsciiInputToAscii(data);
 }

@@ -14,10 +14,9 @@ import { classifyKey } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
+import { PetsciiMachine, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
 import { petsciiOverlayReducer, initialPetsciiOverlayState } from '../petscii/overlay-state';
-import { petsciiKeyBytesToCommand } from '../petscii/key-bytes-to-command';
 import { resolveTerminalFontFamily } from '../petscii/font-gate';
 
 // PETSCII raw-byte transport (Task 9). `MAX_SOFT_CAP_BPS` mirrors
@@ -26,10 +25,11 @@ import { resolveTerminalFontFamily } from '../petscii/font-gate';
 // instead of the whole 40x25 frame landing in one tick.
 const PETSCII_MAX_SOFT_CAP_BPS = 230400;
 
-// petsciiKeyBytesToCommand moved to petscii/key-bytes-to-command.ts (final
-// review wave, Finding 4) so it's directly unit-testable without pulling in
-// this file's React/xterm/socket.io-client dependencies - see that file's
-// doc comment.
+// petsciiKeyBytesToCommand (packages/terminal/src/petscii/key-bytes-to-command.ts)
+// was folded into the SDK's shared petsciiInputToAscii (sdk/petscii/
+// petscii-input.ts, task 6 of the full-canvas PETSCII plan) so the web
+// canvas and real C64 telnet callers go through one table, including
+// cursor and function keys the old canvas-only helper dropped.
 
 // RIP Graphics.
 //
@@ -3586,7 +3586,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               // term.onData while this overlay is up; this handler never
               // fires for it because the overlay does not take focus.
               flushPetsciiQueue();
-              const command = petsciiKeyBytesToCommand(bytes);
+              const command = petsciiInputToAscii(bytes);
               if (command) socketRef.current?.emit('command', command);
             }}
           />

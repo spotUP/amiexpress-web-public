@@ -480,18 +480,29 @@ describe('petscii.util', () => {
   });
 
   describe('convertPetsciiInputToAscii', () => {
-    it('should convert PETSCII uppercase to ASCII uppercase', () => {
-      const buffer = Buffer.from([0x41, 0x42, 0x43]); // ABC
-      const result = convertPetsciiInputToAscii(buffer);
-
-      expect(result).toBe('ABC');
-    });
-
-    it('should convert PETSCII lowercase to ASCII lowercase', () => {
-      const buffer = Buffer.from([0xC1, 0xC2, 0xC3]); // abc in PETSCII
+    // Case convention flip (2026-09-02 full-canvas PETSCII plan, task 6,
+    // conflict #3): this wrapper now delegates to the SDK's
+    // petsciiInputToAscii, which unifies on the web keymap's convention
+    // (SyncTERM C64-mode) instead of the old telnet-only mapping. On a real
+    // C64 the UNSHIFTED key sends $41-$5A and displays uppercase in bank 0,
+    // but the BBS runs the text bank where $41-$5A IS lowercase - so
+    // unshifted now maps to lowercase ASCII and shifted ($C1-$DA) to
+    // uppercase, the INVERSE of what this suite asserted before. Login is
+    // unaffected: getUserByUsername matches on LOWER(username) and
+    // AuthenticationUseCase tries the lowercased password before the
+    // original case, so a real C64 typing either case still logs in.
+    it('should convert PETSCII unshifted letters to ASCII lowercase', () => {
+      const buffer = Buffer.from([0x41, 0x42, 0x43]); // abc, unshifted
       const result = convertPetsciiInputToAscii(buffer);
 
       expect(result).toBe('abc');
+    });
+
+    it('should convert PETSCII shifted letters to ASCII uppercase', () => {
+      const buffer = Buffer.from([0xC1, 0xC2, 0xC3]); // ABC, shifted
+      const result = convertPetsciiInputToAscii(buffer);
+
+      expect(result).toBe('ABC');
     });
 
     it('should handle numbers and punctuation', () => {
@@ -523,10 +534,10 @@ describe('petscii.util', () => {
     });
 
     it('should skip line feed (LF)', () => {
-      const buffer = Buffer.from([0x41, 0x0A, 0x42]); // A, LF, B
+      const buffer = Buffer.from([0x41, 0x0A, 0x42]); // a, LF, b (unshifted)
       const result = convertPetsciiInputToAscii(buffer);
 
-      expect(result).toBe('AB'); // LF skipped
+      expect(result).toBe('ab'); // LF skipped
     });
 
     it('should handle @ symbol', () => {
@@ -551,10 +562,10 @@ describe('petscii.util', () => {
     });
 
     it('should skip graphics and control codes', () => {
-      const buffer = Buffer.from([0x00, 0x03, 0x41, 0x08, 0x42]); // Controls + A + Controls + B
+      const buffer = Buffer.from([0x00, 0x03, 0x41, 0x08, 0x42]); // Controls + a + Controls + b (unshifted)
       const result = convertPetsciiInputToAscii(buffer);
 
-      expect(result).toBe('AB'); // Only letters extracted
+      expect(result).toBe('ab'); // Only letters extracted
     });
 
     it('should handle graphics range 0x61-0x7A as lowercase', () => {
@@ -562,6 +573,27 @@ describe('petscii.util', () => {
       const result = convertPetsciiInputToAscii(buffer);
 
       expect(result).toBe('abc');
+    });
+
+    it('should convert cursor keys to the ANSI arrow sequences blessed doors decode (previously dropped)', () => {
+      const buffer = Buffer.from([0x91, 0x11, 0x1D, 0x9D, 0x13, 0x94]);
+      const result = convertPetsciiInputToAscii(buffer);
+
+      expect(result).toBe('\x1b[A\x1b[B\x1b[C\x1b[D\x1b[H\x1b[2~');
+    });
+
+    it('should convert F1-F8 to the VT sequences client-door-bridge maps to F1-F8 (previously dropped)', () => {
+      const buffer = Buffer.from([0x85, 0x89, 0x86, 0x8A, 0x87, 0x8B, 0x88, 0x8C]);
+      const result = convertPetsciiInputToAscii(buffer);
+
+      expect(result).toBe('\x1bOP\x1bOQ\x1bOR\x1bOS\x1b[15~\x1b[17~\x1b[18~\x1b[19~');
+    });
+
+    it('should still drop CLR and other unmapped control bytes', () => {
+      const buffer = Buffer.from([0x93, 0x03, 0x05]);
+      const result = convertPetsciiInputToAscii(buffer);
+
+      expect(result).toBe('');
     });
 
     it('should handle empty buffer', () => {
