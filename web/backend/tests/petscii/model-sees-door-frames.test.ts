@@ -360,10 +360,12 @@ function writeSeq(): string {
  * The widest run of printable characters between escape sequences and line
  * breaks - the adapter's rows can never exceed the caller's columns.
  */
+// Escapes collapse to a NUL sentinel (written as the \0 escape, never a raw
+// byte) so spaces stay inside a run and the split measures COLUMNS, not words.
 function widestPrintableRun(text: string): number {
-  const withoutEscapes = text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ' ').replace(/\x1b./g, ' ');
+  const withoutEscapes = text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '\0').replace(/\x1b./g, '\0');
   return withoutEscapes
-    .split(/[ \r\n]+/)
+    .split(/[\0\r\n]+/)
     .reduce((widest, run) => Math.max(widest, run.length), 0);
 }
 
@@ -433,6 +435,8 @@ describe('OC-8: a 68K door reaches the session model as the caller sees it', () 
     expect(onTheWire.join('')).not.toContain('-'.repeat(41));
     // No frame the model was fed is wider than the caller's 40 columns.
     for (const frame of fedToModel) expect(widestPrintableRun(frame)).toBeLessThanOrEqual(40);
+    // ... and the widest one uses all 40: the adapter reduced, it did not truncate to less.
+    expect(Math.max(...fedToModel.map(widestPrintableRun))).toBe(40);
   });
 
   it("the adapter's uninstall leaves the choke on the socket, and a later .seq is still fed", async () => {
@@ -492,7 +496,7 @@ describe('OC-8: a 68K door reaches the session model as the caller sees it', () 
     expectOracleMatchesWire(session, socket.emitted);
   });
 
-  it('an ANSI session running the same door is byte-identical, with no model at all', async () => {
+  it('an ANSI session running the same door gets its bytes contiguous and unmodified, with no model at all', async () => {
     const session = c64Session({
       petsciiMode: false,
       terminalType: 'modern',
