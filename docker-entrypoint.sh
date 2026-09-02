@@ -463,6 +463,9 @@ else
         # Re-copy conference Screens (Conf1-Conf14)
         # ALWAYS delete old Screens to remove any placeholder files, then copy if source exists
         for conf in Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 Conf11 Conf12 Conf13 Conf14; do
+            # Same rule as the seeding above: a conference the board no longer
+            # has is not re-created here either, forced or not.
+            conference_still_exists "$conf" || continue
             # Always delete old screens (removes placeholders from persistent disk)
             if [ -d "$BBS_DATA_DIR/$conf/Screens" ]; then
                 rm -rf "$BBS_DATA_DIR/$conf/Screens"
