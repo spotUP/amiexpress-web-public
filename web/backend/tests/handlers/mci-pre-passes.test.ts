@@ -73,6 +73,7 @@ jest.mock('../../src/handlers/command.handler', () => ({
 }));
 
 import { parseMciCodes, setConferences } from '../../src/handlers/screen.handler';
+import { MCI_SENTINELS } from '../../src/handlers/mci-dispatch';
 import { flushOutput } from '../../src/utils/output.util';
 
 const SNAPSHOT_PATH = path.join(__dirname, '__fixtures__', 'mci-pre-passes-ansi-pin.json');
@@ -296,6 +297,133 @@ describe('ANSI byte-identity pin — MCI pre-passes', () => {
   test('the narrow branch really differs from the 80-column one', () => {
     for (const row of ['CL-conference-list', 'CD-conference-dir', 'ML-msgbase-list', 'MD-msgbase-desc']) {
       expect(actual[`${row}-narrow`].parsed).not.toBe(actual[row].parsed);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cross-flavour parity (plan Task 4b tests 2-4)
+//
+// The pre-passes are the OTHER half of decision 1: adding a 21st row to one
+// flavour only, or leaving a token unconsumed on the C64 path, fails here.
+// ---------------------------------------------------------------------------
+
+import { applyMciPrePasses } from '../../src/handlers/mci-pre-passes';
+
+/** Every token the pre-passes are responsible for consuming. */
+const ALL_ROWS = [
+  '~D|',
+  'x~XC_DOORS:who/NI||y',
+  'x~XIDOORS:who/NO y',
+  '~CL.',
+  '~CD.',
+  '~ML.',
+  '~MD.',
+  '%NODELIST',
+  '~CR_Hit it||',
+  '~SM_MENUNAME||',
+  '~CC_X|',
+  '~SS_PIN_NO_SUCH_SCREEN|',
+  '~2SPIN_NO_SUCH_SCREEN|',
+  '~5SR_pin_no_such_base|',
+  '~SX_pin_no_such_base||',
+  '~SMO2|',
+  '~SMC|',
+  '~SP.',
+  '~CR.',
+  '~NSF',
+  '~',
+].join('\n');
+
+const CONSUMED_LITERALS = [
+  '~XC_', '~XI', '~CL.', '~CD.', '~ML.', '~MD.', '%NODELIST', '~CR_', '~SM_',
+  '~CC_', '~SS_', '~2S', '~SR_', '~SX_', '~SMO', '~SMC', '~SP.', '~CR.', '~NSF',
+];
+
+describe('applyMciPrePasses — cross-flavour parity', () => {
+  const run = (flavour: 'ansi' | 'petscii', text = ALL_ROWS, inlineMode = false) =>
+    applyMciPrePasses(text, makeSession(), { flavour, inlineMode });
+
+  test('both flavours consume the identical token list', async () => {
+    const a = await run('ansi');
+    const p = await run('petscii');
+    for (const literal of CONSUMED_LITERALS) {
+      expect(`ansi:${a.text}`).not.toContain(literal);
+      expect(`petscii:${p.text}`).not.toContain(literal);
+    }
+  });
+
+  test('the side-effect results are deep-equal across flavours', async () => {
+    const a = await run('ansi');
+    const p = await run('petscii');
+    expect(p.commandsToExecute).toEqual(a.commandsToExecute);
+    expect(p.filesToDisplay).toEqual(a.filesToDisplay);
+    expect(p.slowmo).toEqual(a.slowmo);
+    expect(p.slowmoCount).toEqual(a.slowmoCount);
+    expect(p.terminator).toEqual(a.terminator);
+    expect(p.hasPause).toEqual(a.hasPause);
+    // The fixture really did drive the passes.
+    expect(a.commandsToExecute).toEqual(['DOORS:who/NI', 'DOORS:who/NO', 'X']);
+    expect(a.hasPause).toBe(true);
+  });
+
+  test('the petscii output carries no ESC byte at all', async () => {
+    const p = await run('petscii');
+    expect(p.text).not.toContain('\x1b');
+    // ...while the ANSI rendering of the same document is full of them.
+    const a = await run('ansi');
+    expect(a.text).toContain('\x1b');
+  });
+
+  test('the bare ~ line clears with $93 on a C64 and ESC[2J on ANSI', async () => {
+    expect((await run('petscii', 'a\n~\nb')).text).toBe('a\n\x93\nb');
+    expect((await run('ansi', 'a\n~\nb')).text).toBe('a\n\x1b[2J\x1b[H\nb');
+  });
+
+  test('%NODELIST drops its only SGR run on a C64', async () => {
+    const p = await run('petscii', '%NODELIST');
+    expect(p.text).toContain('Node 1:  You');
+    expect(p.text).not.toContain('\x1b');
+  });
+
+  test('the four list rows reuse the existing narrow branches, clipped to a row', async () => {
+    for (const token of ['~CL.', '~CD.', '~ML.', '~MD.']) {
+      const p = await run('petscii', token);
+      const rows = p.text.split('\r\n').filter(Boolean);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row).not.toContain('\x1b');
+        expect(row.length).toBeLessThanOrEqual(40);
+      }
+    }
+  });
+
+  test('~D. still retargets the terminator for the tokenizer stage that follows', async () => {
+    for (const flavour of ['ansi', 'petscii'] as const) {
+      const r = await applyMciPrePasses('~D.abc', makeSession(), { flavour, inlineMode: false });
+      expect(r.terminator).toBe('.');
+      expect(r.text).toBe('abc');
+    }
+    const dflt = await applyMciPrePasses('abc', makeSession(), {
+      flavour: 'ansi', inlineMode: false,
+    });
+    expect(dflt.terminator).toBe('|');
+  });
+
+  test('~SP. emits the shared SP sentinel in inline mode, in both flavours', async () => {
+    for (const flavour of ['ansi', 'petscii'] as const) {
+      const r = await applyMciPrePasses('a~SP.b', makeSession(), { flavour, inlineMode: true });
+      expect(r.text).toBe(`a${MCI_SENTINELS.SP}b`);
+    }
+  });
+
+  test('inline mode leaves ~CC_/~SS_/~SR_ for the dispatch sentinels, in both flavours', async () => {
+    for (const flavour of ['ansi', 'petscii'] as const) {
+      const r = await applyMciPrePasses(
+        '~CC_X|~SS_FOO|~2SR_bar|', makeSession(), { flavour, inlineMode: true },
+      );
+      expect(r.text).toBe('~CC_X|~SS_FOO|~2SR_bar|');
+      expect(r.commandsToExecute).toEqual([]);
     }
   });
 });
