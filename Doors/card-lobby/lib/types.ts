@@ -68,8 +68,20 @@ export interface CardPreferences {
   style?: 'ascii' | 'unicode';
   /** The back of a face-down card. */
   back?: 'lined' | 'dotted' | 'classic' | 'shiny';
-  /** 'auto' fills the panel it is drawn in; 'mini' always stays small. */
-  size?: 'auto' | 'mini';
+  /** 'auto' fills the panel it is drawn in; 'full' and 'mini' insist. */
+  size?: 'auto' | 'full' | 'mini';
+  /** Coloured suits and pips, or plain. */
+  colour?: 'ansi' | 'none';
+  /**
+   * How a hand is laid out: side by side, overlapped, or fanned into an
+   * arch the way a hand of cards sits in a real hand.
+   */
+  layout?: 'flat' | 'flat-condensed' | 'arch' | 'arch-condensed';
+  /**
+   * Columns between one card and the next. 'auto' lets the engine choose
+   * per layout (a condensed layout overlaps by four columns).
+   */
+  spacing?: 'auto' | 'tight' | 'wide';
 }
 
 export interface PlayerProfile {

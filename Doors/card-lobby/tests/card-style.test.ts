@@ -15,7 +15,9 @@ import assert from 'assert';
 import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { resolveCardStyle, FULL_CARD_ROWS } from '../lib/card-style';
+import { resolveCardStyle, FULL_CARD_ROWS, CARD_STYLE_CHOICES } from '../lib/card-style';
+import { previewLines, showCardStyleDialog } from '../managers/CardStyleDialog';
+import { readFileSync } from 'fs';
 import { unlockAchievements, recordHandResult } from '../lib/achievements';
 
 process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-cards-'));
@@ -42,8 +44,8 @@ export async function unicodeFacesNeedATerminalThatDrawsThem(): Promise<void> {
 }
 
 export async function theCardBackIsRememberedToo(): Promise<void> {
-  assert.strictEqual(resolveCardStyle(undefined, 10).back, 'lined');
-  assert.strictEqual(resolveCardStyle({ back: 'shiny' }, 10).back, 'shiny');
+  assert.strictEqual(resolveCardStyle(undefined, 10).backStyle, 'lined');
+  assert.strictEqual(resolveCardStyle({ back: 'shiny' }, 10).backStyle, 'shiny');
 }
 
 export async function theMenuOffersCardStyle(): Promise<void> {
@@ -125,4 +127,129 @@ export async function aWinExtendsTheStreakAndALossEndsIt(): Promise<void> {
   assert.strictEqual(p.stats.bestWinStreak, 2, 'and the best stands');
   assert.strictEqual(p.stats.handsPlayed, 4);
   assert.strictEqual(p.stats.net, 75);
+}
+
+/**
+ * "we have much more to chose from when it comes to card styles and hand
+ * layouts do a thorough research and add all of it" (sysop, 2026-09-02).
+ *
+ * The panel offered three settings out of the engine's six. This reads the
+ * engine's own type unions and fails the moment one of their members is not
+ * on offer - including a member added to the engine later.
+ */
+export async function everyEngineOptionIsOnOffer(): Promise<void> {
+  // The SDK is linked into the door as a package whose exports map does not
+  // reach into engines/, so read the source through the link itself.
+  const engine = readFileSync(
+    join(__dirname, '..', 'node_modules', '@amiexpress', 'bbs-door-sdk',
+      'engines', 'cards', 'card-engine.ts'),
+    'utf8',
+  );
+
+  const unionMembers = (name: string): string[] => {
+    const match = engine.match(new RegExp(`export type ${name} =([^;]+);`));
+    assert.ok(match, `the engine no longer declares ${name}`);
+    return (match![1].match(/"([^"]+)"/g) ?? []).map((quoted) => quoted.replace(/"/g, ''));
+  };
+
+  const offered: Record<string, readonly string[]> = {
+    CardStyle: CARD_STYLE_CHOICES.style,
+    CardSize: CARD_STYLE_CHOICES.size.filter((value) => value !== 'auto'),
+    BackStyle: CARD_STYLE_CHOICES.back,
+    ColorMode: CARD_STYLE_CHOICES.colour,
+    HandLayout: CARD_STYLE_CHOICES.layout,
+  };
+
+  for (const [type, choices] of Object.entries(offered)) {
+    for (const member of unionMembers(type)) {
+      assert.ok(choices.includes(member),
+        `the engine's ${type} has '${member}' and the card style panel does not offer it`);
+    }
+  }
+}
+
+export async function thePreviewShowsWhatTheSettingDoes(): Promise<void> {
+  const flat = previewLines({ layout: 'flat' }, false).join('\n');
+  const arch = previewLines({ layout: 'arch' }, false).join('\n');
+  assert.notStrictEqual(flat, arch, 'a fanned hand does not look like a flat one');
+
+  const width = (drawn: string[]): number =>
+    Math.max(...drawn.map((line) => line.replace(/\{[^}]*\}/g, '').length));
+  assert.ok(width(previewLines({ spacing: 'wide' }, false))
+    > width(previewLines({ spacing: 'tight' }, false)),
+    'wide spacing is wider than tight');
+
+  assert.ok(!previewLines({ colour: 'none' }, false).join('').includes('{'),
+    'a monochrome preview carries no colour tags');
+  assert.ok(previewLines({ colour: 'ansi' }, false).join('').includes('{'),
+    'and a coloured one does');
+}
+
+/**
+ * "the card style dialog closes every time i make a selection not very
+ * practical" (sysop, 2026-09-02). Keys go in through the screen's own
+ * program, so this fails if the panel stops being reachable as well as if it
+ * closes early.
+ */
+export async function thePanelStaysOpenWhileSettingsChange(): Promise<void> {
+  const { CardLobbyApp } = await import('../index');
+  const bbs: any = {
+    write: () => {}, writeLine: () => {}, on: () => {},
+    getTerminalSize: () => ({ width: 100, height: 30 }),
+    readFile: async () => null, writeFile: async () => {},
+    enableWideMode: () => {}, disableWideMode: () => {},
+    getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
+    connectionType: 'web', unicodeCapable: true,
+  };
+  const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
+  const app: any = new CardLobbyApp({
+    bbs, socket, params: [],
+    bbsSession: { userId: 2, username: 'sysop', nodeId: 1, secLevel: 255, screenHeight: 30, socket },
+    user: { id: 2, username: 'sysop', name: 'sysop', accessLevel: 255 },
+  } as any);
+  void app.run();
+  await new Promise((r) => setTimeout(r, 1500));
+
+  try {
+    const changes: any[] = [];
+    const closed = showCardStyleDialog(
+      {
+        screen: app.screen,
+        overlayShade: app.uiManager.overlayShade,
+        setModalActive: () => {},
+        isModalActive: () => false,
+      },
+      {},
+      true,
+      (preferences) => changes.push(preferences),
+    );
+    let settled = false;
+    void closed.then(() => { settled = true; });
+
+    // The List debounces navigation keys by 50ms, so space the presses out
+    // the way a hand does.
+    const press = async (name: string) => {
+      app.screen.program.emit('keypress', null, { name, full: name });
+      await new Promise((r) => setTimeout(r, 60));
+    };
+
+    await press('right');                 // card size
+    await press('down');
+    await press('right');                 // card faces
+    await press('down'); await press('down'); await press('down');
+    await press('right');                 // hand layout
+
+    assert.strictEqual(changes.length, 3, 'each key changed one setting');
+    assert.strictEqual(settled, false, 'and the panel is still open');
+    assert.strictEqual(changes[0].size, 'full');
+    assert.strictEqual(changes[1].style, 'unicode');
+    assert.strictEqual(changes[2].layout, 'flat');
+
+    await press('escape');
+    const result = await Promise.race([
+      closed,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('ESC did not close the panel')), 500)),
+    ]);
+    assert.deepStrictEqual(result, { size: 'full', style: 'unicode', layout: 'flat' });
+  } finally { app.screen?.destroy?.(); }
 }

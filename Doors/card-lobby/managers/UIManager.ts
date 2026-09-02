@@ -9,7 +9,7 @@ import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoColor as EngineUnoColor, UnoValue as EngineUnoValue } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
 import { renderCardLines, stripBlessedTags, wrapTagged } from '../lib/utils';
-import { resolveCardStyle } from '../lib/card-style';
+import { resolveCardStyle, toRenderOptions, FULL_CARD_ROWS } from '../lib/card-style';
 import type { CardPreferences } from '../lib/types';
 import type { UnoCard, UnoColor, UnoPlayer } from '../lib/uno-engine';
 
@@ -852,6 +852,23 @@ export class UIManager {
     });
   }
 
+  /**
+   * The engine options for cards drawn in a panel of this capacity.
+   *
+   * `capacity` is the panel's own answer to whether a full-size card fits;
+   * the player's preference decides what to do with that room (always big,
+   * always small, or fit the panel), along with faces, colour, back, hand
+   * layout and spacing.
+   */
+  private cardOptions(capacity: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+    const chrome = resolveCardStyle(
+      this.cardPreferences,
+      capacity === 'mini' ? FULL_CARD_ROWS - 1 : FULL_CARD_ROWS,
+      this.unicodeCapable,
+    );
+    return { ...toRenderOptions(chrome), ...extra };
+  }
+
   renderBoardAndHand(
     boardCards: ReturnType<typeof pokerCardsToCards>,
     playerHand: ReturnType<typeof pokerCardsToCards>,
@@ -861,7 +878,7 @@ export class UIManager {
   ): void {
     if (boardCards.length > 0) {
       this.flopContent.setContent(
-        renderCardLines(boardCards, { layout: 'flat-condensed', size: flopCardSize }).join('\n'),
+        renderCardLines(boardCards, this.cardOptions(flopCardSize)).join('\n'),
       );
     } else {
       this.flopContent.setContent('Board not dealt yet.');
@@ -869,7 +886,7 @@ export class UIManager {
 
     if (playerHand.length > 0) {
       this.handContent.setContent(
-        renderCardLines(playerHand, { layout: 'flat-condensed', size: handCardSize }).join('\n'),
+        renderCardLines(playerHand, this.cardOptions(handCardSize)).join('\n'),
       );
     } else {
       this.handContent.setContent(hasLiveHand ? 'Waiting for cards...' : 'No hand on record.');
@@ -904,7 +921,7 @@ export class UIManager {
         face: index < flipped ? 'front' as const : 'back' as const,
       }));
       this.flopContent.setContent(
-        renderCardLines(framed, { layout: 'flat-condensed', size }).join('\n'),
+        renderCardLines(framed, this.cardOptions(size)).join('\n'),
       );
     };
 
@@ -919,7 +936,7 @@ export class UIManager {
         face: index < flipped ? 'front' as const : 'back' as const,
       }));
       this.handContent.setContent(
-        renderCardLines(framed, { layout: 'flat-condensed', size }).join('\n'),
+        renderCardLines(framed, this.cardOptions(size)).join('\n'),
       );
     };
 
@@ -928,7 +945,7 @@ export class UIManager {
         for (let i = 1; i <= boardCards.length; i += 1) {
           const partial = boardCards.slice(0, i);
           this.flopContent.setContent(
-            renderCardLines(partial, { layout: 'flat-condensed', size: flopCardSize, face: 'back' }).join('\n'),
+            renderCardLines(partial, this.cardOptions(flopCardSize, { face: 'back' })).join('\n'),
           );
           emitSfx('card-flap');
           this.screen.render();
@@ -951,7 +968,7 @@ export class UIManager {
         for (let i = 1; i <= playerHand.length; i += 1) {
           const partial = playerHand.slice(0, i);
           this.handContent.setContent(
-            renderCardLines(partial, { layout: 'flat-condensed', size: handCardSize, face: 'back' }).join('\n'),
+            renderCardLines(partial, this.cardOptions(handCardSize, { face: 'back' })).join('\n'),
           );
           emitSfx('card-flap');
           this.screen.render();
@@ -1063,11 +1080,7 @@ export class UIManager {
         this.panelRows(this.flopContent) - 3,   // two state lines and a gap
         this.unicodeCapable,
       );
-      const lines = cardEngine.renderUnoCardLines(engineCard, {
-        style: chrome.style,
-        size: chrome.size,
-        color: 'ansi',
-      });
+      const lines = cardEngine.renderUnoCardLines(engineCard, toRenderOptions(chrome) as never);
       return lines.map((line) => ` ${ansiToTags(line)}`).join('\n');
     }
 
@@ -1127,9 +1140,8 @@ export class UIManager {
     for (const card of hand) {
       const engineCard = this.toEngineUnoCard(card);
       if (!engineCard) return null;               // a house-rule card has no art
-      drawnCards.push(cardEngine.renderUnoCardLines(engineCard, {
-        style: chrome.style, size: chrome.size, color: 'ansi',
-      }).map((line) => ansiToTags(line)));
+      drawnCards.push(cardEngine.renderUnoCardLines(engineCard, toRenderOptions(chrome) as never)
+        .map((line) => ansiToTags(line)));
     }
     if (drawnCards.length === 0) return null;
 
