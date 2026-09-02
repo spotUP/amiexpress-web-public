@@ -18,6 +18,7 @@ import { parseMciCodes } from '../screen.handler';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
 import { updateTimeUsed, checkTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
+import { buildMenuPrompt } from '../../utils/menu-prompt.util';
 import { setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 
@@ -270,13 +271,24 @@ console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
 console.log('  - currentMsgBase found:', !!currentMsgBase);
 
   // express.e:28417-28420: [0m[35m{bbsName} [0m[[36m{confNum}[34m:[36m{confName}[0m] Menu ([33m{time}[0m mins. left):
-  if (msgBasesInConf.length > 1 && currentMsgBase) {
-    const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
-    const prompt = `\x1b[0m\x1b[35m${bbsName} \x1b[0m[\x1b[36m${session.relConfNum}\x1b[34m:\x1b[36m${displayName}\x1b[0m] Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
-    emitPrompt(socket, prompt);
-  } else {
-    const prompt = `\x1b[0m\x1b[35m${bbsName} \x1b[0m[\x1b[36m${session.relConfNum}\x1b[34m:\x1b[36m${session.currentConfName}\x1b[0m] Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
-    emitPrompt(socket, prompt);
-  }
+  // buildMenuPrompt owns the format. It returns those bytes unchanged for
+  // every 80-column caller and a 40-column form without the board name for a
+  // PETSCII one - C64/40-col plan, Task 4b (sysop, 2026-09-02).
+  const displayName =
+    msgBasesInConf.length > 1 && currentMsgBase
+      ? `${session.currentConfName} - ${currentMsgBase.name}`
+      : `${session.currentConfName}`;
+  emitPrompt(
+    socket,
+    buildMenuPrompt(
+      {
+        bbsName,
+        relConfNum: session.relConfNum as any,
+        confDisplayName: displayName,
+        timeLeft,
+      },
+      session as any
+    )
+  );
 
 }
