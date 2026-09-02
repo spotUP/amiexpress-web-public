@@ -10,7 +10,7 @@ export declare function buildThemeItems(themes: Array<{
     id: string;
     name: string;
     blurb: string;
-}>, active: string, s: any, compact: CompactProfile): string[];
+}>, active: string, s: any, compact: CompactProfile, width?: number): string[];
 /** The line under the list, said in as many words as the screen has room for. */
 export declare function buildNote(s: any, compact: CompactProfile): string;
 /** Footer key hints; the XXS set is the same three keys, abbreviated to fit. */

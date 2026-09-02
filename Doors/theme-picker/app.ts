@@ -35,8 +35,12 @@ export function buildThemeItems(
   themes: Array<{ id: string; name: string; blurb: string }>,
   active: string,
   s: any,
-  compact: CompactProfile
+  compact: CompactProfile,
+  width = 80
 ): string[] {
+  // `[*] ` costs four of the row's columns, and the last one is left empty
+  // (writing a row's final cell leaves the terminal in a pending-wrap state).
+  const nameRoom = Math.max(4, width - 5);
   return themes.map(t => {
     // The one in use is marked rather than merely highlighted: the
     // highlight follows the cursor and says nothing about what is saved.
@@ -44,7 +48,7 @@ export function buildThemeItems(
     // 40 columns: name only. `[*] ` costs 4 of them and a folded row eats
     // the theme underneath it, which is how the C64 lost a third of this list.
     return compact.singleColumn
-      ? `${mark} ${s.ink(t.name.substring(0, 34))}`
+      ? `${mark} ${s.ink(t.name.substring(0, nameRoom))}`
       : `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
   });
 }
@@ -88,7 +92,8 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   // Every width decision below comes from the LIVE screen through the SDK's
   // one compact profile - no door-local 40 or 80 anywhere.
-  const compact = getCompactProfile(((screen as any).width as number) || 80);
+  const screenWidth = ((screen as any).width as number) || 80;
+  const compact = getCompactProfile(screenWidth);
 
   // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
   // The layout is written in percentages, so following a resize is a
@@ -126,12 +131,12 @@ export async function createApp(session: DoorSession): Promise<void> {
   // repaint is a lot of PETSCII bytes for a C64 to swallow. The title still
   // draws; it just stops moving. (SDK: effectsAllowed(), same call the other
   // three compact doors make.)
-  const stopMasthead = effectsAllowed(((screen as any).width as number) || 80)
+  const stopMasthead = effectsAllowed(screenWidth)
     ? attachMasthead(mastheadRow as any, theme, {
     title: 'DOOR THEME',
     // One column short: writing a row's last cell leaves the terminal in a
     // pending-wrap state and clips the final character.
-    width: Math.max(1, ((screen as any).width || 80) - 1),
+    width: Math.max(1, screenWidth - 1),
     rail: s.accent,
     ink: s.ink,
     render: () => screen.render(),
@@ -158,7 +163,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       selected: s.list.style.selected,
       item: { fg: theme.tokens.dim },
     },
-    items: buildThemeItems(themes, active, s, compact),
+    items: buildThemeItems(themes, active, s, compact, screenWidth),
   });
 
   const listRows = Math.max(1, Math.min(themes.length, ((screen as any).height || 24) - 6));

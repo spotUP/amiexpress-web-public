@@ -25,7 +25,10 @@ const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 /** A theme row, styled. Wide keeps the blurb column; XXS has no room for it. */
-function buildThemeItems(themes, active, s, compact) {
+function buildThemeItems(themes, active, s, compact, width = 80) {
+    // `[*] ` costs four of the row's columns, and the last one is left empty
+    // (writing a row's final cell leaves the terminal in a pending-wrap state).
+    const nameRoom = Math.max(4, width - 5);
     return themes.map(t => {
         // The one in use is marked rather than merely highlighted: the
         // highlight follows the cursor and says nothing about what is saved.
@@ -33,7 +36,7 @@ function buildThemeItems(themes, active, s, compact) {
         // 40 columns: name only. `[*] ` costs 4 of them and a folded row eats
         // the theme underneath it, which is how the C64 lost a third of this list.
         return compact.singleColumn
-            ? `${mark} ${s.ink(t.name.substring(0, 34))}`
+            ? `${mark} ${s.ink(t.name.substring(0, nameRoom))}`
             : `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
     });
 }
@@ -69,7 +72,8 @@ async function createApp(session) {
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: 'Theme' });
     // Every width decision below comes from the LIVE screen through the SDK's
     // one compact profile - no door-local 40 or 80 anywhere.
-    const compact = (0, blessed_1.getCompactProfile)(screen.width || 80);
+    const screenWidth = screen.width || 80;
+    const compact = (0, blessed_1.getCompactProfile)(screenWidth);
     // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
     // The layout is written in percentages, so following a resize is a
     // repaint; asking the terminal to grow at all is the part no door gets
@@ -104,12 +108,12 @@ async function createApp(session) {
     // repaint is a lot of PETSCII bytes for a C64 to swallow. The title still
     // draws; it just stops moving. (SDK: effectsAllowed(), same call the other
     // three compact doors make.)
-    const stopMasthead = (0, blessed_1.effectsAllowed)(screen.width || 80)
+    const stopMasthead = (0, blessed_1.effectsAllowed)(screenWidth)
         ? (0, theme_1.attachMasthead)(mastheadRow, theme, {
             title: 'DOOR THEME',
             // One column short: writing a row's last cell leaves the terminal in a
             // pending-wrap state and clips the final character.
-            width: Math.max(1, (screen.width || 80) - 1),
+            width: Math.max(1, screenWidth - 1),
             rail: s.accent,
             ink: s.ink,
             render: () => screen.render(),
@@ -134,7 +138,7 @@ async function createApp(session) {
             selected: s.list.style.selected,
             item: { fg: theme.tokens.dim },
         },
-        items: buildThemeItems(themes, active, s, compact),
+        items: buildThemeItems(themes, active, s, compact, screenWidth),
     });
     const listRows = Math.max(1, Math.min(themes.length, (screen.height || 24) - 6));
     // The note sits under the list; the HINTS go to the bottom of the screen
