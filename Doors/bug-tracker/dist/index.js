@@ -50,6 +50,10 @@ function showSelector(ctx, title, items, callback) {
     const previousView = ctx.currentView;
     ctx.currentView = "dialog";
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: void 0,
       parent: ctx.screen,
       top: 0,
       left: 0,
@@ -112,6 +116,10 @@ function showTextInput(ctx, title, defaultValue, multiline, callback) {
     ctx.currentView = "dialog";
     const height = multiline ? 10 : 5;
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: void 0,
       parent: ctx.screen,
       top: 0,
       left: 0,
@@ -201,6 +209,10 @@ function showMessage(ctx, title, message, callback) {
     const previousView = ctx.currentView;
     ctx.currentView = "dialog";
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: void 0,
       parent: ctx.screen,
       top: 0,
       left: 0,
@@ -261,6 +273,10 @@ function showConfirm(ctx, title, message, callback) {
     const previousView = ctx.currentView;
     ctx.currentView = "dialog";
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: void 0,
       parent: ctx.screen,
       top: 0,
       left: 0,

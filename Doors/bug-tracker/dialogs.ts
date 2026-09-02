@@ -49,6 +49,10 @@ export function showSelector(ctx: DialogHost, title: string, items: string[], ca
 
     // Create modal backdrop to capture clicks outside
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: undefined,
       parent: ctx.screen,
       top: 0,
       left: 0,
@@ -124,6 +128,10 @@ export function showTextInput(ctx: DialogHost, title: string, defaultValue: stri
 
     // Create modal backdrop
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: undefined,
       parent: ctx.screen,
       top: 0,
       left: 0,
@@ -228,6 +236,10 @@ export function showMessage(ctx: DialogHost, title: string, message: string, cal
 
     // Create modal backdrop
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: undefined,
       parent: ctx.screen,
       top: 0,
       left: 0,
@@ -296,6 +308,10 @@ export function showConfirm(ctx: DialogHost, title: string, message: string, cal
 
     // Create modal backdrop
     const backdrop = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: undefined,
       parent: ctx.screen,
       top: 0,
       left: 0,

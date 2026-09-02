@@ -117,6 +117,10 @@ async function createApp(session) {
         },
     });
     const under = (0, blessed_helpers_1.createBox)({
+        // A ground, not a frame: createBox draws a line border when no
+        // border key is given (Panel's default), which outlines the whole
+        // terminal.
+        border: undefined,
         parent: underPanel,
         top: 0,
         left: 0,
