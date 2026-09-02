@@ -37,6 +37,7 @@ import { runLogoffBatches, runExecuteOn } from '../services/batch-scheduler';
 import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
+import { disposePetsciiRenderCtx } from '../handlers/petscii-screen.render';
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
@@ -968,9 +969,14 @@ console.log('=== COMMAND PROCESSED ===\n');
 }
 
 /**
- * Register disconnect handler
+ * Register disconnect handler.
+ *
+ * Exported so a test can drive the real teardown path
+ * (`tests/petscii/render-ctx-disposal.test.ts`) without registering the
+ * whole socket surface; production still reaches it only through
+ * `registerSocketHandlers`.
  */
-function registerDisconnectHandler(socket: Socket) {
+export function registerDisconnectHandler(socket: Socket) {
   socket.on('disconnect', async (reason) => {
 console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${socket.id}`);
 
@@ -1225,6 +1231,14 @@ console.error(`[LOGOFF] Error deleting node files:`, error);
 
   // Release node back to available pool
   await nodeManager.releaseSession(socketId);
+
+  // The PETSCII render context dies with the session. Its cached
+  // `PetsciiMachine` (`handlers/petscii-screen.render.ts`) is the render-side
+  // bank/cursor/pen oracle; sessions live in the module-level maps above, so
+  // dropping it here - alongside the rest of the teardown, after the
+  // reconnect grace period - is what keeps a reused session object from
+  // painting its first screen against the previous caller's cursor.
+  disposePetsciiRenderCtx(session);
 
   // Clean up session storage
   if (userId) {

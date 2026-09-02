@@ -124,6 +124,19 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
       // include emits nothing, or only the fixture's trailing newline.
       expect(emits.length).toBeGreaterThan(0);
       expect(wireBytes(emits)).toBeGreaterThan(SHIPPED_LOGOFF_SEQ.length);
+
+      // (3) Strengthened again in Task 6 (which wired the renderer into
+      // `emitPetsciiScreen`): from that commit on, the `~SR_` TOKEN is gone
+      // from the wire - the dispatch turns it into a NUL-delimited
+      // structural sentinel (`mci-dispatch.ts:49-57`) and the renderer
+      // passes it through untouched for the walker that Task 7 adds. Without
+      // this assertion (1) and (2) both pass on that sentinel, and a C64
+      // would be sent `\x00SR:...\x00` instead of the included art - the
+      // same bug wearing different bytes. A sentinel is an INTERNAL marker
+      // and must never reach a terminal.
+      for (const sentinel of ['\x00SR:', '\x00SS:', '\x00CC:', '\x00SP\x00', '\x00F\x00']) {
+        expect(wireText(emits)).not.toContain(sentinel);
+      }
     },
   );
 

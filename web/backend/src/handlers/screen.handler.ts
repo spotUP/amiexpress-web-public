@@ -50,6 +50,7 @@ import { petsciiTextScreenPlan, ANSI_ART_SKIPPED_NOTICE } from '../utils/ansi-ar
 import { wrapForSession } from '../utils/wrap-for-session.util';
 import { buildMciDispatch, MCI_SENTINELS } from './mci-dispatch';
 import { applyMciPrePasses } from './mci-pre-passes';
+import { renderPetsciiScreen, petsciiRenderCtxFor } from './petscii-screen.render';
 
 /**
  * Detect if content is an ANSI animation that should play at modem speed
@@ -1215,24 +1216,34 @@ export function addAnsiEscapes(content: string): string {
 }
 
 /**
- * Emit a PETSCII screen result (Task 9: raw-byte transport).
+ * Emit a PETSCII screen result: the ONE server-side render of a `.seq`
+ * (plan `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`, Task 6).
  *
  * When the loader captured the original `.seq` bytes (`petsciiBuffer` set),
- * emit them raw over `petscii-bytes` (base64) — the web terminal renders
- * them through `PetsciiMachine`/`PetsciiCanvas`, and telnet's connection
- * emitter (`connection-emitter.ts`) forwards the identical bytes to a real
- * C64 (or degrades them for a non-PETSCII terminal that ended up here).
+ * they go through `renderPetsciiScreen` and out over `petscii-bytes`
+ * (base64). That render is the ONLY place a PETSCII screen's MCI is
+ * substituted, and it happens BEFORE the transports split (decision 2):
+ * the web terminal feeds the payload verbatim to its own
+ * `PetsciiMachine`/`PetsciiCanvas`, and telnet's connection emitter
+ * (`connection-emitter.ts:130-141`) forwards the identical bytes to a real
+ * C64 — so both see the same substituted screen, byte for byte. A non-
+ * PETSCII terminal that ended up here still gets the emitter's PUA degrade.
  * `result.content` (the legacy Unicode-PUA conversion) is kept only as a
  * fallback for callers that still produce string-only PETSCII content
  * (`BBSApi.writePetscii(string)`; older loader results without a buffer).
  *
- * PETSCII screens bypass the ANSI MCI/wipe/pagination pipeline entirely
- * (see the `isPetscii` early-return in `displayScreen`) — that machinery
- * tokenizes ANSI escapes and splits on `\r\n`, which is meaningless (and
- * unsafe) applied to raw binary PETSCII. This intentionally drops ~SP
- * soft-pause / auto-pagination support for PETSCII screens; real .seq art
- * is authored as a single fixed 40x25 frame, matching the one-shot emit
- * here.
+ * The render is gated exactly as express.e gates it (`express.e:6800-6806`,
+ * decision 3): only a file whose FIRST byte is `~` is MCI. Art comes back
+ * byte-identical — the render machine still observes it, so the bank and
+ * cursor stay truthful for whatever is drawn next.
+ *
+ * PETSCII screens still bypass the ANSI wipe/pagination pipeline (see the
+ * `isPetscii` early-return in `displayScreen`): that machinery tokenizes
+ * ANSI escapes and splits on `\r\n`, which is meaningless (and unsafe)
+ * applied to raw binary PETSCII. `~SP` soft-pause and the structural
+ * includes (`~SS_`/`~SR_`/`~CC_`) are Task 7's inline sentinel walker —
+ * `renderPetsciiScreen` already passes their sentinels through untouched
+ * for it; until that lands a `.seq` is still painted as one frame.
  *
  * Finding 3 (final review wave): `petscii-bytes` is a session-mode gate,
  * not just a transport choice. An ANSI web session can reach a .seq screen
@@ -1253,7 +1264,14 @@ export async function emitPetsciiScreen(
 ): Promise<void> {
   const sessionWantsRawPetscii = !!session.petsciiMode || session.terminalType === 'c64';
   if (result.petsciiBuffer && sessionWantsRawPetscii) {
-    socket.emit('petscii-bytes', result.petsciiBuffer.toString('base64'));
+    // ONE render, before the base64 and therefore before the transports
+    // split. The context caches only the session's PetsciiMachine (the
+    // positional bank/cursor/pen oracle); the dispatch is rebuilt here every
+    // paint because its values close over the clock, the conference and the
+    // byte counters.
+    const ctx = await petsciiRenderCtxFor(session);
+    const rendered = await renderPetsciiScreen(result.petsciiBuffer, session, ctx);
+    socket.emit('petscii-bytes', rendered.toString('base64'));
   } else {
     socket.emit('petscii-output', result.content);
   }
