@@ -133,6 +133,18 @@ export interface MciDispatchConfig {
    * variants that would have failed on Amiga anyway.
    */
   caseSensitive?: boolean;
+  /**
+   * Called once per successful substitution with the value's span in the
+   * RETURNED string and the matched cmd (original case, width digits and
+   * terminator excluded). Offsets are only meaningful on processMci's
+   * immediate output - any later regex pass invalidates them, which is
+   * why the PETSCII `.seq` renderer calls processMci directly rather
+   * than through parseMciCodes' regex stages.
+   *
+   * A substitution that yields the empty string still reports, with
+   * length 0. Fall-through (unrecognised code) never reports.
+   */
+  onSubstitution?: (start: number, length: number, cmd: string) => void;
 }
 
 /**
@@ -265,6 +277,7 @@ export function processMci(
 
     if (result !== undefined) {
       pos = cmdEnd + (consumedTerminator ? 1 : 0);
+      config.onSubstitution?.(out.length, result.length, rawCmd);
       out += result;
     } else if (softFallThrough) {
       // Soft fall-through: re-emit `~` + width digits so downstream

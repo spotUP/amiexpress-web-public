@@ -270,3 +270,109 @@ describe('applyMciWidth', () => {
     expect(applyMciWidth('hi', 5)).toBe('hi');
   });
 });
+
+/**
+ * Task 3 of `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`:
+ * the tokenizer stays the ONE MCI scanner, and tells its caller WHERE it
+ * substituted. The PETSCII `.seq` renderer needs that: substituted values
+ * are text to encode through the ASCII->PETSCII table, while everything
+ * around them is art bytes to copy untouched.
+ *
+ * Offsets are into processMci's own return string, so they are only valid
+ * on its immediate output - which is exactly why the PETSCII renderer
+ * calls processMci directly instead of going through parseMciCodes'
+ * regex stages.
+ */
+describe('processMci onSubstitution hook (Task 3)', () => {
+  test('reports the span of an exact-dispatch substitution in the returned string', () => {
+    const calls: Array<[number, number, string]> = [];
+    const out = processMci('AB~N|CD', {
+      dispatch: { N: () => 'zed' },
+      onSubstitution: (start, length, cmd) => calls.push([start, length, cmd]),
+    });
+
+    expect(out).toBe('ABzedCD');
+    expect(calls).toEqual([[2, 3, 'N']]);
+    expect(out.slice(2, 2 + 3)).toBe('zed');
+  });
+
+  test('prefix dispatch reports too, with the cmd in its original case', () => {
+    const calls: Array<[number, number, string]> = [];
+    const out = processMci('hi ~SS_x|!', {
+      dispatch: {},
+      prefixDispatch: { SS_: (suffix) => `<${suffix}>` },
+      onSubstitution: (start, length, cmd) => calls.push([start, length, cmd]),
+    });
+
+    expect(out).toBe('hi <x>!');
+    expect(calls).toHaveLength(1);
+    const [start, length, cmd] = calls[0];
+    expect(out.slice(start, start + length)).toBe('<x>');
+    expect(cmd).toBe('SS_x'); // rawCmd: original case, not uppercased
+  });
+
+  test('two substitutions report cumulative offsets that both index correctly', () => {
+    const calls: Array<[number, number, string]> = [];
+    const out = processMci('~N| and ~UL|.', {
+      dispatch: { N: () => 'Spot', UL: () => 'Sweden' },
+      onSubstitution: (start, length, cmd) => calls.push([start, length, cmd]),
+    });
+
+    expect(out).toBe('Spot and Sweden.');
+    expect(calls).toEqual([
+      [0, 4, 'N'],
+      [9, 6, 'UL'],
+    ]);
+    for (const [start, length] of calls) {
+      expect(out.slice(start, start + length).length).toBe(length);
+    }
+    expect(out.slice(9, 15)).toBe('Sweden');
+  });
+
+  test('an empty substitution reports a zero-length span at the right offset', () => {
+    // `~SP` and friends substitute nothing; the renderer must not be told
+    // to encode a phantom byte, but the offset still has to be truthful.
+    const calls: Array<[number, number, string]> = [];
+    const out = processMci('ab~SP|cd', {
+      dispatch: { SP: () => '' },
+      onSubstitution: (start, length, cmd) => calls.push([start, length, cmd]),
+    });
+
+    expect(out).toBe('abcd');
+    expect(calls).toEqual([[2, 0, 'SP']]);
+  });
+
+  test('PIN: with no hook the output is identical, and fall-through never reports', () => {
+    const dispatch: MciDispatchMap = { N: () => 'Spot', UL: () => 'Sweden' };
+    const prefixDispatch: MciPrefixDispatchMap = { SS_: (s) => `<${s}>` };
+    const samples = [
+      'Hello ~N|, welcome',
+      'Hello ~N',
+      'Hello ~N.',
+      'a~10ZZZ|b',
+      '~SS_path|',
+      '~N| and ~UL|.',
+      'no codes at all',
+      '',
+    ];
+
+    const calls: string[] = [];
+    for (const sample of samples) {
+      const withoutHook = processMci(sample, { dispatch, prefixDispatch });
+      const withHook = processMci(sample, {
+        dispatch,
+        prefixDispatch,
+        onSubstitution: (_s, _l, cmd) => calls.push(cmd),
+      });
+      expect(withHook).toBe(withoutHook);
+      // Legacy flat-map form takes the same path.
+      expect(processMci(sample, dispatch)).toBe(
+        processMci(sample, { dispatch }),
+      );
+    }
+
+    // `~10ZZZ|` and `~N.` fall through - unrecognised codes are not
+    // substitutions and must never be reported.
+    expect(calls).toEqual(['N', 'N', 'SS_path', 'N', 'UL']);
+  });
+});
