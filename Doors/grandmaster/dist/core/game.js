@@ -16,6 +16,7 @@ const replay_manager_1 = require("../server/replay-manager");
 const medals_1 = require("./medals");
 const credit_roll_1 = require("./credit-roll");
 const time_limit_1 = require("./time-limit");
+const devil_grade_1 = require("./devil-grade");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 const items_1 = require("./items");
@@ -83,6 +84,22 @@ class GameEngine {
         if (settings.itemMode && settings.itemMode !== 'OFF') {
             this.enableItems(settings.itemMode);
         }
+    }
+    /**
+     * Publish the grade for the mode being played.
+     *
+     * 'death' is HeborisCE's Devil family (gameMode 3) and climbs dgname by
+     * level, not the TGM3 Master ladder the GradeManager scores
+     * (gamestart.c:9348-9349). Every other mode keeps the Master ladder.
+     */
+    refreshGrade() {
+        if (this.state.mode === 'death') {
+            this.state.grade = (0, devil_grade_1.devilGradeForLevel)(this.state.level);
+            this.state.internalGrade = this.gradeManager.getInternalGrade();
+            return;
+        }
+        this.state.grade = this.gradeManager.getGrade();
+        this.state.internalGrade = this.gradeManager.getInternalGrade();
     }
     /**
      * Set animation manager (for visual effects)
@@ -387,8 +404,7 @@ class GameEngine {
         }
         // HeborisCE: update decay every frame
         this.gradeManager.updateDecay(this.state.combo, this.state.level, this.state.creditRollActive);
-        this.state.grade = this.gradeManager.getGrade();
-        this.state.internalGrade = this.gradeManager.getInternalGrade();
+        this.refreshGrade();
         // Update credit roll timer
         if (this.state.creditRollActive) {
             this.creditRollManager.update(this.FRAME_TIME);
@@ -930,6 +946,17 @@ class GameEngine {
                 this.state.endTime = Date.now();
                 return;
             }
+            // "DEVILなら1300で終了させる" (gamestart.c:11108-11122). The run stops
+            // at 1300 and keeps GOD if it got there inside the window for its
+            // rotation family, S13 otherwise. Before this, 'death' ran on past
+            // 1300 with no ending and no top rank to reach at all.
+            if (this.state.mode === 'death' && this.state.level >= devil_grade_1.DEVIL_END_LEVEL) {
+                this.state.level = devil_grade_1.DEVIL_END_LEVEL;
+                this.state.grade = (0, devil_grade_1.devilFinalGrade)(gametimeFrames, this.settings.rotationSystem);
+                this.state.status = 'complete';
+                this.state.endTime = Date.now();
+                return;
+            }
         }
         const newSection = Math.floor(this.state.level / 100);
         if (lineCount > 0) {
@@ -1077,8 +1104,7 @@ class GameEngine {
             }
             // Award grade points for line clear
             this.gradeManager.awardPoints(lineCount, this.state.combo, this.state.level, isTSpin);
-            this.state.grade = this.gradeManager.getGrade();
-            this.state.internalGrade = this.gradeManager.getInternalGrade();
+            this.refreshGrade();
             // Sync GM flags from grade manager
             this.state.gmFlags = this.gradeManager.getGMFlags();
             // Track section completion
@@ -1109,8 +1135,7 @@ class GameEngine {
         }
         // Apply grade decay (handled per-frame now)
         // this.gradeManager.applyDecay(this.state.level); // Removed legacy call
-        this.state.grade = this.gradeManager.getGrade();
-        this.state.internalGrade = this.gradeManager.getInternalGrade();
+        this.refreshGrade();
         // HeborisCE Shirase Garbage Rising
         if (this.state.mode === 'death' && this.state.level >= 500) {
             this.devilNextRise--;

@@ -215,9 +215,6 @@ const THIN_BOX_BACKLOG: Record<string, number> = {
   'Doors/bug-tracker/app.ts': 2,
   'Doors/bug-tracker/dialogs.ts': 1,
   'Doors/rip-browser/app.ts': 1,
-  // GRANDMASTER's remaining three, in the TetriNET screens.
-  'Doors/grandmaster/app.ts': 2,
-  'Doors/grandmaster/ui/menu.ts': 1,
 };
 
 /** Every `.ts` under Doors/, excluding builds and dependencies. */

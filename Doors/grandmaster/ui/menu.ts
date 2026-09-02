@@ -208,6 +208,9 @@ export class MenuScreen {
 
       // Instructions
       const instructions = createBox({
+        // One row of hint text, not a framed panel - see the createBox
+        // default border note in dev/tests/door-regressions.test.ts.
+        border: undefined,
         parent: this.screen,
         top: panelTop + panelHeight,
         left: offsetX(),

@@ -2146,6 +2146,10 @@ class GrandmasterApp {
                 fixed: true,
             });
             (0, blessed_helpers_1.createBox)({
+                // A one-row box inside the footer frame: createBox borders when no
+                // border key is given (Panel's default), and a bordered one-row box
+                // has no interior left to paint the text in.
+                border: undefined,
                 parent: footer,
                 top: 0,
                 left: 1,
@@ -2154,6 +2158,7 @@ class GrandmasterApp {
                 content: '{bold}Commands:{/bold} /team <name> | /me <action> | /public | /private | ESC to disconnect',
             });
             const footerStatus = (0, blessed_helpers_1.createBox)({
+                border: undefined, // one row: a frame would eat the whole line
                 parent: footer,
                 top: 1,
                 left: 1,

@@ -2435,6 +2435,10 @@ export class GrandmasterApp {
       });
 
       createBox({
+        // A one-row box inside the footer frame: createBox borders when no
+        // border key is given (Panel's default), and a bordered one-row box
+        // has no interior left to paint the text in.
+        border: undefined,
         parent: footer,
         top: 0,
         left: 1,
@@ -2444,6 +2448,7 @@ export class GrandmasterApp {
       });
 
       const footerStatus = createBox({
+        border: undefined,   // one row: a frame would eat the whole line
         parent: footer,
         top: 1,
         left: 1,

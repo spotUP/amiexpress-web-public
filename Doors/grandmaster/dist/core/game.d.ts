@@ -66,6 +66,14 @@ export declare class GameEngine {
     private readonly startLevel;
     constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager, startLevel?: number);
     /**
+     * Publish the grade for the mode being played.
+     *
+     * 'death' is HeborisCE's Devil family (gameMode 3) and climbs dgname by
+     * level, not the TGM3 Master ladder the GradeManager scores
+     * (gamestart.c:9348-9349). Every other mode keeps the Master ladder.
+     */
+    private refreshGrade;
+    /**
      * Set animation manager (for visual effects)
      */
     setAnimationManager(animations: AnimationManager): void;

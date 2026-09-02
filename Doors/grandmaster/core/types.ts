@@ -388,7 +388,10 @@ export type TGMGrade =
   | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9'
   | 'S10' | 'S11' | 'S12' | 'S13'
   | 'm1' | 'm2' | 'm3' | 'm4' | 'm5' | 'm6' | 'm7' | 'm8' | 'm9'
-  | 'M' | 'MK' | 'MV' | 'MO' | 'GM' | 'GMM';
+  | 'M' | 'MK' | 'MV' | 'MO' | 'GM' | 'GMM'
+  // The Devil/DOOM ladder's top rank (dgname[16], gamestart.c:609). Only
+  // 'death' can award it - see core/devil-grade.ts.
+  | 'GOD';
 
 export interface GradeRequirement {
   grade: TGMGrade;

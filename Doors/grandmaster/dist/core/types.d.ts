@@ -223,7 +223,7 @@ export interface SpeedLevel {
     das: number;
     lockDelay: number;
 }
-export type TGMGrade = '9' | '8' | '7' | '6' | '5' | '4' | '3' | '2' | '1' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9' | 'S10' | 'S11' | 'S12' | 'S13' | 'm1' | 'm2' | 'm3' | 'm4' | 'm5' | 'm6' | 'm7' | 'm8' | 'm9' | 'M' | 'MK' | 'MV' | 'MO' | 'GM' | 'GMM';
+export type TGMGrade = '9' | '8' | '7' | '6' | '5' | '4' | '3' | '2' | '1' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9' | 'S10' | 'S11' | 'S12' | 'S13' | 'm1' | 'm2' | 'm3' | 'm4' | 'm5' | 'm6' | 'm7' | 'm8' | 'm9' | 'M' | 'MK' | 'MV' | 'MO' | 'GM' | 'GMM' | 'GOD';
 export interface GradeRequirement {
     grade: TGMGrade;
     internalGradeRequired: number;
