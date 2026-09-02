@@ -7,6 +7,9 @@ import { T } from '../door-theme';
 
 export function createEventCheckboxes(p: Box, state: AppState, l: number, r: number) {
   blessed.box({
+    // A bar, not a frame: Panel borders when the caller names none, and a
+    // one-row box with a frame has no interior - its content never renders.
+    border: undefined,
     parent: p,
     top: r++,
     left: l,

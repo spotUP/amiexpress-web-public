@@ -84,6 +84,8 @@ class VideoGrid {
             top: options.top ?? 0,
             width: options.width ?? '100%',
             height: options.height ?? '100%',
+            // A bar, not a frame: Panel borders when the caller names none, and a
+            // one-row box with a frame has no interior - its content never renders.
             border: undefined,
             style: {
                 bg: 'transparent',
@@ -271,6 +273,7 @@ class VideoGrid {
         if (!text)
             return;
         this.emptyNoticeBox = blessed_1.default.box({
+            border: undefined,
             parent: this.container,
             bottom: 0,
             left: 0,

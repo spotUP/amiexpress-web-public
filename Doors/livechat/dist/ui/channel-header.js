@@ -8,6 +8,9 @@ const door_theme_1 = require("../door-theme");
 /** Create channel header component */
 function createChannelHeader(blessed, screen) {
     return blessed.box({
+        // A bar, not a frame: Panel borders when the caller names none, and a
+        // one-row box with a frame has no interior - its content never renders.
+        border: undefined,
         parent: screen,
         top: 1,
         left: 16,

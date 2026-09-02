@@ -214,16 +214,6 @@ const THIN_BOX_BACKLOG: Record<string, number> = {
   // Its four modal backdrops were fixed in 4a0d0aa29; these three are bars.
   'Doors/bug-tracker/app.ts': 2,
   'Doors/bug-tracker/dialogs.ts': 1,
-  // The busiest door on the board - eight of them, including the channel
-  // header and the user-status line.
-  'Doors/livechat/server.ts': 1,
-  'Doors/livechat/ui/channel-header.ts': 1,
-  'Doors/livechat/ui/user-status.ts': 1,
-  'Doors/livechat/ui/video-tile.ts': 1,
-  'Doors/livechat/overlays/settings-checkboxes-events.ts': 1,
-  'Doors/livechat/overlays/settings-overlay.ts': 1,
-  'Doors/livechat/features/drawing-canvas.ts': 1,
-  'Doors/livechat/features/video-grid.ts': 1,
   'Doors/rip-browser/app.ts': 1,
   // GRANDMASTER's remaining three, in the TetriNET screens.
   'Doors/grandmaster/app.ts': 2,

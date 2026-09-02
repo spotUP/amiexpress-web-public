@@ -16,6 +16,9 @@ const STATUS_SYMBOLS = {
 /** Create user status summary component */
 function createUserStatus(blessed, screen) {
     return blessed.box({
+        // A bar, not a frame: Panel borders when the caller names none, and a
+        // one-row box with a frame has no interior - its content never renders.
+        border: undefined,
         parent: screen,
         bottom: 2,
         left: 0,

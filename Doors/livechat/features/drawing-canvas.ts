@@ -21,7 +21,9 @@ export function createDrawingCanvas(s: Screen, sock: any, st: any, cl: any, tb: 
 
   canvas.enableResize();
 
-  const pal = blessed.box({ parent: s, top: 0, left: 0, width: 1, height: 1, hidden: true, tags: true });
+  // border: undefined - Panel frames a box the caller leaves unspecified, and
+  // this one is a single cell.
+  const pal = blessed.box({ border: undefined, parent: s, top: 0, left: 0, width: 1, height: 1, hidden: true, tags: true });
 
   canvas.on('mouse', (e: any) => {
     if (!dm) return;

@@ -376,6 +376,9 @@ export async function createApp(session: DoorSession) {
 
   // Ghost text overlay for inline completion preview
   const ghostText = createBox({
+    // A bar, not a frame: Panel borders when the caller names none, and a
+    // one-row box with a frame has no interior - its content never renders.
+    border: undefined,
     parent: screen, // Parent to screen to avoid panel clipping
     bottom: STATUS_HEIGHT + 1,  // Align with input field content
     left: 10,

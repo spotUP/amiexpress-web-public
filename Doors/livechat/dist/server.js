@@ -320,6 +320,9 @@ async function createApp(session) {
     });
     // Ghost text overlay for inline completion preview
     const ghostText = (0, blessed_helpers_1.createBox)({
+        // A bar, not a frame: Panel borders when the caller names none, and a
+        // one-row box with a frame has no interior - its content never renders.
+        border: undefined,
         parent: screen, // Parent to screen to avoid panel clipping
         bottom: status_bar_1.STATUS_HEIGHT + 1, // Align with input field content
         left: 10,

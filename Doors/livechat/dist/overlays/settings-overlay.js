@@ -47,6 +47,9 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         style: { fg: door_theme_1.T.dim },
     });
     blessed_1.default.box({
+        // A bar, not a frame: Panel borders when the caller names none, and a
+        // one-row box with a frame has no interior - its content never renders.
+        border: undefined,
         parent: o,
         top: pCb.nextRow + 1,
         left: l,

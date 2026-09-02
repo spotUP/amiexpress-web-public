@@ -299,6 +299,8 @@ class VideoTile {
             top: options.top,
             width: options.width,
             height: options.height,
+            // A bar, not a frame: Panel borders when the caller names none, and a
+            // one-row box with a frame has no interior - its content never renders.
             border: undefined,
             style: { bg: door_theme_1.T.ground },
             tags: true,
@@ -332,6 +334,7 @@ class VideoTile {
         this.updateVideoDisplay();
         // Status bar at bottom (username and indicators)
         this.statusBar = blessed_1.default.box({
+            border: undefined,
             parent: this.container,
             left: 0,
             bottom: 0,

@@ -20,7 +20,9 @@ function createDrawingCanvas(s, sock, st, cl, tb, bbs, ib, gcdn, ucl, usb, asm, 
     const cols = ['white', 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'gray'];
     let ci = 0;
     canvas.enableResize();
-    const pal = blessed_1.default.box({ parent: s, top: 0, left: 0, width: 1, height: 1, hidden: true, tags: true });
+    // border: undefined - Panel frames a box the caller leaves unspecified, and
+    // this one is a single cell.
+    const pal = blessed_1.default.box({ border: undefined, parent: s, top: 0, left: 0, width: 1, height: 1, hidden: true, tags: true });
     canvas.on('mouse', (e) => {
         if (!dm)
             return;
