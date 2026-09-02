@@ -585,18 +585,28 @@ const CLASSIC_SHAPES = {
 };
 // TI-ARS / ACE-ARS wall & floor kicks.
 //
+// This table is shared by TI-ARS and ACE-ARS; the two ROTATION SYSTEMS are
+// not otherwise the same, see the RotationSystem doc comment in core/types.ts
+// for what else HeborisCE gates on rots (ACE-ARS's up-key instant lock in
+// particular, ars.c:331/361/389, which this door does not implement).
+//
 // classic.c:130-242 (statCMove, shared by Heboris rots==0 and TI-ARS rots==1):
 //   - the plain left/right wall kick for every non-I piece (classic.c:130-186)
 //     applies to BOTH Heboris and TI-ARS -- it is not gated on rots.
 //   - the T-piece "cyan" floor kick (classic.c:162-183, gated `rots[player]==1`)
 //     and the I-piece red wall/floor kick (classic.c:186-241, gated
 //     `rots[player]==1`) are TI-ARS exclusive; Heboris (rots==0) gets neither.
-// ars.c:83-234 (statAMove, shared by ACE-ARS rots==4 and ACE-ARS2 rots==5) runs
+// ars.c:83-234 (statAMove, run by ACE-ARS rots==4 and ACE-ARS2 rots==5) runs
 // textually the same three kick branches (ars.c:112, ars.c:144-165, ars.c:168-223)
-// with NO rots gating at all, so ACE-ARS always gets what TI-ARS gets. The two
-// systems' kick data is therefore identical -- this is a traced fact, not a
-// shortcut; they differ in lock/drop mechanics (ARS1 vs Ti-style hard lock)
-// which this table does not model.
+// with NO rots gating at all, so for THESE SPECIFIC transitions ACE-ARS computes
+// the same offsets TI-ARS does -- a traced fact about the kick math, checked
+// transition by transition, not a claim that ACE-ARS and TI-ARS play the same.
+// ars.c's statAMove also gives ACE-ARS (rots==4 only, not TI-ARS, not ACE-ARS2)
+// an ARS1-style instant lock on the up key while grounded (ars.c:331,361,389) --
+// a lock/landing mechanic with no equivalent in classic.c's statCMove at all, so
+// TI-ARS has no analog of it whatsoever. Not implemented in this door: there is
+// no "up key held while grounded" input distinct from rotate/hard-drop in this
+// door's control scheme, and inventing one risks a guessed key mapping.
 //
 // Left/right kick priority: classic.c/ars.c test left-then-right with two
 // independent `if`s, so when both directions are open the right kick's
@@ -656,14 +666,23 @@ const CLASSIC_ARS_KICKS = {
 // ============================================================================
 // TI-WORLD / ACE-SRS / DS-WORLD / SRS-X shared 90-degree wall kicks.
 //
+// This table is shared by all four of these ROTATION SYSTEMS; the systems
+// themselves are not otherwise interchangeable -- see the RotationSystem doc
+// comment in core/types.ts for the lock/landing differences HeborisCE gates
+// per rots value (DS-WORLD's kick-limit exemption and SRS-X's instant lock on
+// down are both implemented in core/game.ts; the ACE-SRS/DS-WORLD soft-drop
+// gravity constant at world.c:405,452 is not).
+//
 // world.c:139-357 (statWMove) is the single function behind all four of these
 // rulesets (game/gamestart.c:7613-7630: rots==2 TI-WORLD, rots==3 ACE-SRS/
 // "WORLD2", rots==6 DS-WORLD/"WORLD3", rots==7 SRS-X); its rotation/kick block
 // (world.c:203-357) is not gated on rots at all for the plain CW/CCW case, so
-// all four systems get identical 90-degree kick data -- again a traced fact,
-// not a guess. They differ in lock-delay/drop-speed constants passed into
-// statWMove (world.c:7613-7630) and, for SRS-X only, a dedicated 180-degree
-// path (world.c:211, 242-254) -- see SRS_X_KICKS below.
+// for these transitions all four compute identical 90-degree kick data -- a
+// traced fact about the kick math specifically, not a claim that the four
+// systems play the same. They differ in kick-count limits, lock-on-down, and
+// drop-speed constants passed into statWMove (world.c:7613-7630, 405-452) and,
+// for SRS-X only, a dedicated 180-degree path (world.c:211, 242-254) -- see
+// SRS_X_KICKS below.
 //
 // Non-I offsets are the "回転補正(I以外共通)" table at world.c:29-37 (world_i_rot
 // defaults to 0 -- game/gamestart.c:975 -- so the I offsets are the symmetric

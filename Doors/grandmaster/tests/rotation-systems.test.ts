@@ -9,18 +9,38 @@
  * comments above CLASSIC_SHAPES / CLASSIC_ARS_KICKS / WORLD_KICKS /
  * SRS_X_KICKS in core/pieces.ts for the full derivation and citations).
  *
- * Two families, four "identical by trace" facts pinned deliberately:
- *  - TI-ARS and ACE-ARS run different HeborisCE functions (statCMove vs
- *    statAMove) but those functions execute textually the same kick logic
- *    for the transitions this file exercises, so their kick tables are
- *    pinned as equal, not just "both non-empty" - if a future edit only
- *    updates one of the two, this test catches the drift.
- *  - TI-WORLD, ACE-SRS and DS-WORLD all run statWMove and its rotation/kick
- *    block is not gated on which of the three it is running as, so their
- *    90-degree kick tables are pinned as equal to each other too.
- *  - SRS-X reuses that same 90-degree table AND additionally exposes a
- *    dedicated 180-degree kick table (world.c's otherBlock180KickTable /
- *    iBlock180KickTable) that the other WORLD-family systems do not have.
+ * rots is 0-indexed HEBORIS/TI-ARS/TI-WORLD/ACE-SRS/ACE-ARS/ACE-ARS2/DS-WORLD/
+ * SRS-X/DRS (config.c:1118-1126). None of these six are the same rotation
+ * system as each other - HeborisCE gates real lock/landing behavior on rots,
+ * not just the shape/kick tables. What this file pins in two parts:
+ *
+ *  1. Shared TABLES, deliberately pinned so a future edit to one half of a
+ *     pair can't silently drift from the other:
+ *      - TI-ARS and ACE-ARS run different HeborisCE functions (statCMove vs
+ *        statAMove) but those functions execute textually the same kick
+ *        logic for the transitions this file exercises, so their kick
+ *        tables are pinned as equal, not just "both non-empty".
+ *      - TI-WORLD, ACE-SRS and DS-WORLD all run statWMove and its rotation/
+ *        kick block is not gated on which of the three it is running as, so
+ *        their 90-degree kick tables are pinned as equal to each other too.
+ *      - SRS-X reuses that same 90-degree table AND additionally exposes a
+ *        dedicated 180-degree kick table (world.c's otherBlock180KickTable /
+ *        iBlock180KickTable) the other WORLD-family systems do not have.
+ *
+ *  2. Behavioral differences HeborisCE gates on rots that this door DOES
+ *     implement, despite the shared tables above:
+ *      - DS-WORLD (rots==6) is exempted from the kick-count forced lock the
+ *        rest of the WORLD family gets (world.c:425-426) - "infinite spin".
+ *      - SRS-X (rots==7) locks instantly on down input once grounded,
+ *        instead of just resetting the lock-delay timer (world.c:440).
+ *
+ * Not implemented, and said here rather than guessed: ACE-ARS's up-key
+ * instant lock (ars.c:331,361,389, ACE-ARS only, not TI-ARS) has no
+ * equivalent input in this door's control scheme; ACE-SRS/DS-WORLD's
+ * distinct soft-drop gravity constant (world.c:405,452) would collide with
+ * the player-configurable PlayerSettings.softDropSpeed multiplier this door
+ * already has; ACE-ARS2's down-key instant lock (ars.c:320) and D.R.S are
+ * out of scope entirely - ACE-ARS2 and D.R.S are not requested systems.
  */
 
 import assert from 'assert';
@@ -97,11 +117,17 @@ export async function tiArsIPieceHorizontalAndFloorKicks(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // ACE-ARS: ars.c reuses classic.c's shapes and, because ars.c:83-234 runs the
-// same three kick branches with no `rots` gate at all, ends up with the
-// exact same kick data as TI-ARS.
+// same three kick branches with no `rots` gate at all, computes the same
+// kick offsets as TI-ARS for the transitions below. ACE-ARS is still its own
+// rotation system - see the test above's comment for the lock/landing
+// mechanic (up-key instant lock) that TI-ARS has no analog of at all.
 // ---------------------------------------------------------------------------
 
-export async function aceArsSharesTiArssShapesAndKicks(): Promise<void> {
+export async function aceArsAndTiArsShareShapeAndKickTablesOnly(): Promise<void> {
+  // Table-level equality only - see core/pieces.ts's CLASSIC_ARS_KICKS
+  // comment and tests below for the lock/landing behavior that still tells
+  // ACE-ARS and TI-ARS apart (ACE-ARS's up-key instant lock, not implemented
+  // here; not tested here either, since there is nothing to assert against).
   const ti = new PieceManager('TI-ARS');
   const ace = new PieceManager('ACE-ARS');
 
@@ -117,7 +143,8 @@ export async function aceArsSharesTiArssShapesAndKicks(): Promise<void> {
 
   // ars.c's three kick branches (112, 144-165, 168-223) are not gated on
   // rots, unlike classic.c's (which gates the T floor kick and I kick on
-  // rots==1) - so ACE-ARS gets exactly what TI-ARS gets for every transition.
+  // rots==1) - so for these specific transitions ACE-ARS computes exactly
+  // what TI-ARS computes.
   const transitions: Array<[('I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L'), number, number]> = [
     ['J', 0, 1], ['T', 1, 2], ['T', 0, 1], ['I', 0, 1], ['I', 1, 0],
   ];
@@ -167,6 +194,84 @@ export async function worldFamilyNinetyDegreeKicksAreShared(): Promise<void> {
       pm.getKicks('I', 1, 2), ti.getKicks('I', 1, 2),
       `${system}'s 90-degree I kicks must match TI-WORLD's`
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Behavioral differences the shared tables above do NOT capture. TI-WORLD,
+// ACE-SRS, DS-WORLD and SRS-X share a shape table and a 90-degree kick
+// table, but HeborisCE still gates real lock/landing behavior on which of
+// the four is running - these are not the same rotation system, and this
+// door models two of those differences.
+// ---------------------------------------------------------------------------
+
+export async function dsWorldNeverCapsOutOnKickCountTheWayTiWorldDoes(): Promise<void> {
+  // world.c:425-426 explicitly excludes rots==6 (DS-WORLD) from the
+  // kick-count forced lock every other WORLD-family system gets - HeborisCE's
+  // "infinite spin". This door's analog of that forced lock is
+  // moveResetCount/rotationResetCount capping out at maxMoveResets/
+  // maxRotationResets (core/game.ts resetLockDelay(): once a count reaches
+  // its cap, further rotations/moves stop refreshing the lock-delay timer).
+  // DS-WORLD must never hit that cap; TI-WORLD must.
+  const rotationsToTry = 20;
+  const groundedO = { type: 'O' as const, rotation: 0 as const, x: 4, y: 22 };
+
+  const dsWorld: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: 'DS-WORLD' }, sounds);
+  dsWorld.start();
+  dsWorld.getState().currentPiece = { ...groundedO };
+  for (let i = 0; i < rotationsToTry; i++) dsWorld.rotate(1);
+  assert.strictEqual(
+    dsWorld.getState().rotationResetCount, rotationsToTry,
+    'DS-WORLD must keep counting resets past the Ti-style cap other systems hit'
+  );
+
+  const tiWorld: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: 'TI-WORLD' }, sounds);
+  tiWorld.start();
+  tiWorld.getState().currentPiece = { ...groundedO };
+  for (let i = 0; i < rotationsToTry; i++) tiWorld.rotate(1);
+  assert.ok(
+    tiWorld.getState().rotationResetCount < rotationsToTry,
+    'TI-WORLD must actually cap out for this to be a meaningful contrast with DS-WORLD'
+  );
+  assert.strictEqual(
+    tiWorld.getState().rotationResetCount, tiWorld.getState().maxRotationResets,
+    'TI-WORLD must cap exactly at its own maxRotationResets'
+  );
+}
+
+export async function srsXLocksInstantlyOnDownOnceGrounded(): Promise<void> {
+  // world.c:440 ("if((rots[player] == 7) || (heboGB[player]!=0)) bk[player]
+  // = 100;", commented "SRS-X即接着" i.e. "SRS-X instant lock"): pressing
+  // down while already grounded locks the piece on the spot. Every other
+  // WORLD-family system takes world.c:442's `else` branch instead, which
+  // only nudges the lock timer (bk[player] += 1 + ...) - it does not lock.
+  const srsX: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: 'SRS-X' }, sounds);
+  srsX.start();
+  const state = srsX.getState();
+  // SRS T rot0 at y=22: row1 (x,x+1,x+2 at y+1=23) is the board's last row,
+  // so moving down one more is out of bounds - already grounded.
+  state.currentPiece = { type: 'T', rotation: 0, x: 4, y: 22 };
+
+  const result = srsX.softDrop();
+
+  assert.strictEqual(result, true, 'softDrop must report success (it locked the piece)');
+  assert.strictEqual(state.board.grid[23][4].filled, true, 'the piece must already be on the board');
+  assert.strictEqual(state.board.grid[23][5].filled, true);
+  assert.strictEqual(state.board.grid[23][6].filled, true);
+}
+
+export async function everyOtherWorldFamilySystemJustWaitsOutTheLockDelayOnDown(): Promise<void> {
+  for (const system of ['TI-WORLD', 'ACE-SRS', 'DS-WORLD', 'SRS'] as const) {
+    const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: system }, sounds);
+    engine.start();
+    const state = engine.getState();
+    state.currentPiece = { type: 'T', rotation: 0, x: 4, y: 22 };
+
+    const result = engine.softDrop();
+
+    assert.strictEqual(result, false, `${system}'s soft-drop must not move (already grounded) or lock`);
+    assert.strictEqual(state.board.grid[23][4].filled, false, `${system} must not lock instantly on down`);
+    assert.ok(state.currentPiece, `${system}'s piece must still be the active piece, not locked`);
   }
 }
 

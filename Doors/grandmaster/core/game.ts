@@ -171,8 +171,16 @@ export class GameEngine {
       moveResetCount: 0,
       rotationResetCount: 0,
       floorKickCount: 0,
-      maxMoveResets: 15,       // Ti-style defaults
-      maxRotationResets: 8,    // Ti-style: fewer rotation resets than move resets
+      // world.c:425-426 skips the kick-count forced lock (bk[player]=100
+      // once kickc>=kickm / kickc3>=kickr) specifically when rots==6
+      // (DS-WORLD), and DS-WORLD's own kickm/kickr call parameters
+      // (game/gamestart.c's rots==6 branch) are -1 - literally "no limit" -
+      // outside versus play. That is HeborisCE's "infinite spin" for
+      // DS-WORLD: it never gets kicked into a forced lock by move/rotation
+      // count the way TI-WORLD/ACE-SRS/SRS-X do. Every other rotation
+      // system here keeps the Ti-style defaults below.
+      maxMoveResets: this.settings.rotationSystem === 'DS-WORLD' ? Infinity : 15,       // Ti-style defaults
+      maxRotationResets: this.settings.rotationSystem === 'DS-WORLD' ? Infinity : 8,    // Ti-style: fewer rotation resets than move resets
       maxFloorKicks: 1,        // Ti-style: only 1 floor kick allowed
       lockResets: 0,           // Legacy compatibility
 
@@ -580,6 +588,20 @@ export class GameEngine {
         this.recorder.recordInput('soft_drop', piece.type);
       }
 
+      return true;
+    }
+
+    // SRS-X: down input locks instantly once the piece is grounded
+    // (world.c:440, "if((rots[player] == 7) || (heboGB[player]!=0))
+    // bk[player] = 100;" - the comment there literally reads "SRS-X即接着"
+    // i.e. "SRS-X instant lock"). Every other rotation system here just
+    // leaves a grounded piece alone on a down-press that can't move it -
+    // same as before this change - and waits out the normal lock delay.
+    if (this.settings.rotationSystem === 'SRS-X') {
+      if (this.recorder) {
+        this.recorder.recordInput('soft_drop', piece.type);
+      }
+      this.lockPiece();
       return true;
     }
 

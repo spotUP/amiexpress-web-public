@@ -22,14 +22,33 @@ export type RotationSystem =
   | 'NRS'
   | 'BARS'
   // HeborisCE-authentic rotation rulesets (Documentation/7-Reference Sources/HeborisCE-1.1.0).
-  // TI-ARS / ACE-ARS share classic.c's block-data table (src/script/classic.c:3-23) and its
-  // "Ti-style" wall/floor kicks (src/script/classic.c:130-242, src/script/ars.c:112-223).
+  // rots is 0-indexed HEBORIS/TI-ARS/TI-WORLD/ACE-SRS/ACE-ARS/ACE-ARS2/DS-WORLD/SRS-X/DRS
+  // (src/script/config.c:1118-1126). These are NOT interchangeable rotation systems that
+  // happen to share tables - each is gated on its own rots value and HeborisCE gives several
+  // of them their own lock/landing behavior. What IS shared, and only that:
+  //   - TI-ARS (rots==1) and ACE-ARS (rots==4) share classic.c's block-data table
+  //     (src/script/classic.c:3-23, reused verbatim by ars.c per its own header comment)
+  //     and, because classic.c's Ti-gated kick branches and ars.c's ungated ones compute the
+  //     same offsets, the same wall/floor kick TABLE (classic.c:130-242, ars.c:112-223).
+  //     They are still different systems: ACE-ARS runs ars.c's statAMove, which gives it an
+  //     ARS1-style instant lock on the up key that TI-ARS's classic.c statCMove never has
+  //     (ars.c:331,361,389) - not implemented here; see core/pieces.ts's CLASSIC_ARS_KICKS
+  //     comment for why.
   | 'TI-ARS'
   | 'ACE-ARS'
   // TI-WORLD / ACE-SRS / DS-WORLD / SRS-X all run statWMove (src/script/world.c:139-357),
   // whose block-data table (world.c:52-72) is byte-for-byte identical to SRS piece shapes,
-  // and share the wall-kick offsets documented at world.c:28-47. SRS-X additionally gets the
-  // dedicated 180-degree kick tables at world.c:121-135.
+  // and whose plain CW/CCW kick offsets (world.c:28-47) are likewise shared by all four -
+  // that rotation/kick block is not gated per system. SRS-X additionally gets a dedicated
+  // 180-degree kick table (world.c:121-135) the other three don't have. Past the shape and
+  // 90-degree kick tables, these are NOT the same system: DS-WORLD is exempted from the
+  // kick-count forced lock the other three get (world.c:425-426, "infinite spin" - modeled
+  // in core/game.ts as unlimited maxMoveResets/maxRotationResets), and SRS-X locks instantly
+  // on down input once grounded instead of just resetting the lock timer (world.c:440,
+  // modeled in core/game.ts's softDrop()). ACE-SRS and DS-WORLD also run a different
+  // soft-drop gravity constant than TI-WORLD/SRS-X (world.c:405,452) - not modeled here; this
+  // door's soft-drop speed is the player-configurable PlayerSettings.softDropSpeed multiplier,
+  // not a per-rotation-system constant, and retrofitting one risks conflicting with it.
   | 'TI-WORLD'
   | 'ACE-SRS'
   | 'DS-WORLD'
