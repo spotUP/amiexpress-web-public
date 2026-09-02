@@ -877,7 +877,7 @@ class CardLobbyApp {
             map.push(table.id);
         });
         if (rows.length === 0) {
-            rows.push(['', '', '>>> No tables available. Press [C] to create one. <<<', '', '']);
+            rows.push(['-', 'No tables yet', '', '', '']);
         }
         this.tableListMap = map;
         this.uiManager.lobbyList.setRows(rows);
@@ -904,8 +904,13 @@ class CardLobbyApp {
                 'Select a table to view details.',
                 '',
                 `{${lib_1.UI_THEME.accent}-fg}Quick start{/}:`,
-                'Use the lobby list to highlight a table.',
-                `Press {${lib_1.UI_THEME.accent}-fg}ENTER{/} to join, {${lib_1.UI_THEME.accent}-fg}O{/} to observe, or {${lib_1.UI_THEME.accent}-fg}C{/} to create a table.`,
+                '',
+                // One key per line: the panel is 52 columns wide at 80x25 and a
+                // single sentence naming all three ran off the right edge.
+                `  {${lib_1.UI_THEME.accent}-fg}C{/}      create a table`,
+                `  {${lib_1.UI_THEME.accent}-fg}ENTER{/}  join the highlighted table`,
+                `  {${lib_1.UI_THEME.accent}-fg}O{/}      observe it`,
+                `  {${lib_1.UI_THEME.accent}-fg}R{/}      refresh the lobby`,
             ].join('\n'));
             this.updateTableActions();
             return;

@@ -1493,16 +1493,30 @@ export class Element extends EventEmitter {
   // Focus Management
   // ============================================================================
 
+  /**
+   * Focus this element.
+   *
+   * `focusable` governs the TAB ORDER - whether Tab and the screen's focus
+   * navigation stop here - and `_getFocusable()` reads it for exactly that.
+   * It does not veto an explicit call: a caller asking for focus by name has
+   * already decided.
+   *
+   * This used to return silently when `focusable` was false, which every
+   * Element is by DEFAULT (see the defaults above). A door that opened a
+   * scrollable text window and called `focus()` on it kept the focus it had,
+   * so the window's own `key(['escape', 'q'])` handlers never ran and the
+   * dialog could not be closed at all - CARD LOBBY's profile, achievements
+   * and leaderboard windows, reported 2026-09-02 as "i can't exit them".
+   * Silently ignoring the call is what made it hard to find.
+   */
   focus(): void {
     if (this.destroyed || !this.screen) return;
 
-    // Disabled elements cannot receive focus
+    // Disabled elements cannot receive focus - that is what disabled means.
     if (this.disabled) return;
 
-    if (this.options.focusable !== false) {
-      // setFocused handles blur of previous, setting focused=true, and emitting focus
-      this.screen.setFocused(this);
-    }
+    // setFocused handles blur of previous, setting focused=true, and emitting focus
+    this.screen.setFocused(this);
   }
 
   blur(): void {

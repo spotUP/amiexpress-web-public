@@ -1077,7 +1077,7 @@ export class CardLobbyApp {
     });
 
     if (rows.length === 0) {
-      rows.push(['', '', '>>> No tables available. Press [C] to create one. <<<', '', '']);
+      rows.push(['-', 'No tables yet', '', '', '']);
     }
 
     this.tableListMap = map;
@@ -1105,8 +1105,13 @@ export class CardLobbyApp {
         'Select a table to view details.',
         '',
         `{${UI_THEME.accent}-fg}Quick start{/}:`,
-        'Use the lobby list to highlight a table.',
-        `Press {${UI_THEME.accent}-fg}ENTER{/} to join, {${UI_THEME.accent}-fg}O{/} to observe, or {${UI_THEME.accent}-fg}C{/} to create a table.`,
+        '',
+        // One key per line: the panel is 52 columns wide at 80x25 and a
+        // single sentence naming all three ran off the right edge.
+        `  {${UI_THEME.accent}-fg}C{/}      create a table`,
+        `  {${UI_THEME.accent}-fg}ENTER{/}  join the highlighted table`,
+        `  {${UI_THEME.accent}-fg}O{/}      observe it`,
+        `  {${UI_THEME.accent}-fg}R{/}      refresh the lobby`,
       ].join('\n'));
       this.updateTableActions();
       return;

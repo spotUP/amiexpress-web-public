@@ -162,12 +162,15 @@ export class Question extends Box {
       content: '[ Yes ]',
       align: 'center',
       valign: 'middle',
-      border: { type: 'line' },
+      // No border. A bordered box one row high has no interior row left for
+      // its content - the frame takes the top and the bottom - so the label
+      // was never drawn and the dialog showed two empty outlines
+      // ("broken dialog", 2026-09-02). The container comment beside
+      // buttonBox already said the buttons draw no frame; the code did.
       mouse: true,
       style: {
         fg: 'white',
         bg: 'green',
-        border: { fg: 'green' },
         hover: { bg: 'lightgreen', fg: 'black' },
         focus: { bg: 'lightgreen', fg: 'black' },
       },
@@ -183,12 +186,10 @@ export class Question extends Box {
       content: '[ No ]',
       align: 'center',
       valign: 'middle',
-      border: { type: 'line' },
       mouse: true,
       style: {
         fg: 'white',
         bg: 'red',
-        border: { fg: 'red' },
         hover: { bg: 'lightred', fg: 'black' },
         focus: { bg: 'lightred', fg: 'black' },
       },

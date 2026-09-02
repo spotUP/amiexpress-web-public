@@ -160,3 +160,50 @@ export async function tabMovesFocusToSomethingThatTakesIt(): Promise<void> {
   await h.app.shutdown();
   await h.finished;
 }
+
+export async function theTablePanelsAreLaidOutWhereTheyBelong(): Promise<void> {
+  // "i created a table and ended up in this broken screen" - one small box in
+  // an empty window. layoutTablePanels() wrote geometry to `.options`, which
+  // seeds a widget at construction and is never read again, so all four
+  // panels kept the 10x6 they were built with, stacked at the same spot.
+  const h = await openLobby();
+  const ui = h.app.uiManager;
+
+  ui.layoutTablePanels();
+
+  const panels = [ui.flopPanel, ui.playersPanel, ui.handPanel, ui.activityPanel];
+  const boxes = panels.map((p: any) => ({ top: Number(p.top), left: Number(p.left), w: Number(p.width), h: Number(p.height) }));
+
+  for (const b of boxes) {
+    assert.ok(b.w > 10, `a laid-out panel is wider than the 10 columns it was built with (got ${b.w})`);
+    assert.ok(b.h >= 4, `and taller than nothing (got ${b.h})`);
+  }
+
+  const positions = new Set(boxes.map((b) => `${b.top}:${b.left}`));
+  assert.strictEqual(positions.size, 4, 'the four panels occupy four different places');
+
+  // The two columns line up, and the bottom row sits below the top row.
+  assert.strictEqual(boxes[0].top, boxes[1].top, 'flop and players share the top row');
+  assert.strictEqual(boxes[2].top, boxes[3].top, 'hand and activity share the bottom row');
+  assert.ok(boxes[2].top > boxes[0].top, 'the bottom row is below the top row');
+
+  await h.app.shutdown();
+  await h.finished;
+}
+
+export async function theActionButtonsSpreadAcrossTheRow(): Promise<void> {
+  // Same defect, same fix: the buttons were placed through `.options` too.
+  const h = await openLobby();
+  const ui = h.app.uiManager;
+
+  ui.layoutTablePanels();
+
+  const lefts = ['fold', 'check', 'call', 'raise', 'quit'].map((k) => Number(ui.actionButtons[k].left));
+  const sorted = [...lefts].sort((a, b) => a - b);
+
+  assert.deepStrictEqual(lefts, sorted, 'the buttons run left to right');
+  assert.strictEqual(new Set(lefts).size, 5, 'and no two share a column');
+
+  await h.app.shutdown();
+  await h.finished;
+}

@@ -3,7 +3,7 @@
  * Handles all UI building, layout, and rendering operations
  */
 
-import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu, ListTable } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu, ListTable, Overlay } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
@@ -647,6 +647,31 @@ export class UIManager {
     this.layoutTablePanels();
   }
 
+  /**
+   * Move and size a widget.
+   *
+   * Both the live property and `options` are written: the property is what
+   * the renderer reads, and `options` is what a later rebuild would seed
+   * from, so leaving them to disagree is how a panel springs back.
+   */
+  private place(
+    widget: { top?: unknown; left?: unknown; width?: unknown; height?: unknown; options?: unknown },
+    box: { top: number; left: number; width: number; height: number },
+  ): void {
+    widget.top = box.top;
+    widget.left = box.left;
+    widget.width = box.width;
+    widget.height = box.height;
+
+    const options = widget.options as Record<string, unknown> | undefined;
+    if (options) {
+      options.top = box.top;
+      options.left = box.left;
+      options.width = box.width;
+      options.height = box.height;
+    }
+  }
+
   layoutTablePanels(): void {
     if (!this.layout) return;
     const tableWidth = Number(this.tableWindow.width) || this.layout.width;
@@ -689,30 +714,15 @@ export class UIManager {
     const bottomTop = top + topHeight + rowGap;
     const actionTop = top + innerHeight - actionHeight;
 
-    this.flopPanel.options.top = top;
-    this.flopPanel.options.left = left;
-    this.flopPanel.options.width = leftWidth;
-    this.flopPanel.options.height = topHeight;
+    this.place(this.flopPanel, { top, left, width: leftWidth, height: topHeight });
 
-    this.playersPanel.options.top = top;
-    this.playersPanel.options.left = rightStart;
-    this.playersPanel.options.width = rightWidth;
-    this.playersPanel.options.height = topHeight;
+    this.place(this.playersPanel, { top, left: rightStart, width: rightWidth, height: topHeight });
 
-    this.handPanel.options.top = bottomTop;
-    this.handPanel.options.left = left;
-    this.handPanel.options.width = leftWidth;
-    this.handPanel.options.height = bottomHeight;
+    this.place(this.handPanel, { top: bottomTop, left, width: leftWidth, height: bottomHeight });
 
-    this.activityPanel.options.top = bottomTop;
-    this.activityPanel.options.left = rightStart;
-    this.activityPanel.options.width = rightWidth;
-    this.activityPanel.options.height = bottomHeight;
+    this.place(this.activityPanel, { top: bottomTop, left: rightStart, width: rightWidth, height: bottomHeight });
 
-    this.tableActions.options.top = actionTop;
-    this.tableActions.options.left = left;
-    this.tableActions.options.width = innerWidth;
-    this.tableActions.options.height = actionHeight;
+    this.place(this.tableActions, { top: actionTop, left, width: innerWidth, height: actionHeight });
 
     this.layoutActionButtons();
   }
@@ -731,10 +741,7 @@ export class UIManager {
 
     order.forEach((key) => {
       const button = this.actionButtons[key];
-      button.options.top = buttonTop;
-      button.options.height = buttonHeight;
-      button.options.left = left;
-      button.options.width = buttonWidth;
+      this.place(button, { top: buttonTop, left, width: buttonWidth, height: buttonHeight });
       button.setContent(this.formatButtonLabel(button.getContent(), buttonWidth));
       left += buttonWidth + gap;
     });
@@ -788,24 +795,24 @@ export class UIManager {
   }
 
   buildOverlay(): void {
-    // CRITICAL: Parent overlayShade to screen (not desktop) so it works in browser mode
-    // Desktop gets hidden in browser mode, but overlayShade must always be visible
-    this.overlayShade = createBox({
-      // Panel adds a line border unless the key is present; these are
-      // bars and content areas, and the window around them carries the frame.
-      border: undefined,
+    // The SDK's Overlay, not a black box.
+    //
+    // This was a full-screen Box filled with solid black, so every dialog
+    // opened on a blank screen with the lobby wiped out behind it, reported
+    // as "many dialogs open up on a black screen instead of overlayed"
+    // (2026-09-02). Overlay draws no background of its own - the modal sits
+    // on top of the board it came from, and web clients get the dimming from
+    // the CSS overlay it announces.
+    //
+    // Parented to the SCREEN, not the desktop: the desktop can be hidden and
+    // the shade must not go with it.
+    this.overlayShade = new Overlay({
       parent: this.screen,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
       hidden: true,
-      clickable: true,  // Enable mouse handling to prevent focus issues
-      mouse: true,
-      style: {
-        bg: 'black',
-      },
-    });
+      // The dialogs manage their own focus and dismissal; the shade must not
+      // take focus away from them.
+      tapToDismiss: false,
+    }) as any;
 
     // Set z-index after creation to ensure dialogs appear on top of all UI (browser widget, etc.)
     (this.overlayShade as any).z = 9999;
