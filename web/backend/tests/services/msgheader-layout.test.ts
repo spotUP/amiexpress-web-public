@@ -25,7 +25,7 @@ process.env.SKIP_DB_INIT = '1';
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { classifyMsgHeaderRecord, portRecordToAmiga } from '../../src/services/msgheader-layout';
+import { classifyMsgHeaderRecord, classifyHeaderFile, portRecordToAmiga } from '../../src/services/msgheader-layout';
 import { parseAmigaMsgHeader, AMIGA_MSGHEADER_SIZE } from '../../src/services/amiga-msgheader';
 import { messageIndexManager } from '../../src/services/MessageIndexManager';
 import { planHeaderFile } from '../../src/scripts/migrate-msgheaders';
@@ -41,8 +41,36 @@ describe('telling the two layouts apart', () => {
     expect(classifyMsgHeaderRecord(amigaBytes, 0)).toBe('amiga');
   });
 
-  it('knows a record this port wrote', () => {
-    expect(classifyMsgHeaderRecord(portBytes, 0)).toBe('port');
+  it('will not guess at a record this port wrote, on its own', () => {
+    // Honest, not a shortcoming: such a record carries a plausible message
+    // number at BOTH offsets - its real one at 1, and at 2 the same number
+    // shifted a byte with the first letter of toName carried in.
+    expect(classifyMsgHeaderRecord(portBytes, 0)).toBe('unknown');
+  });
+
+  it('identifies it once the rest of the file is in hand', () => {
+    // The numbers run in sequence, so the reading that continues the run is
+    // the right one: 1, 2, 3 beats 321, 578, 835.
+    expect(classifyHeaderFile(portBytes)).toEqual(['port', 'port', 'port']);
+  });
+
+  it('identifies a 68K door\'s records the same way', () => {
+    expect(classifyHeaderFile(amigaBytes)).toEqual(['amiga', 'amiga', 'amiga']);
+  });
+
+  it('does not need a name field to be padded with NULs', () => {
+    // The live board's Conf2 carries `eall\0\xf9\xfc\x0e` as a toName: the
+    // bytes after a name's terminator are undefined. An earlier version read
+    // byte 36 - the tail of that field - and called 480 live records
+    // unidentifiable, every one an ordinary AmiExpress record.
+    const record = Buffer.alloc(110);
+    record[0] = 0x44;
+    record.writeInt32BE(7, 2);
+    Buffer.from('eall\0\xf9\xfc\x0e', 'latin1').copy(record, 6);
+    Buffer.from('Sandman\0', 'latin1').copy(record, 37);
+    Buffer.from('Results from Conftop!\0', 'latin1').copy(record, 68);
+
+    expect(classifyMsgHeaderRecord(record, 0)).toBe('amiga');
   });
 
   it('does not decide by the pad bytes, which hold uninitialised memory', () => {
@@ -105,6 +133,7 @@ describe('converting a record to the layout AmiExpress reads', () => {
     const converted = portRecordToAmiga(portBytes, 0);
 
     expect(classifyMsgHeaderRecord(converted, 0)).toBe('amiga');
+    expect(classifyHeaderFile(converted)).toEqual(['amiga']);
   });
 
   it('leaves a converted record alone the second time', () => {

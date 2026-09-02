@@ -1,5 +1,5 @@
 import { parseAmigaMsgHeader } from './amiga-msgheader';
-import { classifyMsgHeaderRecord, portRecordToAmiga } from './msgheader-layout';
+import { classifyMsgHeaderRecord, classifyHeaderFile, portRecordToAmiga, type MsgHeaderLayout } from './msgheader-layout';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getRootConferenceDir } from '../utils/file-hold.util';
@@ -200,7 +200,7 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
   /**
    * Deserialize msgHeader struct from binary buffer
    */
-  private deserializeMsgHeader(buffer: Buffer, offset: number): MsgHeader {
+  private deserializeMsgHeader(buffer: Buffer, offset: number, known?: MsgHeaderLayout): MsgHeader {
     /*
      * Reads BOTH layouts, because this board's files contain both.
      *
@@ -215,7 +215,7 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
      * guessed at differently each time; the migration reports those instead
      * of rewriting them.
      */
-    const layout = classifyMsgHeaderRecord(buffer, offset);
+    const layout = known ?? classifyMsgHeaderRecord(buffer, offset);
     const record = layout === 'port'
       ? portRecordToAmiga(buffer, offset)
       : buffer.subarray(offset, offset + this.MSGHEADER_SIZE);
@@ -258,10 +258,14 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
    */
   parseHeaderFile(buffer: Buffer): MsgHeader[] {
     const messageCount = Math.floor(buffer.length / this.MSGHEADER_SIZE);
+    // Decided with the whole file in hand: a record this port wrote has a
+    // plausible message number at BOTH offsets, and only the sequence the
+    // other records form says which one is real.
+    const layouts = classifyHeaderFile(buffer);
     const headers: MsgHeader[] = [];
 
     for (let i = 0; i < messageCount; i++) {
-      headers.push(this.deserializeMsgHeader(buffer, i * this.MSGHEADER_SIZE));
+      headers.push(this.deserializeMsgHeader(buffer, i * this.MSGHEADER_SIZE, layouts[i]));
     }
 
     return headers;

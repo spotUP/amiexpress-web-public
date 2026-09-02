@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { AMIGA_MSGHEADER_SIZE } from '../services/amiga-msgheader';
-import { classifyMsgHeaderRecord, portRecordToAmiga } from '../services/msgheader-layout';
+import { classifyHeaderFile, portRecordToAmiga } from '../services/msgheader-layout';
 
 export interface MigrationReport {
   file: string;
@@ -33,9 +33,15 @@ export function planHeaderFile(buffer: Buffer): { out: Buffer; report: Omit<Migr
   const out = Buffer.from(buffer);
   const report = { records, converted: 0, alreadyAmiga: 0, unidentified: [] as number[] };
 
+  // Decided with the whole file in hand: a record this port wrote carries a
+  // plausible message number at BOTH offsets, and only the sequence the other
+  // records form says which is real. Asked one record at a time, 480 of the
+  // live board's ordinary AmiExpress records came back unidentifiable.
+  const layouts = classifyHeaderFile(buffer);
+
   for (let i = 0; i < records; i++) {
     const at = i * AMIGA_MSGHEADER_SIZE;
-    switch (classifyMsgHeaderRecord(buffer, at)) {
+    switch (layouts[i]) {
       case 'port':
         portRecordToAmiga(buffer, at).copy(out, at);
         report.converted++;
@@ -58,6 +64,10 @@ function headerFiles(root: string): string[] {
     if (!entry.isDirectory()) continue;
     // MsgBase, or the numbered bases a conference with several of them keeps.
     const confDir = path.join(root, entry.name);
+    // A board keeps dated copies of a conference beside it - the live one has
+    // a Conf2.backup-2026-05-27 - and rewriting a backup is the one thing a
+    // migration must not do.
+    if (/\.backup|backup-\d/i.test(entry.name)) continue;
     for (const sub of fs.readdirSync(confDir, { withFileTypes: true }).filter(d => d.isDirectory())) {
       const candidate = path.join(confDir, sub.name, 'HeaderFile');
       if (fs.existsSync(candidate) && fs.statSync(candidate).size > 0) found.push(candidate);
