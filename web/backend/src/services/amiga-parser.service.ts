@@ -13,6 +13,7 @@ import { InfoFileParser } from './info-file-parser';
 // The user-file format has one owner; the importer reads another board's
 // files through it rather than keeping a second field layout.
 import { userFileManager } from './UserFileManager';
+import { readTooltypeMap } from '../utils/info-file.util';
 import { UserFileManager } from './UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import type {
@@ -359,7 +360,7 @@ console.log(`[AmigaParser] Parsing conference ${confNumber}...`);
       number: confNumber,
       database: await this.parseConferenceDB(confPath, confNumber, metadata),
       menu: await this.readTextFile(path.join(confPath, 'Menu.txt')),
-      fileAreas: await this.parseFileAreas(confPath),
+      fileAreas: await this.parseFileAreas(confPath, this.conferenceDirCount(confPath, confNumber)),
       messageBases: await this.parseMessageBases(confPath, confNumber),
     };
 
@@ -442,11 +443,49 @@ console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
   /**
    * Parse file areas (Dir0.info, Dir1.info, etc.)
    */
-  async parseFileAreas(confPath: string): Promise<AmigaFileArea[]> {
+  /**
+   * How many file areas a conference HAS, from its own icon.
+   *
+   * `NDIRS` on `Conf<n>.info` is what AmiExpress reads (express.e:5006 and
+   * 15264), and it bounds every directory operation the board does:
+   * `Directory to Edit[1-<maxDirs>]`, refused outside
+   * `1 <= which <= maxDirs` (express.e:10031-10042). Anything on disk past
+   * that number is a leftover the board itself ignores.
+   *
+   * A conference with NO `NDIRS` has no file areas: `readToolTypeInt`
+   * answers -1 for a key that is not there (tooltypes.e:176-181), and
+   * `which <= -1` can never hold, so the board offers no directory at all.
+   * 0 here reaches the same answer through the same test.
+   */
+  private conferenceDirCount(confPath: string, confNumber: number): number {
+    try {
+      const icon = path.join(path.dirname(confPath), `Conf${confNumber}.info`);
+      const count = parseInt(readTooltypeMap(icon).get('NDIRS') ?? '', 10);
+      return Number.isFinite(count) && count >= 0 ? count : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * A conference's file areas - the ones the BOARD has, not the ones left on
+   * disk.
+   *
+   * This used to import every `Dir<n>.info` it could see. On the reference-boardBBS
+   * reference tree Conf1 declares `NDIRS=1` and carries Dir0, Dir1 and Dir2,
+   * so an import created three file areas where the board has one - and Dir0
+   * is not a numbered area at all, because express.e numbers them from 1.
+   */
+  async parseFileAreas(confPath: string, maxDirs = 0): Promise<AmigaFileArea[]> {
     const fileAreas: AmigaFileArea[] = [];
     const entries = await fs.readdir(confPath);
 
-    const dirInfoFiles = entries.filter(f => /^Dir\d+\.info$/i.test(f));
+    const dirInfoFiles = entries
+      .filter(f => /^Dir\d+\.info$/i.test(f))
+      .filter(f => {
+        const n = parseInt(f.match(/\d+/)?.[0] || '0', 10);
+        return n >= 1 && n <= maxDirs;
+      });
 
     for (const file of dirInfoFiles) {
       const areaNumber = parseInt(file.match(/\d+/)?.[0] || '0', 10);
