@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { findCaseInsensitive } from './amigafs';
 
 // Default extensions if ScreenTypes.info not available
 const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
@@ -21,13 +22,13 @@ function resolveCaseInsensitivePath(targetPath: string): string | null {
   const targetName = path.basename(targetPath);
 
   try {
-    const entries = fs.readdirSync(dirPath);
-    const match = entries.find(entry => entry.toLowerCase() === targetName.toLowerCase());
-    if (match) {
-      const resolvedPath = path.join(dirPath, match);
-      if (fs.existsSync(resolvedPath)) {
-        return resolvedPath;
-      }
+    // Through amigafs, which remembers a directory's listing until its mtime
+    // moves. This function is called ~200 times per screen per scope by the
+    // level walk below, and a readdir each time is what made the screen index
+    // take twelve seconds on this board.
+    const match = findCaseInsensitive(dirPath, targetName);
+    if (match && fs.existsSync(match)) {
+      return match;
     }
   } catch (error) {
     // Directory may not exist or is unreadable

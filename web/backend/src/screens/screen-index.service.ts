@@ -175,6 +175,9 @@ const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'
 function isScreenFile(name: string): boolean {
   if (name.endsWith('.backup')) return false;
   const lower = name.toLowerCase();
+  // `bbsConfig.info.txt` is a config file's text sidecar, not a screen - it
+  // ends in .txt and has nothing to do with what a caller sees.
+  if (lower.endsWith('.info') || lower.includes('.info.')) return false;
   return SCREEN_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
@@ -463,7 +466,28 @@ function screenRefExists(baseDir: string, target: string): boolean {
   return !!resolveScreenReference(baseDir, target);
 }
 
+/**
+ * The facts for a file, remembered until the file changes.
+ *
+ * Every fact here comes from the BYTES - the sha256, the MCI references, the
+ * SAUCE record, the missing escape bytes - so the answer is only as old as the
+ * file. Keyed on size and mtime: an edit through the manager changes both, and
+ * a build that re-reads 1,145 unchanged files to say the same thing again is
+ * what a sysop experiences as "why does it take so long".
+ */
+const factsCache = new Map<string, { mtimeMs: number; size: number; facts: ScreenFileFacts }>();
+
 export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFacts {
+  try {
+    const stat = fs.statSync(absPath);
+    const cached = factsCache.get(absPath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      // A copy: callers fill in readBy, which belongs to a build and not to
+      // the file.
+      return { ...cached.facts, readBy: [] };
+    }
+  } catch { /* a file that will not stat is read below and fails there */ }
+
   const buf = fs.readFileSync(absPath);
   const name = path.basename(absPath);
   const format = sniffFormat(name, buf);
@@ -484,7 +508,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
         targetName: ref.code === 'CC' ? commandName(baseDir, ref.target) : undefined,
       }));
 
-  return {
+  const facts: ScreenFileFacts = {
     // Readers are filled in by buildScreenIndex, which is the only place that
     // knows which nodes and conferences exist and what each one reads.
     readBy: [],
@@ -497,6 +521,13 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     sha256: crypto.createHash('sha256').update(buf).digest('hex'),
     mci,
   };
+
+  try {
+    const stat = fs.statSync(absPath);
+    factsCache.set(absPath, { mtimeMs: stat.mtimeMs, size: stat.size, facts });
+  } catch { /* unreadable now; the next call reads it again */ }
+
+  return facts;
 }
 
 /** The stem a security variant shares with its base screen: LOGON20.TXT -> logon. */
