@@ -50,7 +50,7 @@ describe('FrameReconstructor erase (cursor never moves)', () => {
 
   it('erase resets the cells to the default attributes, not the current pen', () => {
     const { f } = run('\x1b[41;32;1;7m' + 'z'.repeat(10) + '\x1b[2K');
-    expect(at(f, 0, 0)).toEqual({ ch: ' ', fg: 1, bg: 6, bold: false, rvs: false });
+    expect(at(f, 0, 0)).toEqual({ ch: ' ', fg: 1, bg: 0, bold: false, rvs: false });
   });
 
   it('erase settles a pending wrap: the next printable lands in the erased last column, not on the next row', () => {
@@ -79,11 +79,14 @@ describe('FrameReconstructor SGR resolves into the VIC index space', () => {
     expect(at(run('\x1b[48;2;0;0;0mX').f, 0, 0).bg).toBe(0);
   });
 
-  it('backgrounds are consumed into bg and never leak into fg; 49 restores blue', () => {
+  // 49 restores the DEFAULT background, which is black (types.ts DEFAULT_BG):
+  // a C64 terminal powers on black and has no per-cell background at all.
+  // SGR 44 is still an explicit blue background and still resolves to VIC 6.
+  it('backgrounds are consumed into bg and never leak into fg; 49 restores the default black', () => {
     const c = at(run('\x1b[44;33mX').f, 0, 0);
     expect(c.bg).toBe(6);
     expect(c.fg).toBe(7);
-    expect(at(run('\x1b[41m\x1b[49mX').f, 0, 0).bg).toBe(6);
+    expect(at(run('\x1b[41m\x1b[49mX').f, 0, 0).bg).toBe(0);
   });
 
   it('reverse video is a cell attribute; SGR 0 clears everything', () => {
@@ -91,7 +94,7 @@ describe('FrameReconstructor SGR resolves into the VIC index space', () => {
     expect(at(f, 0, 0).rvs).toBe(true);
     expect(at(f, 1, 0).rvs).toBe(false);
     expect(at(f, 2, 0)).toMatchObject({ rvs: true, bold: true, fg: 10 });
-    expect(at(f, 3, 0)).toEqual({ ch: 'P', fg: 1, bg: 6, bold: false, rvs: false });
+    expect(at(f, 3, 0)).toEqual({ ch: 'P', fg: 1, bg: 0, bold: false, rvs: false });
   });
 
   it('a truncated extended colour ends the SGR without treating its tail as a reset', () => {
@@ -129,7 +132,7 @@ describe('FrameReconstructor save/restore, alternate screen, strings', () => {
   it('RIS resets the grid and attributes', () => {
     const { f } = run('\x1b[31m' + PAINTED + '\x1bcX');
     expect(text(f, 1)).toBe('');
-    expect(at(f, 0, 0)).toEqual({ ch: 'X', fg: 1, bg: 6, bold: false, rvs: false });
+    expect(at(f, 0, 0)).toEqual({ ch: 'X', fg: 1, bg: 0, bold: false, rvs: false });
   });
 
   it('OSC / DCS are swallowed through BEL or ST, held across chunks, dropped at the 256-byte cap', () => {

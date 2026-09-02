@@ -25,6 +25,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
 import { resolveDoorMinColumns, declaredMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
+import { installC64DoorAdapter, uninstallC64DoorAdapter, doorRequestsC64Adapt } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_LINE_WIDTH } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
@@ -1657,6 +1658,13 @@ export async function applyPostDoorMenuAction(
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
 console.log('Executing door:', door.name);
 
+  // Defensive: an adapter can NEVER survive one door into the next, or into
+  // the menu. executeAmigaDoor's finally and AmigaDoorSession's teardown both
+  // uninstall, but a crash between them would leave the socket's emit patched
+  // and every later byte would go through a reconstructor with no owner. This
+  // is a no-op on every ordinary launch (nothing is installed).
+  uninstallC64DoorAdapter(socket);
+
   // MIN_COLUMNS gate (C64/40-col Task 1). Default-closed: every door type
   // (68K, AREXX, TS, MCI, ...) gates at 80 columns unless its registration
   // carries an explicit MIN_COLUMNS the session satisfies. This one check,
@@ -2991,6 +2999,18 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
     const amigaSession = new AmigaDoorSession(socket, doorConfig);
     console.log(`[TIMING] after new AmigaDoorSession: ${Date.now() - __doorT0}ms`);
 
+    // C64 door adapter (Phase 3): a PETSCII caller entering a door that has
+    // been adapted and verified for 40 columns gets the door's 80-column
+    // frames reduced on the way out. Installed BEFORE the fresh-line emitText
+    // so the adapter's first render is the door's entry full paint, and gated
+    // on BOTH halves - a 40-column session AND a door that declared
+    // C64_ADAPT. Everything else (every ANSI caller, every unadapted door) is
+    // byte-for-byte what it was: installC64DoorAdapter returns null without
+    // touching socket.emit.
+    if (doorRequestsC64Adapt(door)) {
+      installC64DoorAdapter(socket, session as any);
+    }
+
     // Move to a fresh line before the door renders any output (prevents menu prompt overlap)
     emitText(socket, '\r\n');
 
@@ -3049,7 +3069,19 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
 
     // Start the door execution
     console.log(`[TIMING] before amigaSession.start(): ${Date.now() - __doorT0}ms`);
-    await amigaSession.start();
+    try {
+      await amigaSession.start();
+    } finally {
+      // emitText buffers (ansi-buffer.util.ts, 16 ms timer); a buffered chunk
+      // flushing AFTER the restore would reach the wire as raw 80-column ANSI
+      // in the middle of a 40-column screen. flushOutput() IS
+      // getAnsiBuffer(socket).flushImmediate() (output.util.ts:80,
+      // ansi-buffer.util.ts:111 - flushImmediate is an alias for flush), so
+      // this is the plan's call through the module the handler already
+      // imports. It must run BEFORE the uninstall, in that order.
+      flushOutput(socket);
+      uninstallC64DoorAdapter(socket);
+    }
     console.log(`[TIMING] after amigaSession.start() (door exited): ${Date.now() - __doorT0}ms`);
 
     // Flush any buffered door stdout before processing RETURNCOMMAND output.

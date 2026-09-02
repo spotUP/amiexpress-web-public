@@ -199,6 +199,7 @@ export class MoiraEmulator {
   // Prompt() pause/resume state
   private paused: boolean = false;
   private resumeCallback: (() => void) | null = null;
+  private pauseListener: (() => void) | null = null;
 
   constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space (Amiga standard)
 
@@ -260,6 +261,18 @@ console.log(`[MoiraEmulator] CPU RESUMED from Wait()`);
   }
 
   /**
+   * Notified whenever the CPU STOPS - which is not only an input wait:
+   * Exec/DOS waits, DreamDoor and FIM handlers all pause too (fourteen call
+   * sites). That is fine and deliberate for the C64 door adapter: whatever
+   * the door has painted when it stops running is a complete frame, and
+   * flushing more often than strictly necessary only makes the next diff
+   * smaller. One listener, set by AmigaDoorSession; harmless when unset.
+   */
+  onPause(listener: (() => void) | null): void {
+    this.pauseListener = listener;
+  }
+
+  /**
    * Pause emulator execution (for async input handling)
    * @param resumeCallback Called when resume() is invoked
    */
@@ -267,6 +280,13 @@ console.log(`[MoiraEmulator] CPU RESUMED from Wait()`);
     this.paused = true;
     this.resumeCallback = resumeCallback || null;
 console.log("[MoiraEmulator] Emulator PAUSED (waiting for async input)");
+    if (this.pauseListener) {
+      try {
+        this.pauseListener();
+      } catch {
+        /* a frame flush must never kill the door */
+      }
+    }
   }
 
   /**

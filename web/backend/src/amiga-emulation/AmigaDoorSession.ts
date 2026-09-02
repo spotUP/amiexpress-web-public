@@ -27,6 +27,7 @@ import { parseInfoFile } from "../utils/amiga-command-parser.util";
 import { debugLog } from '../utils/debug-log';
 import { setEnvStat } from "../utils/acs.util";
 import { EnvStat } from "../constants/env-codes";
+import { c64AdapterFor, uninstallC64DoorAdapter } from "../server/c64-door-adapter";
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -331,6 +332,15 @@ debugLog(
       const memSize = Math.max(2, Math.min(16, memSizeMB)) * 1024 * 1024;
       debugLog(`[AmigaDoorSession] Emulator memory: ${memSizeMB}MB`);
       this.emulator = new MoiraEmulator(memSize);
+      // Frame boundary for a C64 caller whenever the CPU stops. NOTE the limit:
+      // C64_ADAPT_MAX_FRAME_MS is a setTimeout, so it can only fire when the JS
+      // loop yields - it cannot preempt a synchronous 68K batch inside
+      // executeUntilTrap (MoiraEmulator.ts, a tight C++ loop of up to
+      // maxIterations instructions). A door that paints for a whole batch shows
+      // its frame when the batch ends, not 250 ms in. The fake-timer unit test
+      // does NOT cover that; only the live walk does. No-op when no adapter is
+      // installed (every non-PETSCII session).
+      this.emulator.onPause(() => c64AdapterFor(this.socket)?.flush());
       await this.emulator.initialize();
 debugLog("[AmigaDoorSession] ✅ Emulator initialized");
 
@@ -1261,6 +1271,12 @@ debugLog("[AmigaDoorSession] Refactored door session terminated");
       this.socket.off("door:terminate", this.onDoorTerminate);
       this.onDoorTerminate = undefined;
     }
+    // A disconnect or door:terminate tears the door down without ever
+    // returning through executeAmigaDoor's finally, so the LAST place that
+    // can restore the socket's emit is here. Leaving it patched would send
+    // the menu, the logoff screen and the next door through a reconstructor
+    // that no longer has an owner.
+    uninstallC64DoorAdapter(this.socket);
   }
 
   /**

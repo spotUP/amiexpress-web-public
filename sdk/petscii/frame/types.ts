@@ -12,7 +12,7 @@ export interface Cell {
   ch: string;
   /** Foreground, VIC index 0-15. SGR 0 / 39 resolve to 1 (white), as in the transducer. */
   fg: number;
-  /** Background, VIC index 0-15. Recorded so nothing is lost; the C64 has one fixed background (6) and the renderer never emits it. */
+  /** Background, VIC index 0-15. Recorded so nothing is lost; the C64 has one fixed, whole-screen background (black on a terminal) and the renderer never emits it. */
   bg: number;
   bold: boolean;
   rvs: boolean;
@@ -29,7 +29,20 @@ export interface Frame {
 }
 
 export const DEFAULT_FG = 1;
-export const DEFAULT_BG = 6;
+/**
+ * A C64 *terminal* is black. PetsciiMachine powers on background 0 / border 0
+ * (the BBS simulation, not KERNAL BASIC blue), the C64 has no per-cell
+ * background at all, and a coloured backdrop is a whole-screen `$02 <colour>`
+ * / `$0E` decision that belongs to the transducer/machine and to the Phase 4
+ * theme packs - never to a cell.
+ *
+ * This constant was 6 (BASIC blue) before the CCGMS work landed. At 6 a door
+ * emitting `ESC[40m` (or `ESC[49m`) produced `bg 0 != 6` on every cell, which
+ * `sameCell` counted as a difference and `renderDiff` then repainted for
+ * nothing. `renderDiff` still never emits a background byte
+ * (frame-render.ts:10-19); this only makes the model agree with the machine.
+ */
+export const DEFAULT_BG = 0;
 
 export function blankCell(): Cell {
   return { ch: ' ', fg: DEFAULT_FG, bg: DEFAULT_BG, bold: false, rvs: false };

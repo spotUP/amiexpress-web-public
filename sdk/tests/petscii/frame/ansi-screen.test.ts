@@ -16,7 +16,7 @@ describe('FrameReconstructor geometry', () => {
     expect(f.cells.length).toBe(25);
     expect(f.cells.every((row) => row.length === 80)).toBe(true);
     expect(f.cursor).toEqual({ x: 0, y: 0 });
-    expect(at(f, 0, 0)).toEqual({ ch: ' ', fg: 1, bg: 6, bold: false, rvs: false });
+    expect(at(f, 0, 0)).toEqual({ ch: ' ', fg: 1, bg: 0, bold: false, rvs: false });
   });
 
   it('takes a configurable size', () => {
