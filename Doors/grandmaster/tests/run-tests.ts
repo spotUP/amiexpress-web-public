@@ -18,6 +18,7 @@ const TEST_MODULES = ['./versus-layout.test',
   // panel-attack's own fixtures; see tests/panels/prng.test.ts.
   './panels/prng.test',
   './panels/consts.test',
+  './panels/panel.test',
   './versus-render.test',
   './versus-repaint.test',
   './fullscreen.test',
