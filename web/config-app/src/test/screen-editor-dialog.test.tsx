@@ -137,7 +137,9 @@ describe('the editor as a dialog', () => {
 
     await user.click(within(dialog).getByRole('button', { name: /cancel editing/i }));
 
-    await waitFor(() => expect(screen.queryByTestId('ansi-canvas')).toBeNull());
+    // The canvas is still on screen - the file's read-only view uses the same
+    // renderer - so the editor being gone is what "cancelled" looks like.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull());
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(false);
   });

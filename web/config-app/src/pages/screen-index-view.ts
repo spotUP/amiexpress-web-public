@@ -54,6 +54,19 @@ export interface ScreenFileShape {
   mci: MciReferenceShape[];
   readBy?: ScreenReaderShape[];
   sauce?: SauceShape;
+  /** What is wrong with the bytes: 'empty', 'colour-codes-without-escape'. */
+  problems?: string[];
+}
+
+/** What a problem means, in the sysop's terms. */
+export const PROBLEM_LABELS: Record<string, string> = {
+  empty: 'Empty - draws nothing',
+  'colour-codes-without-escape':
+    'Colour codes lost their escape byte - a caller sees the codes as text',
+};
+
+export function describeProblem(problem: string): string {
+  return PROBLEM_LABELS[problem] ?? problem;
 }
 
 /** A conference as the board names it - `Conf2` means nothing to a designer. */

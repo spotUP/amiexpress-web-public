@@ -85,7 +85,19 @@ export interface ScreenFileFacts {
   readBy: ScreenReader[];
   /** Present when the art carries a SAUCE record - most ANSI art does. */
   sauce?: SauceFacts;
+  /**
+   * What is wrong with the file itself, if anything.
+   *
+   * `empty` - zero bytes, so it draws nothing.
+   * `colour-codes-without-escape` - it holds `[0;1;31m` with the ESC byte
+   *   gone, so a caller sees the codes printed instead of the colour. 47 files
+   *   on the live board are in that state; the editor showing them as plain
+   *   text was right, and nothing said why.
+   */
+  problems: ScreenProblem[];
 }
+
+export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
 
 export interface ScopeResolution {
   scope: 'node' | 'conf' | 'board';
@@ -243,6 +255,30 @@ function readSauce(buf: Buffer): SauceFacts | undefined {
 }
 
 /** What the board calls a command, from its own icon. */
+/**
+ * What is wrong with the bytes themselves.
+ *
+ * A CSI sequence is ESC + `[` + parameters + a letter. A file carrying `[0;1;31m`
+ * with no ESC anywhere lost its escapes to a text-mode copy somewhere in its
+ * history, and the board prints the codes at the caller instead of colouring
+ * the line.
+ */
+function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
+  const problems: ScreenProblem[] = [];
+  if (buf.length === 0) problems.push('empty');
+
+  // Only for text-shaped screens: RIP and PETSCII carry their own byte
+  // conventions and `[` means nothing special in them.
+  if (format !== 'rip' && format !== 'petscii') {
+    const text = buf.toString('latin1');
+    const hasEscape = text.includes('\x1b');
+    const hasBareCsi = /\[[0-9][0-9;]*m/.test(text);
+    if (!hasEscape && hasBareCsi) problems.push('colour-codes-without-escape');
+  }
+
+  return problems;
+}
+
 function commandName(baseDir: string, command: string): string | undefined {
   const dir = path.join(baseDir, 'Commands', 'BBSCmd');
   const file = amigafs.findCaseInsensitive(dir, `${command}.info`);
@@ -303,6 +339,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     // knows which nodes and conferences exist and what each one reads.
     readBy: [],
     sauce: readSauce(buf),
+    problems: fileProblems(buf, format),
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,

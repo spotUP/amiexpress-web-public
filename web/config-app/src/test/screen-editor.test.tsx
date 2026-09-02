@@ -154,7 +154,8 @@ describe('editing a screen in the browser', () => {
 
     await user.click(screen.getByRole('button', { name: /cancel editing/i }));
 
-    expect(screen.queryByTestId('ansi-canvas')).toBeNull();
+    // The read-only view keeps drawing the art; the EDITOR is what closed.
+    expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull();
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(false);
   });
 

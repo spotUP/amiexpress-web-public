@@ -9,7 +9,8 @@ import { callSitesFor } from './screen-provenance';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
-import { ScreenPreview } from '../components/ScreenPreview';
+import { ScreenArt } from '../components/ScreenArt';
+import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { Modal } from '../components/ui/Modal';
 import { screenToCanvas } from './screen-bytes';
@@ -18,7 +19,7 @@ import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
-  type MciReferenceShape, describeReader,
+  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem,
 } from './screen-index-view';
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
@@ -389,6 +390,44 @@ export function ScreenFilesPage() {
     },
   ];
 
+  /** The files nothing reads - a table, because a list of 400 paths is not one. */
+  const unusedColumns: DataTableColumn<ScreenFileShape>[] = [
+    {
+      id: 'path',
+      header: 'File',
+      sortable: true,
+      value: item => item.relPath,
+      cell: item => <span className="font-topaz underline">{item.relPath}</span>,
+    },
+    { id: 'format', header: 'Format', sortable: true, value: item => item.format },
+    { id: 'bytes', header: 'Size', align: 'right', sortable: true, value: item => item.bytes,
+      cell: item => formatBytes(item.bytes) },
+    {
+      id: 'problems',
+      header: 'State',
+      sortable: true,
+      value: item => (item.problems ?? []).join(' '),
+      cell: item => (
+        <span className={item.problems?.length ? 'text-status-warn' : 'text-content-secondary'}>
+          {item.problems?.length ? item.problems.map(describeProblem).join('; ') : 'looks fine'}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      align: 'right',
+      cell: item => (
+        <button
+          className="underline text-status-danger"
+          onClick={event => { event.stopPropagation(); removeFile(item.relPath); }}
+        >
+          Delete
+        </button>
+      ),
+    },
+  ];
+
   const screenTable = (rows: ScreenRow[]) => (
     <DataTable
       columns={columns}
@@ -427,26 +466,20 @@ export function ScreenFilesPage() {
       render: () => (
         <div className="space-y-2 text-sm">
           <p className="text-content-secondary">
-            On the volume, read by no screen the board can display. Safe to keep;
-            safe to remove once you have looked.
+            No screen reads these - at any security level, in any screen type,
+            and no other screen includes them. Everything a variant serves
+            (BULL20 for a level-20 caller, MENU250.TXT.GR for a sysop on a
+            graphics terminal) counts as read and is NOT in this list. Click a
+            row to see the art before deciding.
           </p>
-          <ul className="space-y-1">
-            {(data?.unused ?? []).map(item => (
-              <li key={item.relPath} className="flex items-center gap-3">
-                <span className="font-topaz text-content-primary">{item.relPath}</span>
-                <span className="text-content-secondary">{item.bytes} bytes, {item.format}</span>
-                <a
-                  className="underline"
-                  href={`/api/screens/file?path=${encodeURIComponent(item.relPath)}&download=1`}
-                >
-                  Download
-                </a>
-                <button className="underline text-status-danger" onClick={() => removeFile(item.relPath)}>
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
+          <DataTable
+            columns={unusedColumns}
+            rows={data?.unused ?? []}
+            getRowId={item => item.relPath}
+            initialSort={[{ id: 'bytes', desc: true }]}
+            emptyMessage="Every screen file on this board is read by something."
+            onRowClick={item => setOpenFile(item.relPath)}
+          />
         </div>
       ),
     },
@@ -800,8 +833,18 @@ export function ScreenFilesPage() {
               </div>
             )}
 
+            {file.problems && file.problems.length > 0 && (
+              <ul className="text-sm text-status-warn">
+                {file.problems.map((problem: string) => (
+                  <li key={problem}>{describeProblem(problem)}</li>
+                ))}
+              </ul>
+            )}
+
             {file.format === 'ansi' || file.format === 'text' ? (
-              <ScreenPreview content={atob(file.content)} />
+              // The editor's own renderer, so the view and the edit cannot
+              // disagree about what the file looks like.
+              <ScreenArt content={file.content} />
             ) : (
               <p className="text-sm text-status-warn">
                 {file.format === 'rip'

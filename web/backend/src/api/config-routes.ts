@@ -49,8 +49,16 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
   const router = express.Router();
   const configService = new ConfigService(database);
 
-  // Initialize services
-  const bbsRoot = process.env.BBS_ROOT || path.join(process.cwd(), '../../');
+  // The BOARD's directory, the same one every other route reads.
+  //
+  // This was `process.env.BBS_ROOT || cwd/../..`, which in the container is
+  // `/app` - a bare skeleton beside the real board at `/app/data/bbs`. The
+  // health check therefore reported the entire board missing
+  // (`/app/ConfConfig.info missing`, `/app/Screens/ directory missing`) and
+  // OFFERED TO FIX IT, which would have created empty directories and a
+  // ConfConfig.info in the wrong place. Reported by the sysop as "can i really
+  // trust the auto fix here? are they real issues?" - they were not.
+  const bbsRoot = config.get('dataDir');
   const conferenceSetup = new ConferenceSetupService(bbsRoot);
   const healthCheck = new BBSHealthCheckService(bbsRoot);
 
@@ -2348,7 +2356,10 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
   router.get('/health', async (req: Request, res: Response) => {
     try {
       const report = await healthCheck.runFullHealthCheck();
-      sendResponse(res, report, 'BBS health check complete');
+      // Say WHICH board was checked. The report used to name paths under /app
+      // while the board lived at /app/data/bbs, and nothing on screen said
+      // which directory the findings were about.
+      sendResponse(res, { ...report, bbsRoot }, `BBS health check complete for ${bbsRoot}`);
     } catch (error) {
       handleError(res, error);
     }
