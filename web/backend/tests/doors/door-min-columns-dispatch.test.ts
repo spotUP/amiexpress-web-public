@@ -405,7 +405,7 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
 
 
 /**
- * The three doors the sysop marked, read from their REAL
+ * The doors the sysop marked, read from their REAL
  * `Commands/BBSCmd/<CMD>.info` BYTES (Phase 3 Task 8 / Task 5 Step 6).
  *
  * Not a fabricated tooltype map and not a source pin: the .info file on disk
@@ -420,14 +420,33 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
  * was actually on the wire" - everything is uninstalled by the time
  * executeDoor returns, so a post-hoc check could never prove it.
  */
-describe('WHO, S and WHAT open for a C64 from their real .info bytes', () => {
+describe('WHO, RTW, S and WHAT open for a C64 from their real .info bytes', () => {
   const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
-  /** Phase 3's three doors, and the binary each one launches. */
+  /**
+   * The marked doors, and the binary each one launches.
+   *
+   * WHO and RTW are two BBSCMD registrations of ONE door - both
+   * `LOCATION=DOORS:RTW/RTW`, both `TYPE=XIM` - so the adapter proof made for
+   * WHO's bytes is a proof about the binary RTW opens too. RTW was left
+   * unmarked when Phase 3 landed, which meant the board answered the same
+   * door two different ways depending on which command the caller typed; the
+   * sysop closed that by marking RTW as well. The mark is still per
+   * REGISTRATION (an unmarked command stays refused however many marked
+   * commands share its executable - the GWall case below), it is just no
+   * longer the case that this particular door has one of each.
+   */
   const MARKED: Array<[string, string]> = [
     ['WHO', 'Doors/RTW/RTW'],
+    ['RTW', 'Doors/RTW/RTW'],
     ['S', 'Doors/ustats/stats'],
     ['WHAT', 'Doors/What/What'],
   ];
+  /**
+   * An unmarked TYPE=XIM registration, for the default-closed half: a 68K
+   * door that declared nothing is refused at 40 no matter what its
+   * neighbours declared. `ACCESS=50`, cleared by the sysop session below.
+   */
+  const UNMARKED = 'GWALL';
 
   function definitionFromDisk(command: string) {
     const { loadCommandFromInfo } = require('../../src/utils/amiga-command-parser.util');
@@ -467,7 +486,7 @@ describe('WHO, S and WHAT open for a C64 from their real .info bytes', () => {
     setDoorsForCommandHandler(getDoors());
   }
 
-  /** ACCESS=20 on WHO/WHAT, 010 on S - a sysop clears all three. */
+  /** ACCESS=20 on WHO/RTW/WHAT, 010 on S, 50 on GWall - a sysop clears them all. */
   const sysopC64 = (command: string) => ({
     ...c64Session(),
     user: { id: 'u1', username: 'C64USER', secLevel: 255 },
@@ -571,24 +590,26 @@ describe('WHO, S and WHAT open for a C64 from their real .info bytes', () => {
     },
   );
 
-  it('the DOORS list marks all three [C64] and marks nothing else', async () => {
-    await registerFromDisk([...MARKED.map(([c]) => c), 'RTW']);
+  it('the DOORS list marks every marked door [C64] and marks nothing else', async () => {
+    await registerFromDisk([...MARKED.map(([c]) => c), UNMARKED]);
     const marks = new Map(
       getDoors().map((d) => [d.command, formatDoorLine(d, false).includes('[C64]')]),
     );
-    expect(marks.get('WHO')).toBe(true);
-    expect(marks.get('S')).toBe(true);
-    expect(marks.get('WHAT')).toBe(true);
-    // RTW launches the SAME binary as WHO and is deliberately NOT marked -
-    // the mark is per registration, not per executable.
-    expect(marks.get('RTW')).toBe(false);
+    for (const [command] of MARKED) expect(marks.get(command)).toBe(true);
+    // WHO and RTW are the same executable and BOTH now carry the mark, so the
+    // list can no longer answer one way for one command and the other way for
+    // its twin.
+    expect(marks.get('WHO')).toBe(marks.get('RTW'));
+    // An unmarked 68K registration is still unmarked - the mark is a
+    // per-registration promise, never inherited from the board's other doors.
+    expect(marks.get(UNMARKED)).toBe(false);
   });
 
-  it('RTW - the same binary as WHO, unmarked - is still refused at 40', async () => {
-    await registerFromDisk(['RTW']);
+  it(`${UNMARKED} - a 68K door that declared nothing - is still refused at 40`, async () => {
+    await registerFromDisk([UNMARKED]);
     const socket = makeSocket();
 
-    await handleCommand(socket as any, sysopC64('RTW'), '');
+    await handleCommand(socket as any, sysopC64(UNMARKED), '');
 
     expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
