@@ -120,25 +120,28 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
       // the token is not proof the include resolved. A silently-empty
       // include emits nothing, or only the fixture's trailing newline.
       //
-      // What the shipped data actually resolves to, as of Task 7:
-      // `~SR_WORK:bbs/Screens/logoff/logoff.seq` -> `001.logoff.seq` ->
-      // (resolver fix) `Screens/logoff/001.logoff.txt`, which EXISTS and is
-      // 1022 bytes of 80-column ANSI art. A PETSCII session never reflows
-      // 80-column art (`petsciiTextScreenPlan` -> 'art-skip'), so what a C64
-      // caller sees is the skip token, not the picture. That token is proof
-      // the include RESOLVED - before Task 7 the probe list missed the file
-      // entirely and nothing at all came back - and it is the honest state
-      // of the shipped data. The sysop follow-up (a real 40-column
-      // `logoff/00N.logoff.seq`, and `~3SR_` instead of `~SR_`) is recorded
-      // in handoff.md; the next test proves the same include path carries
-      // real art bytes the moment a `.seq` is there to carry.
+      // What this asserts is RESOLUTION, not what the include happens to
+      // contain today. `~SR_WORK:bbs/Screens/logoff/logoff.seq` ->
+      // `001.logoff.seq` -> (resolver fix) `Screens/logoff/001.logoff.*`,
+      // and what that file IS is the sysop's data: today an 80-column ANSI
+      // `.txt` (skipped with the ASCII token, `petsciiTextScreenPlan` ->
+      // 'art-skip'), tomorrow the 40-column `00N.logoff.seq` handoff.md asks
+      // for, which would put real PETSCII art on the wire. Both are a
+      // resolved include; only an UNRESOLVED one leaves the wire with
+      // nothing but the pre-clear and the fixture's own newline. Pinning the
+      // skip token here would turn CI red the day the sysop fixes the data.
+      // The next test owns the `.seq` arm, and the fixture test below owns
+      // the art-skip arm.
       expect(emits.length).toBeGreaterThan(0);
       // The pre-clear ~SR_ sends before a full-screen file is $93 on the
       // PETSCII wire, never an ANSI escape (plan Task 6's divergence rule).
       const petsciiFirst = emits.find((e) => e.event === 'petscii-bytes');
       expect(petsciiFirst).toBeDefined();
       expect(Buffer.from(petsciiFirst!.data, 'base64')[0]).toBe(0x93);
-      expect(wireText(emits)).toContain(ANSI_ART_SKIPPED_NOTICE);
+      // Content beyond the clear, the fixture's newline and blank space:
+      // the include brought something back.
+      const beyondTheClear = wireText(emits).replace(/[\x93\r\n\x00 ]/g, '');
+      expect(beyondTheClear.length).toBeGreaterThan(0);
       expect(wireText(emits)).not.toContain('\x1b[2J');
 
       // (3) Strengthened again in Task 6 (which wired the renderer into
@@ -198,6 +201,49 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
         .map((e) => Buffer.from(e.data, 'base64'));
       expect(petsciiPayloads.length).toBeGreaterThan(0);
       expect(Buffer.concat(petsciiPayloads).includes(art)).toBe(true);
+    },
+  );
+
+  /**
+   * The OTHER arm of the same include, on a fixture of its own: when the
+   * numbered file that comes back is 80-column ANSI art, a PETSCII session
+   * never reflows it - `petsciiTextScreenPlan` returns 'art-skip' and the
+   * caller gets the ASCII token instead of a smeared picture.
+   *
+   * This is what the shipped `Logoff.seq` happens to hit today. Pinning it
+   * on the shipped data would make a sysop's future 40-column
+   * `00N.logoff.seq` turn CI red, so the rule is pinned here, where the test
+   * owns the bytes.
+   */
+  it(
+    'a ~SR_ include that resolves to 80-column ANSI art is skipped with the ASCII token',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seq-mci-artskip-'));
+      const incDir = path.join(dir, 'logoff');
+      fs.mkdirSync(incDir);
+
+      // Absolute cursor addressing is rule 1 of the art detector
+      // (`ansi-art-detect.util.ts`: a layout at coordinates is never a
+      // paragraph), so this file is art whatever its row count.
+      fs.writeFileSync(
+        path.join(incDir, '001.logoff.txt'),
+        '\x1b[2;10HTOP\r\n\x1b[12;40HMIDDLE\r\n',
+        'latin1',
+      );
+
+      const seqPath = path.join(dir, 'LOGOFF.SEQ');
+      fs.writeFileSync(
+        seqPath,
+        Buffer.from(`~1SR_${path.join(incDir, 'logoff.seq')}\n`, 'latin1'),
+      );
+
+      const emits: Emit[] = [];
+      const session: any = { petsciiMode: true, nodeId: 0 };
+      await displayScreen(makeSocket(emits), session, seqPath);
+
+      expect(wireText(emits)).toContain(ANSI_ART_SKIPPED_NOTICE);
+      // The picture itself never reached the caller, in either transport.
+      expect(wireText(emits)).not.toContain('MIDDLE');
     },
   );
 });
@@ -609,8 +655,14 @@ describe('renderPetsciiScreen - review follow-ups', () => {
     const { out } = await render(seqBytes(GATE, '~~~N|'), session);
 
     // `~~N` falls through the tokenizer verbatim, then the `~~` unescape
-    // leaves `~N` - the token is shown, not substituted. parseMciCodes'
-    // trailing replace(/~~/g, '~') produces the same string.
+    // leaves `~N` - the token is shown, not substituted.
+    //
+    // Parity here is with parseMciCodes' NON-inline path only: its
+    // `replace(/~~/g, '~')` (screen.handler.ts, "must be processed LAST")
+    // runs on the string it RETURNS, and inline mode has already put its
+    // chunks on the wire by then - so an inline ANSI screen still shows
+    // `~~`. The `.seq` renderer collapses the pair inside the chunk walk,
+    // which is the only place a PETSCII screen could do it at all.
     expect(Array.from(out)).toEqual([0x20, 0x7e, 0x4e]);
     expect(Buffer.from(out).toString('latin1')).not.toContain('spot');
   });

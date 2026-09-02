@@ -318,6 +318,44 @@ describe('include resolver: a numbered name already carries its extension (Task 
     expect(found!.isPetscii).toBe(true);
   });
 
+  /**
+   * The resolver widened for `~SS_`/`~SR_` in Task 7 (a name that already
+   * carries a screen extension gets it SWAPPED, not appended). These two
+   * pin the edges of that widening, which nothing else covers.
+   */
+  it('an explicit .txt include still prefers the .seq sibling for a PETSCII session', () => {
+    const dir = tmpdir('resolve-explicit-txt');
+    fs.writeFileSync(path.join(dir, 'FOO.txt'), 'ANSI VERSION\r\n', 'latin1');
+    fs.writeFileSync(path.join(dir, 'FOO.seq'), Buffer.from([0xa1, 0x0d]));
+
+    const found = loadScreenFile(path.join(dir, 'FOO.txt'), undefined, 0, petsciiSession());
+
+    // `resolvePetsciiPath` swaps the extension BEFORE the probe list runs,
+    // so an `~SS_FOO.txt` written for the ANSI board still serves the C64
+    // its own artwork.
+    expect(found).not.toBeNull();
+    expect(path.basename(found!.filePath)).toBe('FOO.seq');
+    expect(found!.isPetscii).toBe(true);
+
+    // An ANSI session on the same pair gets the file it asked for.
+    const ansi = loadScreenFile(path.join(dir, 'FOO.txt'), undefined, 0, { nodeId: 0 } as any);
+    expect(path.basename(ansi!.filePath)).toBe('FOO.txt');
+    expect(ansi!.isPetscii).toBe(false);
+  });
+
+  it('a missing lowercase .txt resolves to the uppercase .TXT on disk', () => {
+    const dir = tmpdir('resolve-case');
+    // Only the legacy Amiga spelling exists - the case the shipped board is
+    // full of.
+    fs.writeFileSync(path.join(dir, 'BAR.TXT'), 'UPPER VERSION\r\n', 'latin1');
+
+    const found = loadScreenFile(path.join(dir, 'BAR.txt'), undefined, 0, petsciiSession());
+
+    expect(found).not.toBeNull();
+    expect(path.basename(found!.filePath)).toBe('BAR.TXT');
+    expect(found!.content).toContain('UPPER VERSION');
+  });
+
   it('an extensionless name resolves exactly as today (ANSI pin)', () => {
     const dir = tmpdir('resolve-ansi');
     fs.writeFileSync(path.join(dir, 'MENU.txt'), 'MENU TEXT\r\n', 'latin1');
