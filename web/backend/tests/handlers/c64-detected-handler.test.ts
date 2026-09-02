@@ -23,7 +23,13 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-const displayScreenMock = jest.fn(async () => true);
+// Typed with the real displayScreen's arity: `jest.fn(async () => true)`
+// infers a ZERO-argument mock, and then both `mockImplementation` with three
+// parameters and `mock.calls[0][1]` fail the tests typecheck (which jest
+// itself never runs - swc strips types). Three errors, red on main.
+const displayScreenMock = jest.fn(
+  async (_emitter: any, _session: any, _screenName: any): Promise<boolean> => true
+);
 
 jest.mock('../../src/handlers/screen.handler', () => ({
   displayScreen: displayScreenMock,
