@@ -14,11 +14,12 @@
  * width-driven builders, so these assertions run on the real strings the
  * door hands to its List. The 80-column branch is pinned literally.
  */
-const {
-  buildCategoryRow,
-  buildDoorRow,
-  buildFooterContent,
-} = require('../../../../../Doors/doors-menu/app');
+const doorsMenu = require('../../../../../Doors/doors-menu/app');
+const { buildCategoryRow, buildDoorRow, buildFooterContent } = doorsMenu;
+// The compiled modules the door actually loads (its package exports map
+// points at sdk/dist), so a spy here is the spy the door sees.
+const glitchRunner = require('../../../../../sdk/dist/engines/ui/theme/glitch-runner');
+const chrome = require('../../../../../sdk/dist/engines/ui/theme/chrome');
 
 /** Printable width, escape sequences removed. */
 const printable = (s: string): number => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;
@@ -71,6 +72,39 @@ describe('doors-menu compact (40-column) rows', () => {
     expect(footer).toContain('Quit');
     // The decorative rail tail has no cells to live in at 40.
     expect(footer).not.toContain('////////');
+  });
+
+  // The effect gate. Glitches damage rows on purpose; on a 40-column canvas
+  // that damage is the "stray glyphs mid-row" the sysop reported, so at XXS
+  // no glitch timer is started at all.
+  it('40 columns: attachGlitches is never called; 80 columns: it is', async () => {
+    const glitchSpy = jest.spyOn(glitchRunner, 'attachGlitches').mockReturnValue(() => undefined);
+    // The masthead animation is gated on the same call; stub it so the test
+    // leaves no 20fps interval behind at 80.
+    const mastheadSpy = jest.spyOn(chrome, 'railStream');
+    try {
+      for (const [width, expected] of [[40, 0], [80, 1]] as Array<[number, number]>) {
+        glitchSpy.mockClear();
+        const bbs: any = {
+          write: () => undefined,
+          connectionType: 'web',
+          getTerminalSize: () => ({ width, height: width === 40 ? 25 : 24 }),
+          getDoorList: async () => ([
+            { id: 'gm', command: 'GMASTER', name: 'Grandmaster Chess', description: 'chess',
+              type: 'TS', size: 245760, enabled: true, accessLevel: 0, category: 'Games' },
+          ]),
+          on: () => undefined,
+        };
+        const socket = { on: () => undefined, once: () => undefined, emit: () => undefined, id: 'spy' };
+        const run = doorsMenu.createApp({ bbs, socket, user: { username: 'C64USER', secLevel: 255 }, params: [] });
+        await new Promise((r) => setTimeout(r, 30));
+        expect(glitchSpy).toHaveBeenCalledTimes(expected);
+        void run;
+      }
+    } finally {
+      glitchSpy.mockRestore();
+      mastheadSpy.mockRestore();
+    }
   });
 
   it('80 columns: category row, door row and footer are byte-identical to the pre-change door', () => {
