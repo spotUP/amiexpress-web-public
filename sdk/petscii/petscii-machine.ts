@@ -15,6 +15,7 @@
  * behavioral rules this file implements.
  */
 import { PETSCII_COLOR_TO_VIC } from './c64-palette';
+import { printablePetsciiToScreenCode } from './screen-codes';
 
 const COLS = 40, ROWS = 25, CELLS = COLS * ROWS;
 
@@ -28,15 +29,6 @@ export interface PetsciiMachineState {
   pen: number;           // VIC index, power-on 14
   background: number;    // VIC index, fixed 6 (no PETSCII code changes it)
   border: number;        // VIC index, fixed 14
-}
-
-function petsciiToScreenCode(p: number): number {
-  if (p <= 0x3F) return p;               // caller guarantees p >= 0x20 here
-  if (p <= 0x5F) return p - 0x40;
-  if (p <= 0x7F) return p - 0x20;
-  if (p <= 0xBF) return p - 0x40;        // caller guarantees p >= 0xA0 here
-  if (p <= 0xFE) return p - 0x80;
-  return 0x5E;                            // $FF = pi
 }
 
 export class PetsciiMachine {
@@ -92,7 +84,7 @@ export class PetsciiMachine {
     }
     if (b < 0x20 || (b >= 0x80 && b <= 0x9F)) return false; // all other controls: no-op
     // printable
-    const sc = petsciiToScreenCode(b) | (s.reverse ? 0x80 : 0);
+    const sc = printablePetsciiToScreenCode(b) | (s.reverse ? 0x80 : 0);
     const idx = s.cursorY * COLS + s.cursorX;
     s.screen[idx] = sc;
     s.colorRam[idx] = s.pen;

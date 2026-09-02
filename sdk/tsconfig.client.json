@@ -12,6 +12,8 @@
     "client/**/*",
     "common/**/*",
     "core/**/*",
+    // PETSCII core is pure and the terminal package's browser bundle imports it.
+    "petscii/**/*",
     // The arcade shell is pure and I/O-free, and a door's browser client
     // imports from it (installArcadeSfx). The package's "import" condition
     // points at dist-esm, so without this an esbuild client bundle resolves

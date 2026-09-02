@@ -7,7 +7,7 @@
  * display purposes; Colodore is the default here because it is the closer
  * match to a properly calibrated composite/S-Video display.
  *
- * Twin of web/backend/src/utils/c64-palette.ts — keep values in sync.
+ * The ONE copy: web/backend/src/utils/c64-palette.ts and packages/terminal re-export from here.
  *
  * References: reference doc `thoughts/shared/research/2026-09-01_true-petscii-reference.md` section 3.
  */

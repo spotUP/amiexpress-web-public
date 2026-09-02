@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { PetsciiMachine } from './petscii-machine';
-import { C64_PALETTE_COLODORE } from './c64-palette';
+import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
+import { C64_PALETTE_COLODORE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
 import { keyEventToPetscii } from './keymap';
 

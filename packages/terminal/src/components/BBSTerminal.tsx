@@ -14,7 +14,7 @@ import { classifyKey } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { PetsciiMachine } from '../petscii/petscii-machine';
+import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
 import { petsciiOverlayReducer, initialPetsciiOverlayState } from '../petscii/overlay-state';
 import { petsciiKeyBytesToCommand } from '../petscii/key-bytes-to-command';

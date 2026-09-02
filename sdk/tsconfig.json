@@ -19,6 +19,7 @@
   "include": [
     "index.ts",
     "settings.ts",
+    "petscii/**/*",
     "common/**/*",
     "server/**/*",
     "client/**/*",

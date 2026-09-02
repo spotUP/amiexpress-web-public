@@ -75,6 +75,12 @@
       "require": "./dist/engines/ui/theme/index.js",
       "default": "./dist/engines/ui/theme/index.js"
     },
+    "./petscii": {
+      "types": "./dist/petscii/index.d.ts",
+      "import": "./dist-esm/petscii/index.js",
+      "require": "./dist/petscii/index.js",
+      "default": "./dist/petscii/index.js"
+    },
     "./engines/ui/arcade": {
       "types": "./dist/engines/ui/arcade/index.d.ts",
       "import": "./dist-esm/engines/ui/arcade/index.js",

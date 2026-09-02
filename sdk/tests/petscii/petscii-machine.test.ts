@@ -1,4 +1,4 @@
-import { PetsciiMachine } from '../../../../packages/terminal/src/petscii/petscii-machine';
+import { PetsciiMachine } from '../../petscii/petscii-machine';
 
 const cell = (m: PetsciiMachine, x: number, y: number) => m.state.screen[y * 40 + x];
 const color = (m: PetsciiMachine, x: number, y: number) => m.state.colorRam[y * 40 + x];
