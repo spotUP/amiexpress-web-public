@@ -38,6 +38,8 @@ import { MatchableStack, Coordinate } from './check-matches';
 import type { GeneratorSource } from './generator-source';
 export declare const BOARD_WIDTH = 6;
 export declare const BOARD_HEIGHT = 12;
+/** The last frame of the countdown; physics begins on this frame. */
+export declare const COUNTDOWN_END: number;
 /** Which way the cursor is being pushed this frame. */
 export type CursorDirection = 'up' | 'down' | 'left' | 'right' | null;
 /** Behaviour switches that game modes vary. */
@@ -54,6 +56,15 @@ export interface StackOptions {
     behaviours?: Partial<StackBehaviours>;
     /** Stop time the board starts with, for puzzles that grant it. */
     startingStopTime?: number;
+    /** Play the 188-frame opening countdown before physics begins. */
+    doCountdown?: boolean;
+    /**
+     * Which engine's physics to run. Replay fixtures span 045-049 and the
+     * versions differ; a replay loaded under the wrong one diverges.
+     */
+    engineVersion?: string;
+    /** Cursor DAS, in ticks. Replays record the value they were played at. */
+    cursorWaitTime?: number;
 }
 export declare class Stack implements MatchableStack {
     readonly width = 6;
@@ -92,6 +103,7 @@ export declare class Stack implements MatchableStack {
     panelsCleared: number;
     metalPanelsQueued: number;
     swapCount: number;
+    /** 0 means the game is still running, matching upstream's sentinel. */
     gameOverClock: number;
     nActivePanels: number;
     nPrevActivePanels: number;
@@ -101,6 +113,22 @@ export declare class Stack implements MatchableStack {
     topCurRow: number;
     cursorDirection: CursorDirection;
     swapThisFrame: boolean;
+    /** Ticks the current direction has been held. */
+    curTimer: number;
+    curWaitTime: number;
+    /** Set during the countdown's scripted cursor animation. */
+    cursorLock: boolean;
+    animatingCursorDuringCountdown: boolean;
+    engineVersion: string;
+    doCountdown: boolean;
+    countdownTimer: number | null;
+    /**
+     * One input character per frame, as a replay stores them and as netplay sends
+     * them. When this is empty the stack is in "manual" mode and the caller sets
+     * cursorDirection / swapThisFrame / manualRaise itself.
+     */
+    confirmedInput: string[];
+    inputState: string;
     queuedSwapRow: number;
     queuedSwapColumn: number;
     /** Optional observers, for sound and effects. */
@@ -131,6 +159,33 @@ export declare class Stack implements MatchableStack {
     hasChainingPanels(): boolean;
     swapQueued(): boolean;
     gameEnded(): boolean;
+    /** Is this stack being driven by a recorded/networked input buffer? */
+    private get drivenByInput();
+    /** Append one or more input characters to the buffer. */
+    receiveConfirmedInput(input: string): void;
+    /** Has the game finished, from the point of view of the input reader? */
+    private inputExhausted;
+    /** Take this frame's input off the buffer and decode it. */
+    private setupInput;
+    /**
+     * Turn this frame's input character into intents.
+     *
+     * Two details are load-bearing. Directions are PRIORITISED, not combined -
+     * up beats down beats left beats right - and a swap is refused outright if
+     * one is already queued, so a swap is possible at most every OTHER frame.
+     * Upstream flags that second one as a known wart (issue #624): it can make a
+     * stealth attempt fail with no feedback.
+     */
+    private controls;
+    /**
+     * The opening countdown: 188 frames in which the cursor walks itself into
+     * place and nothing else happens.
+     *
+     * The walk is not decoration - it decides where the cursor STARTS, and every
+     * recorded input in a replay is relative to that position. Four steps down,
+     * two left, from the top-right of the playfield.
+     */
+    private runCountdown;
     run(): void;
     private runPhysics;
     private updatePanels;
@@ -164,6 +219,17 @@ export declare class Stack implements MatchableStack {
     newRow(): void;
     /** Drop empty rows above the playfield so the grid does not grow forever. */
     private removeExtraRows;
+    moveCursorInDirection(direction: Exclude<CursorDirection, null>): void;
+    /**
+     * Move the cursor, with the game's own auto-repeat.
+     *
+     * A direction moves on the frame it is first pressed (curTimer 0), then not
+     * again until the timer reaches curWaitTime, after which it moves every
+     * frame. Note the timer is incremented in BOTH controls() and here, so it
+     * advances two per frame and the effective delay is HALF curWaitTime - about
+     * 10 frames at the default of 20. That double increment is upstream's, and a
+     * port that increments once makes every held direction travel at half speed.
+     */
     applyCursorDirection(direction: CursorDirection): void;
     /**
      * Ask for a swap. It does not happen now - it is queued for the next frame.

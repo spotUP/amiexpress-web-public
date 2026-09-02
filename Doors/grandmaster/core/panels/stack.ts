@@ -47,9 +47,24 @@ import {
 } from './consts';
 import { checkMatches, MatchableStack, Coordinate } from './check-matches';
 import type { GeneratorSource } from './generator-source';
+import {
+  COUNTDOWN_START, COUNTDOWN_LENGTH, COUNTDOWN_CURSOR_SPEED,
+  DEFAULT_INPUT_REPEAT_DELAY, ENGINE_VERSION, ENGINE_VERSIONS,
+} from './consts';
+import { decodeInput, maskToInputState, INPUT_CHARS } from './input-codec';
 
 export const BOARD_WIDTH = 6;
 export const BOARD_HEIGHT = 12;
+
+/** The last frame of the countdown; physics begins on this frame. */
+export const COUNTDOWN_END = COUNTDOWN_START + COUNTDOWN_LENGTH;
+
+const DIRECTION_ROW: Record<Exclude<CursorDirection, null>, number> = {
+  up: 1, down: -1, left: 0, right: 0,
+};
+const DIRECTION_COLUMN: Record<Exclude<CursorDirection, null>, number> = {
+  up: 0, down: 0, left: -1, right: 1,
+};
 
 /** Which way the cursor is being pushed this frame. */
 export type CursorDirection = 'up' | 'down' | 'left' | 'right' | null;
@@ -72,6 +87,15 @@ export interface StackOptions {
   behaviours?: Partial<StackBehaviours>;
   /** Stop time the board starts with, for puzzles that grant it. */
   startingStopTime?: number;
+  /** Play the 188-frame opening countdown before physics begins. */
+  doCountdown?: boolean;
+  /**
+   * Which engine's physics to run. Replay fixtures span 045-049 and the
+   * versions differ; a replay loaded under the wrong one diverges.
+   */
+  engineVersion?: string;
+  /** Cursor DAS, in ticks. Replays record the value they were played at. */
+  cursorWaitTime?: number;
 }
 
 export class Stack implements MatchableStack {
@@ -122,7 +146,8 @@ export class Stack implements MatchableStack {
   panelsCleared = 0;
   metalPanelsQueued = 0;
   swapCount = 0;
-  gameOverClock = -1;
+  /** 0 means the game is still running, matching upstream's sentinel. */
+  gameOverClock = 0;
 
   nActivePanels = 0;
   nPrevActivePanels = 0;
@@ -134,6 +159,25 @@ export class Stack implements MatchableStack {
   topCurRow: number;
   cursorDirection: CursorDirection = null;
   swapThisFrame = false;
+  /** Ticks the current direction has been held. */
+  curTimer = 0;
+  curWaitTime: number;
+  /** Set during the countdown's scripted cursor animation. */
+  cursorLock = false;
+  animatingCursorDuringCountdown = false;
+
+  // --- countdown ---
+  engineVersion: string;
+  doCountdown = false;
+  countdownTimer: number | null = null;
+
+  /**
+   * One input character per frame, as a replay stores them and as netplay sends
+   * them. When this is empty the stack is in "manual" mode and the caller sets
+   * cursorDirection / swapThisFrame / manualRaise itself.
+   */
+  confirmedInput: string[] = [];
+  inputState: string = INPUT_CHARS.idle;
 
   queuedSwapRow = 0;
   queuedSwapColumn = 0;
@@ -161,6 +205,14 @@ export class Stack implements MatchableStack {
     this.riseTimer = SPEED_TO_RISE_TIME[this.speed];
     this.stopTime = options.startingStopTime ?? 0;
     this.topCurRow = this.behaviours.passiveRaise ? this.height - 1 : this.height;
+    this.engineVersion = options.engineVersion ?? ENGINE_VERSION;
+    this.curWaitTime = options.cursorWaitTime ?? DEFAULT_INPUT_REPEAT_DELAY;
+
+    if (options.doCountdown) {
+      // Physics is held off until the countdown ends.
+      this.stopWatchIsRunning = false;
+      this.doCountdown = true;
+    }
 
     for (let row = 0; row <= this.height; row++) {
       this.panels[row] = [];
@@ -242,12 +294,117 @@ export class Stack implements MatchableStack {
   }
 
   gameEnded(): boolean {
-    return this.gameOverClock >= 0;
+    return this.gameOverClock > 0 && this.clock >= this.gameOverClock;
   }
 
   // --- one frame ---
 
+  /** Is this stack being driven by a recorded/networked input buffer? */
+  private get drivenByInput(): boolean {
+    return this.confirmedInput.length > 0;
+  }
+
+  /** Append one or more input characters to the buffer. */
+  receiveConfirmedInput(input: string): void {
+    for (const char of input) this.confirmedInput.push(char);
+  }
+
+  /** Has the game finished, from the point of view of the input reader? */
+  private inputExhausted(): boolean {
+    return this.gameOverClock > 0 && this.clock >= this.gameOverClock;
+  }
+
+  /** Take this frame's input off the buffer and decode it. */
+  private setupInput(): void {
+    if (!this.drivenByInput) return;
+    this.inputState = this.inputExhausted()
+      ? INPUT_CHARS.idle
+      : (this.confirmedInput[this.clock] ?? INPUT_CHARS.idle);
+    this.controls();
+  }
+
+  /**
+   * Turn this frame's input character into intents.
+   *
+   * Two details are load-bearing. Directions are PRIORITISED, not combined -
+   * up beats down beats left beats right - and a swap is refused outright if
+   * one is already queued, so a swap is possible at most every OTHER frame.
+   * Upstream flags that second one as a known wart (issue #624): it can make a
+   * stealth attempt fail with no feedback.
+   */
+  private controls(): void {
+    const state = maskToInputState(decodeInput(this.inputState));
+
+    this.swapThisFrame = state.swap;
+    if (this.swapThisFrame && this.swapQueued()) this.swapThisFrame = false;
+
+    let newDir: CursorDirection = null;
+    if (state.up) newDir = 'up';
+    else if (state.down) newDir = 'down';
+    else if (state.left) newDir = 'left';
+    else if (state.right) newDir = 'right';
+
+    if (newDir === this.cursorDirection) {
+      if (this.curTimer !== this.curWaitTime) this.curTimer += 1;
+    } else {
+      this.cursorDirection = newDir;
+      this.curTimer = 0;
+    }
+
+    if (state.raise && !this.preventManualRaise) {
+      this.manualRaise = true;
+      this.manualRaiseYet = false;
+    }
+  }
+
+  /**
+   * The opening countdown: 188 frames in which the cursor walks itself into
+   * place and nothing else happens.
+   *
+   * The walk is not decoration - it decides where the cursor STARTS, and every
+   * recorded input in a replay is relative to that position. Four steps down,
+   * two left, from the top-right of the playfield.
+   */
+  private runCountdown(): void {
+    this.doCountdown = true;
+    this.riseLock = true;
+
+    if (this.clock === 0) {
+      this.animatingCursorDuringCountdown = true;
+      if (this.engineVersion === ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE) this.cursorLock = true;
+      this.curRow = this.height - 1;
+      this.curCol = this.width - 1;
+    } else if (this.clock === COUNTDOWN_START) {
+      this.countdownTimer = COUNTDOWN_LENGTH;
+    }
+
+    if (this.countdownTimer !== null) {
+      const countDownFrame = COUNTDOWN_LENGTH - this.countdownTimer;
+      if (countDownFrame > 0 && countDownFrame % COUNTDOWN_CURSOR_SPEED === 0) {
+        const moveIndex = Math.floor(countDownFrame / COUNTDOWN_CURSOR_SPEED);
+        if (moveIndex <= 4) this.moveCursorInDirection('down');
+        else if (moveIndex <= 6) this.moveCursorInDirection('left');
+        else if (moveIndex === 10) this.animatingCursorDuringCountdown = false;
+      } else if (countDownFrame === 6 * COUNTDOWN_CURSOR_SPEED + 1) {
+        if (this.engineVersion === ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE) this.cursorLock = false;
+      }
+
+      if (this.countdownTimer === 0) {
+        this.doCountdown = false;
+        this.countdownTimer = null;
+      }
+      if (this.countdownTimer !== null) this.countdownTimer -= 1;
+    }
+  }
+
   run(): void {
+    this.setupInput();
+
+    if (this.doCountdown && this.clock <= COUNTDOWN_END) {
+      this.runCountdown();
+      if (this.clock === COUNTDOWN_END) this.stopWatchIsRunning = true;
+    }
+
     if (this.stopWatchIsRunning) this.runPhysics();
 
     // Phase 3: what the player asked for this frame.
@@ -264,9 +421,11 @@ export class Stack implements MatchableStack {
     if (this.stopWatchIsRunning) this.stopWatch += 1;
     this.clock += 1;
 
-    // Input is consumed; the caller sets it again for the next frame.
-    this.cursorDirection = null;
-    this.swapThisFrame = false;
+    if (!this.drivenByInput) {
+      // Manual mode: the caller sets the intents again for the next frame.
+      this.cursorDirection = null;
+      this.swapThisFrame = false;
+    }
   }
 
   private runPhysics(): void {
@@ -515,12 +674,30 @@ export class Stack implements MatchableStack {
 
   // --- input ---
 
+  moveCursorInDirection(direction: Exclude<CursorDirection, null>): void {
+    this.curRow = Math.max(1, Math.min(this.curRow + DIRECTION_ROW[direction], this.topCurRow));
+    this.curCol = Math.max(1, Math.min(this.curCol + DIRECTION_COLUMN[direction], this.width - 1));
+  }
+
+  /**
+   * Move the cursor, with the game's own auto-repeat.
+   *
+   * A direction moves on the frame it is first pressed (curTimer 0), then not
+   * again until the timer reaches curWaitTime, after which it moves every
+   * frame. Note the timer is incremented in BOTH controls() and here, so it
+   * advances two per frame and the effective delay is HALF curWaitTime - about
+   * 10 frames at the default of 20. That double increment is upstream's, and a
+   * port that increments once makes every held direction travel at half speed.
+   */
   applyCursorDirection(direction: CursorDirection): void {
-    if (!direction) return;
-    if (direction === 'up') this.curRow = Math.min(this.curRow + 1, this.topCurRow);
-    else if (direction === 'down') this.curRow = Math.max(this.curRow - 1, 1);
-    else if (direction === 'left') this.curCol = Math.max(this.curCol - 1, 1);
-    else if (direction === 'right') this.curCol = Math.min(this.curCol + 1, this.width - 1);
+    if (direction && (this.curTimer === 0 || this.curTimer === this.curWaitTime)
+      && !this.cursorLock) {
+      this.moveCursorInDirection(direction);
+    } else {
+      this.curRow = Math.max(1, Math.min(this.curRow, this.topCurRow));
+    }
+
+    if (this.curTimer !== this.curWaitTime) this.curTimer += 1;
   }
 
   /**
@@ -537,8 +714,8 @@ export class Stack implements MatchableStack {
 
   canSwap(panel1: Panel, panel2: Panel): boolean {
     if (Math.abs(panel1.column - panel2.column) !== 1 || panel1.row !== panel2.row) return false;
-    // No swapping on the first frame of a game.
-    if (this.clock <= 1) return false;
+    // No swapping during the countdown, or on the first frame of a game.
+    if (this.doCountdown || this.clock <= 1) return false;
     if (panel1.color === 0 && panel2.color === 0) return false;
     if (!panel1.allowsSwap() || !panel2.allowsSwap()) return false;
 
@@ -645,8 +822,24 @@ export class Stack implements MatchableStack {
    * shaking - garbage landing must not kill on the frame it arrives.
    */
   checkGameOver(): boolean {
-    if (this.gameEnded()) return false;
-    return this.health <= 0 && this.shakeTime <= 0;
+    if (this.gameOverClock > 0) return true;
+
+    // Out of health, once the stack has stopped shaking - garbage landing must
+    // not kill on the frame it arrives.
+    if (this.health <= 0 && this.shakeTime <= 0) return true;
+
+    // Holding the raise button while topped out and not rise-locked is an
+    // instant loss, and it is the ONLY way to die while raising - the health
+    // drain lives in passive raise, which a manual raise short-circuits.
+    // Upstream calls this one disputable (issue #437): at one point of health
+    // the difference is negligible, but on lower levels it makes it easy to
+    // kill yourself by accident. Kept, because it is what the engine does.
+    if (!this.riseLock && this.behaviours.allowManualRaise
+      && this.wasToppedOut && this.manualRaise) {
+      return true;
+    }
+
+    return false;
   }
 
   setGameOver(): void {
