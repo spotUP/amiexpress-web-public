@@ -195,6 +195,32 @@ describe('the cold-load font race', () => {
     await expect(waitForFontFace(DEFAULT_BBS_FONT)).resolves.toBeUndefined();
   });
 
+  it('a later font request wins over an earlier one that resolves late', async () => {
+    // The constructor's cached-font apply and the server's font-preference
+    // apply overlap on every login. Their font faces resolve in whatever
+    // order the network hands them over, and last-resolution-wins would
+    // let the STALE cached font overwrite the server's answer.
+    const faces = new Map<string, () => void>();
+    const load = vi.fn((spec: string) =>
+      new Promise<void>((resolve) => { faces.set(spec, resolve); }).then(() => []),
+    );
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load } });
+
+    const { term } = recordingTerm();
+    const first = applyFont(term, 'mosoul');          // the cached font
+    const second = applyFont(term, 'TopazPlus_a500'); // the server's answer
+
+    // Resolve them in REVERSE order: the server's face arrives first, the
+    // stale cached face second.
+    faces.get('12px "TopazPlus_a500"')!();
+    await second;
+    faces.get('12px "mosoul"')!();
+    await first;
+
+    expect(term.options.fontFamily).toBe(fontFamilyFor('TopazPlus_a500'));
+    expect(readCachedFont()).toBe('TopazPlus_a500');
+  });
+
   it('forceRemeasure leaves an unset or fallback-only family alone', () => {
     const empty = { options: {} as Record<string, any> };
     forceRemeasure(empty);

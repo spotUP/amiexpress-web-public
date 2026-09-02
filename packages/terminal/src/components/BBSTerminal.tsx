@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useState, useReducer } from 'react';
-import * as SDKClient from '@amiexpress/bbs-door-sdk/client';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
@@ -65,8 +64,6 @@ interface BBSTerminalProps {
   onConnect?: () => void;
   /** Disconnect callback */
   onDisconnect?: (reason: string) => void;
-  /** Raw ANSI output callback */
-  onAnsiOutput?: (data: string) => void;
   /**
    * When set, overrides server 'terminal-mode' events.
    * Pass 'wide' on mobile so FitAddon controls columns.
@@ -171,7 +168,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   onConnectionError,
   onConnect,
   onDisconnect,
-  onAnsiOutput,
   forcedMode,
   keepFocused,
   fillParent,
@@ -1579,7 +1575,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     });
 
-    socket.on('video:stop-stream', (data, callback) => {
+    socket.on('video:stop-stream', (_data, callback) => {
       mediaHandler.stopVideo();
       if (typeof callback === 'function') callback({ success: true });
     });
@@ -2291,22 +2287,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     });
 
-    // Auto-login handlers
-    const handleAutoLogin = () => {
-      const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
-      const savedUsername = localStorage.getItem('bbs_saved_username');
-      const savedPassword = localStorage.getItem('bbs_saved_password');
-
-      if (autoLoginEnabled && savedUsername && savedPassword) {
-        const decodedUsername = atob(savedUsername);
-        const decodedPassword = atob(savedPassword);
-        console.log(`🔐 Auto-login enabled, sending credentials for ${decodedUsername}`);
-        socket.emit('login', { username: decodedUsername, password: decodedPassword });
-        loginState.current = 'logging-in';
-        return true;
-      }
-      return false;
-    };
+    // The credential-replay auto-login that used to live here was dead:
+    // nothing called it. Auto-login runs through attemptTokenLogin (the
+    // saved JWT), and the saved username/password are only used to seed
+    // that token on a fresh registration.
 
     socket.on('prompt-login', () => {
       // If we're already in the middle of manual login, don't duplicate the prompt
@@ -3089,28 +3073,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
   };
 
-  const handleWheel = (event: React.WheelEvent) => {
-    if (!doorActive.current && !gameMode.current) return;
-
-    const socket = socketRef.current;
-    if (!socket?.connected) return;
-
-    const wheelPoint = document.pointerLockElement && lockedPointer.current
-      ? lockedPointer.current
-      : { x: event.clientX, y: event.clientY };
-    const coords = getTerminalCoordsFromPoint(wheelPoint.x, wheelPoint.y);
-    if (!coords) return;
-
-    event.preventDefault();
-    socket.emit('mouse-wheel', {
-      x: coords.x,
-      y: coords.y,
-      deltaY: event.deltaY,
-      shift: event.shiftKey,
-      ctrl: event.ctrlKey,
-      alt: event.altKey
-    });
-  };
+  // Wheel events are handled by the NATIVE listener installed on
+  // .xterm-screen in the mount effect - React's onWheel never sees them,
+  // because xterm stops the event before it bubbles to the React tree.
+  // The React handler that used to live here was dead for that reason.
 
   // Prevent browser context menu when door is active (allows app to use right-click)
   const handleContextMenu = (event: React.MouseEvent) => {

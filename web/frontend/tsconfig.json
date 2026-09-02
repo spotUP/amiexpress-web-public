@@ -9,6 +9,15 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    /* The app compiles @amiexpress/terminal's SOURCES (its tests import
+     * BBSTerminal.tsx directly), and one of those sources imports the
+     * vendored RIPtermJS module, which is plain JavaScript. Without
+     * allowJs the compiler cannot read it at all and reports it as an
+     * implicit any (TS7016). checkJs stays off, so the vendored file is
+     * read for its inferred types and never type-checked - the same terms
+     * packages/terminal itself reads it on. */
+    "allowJs": true,
+    "checkJs": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,

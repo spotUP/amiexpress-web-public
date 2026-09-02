@@ -15,7 +15,12 @@
  * consumes, so multi-command lines, continuations and half-arrived
  * commands are its problem rather than ours.
  */
-import React, { forwardRef, useEffect, useId, useImperativeHandle, useRef } from 'react';
+// `React` is used as a namespace below (React.forwardRef) rather than
+// imported only for the classic JSX runtime: this file is compiled BOTH by
+// packages/terminal (jsx: "react", which needs the binding) and by
+// web/frontend (jsx: "react-jsx", which does not) - a namespace use is
+// the one form both configurations agree is used.
+import React, { useEffect, useId, useImperativeHandle, useRef } from 'react';
 import { RIPterm } from './vendor/ripterm.js';
 import type { RIPState } from './RIPTypes';
 import { createInitialState } from './RIPTypes';
@@ -77,7 +82,7 @@ function toBytes(text: string): Uint8Array {
   return out;
 }
 
-const RIPRenderer = forwardRef<RIPRendererRef, RIPRendererProps>(
+const RIPRenderer = React.forwardRef<RIPRendererRef, RIPRendererProps>(
   ({ onCommand, width = 640, height = 350, fontsPath = '/rip/fonts', iconsPath = '/rip/icons' }, ref) => {
     // RIPtermJS finds its canvas by DOM id, so each instance needs one.
     const canvasId = 'rip-canvas-' + useId().replace(/[^A-Za-z0-9]/g, '');

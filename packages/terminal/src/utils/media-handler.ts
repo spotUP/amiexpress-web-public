@@ -72,8 +72,10 @@ export class MediaHandler {
     });
 
     // Listen for mute status updates from other users (optional visual feedback)
-    this.socket.on('audio:muted', (data: { userId: string | number, muted: boolean }) => {
-      // Could be used to update UI
+    this.socket.on('audio:muted', () => {
+      // Subscribed so the server sees a listener; there is no mute
+      // indicator in the terminal UI to update yet, so the payload is not
+      // read.
     });
 
     // Listen for procedural sound effects from the door
@@ -413,7 +415,11 @@ export class MediaHandler {
    * Play a sound from the library (browser-compatible)
    * Maps soundId to appropriate synthesized sounds
    */
-  private playSound(soundId: string, params?: any): void {
+  // `_params` is the door's per-sound parameter bag (mouth/DoorSFX sends
+  // it). The synthesis library below is keyed on soundId alone and does
+  // not read it yet; the parameter stays in the signature so the call site
+  // keeps passing it through rather than silently dropping it.
+  private playSound(soundId: string, _params?: any): void {
     if (!this.audioContext) return;
 
     // Sound library - maps soundId to synthesis parameters

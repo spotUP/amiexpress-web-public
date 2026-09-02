@@ -171,6 +171,13 @@ export function forceRemeasure(term: FontTarget): void {
 }
 
 /**
+ * Per-terminal request counter for `applyFont`. Keyed by the terminal so
+ * two surfaces on one page cannot cancel each other's fonts; weak so a
+ * disposed terminal does not keep an entry alive.
+ */
+const applyGenerations = new WeakMap<FontTarget, number>();
+
+/**
  * Apply a BBS font to a terminal and remember it. The one place that
  * writes `options.fontFamily` / `options.lineHeight` for the session font.
  *
@@ -183,7 +190,17 @@ export function forceRemeasure(term: FontTarget): void {
  * default.
  */
 export async function applyFont(term: FontTarget, font: string, fontSize?: number): Promise<void> {
+  const generation = (applyGenerations.get(term) ?? 0) + 1;
+  applyGenerations.set(term, generation);
   await waitForFontFace(font);
+  // A newer applyFont for this terminal started while this one was waiting
+  // for its face, so this call's font is stale. Without this guard the
+  // race is last-RESOLUTION-wins rather than last-REQUEST-wins: the
+  // constructor's cached-font apply and the server's font-preference apply
+  // overlap on every login, and a slow-loading cached font would overwrite
+  // the answer the server just gave - in the terminal AND in the cache,
+  // which would then poison the next connect's pre-login window too.
+  if (applyGenerations.get(term) !== generation) return;
   const family = fontFamilyFor(font);
   const familyChanged = term.options.fontFamily !== family;
   term.options.fontFamily = family;

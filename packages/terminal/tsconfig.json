@@ -11,6 +11,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
+    /* Linting - kept identical to web/frontend/tsconfig.json, the app that
+     * compiles these sources directly (its tests import BBSTerminal.tsx
+     * from source). When the package was laxer than its consumer, dead
+     * locals accumulated here and surfaced as errors in the app's
+     * type-check instead of this package's own build. */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
