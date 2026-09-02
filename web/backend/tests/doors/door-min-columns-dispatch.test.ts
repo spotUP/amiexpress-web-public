@@ -342,3 +342,196 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
     expect(allOutput(socket)).not.toContain('-'.repeat(70));
   });
 });
+
+
+/**
+ * The three doors the sysop marked, read from their REAL
+ * `Commands/BBSCmd/<CMD>.info` BYTES (Phase 3 Task 8 / Task 5 Step 6).
+ *
+ * Not a fabricated tooltype map and not a source pin: the .info file on disk
+ * is parsed by `loadCommandFromInfo` - the parser registration itself uses -
+ * the definition it returns is seeded into the same `commandCache.bbscmd`
+ * `loadCommands()` fills, and the door is then reached the way a user reaches
+ * it: `initializeDoors -> getDoors -> setDoorsForCommandHandler ->
+ * handleCommand -> executeDoor -> executeAmigaDoor`.
+ *
+ * Two sentinels, as above: `createAllDropFiles` for "the launch proceeded",
+ * and `c64AdapterFor(socket)` captured INSIDE the door's run for "the adapter
+ * was actually on the wire" - everything is uninstalled by the time
+ * executeDoor returns, so a post-hoc check could never prove it.
+ */
+describe('WHO, S and WHAT open for a C64 from their real .info bytes', () => {
+  const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+  /** Phase 3's three doors, and the binary each one launches. */
+  const MARKED: Array<[string, string]> = [
+    ['WHO', 'Doors/RTW/RTW'],
+    ['S', 'Doors/ustats/stats'],
+    ['WHAT', 'Doors/What/What'],
+  ];
+
+  function definitionFromDisk(command: string) {
+    const { loadCommandFromInfo } = require('../../src/utils/amiga-command-parser.util');
+    const def = loadCommandFromInfo(path.join(BBSCMD, `${command}.info`));
+    if (!def) throw new Error(`Commands/BBSCmd/${command}.info did not parse`);
+    return def;
+  }
+
+  /**
+   * The real .info BYTES, copied into the temp BBS root and loaded by the real
+   * `loadCommands()` - not a hand-seeded cache.
+   *
+   * Seeding `commandCache.bbscmd` directly does not survive dispatch: every
+   * BBSCMD lookup calls `revalidateBbsCommandsIfChanged()` first
+   * (command-execution.handler.ts), which re-scans `dataDir/Commands/BBSCmd`
+   * whenever its mtime moved and clears whatever was seeded by hand. With the
+   * real files on disk the revalidation reads the same bytes back, which is
+   * what the live board does.
+   */
+  async function registerFromDisk(commands: string[]) {
+    const { commandCache, loadCommands } = require('../../src/handlers/command-execution.handler');
+    commandCache.bbscmd.clear();
+    commandCache.syscmd.clear();
+    const cmdDir = path.join(root, 'Commands', 'BBSCmd');
+    fs.rmSync(cmdDir, { recursive: true, force: true });
+    fs.mkdirSync(cmdDir, { recursive: true });
+    for (const c of commands) {
+      fs.copyFileSync(path.join(BBSCMD, `${c}.info`), path.join(cmdDir, `${c}.info`));
+      // The executable executeAmigaDoor refuses to launch without. Amiga hunk
+      // magic, so the native-GCC branch is not taken either.
+      const full = path.join(root, ...definitionFromDisk(c).location.split('/'));
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+    }
+    loadCommands(root);
+    await initializeDoors();
+    setDoorsForCommandHandler(getDoors());
+  }
+
+  /** ACCESS=20 on WHO/WHAT, 010 on S - a sysop clears all three. */
+  const sysopC64 = (command: string) => ({
+    ...c64Session(),
+    user: { id: 'u1', username: 'C64USER', secLevel: 255 },
+    commandText: command,
+  });
+
+  beforeEach(() => {
+    mockAdapterDuringRun.length = 0;
+    // The live BBSCMD path. server/initialization.ts:665 injects these right
+    // after setDoorsForCommandHandler; without them processCommand's BbsCommand
+    // branch reports "executeDoor not available" and falls through to the
+    // InternalCommand branch - which happens to reach the door for WHO and
+    // WHAT (no internal command of that name) but NOT for S, which is an
+    // internal command. Wiring it the way the server does exercises the branch
+    // a real caller takes for all three.
+    const { setCommandExecutionDependencies } = require('../../src/handlers/command-execution.handler');
+    const { processBBSCommand } = require('../../src/handlers/command.handler');
+    setCommandExecutionDependencies(executeDoor, processBBSCommand);
+  });
+
+  afterEach(() => {
+    const { setCommandExecutionDependencies } = require('../../src/handlers/command-execution.handler');
+    setCommandExecutionDependencies(null, null);
+  });
+
+  it.each(MARKED)('%s.info carries C64_ADAPT=40 in its real bytes', (command) => {
+    const def = definitionFromDisk(command);
+    expect(def.toolTypes?.['C64_ADAPT']).toBe('40');
+    // ...and the 68K type that makes the claim meaningful (a TS door paints
+    // its own screen and would never cross the adapter's seam).
+    expect(def.type).toBe('XIM');
+  });
+
+  it('nothing else in Commands/BBSCmd claims C64_ADAPT', () => {
+    const marked = MARKED.map(([c]) => c);
+    const others = fs
+      .readdirSync(BBSCMD)
+      .filter((f) => f.endsWith('.info'))
+      .filter((f) => !marked.includes(f.slice(0, -'.info'.length)))
+      .filter((f) => {
+        const def = (() => {
+          try { return definitionFromDisk(f.slice(0, -'.info'.length)); } catch { return null; }
+        })();
+        return def?.toolTypes?.['C64_ADAPT'] !== undefined;
+      });
+    expect(others).toEqual([]);
+  });
+
+  it.each(MARKED)(
+    'a C64 session reaches %s through the real Enter dispatch, with the adapter on the wire',
+    async (command, location) => {
+      await registerFromDisk([command]);
+      const socket = makeSocket();
+      const originalEmit = socket.emit;
+      const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
+
+      await handleCommand(socket as any, sysopC64(command), '');
+
+      // The gate let it in and the launch proceeded...
+      expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
+      expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+      // ...the adapter was installed on the socket while the door ran...
+      expect(mockAdapterDuringRun).toHaveLength(1);
+      expect(mockAdapterDuringRun[0]).not.toBeNull();
+      // ...it reduced the door's 80-column output...
+      expect(allOutput(socket)).not.toContain('-'.repeat(70));
+      // ...and it was uninstalled on the way out.
+      expect(c64AdapterFor(socket)).toBeNull();
+      expect(socket.emit).toBe(originalEmit);
+      // The door that ran is the one the .info points at.
+      expect(fs.existsSync(path.join(root, ...location.split('/')))).toBe(true);
+    },
+  );
+
+  it.each(MARKED)(
+    'an ANSI session reaches %s with no adapter and byte-identical door output',
+    async (command) => {
+      await registerFromDisk([command]);
+      const socket = makeSocket();
+      const originalEmit = socket.emit;
+      const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
+
+      await handleCommand(
+        socket as any,
+        {
+          ...sysopC64(command),
+          petsciiMode: false,
+          terminalType: 'modern',
+          screenWidth: 80,
+          screenHeight: 24,
+        },
+        '',
+      );
+
+      expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+      expect(mockAdapterDuringRun).toEqual([null]);
+      // The exact bytes the door emitted, contiguous and untouched.
+      expect(allOutput(socket)).toContain('\x1b[2J\x1b[H' + '-'.repeat(76) + '\r\n');
+      expect(c64AdapterFor(socket)).toBeNull();
+      expect(socket.emit).toBe(originalEmit);
+    },
+  );
+
+  it('the DOORS list marks all three [C64] and marks nothing else', async () => {
+    await registerFromDisk([...MARKED.map(([c]) => c), 'RTW']);
+    const marks = new Map(
+      getDoors().map((d) => [d.command, formatDoorLine(d, false).includes('[C64]')]),
+    );
+    expect(marks.get('WHO')).toBe(true);
+    expect(marks.get('S')).toBe(true);
+    expect(marks.get('WHAT')).toBe(true);
+    // RTW launches the SAME binary as WHO and is deliberately NOT marked -
+    // the mark is per registration, not per executable.
+    expect(marks.get('RTW')).toBe(false);
+  });
+
+  it('RTW - the same binary as WHO, unmarked - is still refused at 40', async () => {
+    await registerFromDisk(['RTW']);
+    const socket = makeSocket();
+
+    await handleCommand(socket as any, sysopC64('RTW'), '');
+
+    expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(mockAdapterDuringRun).toHaveLength(0);
+  });
+});
