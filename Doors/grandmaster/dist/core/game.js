@@ -19,6 +19,7 @@ const time_limit_1 = require("./time-limit");
 const devil_grade_1 = require("./devil-grade");
 const hidden_1 = require("./hidden");
 const up_key_lock_1 = require("./up-key-lock");
+const practice_goal_1 = require("./practice-goal");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 const items_1 = require("./items");
@@ -65,6 +66,11 @@ class GameEngine {
         this.SHIRASE_RISE_MAX = {
             5: 35, 6: 30, 7: 20, 8: 18, 9: 15
         };
+        /**
+         * PRACTICE goal for a training run (gamestart.c:11229-11252). null = play
+         * until the stack tops out, which is all this door's training mode could do.
+         */
+        this.practiceGoal = null;
         /** Frames since ROLL ROLL was collected (gamestart.c's gametime % 30). */
         this.rollRollFrame = 0;
         this.startLevel = startLevel;
@@ -88,6 +94,39 @@ class GameEngine {
         if (settings.itemMode && settings.itemMode !== 'OFF') {
             this.enableItems(settings.itemMode);
         }
+    }
+    /**
+     * Give a training run a finish line (gamestart.c's p_goaltype). Call
+     * before start(); 'none' or a zero value leaves the run endless.
+     */
+    setPracticeGoal(goal) {
+        this.practiceGoal = goal && (0, practice_goal_1.practiceGoalTarget)(goal) !== null ? goal : null;
+    }
+    /** The goal this run is playing to, for the HUD. */
+    getPracticeGoal() {
+        return this.practiceGoal;
+    }
+    /**
+     * Has the practice goal been met? Checked once per frame and once per lock,
+     * because a time goal can fall due while no piece is moving.
+     */
+    checkPracticeGoal() {
+        if (!this.practiceGoal || this.state.status !== 'playing')
+            return false;
+        const elapsedSeconds = this.state.startTime
+            ? (Date.now() - this.state.startTime) / 1000
+            : 0;
+        const reached = (0, practice_goal_1.practiceGoalReached)(this.practiceGoal, {
+            level: this.state.level,
+            lines: this.state.lines,
+            pieces: this.state.piecesPlaced,
+            elapsedSeconds,
+        });
+        if (!reached)
+            return false;
+        this.state.status = 'complete';
+        this.state.endTime = Date.now();
+        return true;
     }
     /**
      * Apply one item's ItemEffectResult to THIS engine.
@@ -439,6 +478,9 @@ class GameEngine {
                 }
             }
         }
+        // PRACTICE: a time goal comes due whether or not a piece is falling.
+        if (this.checkPracticeGoal())
+            return;
         if (this.state.itemBanner) {
             this.state.itemBanner.ttl--;
             if (this.state.itemBanner.ttl <= 0)

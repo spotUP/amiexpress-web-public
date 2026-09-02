@@ -7,6 +7,7 @@ import type { GameState, GameMode, PlayerSettings, GameResult } from './types';
 import type { AttackManager } from '../network/attack-system';
 import { type Replay } from '../server/replay-manager';
 import { type Medal } from './medals';
+import { type PracticeGoal } from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
@@ -63,10 +64,27 @@ export declare class GameEngine {
     private devilNextRise;
     private readonly SHIRASE_RISE_MIN;
     private readonly SHIRASE_RISE_MAX;
+    /**
+     * PRACTICE goal for a training run (gamestart.c:11229-11252). null = play
+     * until the stack tops out, which is all this door's training mode could do.
+     */
+    private practiceGoal;
     /** Frames since ROLL ROLL was collected (gamestart.c's gametime % 30). */
     private rollRollFrame;
     private readonly startLevel;
     constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager, startLevel?: number);
+    /**
+     * Give a training run a finish line (gamestart.c's p_goaltype). Call
+     * before start(); 'none' or a zero value leaves the run endless.
+     */
+    setPracticeGoal(goal: PracticeGoal | null): void;
+    /** The goal this run is playing to, for the HUD. */
+    getPracticeGoal(): PracticeGoal | null;
+    /**
+     * Has the practice goal been met? Checked once per frame and once per lock,
+     * because a time goal can fall due while no piece is moving.
+     */
+    private checkPracticeGoal;
     /**
      * Apply one item's ItemEffectResult to THIS engine.
      *

@@ -31,6 +31,10 @@ import { checkTorikan } from './time-limit';
 import { devilGradeForLevel, devilFinalGrade, DEVIL_END_LEVEL } from './devil-grade';
 import { SHADOW_TIMER_FRAMES, shadowDecayRate } from './hidden';
 import { lockedByUpKey } from './up-key-lock';
+import {
+  practiceGoalReached, practiceGoalTarget,
+  type PracticeGoal,
+} from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
@@ -118,6 +122,12 @@ export class GameEngine {
     5: 35, 6: 30, 7: 20, 8: 18, 9: 15
   };
 
+  /**
+   * PRACTICE goal for a training run (gamestart.c:11229-11252). null = play
+   * until the stack tops out, which is all this door's training mode could do.
+   */
+  private practiceGoal: PracticeGoal | null = null;
+
   /** Frames since ROLL ROLL was collected (gamestart.c's gametime % 30). */
   private rollRollFrame = 0;
 
@@ -152,6 +162,42 @@ export class GameEngine {
     if (settings.itemMode && settings.itemMode !== 'OFF') {
       this.enableItems(settings.itemMode);
     }
+  }
+
+  /**
+   * Give a training run a finish line (gamestart.c's p_goaltype). Call
+   * before start(); 'none' or a zero value leaves the run endless.
+   */
+  setPracticeGoal(goal: PracticeGoal | null): void {
+    this.practiceGoal = goal && practiceGoalTarget(goal) !== null ? goal : null;
+  }
+
+  /** The goal this run is playing to, for the HUD. */
+  getPracticeGoal(): PracticeGoal | null {
+    return this.practiceGoal;
+  }
+
+  /**
+   * Has the practice goal been met? Checked once per frame and once per lock,
+   * because a time goal can fall due while no piece is moving.
+   */
+  private checkPracticeGoal(): boolean {
+    if (!this.practiceGoal || this.state.status !== 'playing') return false;
+
+    const elapsedSeconds = this.state.startTime
+      ? (Date.now() - this.state.startTime) / 1000
+      : 0;
+    const reached = practiceGoalReached(this.practiceGoal, {
+      level: this.state.level,
+      lines: this.state.lines,
+      pieces: this.state.piecesPlaced,
+      elapsedSeconds,
+    });
+    if (!reached) return false;
+
+    this.state.status = 'complete';
+    this.state.endTime = Date.now();
+    return true;
   }
 
   /**
@@ -540,6 +586,9 @@ export class GameEngine {
         }
       }
     }
+
+    // PRACTICE: a time goal comes due whether or not a piece is falling.
+    if (this.checkPracticeGoal()) return;
 
     if (this.state.itemBanner) {
       this.state.itemBanner.ttl--;

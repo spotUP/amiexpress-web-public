@@ -722,18 +722,21 @@ class GrandmasterApp {
         this.inputManager.suspend();
         const config = await (0, training_config_1.showTrainingConfig)(this.screen);
         this.inputManager.resume();
-        await this.startGame('training', config.startLevel);
+        await this.startGame('training', config.startLevel, config.goal);
     }
     /**
      * Start a game in specified mode
      */
-    async startGame(mode, startLevel = 0) {
+    async startGame(mode, startLevel = 0, practiceGoal = null) {
         this.currentScreen = 'game';
         this.state.currentMode = mode;
         // Disable mouse control during gameplay
         this.screen.program.disableMouse();
         // Create game engine
         this.gameEngine = new game_1.GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel);
+        // PRACTICE goal (training only) - set before start(), which the game
+        // screen calls, so the run knows its finish line from the first piece.
+        this.gameEngine.setPracticeGoal(practiceGoal);
         // Start replay recording
         const userId = this.session.user?.id || 'guest';
         const username = this.session.user?.username || this.state.playerName;

@@ -35,6 +35,7 @@ interface DoorSession {
 import { GameMode, AppState, GameResult } from './core/types';
 import { GameEngine } from './core/game';
 import { softDropIntervalMs } from './core/soft-drop';
+import type { PracticeGoal } from './core/practice-goal';
 import { MenuScreen } from './ui/menu';
 import { GameScreen } from './ui/game-screen';
 import { SettingsScreen } from './ui/settings-screen';
@@ -786,13 +787,17 @@ export class GrandmasterApp {
     this.inputManager.suspend();
     const config = await showTrainingConfig(this.screen);
     this.inputManager.resume();
-    await this.startGame('training', config.startLevel);
+    await this.startGame('training', config.startLevel, config.goal);
   }
 
   /**
    * Start a game in specified mode
    */
-  private async startGame(mode: GameMode, startLevel: number = 0): Promise<void> {
+  private async startGame(
+    mode: GameMode,
+    startLevel: number = 0,
+    practiceGoal: PracticeGoal | null = null
+  ): Promise<void> {
     this.currentScreen = 'game';
     this.state.currentMode = mode;
 
@@ -801,6 +806,10 @@ export class GrandmasterApp {
 
     // Create game engine
     this.gameEngine = new GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel);
+
+    // PRACTICE goal (training only) - set before start(), which the game
+    // screen calls, so the run knows its finish line from the first piece.
+    this.gameEngine.setPracticeGoal(practiceGoal);
 
     // Start replay recording
     const userId = this.session.user?.id || 'guest';

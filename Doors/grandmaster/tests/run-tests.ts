@@ -55,6 +55,7 @@ const TEST_MODULES = ['./versus-layout.test',
   './versus-win-type.test',
   './hidden-mode.test',
   './soft-drop-speed.test',
+  './practice-goal.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.
