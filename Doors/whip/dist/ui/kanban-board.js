@@ -9,6 +9,7 @@ const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/b
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
 const door_theme_1 = require("../door-theme");
+const confirm_delete_1 = require("./confirm-delete");
 const COLUMNS = ['todo', 'in-progress', 'testing', 'done'];
 const COLUMN_LABELS = {
     'todo': 'TODO',
@@ -384,7 +385,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            const confirmed = await confirmDelete(screen, task.title);
+                            const confirmed = await (0, confirm_delete_1.confirmDelete)(screen, 'task', task.title);
                             if (confirmed) {
                                 await dataManager.deleteTask(task.id);
                                 if (bbsApi?.emitCustomEvent) {
@@ -521,28 +522,6 @@ async function moveTask(screen, task, newStatus, dataManager, achievementManager
         }
     }
     await dataManager.updateTask(task);
-}
-async function confirmDelete(screen, taskTitle) {
-    return new Promise((resolve) => {
-        const question = blessed_1.default.question({
-            parent: screen,
-            top: 'center',
-            left: 'center',
-            width: 60,
-            height: 7,
-            border: { type: 'line' },
-            style: {
-                border: { fg: door_theme_1.T.alert },
-                bg: door_theme_1.T.ground
-            },
-            label: ' Confirm Delete '
-        });
-        question.ask(`Delete task "${taskTitle}"?\n\n(Y/N)`, (answer) => {
-            screen.remove(question);
-            screen.render();
-            resolve(answer);
-        });
-    });
 }
 async function showAchievementUnlock(screen, achievement) {
     return new Promise((resolve) => {

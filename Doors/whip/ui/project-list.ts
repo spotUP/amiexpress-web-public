@@ -12,6 +12,7 @@ import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { v4 as uuidv4 } from 'uuid';
 import { T } from '../door-theme';
+import { confirmDelete } from './confirm-delete';
 
 const PROJECT_TYPES: ProjectType[] = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
 
@@ -134,7 +135,7 @@ export async function showProjectList(
         case 'd':
           if (projects.length > 0) {
             const projectToDelete = projects[list.selected || 0];
-            const confirmed = await confirmDelete(screen, projectToDelete.name);
+            const confirmed = await confirmDelete(screen, 'project', projectToDelete.name);
             if (confirmed) {
               await dataManager.deleteProject(projectToDelete.id);
 
@@ -506,26 +507,3 @@ async function showProjectEditor(
   });
 }
 
-async function confirmDelete(screen: Screen, projectName: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const question = blessed.question({
-      parent: screen,
-      top: 'center',
-      left: 'center',
-      width: 60,
-      height: 7,
-      border: { type: 'line' },
-      style: {
-        border: { fg: T.alert },
-        bg: T.ground
-      },
-      label: ' Confirm Delete '
-    });
-
-    question.ask(`Delete project "${projectName}"?\n\n(Y/N)`, (answer: boolean) => {
-      screen.remove(question);
-      screen.render();
-      resolve(answer);
-    });
-  });
-}

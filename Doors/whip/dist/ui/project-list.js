@@ -8,6 +8,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
+const confirm_delete_1 = require("./confirm-delete");
 const PROJECT_TYPES = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
 async function showProjectList(screen, user, dataManager, achievementManager, bbsApi) {
     return new Promise(async (resolve) => {
@@ -113,7 +114,7 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
                     case 'd':
                         if (projects.length > 0) {
                             const projectToDelete = projects[list.selected || 0];
-                            const confirmed = await confirmDelete(screen, projectToDelete.name);
+                            const confirmed = await (0, confirm_delete_1.confirmDelete)(screen, 'project', projectToDelete.name);
                             if (confirmed) {
                                 await dataManager.deleteProject(projectToDelete.id);
                                 // Emit event for deleted project
@@ -421,27 +422,5 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
         // Focus name input initially
         nameInput.focus();
         screen.render();
-    });
-}
-async function confirmDelete(screen, projectName) {
-    return new Promise((resolve) => {
-        const question = blessed_1.default.question({
-            parent: screen,
-            top: 'center',
-            left: 'center',
-            width: 60,
-            height: 7,
-            border: { type: 'line' },
-            style: {
-                border: { fg: door_theme_1.T.alert },
-                bg: door_theme_1.T.ground
-            },
-            label: ' Confirm Delete '
-        });
-        question.ask(`Delete project "${projectName}"?\n\n(Y/N)`, (answer) => {
-            screen.remove(question);
-            screen.render();
-            resolve(answer);
-        });
     });
 }

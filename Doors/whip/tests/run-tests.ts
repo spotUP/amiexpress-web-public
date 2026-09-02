@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./opens.test'];
+const TEST_MODULES = ['./opens.test', './confirm-delete.test'];
 
 const realLog = console.log;
 console.log = () => {};

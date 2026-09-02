@@ -11,6 +11,7 @@ import type { AchievementManager } from '../core/achievements';
 import { getPriorityColor, calculateLevel } from '../core/gamification';
 import { editTask, createTask } from './task-editor';
 import { T } from '../door-theme';
+import { confirmDelete } from './confirm-delete';
 
 const COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'testing', 'done'];
 const COLUMN_LABELS: Record<TaskStatus, string> = {
@@ -442,7 +443,7 @@ export async function showKanbanBoard(
           if (columnTasks.length > 0) {
             const selectedIndex = columnLists[currentColumn].selected || 0;
             const task = columnTasks[selectedIndex];
-            const confirmed = await confirmDelete(screen, task.title);
+            const confirmed = await confirmDelete(screen, 'task', task.title);
             if (confirmed) {
               await dataManager.deleteTask(task.id);
 
@@ -623,29 +624,6 @@ async function moveTask(
   await dataManager.updateTask(task);
 }
 
-async function confirmDelete(screen: Screen, taskTitle: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const question = blessed.question({
-      parent: screen,
-      top: 'center',
-      left: 'center',
-      width: 60,
-      height: 7,
-      border: { type: 'line' },
-      style: {
-        border: { fg: T.alert },
-        bg: T.ground
-      },
-      label: ' Confirm Delete '
-    });
-
-    question.ask(`Delete task "${taskTitle}"?\n\n(Y/N)`, (answer: boolean) => {
-      screen.remove(question);
-      screen.render();
-      resolve(answer);
-    });
-  });
-}
 
 async function showAchievementUnlock(screen: Screen, achievement: Achievement): Promise<void> {
   return new Promise((resolve) => {
