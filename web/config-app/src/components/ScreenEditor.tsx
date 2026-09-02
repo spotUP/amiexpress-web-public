@@ -156,9 +156,22 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
         </div>
       </div>
 
-      {/* Black because that is the SCREEN's own background - ANSI colour 0 -
-          not a surface of the admin's chrome. */}
-      <div className="overflow-auto bg-black p-2">
+      {/*
+        A viewport, not the whole canvas.
+        
+        BBSTITLE on this board is several screens tall, and an unbounded
+        container simply grew: the dialog scrolled instead, carrying the tool
+        row and the colours off the top, and the sysop had no way to reach the
+        bottom of the art while drawing. The canvas scrolls INSIDE its own box
+        now, so the tools stay put.
+
+        Black because that is the SCREEN's own background - ANSI colour 0 - not
+        a surface of the admin's chrome.
+      */}
+      <div
+        data-testid="canvas-viewport"
+        className="max-h-[55vh] overflow-auto bg-black p-2"
+      >
         <AnsiCanvas
           canvas={surface.canvas}
           cursor={surface.tool === 'text' ? cursor : null}

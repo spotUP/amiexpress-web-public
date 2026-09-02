@@ -15,7 +15,20 @@ const AUTH_BASE = '/auth';
  * POSITIVE claim about a request that had failed.
  */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    /**
+     * The `data` the board sent with the refusal.
+     *
+     * A refusal is not always just a sentence: the share endpoint answers 409
+     * with every blocked node, the files it would lose and the screens that
+     * differ, and the page could not show any of it because the error carried
+     * only a message. Reported as "5 nodes cannot share this directory" - true,
+     * and useless on its own.
+     */
+    public readonly data?: unknown,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -46,14 +59,18 @@ class ApiClient {
     };
   }
 
-  private failed(status: number, body: { error?: string; message?: string }, fallback: string): ApiError {
+  private failed(
+    status: number,
+    body: { error?: string; message?: string; data?: unknown },
+    fallback: string,
+  ): ApiError {
     if (status === 401) {
       // Reached only after refreshAccessToken() has been tried and refused.
       this.setToken(null);
       writeAdminRefreshToken(null);
       this.unauthorizedHandler?.();
     }
-    return new ApiError(body.error || body.message || fallback, status);
+    return new ApiError(body.error || body.message || fallback, status, body.data);
   }
 
   constructor() {

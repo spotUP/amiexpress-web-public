@@ -114,6 +114,19 @@ describe('the editor as a dialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('scrolls a tall screen inside the canvas, not by moving the tools', async () => {
+    // BBSTITLE on the live board is several screens tall. An unbounded canvas
+    // container grew and the DIALOG scrolled, taking the tool row and the
+    // colour pickers off the top with it.
+    const user = userEvent.setup();
+    const dialog = await openEditor(user);
+
+    const viewport = within(dialog).getByTestId('canvas-viewport');
+    expect(viewport.className).toMatch(/overflow-auto/);
+    expect(viewport.className).toMatch(/max-h-/);
+    expect(viewport.contains(within(dialog).getByTestId('ansi-canvas'))).toBe(true);
+  });
+
   it('goes back to the file on cancel, without writing', async () => {
     // Cancel leaves the EDITOR, not the file: the dialog is where the file's
     // details, its preview and its MCI list live now.

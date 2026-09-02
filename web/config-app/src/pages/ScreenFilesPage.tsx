@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil } from 'lucide-react';
-import { apiClient } from '../api/client';
+import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
 import { summariseShare, type ShareSummary } from './screen-share-view';
@@ -197,12 +197,22 @@ export function ScreenFilesPage() {
       ));
       showSuccess(`${res.data?.wouldWrite?.length ?? nodes.length} node icons would be written`);
     } catch (error) {
-      const payload = (error as { data?: { blocked?: { id: number; reasons: string[]; losing: string[]; gaining: string[] }[] } }).data;
+      // The board answers a refusal with the whole picture: which nodes are
+      // blocked, what each would lose and gain, and which could share anyway.
+      const payload = (error as ApiError).data as {
+        blocked?: { id: number; reasons: string[]; losing: string[]; gaining: string[] }[];
+        canShare?: number[];
+      } | undefined;
       if (payload?.blocked) {
-        setShareSummary(summariseShare(Object.fromEntries(payload.blocked.map(b => [b.id, {
-          ok: false, reasons: b.reasons, losing: b.losing ?? [], gaining: b.gaining ?? [],
-          nodeHasNoScreens: false,
-        }]))));
+        setShareSummary(summariseShare({
+          ...Object.fromEntries((payload.canShare ?? []).map(id => [id, {
+            ok: true, reasons: [], losing: [], gaining: [], nodeHasNoScreens: false,
+          }])),
+          ...Object.fromEntries(payload.blocked.map(b => [b.id, {
+            ok: false, reasons: b.reasons, losing: b.losing ?? [], gaining: b.gaining ?? [],
+            nodeHasNoScreens: false,
+          }])),
+        }));
       } else {
         showError((error as Error).message);
       }
