@@ -20,9 +20,22 @@ export interface ScreenArtProps {
   className?: string;
   /** Passed to the canvas, so a thumbnail is distinguishable from the editor. */
   testId?: string;
+  /**
+   * Draw at most this many rows.
+   *
+   * A screen is 25 rows by convention and the loader stopped capping at 25 on
+   * purpose - codes live BELOW the art and truncating deleted them. But this
+   * board keeps ordinary text under its screen directories too: BBSHelp.txt is
+   * 430 lines and a vendored changelog is 3,019. A preview of one of those
+   * asks for a canvas 96,608 pixels tall, past every browser's maximum, and
+   * the page stops responding. A thumbnail wants the first screenful anyway.
+   *
+   * Absent means all of it, which is what the EDITOR needs.
+   */
+  maxRows?: number;
 }
 
-export function ScreenArt({ content, scale = 1, className, testId }: ScreenArtProps) {
+export function ScreenArt({ content, scale = 1, className, testId, maxRows }: ScreenArtProps) {
   const [canvas, setCanvas] = useState<Cell[][] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -51,6 +64,10 @@ export function ScreenArt({ content, scale = 1, className, testId }: ScreenArtPr
   }
   if (!canvas) return null;
 
+  // Sliced AFTER parsing, so the rows a preview does not show cost pixels
+  // rather than a canvas the browser refuses to allocate.
+  const shown = maxRows && canvas.length > maxRows ? canvas.slice(0, maxRows) : canvas;
+
   /*
    * The scale goes to the CANVAS, not to a CSS transform around it.
    *
@@ -63,7 +80,7 @@ export function ScreenArt({ content, scale = 1, className, testId }: ScreenArtPr
       className={`overflow-auto bg-black p-2 ${className ?? ''}`}
       style={scale === 1 ? undefined : { width: 'fit-content' }}
     >
-      <AnsiCanvas canvas={canvas} scale={scale} testId={testId} />
+      <AnsiCanvas canvas={shown} scale={scale} testId={testId} />
     </div>
   );
 }

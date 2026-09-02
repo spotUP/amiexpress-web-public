@@ -1463,7 +1463,17 @@ export function ScreenFilesPage() {
               // Tall art scrolls inside its own viewport rather than pushing
               // everything below it off the page - the same treatment the
               // editor's canvas gets.
-              <ScreenArt content={file.content} className="max-h-[60vh]" />
+              <ScreenArt
+                content={file.content}
+                className="max-h-[60vh]"
+                /*
+                 * Tall art scrolls; a 3,019-line changelog is not art. Without
+                 * a ceiling this canvas is 96,608 pixels high, past what any
+                 * browser will allocate, and the page freezes. 200 rows is
+                 * eight screenfuls - more than any real piece on this board.
+                 */
+                maxRows={200}
+              />
             ) : (
               <p className="text-sm text-status-warn">
                 {file.format === 'rip'
