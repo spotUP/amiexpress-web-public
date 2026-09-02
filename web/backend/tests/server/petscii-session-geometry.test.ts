@@ -19,7 +19,12 @@
  */
 jest.mock('../../src/index', () => ({}));
 
-import { applyClientReportedGeometry } from '../../src/amiga-emulation/xim/screen-width.util';
+import {
+  applyClientReportedGeometry,
+  applyTerminalTypeReport,
+  applyWindowSizeReport,
+} from '../../src/amiga-emulation/xim/screen-width.util';
+import { wrapForSession } from '../../src/utils/wrap-for-session.util';
 import { doorScreenWidth } from '../../src/amiga-emulation/xim/screen-width.util';
 import { emitText } from '../../src/utils/ansi-buffer.util';
 import * as fs from 'fs';
@@ -120,25 +125,106 @@ describe('applyClientReportedGeometry (the shared gate, also used by telnet NAWS
   });
 });
 
+/**
+ * The two index.ts listeners, DRIVEN (whole-run review, I13).
+ *
+ * They used to be asserted by regex over index.ts's text, justified because
+ * the module boots a server on import. A source pin proves a call exists, not
+ * that it works - so the bodies were extracted into screen-width.util.ts
+ * (where applyClientReportedGeometry already lives) and index.ts calls them.
+ * These are the real drives; the source pins below now only keep index.ts
+ * delegating rather than growing a second unguarded write.
+ */
+describe('applyTerminalTypeReport (index.ts TTYPE listener body)', () => {
+  it('a C64 TTYPE answer makes a PETSCII session and takes NO reported geometry', () => {
+    const session: any = { screenWidth: 80, screenHeight: 24 };
+    expect(applyTerminalTypeReport(session, { terminalType: 'c64', isC64: true, width: 80, height: 25 })).toBe(false);
+    expect(session.petsciiMode).toBe(true);
+    expect(session.terminalType).toBe('c64');
+    // The listener does NOT stamp 40 - and this is exactly the window I1
+    // closed: every reader gets the width from doorScreenWidth() instead.
+    expect(session.screenWidth).toBe(80);
+    expect(doorScreenWidth(session, 80)).toBe(40);
+  });
+
+  it('the session it produces is wrapped at 40 by the prose choke, stale 80 and all', () => {
+    const session: any = { screenWidth: 80, screenHeight: 24 };
+    applyTerminalTypeReport(session, { terminalType: 'c64', isC64: true, width: 80, height: 25 });
+    const prose = 'word '.repeat(30).trim();
+    const out = wrapForSession(prose, session);
+    expect(out).not.toBe(prose);
+    for (const row of out.split('\r\n')) expect(row.length).toBeLessThanOrEqual(40);
+  });
+
+  it('a modern TTYPE answer takes the reported geometry and leaves petsciiMode off', () => {
+    const session: any = {};
+    expect(applyTerminalTypeReport(session, { terminalType: 'xterm', isC64: false, width: 132, height: 50 })).toBe(true);
+    expect(session.petsciiMode).toBe(false);
+    expect(session.terminalType).toBe('modern');
+    expect({ w: session.screenWidth, h: session.screenHeight }).toEqual({ w: 132, h: 50 });
+  });
+
+  it('is inert without a session', () => {
+    expect(applyTerminalTypeReport(undefined, { terminalType: 'c64', isC64: true, width: 40, height: 25 })).toBe(false);
+  });
+});
+
+describe('applyWindowSizeReport (index.ts NAWS listener body)', () => {
+  it('a PETSCII session takes neither the geometry nor a re-detection', () => {
+    const session: any = { petsciiMode: true, terminalType: 'c64', screenWidth: 40, screenHeight: 25 };
+    expect(applyWindowSizeReport(session, 80, 25)).toEqual({ geometryTaken: false, detectedFromSize: false });
+    expect({ w: session.screenWidth, h: session.screenHeight }).toEqual({ w: 40, h: 25 });
+    expect(session.petsciiMode).toBe(true);
+  });
+
+  it('40x25 from an undetected terminal is read as a C64', () => {
+    const session: any = {};
+    expect(applyWindowSizeReport(session, 40, 25)).toEqual({ geometryTaken: true, detectedFromSize: true });
+    expect(session.petsciiMode).toBe(true);
+    expect(session.terminalType).toBe('c64');
+    expect(doorScreenWidth(session, 80)).toBe(40);
+  });
+
+  it('any other size from an undetected terminal is a modern terminal', () => {
+    const session: any = { terminalType: 'unknown' };
+    expect(applyWindowSizeReport(session, 132, 50)).toEqual({ geometryTaken: true, detectedFromSize: true });
+    expect(session.petsciiMode).toBe(false);
+    expect({ w: session.screenWidth, h: session.screenHeight }).toEqual({ w: 132, h: 50 });
+  });
+
+  it('an already-detected terminal keeps its type and only resizes', () => {
+    const session: any = { terminalType: 'modern', petsciiMode: false };
+    expect(applyWindowSizeReport(session, 40, 25)).toEqual({ geometryTaken: true, detectedFromSize: false });
+    expect(session.terminalType).toBe('modern');
+    expect(session.petsciiMode).toBe(false);
+    expect(session.screenWidth).toBe(40);
+  });
+
+  it('is inert without a session', () => {
+    expect(applyWindowSizeReport(null, 40, 25)).toEqual({ geometryTaken: false, detectedFromSize: false });
+  });
+});
+
 describe('both reporters go through the one gate', () => {
-  // index.ts boots a server on import, so its NAWS handler cannot be driven
-  // from jest. This pin is what keeps it delegating instead of growing a
-  // second unguarded write. socket-handlers.ts is driven for real above.
+  // The bodies are driven above; these keep index.ts delegating to them
+  // rather than growing a second unguarded write.
   it('index.ts window-size assigns no geometry of its own', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
     const handler = src.slice(src.indexOf('connection.on("window-size"'));
     const body = handler.slice(0, handler.indexOf('\n  });'));
-    expect(body).toContain('applyClientReportedGeometry(connection.session, width, height)');
+    expect(body).toContain('applyWindowSizeReport(connection.session, width, height)');
     expect(body).not.toMatch(/session\.screenWidth\s*=/);
     expect(body).not.toMatch(/session\.screenHeight\s*=/);
+    expect(body).not.toMatch(/session\.petsciiMode\s*=/);
   });
 
   it('index.ts terminal-type (TTYPE) assigns no geometry of its own', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
     const handler = src.slice(src.indexOf('connection.on(\n    "terminal-type"'));
     const body = handler.slice(0, handler.indexOf('\n  );'));
-    expect(body).toContain('applyClientReportedGeometry(connection.session, info.width, info.height)');
+    expect(body).toContain('applyTerminalTypeReport(connection.session, info)');
     expect(body).not.toMatch(/session\.screenWidth\s*=/);
     expect(body).not.toMatch(/session\.screenHeight\s*=/);
+    expect(body).not.toMatch(/session\.petsciiMode\s*=/);
   });
 });

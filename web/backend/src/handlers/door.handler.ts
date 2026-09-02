@@ -4150,6 +4150,20 @@ console.log('[reloadDoors] Reloading doors cache...');
   const { loadCommands } = await import('./command-execution.handler');
   loadCommands(bbsBaseDir, 1, 0);
 
+  // The installed-68K registry is the OTHER half of a door's registration:
+  // initializeDoors() folds each record's MIN_COLUMNS / C64_ADAPT onto the
+  // Door the gate and the marker read. Without this the cache still holds the
+  // .info bytes from boot, so editing an installed door's tooltypes needed a
+  // restart to take effect - which the tooltype documentation promises it
+  // does not. A scan failure must not stop the reload: doors then simply
+  // carry no declaration, the closed default.
+  try {
+    const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
+    await getAmigaDoorManager().refreshCache();
+  } catch (err: any) {
+console.warn(`[reloadDoors] installed-door cache refresh failed: ${err?.message ?? err}`);
+  }
+
   // Reinitialize doors
   await initializeDoors();
 

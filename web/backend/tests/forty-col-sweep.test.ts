@@ -26,6 +26,13 @@
  * Adding a narrow surface? Add it here. A surface missing from this file is
  * a surface nobody sweeps.
  *
+ * Some surfaces have no exported row builder to call - they emit from inside
+ * a handler. Those are swept in "the driven surfaces" below, through the same
+ * stub-socket driver narrow-tables.test.ts uses, so the rule above holds with
+ * no exceptions: the five that used to be missing (user list, computer
+ * picker, file-status block, viewed-file wrap, MCI conference lists) are all
+ * here now. Whole-run review, I4.
+ *
  * RED by construction, measured 2026-09-02: re-run with every builder given
  * its WIDE (80-column) branch and 22 of these 27 cases fail. The five that
  * do not are the ones with no wide branch to fail into - the two fixed
@@ -68,6 +75,9 @@ import { buildMsgListRow, buildMessageHeaderLines } from '../src/handlers/messag
 import { buildMailScanRow } from '../src/handlers/message/message-scan.handler';
 import { buildProtocolMenuLines } from '../src/handlers/commands/info-commands.handler';
 import { formatDoorLine } from '../src/handlers/door.handler';
+import { sessionColumns } from '../src/utils/door-min-columns.util';
+import { flushOutput } from '../src/utils/output.util';
+import { displayLineWithWrappingForTest } from '../src/handlers/content/view-file.handler';
 
 /** The C64 session every narrow surface is asked about. */
 const C64 = { screenWidth: 40, petsciiMode: true, screenHeight: 25 } as any;
@@ -229,6 +239,65 @@ describe('40-column sweep: prompts', () => {
   });
 });
 
+/**
+ * A conference's MENU_PROMPT tooltype (command-handler/menu.ts:248-258)
+ * returns BEFORE buildMenuPrompt, so it is not rebuilt narrow - the sysop
+ * wrote those words and only the sysop knows which of them to drop. It is not
+ * unadapted, though: emitPrompt -> emitText -> wrapForSession is the same
+ * choke every other prose emit crosses, so it reaches a C64 word-wrapped at
+ * forty rather than running off the edge. Whole-run review, I12: the
+ * behaviour is deliberate, documented in CONFIGURATION.md, and swept here so
+ * it cannot silently stop happening.
+ */
+describe('40-column sweep: a sysop-authored MENU_PROMPT', () => {
+  const { emitPrompt, flushOutput } = require('../src/utils/output.util');
+
+  function promptRows(text: string): string[] {
+    const emitted: string[] = [];
+    const session: any = { ...C64 };
+    const socket: any = {
+      id: `forty-col-sweep-menuprompt-${text.length}`,
+      session,
+      emit(event: string, data: string) {
+        if (event === 'ansi-output') emitted.push(data);
+        return true;
+      },
+      on() {
+        return socket;
+      },
+    };
+    emitPrompt(socket, text);
+    flushOutput(socket);
+    return emitted.join('').split('\r\n');
+  }
+
+  it('is word-wrapped to forty columns, however long the sysop made it', () => {
+    fits(promptRows('\x1b[0m\x1b[35mUP ROUGH BBS\x1b[0m ' + PROSE + ' Command: '));
+    fits(promptRows(LONG + ' '));
+    fits(promptRows(LONG_WORDS + ' '));
+  });
+
+  it('an 80-column caller gets the sysop bytes back untouched', () => {
+    const text = '\x1b[0m\x1b[35mUP ROUGH BBS\x1b[0m ' + PROSE + ' Command: ';
+    const emitted: string[] = [];
+    const session: any = { screenWidth: 80 };
+    const socket: any = {
+      id: 'forty-col-sweep-menuprompt-wide',
+      session,
+      emit(event: string, data: string) {
+        if (event === 'ansi-output') emitted.push(data);
+        return true;
+      },
+      on() {
+        return socket;
+      },
+    };
+    emitPrompt(socket, text);
+    flushOutput(socket);
+    expect(emitted.join('')).toContain(text);
+  });
+});
+
 describe('40-column sweep: screens', () => {
   it('the art-skip token', () => {
     fits([ANSI_ART_SKIPPED_NOTICE]);
@@ -327,6 +396,137 @@ describe('40-column sweep: the six adapted doors', () => {
       ui.say(socket, gameState, row);
     }
     fits(rows);
+  });
+});
+
+/**
+ * The surfaces with no exported builder: driven, not called.
+ *
+ * Each of these emits from inside a handler, so the sweep drives the handler
+ * through a stub socket carrying the C64 session (which also puts the
+ * emitText width choke on the wire, exactly as on the board) and applies the
+ * one invariant to what came out. Their LAYOUTS - and their 80-column byte
+ * pins - belong to tests/handlers/narrow-tables.test.ts and
+ * tests/handlers/view-file-width.test.ts; this is the sweep.
+ */
+describe('40-column sweep: the driven surfaces', () => {
+  let driverSeq = 0;
+
+  function drive() {
+    const emitted: string[] = [];
+    const session: any = { ...C64, currentConf: 1, nodeId: 1, tempData: {} };
+    const socket: any = {
+      id: `forty-col-sweep-${driverSeq++}`,
+      session,
+      emit(event: string, data: string) {
+        if (event === 'ansi-output') emitted.push(data);
+        return true;
+      },
+      on() {
+        return socket;
+      },
+    };
+    return {
+      socket,
+      session,
+      rows: () => {
+        flushOutput(socket);
+        return emitted.join('').split('\r\n');
+      },
+    };
+  }
+
+  it('the user list (account.handler.ts displayUserList)', async () => {
+    const d = drive();
+    const account = require('../src/handlers/user/account.handler');
+    account.setDatabase({
+      getUsers: jest.fn().mockResolvedValue([
+        { username: LONG, realname: LONG, location: LONG, secLevel: 255, lastLogin: new Date(0) },
+        { username: EMPTY, realname: EMPTY, location: EMPTY, secLevel: 0, lastLogin: null },
+      ]),
+    });
+    account.displayUserList(d.socket, d.session, 1);
+    await new Promise((resolve) => setImmediate(resolve));
+    fits(d.rows());
+  });
+
+  it('the new-user computer picker (new-user.handler.ts)', async () => {
+    const d = drive();
+    d.session.newUserData = {};
+    const newUser = require('../src/handlers/user/new-user.handler');
+    await newUser.handleLinesInput(d.socket, d.session, '24');
+    const rows = d.rows();
+    // The trailing prompt has no CRLF after it and stops one column short.
+    const prompt = rows.pop() ?? '';
+    fits(rows);
+    fits([prompt], NARROW_PROMPT_WIDTH);
+  });
+
+  it('the file-status block (file-status.handler.ts)', async () => {
+    const d = drive();
+    const { FileStatusHandler } = require('../src/handlers/file/file-status.handler');
+    d.session.user = {
+      id: 'u1',
+      username: LONG,
+      securityFlags: 'T'.repeat(64),
+      confAccess: 'X',
+      byteLimit: 0,
+    };
+    const handler = new FileStatusHandler(
+      {
+        getConferences: jest.fn().mockResolvedValue([
+          {
+            id: 999,
+            name: LONG,
+            uploads: 999999,
+            bytesUpload: 9999999999999,
+            downloads: 999999,
+            bytesDownload: 9999999999999,
+            ratio: 999,
+          },
+        ]),
+      },
+      {} as any
+    );
+    await handler.handleFileStatusCommand(d.socket, d.session);
+    fits(d.rows());
+  });
+
+  it('the MCI conference and message-base lists (screen.handler.ts parseMciCodes)', async () => {
+    const screen = require('../src/handlers/screen.handler');
+    screen.setConferences([
+      { id: 1, name: LONG },
+      { id: 2, name: EMPTY },
+    ]);
+    const { Database } = require('../src/database');
+    const originalBases = Database.prototype.getMessageBases;
+    Database.prototype.getMessageBases = jest.fn().mockResolvedValue([{ name: LONG }, { name: EMPTY }]);
+    try {
+      for (const code of ['~CL.', '~CD.', '~ML.', '~MD.']) {
+        const d = drive();
+        d.session.user = { id: 'u1', username: 'SPOT', confAccess: 'XX' };
+        const { parsed } = await screen.parseMciCodes(code, d.session);
+        fits([parsed]);
+      }
+    } finally {
+      Database.prototype.getMessageBases = originalBases;
+    }
+  });
+
+  it('the viewed-file wrap (view-file.handler.ts)', async () => {
+    const d = drive();
+    // The expression the handler itself computes (view-file.handler.ts:202),
+    // built from the SAME width source. What this sweeps is that source
+    // answering 40 for a C64 and the wrapper honouring it - a sessionColumns
+    // regression to 80 puts 79-column chunks on the wire and fails here.
+    // That the handler still calls it is view-file-width.test.ts's job: that
+    // suite drives the real displayFile against a live session, which needs
+    // an amigafs module mock this file must not take on.
+    const wrapWidth = Math.max(20, sessionColumns(d.session) - 1);
+    for (const line of [LONG, LONG_WORDS, PROSE, EMPTY]) {
+      await displayLineWithWrappingForTest(d.socket, line, wrapWidth);
+    }
+    fits(d.rows(), NARROW_PROMPT_WIDTH);
   });
 });
 

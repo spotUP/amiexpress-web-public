@@ -68,3 +68,71 @@ export function applyClientReportedGeometry(
   session.screenHeight = rows;
   return true;
 }
+
+export interface NegotiatedSession extends MutableGeometry {
+  terminalType?: string;
+}
+
+export interface TerminalTypeReport {
+  terminalType: string;
+  isC64: boolean;
+  width: number;
+  height: number;
+}
+
+/**
+ * A telnet/SSH TTYPE answer landing on a session.
+ *
+ * EXTRACTED from index.ts's `terminal-type` listener (whole-run review, I13):
+ * index.ts boots a server on import, so its listener bodies could only ever be
+ * asserted by regex over the file's text - a source pin proves a call exists,
+ * not that it works. This is the body; index.ts keeps the logging.
+ *
+ * Note what it does NOT do: it never stamps `screenWidth = 40` for a C64.
+ * applyClientReportedGeometry refuses a PETSCII session's reported geometry,
+ * and there is no second write - a C64's width is 40 BY DEFINITION and
+ * doorScreenWidth() is where every reader gets it, whatever the field holds.
+ *
+ * @returns whether the reported geometry was taken.
+ */
+export function applyTerminalTypeReport(
+  session: NegotiatedSession | null | undefined,
+  info: TerminalTypeReport,
+): boolean {
+  if (!session) return false;
+  session.terminalType = info.isC64 ? 'c64' : 'modern';
+  session.petsciiMode = info.isC64;
+  return applyClientReportedGeometry(session, info.width, info.height);
+}
+
+export interface WindowSizeOutcome {
+  /** The reported size was written onto the session. */
+  geometryTaken: boolean;
+  /** The terminal type was decided FROM that size (the NAWS fallback). */
+  detectedFromSize: boolean;
+}
+
+/**
+ * A NAWS window-size report landing on a session.
+ *
+ * EXTRACTED from index.ts's `window-size` listener, same reason as above.
+ * A PETSCII session takes neither the geometry nor the fallback detection:
+ * once it is a C64 it stays 40x25 and stays a C64.
+ */
+export function applyWindowSizeReport(
+  session: NegotiatedSession | null | undefined,
+  width: number,
+  height: number,
+): WindowSizeOutcome {
+  if (!session) return { geometryTaken: false, detectedFromSize: false };
+  if (!applyClientReportedGeometry(session, width, height)) {
+    return { geometryTaken: false, detectedFromSize: false };
+  }
+  if (!session.terminalType || session.terminalType === 'unknown') {
+    const isC64 = width === C64_COLUMNS && height === 25;
+    session.terminalType = isC64 ? 'c64' : 'modern';
+    session.petsciiMode = isC64;
+    return { geometryTaken: true, detectedFromSize: true };
+  }
+  return { geometryTaken: true, detectedFromSize: false };
+}

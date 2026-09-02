@@ -126,11 +126,6 @@ import {
   setConstants,
 } from "./handlers/operations/conference.handler";
 import {
-  handleBulletinCommand,
-  handleBulletinInput,
-  setBulletinDependencies,
-} from "./handlers/content/bulletin.handler";
-import {
   performConferenceScan,
   displayMailScanScreen,
   setMessageScanDependencies,
@@ -1052,7 +1047,7 @@ setNewUserDependencies({
 import { registerHttpRoutes } from "./server/routes-setup";
 import { getSystemTime } from './utils/date-time.util';
 import { getBoardConfig } from './services/bbs-config-file.service';
-import { applyClientReportedGeometry } from './amiga-emulation/xim/screen-width.util';
+import { applyTerminalTypeReport, applyWindowSizeReport } from './amiga-emulation/xim/screen-width.util';
 
 // ===== HTTP Routes (now in server/routes-setup.ts) =====
 // Routes registered in startup section below
@@ -1254,13 +1249,14 @@ console.log('[TELNET] Door active but no handler - emitting door:input');
       height: number;
     }) => {
       if (connection.session) {
-        connection.session.terminalType = info.isC64 ? "c64" : "modern";
-        connection.session.petsciiMode = info.isC64;
         // A C64 TTYPE answer can still carry an 80-column width in the
-        // payload; applyClientReportedGeometry is the single gate (shared
-        // with the NAWS handler below and socket-handlers.ts terminal-size)
-        // that keeps a PETSCII session at 40x25 regardless.
-        applyClientReportedGeometry(connection.session, info.width, info.height);
+        // payload; applyTerminalTypeReport routes it through
+        // applyClientReportedGeometry, the single gate (shared with the NAWS
+        // handler below and socket-handlers.ts terminal-size) that keeps a
+        // PETSCII session at 40x25 regardless. The body lives in
+        // xim/screen-width.util.ts so it can be DRIVEN by a test - this file
+        // boots a server on import (whole-run review, I13).
+        applyTerminalTypeReport(connection.session, info);
 console.log(
           `[${type.toUpperCase()}] Terminal detected: ${info.terminalType} (${
             info.isC64 ? "C64" : "Modern"
@@ -1275,26 +1271,22 @@ console.log(
     if (connection.session) {
       // A C64 client can announce 80 columns over NAWS; a PETSCII session's
       // geometry is 40x25 by definition and never takes a reported size.
-      // applyClientReportedGeometry is the single gate (shared with
-      // socket-handlers.ts terminal-size).
-      if (!applyClientReportedGeometry(connection.session, width, height)) {
+      // applyWindowSizeReport wraps applyClientReportedGeometry, the single
+      // gate (shared with socket-handlers.ts terminal-size), plus the
+      // type-not-yet-known fallback detection. Extracted so it can be driven
+      // by a test rather than pinned by a regex (whole-run review, I13).
+      const outcome = applyWindowSizeReport(connection.session, width, height);
+      if (!outcome.geometryTaken) {
 console.log(
           `[${type.toUpperCase()}] Ignoring NAWS ${width}x${height}: PETSCII session stays 40x25`
         );
         return;
       }
 
-      // Fallback detection: If terminal type not yet determined, use screen size
-      if (
-        !connection.session.terminalType ||
-        connection.session.terminalType === "unknown"
-      ) {
-        const isC64 = width === 40 && height === 25;
-        connection.session.terminalType = isC64 ? "c64" : "modern";
-        connection.session.petsciiMode = isC64;
+      if (outcome.detectedFromSize) {
 console.log(
           `[${type.toUpperCase()}] Terminal detected via NAWS: ${width}x${height} (${
-            isC64 ? "C64" : "Modern"
+            connection.session.petsciiMode ? "C64" : "Modern"
           })`
         );
       } else {

@@ -62,7 +62,6 @@ import {
   setConstants,
   joinConference
 } from '../handlers/operations/conference.handler';
-import { setBulletinDependencies } from '../handlers/content/bulletin.handler';
 import { setMessageScanDependencies, checkConfAccess } from '../handlers/message/message-scan.handler';
 import { setUserCommandsDependencies } from '../handlers/commands/user-commands.handler';
 import { setSystemCommandsDependencies, handleGoodbyeCommand } from '../handlers/commands/system-commands.handler';
@@ -599,9 +598,6 @@ export async function initializeData(io?: SocketIOServer) {
 
     // Inject dependencies into account handler
     setDatabaseForAccountHandler(db);
-
-    // Inject dependencies into bulletin handler
-    setBulletinDependencies(db, parseMciCodes, addAnsiEscapes);
 
     // Inject dependencies into message scan handler
     setMessageScanDependencies(db, displayScreen, parseMciCodes, addAnsiEscapes, loadScreenFile, conferences, messageBases);

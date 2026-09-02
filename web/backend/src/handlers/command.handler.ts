@@ -40,11 +40,6 @@ import {
   displayUserList
 } from './user/account.handler';
 import {
-  handleBulletinCommand,
-  handleBulletinInput,
-  setBulletinDependencies
-} from './content/bulletin.handler';
-import {
   FileMaintenanceHandler,
   setFileMaintenanceDependencies
 } from './file/file-maintenance.handler';
