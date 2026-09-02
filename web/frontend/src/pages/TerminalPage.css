@@ -38,3 +38,26 @@
 .terminal-page--with-input {
   padding-bottom: var(--bbs-onscreen-input-height);
 }
+
+/*
+ * Desktop 80x25 mode: BBSTerminal's own outer wrapper paints its xterm
+ * theme's pure-black background across 100% of whatever box hosts it, so
+ * that box has to be shrunk to the terminal's own footprint before the
+ * lighter page ground (--bbs-page-bg, index.css) can show around it.
+ * `.terminal-page--framed` centres that shrunk box in the viewport; a door
+ * that switches to wide/fullscreen mode still fills the screen, because
+ * BBSTerminal then switches itself to `position: absolute` and escapes this
+ * flex layout entirely (see BBSTerminal.tsx).
+ */
+.terminal-page--framed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.terminal-page__frame {
+  width: fit-content;
+  height: fit-content;
+  max-width: 100%;
+  max-height: 100%;
+}

@@ -65,6 +65,15 @@ export function TerminalPage(): JSX.Element {
    * only way to type on one, landscape included.
    */
   const [surface, setSurface] = useState<'xterm' | 'canvas'>('xterm');
+  /**
+   * Desktop, non-touch, at the standard 80x25 grid: the one case that gets
+   * letterboxed against the lighter page ground instead of filling the
+   * viewport. Handheld devices scale their font to fill the screen (see
+   * refit()) and a door's wide/fullscreen mode breaks out of this layout
+   * entirely (BBSTerminal switches to position: absolute) - both must keep
+   * filling the viewport, so this flag stays false for them.
+   */
+  const [isHandheldMode, setIsHandheldMode] = useState<boolean>(isHandheld);
   const [fontSize, setFontSize] = useState<number>(() =>
     isHandheld() ? seedFontSize(window.innerWidth) : DESKTOP_FONT_SIZE
   );
@@ -135,6 +144,7 @@ export function TerminalPage(): JSX.Element {
   useEffect(() => {
     const handleViewportChange = () => {
       setIsMobile(isPortraitMobile());
+      setIsHandheldMode(isHandheld());
       refit();
     };
     window.addEventListener('resize', handleViewportChange);
@@ -375,17 +385,30 @@ export function TerminalPage(): JSX.Element {
   // orientation, because there is no other keyboard to reach.
   const showOnscreenInput = isMobile || (isHandheld() && surface === 'canvas');
 
+  // The letterboxed frame only applies to the desktop ANSI terminal. The
+  // PETSCII canvas already centres itself (aspect-ratio box inside
+  // BBSTerminal's own fixed-mode wrapper), and a handheld session needs the
+  // terminal sized to the raw viewport for refit()'s measurements to stay
+  // stable - wrapping it here would make the frame's own fit-content size
+  // depend on the very font size refit() is trying to compute.
+  const showFrame = !isHandheldMode && surface === 'xterm';
+  const terminal = (
+    <BBSTerminal
+      ref={terminalRef}
+      fontSize={fontSize}
+      keepFocused
+      fillParent
+      onConnect={handleConnect}
+      onDoorChange={setActiveDoorId}
+      onSurfaceChange={setSurface}
+    />
+  );
+
   return (
-    <div className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}`}>
-      <BBSTerminal
-        ref={terminalRef}
-        fontSize={fontSize}
-        keepFocused
-        fillParent
-        onConnect={handleConnect}
-        onDoorChange={setActiveDoorId}
-        onSurfaceChange={setSurface}
-      />
+    <div
+      className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}${showFrame ? ' terminal-page--framed' : ''}`}
+    >
+      {showFrame ? <div className="terminal-page__frame">{terminal}</div> : terminal}
       {showOnscreenInput && (
         gameControls === null
           ? <MobileBBSKeyboard onKey={handleKey} />

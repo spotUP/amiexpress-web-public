@@ -10,6 +10,9 @@
  */
 
 import React from 'react';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, act } from '@testing-library/react';
 
@@ -51,6 +54,23 @@ const STRIP_WIDTH = 200;
 function setPhoneViewport(): void {
   Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
   Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true });
+}
+
+/**
+ * A landscape desktop window. isPortraitMobile() is false because the
+ * window is wider than it is tall, and isHandheld()'s landscape branch
+ * needs `window.matchMedia` to find a coarse pointer - jsdom does not
+ * implement it (see the note in bbsterminal-session-font.test.tsx), so
+ * `typeof window.matchMedia === 'function'` is false here and isHandheld()
+ * comes back false, exactly like a real desktop browser.
+ */
+function setDesktopViewport(): void {
+  Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true });
+  Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+}
+
+function setSurface(kind: 'xterm' | 'canvas'): void {
+  act(() => { harness.props?.onSurfaceChange?.(kind); });
 }
 
 function startDoor(doorId: string | null): void {
@@ -253,5 +273,96 @@ describe('TerminalPage ARKANOID trackpad', () => {
 
     fireTouch(pause, 'touchend', [{ identifier: 6 }]);
     expect(harness.releaseGameKey).toHaveBeenCalledWith('p', 'KeyP');
+  });
+});
+
+/**
+ * The sysop asked for the fixed 80x25 terminal to sit centred against a page
+ * ground that is a shade lighter than pure black, so the letterboxing is
+ * actually visible - currently both the terminal's wrapper and the page
+ * behind it are #000000, so "centred" has nothing to contrast against.
+ *
+ * jsdom does no layout (and this project's vitest config runs with
+ * `css: false`), so there is no computed style to assert pixel centring
+ * against. What IS reachable and real: the container class TerminalPage
+ * puts on the DOM only in the desktop-fixed case (never for a handheld
+ * session or a PETSCII canvas session, where the terminal must still fill
+ * the viewport), and the CSS source that turns that class + the new token
+ * into an actual centred, contrasting page.
+ */
+describe('TerminalPage desktop 80x25 framing', () => {
+  it('centres the terminal in a frame on a desktop xterm session', () => {
+    setDesktopViewport();
+    render(<TerminalPage />);
+
+    const page = document.querySelector('.terminal-page');
+    expect(page?.className).toContain('terminal-page--framed');
+
+    const frame = document.querySelector('.terminal-page__frame');
+    expect(frame).toBeTruthy();
+    expect(frame?.querySelector('[data-testid="bbs-terminal"]')).toBeTruthy();
+  });
+
+  it('does not frame a handheld session - it must still fill the viewport', () => {
+    setPhoneViewport();
+    render(<TerminalPage />);
+
+    const page = document.querySelector('.terminal-page');
+    expect(page?.className).not.toContain('terminal-page--framed');
+    expect(document.querySelector('.terminal-page__frame')).toBeNull();
+  });
+
+  it('does not frame a PETSCII canvas session - it already centres itself', () => {
+    setDesktopViewport();
+    render(<TerminalPage />);
+
+    setSurface('canvas');
+
+    const page = document.querySelector('.terminal-page');
+    expect(page?.className).not.toContain('terminal-page--framed');
+    expect(document.querySelector('.terminal-page__frame')).toBeNull();
+  });
+
+  it('un-frames again once a door drops the desktop session back to handheld-style sizing', () => {
+    setDesktopViewport();
+    render(<TerminalPage />);
+    expect(document.querySelector('.terminal-page__frame')).toBeTruthy();
+
+    act(() => {
+      setPhoneViewport();
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(document.querySelector('.terminal-page__frame')).toBeNull();
+  });
+});
+
+describe('TerminalPage page ground token', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const read = (rel: string) => readFileSync(path.join(here, rel), 'utf8');
+
+  it('defines one near-black page-ground token, lighter than the pure-black terminal theme', () => {
+    const indexCss = read('../../index.css');
+    const matches = indexCss.match(/--bbs-page-bg:\s*(#[0-9a-fA-F]{3,6})/);
+
+    expect(matches).toBeTruthy();
+    const [, hex] = matches!;
+    expect(hex.toLowerCase()).not.toBe('#000000');
+    expect(hex.toLowerCase()).not.toBe('#000');
+
+    // "Tiny bit lighter": every channel is low, not swapped for a hue.
+    const value = hex.length === 4
+      ? hex.slice(1).split('').map(c => parseInt(c + c, 16))
+      : [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map(c => parseInt(c, 16));
+    expect(Math.max(...value)).toBeGreaterThan(0);
+    expect(Math.max(...value)).toBeLessThan(40);
+  });
+
+  it('paints the page background (not the terminal) from that token, not a hardcoded hex', () => {
+    const indexCss = read('../../index.css');
+    const appCss = read('../../App.css');
+
+    expect(indexCss).toMatch(/body\s*{[^}]*background:\s*var\(--bbs-page-bg\)/s);
+    expect(appCss).toMatch(/\.app-shell\s*{[^}]*background:\s*var\(--bbs-page-bg\)/s);
   });
 });

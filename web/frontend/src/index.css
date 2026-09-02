@@ -82,7 +82,14 @@
   line-height: 1.5;
   font-weight: 400;
   color: #ffffff;
-  background-color: #000000;
+  /*
+   * Near-black page ground. Deliberately NOT pure black: the terminal's own
+   * xterm theme background stays #000000 (packages/terminal), so this token
+   * has to be a shade lighter or the 80x25 grid has nothing to contrast
+   * against when TerminalPage letterboxes it (see .terminal-page--framed).
+   */
+  --bbs-page-bg: #0a0a0a;
+  background-color: var(--bbs-page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -110,7 +117,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-size: 16px;
-  background: #000000;
+  background: var(--bbs-page-bg);
   display: flex;
   align-items: center;
   justify-content: center;
