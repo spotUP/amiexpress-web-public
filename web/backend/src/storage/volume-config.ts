@@ -39,6 +39,47 @@ export function parseQuota(text: string): number {
   return Number(match[1]) * scale;
 }
 
+/**
+ * `parseQuota` for one drive's line, so the throw names the line to fix.
+ *
+ * A present-but-EMPTY quota is an error, not "unbounded". The tooltype parser
+ * trims, so `DRIVE.2.QUOTA=` and a line of spaces both arrive here as '', and
+ * reading that as no-limit is how a metered bucket runs up a bill on a typo.
+ * A drive that is genuinely unbounded says so by having no QUOTA key at all.
+ */
+function parseDriveQuota(driveNumber: number, text: string): number {
+  const key = `DRIVE.${driveNumber}.QUOTA`;
+  if (text.trim() === '') {
+    throw new Error(
+      `${key} is present but empty - write a size such as 10G, or delete the line to leave the drive unbounded`
+    );
+  }
+  try {
+    return parseQuota(text);
+  } catch (err) {
+    throw new Error(`${key}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Days a drive keeps a file, from DRIVE.n.RETENTION.
+ *
+ * `90` and `90D` both mean ninety days. Zero means zero - delete on the sweep -
+ * and is NOT the same as an absent key, which means keep for ever; collapsing
+ * both to undefined made a deliberate 0 and a typo look identical. Anything
+ * else throws naming the line, the same posture QUOTA has.
+ */
+function parseDriveRetentionDays(driveNumber: number, text: string): number {
+  const key = `DRIVE.${driveNumber}.RETENTION`;
+  const match = /^(\d+)\s*(?:D|DAYS)?$/i.exec(text.trim());
+  if (!match) {
+    throw new Error(
+      `${key} is unreadable ("${text}") - write a whole number of days, such as 90 or 90D`
+    );
+  }
+  return Number(match[1]);
+}
+
 export function parseVolumes(bbsRoot: string): StorageVolume[] {
   const drivesInfo = path.join(bbsRoot, 'Drives.info');
   if (!fs.existsSync(drivesInfo)) return [];
@@ -62,12 +103,12 @@ export function parseVolumes(bbsRoot: string): StorageVolume[] {
       path: isS3 ? target.slice('s3://'.length) : target,
       endpoint: tools.get(`DRIVE.${n}.ENDPOINT`),
       region: tools.get(`DRIVE.${n}.REGION`),
-      quotaBytes: quota ? parseQuota(quota) : undefined,
+      quotaBytes: quota === undefined ? undefined : parseDriveQuota(n, quota),
       // An unmarked bucket is assumed to cost money and meter egress: guessing
       // "free" is the guess that shows up on an invoice.
       egress: egress === 'FREE' || egress === '3X' ? egress : 'METERED',
       volumeClass: cls === 'FREE' ? 'FREE' : 'PAID',
-      retentionDays: retention ? Number(/^\d+/.exec(retention)?.[0] ?? '0') || undefined : undefined,
+      retentionDays: retention === undefined ? undefined : parseDriveRetentionDays(n, retention),
       keyId: tools.get(`DRIVE.${n}.KEYID`),
     });
   }

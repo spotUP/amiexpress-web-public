@@ -83,6 +83,33 @@ describe('parseVolumes', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'volcfg-empty-'));
     expect(parseVolumes(root)).toEqual([]);
   });
+
+  it('refuses a present-but-empty QUOTA instead of reading it as unbounded', () => {
+    const root = boardWith(['DRIVE.1=s3://metered', 'DRIVE.1.QUOTA=']);
+    expect(() => parseVolumes(root)).toThrow(/DRIVE\.1\.QUOTA/);
+  });
+
+  it('keeps QUOTA=0 as the real, bounded zero it is', () => {
+    const root = boardWith(['DRIVE.1=s3://sealed', 'DRIVE.1.QUOTA=0']);
+    expect(parseVolumes(root)[0].quotaBytes).toBe(0);
+  });
+
+  it('refuses an unreadable RETENTION instead of dropping it', () => {
+    const root = boardWith(['DRIVE.1=s3://cold', 'DRIVE.1.RETENTION=forever']);
+    expect(() => parseVolumes(root)).toThrow(/DRIVE\.1\.RETENTION/);
+  });
+
+  it('tells RETENTION=0 apart from an absent RETENTION', () => {
+    const zero = boardWith(['DRIVE.1=s3://cold', 'DRIVE.1.RETENTION=0']);
+    expect(parseVolumes(zero)[0].retentionDays).toBe(0);
+    const absent = boardWith(['DRIVE.1=s3://cold']);
+    expect(parseVolumes(absent)[0].retentionDays).toBeUndefined();
+  });
+
+  it('reads the D suffix a sysop writes on a retention', () => {
+    const root = boardWith(['DRIVE.1=s3://cold', 'DRIVE.1.RETENTION=90D']);
+    expect(parseVolumes(root)[0].retentionDays).toBe(90);
+  });
 });
 
 describe('readVolumeSecret', () => {
