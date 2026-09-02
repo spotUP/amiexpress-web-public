@@ -36,5 +36,6 @@ module.exports = {
     // exports map (sdk/dist). Tests resolve it to the SDK SOURCE instead so a
     // RED/GREEN cycle never depends on a stale sdk/dist build.
     '^@amiexpress/bbs-door-sdk/petscii$': '<rootDir>/../../sdk/petscii/index.ts',
+    '^@amiexpress/bbs-door-sdk/petscii/frame$': '<rootDir>/../../sdk/petscii/frame/index.ts',
   },
 };
