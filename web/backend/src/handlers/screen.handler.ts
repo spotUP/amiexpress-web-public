@@ -5,6 +5,7 @@
  * Based on express.e await displayScreen() functions.
  */
 
+import { utf8ChunkEnd } from '../utils/utf8-chunk.util';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
@@ -2300,11 +2301,13 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
             await sleep(2);
             continue;
           }
-          const toSend = Math.min(allowed, buf.length - offset, 256);
-          const chunk = buf.slice(offset, offset + toSend).toString('utf-8');
-          directEmit(eventName, chunk);
-          offset += toSend;
-          sentBytes += toSend;
+          const wanted = Math.min(allowed, buf.length - offset, 256);
+          // On a character boundary: this budget is in bytes, and a cut inside
+          // a multi-byte character sends two halves that both render as U+FFFD.
+          const end = utf8ChunkEnd(buf, offset, wanted);
+          directEmit(eventName, buf.subarray(offset, end).toString('utf-8'));
+          sentBytes += end - offset;
+          offset = end;
         }
       }
     };
@@ -2442,9 +2445,10 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           toSend = buffer.length - offset;
           carry = 0;
         }
-        const chunk = buffer.slice(offset, offset + toSend).toString('utf-8');
-        socket.emit(eventName, chunk);
-        offset += toSend;
+        // On a character boundary, for the same reason as the modem path.
+        const end = utf8ChunkEnd(buffer, offset, toSend);
+        socket.emit(eventName, buffer.subarray(offset, end).toString('utf-8'));
+        offset = end;
         if (offset < buffer.length) {
           await new Promise(resolve => setTimeout(resolve, 16)); // ~60fps pacing
           return step();
