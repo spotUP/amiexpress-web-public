@@ -18,6 +18,7 @@ import { PetsciiMachine } from '../petscii/petscii-machine';
 import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
 import { petsciiOverlayReducer, initialPetsciiOverlayState } from '../petscii/overlay-state';
 import { petsciiKeyBytesToCommand } from '../petscii/key-bytes-to-command';
+import { resolveTerminalFontFamily } from '../petscii/font-gate';
 
 // PETSCII raw-byte transport (Task 9). `MAX_SOFT_CAP_BPS` mirrors
 // modem-emulator.ts's bps=0 soft cap (230400 bps / 10 bits-per-byte =
@@ -229,6 +230,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const guruPhaseRef = useRef<number>(0);
   const guruStaticRendered = useRef<boolean>(false);
   const normalFont = useRef<string>('TopazPlus_a1200, "Courier New", monospace');
+  // Bug F fix (true-petscii login/font pass): true once a PETSCII (C64)
+  // session is showing - set from every place that switches xterm to
+  // PetMe64 (ensurePetsciiTerminal itself, the one-shot 40x25
+  // 'terminal-resize' that precedes it, and the first 'petscii-bytes' event
+  // in case that ordering ever changes) so it's true as soon as PETSCII
+  // mode is known to be starting, not only once the async font-load
+  // promise inside ensurePetsciiTerminal resolves. Consumed by the
+  // font-preference/set-font handlers below (via resolveTerminalFontFamily)
+  // so a saved or user-picked Amiga font can never clobber PetMe64 while
+  // this is true. No backend event currently un-does the 40x25 resize
+  // (grepped: pre-login.ts:158 is the only 'terminal-resize' emitter, and it
+  // only ever sends 40x25), so this intentionally never resets false again -
+  // correct for the lifetime of a 'P' session.
+  const petsciiSessionActiveRef = useRef<boolean>(false);
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
     paths: [],
@@ -730,6 +745,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const term = terminalInstance.current;
       const socket = socketRef.current;
       if (!term) return;
+
+      // Bug I fix (true-petscii login/font pass): the on-screen/mobile
+      // keyboard drives login through this method, not through xterm's own
+      // term.onKey — so it never reached the window 'keydown' listener
+      // (BBSTerminal.tsx, "Finding 2 (final review wave)") that dismisses
+      // the PetsciiCanvas overlay on physical typing. That left the overlay
+      // (opaque, on top of xterm) up forever on mobile: the user typed their
+      // username/password blind behind it and still got logged in, because
+      // the login state machine below runs regardless of what's drawn on
+      // screen. Mirror the physical-keyboard path unconditionally, exactly
+      // like that listener does — dismissing is a no-op via
+      // petsciiOverlayReducer's 'keypress' case when nothing is showing, so
+      // this is safe to call on every injected keystroke, login or not.
+      dispatchPetsciiOverlay({ type: 'keypress' });
 
       // During login states onData is explicitly blocked — replicate onKey logic directly.
       if (loginState.current === 'username') {
@@ -2124,6 +2153,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // xterm caches rasterized tofu in its texture atlas (audit A1/A2).
     let petsciiFontReady: Promise<unknown> | null = null;
     const ensurePetsciiTerminal = async () => {
+      // Set synchronously, before the await below, so a login-success that
+      // races ahead of the font-load promise still sees the PETSCII session
+      // as active (Bug F fix).
+      petsciiSessionActiveRef.current = true;
       petsciiFontReady = petsciiFontReady ?? document.fonts.load('16px PetMe64');
       await petsciiFontReady;
       const currentFont = term.options.fontFamily;
@@ -2192,6 +2225,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       void step();
     };
     socket.on('petscii-bytes', (b64: string) => {
+      petsciiSessionActiveRef.current = true; // Bug F fix - see declaration
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       if (!petsciiMachineRef.current) {
         // Created once and kept for the rest of the session - the machine
@@ -2238,6 +2272,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.resize(size.cols, size.rows);
       // For PETSCII mode (40x25), also switch to PetMe64 font
       if (size.cols === 40 && size.rows === 25) {
+        petsciiSessionActiveRef.current = true; // Bug F fix - see declaration
         void ensurePetsciiTerminal();
       }
     });
@@ -2733,15 +2768,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
         'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
       };
-      const fontFamily = `${fontName}, "Courier New", monospace`;
-      const lineHeight = lineHeightMap[fontName] ?? 1.0;
+      const requestedFontFamily = `${fontName}, "Courier New", monospace`;
+      const requestedLineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
+      // Bug F fix: a user-initiated font pick must not clobber PetMe64
+      // while a PETSCII (C64) session is showing — a simulated C64 has no
+      // business switching to an Amiga bitmap font mid-session. The pick is
+      // still remembered in normalFont.current so it applies once the user
+      // is back in a non-PETSCII session.
+      const petsciiActive = petsciiSessionActiveRef.current;
+      const fontFamily = resolveTerminalFontFamily(requestedFontFamily, petsciiActive);
       term.options.fontFamily = fontFamily;
       term.options.fontSize = size;
-      term.options.lineHeight = lineHeight;
-      normalFont.current = fontFamily;
-      console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', lineHeight);
+      if (!petsciiActive) {
+        term.options.lineHeight = requestedLineHeight;
+      }
+      normalFont.current = requestedFontFamily;
+      console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight, 'petsciiActive:', petsciiActive);
     });
 
     // Handle font preference loaded from database on login
@@ -2754,15 +2798,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
       };
       const fontName = data.font;
-      const fontFamily = `${fontName}, "Courier New", monospace`;
-      const lineHeight = lineHeightMap[fontName] ?? 1.0;
+      const requestedFontFamily = `${fontName}, "Courier New", monospace`;
+      const requestedLineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
+      // Bug F fix: login-success unconditionally requests this the instant
+      // login completes, which used to land right after ensurePetsciiTerminal
+      // switched to PetMe64 for a 'P' (PETSCII) session and clobber it back
+      // to the saved Amiga font — the session stayed 40x25 but rendered in
+      // the wrong font. While a PETSCII session is active, keep PetMe64
+      // instead; the saved preference is still remembered in
+      // normalFont.current so it applies once the user is back in a
+      // non-PETSCII session.
+      const petsciiActive = petsciiSessionActiveRef.current;
+      const fontFamily = resolveTerminalFontFamily(requestedFontFamily, petsciiActive);
       term.options.fontFamily = fontFamily;
       term.options.fontSize = size;
-      term.options.lineHeight = lineHeight;
-      normalFont.current = fontFamily;
-      console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', lineHeight);
+      if (!petsciiActive) {
+        term.options.lineHeight = requestedLineHeight;
+      }
+      normalFont.current = requestedFontFamily;
+      console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight, 'petsciiActive:', petsciiActive);
     });
 
     // Keyboard input handling
@@ -3433,6 +3489,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            // Bug I fix (true-petscii login/font pass): this overlay is
+            // purely a transient "press a key to continue" title-screen
+            // linger over the REAL interaction surface (xterm, still
+            // focused underneath - Finding 2's ruling). It used to default
+            // to pointerEvents:'auto', and the canvas below it has
+            // tabIndex - so a click anywhere on the overlay during login
+            // could focus the canvas instead of xterm's hidden input,
+            // silently stealing every subsequent keystroke away from the
+            // login state machine (which only listens on xterm/injectInput)
+            // with no visible sign anything was wrong. 'none' makes the
+            // whole overlay (including the canvas) transparent to the
+            // pointer, so a click during the linger falls through to the
+            // xterm container beneath it (whose own onClick focuses
+            // xterm) instead of ever reaching the canvas. This is the
+            // correct choice, not a stopgap: the canvas's onData prop below
+            // exists only for a hypothetical future full-canvas door
+            // session that owns the screen outright - not this login
+            // linger - so it does not need pointer input here at all.
+            pointerEvents: 'none',
           }}
         >
           <PetsciiCanvas

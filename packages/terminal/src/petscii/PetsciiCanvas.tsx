@@ -18,6 +18,19 @@ export interface PetsciiCanvasProps {
   scale?: number;
   /** Keyboard input, already translated to PETSCII bytes. */
   onData?: (bytes: number[]) => void;
+  /**
+   * Whether the canvas should be able to take keyboard focus (tabIndex 0).
+   * Defaults to false: the current consumer (BBSTerminal's login-linger
+   * overlay, Bug I fix - true-petscii login/font pass) draws this canvas as
+   * a purely transient "press a key to continue" title screen over xterm,
+   * which stays the REAL interaction surface (Finding 2's overlay ruling -
+   * see overlay-state.ts). A focusable canvas there, combined with a click
+   * during the overlay, used to let it steal keyboard focus away from
+   * xterm's login state machine with no visible sign anything was wrong.
+   * Pass `focusable` only for a genuine full-canvas door session that
+   * intends this canvas to own keyboard input directly via `onData`.
+   */
+  focusable?: boolean;
 }
 
 const COLS = 40;
@@ -46,6 +59,7 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
   palette = C64_PALETTE_COLODORE,
   scale: maxScale = 4,
   onData,
+  focusable = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -206,7 +220,7 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
         ref={canvasRef}
         width={width}
         height={height}
-        tabIndex={0}
+        tabIndex={focusable ? 0 : -1}
         onKeyDown={handleKeyDown}
         style={{
           imageRendering: 'pixelated',
