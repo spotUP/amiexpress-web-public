@@ -66,12 +66,12 @@ export interface PreLoginConnectResult {
 // ANSI_PROMPT — see command.handler.ts). The A/R/P/N graphics question
 // itself is unchanged; only its casing and the DEL invite are new.
 //
-// Explicit multi-line, each visible line <=40 columns (sysop addendum,
-// 2026-09-02): a single long line word-wraps mid-word on an 80-col
-// terminal and worse on a real C64's 40-col screen. The question comes
-// last with a trailing space so the input cursor sits right after it.
+// Two lines (sysop addendum, 2026-09-02): the C64 DEL invite stays on its
+// own line, but the graphics question and the A/R/P/N prompt are merged
+// onto one line. The question comes last with a trailing space so the
+// input cursor sits right after it.
 export const ANSI_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS\r\n(A/R/P/N) [Q=SKIP BULLETINS]? ";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/N) [Q=SKIP BULLETINS]? ";
 
 export async function runPreLoginConnect(
   emitter: LoginEmitter,

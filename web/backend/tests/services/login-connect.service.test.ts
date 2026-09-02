@@ -61,12 +61,13 @@ describe('runPreLoginConnect — connect-time unification', () => {
       expect(ANSI_GRAPHICS_PROMPT).not.toMatch(/[a-z]/);
     });
 
-    // Sysop addendum (2026-09-02): a single long line word-wraps mid-word
-    // on an 80-col terminal, worse on a real C64's 40-col screen. Assert
-    // the shape (multi-line, every visible line <=40 cols, question last
-    // with the input cursor sitting right after it) rather than pinning
-    // one giant string.
-    it('graphics prompt is explicit multi-line, each line <=40 columns, question last', () => {
+    // Sysop addendum (2026-09-02): the graphics question and the A/R/P/N
+    // prompt (originally lines 2+3) are merged into one line; the C64 DEL
+    // invite keeps its own line so it still can't word-wrap mid-word on a
+    // real C64's 40-col screen. Assert the shape (two lines, DEL line
+    // <=40 cols, question last with the input cursor sitting right after
+    // it) rather than pinning one giant string.
+    it('graphics prompt is two lines, DEL line <=40 columns, question last', () => {
       const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
 
       // Leading "\r\n" is just a blank-line separator from prior screen
@@ -74,10 +75,8 @@ describe('runPreLoginConnect — connect-time unification', () => {
       const body = (ANSI_GRAPHICS_PROMPT as string).replace(/^\r\n/, '');
       const lines = body.split('\r\n');
 
-      expect(lines.length).toBeGreaterThanOrEqual(2);
-      for (const line of lines) {
-        expect(line.length).toBeLessThanOrEqual(40);
-      }
+      expect(lines.length).toBe(2);
+      expect(lines[0].length).toBeLessThanOrEqual(40);
 
       const lastLine = lines[lines.length - 1];
       // Question mark comes last, followed only by a trailing space for
