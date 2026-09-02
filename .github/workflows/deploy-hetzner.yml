@@ -35,7 +35,12 @@
       steps:
         - name: Deploy to Hetzner VPS
           uses: appleboy/ssh-action@v1.0.3
+          # An Actions token so the HOST can fetch as somebody. See the fetch
+          # block below for why an anonymous fetch stopped being reliable.
+          env:
+            GH_TOKEN: ${{ github.token }}
           with:
+            envs: GH_TOKEN
             host: ${{ secrets.HETZNER_HOST }}
             username: root
             key: ${{ secrets.HETZNER_SSH_KEY }}
@@ -144,8 +149,39 @@
               #
               # GIT_TERMINAL_PROMPT=0 keeps a REAL credential problem failing
               # fast and honestly instead of hiding behind the prompt error.
+              # Fetch as SOMEBODY first.
+              #
+              # The retry loop was not enough: three deploys in a row on
+              # 2026-09-02 (860b18cf0, 91bd83287, 150751cfe) burned all five
+              # attempts in 75 seconds with the same "could not read Username"
+              # + "expected flush after ref listing" pair. That is not the
+              # transient the comment above describes - and the repo is
+              # PUBLIC, so it is not a permissions problem either. What it
+              # looks like is github.com rate-limiting UNAUTHENTICATED git
+              # traffic from this host's IP, which three agents pushing all
+              # day will earn: an authenticated fetch has a far higher
+              # allowance, and no number of extra attempts can outlast a
+              # limit that is counted per hour.
+              #
+              # The token is the workflow's own, short-lived and read-only,
+              # written to a 600 file rather than a command line so it is not
+              # in `ps` on the host. Anonymous stays as the fallback, so a run
+              # with no token behaves exactly as before.
+              CRED_FILE=""
+              if [ -n "${GH_TOKEN:-}" ]; then
+                CRED_FILE=$(mktemp)
+                chmod 600 "$CRED_FILE"
+                printf 'https://x-access-token:%s@github.com\n' "$GH_TOKEN" > "$CRED_FILE"
+              fi
+
               FETCH_OK=0
               for attempt in 1 2 3 4 5; do
+                if [ -n "$CRED_FILE" ] \
+                  && GIT_TERMINAL_PROMPT=0 git -c "credential.helper=store --file=$CRED_FILE" \
+                       fetch --prune origin main; then
+                  FETCH_OK=1
+                  break
+                fi
                 if GIT_TERMINAL_PROMPT=0 git fetch --prune origin main; then
                   FETCH_OK=1
                   break
@@ -153,6 +189,7 @@
                 echo "fetch attempt $attempt failed; retrying in $((attempt * 5))s" >&2
                 sleep $((attempt * 5))
               done
+              if [ -n "$CRED_FILE" ]; then rm -f "$CRED_FILE"; fi
               if [ "$FETCH_OK" != "1" ]; then
                 echo "ERROR: could not fetch origin/main after 5 attempts" >&2
                 exit 1
