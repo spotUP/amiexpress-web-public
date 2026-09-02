@@ -54,6 +54,8 @@ export interface ScreenFileShape {
   mci: MciReferenceShape[];
   readBy?: ScreenReaderShape[];
   sauce?: SauceShape;
+  /** 'backup' or 'runtime' when a designer would never edit this file. */
+  generated?: 'backup' | 'runtime';
   /** What is wrong with the bytes: 'empty', 'colour-codes-without-escape'. */
   problems?: string[];
 }
