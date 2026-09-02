@@ -2871,6 +2871,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Keyboard input handling
     term.onKey(({ key, domEvent }) => {
+      // Bug fix (desktop PETSCII overlay dismiss): xterm's own keydown
+      // handler on its textarea calls cancel(ev, true) -> preventDefault() +
+      // stopPropagation() (node_modules/@xterm/xterm/lib/xterm.js), so while
+      // xterm has focus - exactly the desktop login case - the keydown never
+      // bubbles to the window 'keydown' listener below ("Finding 2 (final
+      // review wave)") that dismisses the PetsciiCanvas overlay. Dispatch
+      // here too, input-source-agnostic, mirroring the injectInput fix
+      // (mobile/on-screen keyboard path) above. Idempotent when hidden -
+      // petsciiOverlayReducer's 'keypress' case returns the same state - so
+      // firing on every physical keystroke is safe.
+      dispatchPetsciiOverlay({ type: 'keypress' });
+
       if (!socket.connected) {
         console.error('❌ Socket not connected, cannot send key');
         return;
@@ -3132,8 +3144,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   useEffect(() => {
     if (!petsciiOverlay.visible) return;
     const handleKeydown = () => dispatchPetsciiOverlay({ type: 'keypress' });
-    window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
+    // Capture phase: xterm's own keydown handler on its textarea ends with
+    // cancel(ev, true) -> preventDefault() + stopPropagation()
+    // (node_modules/@xterm/xterm/lib/xterm.js), which stops this listener
+    // from ever seeing the event at the bubble phase while xterm has focus
+    // (the desktop login case). term.onKey now carries the primary dismiss
+    // dispatch for that path; this stays as a capture-phase belt-and-
+    // suspenders so any other focus target still dismisses the overlay.
+    window.addEventListener('keydown', handleKeydown, true);
+    return () => window.removeEventListener('keydown', handleKeydown, true);
   }, [petsciiOverlay.visible]);
 
   // Focus terminal when clicked
