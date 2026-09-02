@@ -14,7 +14,11 @@
 
 import type { ScreenIndexShape } from './screen-index-view';
 
-export type FanOutChoice = 'this-file' | 'all-copies' | 'share-then-write';
+export type FanOutChoice =
+  | 'this-file'
+  | 'same-content'
+  | 'all-copies'
+  | 'share-then-write';
 
 export interface FanOutOption {
   choice: FanOutChoice;
@@ -40,7 +44,47 @@ export function fanOutOptions(
     { choice: 'this-file', label: 'this file only', targets: [openPath], suggested: false },
   ];
 
-  if (targets.length < 2) return options;
+  /*
+   * Every file that is byte-identical to this one, wherever it lives.
+   *
+   * This board is 1,155 screen files of which 34 are unique: `guestlogon.txt`
+   * exists 80 times in one version, `logoff.txt` 93 times in five. Editing one
+   * copy at a time is what produced the five - somebody fixed a few nodes and
+   * the rest drifted - so the identical set is the honest default: writing it
+   * changes nothing that was not already the same bytes.
+   *
+   * Not limited to this screen NAME's resolutions, because the copies are
+   * spread across `Node<n>/`, `Node<n>/Screens/` and `Conf<n>/Screens/`, and
+   * the index knows them by content rather than by which screen resolves to
+   * them.
+   */
+  const openFile = index.files[openPath];
+  const identical = openFile
+    ? Object.values(index.files)
+      .filter(f => f.sha256 === openFile.sha256 && f.relPath !== openPath)
+      .map(f => f.relPath)
+      .sort((a, b) => a.localeCompare(b))
+    : [];
+
+  if (identical.length) {
+    options.push({
+      choice: 'same-content',
+      label: `all ${identical.length + 1} copies that are identical to this one`,
+      targets: [openPath, ...identical],
+      // Suggested only when there is nothing better. Sharing is better when it
+      // applies: it makes the NEXT edit one file instead of eighty, which is
+      // the actual fix for a board that is 97% clones.
+      suggested: false,
+    });
+  }
+
+  if (targets.length < 2) {
+    // Nothing to share and no sibling to overwrite, so the safe bulk is the
+    // best answer available.
+    const sameContent = options.find(o => o.choice === 'same-content');
+    if (sameContent) sameContent.suggested = true;
+    return options;
+  }
 
   const hashes = new Set(
     targets.map(t => index.files[t]?.sha256).filter((h): h is string => !!h),

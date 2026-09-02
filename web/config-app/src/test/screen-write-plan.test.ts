@@ -58,3 +58,70 @@ describe('the fan-out choices', () => {
     expect(options[1].targets[0]).toBe('Node2/BBSTITLE.txt');
   });
 });
+
+/**
+ * The identical set.
+ *
+ * This board is 1,155 screen files of which 34 are unique - `guestlogon.txt`
+ * exists 80 times in one version, `logoff.txt` 93 times in five - and original
+ * AmiExpress only ever addressed 32 nodes (axcommon.e:28 MAX_NODES=32). At 255
+ * nodes, editing one copy at a time is what produces the five versions.
+ */
+describe('writing every copy that is already identical', () => {
+  /** Copies spread across the three shapes this board actually uses. */
+  const spread = (): ScreenIndexShape => ({
+    builtAt: '',
+    unused: [],
+    screens: [{
+      screen: 'LOGOFF', dirType: 'node', missingScopes: 0, duplicateGroups: [],
+      resolutions: [
+        { scope: 'node', id: 1, dir: 'Node1', dirIsShared: false, file: 'Node1/Logoff.txt', variants: [] },
+      ],
+    }],
+    files: {
+      'Node1/Logoff.txt': { relPath: 'Node1/Logoff.txt', bytes: 1, format: 'text', sha256: 'same', mci: [] },
+      'Node2/Screens/Logoff.txt': { relPath: 'Node2/Screens/Logoff.txt', bytes: 1, format: 'text', sha256: 'same', mci: [] },
+      'Conf5/Screens/Logoff.txt': { relPath: 'Conf5/Screens/Logoff.txt', bytes: 1, format: 'text', sha256: 'same', mci: [] },
+      'Node9/Logoff.txt': { relPath: 'Node9/Logoff.txt', bytes: 1, format: 'text', sha256: 'different', mci: [] },
+    },
+  });
+
+  test('gathers copies by CONTENT, across scopes the screen does not resolve in', () => {
+    const options = fanOutOptions(spread(), 'LOGOFF', 'Node1/Logoff.txt');
+    const sameContent = options.find(o => o.choice === 'same-content')!;
+
+    // The screen resolves on one node; the identical bytes live on three
+    // paths, in a node directory, a node Screens directory and a conference.
+    expect(sameContent.targets).toEqual([
+      'Node1/Logoff.txt', 'Conf5/Screens/Logoff.txt', 'Node2/Screens/Logoff.txt',
+    ]);
+  });
+
+  test('never includes a copy whose content differs', () => {
+    const options = fanOutOptions(spread(), 'LOGOFF', 'Node1/Logoff.txt');
+
+    expect(options.find(o => o.choice === 'same-content')!.targets)
+      .not.toContain('Node9/Logoff.txt');
+  });
+
+  test('is the suggestion when there is nothing to share', () => {
+    // One resolution, so no fan-out across nodes and no sharing to offer - the
+    // identical set is the best answer available.
+    const options = fanOutOptions(spread(), 'LOGOFF', 'Node1/Logoff.txt');
+
+    expect(options.find(o => o.choice === 'same-content')!.suggested).toBe(true);
+  });
+
+  test('yields to sharing, which makes the NEXT edit one file instead of eighty', () => {
+    const identical = fanOutOptions(twoNodes('a', 'a'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
+
+    expect(identical.find(o => o.choice === 'share-then-write')!.suggested).toBe(true);
+    expect(identical.find(o => o.choice === 'same-content')!.suggested).toBe(false);
+  });
+
+  test('is not offered at all for a file nothing matches', () => {
+    const options = fanOutOptions(twoNodes('a', 'b'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
+
+    expect(options.find(o => o.choice === 'same-content')).toBeUndefined();
+  });
+});

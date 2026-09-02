@@ -21,6 +21,9 @@ import {
   type MciCodeShape, type MciFamilyShape, type CarryVerdict,
 } from './screen-mci';
 import {
+  duplicateGroups, describeGroup, type DuplicateGroup,
+} from './screen-duplicates';
+import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
@@ -522,6 +525,47 @@ export function ScreenFilesPage() {
     },
   ];
 
+  /**
+   * The board as pieces of art rather than as files.
+   *
+   * 1,155 screen files here and 34 of them unique. Original AmiExpress
+   * addressed 32 nodes; this port addresses 255, which turns a per-node copy
+   * from an annoyance into 800 files nobody can maintain by hand.
+   */
+  const duplicates = useMemo(() => (data ? duplicateGroups(data) : []), [data]);
+
+  const duplicateColumns: DataTableColumn<DuplicateGroup>[] = [
+    { id: 'name', header: 'Screen', value: row => row.name, sortable: true, mono: true },
+    {
+      id: 'copies', header: 'Copies', value: row => row.fileCount, align: 'right', sortable: true,
+    },
+    {
+      id: 'versions',
+      header: 'Versions',
+      value: row => row.versions.length,
+      align: 'right',
+      sortable: true,
+      // More than one version of the same screen means somebody edited a few
+      // copies and the rest drifted - which is the thing worth seeing.
+      cell: (row: DuplicateGroup) => describeGroup(row),
+    },
+    {
+      id: 'read',
+      header: 'Who sees it',
+      value: row => row.versions[0]?.readership ?? '',
+      sortable: true,
+      cell: (row: DuplicateGroup) => row.versions
+        .map(v => `${v.readership}${row.uniform ? '' : ` (${v.paths.length})`}`)
+        .join('; '),
+    },
+    {
+      id: 'edit',
+      header: '',
+      cell: (row: DuplicateGroup) => row.versions[0]?.editPath ?? '',
+      mono: true,
+    },
+  ];
+
   const columns: DataTableColumn<ScreenRow>[] = [
     {
       id: 'screen',
@@ -811,6 +855,40 @@ export function ScreenFilesPage() {
               />
             </section>
           ))}
+        </div>
+      ),
+    },
+    {
+      id: 'duplicates',
+      label: `Duplicates ${duplicates.length}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-content-secondary">
+            One row per screen NAME, not per file: this board holds{' '}
+            {data ? Object.keys(data.files).length : 0} screen files and most of
+            them are copies of each other. A row that says "all the same" can be
+            edited once and written to every copy; a row that says versions
+            differ is one somebody edited a few copies of.
+          </p>
+          <p className="text-content-secondary">
+            Click a row to open the copy that callers actually see.
+          </p>
+          <DataTable
+            columns={duplicateColumns}
+            rows={duplicates.filter(g =>
+              !query.trim() || g.name.toLowerCase().includes(query.trim().toLowerCase()))}
+            getRowId={item => item.name}
+            initialSort={[{ id: 'copies', desc: true }]}
+            emptyMessage="Every screen on this board exists exactly once."
+            onRowClick={item => {
+              // Both: the file is what opens, and the SCREEN is what makes the
+              // fan-out able to offer sharing - pointing every node at one
+              // directory, which is the fix that makes the next edit one file
+              // instead of eighty.
+              setOpenFile(item.versions[0]?.editPath ?? null);
+              setOpenScreen(item.screen ?? null);
+            }}
+          />
         </div>
       ),
     },
