@@ -1,10 +1,116 @@
 {
-  "aehelp":       { "binary": "Doors/AEHelp/AEHelp",           "command": "HELP",  "script": ["8000 \\r"],                               "notes": "help index: 2-column table, prose header, line-input prompt" },
-  "six_status":   { "binary": "Doors/SiX-Status/Status",       "command": "STATS", "script": ["1000 \\r", "3000 q\\r", "5000 \\r"],        "notes": "boxed stats art with CR-only overwrites and colour" },
-  "kd_confstats": { "binary": "Doors/KdConfStats/ConfStats",   "command": null,    "script": ["1500 \\r", "4000 \\r", "8000 q\\r"],        "notes": "82-wide bordered two-column table" },
-  "color_wall":   { "binary": "Doors/ColorWall/ColorWall",     "command": "CW",    "script": ["2500 \\r"],                               "notes": "art header, graffiti wall prose" },
-  "who":          { "binary": "Doors/who/who",                 "command": "WHO",   "script": ["6000 \\r", "9000 \\r"],                    "notes": "banner, column headers, 80-wide rule" },
-  "ratiorep":     { "binary": "Doors/RATIOREP/RATIOREP",       "command": "RR",    "script": ["1500 g\\r", "3500 y\\r", "6000 \\r"],       "notes": "two-column stats, underscore rule" },
-  "super_stats":  { "binary": "Doors/Super-Stats/Super-Stats", "command": "STATS", "script": ["1000 \\r", "3000 q\\r", "5000 \\r"],        "notes": "80-column stats frame with art rails" },
-  "hststat":      { "binary": "Doors/Hststat/Hststat",         "command": null,    "script": ["2500 \\r", "5000 \\r"],                    "notes": "89-wide header with high-bit glyphs, numbered menu" }
+  "aehelp": {
+    "binary": "Doors/AEHelp/AEHelp",
+    "command": "HELP",
+    "script": [
+      "8000 \\r"
+    ],
+    "bytes": 1210,
+    "sha256": "86fb88a544fc0200abf79defad293aac21ff0dbd6d805f9178901a0e16116534",
+    "harness": "printf '%s\\n' '8000 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AEHelp/AEHelp 1 --doortype XIM --command HELP --timeout 25 > aehelp.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "help index: 2-column table, prose header, line-input prompt"
+  },
+  "six_status": {
+    "binary": "Doors/SiX-Status/Status",
+    "command": "STATS",
+    "script": [
+      "1000 \\r",
+      "3000 q\\r",
+      "5000 \\r"
+    ],
+    "bytes": 2024,
+    "sha256": "1980a188851b36108112a742dcdc43a14dedd272b2851004e5ebc9bbd8f50f95",
+    "harness": "printf '%s\\n' '1000 \\r' '3000 q\\r' '5000 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/SiX-Status/Status 1 --doortype XIM --command STATS --timeout 25 > six_status.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "boxed stats art with CR-only overwrites and colour"
+  },
+  "kd_confstats": {
+    "binary": "Doors/KdConfStats/ConfStats",
+    "command": null,
+    "script": [
+      "1500 \\r",
+      "4000 \\r",
+      "8000 q\\r"
+    ],
+    "bytes": 2620,
+    "sha256": "193c4b597c0f772fa674a94d594d59b89f7dcac765b447514c8723fdea004e0d",
+    "harness": "printf '%s\\n' '1500 \\r' '4000 \\r' '8000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/KdConfStats/ConfStats 1 --doortype XIM --timeout 25 > kd_confstats.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "82-wide bordered two-column table"
+  },
+  "color_wall": {
+    "binary": "Doors/ColorWall/ColorWall",
+    "command": "CW",
+    "script": [
+      "2500 \\r"
+    ],
+    "bytes": 1186,
+    "sha256": "1cbd5f5ce6f618c7eba295e628b6005845b857da4b8863449a096fce13546d94",
+    "harness": "printf '%s\\n' '2500 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/ColorWall/ColorWall 1 --doortype XIM --command CW --timeout 25 > color_wall.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "art header, graffiti wall prose"
+  },
+  "who": {
+    "binary": "Doors/who/who",
+    "command": "WHO",
+    "script": [
+      "6000 \\r",
+      "9000 \\r"
+    ],
+    "bytes": 354,
+    "sha256": "a7765d23e49bae70b4bbb1082310941f9055a53fd13cedaec5036e690c15ce8e",
+    "harness": "printf '%s\\n' '6000 \\r' '9000 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/who/who 1 --doortype XIM --command WHO --timeout 25 > who.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "banner, column headers, 80-wide rule"
+  },
+  "ratiorep": {
+    "binary": "Doors/RATIOREP/RATIOREP",
+    "command": "RR",
+    "script": [
+      "1500 g\\r",
+      "3500 y\\r",
+      "6000 \\r"
+    ],
+    "bytes": 623,
+    "sha256": "80e08274083d85cc35ec33b0445f8df593bc1ee009e74becba87d664e6b61164",
+    "harness": "printf '%s\\n' '1500 g\\r' '3500 y\\r' '6000 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/RATIOREP/RATIOREP 1 --doortype XIM --command RR --timeout 25 > ratiorep.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "two-column stats, underscore rule"
+  },
+  "super_stats": {
+    "binary": "Doors/Super-Stats/Super-Stats",
+    "command": "STATS",
+    "script": [
+      "1000 \\r",
+      "3000 q\\r",
+      "5000 \\r"
+    ],
+    "bytes": 1745,
+    "sha256": "1b18fd0ef7fddac1f9cc04d5d6b8e1370dcaf53bd17873ac505da51c8fbb97b7",
+    "harness": "printf '%s\\n' '1000 \\r' '3000 q\\r' '5000 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/Super-Stats/Super-Stats 1 --doortype XIM --command STATS --timeout 25 > super_stats.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "80-column stats frame with art rails"
+  },
+  "hststat": {
+    "binary": "Doors/Hststat/Hststat",
+    "command": null,
+    "script": [
+      "2500 \\r",
+      "5000 \\r"
+    ],
+    "bytes": 473,
+    "sha256": "2f5cd9c3af402cf805dcaba0dfe22e1e4d9e63bb8bde711db4f86734bcaf8dd7",
+    "harness": "printf '%s\\n' '2500 \\r' '5000 \\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/Hststat/Hststat 1 --doortype XIM --timeout 25 > hststat.ans",
+    "cwd": "web/backend",
+    "binariesFrom": "1cdddac24^",
+    "notes": "89-wide header with high-bit glyphs, numbered menu"
+  }
 }
