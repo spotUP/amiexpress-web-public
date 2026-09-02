@@ -76,8 +76,8 @@ instead and substitutes codes exactly as it does in a `.TXT` — this is
 express.e's own gate (`express.e:6800-6806`), evaluated ONCE, on byte 0, per
 FILE. Nothing else opts a file in: a `~` on line 3 of an art file changes
 nothing, and no shipped art file is affected (every `BBSTITLE.SEQ` on this
-board starts `0x20` or `0x1F`). The only gated files shipped are the twelve
-`Conf*/Screens/Logoff.seq`.
+board starts `0x20` or `0x1F`). The gated files shipped are the twelve
+`Conf*/Screens/Logoff.seq` and the three `Screens/logoff/00N.logoff.seq`.
 
 **Authoring rule.** Once a `.seq` opens with `~`, EVERY `0x7E` in that file is
 a token candidate — including ones you meant as art. Write `~~` for a literal
@@ -123,8 +123,17 @@ session down.
 **Author 40-column art for PETSCII callers.** An include that resolves to
 80-column ANSI is not reflowed — the caller is shown
 `[80-COLUMN ANSI SCREEN - SKIPPED]`. If a screen matters on a C64, ship a
-40-column `.seq` beside the `.TXT`. This is the reason a C64 caller currently
-sees that token at logoff: `Screens/logoff/` holds only 80-column `.txt` art.
+40-column `.seq` beside the `.TXT`.
+
+Logoff is the worked example. `Node<N>/Logoff.txt` — LOGOFF is a NODE screen,
+so that is the file the board reads, never a conference copy — says
+`~3SR_WORK:bbs/Screens/logoff/logoff`. The target is deliberately
+**extensionless**, so the SESSION picks the extension: `Screens/logoff/` now
+ships `001..003.logoff.seq` (40 columns, PETSCII) beside
+`001..003.logoff.txt` (80 columns, ANSI), a PETSCII caller resolves the
+`.seq` first and an ANSI caller the `.txt` first, and neither is shown the
+other's art. Writing `.../logoff/logoff.seq` in the include would take that
+decision away and hand an ANSI caller raw PETSCII bytes.
 
 
 **Which doors a C64 may enter — `MIN_COLUMNS` and `C64_ADAPT`.** Both are

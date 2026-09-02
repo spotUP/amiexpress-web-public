@@ -238,7 +238,12 @@ export async function buildMciDispatch(
   const user = session.user || {};
   const username = user.username || 'Guest';
   const secLevel = user.secLevel || 0;
-  const timesCalled = user.timesCalled || 0;
+  // express.e:5309 - `~TC` prints `loggedOnUser.timesCalled AND $FFFF`, so
+  // the code can never render more than five digits (65535). The mask is
+  // load-bearing for layout, not only parity: the 40-column
+  // `Screens/logoff/003.logoff.seq` row that carries `~TC` has no room for
+  // a wider number, and an over-wide value wraps the row on a C64.
+  const timesCalled = (user.timesCalled || 0) & 0xffff;
   const messagesPosted = user.messagesPosted || 0;
   const uploads = user.uploads || 0;
   const downloads = user.downloads || 0;
