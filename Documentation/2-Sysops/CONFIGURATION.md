@@ -69,6 +69,52 @@ detection is by file extension only — any file uploaded to a file area named
 `*.seq` will be read as PETSCII content by this same check if a screen path
 ever loads it.
 
+**Which doors a C64 may enter — `MIN_COLUMNS` and `C64_ADAPT`.** Both are
+tooltypes in the door's `Commands/BBSCmd/<CMD>.info` (or its installed 68K
+record), and both are **default-closed**: a door that declares neither is
+refused to a 40-column caller with `THIS DOOR NEEDS AN 80 COLUMN SCREEN` and
+the caller lands back on the menu. Nothing else on the board changes — an
+ANSI caller is never affected by either tooltype.
+
+| Tooltype | Claim | Marker in the DOORS list |
+|---|---|---|
+| `MIN_COLUMNS=40` | "this door already fits 40 columns" — its own layout is width-driven | `[40]` |
+| `C64_ADAPT=40` | "this 68K door reaches 40 columns through the adapter" | `[C64]` |
+
+They are deliberately separate. `MIN_COLUMNS` is a statement about the door's
+own output and is the right mark for a TypeScript door that lays itself out
+from the terminal width. `C64_ADAPT` is a statement about an unmodified
+80-column Amiga binary: the BBS replays the door's ANSI onto a virtual 80x25
+grid and reduces each finished frame to 40 columns, keeping table columns side
+by side and ending any column that lost characters with `>`. Marking such a
+door `MIN_COLUMNS=40` would put a false claim in the registry, so it is not
+accepted as one; a door is never shown both markers.
+
+`C64_ADAPT` only has an effect on the 68K door types whose output crosses the
+adapter's seam — `XIM`, `DD`, `AMI`, `SIM`, `FIM`. Setting it on a TypeScript,
+AREXX, MCI or WEB door does nothing: those doors paint their own screen and
+the adapter never sees it. The value is a column count, read strictly (only
+digits), and the caller must have at least that many columns.
+
+Marked today, after the Phase 3 adaptation work:
+
+- `C64_ADAPT=40` — `WHO` (RTW), `S` (ustats), `WHAT`. Note that `RTW` is a
+  second command pointing at the same binary as `WHO` and is deliberately NOT
+  marked: the claim is per registration, not per executable.
+- `MIN_COLUMNS=40` — `THEME`, `DOORS`, `BUGS`, `DOORMAN`, `STRIP`,
+  `PHREAKWARS`.
+
+To mark a door, edit its tooltypes with the `info-editor` CLI
+(`Documentation/2-Sysops/INFO_EDITOR.md`) rather than a text editor — an
+`.info` file is an Amiga icon binary and a text editor destroys it:
+
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts Commands/BBSCmd/WHO.info set C64_ADAPT 40
+```
+
+The BBS re-reads `Commands/BBSCmd` whenever its mtime moves, so the new
+tooltype takes effect on the next command without a restart.
+
 **Deployment follow-up — port not yet exposed.** `TELNET_PETSCII_PORT` is
 wired on the backend only. Nothing outside the container can reach it yet:
 `docker-compose.yml` does not publish a `6464:6464`-style port mapping (see
