@@ -332,6 +332,83 @@ ${message}
 
 // app.ts
 import { attachMasthead, footerHints, footerStyle } from "@amiexpress/bbs-door-sdk/engines/ui/theme";
+import { effectsAllowed } from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+
+// layout.ts
+import { getCompactProfile } from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+var CompactLayout = class {
+  /** Always a LIVE width - the screen's, read on every access. */
+  constructor(widthOf) {
+    this.widthOf = widthOf;
+  }
+  get width() {
+    return this.widthOf() || 80;
+  }
+  get profile() {
+    return getCompactProfile(this.width);
+  }
+  /** True when secondary columns have to go rather than fold. */
+  get narrow() {
+    return this.profile.singleColumn;
+  }
+  /** `{ type: 'line' }`, or no border at all when the columns cannot spare it. */
+  panelBorder() {
+    return this.profile.borders ? { type: "line" } : void 0;
+  }
+  /**
+   * Spread into a panel that relies on the Panel widget's DEFAULT frame.
+   * Wide adds no key at all, so the default (and its colour) is untouched
+   * byte for byte; at XXS the frame goes.
+   */
+  get frameless() {
+    return this.profile.borders ? {} : { border: void 0 };
+  }
+  /** Height of a header/footer strip: a framed box, or a single row at XXS. */
+  get chromeH() {
+    return this.profile.collapseChrome ? 1 : 3;
+  }
+  /** Left inset of a full-width panel (the 1-column gutter goes at XXS). */
+  get panelLeft() {
+    return this.profile.collapseChrome ? 0 : 1;
+  }
+  get panelWidth() {
+    return this.profile.collapseChrome ? "100%" : "98%";
+  }
+  /** Height of the body panel between a header strip and a footer strip. */
+  get bodyH() {
+    return this.profile.collapseChrome ? "100%-2" : "100%-6";
+  }
+  /**
+   * Geometry for one half of a side-by-side pair. At XXS the pair stacks:
+   * the primary panel takes the top half, the secondary the bottom half.
+   */
+  pairPrimary(wide) {
+    return this.narrow ? { top: this.chromeH, left: 0, width: "100%", height: "50%-1" } : wide;
+  }
+  pairSecondary(wide) {
+    return this.narrow ? { top: "50%", left: 0, width: "100%", height: "50%-1" } : wide;
+  }
+  /** Clip a string to what is left of the row after `reserved` cells. */
+  fit(text, reserved) {
+    return text.substring(0, Math.max(1, this.width - reserved));
+  }
+  /**
+   * A chrome strip's text. Wide keeps the sentence it always had; XXS gets
+   * the short form, which also carries the label - a borderless box has no
+   * frame for one to sit in.
+   */
+  stripText(wide, short) {
+    return this.profile.collapseChrome ? short : wide;
+  }
+  /** The title column of a bug row: 50 on a board, what is left on a C64. */
+  bugTitle(title, voteTagLength) {
+    return this.narrow ? this.fit(title, 14 + voteTagLength) : title.substring(0, 50);
+  }
+  /** How many cells a horizontal bar chart may use. */
+  barWidth(wide, reserved) {
+    return this.narrow ? Math.max(4, this.width - reserved) : wide;
+  }
+};
 
 // storage.ts
 import * as fs from "fs";
@@ -602,6 +679,50 @@ var BugTrackerApp = class {
       debugName: "BugTracker"
     });
   }
+  // ==========================================================================
+  // Width rules - ONE source: `layout.ts`, driven by the LIVE screen width
+  // through the SDK's compact profile. There is no 40 and no 80 in this
+  // door. (Extracted so it can be tested without loading the door, which
+  // reads `import.meta.url`.)
+  // ==========================================================================
+  layout = new CompactLayout(() => this.screenWidth);
+  /** The live screen width, never a constant. */
+  get screenWidth() {
+    return this.screen?.width || 80;
+  }
+  get compact() {
+    return this.layout.profile;
+  }
+  panelBorder() {
+    return this.layout.panelBorder();
+  }
+  get frameless() {
+    return this.layout.frameless;
+  }
+  get chromeH() {
+    return this.layout.chromeH;
+  }
+  get panelLeft() {
+    return this.layout.panelLeft;
+  }
+  get panelWidth() {
+    return this.layout.panelWidth;
+  }
+  get bodyH() {
+    return this.layout.bodyH;
+  }
+  pairPrimary(wide) {
+    return this.layout.pairPrimary(wide);
+  }
+  pairSecondary(wide) {
+    return this.layout.pairSecondary(wide);
+  }
+  fit(text, reserved) {
+    return this.layout.fit(text, reserved);
+  }
+  stripText(wide, short) {
+    return this.layout.stripText(wide, short);
+  }
   createAppScreen() {
     applyTheme(this.session.bbs);
     const screen = createScreen(this.session.bbs, {
@@ -671,12 +792,13 @@ var BugTrackerApp = class {
       top: 0,
       left: 0,
       width: "100%",
-      height: 3,
+      height: this.chromeH,
+      ...this.frameless,
       style: {
         fg: T.ink,
         bg: T.bar
       },
-      content: "\n{center}AmiExpress BBS Issue Management{/center}",
+      content: this.stripText("\n{center}AmiExpress BBS Issue Management{/center}", ""),
       tags: true,
       focusable: false,
       mouse: false,
@@ -688,6 +810,7 @@ var BugTrackerApp = class {
       left: 0,
       width: "100%",
       height: 1,
+      ...this.frameless,
       focusable: false,
       mouse: false,
       clickable: false,
@@ -695,7 +818,7 @@ var BugTrackerApp = class {
       content: "",
       style: S.bar.style
     });
-    this.stopMasthead = attachMasthead(mastheadRow, THEME, {
+    this.stopMasthead = effectsAllowed(this.screenWidth) ? attachMasthead(mastheadRow, THEME, {
       title: "BUG TRACKER",
       // One column short: writing a row's last cell leaves the terminal in
       // a pending-wrap state and clips the final character.
@@ -703,13 +826,14 @@ var BugTrackerApp = class {
       rail: S.accent,
       ink: S.ink,
       render: () => this.screen.render()
-    });
+    }) : (mastheadRow.setContent(" BUG TRACKER "), () => void 0);
     this.mainContainer = createBox2({
       parent: this.screen,
-      top: 3,
+      top: this.chromeH,
       left: 0,
       width: "100%",
       bottom: 1,
+      ...this.frameless,
       // the footer is one row now, not three
       style: {
         fg: T.ink,
@@ -725,9 +849,14 @@ var BugTrackerApp = class {
       left: 0,
       width: "100%",
       height: 1,
+      ...this.frameless,
       style: footerStyle(THEME),
       content: " " + footerHints(
-        [
+        this.compact.collapseChrome ? [
+          // The view's own strip lists its keys; these two always apply.
+          { key: "ESC", does: "Back" },
+          { key: "Q", does: "Quit" }
+        ] : [
           { key: "Arrows", does: "Navigate" },
           { key: "Enter", does: "Select" },
           { key: "ESC", does: "Back" },
@@ -760,17 +889,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: " Bug Tracker ",
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.accent }
       },
-      content: ` Welcome, ${this.username}! | ${stats.total} total bugs | ${openBugs} open`,
+      content: this.stripText(` Welcome, ${this.username}! | ${stats.total} total bugs | ${openBugs} open`, ` BUGS ${stats.total}  OPEN ${openBugs}`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -800,11 +929,8 @@ var BugTrackerApp = class {
     menuActions.push(() => this.quit());
     const menuList = createList2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "48%",
-      height: "100%-6",
-      border: { type: "line" },
+      ...this.pairPrimary({ top: this.chromeH, left: 1, width: "48%", height: this.bodyH }),
+      border: this.panelBorder(),
       label: " Menu ",
       items: menuLabels,
       mouse: true,
@@ -874,11 +1000,8 @@ var BugTrackerApp = class {
     ];
     createBox2({
       parent: this.mainContainer,
-      top: 3,
-      right: 1,
-      width: "48%",
-      height: "100%-6",
-      border: { type: "line" },
+      ...this.pairSecondary({ top: this.chromeH, right: 1, width: "48%", height: this.bodyH }),
+      border: this.panelBorder(),
       label: " Statistics ",
       style: {
         fg: T.ink,
@@ -897,16 +1020,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Enter]{/} Select   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[Q]{/} Quit`,
+      content: this.stripText(` {${T.accent}-fg}[Enter]{/} Select   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[Q]{/} Quit`, ` {${T.accent}-fg}Ent{/} pick  {${T.alert}-fg}Q{/} quit`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -955,17 +1078,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: ` ${filterLabels[this.currentFilter]} `,
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.accent }
       },
-      content: ` Showing ${bugs.length} bug(s) | Filter: ${filterLabels[this.currentFilter]} | Press F to cycle filters`,
+      content: this.stripText(` Showing ${bugs.length} bug(s) | Filter: ${filterLabels[this.currentFilter]} | Press F to cycle filters`, this.fit(` ${filterLabels[this.currentFilter]}: ${bugs.length}  F cycles`, 1)),
       tags: true,
       focusable: false,
       mouse: false,
@@ -975,18 +1098,19 @@ var BugTrackerApp = class {
       const priorityColor = PRIORITIES.find((p) => p.value === bug.priority)?.color || "white";
       const statusColor = STATUSES.find((s) => s.value === bug.status)?.color || "white";
       const voteCount = bug.votes.length > 0 ? ` [+${bug.votes.length}]` : "";
-      return `{${priorityColor}-fg}#${bug.id.toString().padStart(4, "0")}{/} {${statusColor}-fg}[${bug.status.toUpperCase().substring(0, 3)}]{/} ${bug.title.substring(0, 50)}${voteCount}`;
+      const title = this.layout.bugTitle(bug.title, voteCount.length);
+      return `{${priorityColor}-fg}#${bug.id.toString().padStart(4, "0")}{/} {${statusColor}-fg}[${bug.status.toUpperCase().substring(0, 3)}]{/} ${title}${voteCount}`;
     });
     if (listItems.length === 0) {
       listItems.push(`{${T.dim}-fg}No bugs found - press N to create one{/}`);
     }
     const bugList = createList2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "98%",
-      height: "100%-6",
-      border: { type: "line" },
+      top: this.chromeH,
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.bodyH,
+      border: this.panelBorder(),
       label: " Bugs ",
       style: {
         fg: T.ink,
@@ -1015,16 +1139,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Enter]{/} View Bug   {${T.accent}-fg}[N]{/} New Bug   {${T.accent}-fg}[F]{/} Filter   {${T.alert}-fg}[ESC]{/} Back`,
+      content: this.stripText(` {${T.accent}-fg}[Enter]{/} View Bug   {${T.accent}-fg}[N]{/} New Bug   {${T.accent}-fg}[F]{/} Filter   {${T.alert}-fg}[ESC]{/} Back`, ` {${T.accent}-fg}Ent{/} view  {${T.accent}-fg}N{/} new  {${T.accent}-fg}F{/} filter  {${T.alert}-fg}ESC{/} back`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1073,17 +1197,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: ` Bug #${bug.id} `,
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: priorityInfo?.color || "cyan" }
       },
-      content: ` {bold}${bug.title}{/} | {${statusInfo?.color}-fg}${statusInfo?.label}{/} | {${priorityInfo?.color}-fg}${priorityInfo?.label}{/}`,
+      content: this.stripText(` {bold}${bug.title}{/} | {${statusInfo?.color}-fg}${statusInfo?.label}{/} | {${priorityInfo?.color}-fg}${priorityInfo?.label}{/}`, this.fit(` #${bug.id} ${bug.title}`, 1)),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1113,11 +1237,8 @@ var BugTrackerApp = class {
     }
     const detailBox = createBox2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "68%",
-      height: 12,
-      border: { type: "line" },
+      ...this.pairPrimary({ top: this.chromeH, left: 1, width: "68%", height: 12 }),
+      border: this.panelBorder(),
       label: " Details ",
       style: {
         fg: T.ink,
@@ -1155,11 +1276,8 @@ var BugTrackerApp = class {
     actionHandlers.push(() => this.showBugList());
     const actionList = createList2({
       parent: this.mainContainer,
-      top: 3,
-      right: 1,
-      width: "28%",
-      height: 12,
-      border: { type: "line" },
+      ...this.pairSecondary({ top: this.chromeH, right: 1, width: "28%", height: 12 }),
+      border: this.panelBorder(),
       label: " Actions ",
       items: actionLabels,
       mouse: true,
@@ -1191,10 +1309,10 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 15,
-      left: 1,
-      width: "98%",
+      left: this.panelLeft,
+      width: this.panelWidth,
       height: "100%-18",
-      border: { type: "line" },
+      border: this.panelBorder(),
       label: ` Comments (${bug.comments.length}) `,
       style: {
         fg: T.ink,
@@ -1213,16 +1331,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Enter]{/} Select Action   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[ESC]{/} Back`,
+      content: this.stripText(` {${T.accent}-fg}[Enter]{/} Select Action   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[ESC]{/} Back`, ` {${T.accent}-fg}Ent{/} act  {${T.alert}-fg}ESC{/} back`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1288,17 +1406,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: " New Bug Report ",
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.warn }
       },
-      content: " Use arrows/mouse to select field. Enter to edit. F10 to submit. ESC to cancel.",
+      content: this.stripText(" Use arrows/mouse to select field. Enter to edit. F10 to submit. ESC to cancel.", " NEW BUG  Ent edits  F10 sends"),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1313,19 +1431,20 @@ var BugTrackerApp = class {
         } else if (field.name === "Priority") {
           const pri = PRIORITIES.find((p) => p.value === field.value);
           displayValue = `{${pri?.color || "white"}-fg}${pri?.label || field.value}{/}`;
-        } else if (field.value.length > 50) {
-          displayValue = field.value.substring(0, 50) + "...";
+        } else if (field.value.length > (this.compact.singleColumn ? 20 : 50)) {
+          displayValue = field.value.substring(0, this.compact.singleColumn ? 20 : 50) + "...";
         }
-        return `{bold}${field.name.padEnd(20)}{/} ${displayValue}`;
+        const nameCol = this.compact.singleColumn ? 12 : 20;
+        return `{bold}${field.name.substring(0, nameCol).padEnd(nameCol)}{/} ${displayValue}`;
       });
     };
     const fieldList = createList2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "98%",
-      height: "100%-6",
-      border: { type: "line" },
+      top: this.chromeH,
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.bodyH,
+      border: this.panelBorder(),
       style: {
         fg: T.ink,
         bg: T.ground,
@@ -1345,16 +1464,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Enter]{/} Edit Field   {${T.accent}-fg}[F10]{/} Submit   {${T.alert}-fg}[ESC]{/} Cancel`,
+      content: this.stripText(` {${T.accent}-fg}[Enter]{/} Edit Field   {${T.accent}-fg}[F10]{/} Submit   {${T.alert}-fg}[ESC]{/} Cancel`, ` {${T.accent}-fg}Ent{/} edit  {${T.accent}-fg}F10{/} send  {${T.alert}-fg}ESC{/} drop`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1446,17 +1565,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: " Analytics Dashboard ",
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.ok }
       },
-      content: ` Total: ${stats.total} bugs | Open: ${openBugs} (${openPct}%) | Closed: ${closedBugs}`,
+      content: this.stripText(` Total: ${stats.total} bugs | Open: ${openBugs} (${openPct}%) | Closed: ${closedBugs}`, ` ALL ${stats.total}  OPEN ${openBugs}  SHUT ${closedBugs}`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1466,17 +1585,20 @@ var BugTrackerApp = class {
     const maxPriority = Math.max(...Object.values(stats.byPriority), 1);
     PRIORITIES.forEach((p) => {
       const count = stats.byPriority[p.value];
-      const barLen = Math.round(count / maxPriority * 30);
+      const barMax = this.layout.barWidth(30, 18);
+      const barLen = Math.round(count / maxPriority * barMax);
       const bar = "=".repeat(barLen);
-      priorityBars.push(`{${p.color}-fg}${p.label.padEnd(8)}{/} [${bar.padEnd(30)}] ${count}`);
+      priorityBars.push(`{${p.color}-fg}${p.label.padEnd(8)}{/} [${bar.padEnd(barMax)}] ${count}`);
     });
     const categoryBars = [];
     const maxCategory = Math.max(...Object.values(stats.byCategory), 1);
     CATEGORIES.forEach((c) => {
       const count = stats.byCategory[c.value];
-      const barLen = Math.round(count / maxCategory * 25);
+      const labelCol = this.compact.singleColumn ? 10 : 15;
+      const barMax = this.layout.barWidth(25, labelCol + 10);
+      const barLen = Math.round(count / maxCategory * barMax);
       const bar = "#".repeat(barLen);
-      categoryBars.push(`${c.label.padEnd(15)} [${bar.padEnd(25)}] ${count}`);
+      categoryBars.push(`${c.label.substring(0, labelCol).padEnd(labelCol)} [${bar.padEnd(barMax)}] ${count}`);
     });
     const statusLines = [];
     STATUSES.forEach((s) => {
@@ -1499,11 +1621,11 @@ var BugTrackerApp = class {
     ];
     const analyticsBox = createBox2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "98%",
-      height: "100%-6",
-      border: { type: "line" },
+      top: this.chromeH,
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.bodyH,
+      border: this.panelBorder(),
       style: {
         fg: T.ink,
         bg: T.ground,
@@ -1521,16 +1643,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Up/Down]{/} Scroll   {${T.alert}-fg}[ESC]{/} Back to Menu`,
+      content: this.stripText(` {${T.accent}-fg}[Up/Down]{/} Scroll   {${T.alert}-fg}[ESC]{/} Back to Menu`, ` {${T.accent}-fg}Up/Dn{/} scroll  {${T.alert}-fg}ESC{/} back`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1555,17 +1677,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: " Webhook Settings ",
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.warn }
       },
-      content: ` ${webhooks.length} webhook(s) configured | Notifications for bug events`,
+      content: this.stripText(` ${webhooks.length} webhook(s) configured | Notifications for bug events`, ` WEBHOOKS ${webhooks.length}`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1573,18 +1695,19 @@ var BugTrackerApp = class {
     });
     const listItems = webhooks.map((w, idx) => {
       const status = w.enabled ? `{${T.ok}-fg}[ON]{/}` : `{${T.alert}-fg}[OFF]{/}`;
-      return `${status} ${w.type.toUpperCase().padEnd(8)} ${w.url.substring(0, 50)}${w.url.length > 50 ? "..." : ""}`;
+      const urlCol = this.layout.narrow ? Math.max(8, this.screenWidth - 16) : 50;
+      return `${status} ${w.type.toUpperCase().padEnd(8)} ${w.url.substring(0, urlCol)}${w.url.length > urlCol ? "..." : ""}`;
     });
     if (listItems.length === 0) {
       listItems.push(`{${T.dim}-fg}No webhooks configured - press A to add one{/}`);
     }
     const webhookList = createList2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "98%",
-      height: "100%-6",
-      border: { type: "line" },
+      top: this.chromeH,
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.bodyH,
+      border: this.panelBorder(),
       label: " Webhooks ",
       style: {
         fg: T.ink,
@@ -1603,16 +1726,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[A]{/} Add   {${T.accent}-fg}[D]{/} Delete   {${T.accent}-fg}[T]{/} Toggle   {${T.alert}-fg}[ESC]{/} Back`,
+      content: this.stripText(` {${T.accent}-fg}[A]{/} Add   {${T.accent}-fg}[D]{/} Delete   {${T.accent}-fg}[T]{/} Toggle   {${T.alert}-fg}[ESC]{/} Back`, ` {${T.accent}-fg}A{/} add  {${T.accent}-fg}D{/} del  {${T.accent}-fg}T{/} toggle  {${T.alert}-fg}ESC{/} back`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1680,17 +1803,17 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: " Sysop Tools ",
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.alert }
       },
-      content: ` Open: ${openBugs} | Fixed (pending close): ${fixedBugs} | Closed: ${closedBugs}`,
+      content: this.stripText(` Open: ${openBugs} | Fixed (pending close): ${fixedBugs} | Closed: ${closedBugs}`, ` SYSOP  OPEN ${openBugs}  FIX ${fixedBugs}  SHUT ${closedBugs}`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1714,11 +1837,11 @@ var BugTrackerApp = class {
     ];
     const toolList = createList2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "98%",
-      height: "100%-6",
-      border: { type: "line" },
+      top: this.chromeH,
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.bodyH,
+      border: this.panelBorder(),
       label: " Available Tools ",
       style: {
         fg: T.ink,
@@ -1737,16 +1860,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Enter]{/} Select Tool   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[ESC]{/} Back`,
+      content: this.stripText(` {${T.accent}-fg}[Enter]{/} Select Tool   {${T.accent}-fg}[Hotkey]{/} Quick Action   {${T.alert}-fg}[ESC]{/} Back`, ` {${T.accent}-fg}Ent{/} tool  {${T.alert}-fg}ESC{/} back`),
       tags: true,
       focusable: false,
       mouse: false,
@@ -1940,28 +2063,30 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       top: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       label: " User Activity Report ",
       style: {
         fg: T.ink,
         bg: T.ground,
         border: { fg: T.accentAlt }
       },
-      content: ` Tracking ${userCount} user(s) across ${bugs.length} bug(s)`,
+      content: this.stripText(` Tracking ${userCount} user(s) across ${bugs.length} bug(s)`, ` USERS ${userCount}  BUGS ${bugs.length}`),
       tags: true,
       focusable: false,
       mouse: false,
       clickable: false
     });
+    const narrow = this.compact.singleColumn;
+    const nameCol = narrow ? 16 : 20;
     const lines = [
-      "{bold}User                 Reported  Assigned  Comments{/}",
-      `{${T.dim}-fg}` + "-".repeat(55) + "{/}"
+      narrow ? "{bold}User                 Rep   Asg{/}" : "{bold}User                 Reported  Assigned  Comments{/}",
+      `{${T.dim}-fg}` + "-".repeat(narrow ? this.layout.barWidth(55, 2) : 55) + "{/}"
     ];
     Object.entries(userStats).sort((a, b) => b[1].reported + b[1].assigned - (a[1].reported + a[1].assigned)).forEach(([user, stats]) => {
-      const row = `${user.padEnd(20)} ${stats.reported.toString().padStart(8)}  ${stats.assigned.toString().padStart(8)}  ${stats.commented.toString().padStart(8)}`;
+      const row = narrow ? `${user.substring(0, nameCol).padEnd(nameCol)} ${stats.reported.toString().padStart(4)}  ${stats.assigned.toString().padStart(4)}` : `${user.padEnd(nameCol)} ${stats.reported.toString().padStart(8)}  ${stats.assigned.toString().padStart(8)}  ${stats.commented.toString().padStart(8)}`;
       lines.push(row);
     });
     if (userCount === 0) {
@@ -1969,11 +2094,11 @@ var BugTrackerApp = class {
     }
     const reportBox = createBox2({
       parent: this.mainContainer,
-      top: 3,
-      left: 1,
-      width: "98%",
-      height: "100%-6",
-      border: { type: "line" },
+      top: this.chromeH,
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.bodyH,
+      border: this.panelBorder(),
       style: {
         fg: T.ink,
         bg: T.ground,
@@ -1991,16 +2116,16 @@ var BugTrackerApp = class {
     createBox2({
       parent: this.mainContainer,
       bottom: 0,
-      left: 1,
-      width: "98%",
-      height: 3,
-      border: { type: "line" },
+      left: this.panelLeft,
+      width: this.panelWidth,
+      height: this.chromeH,
+      border: this.panelBorder(),
       style: {
         fg: T.dim,
         bg: T.ground,
         border: { fg: T.dim }
       },
-      content: ` {${T.accent}-fg}[Up/Down]{/} Scroll   {${T.alert}-fg}[ESC]{/} Back to Sysop Tools`,
+      content: this.stripText(` {${T.accent}-fg}[Up/Down]{/} Scroll   {${T.alert}-fg}[ESC]{/} Back to Sysop Tools`, ` {${T.accent}-fg}Up/Dn{/} scroll  {${T.alert}-fg}ESC{/} back`),
       tags: true,
       focusable: false,
       mouse: false,
