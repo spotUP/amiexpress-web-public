@@ -524,6 +524,10 @@ export class SpriteStudioDoor {
     const sprite = this.doc?.sprite;
 
     this.editor = new ANSIEditor({
+      // View > Theme, from the editor widget. `applyTheme` re-points this
+      // door's T and S so panels drawn after the switch follow the theme.
+      themeHost: (this.ctx as any)?.bbs,
+      onThemeChange: (theme: unknown) => applyTheme(theme),
       parent: this.screen,
       top: 0, left: 0,
       width: this.terminalMode?.mode() === 'fixed' ? 80 : '100%',

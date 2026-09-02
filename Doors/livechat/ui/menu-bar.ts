@@ -18,6 +18,7 @@ export interface MenuBarHandlers {
   onSearch?: () => void;
   onThreads?: () => void;
   onSettings?: () => void;
+  onTheme?: () => void;
   onRenderMode?: () => void;
   onToggleView?: () => void;     // fullscreen <-> grid
   onToggleSidebar?: () => void;
@@ -60,6 +61,7 @@ const buildMenuItems = (): MenuBarItem[] => ([
     label: 'View',
     items: [
       { label: 'Settings (Ctrl+S)', action: () => globalHandlers.onSettings?.() },
+      { label: 'Theme', action: () => globalHandlers.onTheme?.() },
       { label: 'Cycle Render Mode (r)', action: () => globalHandlers.onRenderMode?.() },
       { label: 'Fullscreen / Grid', action: () => globalHandlers.onToggleView?.() },
       { label: 'Toggle Sidebar', action: () => globalHandlers.onToggleSidebar?.() },

@@ -24,24 +24,23 @@ exports.S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
 /** The theme itself, for the few places that need its border or rail. */
 exports.CURRENT = (0, theme_1.themeById)('classic');
 /**
- * Resolve the caller's theme. Safe to call with anything - a bbs without
- * getTheme (an older host, or a test) leaves the classic default in place,
- * which is the board exactly as it has always looked.
+ * Re-theme this door.
+ *
+ * Takes whatever names a theme: the theme itself, or the bbs handle that
+ * knows which one the caller chose. Safe to call with anything - a host
+ * with no theme leaves the classic default in place, which is the board
+ * exactly as it has always looked.
+ *
+ * Called at startup with the bbs, and again with a THEME by the in-door
+ * theme menu (openThemeMenu), which previews a theme that is not saved
+ * yet and so cannot be read back off the bbs.
  */
-function applyTheme(bbs) {
-    const getTheme = bbs?.getTheme;
-    if (typeof getTheme !== 'function')
+function applyTheme(source) {
+    const theme = (0, theme_1.resolveTheme)(source);
+    if (!theme)
         return;
-    try {
-        const theme = getTheme.call(bbs);
-        if (!theme?.tokens)
-            return;
-        exports.CURRENT = theme;
-        exports.T = theme.tokens;
-        exports.S = (0, theme_1.themeStyles)(theme);
-    }
-    catch {
-        // A theme that will not resolve is not worth failing a door over.
-    }
+    exports.CURRENT = theme;
+    exports.T = theme.tokens;
+    exports.S = (0, theme_1.themeStyles)(theme);
 }
 //# sourceMappingURL=door-theme.js.map

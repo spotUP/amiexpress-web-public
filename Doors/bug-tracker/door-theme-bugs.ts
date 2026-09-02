@@ -8,6 +8,7 @@
 import {
   themeStyles,
   themeById,
+  resolveTheme,
   type Theme,
   type ThemeTokens,
   type ThemeStyles,
@@ -19,17 +20,22 @@ export let S: ThemeStyles = themeStyles(themeById('classic'));
 /** The theme itself, for chrome that needs its rail or border. */
 export let THEME: Theme = themeById('classic');
 
-/** Resolve the caller's theme. A host without getTheme keeps classic. */
-export function applyTheme(bbs: unknown): void {
-  const getTheme = (bbs as { getTheme?: () => Theme } | undefined)?.getTheme;
-  if (typeof getTheme !== 'function') return;
-  try {
-    const theme = getTheme.call(bbs);
-    if (!theme?.tokens) return;
-    T = theme.tokens;
-    S = themeStyles(theme);
-    THEME = theme;
-  } catch {
-    // A theme that will not resolve is not worth failing a door over.
-  }
+/**
+ * Re-theme this door.
+ *
+ * Takes whatever names a theme: the theme itself, or the bbs handle that
+ * knows which one the caller chose. Safe to call with anything - a host
+ * with no theme leaves the classic default in place, which is the board
+ * exactly as it has always looked.
+ *
+ * Called at startup with the bbs, and again with a THEME by the in-door
+ * theme menu (openThemeMenu), which previews a theme that is not saved
+ * yet and so cannot be read back off the bbs.
+ */
+export function applyTheme(source: unknown): void {
+  const theme = resolveTheme(source);
+  if (!theme) return;
+  CURRENT = theme;
+  T = theme.tokens;
+  S = themeStyles(theme);
 }

@@ -31,6 +31,7 @@ import blessed, {
   carousel,
   DockablePanel,
   MobileCarousel,
+  openThemeMenu,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
@@ -2686,6 +2687,17 @@ export async function createApp(session: DoorSession) {
       screen.render();
     },
     onSettings: () => showSettingsOverlay(),
+    // Change the theme without leaving the chat. The panel previews as the
+    // highlight moves - openThemeMenu re-tints every widget on screen - and
+    // applyTheme re-points T and S so a message written AFTER the switch is
+    // written in the new colours rather than the old ones.
+    onTheme: () => {
+      void openThemeMenu({
+        screen,
+        bbs,
+        onApply: (theme) => applyTheme(theme),
+      }).then(() => screen.render());
+    },
     onJoinChannel: () => {
       // Use the existing channel-list tab so it's consistent with F2.
       sidebarTab !== 'channels' && switchSidebarTab('channels');

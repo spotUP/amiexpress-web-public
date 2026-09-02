@@ -464,6 +464,10 @@ class SpriteStudioDoor {
         // point of art not needing a screen of its own.
         const sprite = this.doc?.sprite;
         this.editor = new blessed_1.ANSIEditor({
+            // View > Theme, from the editor widget. `applyTheme` re-points this
+            // door's T and S so panels drawn after the switch follow the theme.
+            themeHost: this.ctx?.bbs,
+            onThemeChange: (theme) => (0, door_theme_1.applyTheme)(theme),
             parent: this.screen,
             top: 0, left: 0,
             width: this.terminalMode?.mode() === 'fixed' ? 80 : '100%',

@@ -16,6 +16,7 @@ import {
   type TerminalModeSwitch,
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { themeById, themeStyles, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { openThemeMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { GamepadButton } from '@amiexpress/bbs-door-sdk/types/gamepad';
 import type {
   Screen,
@@ -493,6 +494,7 @@ export class CardLobbyApp {
       showAchievementsWindow: () => this.dialogManager.showAchievementsWindow(this.currentProfile),
       showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
       showCardStyleWindow: () => this.chooseCardStyle(),
+      showThemeWindow: () => this.chooseTheme(),
       exitDoor: this.exitDoor.bind(this),
       runAction: this.runAction.bind(this),
     });
@@ -917,6 +919,28 @@ export class CardLobbyApp {
    * sessions and between games - the same choice covers a poker board and
    * an UNO discard pile.
    */
+  /**
+   * Change the door's theme without leaving the door.
+   *
+   * The panel previews as the highlight moves: openThemeMenu re-tints every
+   * widget on screen, and `onApply` re-points UI_THEME so anything this door
+   * builds AFTER the switch - a dialog, a repainted panel - is built in the
+   * new colours rather than the old ones.
+   */
+  private async chooseTheme(): Promise<void> {
+    await openThemeMenu({
+      screen: this.screen,
+      bbs: this.session.bbs,
+      parent: this.uiManager.overlayShade,
+      onApply: (theme) => {
+        applyTheme(theme);
+        this.styles = themeStyles(theme);
+      },
+    });
+    this.updateAllPanels();
+    this.screen.render();
+  }
+
   private async chooseCardStyle(): Promise<void> {
     const unicodeCapable =
       Boolean((this.session.bbs as { unicodeCapable?: boolean })?.unicodeCapable);

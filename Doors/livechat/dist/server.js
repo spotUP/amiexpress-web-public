@@ -2305,6 +2305,17 @@ async function createApp(session) {
             screen.render();
         },
         onSettings: () => showSettingsOverlay(),
+        // Change the theme without leaving the chat. The panel previews as the
+        // highlight moves - openThemeMenu re-tints every widget on screen - and
+        // applyTheme re-points T and S so a message written AFTER the switch is
+        // written in the new colours rather than the old ones.
+        onTheme: () => {
+            void (0, blessed_1.openThemeMenu)({
+                screen,
+                bbs,
+                onApply: (theme) => (0, door_theme_1.applyTheme)(theme),
+            }).then(() => screen.render());
+        },
         onJoinChannel: () => {
             // Use the existing channel-list tab so it's consistent with F2.
             sidebarTab !== 'channels' && switchSidebarTab('channels');

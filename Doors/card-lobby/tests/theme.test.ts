@@ -110,3 +110,43 @@ export async function aBoardWithNoThemeStillOpens(): Promise<void> {
   await app.shutdown();
   await finished;
 }
+
+/**
+ * "all typescript doors with menus could have a theme menu that let's the
+ * user change blessed theme inside the doors on the fly" (sysop,
+ * 2026-09-02). The board's own theme picker ends with "Open a door to see
+ * it"; this is the other half, and it is driven: the highlight moves and the
+ * lobby window's frame is read off the real widget.
+ */
+export async function theThemeMenuRepaintsTheDoorOnTheFly(): Promise<void> {
+  const h = await openWithTheme('classic');
+  const app = h.app;
+  const ui = app.uiManager;
+
+  const views = ui.menus[0];
+  const entry = views.items.find((item: any) => item.label === 'Theme');
+  assert.ok(entry, `no Theme entry in: ${views.items.map((i: any) => i.label).join(', ')}`);
+
+  const saved: string[] = [];
+  app.session.bbs.setTheme = async (id: string) => { saved.push(id); return id; };
+
+  const opened = app.chooseTheme();
+  await new Promise((r) => setTimeout(r, 80));
+
+  const press = (name: string) =>
+    app.screen.program.emit('keypress', null, { name, full: name });
+  press('down');
+  await new Promise((r) => setTimeout(r, 80));
+
+  const { THEMES } = await import('@amiexpress/bbs-door-sdk/engines/ui/theme');
+  const next = THEMES[1];
+  assert.strictEqual(ui.lobbyWindow.style.border.fg, next.tokens.chrome,
+    'the lobby frame followed the highlighted theme while the door stayed open');
+
+  press('enter');
+  await opened;
+  assert.deepStrictEqual(saved, [next.id], 'and the choice was remembered');
+
+  await app.shutdown();
+  await h.finished;
+}

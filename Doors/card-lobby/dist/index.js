@@ -14,6 +14,7 @@ const UnoEventBus_1 = require("./managers/UnoEventBus");
 const GameViews_1 = require("./managers/GameViews");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
@@ -343,6 +344,7 @@ class CardLobbyApp {
             showAchievementsWindow: () => this.dialogManager.showAchievementsWindow(this.currentProfile),
             showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
             showCardStyleWindow: () => this.chooseCardStyle(),
+            showThemeWindow: () => this.chooseTheme(),
             exitDoor: this.exitDoor.bind(this),
             runAction: this.runAction.bind(this),
         });
@@ -716,6 +718,27 @@ class CardLobbyApp {
      * sessions and between games - the same choice covers a poker board and
      * an UNO discard pile.
      */
+    /**
+     * Change the door's theme without leaving the door.
+     *
+     * The panel previews as the highlight moves: openThemeMenu re-tints every
+     * widget on screen, and `onApply` re-points UI_THEME so anything this door
+     * builds AFTER the switch - a dialog, a repainted panel - is built in the
+     * new colours rather than the old ones.
+     */
+    async chooseTheme() {
+        await (0, blessed_1.openThemeMenu)({
+            screen: this.screen,
+            bbs: this.session.bbs,
+            parent: this.uiManager.overlayShade,
+            onApply: (theme) => {
+                (0, lib_1.applyTheme)(theme);
+                this.styles = (0, theme_1.themeStyles)(theme);
+            },
+        });
+        this.updateAllPanels();
+        this.screen.render();
+    }
     async chooseCardStyle() {
         const unicodeCapable = Boolean(this.session.bbs?.unicodeCapable);
         // The panel stays open; every change lands on the profile and repaints

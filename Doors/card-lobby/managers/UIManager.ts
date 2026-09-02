@@ -79,10 +79,11 @@ export class UIManager {
     showAchievementsWindow: () => void;
     showBulletinsWindow: () => void;
     showCardStyleWindow: () => void;
+    showThemeWindow: () => void;
     exitDoor: () => void;
     runAction: (action: () => void | Promise<void>) => void;
   }): void {
-    const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, exitDoor, runAction } = callbacks;
+    const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, showThemeWindow, exitDoor, runAction } = callbacks;
 
     this.topBar = createBox({
       // Panel adds a line border unless the key is present; these are
@@ -137,6 +138,7 @@ export class UIManager {
           { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
           { label: 'Bulletins', action: () => runAction(showBulletinsWindow) },
           { label: 'Card Style', action: () => runAction(showCardStyleWindow) },
+          { label: 'Theme', action: () => runAction(showThemeWindow) },
         ],
       },
       {
