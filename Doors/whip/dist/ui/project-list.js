@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.showProjectList = showProjectList;
+exports.createProject = createProject;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const uuid_1 = require("uuid");
@@ -195,6 +196,10 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
             width: '100%-4',
             height: 1,
             content: 'Project Name:',
+            // A label, not a framed box: createBox takes Panel's line border when
+            // the caller names none, and a one-row box with a frame has no interior -
+            // these four field labels never painted a word.
+            border: undefined,
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
             focusable: false,
             mouse: false,
@@ -225,6 +230,7 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
             width: 30,
             height: 1,
             content: 'Type:',
+            border: undefined,
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
             focusable: false,
             mouse: false,
@@ -259,6 +265,7 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
             width: 30,
             height: 1,
             content: 'Status:',
+            border: undefined,
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
             focusable: false,
             mouse: false,
@@ -294,6 +301,7 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
             width: '100%-4',
             height: 1,
             content: 'Description (optional):',
+            border: undefined,
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
             focusable: false,
             mouse: false,

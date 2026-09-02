@@ -180,7 +180,7 @@ export async function showProjectList(
   });
 }
 
-async function createProject(
+export async function createProject(
   screen: Screen,
   user: UserStats,
   dataManager: DataManager,
@@ -248,6 +248,10 @@ async function showProjectEditor(
       width: '100%-4',
       height: 1,
       content: 'Project Name:',
+      // A label, not a framed box: createBox takes Panel's line border when
+      // the caller names none, and a one-row box with a frame has no interior -
+      // these four field labels never painted a word.
+      border: undefined,
       style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
@@ -280,6 +284,7 @@ async function showProjectEditor(
       width: 30,
       height: 1,
       content: 'Type:',
+      border: undefined,
       style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
@@ -316,6 +321,7 @@ async function showProjectEditor(
       width: 30,
       height: 1,
       content: 'Status:',
+      border: undefined,
       style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
@@ -353,6 +359,7 @@ async function showProjectEditor(
       width: '100%-4',
       height: 1,
       content: 'Description (optional):',
+      border: undefined,
       style: { fg: T.ink, bg: T.ground },
       focusable: false,
       mouse: false,
