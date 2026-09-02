@@ -108,10 +108,21 @@ export function transducePetsciiAtChoke(session: any, text: string): Uint8Array 
   return petsciiTerminalModelFor(session).transduce(text);
 }
 
+/**
+ * The one empty result `flushPetsciiModel` hands back, allocated once.
+ *
+ * The web `command` handler flushes on EVERY keystroke of EVERY session
+ * (`server/socket-handlers.ts`), and an ANSI session - which is most of them -
+ * has no model, so a per-call `new Uint8Array(0)` was one throwaway allocation
+ * per key pressed on the board. Never written to: the only two callers read
+ * `.length` and, when it is non-zero, copy it into a Buffer.
+ */
+const NO_PETSCII_BYTES = new Uint8Array(0);
+
 /** The input boundary: resolve a held bare CR into its $9D walk. Returns [] when there is no model. */
 export function flushPetsciiModel(session: any): Uint8Array {
   const model = session?.petsciiTransducer;
-  return model ? model.flush() : new Uint8Array(0);
+  return model ? model.flush() : NO_PETSCII_BYTES;
 }
 
 /**

@@ -136,6 +136,10 @@ describe('OC-2: the choke helpers around the model', () => {
   it('the flush is empty for a session that has no model at all', () => {
     expect(Array.from(flushPetsciiModel(undefined))).toEqual([]);
     expect(Array.from(flushPetsciiModel({}))).toEqual([]);
+    // M5: the web `command` handler flushes on every keystroke of every
+    // session, and most sessions are ANSI and have no model - so the empty
+    // answer is one shared constant, not an allocation per key pressed.
+    expect(flushPetsciiModel({})).toBe(flushPetsciiModel(undefined));
   });
 
   it('a reset homes the model; a dispose drops it with the parked segments', () => {
