@@ -528,8 +528,9 @@ function commandExists(baseDir: string, command: string): boolean {
 /**
  * The file an `~SS_`/`~SR_` target names, as it sits on disk.
  *
- * `BBS:screens/x.txt` and `screens/x.txt` mean the same file, and the volume is
- * case-insensitive, so the answer is whatever findCaseInsensitive turns up.
+ * `BBS:screens/x.txt` and `screens/x.txt` mean the same file, and an Amiga
+ * volume is case-insensitive in every part of a path - the directory as much
+ * as the filename.
  *
  * Through BBSPaths, because a screen names its target in Amiga assigns and
  * `BBS:` is not the only one this board uses - `WORK:bbs/Screens/logoff/logoff`
@@ -545,8 +546,21 @@ function boardPath(baseDir: string, target: string): string {
 }
 
 function resolveScreenReference(baseDir: string, target: string): string | null {
-  const full = boardPath(baseDir, target);
-  return amigafs.findCaseInsensitive(path.dirname(full), path.basename(full));
+  /*
+   * EVERY component case-insensitively, not just the filename.
+   *
+   * findCaseInsensitive matches the last part and takes the DIRECTORY exactly
+   * as written, so `~SS_BBS:screens/flt.txt` went looking for a `screens/`
+   * that this board spells `Screens/`. A developer's Mac hides that - its
+   * filesystem is case-insensitive itself - and the Linux container does not,
+   * so the manager called six live codes dead while the board was displaying
+   * that art perfectly well. Reported by the sysop: "the flt and uprough art
+   * files do display on the live site so you are wrong".
+   *
+   * amigafs.resolvePath walks each component the way the LOADER does, so this
+   * now answers the same question the board answers.
+   */
+  return amigafs.resolvePath(boardPath(baseDir, target));
 }
 
 /**
@@ -564,7 +578,9 @@ function numberedPool(baseDir: string, target: string): string[] {
   const stem = basename.replace(/\.[^.]*$/, '');
 
   try {
-    return fs.readdirSync(dir)
+    // amigafs, so a pool written `screens/logoff` is found in `Screens/logoff`
+    // - the same reason resolveScreenReference walks with it.
+    return amigafs.readdirSync(dir)
       .filter(name => new RegExp(`^\\d+\\.${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`, 'i').test(name))
       .map(name => path.join(dir, name));
   } catch {
