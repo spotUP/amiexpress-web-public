@@ -29,6 +29,20 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
+// `door.handler.ts:23` imports BBSState from `src/index`, and importing that
+// module for real boots the whole server in-process and leaves its heartbeat
+// timer running, so the suite never exits under CI's plain
+// `npx jest ... --ci` (no `--forceExit`). The repo's existing answer is to
+// mock the module - the identical mock `tests/doors/door-min-columns-gate.test.ts:13-16`
+// uses for the same import chain, and 17 other suites use elsewhere. BBSState
+// is the ONLY value this file's chain takes from it; every other reference
+// (`BBSApi.ts:21`, `group-chat.handler.ts:22`, `door.handler.ts:43`) is a
+// type-only import and is erased.
+jest.mock('../../src/index', () => ({
+  BBSState: { LOGGEDON: 'loggedon', AWAIT: 'await' },
+  LoggedOnSubState: {},
+}));
+
 import { createBBSApi } from '../../src/doors/BBSApi';
 import { createDoorSocketWrapper } from '../../src/handlers/door.handler';
 import { buildConnectionEmitter } from '../../src/server/connection-emitter';
