@@ -8,6 +8,7 @@
 
 import { Socket } from 'socket.io';
 import { LoggedOnSubState } from '../../constants/bbs-states';
+import { isNarrow, narrowRule } from '../../utils/table-format.util';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -132,22 +133,51 @@ async function showChatMenu(socket: Socket, session: BBSSession) {
 }
 
 /**
+ * One WHO row (C64/40-col Task 5b).
+ *
+ * 80 columns: the historical row, byte-identical.
+ * Narrow: the Real Name column comes off - it is the one column a C64 row
+ * has no room for. Username(16) + 2 + "Not Available"(13) = 31, so the
+ * full English status words survive rather than being abbreviated.
+ */
+export function buildWhoRow(
+  user: { username: string; realname?: string },
+  statusText: string,
+  narrow: boolean
+): string {
+  const username = user.username.padEnd(16, ' ').substring(0, 16);
+  if (!narrow) {
+    return (
+      username + '  ' + (user.realname || 'Unknown').padEnd(23, ' ').substring(0, 23) + '  ' + statusText
+    );
+  }
+  return username + '  ' + statusText;
+}
+
+/**
  * Render the chat user list with current selection highlighted
  */
 function renderChatUserList(socket: Socket, session: BBSSession) {
   const onlineUsers = session.livechatUserList || [];
   const selectedIndex = session.livechatSelectedIndex || 0;
 
+  const narrow = isNarrow(session);
+  const banner = narrow ? narrowRule('═') : '═'.repeat(63);
+
   let output = '\x1b[2J\x1b[H'; // Clear screen and move cursor to home
   output += '\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
-  output += '\x1b[36m                    SELECT USER TO CHAT\x1b[0m\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\x1b[36m' + banner + '\x1b[0m\r\n';
+  output += narrow
+    ? '\x1b[36m          SELECT USER TO CHAT\x1b[0m\r\n'
+    : '\x1b[36m                    SELECT USER TO CHAT\x1b[0m\r\n';
+  output += '\x1b[36m' + banner + '\x1b[0m\r\n';
   output += '\r\n';
 
   // Display list with arrow key navigation
-  output += '\x1b[33mUsername          Real Name                Status\x1b[0m\r\n';
-  output += '\x1b[33m' + '─'.repeat(63) + '\x1b[0m\r\n';
+  output += narrow
+    ? '\x1b[33mUsername          Status\x1b[0m\r\n'
+    : '\x1b[33mUsername          Real Name                Status\x1b[0m\r\n';
+  output += '\x1b[33m' + (narrow ? narrowRule('─') : '─'.repeat(63)) + '\x1b[0m\r\n';
 
   onlineUsers.forEach((user: any, index: number) => {
     const username = user.username.padEnd(16, ' ').substring(0, 16);
@@ -168,16 +198,23 @@ function renderChatUserList(socket: Socket, session: BBSSession) {
 
     // Highlight selected row with blue background (44 = blue bg, 37 = white text)
     if (index === selectedIndex) {
-      output += '\x1b[44m\x1b[37m> ' + username + realname + '  ' + statusText.padEnd(18) + '\x1b[0m\r\n';
+      output += narrow
+        ? '\x1b[44m\x1b[37m> ' + username + '  ' + statusText.padEnd(13) + '\x1b[0m\r\n'
+        : '\x1b[44m\x1b[37m> ' + username + realname + '  ' + statusText.padEnd(18) + '\x1b[0m\r\n';
     } else {
-      output += '  ' + username + realname + '  ' + statusColor + statusText + '\x1b[0m\r\n';
+      output += narrow
+        ? '  ' + username + '  ' + statusColor + statusText + '\x1b[0m\r\n'
+        : '  ' + username + realname + '  ' + statusColor + statusText + '\x1b[0m\r\n';
     }
   });
 
   output += '\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\x1b[36m' + banner + '\x1b[0m\r\n';
   output += '\r\n';
-  output += '\x1b[32m↑/↓ to select, ENTER to chat, Q to quit\x1b[0m';
+  // ASCII tokens on a C64: the arrow glyphs are not PETSCII characters.
+  output += narrow
+    ? '\x1b[32mUp/Dn select, ENTER chat, Q quit\x1b[0m'
+    : '\x1b[32m↑/↓ to select, ENTER to chat, Q to quit\x1b[0m';
 
   socket.emit('ansi-output', output);
 }
@@ -186,25 +223,32 @@ function renderChatUserList(socket: Socket, session: BBSSession) {
  * Show online users (CHAT WHO)
  */
 async function showOnlineUsers(socket: Socket, session: BBSSession) {
+  const narrow = isNarrow(session);
+  const banner = narrow ? narrowRule('═') : '═'.repeat(63);
+
   let output = '\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
-  output += '\x1b[36m                     ONLINE USERS\x1b[0m\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\x1b[36m' + banner + '\x1b[0m\r\n';
+  output += narrow
+    ? '\x1b[36m             ONLINE USERS\x1b[0m\r\n'
+    : '\x1b[36m                     ONLINE USERS\x1b[0m\r\n';
+  output += '\x1b[36m' + banner + '\x1b[0m\r\n';
   output += '\r\n';
 
   // Header
   output += '\x1b[33m';
-  output += 'Username          Real Name                Status\r\n';
-  output += '================  =======================  ====================\r\n';
+  if (narrow) {
+    output += 'Username          Status\r\n';
+    output += '================  =============\r\n';
+  } else {
+    output += 'Username          Real Name                Status\r\n';
+    output += '================  =======================  ====================\r\n';
+  }
   output += '\x1b[0m';
 
   // Get all online users except current user
   let userCount = 0;
   for (const [socketId, sess] of Array.from(sessions.entries())) {
     if (sess.user && sess.user.id !== session.user?.id) {
-      const username = sess.user.username.padEnd(16, ' ').substring(0, 16);
-      const realname = (sess.user.realname || 'Unknown').padEnd(23, ' ').substring(0, 23);
-
       let status = '';
       if (sess.subState === LoggedOnSubState.CHAT) {
         status = '\x1b[33mIn Chat\x1b[0m';
@@ -214,7 +258,7 @@ async function showOnlineUsers(socket: Socket, session: BBSSession) {
         status = '\x1b[31mNot Available\x1b[0m';
       }
 
-      output += username + '  ' + realname + '  ' + status + '\r\n';
+      output += buildWhoRow(sess.user as any, status, narrow) + '\r\n';
       userCount++;
     }
   }
@@ -226,7 +270,7 @@ async function showOnlineUsers(socket: Socket, session: BBSSession) {
   output += '\r\n';
   output += '\x1b[32mTotal: ' + userCount + ' user(s) online\x1b[0m\r\n';
   output += '\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\x1b[36m' + banner + '\x1b[0m\r\n';
   output += '\r\n';
   output += '\x1b[32mPress any key to continue...\x1b[0m';
 

@@ -231,3 +231,205 @@ describe('5a new files listing (file.handler.ts displayNewFiles)', () => {
     expect(out).toContain(expected);
   });
 });
+
+// ===========================================================================
+// 5b - WHO / user list / room members
+// ===========================================================================
+
+const ONLINE_USER = {
+  id: 'u2',
+  username: 'ZAPHOD',
+  realname: 'Zaphod Beeblebrox',
+  location: 'Betelgeuse Five',
+  secLevel: 255,
+  availableForChat: true,
+};
+
+function chatSessions(): Map<string, any> {
+  const { LoggedOnSubState } = require('../../src/constants/bbs-states');
+  return new Map<string, any>([
+    ['sock-2', { user: ONLINE_USER, subState: LoggedOnSubState.DISPLAY_MENU }],
+  ]);
+}
+
+function driveChat(driver: Driver, params: string) {
+  const chat = require('../../src/handlers/chat/chat-commands.handler');
+  chat.setChatCommandsDependencies({
+    db: {},
+    sessions: chatSessions(),
+    io: {},
+    handleChatRequest: jest.fn(),
+    handleChatAccept: jest.fn(),
+    handleChatDecline: jest.fn(),
+  });
+  driver.session.user = { id: 'u1', username: 'SPOT' };
+  return chat.handleLiveChatCommand(driver.socket, driver.session, params);
+}
+
+describe('5b LIVECHAT WHO (chat-commands.handler.ts showOnlineUsers)', () => {
+  test('80-col PIN: banner, header and row byte-identical', async () => {
+    const driver = wide();
+    await driveChat(driver, 'WHO');
+    const out = driver.output();
+
+    expect(out).toContain('\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n');
+    expect(out).toContain(
+      '\x1b[33mUsername          Real Name                Status\r\n' +
+        '================  =======================  ====================\r\n' +
+        '\x1b[0m'
+    );
+    expect(out).toContain(
+      'ZAPHOD'.padEnd(16, ' ').substring(0, 16) +
+        '  ' +
+        'Zaphod Beeblebrox'.padEnd(23, ' ').substring(0, 23) +
+        '  ' +
+        '\x1b[32mAvailable\x1b[0m\r\n'
+    );
+  });
+
+  test('40-col: no line over 39 columns, username and full status word kept', async () => {
+    const driver = narrow();
+    await driveChat(driver, 'WHO');
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expect(out).toContain('ZAPHOD');
+    expect(out).toContain('Available');
+  });
+});
+
+describe('5b LIVECHAT picker (chat-commands.handler.ts renderChatUserList)', () => {
+  test('80-col PIN: header row byte-identical', async () => {
+    const driver = wide();
+    await driveChat(driver, '');
+    const out = driver.output();
+
+    expect(out).toContain('\x1b[33mUsername          Real Name                Status\x1b[0m\r\n');
+    expect(out).toContain('\x1b[33m' + '─'.repeat(63) + '\x1b[0m\r\n');
+    expect(out).toContain(
+      '\x1b[44m\x1b[37m> ' +
+        'ZAPHOD'.padEnd(16, ' ') +
+        'Zaphod Beeblebrox'.padEnd(23, ' ') +
+        '  ' +
+        'Available'.padEnd(18) +
+        '\x1b[0m\r\n'
+    );
+  });
+
+  test('40-col: no line over 39 columns, selected row still marked', async () => {
+    const driver = narrow();
+    await driveChat(driver, '');
+    const out = driver.output();
+
+    expectFitsNarrow(
+      out
+        .replace('\x1b[2J\x1b[H', '')
+        .split('\r\n')
+        .filter((l) => l.length > 0)
+    );
+    expect(out).toContain('ZAPHOD');
+    expect(out).toContain('\x1b[44m\x1b[37m>');
+  });
+});
+
+describe('5b user list (account.handler.ts displayUserList)', () => {
+  const LIST_USER = { ...ONLINE_USER, lastLogin: new Date(Date.UTC(2026, 0, 2, 12, 0, 0)) };
+
+  async function driveUserList(driver: Driver) {
+    const account = require('../../src/handlers/user/account.handler');
+    account.setDatabase({ getUsers: jest.fn().mockResolvedValue([LIST_USER]) });
+    account.displayUserList(driver.socket, driver.session, 1);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  test('80-col PIN: header, 75-wide rule and row byte-identical', async () => {
+    const driver = wide();
+    await driveUserList(driver);
+    const out = driver.output();
+
+    expect(out).toContain(
+      '\x1b[32mUsername'.padEnd(16) +
+        'Real Name'.padEnd(20) +
+        'Location'.padEnd(15) +
+        'Level  Last Login\x1b[0m\r\n'
+    );
+    expect(out).toContain('\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');
+    expect(out).toContain(
+      'ZAPHOD'.padEnd(16) +
+        'Zaphod Beeblebrox'.padEnd(20) +
+        'Betelgeuse Five'.padEnd(15) +
+        '255'.padStart(5) +
+        '  ' +
+        LIST_USER.lastLogin.toLocaleDateString() +
+        '\r\n'
+    );
+  });
+
+  test('40-col: no line over 39 columns, level and location still shown', async () => {
+    const driver = narrow();
+    await driveUserList(driver);
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expect(out).toContain('ZAPHOD');
+    expect(out).toContain('255');
+    expect(out).toContain('Betelgeuse Five');
+  });
+});
+
+describe('5b room members (room-commands.handler.ts whoInRoom)', () => {
+  const MEMBER = {
+    username: 'ZAPHOD',
+    is_moderator: true,
+    is_muted: false,
+    joined_at: Date.UTC(2026, 0, 2, 12, 0, 0),
+  };
+  const joinedAt = new Date(MEMBER.joined_at).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  function driveWho(driver: Driver) {
+    const rooms = require('../../src/handlers/chat/room-commands.handler');
+    rooms.setRoomCommandsDependencies({
+      db: {
+        getChatRoom: jest.fn().mockResolvedValue({ room_name: 'Amiga Demo Scene', max_users: 50 }),
+        getRoomMembers: jest.fn().mockResolvedValue([MEMBER]),
+      },
+      sessions: new Map(),
+      io: {},
+      handleRoomCreate: jest.fn(),
+      handleRoomJoin: jest.fn(),
+      handleRoomLeave: jest.fn(),
+      handleRoomList: jest.fn(),
+      handleRoomKick: jest.fn(),
+      handleRoomMute: jest.fn(),
+    });
+    driver.session.currentRoomId = 1;
+    driver.session.user = { id: 'u1', username: 'SPOT' };
+    return rooms.handleRoomCommand(driver.socket, driver.session, 'WHO');
+  }
+
+  test('80-col PIN: 70-wide rule and padded row byte-identical', async () => {
+    const driver = wide();
+    await driveWho(driver);
+    const out = driver.output();
+
+    expect(out).toContain('─'.repeat(70));
+    expect(out).toContain(
+      'ZAPHOD'.padEnd(20, ' ') + '[MOD] '.padEnd(15, ' ') + joinedAt + '\r\n'
+    );
+  });
+
+  test('40-col: no line over 39 columns, moderator flag kept', async () => {
+    const driver = narrow();
+    await driveWho(driver);
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expect(out).toContain('ZAPHOD');
+    expect(out).toContain('[MOD]');
+  });
+});

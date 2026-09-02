@@ -5,6 +5,7 @@
  */
 
 import { BBSSession, LoggedOnSubState, BBSState } from '../../index';
+import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 
 // Dependencies (injected)
 let db: any;
@@ -115,8 +116,16 @@ export function displayUserList(socket: any, session: BBSSession, page: number =
   }
   socket.emit('ansi-output', `Page ${page} =-\x1b[0m\r\n\r\n`);
 
-  socket.emit('ansi-output', '\x1b[32mUsername'.padEnd(16) + 'Real Name'.padEnd(20) + 'Location'.padEnd(15) + 'Level  Last Login\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');
+  // C64/40-col Task 5b: narrow drops the Real Name column and stacks
+  // Location on a second row; the 80-column header is untouched.
+  const narrow = isNarrow(session);
+  if (narrow) {
+    socket.emit('ansi-output', '\x1b[32mUsername         Lvl  Last Login\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[36m' + narrowRule('=') + '\x1b[0m\r\n');
+  } else {
+    socket.emit('ansi-output', '\x1b[32mUsername'.padEnd(16) + 'Real Name'.padEnd(20) + 'Location'.padEnd(15) + 'Level  Last Login\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');
+  }
 
   // Get users (with optional search)
   db.getUsers({ limit: pageSize + 1, newUser: undefined }).then((users: any[]) => {
@@ -125,6 +134,16 @@ export function displayUserList(socket: any, session: BBSSession, page: number =
 
     displayUsers.forEach((user: any) => {
       const lastLogin = user.lastLogin ? user.lastLogin.toLocaleDateString() : 'Never';
+      if (narrow) {
+        socket.emit('ansi-output',
+          narrowClip(
+            user.username.padEnd(16).substring(0, 16) + ' ' +
+            user.secLevel.toString().padStart(3) + '  ' + lastLogin
+          ) + '\r\n'
+        );
+        socket.emit('ansi-output', narrowClip('  ' + (user.location || '')) + '\r\n');
+        return;
+      }
       socket.emit('ansi-output',
         user.username.padEnd(16) +
         (user.realname || '').padEnd(20) +
@@ -137,10 +156,15 @@ export function displayUserList(socket: any, session: BBSSession, page: number =
     socket.emit('ansi-output', '\r\n');
 
     if (hasMorePages) {
-      socket.emit('ansi-output', `\x1b[32mPress any key for page ${page + 1}, or 'Q' to quit: \x1b[0m`);
+      // Narrow: same words, no punctuation that pushes past 39 columns.
+      socket.emit('ansi-output', narrow
+        ? `\x1b[32mPress any key for page ${page + 1}, Q quits: \x1b[0m`
+        : `\x1b[32mPress any key for page ${page + 1}, or 'Q' to quit: \x1b[0m`);
       session.tempData = { userListPage: page + 1, searchTerm };
     } else {
-      socket.emit('ansi-output', '\x1b[32mEnd of list. Press any key to continue...\x1b[0m');
+      socket.emit('ansi-output', narrow
+        ? '\x1b[32mEnd of list. Press any key to continue\x1b[0m'
+        : '\x1b[32mEnd of list. Press any key to continue...\x1b[0m');
       session.tempData = undefined;
     }
 

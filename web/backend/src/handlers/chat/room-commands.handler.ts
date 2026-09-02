@@ -20,6 +20,7 @@
 import { Socket } from 'socket.io';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 
@@ -291,6 +292,25 @@ async function listRooms(socket: Socket, session: BBSSession) {
 }
 
 /**
+ * One room-member row (C64/40-col Task 5b).
+ *
+ * 80 columns: username padded to 20, status padded to 15, then the joined
+ * timestamp - byte-identical. Narrow: the joined column comes off and the
+ * status keeps its ASCII tokens ([MOD], [MUTED]).
+ */
+export function buildRoomMemberRow(
+  member: { username: string },
+  status: string,
+  joinedAt: string,
+  narrow: boolean
+): string {
+  if (!narrow) {
+    return member.username.padEnd(20, ' ') + status + joinedAt;
+  }
+  return narrowClip(member.username.padEnd(16, ' ').substring(0, 16) + status.trimEnd());
+}
+
+/**
  * Show who is in current room
  */
 async function whoInRoom(socket: Socket, session: BBSSession) {
@@ -314,13 +334,19 @@ async function whoInRoom(socket: Socket, session: BBSSession) {
     socket.emit('ansi-output', AnsiUtil.line('Total users: ' + members.length + ' / ' + (room?.max_users || 50)));
     socket.emit('ansi-output', AnsiUtil.line(''));
 
-    // Header
+    // Header - C64/40-col Task 5b: narrow drops the Joined column.
+    const narrow = isNarrow(session);
     let header = '';
-    header += AnsiUtil.colorize('Username', 'cyan') + '                ';
-    header += AnsiUtil.colorize('Status', 'cyan') + '          ';
-    header += AnsiUtil.colorize('Joined', 'cyan');
+    if (narrow) {
+      header += AnsiUtil.colorize('Username', 'cyan') + '        ';
+      header += AnsiUtil.colorize('Status', 'cyan');
+    } else {
+      header += AnsiUtil.colorize('Username', 'cyan') + '                ';
+      header += AnsiUtil.colorize('Status', 'cyan') + '          ';
+      header += AnsiUtil.colorize('Joined', 'cyan');
+    }
     socket.emit('ansi-output', header + '\r\n');
-    socket.emit('ansi-output', AnsiUtil.line('─'.repeat(70)));
+    socket.emit('ansi-output', AnsiUtil.line(narrow ? narrowRule('─') : '─'.repeat(70)));
 
     // List members
     for (const member of members) {
@@ -346,7 +372,7 @@ async function whoInRoom(socket: Socket, session: BBSSession) {
         minute: '2-digit'
       });
 
-      socket.emit('ansi-output', AnsiUtil.line(username + status + joinedAt));
+      socket.emit('ansi-output', AnsiUtil.line(buildRoomMemberRow(member, status, joinedAt, narrow)));
     }
 
     socket.emit('ansi-output', AnsiUtil.line(''));
