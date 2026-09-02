@@ -21,6 +21,7 @@ import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations,
 } from './screen-resolution';
+import { countMciCodes } from './mci-catalog';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { loadConfConfig } from '../services/conf-config.service';
@@ -107,6 +108,15 @@ export interface ScreenFileFacts {
    * its live screens were read by nothing.
    */
   generated?: 'backup' | 'runtime';
+  /**
+   * How many times each MCI code appears in this file, by catalog code.
+   *
+   * Counted from the buffer already in hand, so the census costs nothing on
+   * top of the read and is cached with the rest of the file's facts. The
+   * manager needs it to say "used in 179 files" beside `~SP` rather than
+   * listing a hundred codes with nothing to tell them apart.
+   */
+  mciCodes: Record<string, number>;
 }
 
 export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
@@ -431,6 +441,56 @@ function commandName(baseDir: string, command: string): string | undefined {
   }
 }
 
+/**
+ * Every command the board has an icon for, with the name IT calls the command.
+ *
+ * `~CC_gwall|` runs a command; `Commands/BBSCmd/GWALL.info` says the board
+ * calls it "Global Wall" and who may run it. A picker that showed `gwall`
+ * would be showing the sysop a filename, and the icon has been carrying the
+ * real name all along.
+ */
+export interface BbsCommandChoice {
+  /** What goes after `~CC_` - the icon's base name, in its own casing. */
+  command: string;
+  /** The icon's NAME tooltype, when it has one. */
+  name?: string;
+  /** The icon's ACCESS tooltype, as written. */
+  access?: string;
+}
+
+export function listBbsCommands(baseDir: string): BbsCommandChoice[] {
+  const dir = path.join(baseDir, 'Commands', 'BBSCmd');
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+
+  const choices: BbsCommandChoice[] = [];
+  for (const entry of entries) {
+    if (!entry.toLowerCase().endsWith('.info')) continue;
+    const command = entry.slice(0, -'.info'.length);
+    if (!command) continue;
+
+    let tooltypes: Map<string, string>;
+    try {
+      tooltypes = readTooltypeMap(path.join(dir, entry));
+    } catch {
+      choices.push({ command });
+      continue;
+    }
+
+    choices.push({
+      command,
+      name: tooltypes.get('NAME')?.trim() || undefined,
+      access: tooltypes.get('ACCESS')?.trim() || undefined,
+    });
+  }
+
+  return choices.sort((a, b) => a.command.localeCompare(b.command));
+}
+
 function commandExists(baseDir: string, command: string): boolean {
   const dir = path.join(baseDir, 'Commands', 'BBSCmd');
   return !!amigafs.findCaseInsensitive(dir, `${command}.info`);
@@ -525,6 +585,8 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     sauce: readSauce(buf),
     problems: fileProblems(buf, format),
     generated: classifyGenerated(path.relative(baseDir, absPath), buf),
+    // latin1: an Amiga high-bit byte is not UTF-8, and a code is ASCII either way.
+    mciCodes: countMciCodes(buf.toString('latin1')),
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,

@@ -318,3 +318,82 @@ export const MCI_FAMILY_ORDER: { family: MciFamily; label: string }[] = [
   { family: 'files', label: 'Flagged files' },
   { family: 'extension', label: 'This port only' },
 ];
+
+/**
+ * Longest code first, so `ND` is not read as `N` and `SMC` is not read as `SM_`.
+ */
+const BY_LENGTH: MciCode[] = [...MCI_CATALOG].sort((a, b) => b.code.length - a.code.length);
+
+/**
+ * Which catalog code a scanned cmd is, or undefined for one nobody defines.
+ *
+ * The cmd is what express.e's scanner extracts: everything after the tilde and
+ * any width digits, up to the next space or terminator (express.e:5279-5289).
+ * So `SS_BBS:Screens/x.txt` is the `SS_` code, `CL.` is `CL` written with the
+ * period it requires, and `x10` is `x` with its argument attached.
+ */
+export function codeForCmd(cmd: string): MciCode | undefined {
+  for (const entry of BY_LENGTH) {
+    if (cmd === entry.code) return entry;
+    if (entry.terminator === '.' && cmd === `${entry.code}.`) return entry;
+    if (entry.argument.kind !== 'none' && cmd.length > entry.code.length && cmd.startsWith(entry.code)) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * How many times each catalog code appears in one screen file.
+ *
+ * Walks the text the way the parser does rather than running 100 regexes over
+ * it: find a tilde, skip up to three width digits, read to the next space or
+ * terminator. `~~` is a literal tilde and is counted as the `~` code, not as
+ * the start of one.
+ *
+ * The BARE leading tilde - the one that switches MCI on for the whole file
+ * (screen.handler.ts:1943) - has an empty cmd and is counted under the
+ * `MCI_ENABLED_KEY` sentinel, because "587 files carry it" is the single most
+ * useful number the manager can show a designer.
+ */
+export const MCI_ENABLED_KEY = '(enables MCI)';
+
+export function countMciCodes(text: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const bump = (code: string) => { counts[code] = (counts[code] || 0) + 1; };
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '~') continue;
+
+    if (text[i + 1] === '~') {
+      bump('~');
+      i++;
+      continue;
+    }
+
+    let start = i + 1;
+    for (let digits = 0; digits < 3 && start < text.length; digits++) {
+      const ch = text[start];
+      if (ch < '0' || ch > '9') break;
+      start++;
+    }
+
+    // A tilde ends the cmd as surely as a space does - `~f~SS_x|` is two
+    // codes, and reading to the first `|` would make it one nonsense one.
+    // Same stop set as the tokenizer's own `[^\s|~\r\n]`.
+    let end = start;
+    while (end < text.length && !' |~\r\n\t'.includes(text[end])) end++;
+
+    const cmd = text.slice(start, end);
+    if (!cmd) {
+      bump(MCI_ENABLED_KEY);
+      continue;
+    }
+
+    const entry = codeForCmd(cmd);
+    if (entry) bump(entry.code);
+    i = end - 1;
+  }
+
+  return counts;
+}

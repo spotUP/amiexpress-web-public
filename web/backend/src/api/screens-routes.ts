@@ -29,8 +29,9 @@ import { checkShare } from '../screens/share-preconditions';
 import { applyTooltypes } from '../utils/info-file.util';
 import {
   getScreenIndex, invalidateScreenIndex, screenFileFacts, buildScreenIndex,
-  listScreenDirectories,
+  listScreenDirectories, listBbsCommands,
 } from '../screens/screen-index.service';
+import { MCI_CATALOG, MCI_FAMILY_ORDER, MCI_ENABLED_KEY } from '../screens/mci-catalog';
 
 export const screensRouter = express.Router();
 
@@ -372,6 +373,116 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
     deleted: path.relative(baseDir, full),
     backup: `${path.relative(baseDir, full)}.backup`,
     stopsResolving: resolutionsLost(baseDir, before),
+  });
+});
+
+/**
+ * GET /api/screens/mci/catalog
+ *
+ * Every MCI code, with how many times THIS board uses it.
+ *
+ * The usage count is the difference between a reference page and a wall of a
+ * hundred codes: `~SP` reads as "179 files" and `~TR` as "never used here",
+ * and a designer can tell at a glance which half of the list is the board's
+ * habit and which half is unexplored. Counts come from the index's cached file
+ * facts, so this costs a walk of a map, not a re-read of 1,145 files.
+ */
+screensRouter.get('/mci/catalog', (_req: Request, res: Response) => {
+  const index = getScreenIndex(config.get('dataDir'));
+
+  const uses: Record<string, number> = {};
+  const files: Record<string, number> = {};
+  for (const facts of Object.values(index.files)) {
+    for (const [code, count] of Object.entries(facts.mciCodes ?? {})) {
+      uses[code] = (uses[code] || 0) + count;
+      files[code] = (files[code] || 0) + 1;
+    }
+  }
+
+  return sendOk(res, {
+    families: MCI_FAMILY_ORDER,
+    codes: MCI_CATALOG.map(entry => ({
+      ...entry,
+      uses: uses[entry.code] || 0,
+      files: files[entry.code] || 0,
+    })),
+    // The bare leading tilde is not a code; it is the switch that makes every
+    // other one run (screen.handler.ts:1943), so the page has to say so.
+    enablingTilde: { uses: uses[MCI_ENABLED_KEY] || 0, files: files[MCI_ENABLED_KEY] || 0 },
+  });
+});
+
+/** The argument kinds a code can ask for, and where each one's choices live. */
+const MCI_TARGET_KINDS = ['command', 'screen', 'door', 'menu'] as const;
+type MciTargetKind = typeof MCI_TARGET_KINDS[number];
+
+/**
+ * GET /api/screens/mci/targets?kind=command|screen|door|menu
+ *
+ * What a picker offers for one argument kind. Every list is the board's own
+ * files - the command icons, the screen index, the Doors directory - so a door
+ * that is not installed cannot be offered, and one that is cannot be missed.
+ *
+ * An unknown kind is a 400 and not an empty array: "no doors installed" is a
+ * sentence a sysop would believe.
+ */
+screensRouter.get('/mci/targets', (req: Request, res: Response) => {
+  const kind = String(req.query.kind || '');
+  if (!MCI_TARGET_KINDS.includes(kind as MciTargetKind)) {
+    return res.status(400).json({
+      success: false,
+      error: `kind must be one of ${MCI_TARGET_KINDS.join(', ')}`,
+    });
+  }
+
+  const baseDir = config.get('dataDir');
+
+  if (kind === 'command') {
+    return sendOk(res, {
+      kind,
+      targets: listBbsCommands(baseDir).map(c => ({
+        value: c.command,
+        label: c.name || c.command,
+        detail: c.access ? `access ${c.access}` : undefined,
+      })),
+    });
+  }
+
+  if (kind === 'door') {
+    let names: string[] = [];
+    try {
+      names = fs.readdirSync(path.join(baseDir, 'Doors'), { withFileTypes: true })
+        .filter(e => e.isDirectory() && e.name !== 'archives' && !e.name.startsWith('.'))
+        .map(e => e.name)
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      names = [];
+    }
+    return sendOk(res, { kind, targets: names.map(n => ({ value: n, label: n })) });
+  }
+
+  const index = getScreenIndex(baseDir);
+
+  if (kind === 'menu') {
+    // `~SM_` names the menu a screen belongs to, and a board's menus ARE
+    // screens - the ones the loader reaches as MENU.
+    const menus = index.screens
+      .map(s => s.screen)
+      .filter(name => name.toUpperCase().startsWith('MENU'))
+      .sort((a, b) => a.localeCompare(b));
+    return sendOk(res, { kind, targets: menus.map(m => ({ value: m, label: m })) });
+  }
+
+  // kind === 'screen' - every file the loader could be pointed at, by the path
+  // a `~SS_` would carry.
+  const screens = Object.keys(index.files).sort((a, b) => a.localeCompare(b));
+  return sendOk(res, {
+    kind,
+    targets: screens.map(relPath => ({
+      value: `BBS:${relPath.split(path.sep).join('/')}`,
+      label: relPath,
+      detail: index.files[relPath].generated ? 'the board writes this one' : undefined,
+    })),
   });
 });
 
