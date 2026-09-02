@@ -573,3 +573,5 @@ Historical preservation of BBS culture and retro Amiga 68K. Educational, defensi
 - `Documentation/6-Progress/CURRENT_STATUS.md`
 
 Log timestamps are in UTC / server time. Verify "today" or "recent" by file mtime (`ls -la`), not calendar date.
+
+- **Three screens per door** - a new or changed TypeScript door is designed and proven for fixed Amiga ANSI 80x25, responsive Amiga ANSI, and C64 PETSCII 40x25: `.claude/skills/door-three-screens/SKILL.md`.
