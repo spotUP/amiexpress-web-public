@@ -65,7 +65,10 @@ class GameViews {
             // No active game - show waiting message
             this.host.flopContent.setContent('Waiting for game to start...');
             this.host.playersContent.setContent('No active UNO game.');
-            this.host.handContent.setContent('Press {cyan-fg}DEAL{/} to start.');
+            // The KEY, not a button nobody can find: there is no DEAL control on
+            // this screen, and the sysop had to guess D by trying letters
+            // (2026-09-02).
+            this.host.handContent.setContent('Press {cyan-fg}D{/} to deal.');
             this.host.activityContent.setContent('');
             return;
         }
