@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
+import { buildScreenIndex } from '../screens/screen-index.service';
 import { InfoFileParser } from './info-file-parser';
 import { ConferenceSetupService } from './conference-setup.service';
 import { getSystemTime } from '../utils/date-time.util';
@@ -73,6 +74,7 @@ export class BBSHealthCheckService {
     categories.push(await this.checkConferences());
     categories.push(await this.checkNodes());
     categories.push(await this.checkScreens());
+    categories.push(await this.checkScreenContents());
     categories.push(await this.checkCommands());
     categories.push(await this.checkDoors());
     categories.push(await this.checkProtocols());
@@ -606,6 +608,84 @@ export class BBSHealthCheckService {
       checkedCount: protocolFiles.length,
       errorCount: 0,
       warningCount: issues.filter(i => i.severity === 'warning').length
+    };
+  }
+
+  /**
+   * What the screen index knows that a health check should say out loud.
+   *
+   * The manager has been reporting these per file for a while - screens whose
+   * colour codes lost their escape byte, screens nothing reads - and a sysop
+   * looking at the health page had no way to learn about them. Same facts, one
+   * more place, asked for directly.
+   *
+   * The damaged ones are auto-fixable: putting an escape byte back is
+   * mechanical, and the repair writes a backup. The unread ones are NOT - a
+   * file nothing reads today is somebody's art, and deleting it is a decision.
+   */
+  private async checkScreenContents(): Promise<HealthCheckResult> {
+    const issues: HealthIssue[] = [];
+    let checkedCount = 0;
+
+    try {
+      const index = buildScreenIndex(this.bbsRoot);
+      const files = Object.values(index.files);
+      checkedCount = files.length;
+
+      const damaged = files.filter(f => f.problems?.includes('colour-codes-without-escape'));
+      for (const file of damaged) {
+        issues.push({
+          severity: 'warning',
+          category: 'Screens',
+          description: `${file.relPath}: colour codes have no escape byte - callers see the codes as text`,
+          path: path.join(this.bbsRoot, file.relPath),
+          autoFixable: true,
+          fixAction: 'Put the escape byte back (a backup is written first)',
+        });
+      }
+
+      const empty = files.filter(f => f.problems?.includes('empty'));
+      for (const file of empty) {
+        issues.push({
+          severity: 'info',
+          category: 'Screens',
+          description: `${file.relPath}: empty, so it draws nothing`,
+          path: path.join(this.bbsRoot, file.relPath),
+          autoFixable: false,
+          fixAction: 'Draw something, or delete it',
+        });
+      }
+
+      if (index.unused.length > 0) {
+        issues.push({
+          severity: 'info',
+          category: 'Screens',
+          description:
+            `${index.unused.length} screen file(s) no screen reads - at any security level, `
+            + 'in any screen type, and no other screen includes them',
+          path: this.bbsRoot,
+          autoFixable: false,
+          fixAction: 'Look at them in Screen Files before removing any - art nobody reads is still art',
+        });
+      }
+    } catch (error) {
+      issues.push({
+        severity: 'warning',
+        category: 'Screens',
+        description: `Could not read the screen index: ${(error as Error).message}`,
+        path: this.bbsRoot,
+        autoFixable: false,
+        fixAction: 'Manual fix required',
+      });
+    }
+
+    return {
+      category: 'Screen Contents',
+      passed: issues.every(i => i.severity === 'info'),
+      issues,
+      checkedCount,
+      errorCount: issues.filter(i => i.severity === 'error').length,
+      warningCount: issues.filter(i => i.severity === 'warning').length,
     };
   }
 

@@ -304,6 +304,21 @@ export function ScreenFilesPage() {
     queryClient.invalidateQueries({ queryKey: ['screen-index'] });
   };
 
+  const repairFile = async (target: string) => {
+    setFileError(null);
+
+    try {
+      const res = await apiClient.repairScreenFile(target);
+      showSuccess(res.message ?? 'Repaired');
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
+    } catch (error) {
+      const status = (error as ApiError).status;
+      setFileError(status ? `${(error as Error).message} (HTTP ${status})` : (error as Error).message);
+      showError((error as Error).message);
+    }
+  };
+
   const removeFile = async (target: string) => {
     // What a caller stops seeing matters more than the path, so ask with that.
     const ok = await confirm({
@@ -983,11 +998,24 @@ export function ScreenFilesPage() {
             )}
 
             {file.problems && file.problems.length > 0 && (
-              <ul className="text-sm text-status-warn">
-                {file.problems.map((problem: string) => (
-                  <li key={problem}>{describeProblem(problem)}</li>
-                ))}
-              </ul>
+              <div className="text-sm space-y-1">
+                <ul className="text-status-warn">
+                  {file.problems.map((problem: string) => (
+                    <li key={problem}>{describeProblem(problem)}</li>
+                  ))}
+                </ul>
+                {/*
+                  The damage is mechanical - a CSI sequence with its ESC gone -
+                  so the repair is too. A backup is written first, and the
+                  board refuses the file if it holds any escape byte, because
+                  then a bare [ may be art.
+                */}
+                {file.problems.includes('colour-codes-without-escape') && (
+                  <button className="underline text-accent" onClick={() => repairFile(openFile)}>
+                    Put the escape byte back
+                  </button>
+                )}
+              </div>
             )}
 
             {file.format === 'ansi' || file.format === 'text' ? (
