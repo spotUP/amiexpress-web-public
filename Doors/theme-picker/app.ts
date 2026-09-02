@@ -22,10 +22,53 @@ import {
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { themeStyles, themeById, attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
+import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { CompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 interface DoorSession {
   bbs: any;
   user?: { username?: string };
+}
+
+/** A theme row, styled. Wide keeps the blurb column; XXS has no room for it. */
+export function buildThemeItems(
+  themes: Array<{ id: string; name: string; blurb: string }>,
+  active: string,
+  s: any,
+  compact: CompactProfile
+): string[] {
+  return themes.map(t => {
+    // The one in use is marked rather than merely highlighted: the
+    // highlight follows the cursor and says nothing about what is saved.
+    const mark = t.id === active ? s.accent('[*]') : s.dim('[ ]');
+    // 40 columns: name only. `[*] ` costs 4 of them and a folded row eats
+    // the theme underneath it, which is how the C64 lost a third of this list.
+    return compact.singleColumn
+      ? `${mark} ${s.ink(t.name.substring(0, 34))}`
+      : `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
+  });
+}
+
+/** The line under the list, said in as many words as the screen has room for. */
+export function buildNote(s: any, compact: CompactProfile): string {
+  return compact.collapseChrome
+    ? `  ${s.dim('Applies on next door draw.')}`
+    : `  ${s.dim('A theme applies the next time a door draws.')}`;
+}
+
+/** Footer key hints; the XXS set is the same three keys, abbreviated to fit. */
+export function buildFooterHints(compact: CompactProfile): Array<{ key: string; does: string }> {
+  return compact.collapseChrome
+    ? [
+        { key: 'Up/Dn', does: 'Pick' },
+        { key: 'Ent', does: 'Use' },
+        { key: 'Q', does: 'Bye' },
+      ]
+    : [
+        { key: 'Up/Down', does: 'Choose' },
+        { key: 'Enter', does: 'Use it' },
+        { key: 'Q', does: 'Leave' },
+      ];
 }
 
 export async function createApp(session: DoorSession): Promise<void> {
@@ -42,6 +85,10 @@ export async function createApp(session: DoorSession): Promise<void> {
   }
 
   const screen = createScreen(bbs, { title: 'Theme' });
+
+  // Every width decision below comes from the LIVE screen through the SDK's
+  // one compact profile - no door-local 40 or 80 anywhere.
+  const compact = getCompactProfile(((screen as any).width as number) || 80);
 
   // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
   // The layout is written in percentages, so following a resize is a
@@ -105,12 +152,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       selected: s.list.style.selected,
       item: { fg: theme.tokens.dim },
     },
-    items: themes.map(t => {
-      // The one in use is marked rather than merely highlighted: the
-      // highlight follows the cursor and says nothing about what is saved.
-      const mark = t.id === active ? s.accent('[*]') : s.dim('[ ]');
-      return `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
-    }),
+    items: buildThemeItems(themes, active, s, compact),
   });
 
   const listRows = Math.max(1, Math.min(themes.length, ((screen as any).height || 24) - 6));
@@ -127,7 +169,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     height: 1,
     border: undefined,
     focusable: false,
-    content: `  ${s.dim('A theme applies the next time a door draws.')}`,
+    content: buildNote(s, compact),
     style: s.plain.style,
   });
 
@@ -143,11 +185,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     mouse: false,
     style: footerStyle(theme),
     content: ' ' + footerHints(
-      [
-        { key: 'Up/Down', does: 'Choose' },
-        { key: 'Enter', does: 'Use it' },
-        { key: 'Q', does: 'Leave' },
-      ],
+      buildFooterHints(compact),
       { key: s.key, dim: s.dim },
       s.rail
     ),

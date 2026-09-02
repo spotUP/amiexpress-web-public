@@ -1,5 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildThemeItems = buildThemeItems;
+exports.buildNote = buildNote;
+exports.buildFooterHints = buildFooterHints;
 exports.createApp = createApp;
 exports.runDoor = runDoor;
 /**
@@ -20,6 +23,40 @@ const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+/** A theme row, styled. Wide keeps the blurb column; XXS has no room for it. */
+function buildThemeItems(themes, active, s, compact) {
+    return themes.map(t => {
+        // The one in use is marked rather than merely highlighted: the
+        // highlight follows the cursor and says nothing about what is saved.
+        const mark = t.id === active ? s.accent('[*]') : s.dim('[ ]');
+        // 40 columns: name only. `[*] ` costs 4 of them and a folded row eats
+        // the theme underneath it, which is how the C64 lost a third of this list.
+        return compact.singleColumn
+            ? `${mark} ${s.ink(t.name.substring(0, 34))}`
+            : `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
+    });
+}
+/** The line under the list, said in as many words as the screen has room for. */
+function buildNote(s, compact) {
+    return compact.collapseChrome
+        ? `  ${s.dim('Applies on next door draw.')}`
+        : `  ${s.dim('A theme applies the next time a door draws.')}`;
+}
+/** Footer key hints; the XXS set is the same three keys, abbreviated to fit. */
+function buildFooterHints(compact) {
+    return compact.collapseChrome
+        ? [
+            { key: 'Up/Dn', does: 'Pick' },
+            { key: 'Ent', does: 'Use' },
+            { key: 'Q', does: 'Bye' },
+        ]
+        : [
+            { key: 'Up/Down', does: 'Choose' },
+            { key: 'Enter', does: 'Use it' },
+            { key: 'Q', does: 'Leave' },
+        ];
+}
 async function createApp(session) {
     const { bbs } = session;
     const theme = bbs?.getTheme ? bbs.getTheme() : (0, theme_1.themeById)('classic');
@@ -30,6 +67,9 @@ async function createApp(session) {
         return;
     }
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: 'Theme' });
+    // Every width decision below comes from the LIVE screen through the SDK's
+    // one compact profile - no door-local 40 or 80 anywhere.
+    const compact = (0, blessed_1.getCompactProfile)(screen.width || 80);
     // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
     // The layout is written in percentages, so following a resize is a
     // repaint; asking the terminal to grow at all is the part no door gets
@@ -88,12 +128,7 @@ async function createApp(session) {
             selected: s.list.style.selected,
             item: { fg: theme.tokens.dim },
         },
-        items: themes.map(t => {
-            // The one in use is marked rather than merely highlighted: the
-            // highlight follows the cursor and says nothing about what is saved.
-            const mark = t.id === active ? s.accent('[*]') : s.dim('[ ]');
-            return `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
-        }),
+        items: buildThemeItems(themes, active, s, compact),
     });
     const listRows = Math.max(1, Math.min(themes.length, (screen.height || 24) - 6));
     // The note sits under the list; the HINTS go to the bottom of the screen
@@ -108,7 +143,7 @@ async function createApp(session) {
         height: 1,
         border: undefined,
         focusable: false,
-        content: `  ${s.dim('A theme applies the next time a door draws.')}`,
+        content: buildNote(s, compact),
         style: s.plain.style,
     });
     (0, blessed_helpers_1.createBox)({
@@ -122,11 +157,7 @@ async function createApp(session) {
         clickable: false,
         mouse: false,
         style: (0, theme_1.footerStyle)(theme),
-        content: ' ' + (0, theme_1.footerHints)([
-            { key: 'Up/Down', does: 'Choose' },
-            { key: 'Enter', does: 'Use it' },
-            { key: 'Q', does: 'Leave' },
-        ], { key: s.key, dim: s.dim }, s.rail),
+        content: ' ' + (0, theme_1.footerHints)(buildFooterHints(compact), { key: s.key, dim: s.dim }, s.rail),
     });
     list.focus();
     screen.render();

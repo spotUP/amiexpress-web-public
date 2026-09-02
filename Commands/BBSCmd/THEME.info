@@ -5,3 +5,4 @@ DESCRIPTION=Pick the colour theme the doors are drawn with
 MULTINODE=YES
 PRIORITY=SAME
 ACCESS=1
+MIN_COLUMNS=40
