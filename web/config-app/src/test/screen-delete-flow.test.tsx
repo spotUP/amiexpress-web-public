@@ -16,6 +16,7 @@ const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 let deleted = false;
 let refuse = false;
+let damaged = false;
 
 const index = () => ({
   builtAt: '2026-09-02T00:00:00.000Z',
@@ -26,7 +27,8 @@ const index = () => ({
   files: deleted ? {} : {
     'Screens/DOOMED.TXT': {
       relPath: 'Screens/DOOMED.TXT', bytes: 6, format: 'ansi', sha256: 'a', mci: [],
-      problems: [], readBy: [{ screen: 'LOGON', scope: 'board', id: null, via: 'resolved' }],
+      problems: damaged ? ['colour-codes-without-escape'] : [],
+      readBy: [{ screen: 'LOGON', scope: 'board', id: null, via: 'resolved' }],
     },
   },
 });
@@ -51,9 +53,16 @@ const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     deleted = true;
     return envelope({ deleted: true, stopsResolving: [] });
   }
+  if (url.includes('/api/screens/repair')) return envelope({ repaired: 2 });
   if (url.includes('/screens/shared-directories')) return envelope({ directories: [] });
   if (url.includes('/api/screens/file')) {
-    return envelope({ relPath: 'Screens/DOOMED.TXT', bytes: 6, format: 'ansi', mci: [], content: base64(art) });
+    // The file endpoint answers with screenFileFacts, so the problems come
+    // with it - that is what the Repair button keys on.
+    return envelope({
+      relPath: 'Screens/DOOMED.TXT', bytes: 6, format: 'ansi', mci: [],
+      problems: damaged ? ['colour-codes-without-escape'] : [],
+      content: base64(art),
+    });
   }
   return envelope(index());
 });
@@ -75,7 +84,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('deleting a screen file', () => {
-  beforeEach(() => { deleted = false; refuse = false; fetchMock.mockClear(); });
+  beforeEach(() => { deleted = false; refuse = false; damaged = false; fetchMock.mockClear(); });
 
   it('says why, in the dialog, when the board refuses', async () => {
     // A toast is missable and then gone; the reason belongs where the button
@@ -103,5 +112,41 @@ describe('deleting a screen file', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(screen.queryByText('LOGON')).toBeNull());
+  });
+});
+
+/**
+ * Repairing a screen whose colour codes lost their escape byte.
+ *
+ * "Can we also offer a fix button in the admin interface in the dialog for the
+ * broken ones?" 47 files on the live board are in that state.
+ */
+describe('repairing a damaged screen', () => {
+  beforeEach(() => { deleted = false; refuse = false; damaged = false; fetchMock.mockClear(); });
+
+  it('offers the fix on the file that is damaged, and asks the board to do it', async () => {
+    damaged = true;
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByText('LOGON'));
+    const dialog = await screen.findByRole('dialog');
+
+    await user.click(within(dialog).getByRole('button', { name: /put the escape byte back/i }));
+
+    await waitFor(() => {
+      const repair = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/screens/repair'));
+      expect(repair).toBeTruthy();
+    });
+  });
+
+  it('offers nothing of the sort on a healthy file', async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByText('LOGON'));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).queryByRole('button', { name: /escape byte/i })).toBeNull();
   });
 });

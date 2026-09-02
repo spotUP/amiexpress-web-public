@@ -285,6 +285,71 @@ screensRouter.put('/file', (req: Request, res: Response) => {
  * DELETE /api/screens/file?path=...
  * Backs up, removes, and reports which scopes stop resolving because of it.
  */
+/**
+ * POST /api/screens/repair   Body: { path }
+ *
+ * Puts the escape byte back in front of a screen's colour codes.
+ *
+ * 47 files on this board hold `[0;1;31m` with the ESC gone - a text-mode copy
+ * somewhere in their history ate it - so a caller sees the codes printed
+ * instead of the colour. The damage is mechanical: a CSI sequence is ESC + `[`
+ * + parameters + a final letter, and these files carry all of it but the ESC.
+ *
+ * Narrow on purpose. A file with ANY escape byte in it is refused, because
+ * then a bare `[` might be art rather than damage - `[bracket]` in a logon
+ * screen is a real thing. And a backup is written first, the same one a delete
+ * writes.
+ */
+screensRouter.post('/repair', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const rel = String(req.body?.path || '');
+  const full = resolveScreenPath(rel);
+  if (!full) {
+    return res.status(400).json({ success: false, error: 'Path outside the board root' });
+  }
+
+  let text: string;
+  try {
+    text = fs.readFileSync(full, 'latin1');
+  } catch (error) {
+    return res.status(404).json({ success: false, error: (error as Error).message });
+  }
+
+  if (text.includes('\x1b')) {
+    return res.status(400).json({
+      success: false,
+      error: 'This file already contains escape bytes, so a bare [ may be art rather than damage. Nothing was changed.',
+    });
+  }
+
+  // The final byte of a CSI sequence is what says where it ends: m for colour,
+  // H for cursor position, J for clear, and the rest of the set.
+  const CSI = /\[([0-9;?]*)([A-Za-z])/g;
+  const matches = text.match(CSI);
+  if (!matches || matches.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'No colour codes found in this file - there is nothing to repair.',
+    });
+  }
+
+  const repaired = text.replace(CSI, (_full, params, final) => `\x1b[${params}${final}`);
+
+  try {
+    fs.copyFileSync(full, `${full}.backup`);
+    fs.writeFileSync(full, repaired, 'latin1');
+    invalidateScreenIndex();
+  } catch (error) {
+    return res.status(500).json({ success: false, error: (error as Error).message });
+  }
+
+  return sendOk(res, {
+    path: path.relative(baseDir, full),
+    backup: `${path.relative(baseDir, full)}.backup`,
+    repaired: matches.length,
+  }, `Put the escape byte back in front of ${matches.length} code${matches.length === 1 ? '' : 's'}`);
+});
+
 screensRouter.delete('/file', (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const rel = String(req.query.path || '');

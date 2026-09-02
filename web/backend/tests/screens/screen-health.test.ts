@@ -29,6 +29,8 @@ beforeEach(() => {
   write('Node1/LOGON.TXT', '[0;1;31m_____ colour codes with no escape\n');
   write('Node1/LOGOFF.TXT', '');
   write('Node1/JOIN.TXT', 'plain words, no colour at all\n');
+  // Nothing reads this one - no screen name, no variant, no include.
+  write('Screens/leftover.txt', 'art nobody points at\n');
 });
 
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -56,5 +58,44 @@ describe('a screen the board cannot display properly', () => {
     const index = buildScreenIndex(root);
 
     expect(index.files['Node1/JOIN.TXT'].problems).toEqual([]);
+  });
+});
+
+/**
+ * And the health check says it too.
+ *
+ * "Can these cases be reported in the bbs health check? can we auto fix them?"
+ * Yes to reporting both, and to fixing the damaged ones - putting an escape
+ * byte back is mechanical and reversible. Not to the unread ones: a file
+ * nothing reads today is still somebody's art, and deleting it is a decision.
+ */
+import { BBSHealthCheckService } from '../../src/services/bbs-health-check.service';
+
+describe('the board health check', () => {
+  test('reports a screen whose colour codes lost their escape byte, as fixable', async () => {
+    const report = await new BBSHealthCheckService(root).runFullHealthCheck();
+    const screens = report.categories.find(c => c.category === 'Screen Contents');
+    const damaged = screens?.issues.find(i => i.description.includes('LOGON.TXT'));
+
+    expect(damaged?.description).toMatch(/no escape byte/);
+    expect(damaged?.autoFixable).toBe(true);
+  });
+
+  test('reports an empty screen, and does not offer to fix it', async () => {
+    const report = await new BBSHealthCheckService(root).runFullHealthCheck();
+    const screens = report.categories.find(c => c.category === 'Screen Contents');
+    const empty = screens?.issues.find(i => i.description.includes('LOGOFF.TXT'));
+
+    expect(empty?.description).toMatch(/empty/);
+    expect(empty?.autoFixable).toBe(false);
+  });
+
+  test('counts the files nothing reads, without offering to delete them', async () => {
+    const report = await new BBSHealthCheckService(root).runFullHealthCheck();
+    const screens = report.categories.find(c => c.category === 'Screen Contents');
+    const unread = screens?.issues.find(i => i.description.includes('no screen reads'));
+
+    expect(unread?.autoFixable).toBe(false);
+    expect(unread?.fixAction).toMatch(/still art/i);
   });
 });
