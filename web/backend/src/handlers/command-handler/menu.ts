@@ -283,11 +283,11 @@ console.log('  - currentMsgBase found:', !!currentMsgBase);
     buildMenuPrompt(
       {
         bbsName,
-        relConfNum: session.relConfNum as any,
+        relConfNum: session.relConfNum,
         confDisplayName: displayName,
         timeLeft,
       },
-      session as any
+      session
     )
   );
 

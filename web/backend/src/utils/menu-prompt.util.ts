@@ -22,6 +22,10 @@
  * room actually left, so the guarantee holds for a name of any length
  * (the multi-message-base form "Conf - Base" is much the longer one).
  *
+ * The clamp reserves the LAST column for the cursor (width - 1, the same
+ * reservation the file viewer makes): a prompt that fills all 40 columns
+ * puts the caller's first typed character on the next row.
+ *
  * BINDING RULE: `sessionColumns` (-> doorScreenWidth) is the only width
  * source, and it can only answer < 80 when `petsciiMode === true`. A
  * narrow ANSI terminal - a phone in portrait reporting 40 columns over
@@ -64,7 +68,9 @@ export function buildMenuPrompt(
   // conference name clamped to whatever columns those leave.
   const headColumns = `[${relConfNum}:`.length;
   const tailColumns = `] (${timeLeft} mins): `.length;
-  const room = Math.max(MIN_CONF_NAME_COLUMNS, width - headColumns - tailColumns);
+  // width - 1: the last column belongs to the cursor. A prompt that fills
+  // all 40 puts the caller's first keystroke on the next row.
+  const room = Math.max(MIN_CONF_NAME_COLUMNS, width - 1 - headColumns - tailColumns);
   const name =
     confDisplayName.length > room ? confDisplayName.substring(0, room) : confDisplayName;
 

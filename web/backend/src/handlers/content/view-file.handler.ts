@@ -199,7 +199,7 @@ console.log(`[SECURITY] User ${session.user?.username} attempted to read restric
       // is the caller's, not a constant: 79 for every ANSI session
       // (byte-identical), 39 for a C64. sessionColumns() is the one width
       // source (delegates to doorScreenWidth) - C64/40-col plan, Task 4.
-      const wrapWidth = Math.max(20, sessionColumns(session as any) - 1);
+      const wrapWidth = Math.max(20, sessionColumns(session) - 1);
 
       for (const line of lines) {
         // Display line with wrapping at wrapWidth characters - express.e:20492-20516

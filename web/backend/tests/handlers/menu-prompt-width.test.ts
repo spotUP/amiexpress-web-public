@@ -133,12 +133,22 @@ describe('buildMenuPrompt - 40 columns for a PETSCII session', () => {
     expect(prompt).not.toContain('AmiExpress Web BBS');
   });
 
-  it('fits 40 printable columns with a 22-char conference name', () => {
+  it('fits inside 40 columns, leaving the last one for the cursor, with a 22-char name', () => {
     const prompt = buildMenuPrompt(
       { bbsName: 'AmiExpress Web BBS', relConfNum: 2, confDisplayName: LONG_CONF, timeLeft: 60 },
       c64
     );
-    expect(printableLength(prompt)).toBeLessThanOrEqual(40);
+    expect(printableLength(prompt)).toBeLessThanOrEqual(39);
+  });
+
+  it('is exactly these bytes - trailing space and colour codes included', () => {
+    const prompt = buildMenuPrompt(
+      { bbsName: 'AmiExpress Web BBS', relConfNum: 2, confDisplayName: LONG_CONF, timeLeft: 60 },
+      c64
+    );
+    expect(prompt).toBe(
+      '\x1b[0m[\x1b[36m2\x1b[34m:\x1b[36mAmiga Demo Scene Chat!\x1b[0m] (\x1b[33m60\x1b[0m mins): '
+    );
   });
 
   it('still names the conference number, the conference and the time left', () => {
@@ -161,10 +171,10 @@ describe('buildMenuPrompt - 40 columns for a PETSCII session', () => {
       },
       c64
     );
-    expect(printableLength(prompt)).toBeLessThanOrEqual(40);
+    expect(printableLength(prompt)).toBeLessThanOrEqual(39);
   });
 
-  it('fits 40 columns for the multi-message-base display name too', () => {
+  it('leaves the cursor column free for the multi-message-base display name too', () => {
     const prompt = buildMenuPrompt(
       {
         bbsName: 'AmiExpress Web BBS',
@@ -174,7 +184,7 @@ describe('buildMenuPrompt - 40 columns for a PETSCII session', () => {
       },
       c64
     );
-    expect(printableLength(prompt)).toBeLessThanOrEqual(40);
+    expect(printableLength(prompt)).toBeLessThanOrEqual(39);
   });
 });
 
@@ -189,7 +199,7 @@ describe('displayMenuPrompt uses the session width (real dispatch)', () => {
     );
   });
 
-  it('emits a prompt without the BBS name, inside 40 columns, for a PETSCII session', () => {
+  it('emits a prompt without the BBS name, inside 39 columns, for a PETSCII session', () => {
     displayMenuPrompt(
       makeSocket(),
       makeSession({ currentConfName: LONG_CONF, petsciiMode: true, screenWidth: 40 })
@@ -197,10 +207,10 @@ describe('displayMenuPrompt uses the session width (real dispatch)', () => {
 
     const prompt = lastPrompt();
     expect(prompt).not.toContain('AmiExpress Web BBS');
-    expect(printableLength(prompt)).toBeLessThanOrEqual(40);
+    expect(printableLength(prompt)).toBeLessThanOrEqual(39);
   });
 
-  it('fits 40 columns on the multiple-message-base branch as well', () => {
+  it('leaves the cursor column free on the multiple-message-base branch as well', () => {
     (getMessageBases as jest.Mock).mockReturnValueOnce([
       { id: 1, conferenceId: 1, name: 'General' },
       { id: 2, conferenceId: 1, name: 'Chatter' },
@@ -211,6 +221,6 @@ describe('displayMenuPrompt uses the session width (real dispatch)', () => {
       makeSession({ currentConfName: LONG_CONF, petsciiMode: true, screenWidth: 40 })
     );
 
-    expect(printableLength(lastPrompt())).toBeLessThanOrEqual(40);
+    expect(printableLength(lastPrompt())).toBeLessThanOrEqual(39);
   });
 });
