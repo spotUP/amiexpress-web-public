@@ -57,6 +57,8 @@ door.onStart(async (ctx) => {
     // Cast: the SDK's BBSApi interface does not declare getTerminalSize yet,
     // though the backend's implementation has it (web/backend/src/doors/BBSApi.ts:216).
     const termWidth = ctx.bbs?.getTerminalSize?.().width ?? 80;
+    /** Every byte this door writes goes out fitted to that width. */
+    const write = (text) => output.write((0, layout_1.fitToWidth)(text, termWidth));
     // Load from require cache (BBS server has already imported it via BBSApi)
     // Fall back to path probing for local dev.
     function getLib() {
@@ -75,7 +77,7 @@ door.onStart(async (ctx) => {
     }
     const stripperLib = getLib();
     if (!stripperLib) {
-        await output.write('\r\n\x1b[31mStripper library not available.\x1b[0m\r\n');
+        await write('\r\n\x1b[31mStripper library not available.\x1b[0m\r\n');
         return;
     }
     function formatSize(bytes) {
@@ -99,8 +101,8 @@ door.onStart(async (ctx) => {
         return '?';
     }
     function showHeader() {
-        output.write('\x1b[2J\x1b[H');
-        output.write('\x1b[0;37;44m' + (0, layout_1.stripperHeader)(patternCount(), termWidth) + '\x1b[0m\r\n\r\n');
+        write('\x1b[2J\x1b[H');
+        write('\x1b[0;37;44m' + (0, layout_1.stripperHeader)(patternCount(), termWidth) + '\x1b[0m\r\n\r\n');
     }
     while (true) {
         await showHeader();
@@ -108,47 +110,47 @@ door.onStart(async (ctx) => {
         if (!archivePath || archivePath.toLowerCase() === 'q')
             break;
         if (!fs.existsSync(archivePath)) {
-            await output.write(`\r\n\x1b[31mFile not found: ${archivePath}\x1b[0m\r\n\r\n`);
+            await write(`\r\n\x1b[31mFile not found: ${archivePath}\x1b[0m\r\n\r\n`);
             continue;
         }
-        await output.write('\r\n\x1b[36mAnalyzing...\x1b[0m ');
+        await write('\r\n\x1b[36mAnalyzing...\x1b[0m ');
         let result;
         try {
             result = await stripperLib.analyzeArchive(archivePath);
         }
         catch (err) {
-            await output.write(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n\r\n`);
+            await write(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n\r\n`);
             continue;
         }
         const total = result.kept.length + result.stripped.length;
-        await output.write(`done. ${total} files in archive.\r\n\r\n`);
+        await write(`done. ${total} files in archive.\r\n\r\n`);
         if (result.stripped.length === 0) {
-            await output.write('\x1b[32mNo junk files found — archive is clean.\x1b[0m\r\n\r\n');
-            await output.write('\x1b[90mPress ENTER to continue...\x1b[0m');
+            await write('\x1b[32mNo junk files found — archive is clean.\x1b[0m\r\n\r\n');
+            await write('\x1b[90mPress ENTER to continue...\x1b[0m');
             await input.waitForKey();
             continue;
         }
-        await output.write(`\x1b[31mFILES TO STRIP (${result.stripped.length}):\x1b[0m\r\n`);
+        await write(`\x1b[31mFILES TO STRIP (${result.stripped.length}):\x1b[0m\r\n`);
         for (const entry of result.stripped.slice(0, 20)) {
             const reason = result.reason[entry.path] ?? '';
             const col = (0, layout_1.pathColumn)(38, termWidth);
             const tail = (0, layout_1.showsReason)(termWidth) ? `  \x1b[90m[${reason}]\x1b[0m` : '';
-            await output.write(`  \x1b[31m${entry.path.substring(0, col).padEnd(col)}\x1b[0m ${formatSize(entry.size).padStart(7)}${tail}\r\n`);
+            await write(`  \x1b[31m${entry.path.substring(0, col).padEnd(col)}\x1b[0m ${formatSize(entry.size).padStart(7)}${tail}\r\n`);
         }
         if (result.stripped.length > 20)
-            await output.write(`  \x1b[90m... and ${result.stripped.length - 20} more\x1b[0m\r\n`);
-        await output.write(`\r\n\x1b[32mFILES KEPT (${result.kept.length}):\x1b[0m\r\n`);
+            await write(`  \x1b[90m... and ${result.stripped.length - 20} more\x1b[0m\r\n`);
+        await write(`\r\n\x1b[32mFILES KEPT (${result.kept.length}):\x1b[0m\r\n`);
         for (const entry of result.kept.slice(0, 10)) {
             const col = (0, layout_1.pathColumn)(40, termWidth);
-            await output.write(`  ${entry.path.substring(0, col).padEnd(col)} ${formatSize(entry.size).padStart(7)}\r\n`);
+            await write(`  ${entry.path.substring(0, col).padEnd(col)} ${formatSize(entry.size).padStart(7)}\r\n`);
         }
         if (result.kept.length > 10)
-            await output.write(`  \x1b[90m... and ${result.kept.length - 10} more\x1b[0m\r\n`);
-        await output.write('\r\n\x1b[0;37m' + (0, layout_1.stripperRule)(termWidth) + '\x1b[0m\r\n');
-        await output.write('\x1b[33mS\x1b[0m Strip in-place  \x1b[33mA\x1b[0m Abort\r\n');
+            await write(`  \x1b[90m... and ${result.kept.length - 10} more\x1b[0m\r\n`);
+        await write('\r\n\x1b[0;37m' + (0, layout_1.stripperRule)(termWidth) + '\x1b[0m\r\n');
+        await write('\x1b[33mS\x1b[0m Strip in-place  \x1b[33mA\x1b[0m Abort\r\n');
         const choice = await input.getChar();
         if (choice.toLowerCase() !== 's') {
-            await output.write('\r\n\x1b[33mAborted.\x1b[0m\r\n\r\n');
+            await write('\r\n\x1b[33mAborted.\x1b[0m\r\n\r\n');
             continue;
         }
         // stripArchive always writes a portable ZIP — there is no cross-platform
@@ -157,21 +159,21 @@ door.onStart(async (ctx) => {
         // with ZIP bytes under its original name would silently mislead the
         // sysop about what's on disk, so the clean archive is written as a
         // sibling <name>.zip instead and the original is left untouched.
-        await output.write(`\r\n\x1b[36mStripping and repacking...\x1b[0m\r\n`);
+        await write(`\r\n\x1b[36mStripping and repacking...\x1b[0m\r\n`);
         const outcome = await (0, strip_repack_1.runStripRepack)(stripperLib.stripArchive, archivePath);
         if (outcome.ok) {
             const saved = outcome.origSize - outcome.newSize;
-            await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(outcome.origSize)} -> ${formatSize(outcome.newSize)} (saved ${formatSize(saved)})\r\n`);
-            await output.write(`\x1b[32mStripped archive written to ${path.basename(outcome.finalPath)}\x1b[0m (portable ZIP format).\r\n`);
-            await output.write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
+            await write(`\x1b[32mDone.\x1b[0m ${formatSize(outcome.origSize)} -> ${formatSize(outcome.newSize)} (saved ${formatSize(saved)})\r\n`);
+            await write(`\x1b[32mStripped archive written to ${path.basename(outcome.finalPath)}\x1b[0m (portable ZIP format).\r\n`);
+            await write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
         }
         else {
-            await output.write(`\x1b[31m${outcome.error}\x1b[0m\r\n\r\n`);
+            await write(`\x1b[31m${outcome.error}\x1b[0m\r\n\r\n`);
         }
-        await output.write('\x1b[90mPress ENTER to continue...\x1b[0m');
+        await write('\x1b[90mPress ENTER to continue...\x1b[0m');
         await input.waitForKey();
     }
-    await output.write('\r\n\x1b[36mGoodbye.\x1b[0m\r\n');
+    await write('\r\n\x1b[36mGoodbye.\x1b[0m\r\n');
 });
 exports.default = door;
 //# sourceMappingURL=index.js.map

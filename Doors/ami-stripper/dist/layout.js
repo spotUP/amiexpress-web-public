@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.fitToWidth = fitToWidth;
 exports.stripperHeader = stripperHeader;
 exports.stripperRule = stripperRule;
 exports.pathColumn = pathColumn;
@@ -16,6 +17,31 @@ exports.showsReason = showsReason;
  * Its own module so the rules are testable without the door runtime.
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const petscii_1 = require("@amiexpress/bbs-door-sdk/petscii");
+/**
+ * One payload, word-wrapped to the caller's width.
+ *
+ * This door writes through BBSApi.write(), which emits straight to the socket
+ * and never passes the backend's wrapForSession - so a status line carrying a
+ * filename ("Stripped archive written to <name> (portable ZIP format).", 66
+ * columns) does not soft-wrap on a C64, it hard-wraps mid-word and eats the
+ * row beneath. The wrap is the SDK's `wrapLineToWidth`, the same primitive
+ * wrapForSession is built on, so the door and the board break lines the same
+ * way.
+ *
+ * At 80 columns and wider this is a straight pass-through: the board's bytes
+ * are exactly what they were.
+ */
+function fitToWidth(text, width) {
+    if (width >= 80)
+        return text;
+    // Line breaks are put back exactly as they were - a prompt ends without
+    // one, and adding one would move the cursor off the input row.
+    return text
+        .split('\r\n')
+        .map(part => (part.length === 0 ? part : (0, petscii_1.wrapLineToWidth)(part, width).join('\r\n')))
+        .join('\r\n');
+}
 /** The banner: title on the left, the pattern count on the right. */
 function stripperHeader(patternCount, width) {
     const compact = (0, blessed_1.getCompactProfile)(width);

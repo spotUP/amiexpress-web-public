@@ -19,7 +19,11 @@ const {
   stripperRule,
   pathColumn,
   showsReason,
+  fitToWidth,
 } = require('../../../../../Doors/ami-stripper/layout');
+
+/** Printable length of one terminal row. */
+const printable = (s: string): number => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;
 
 describe('ami-stripper at 40 columns', () => {
   it('the banner fills exactly the row, no more', () => {
@@ -44,7 +48,35 @@ describe('ami-stripper at 40 columns', () => {
     expect(showsReason(80)).toBe(true);
   });
 
+  // The two status lines the review found: they carry a filename, so no
+  // literal can be short enough on its own - they have to be wrapped.
+  it('a status line carrying a filename wraps instead of eating the next row', () => {
+    const line = '\x1b[32mStripped archive written to SOME-LONG-SCENE-RELEASE.zip\x1b[0m (portable ZIP format).\r\n';
+    for (const row of fitToWidth(line, 40).split('\r\n')) {
+      expect(printable(row)).toBeLessThanOrEqual(40);
+    }
+    // Wrapped, not truncated.
+    const joined = fitToWidth(line, 40).replace(/\r\n/g, ' ').replace(/\s+/g, ' ');
+    expect(joined).toContain('portable ZIP format');
+    expect(joined).toContain('SOME-LONG-SCENE-RELEASE.zip');
+  });
+
+  it('the Done. size summary wraps too', () => {
+    const line = '\x1b[32mDone.\x1b[0m 1.2 MB -> 840 KB (saved 384 KB)\r\n';
+    for (const row of fitToWidth(line, 40).split('\r\n')) {
+      expect(printable(row)).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('a prompt keeps the cursor on its own row (no break appended)', () => {
+    const prompt = '\x1b[90mPress ENTER to continue...\x1b[0m';
+    expect(fitToWidth(prompt, 40).endsWith('\r\n')).toBe(false);
+  });
+
   it('80 columns: every string is the one the door emitted before', () => {
+    // fitToWidth is a straight pass-through at 80 and wider.
+    const long = '\x1b[32mStripped archive written to A-VERY-LONG-NAME.zip\x1b[0m (portable ZIP format).\r\n';
+    expect(fitToWidth(long, 80)).toBe(long);
     expect(stripperHeader('12', 80)).toBe(
       ' AMIGA ARCHIVE STRIPPER' +
       ' '.repeat(80 - ' AMIGA ARCHIVE STRIPPER'.length - '[scene db: 12 patterns]'.length) +
