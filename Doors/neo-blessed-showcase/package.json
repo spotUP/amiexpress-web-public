@@ -16,7 +16,8 @@
     "build": "tsc && npm run bundle:client",
     "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --external:net --external:crypto --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
     "dev": "ts-node index.ts",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "test": "tsx tests/run-tests.ts"
   },
   "doorMetadata": {
     "name": "Neo-Blessed Showcase",

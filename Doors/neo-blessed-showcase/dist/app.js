@@ -64,6 +64,7 @@ const path = __importStar(require("path"));
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const braille_graphics_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/braille-graphics");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 /**
  * Global canvas rendering mode for all chart widgets
  * - 'braille': Unicode braille (2x4 resolution) - best quality, needs Unicode
@@ -74,6 +75,15 @@ const CANVAS_MODE = 'halfblock';
 async function createApp(session) {
     const { bbs, user } = session;
     const username = user?.username || 'Guest';
+    // The board's theme, for this door's CHROME only.
+    //
+    // The demos below keep their literal colours on purpose - a widget
+    // showcase demonstrating `fg: 'red'` should show red - but the frame
+    // around them is the board's furniture and had no business being cyan and
+    // green in all seven themes. A host without getTheme (an older board, a
+    // test) leaves `classic`, whose tokens ARE the names that were hardcoded
+    // here, so nothing moves for anyone who has not chosen a theme.
+    const S = (0, theme_1.themeStyles)((bbs?.getTheme?.()) ?? (0, theme_1.themeById)('classic'));
     const testResults = [];
     let currentDemo = null;
     const intervals = [];
@@ -120,7 +130,13 @@ async function createApp(session) {
         width: '100%',
         height: 1,
         tags: true,
-        style: { fg: 'white', bg: 'blue' },
+        // A bar, not a frame: `blessed.box` builds a Panel, and Panel draws a
+        // line border whenever the caller names none. A one-row box with a frame
+        // has no interior at all, which is why this bar has never shown its text -
+        // only the rule underneath it reached the screen. Same defect as
+        // GRANDMASTER's backgrounds and Scrollwars' footer.
+        border: undefined,
+        style: S.bar.style,
         content: ` Neo-Blessed Showcase ${BUILD_VERSION} | Q:Quit Tab:Nav Enter:Select `,
     });
     const menuBox = blessed_1.default.box({
@@ -130,8 +146,8 @@ async function createApp(session) {
         width: 26,
         bottom: 1,
         label: ' Categories ',
-        border: { type: 'line' },
-        style: { fg: 'white', border: { fg: 'cyan' } },
+        border: S.panel.border,
+        style: S.panel.style,
     });
     const menuList = blessed_1.default.list({
         parent: menuBox,
@@ -147,9 +163,9 @@ async function createApp(session) {
         scrollbar: {
             ch: ' ', // Space with bg color for Amiga compatibility
             track: { ch: ' ', style: { bg: 'black' } },
-            style: { bg: 'cyan' } // Cyan background for thumb
+            style: { bg: S.list.style.selected?.bg ?? 'cyan' }
         },
-        style: { fg: 'white', selected: { fg: 'black', bg: 'cyan' } },
+        style: S.list.style,
         items: [
             ' 1. Basic Widgets',
             ' 2. List Widgets',
@@ -198,8 +214,8 @@ async function createApp(session) {
         right: 0,
         bottom: 1,
         label: ' Demo Area ',
-        border: { type: 'line' },
-        style: { fg: 'white', border: { fg: 'green' } },
+        border: S.panel.border,
+        style: S.panel.style,
     });
     // NOTE: Active panel borders (white on focus) are now handled automatically by SDK!
     // No need for manual focus handlers - the SDK's screen.setFocused() method
@@ -211,7 +227,8 @@ async function createApp(session) {
         width: '100%',
         height: 1,
         tags: true,
-        style: { fg: 'white', bg: 'blue' },
+        border: undefined, // as above: a one-row bar cannot carry a frame
+        style: S.bar.style,
         content: ` User: ${username} | Select a category | F12: Toggle Mouse `,
     });
     // ========== HELPERS ==========
