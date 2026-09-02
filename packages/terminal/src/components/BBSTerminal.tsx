@@ -239,11 +239,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // promise inside ensurePetsciiTerminal resolves. Consumed by the
   // font-preference/set-font handlers below (via resolveTerminalFontFamily)
   // so a saved or user-picked Amiga font can never clobber PetMe64 while
-  // this is true. No backend event currently un-does the 40x25 resize
-  // (grepped: pre-login.ts:158 is the only 'terminal-resize' emitter, and it
-  // only ever sends 40x25), so this intentionally never resets false again -
-  // correct for the lifetime of a 'P' session.
+  // this is true.
+  //
+  // Re-review follow-up: no backend event un-does the 40x25 resize *within
+  // the same session* (grepped: pre-login.ts:158 is the only
+  // 'terminal-resize' emitter, and it only ever sends 40x25) - correct, a
+  // 'P' session stays PETSCII for its own lifetime. But this ref lives on
+  // the mounted React component, not the backend session, and three
+  // reconnection paths start a genuinely FRESH session on the SAME mounted
+  // component without remounting it: 'session-restore-failed' and
+  // 'reconnect_failed' (both below) and attemptTokenLogin's token-login
+  // branch (which skips the graphics prompt entirely). Left uncleared, a
+  // prior PETSCII session's flag would force-lock PetMe64 onto a brand new
+  // session that never answered 'P' - font-preference/set-font would keep
+  // "winning" for the wrong reason, with no undo short of a page reload.
+  // clearPetsciiSession() (declared right below) is called from all three;
+  // every re-SET site above still re-arms it correctly if the fresh session
+  // does turn out to answer 'P' again. A real 'session-restored' (the
+  // backend resuming the SAME session after a network blip) deliberately
+  // does NOT clear this - that is a continuation, not a fresh session, and
+  // must keep whatever font state it already had.
   const petsciiSessionActiveRef = useRef<boolean>(false);
+  const clearPetsciiSession = useCallback(() => {
+    petsciiSessionActiveRef.current = false;
+  }, []);
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
     paths: [],
@@ -502,6 +521,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       return false;
     }
 
+    // Re-review follow-up to the Bug F fix: every caller of this function
+    // (initial mount, the 'connect' handler's non-restore branch, and
+    // 'session-restore-failed') is, by definition, about to begin a FRESH
+    // session on this mounted component - either via the token-login
+    // branch below (which skips the graphics prompt outright) or by
+    // falling through to a brand new graphics-prompt/login flow. Either
+    // way a prior PETSCII session's font lock must not carry over; see
+    // petsciiSessionActiveRef's declaration above.
+    clearPetsciiSession();
+
     const token = getStoredSharedToken();
     if (token) {
       console.log('[AutoLogin] Reusing shared auth token');
@@ -510,7 +539,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       return true;
     }
     return false;
-  }, [getStoredSharedToken]);
+  }, [getStoredSharedToken, clearPetsciiSession]);
 
   useEffect(() => {
     if (!attemptTokenLogin()) {
@@ -1666,6 +1695,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // out is a reload. Start over instead.
     socket.io.on('reconnect_failed', () => {
       console.warn('[Terminal] Reconnection gave up - starting over rather than sitting dead');
+      // Re-review follow-up to the Bug F fix: "starting over" means the
+      // eventual reconnect either restores the old session (which
+      // legitimately keeps whatever font state it had) or - if that fails,
+      // or there was nothing to restore - runs the fresh-session path
+      // (session-restore-failed / attemptTokenLogin, both of which also
+      // clear this). Clearing here too, right where "starting over" is
+      // decided, means the flag is never left dangling through whatever
+      // gap exists before that eventual 'connect'/'session-restore-failed'
+      // fires.
+      clearPetsciiSession();
       socket.connect();
     });
 
@@ -2445,6 +2484,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('session-restore-failed', (reason: string) => {
       console.log('[Session Persistence] Session restoration failed:', reason);
+      // Re-review follow-up to the Bug F fix: the restore failed, so the
+      // backend is about to start a genuinely fresh session (a new
+      // graphics prompt, or the token-login fallback below) - not a
+      // continuation of whatever session (PETSCII or not) this component
+      // was previously showing. Clear explicitly here, before that fresh
+      // sequence begins, rather than relying solely on attemptTokenLogin's
+      // own clear (it already does this too, belt-and-suspenders, since it
+      // also runs when there's no token to fall back on).
+      clearPetsciiSession();
       clearSessionState();
       reconnectPending.current = false;
       // Fall back to token login
