@@ -49,6 +49,8 @@ export class UIManager {
   public handContent!: Box;
   public activityPanel!: Box;
   public activityContent!: Log;
+  public chatPanel!: Box;
+  public chatContent!: Log;
   /** The player's card preferences, set by the door when a profile loads. */
   public cardPreferences: CardPreferences | undefined;
   /** Whether this session's terminal can draw unicode card faces. */
@@ -80,10 +82,11 @@ export class UIManager {
     showBulletinsWindow: () => void;
     showCardStyleWindow: () => void;
     showThemeWindow: () => void;
+    saySomething: () => void;
     exitDoor: () => void;
     runAction: (action: () => void | Promise<void>) => void;
   }): void {
-    const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, showThemeWindow, exitDoor, runAction } = callbacks;
+    const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, showThemeWindow, saySomething, exitDoor, runAction } = callbacks;
 
     this.topBar = createBox({
       // Panel adds a line border unless the key is present; these are
@@ -137,6 +140,7 @@ export class UIManager {
           { label: 'Leaders', action: () => runAction(showLeaderboardWindow) },
           { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
           { label: 'Bulletins', action: () => runAction(showBulletinsWindow) },
+          { label: 'Say Something (T)', action: () => runAction(saySomething) },
           { label: 'Card Style', action: () => runAction(showCardStyleWindow) },
           { label: 'Theme', action: () => runAction(showThemeWindow) },
         ],
@@ -663,7 +667,76 @@ export class UIManager {
       content: '',
     });
 
+
+    // CHAT sits beside ACTIVITY when the table has the room for it: the
+    // feed is the door talking, this is the players talking. On a narrow
+    // board there is no room for a second panel, and the door writes chat
+    // into the activity feed instead - never nowhere.
+    this.chatPanel = createBox({
+      parent: this.tableWindow,
+      top: 1,
+      left: 1,
+      width: 10,
+      height: 6,
+      label: ' CHAT ',
+      tags: true,
+      hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+      border: { type: 'line', labelStyle: { fg: UI_THEME.accent } },
+      style: panelStyle,
+    });
+
+    this.chatContent = createLog({
+      parent: this.chatPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      bottom: 1,
+      tags: true,
+      scrollable: true,
+      alwaysScroll: true,
+      keys: true,
+      mouse: true,
+      wrap: true,
+      scrollOnInput: false,
+      scrollback: 200,
+      style: contentStyle,
+      scrollbar: {
+        ch: '|',
+        track: { ch: '|', bg: UI_THEME.windowBg },
+        style: scrollbarStyle,
+      } as any,
+      content: '',
+    });
+
     this.layoutTablePanels();
+  }
+
+  /**
+   * Whether the right column has the rows for ACTIVITY and CHAT both.
+   *
+   * Each panel spends two rows on its own frame, so a pair costs four
+   * before a word is drawn. At nine rows the split gives four and five -
+   * two lines of feed and three of chat, which is a conversation. Below
+   * that the split leaves two panels showing one line each, and the chat
+   * belongs in the feed instead.
+   */
+  private hasRoomForChatPanel(bottomHeight: number): boolean {
+    return bottomHeight >= 9;
+  }
+
+  /** Is the chat drawn in its own panel, or does it belong in the feed? */
+  public chatHasItsOwnPanel(): boolean {
+    return Boolean(this.chatPanel) && !this.chatPanel.hidden;
+  }
+
+  /** Repaint the chat panel from the messages it should be showing. */
+  public setChatLines(lines: string[]): void {
+    if (!this.chatContent) return;
+    this.chatContent.setContent(lines.join('\n'));
+    this.chatContent.setScrollPerc(100);
   }
 
   /** Rows a widget has inside its own borders, for sizing what goes in it. */
@@ -749,7 +822,27 @@ export class UIManager {
 
     this.place(this.handPanel, { top: bottomTop, left, width: leftWidth, height: bottomHeight });
 
-    this.place(this.activityPanel, { top: bottomTop, left: rightStart, width: rightWidth, height: bottomHeight });
+    // ACTIVITY and CHAT share the right column, stacked rather than side by
+    // side. Measured, not guessed: at 120x30 - the size the door is played
+    // at in fullscreen - that column is 35 wide, and splitting it across
+    // gives each panel 15 usable characters, narrower than "22:14 sysop:
+    // nice". Chat lines are wide and short, so they take the whole width
+    // and fewer rows. Too few rows to split, and chat goes to the feed.
+    if (this.hasRoomForChatPanel(bottomHeight)) {
+      const chatHeight = Math.max(4, Math.floor(bottomHeight / 2));
+      const feedHeight = bottomHeight - chatHeight;
+      this.place(this.activityPanel, { top: bottomTop, left: rightStart, width: rightWidth, height: feedHeight });
+      this.place(this.chatPanel, {
+        top: bottomTop + feedHeight,
+        left: rightStart,
+        width: rightWidth,
+        height: chatHeight,
+      });
+      this.chatPanel.hidden = this.activityPanel.hidden;
+    } else {
+      this.place(this.activityPanel, { top: bottomTop, left: rightStart, width: rightWidth, height: bottomHeight });
+      this.chatPanel.hide();
+    }
 
     this.place(this.tableActions, { top: actionTop, left, width: innerWidth, height: actionHeight });
 

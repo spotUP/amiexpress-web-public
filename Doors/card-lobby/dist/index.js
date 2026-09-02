@@ -15,6 +15,7 @@ const GameViews_1 = require("./managers/GameViews");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const ChatManager_1 = require("./managers/ChatManager");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
@@ -96,6 +97,26 @@ class CardLobbyApp {
         this.tableListMap = [];
         this.selectedTableId = null;
         this.selectedUnoCardIndex = null;
+        /**
+         * Ask how this player wants cards drawn, remember it, and redraw.
+         *
+         * The preference lives on the profile, so it follows the player between
+         * sessions and between games - the same choice covers a poker board and
+         * an UNO discard pile.
+         */
+        /**
+         * Change the door's theme without leaving the door.
+         *
+         * The panel previews as the highlight moves: openThemeMenu re-tints every
+         * widget on screen, and `onApply` re-points UI_THEME so anything this door
+         * builds AFTER the switch - a dialog, a repainted panel - is built in the
+         * new colours rather than the old ones.
+         */
+        /**
+         * The lobby's chat. The door is the host, the way it is for the UNO event
+         * bus: the state, the dialogs and the panels all live here already.
+         */
+        this.chat = new ChatManager_1.ChatManager(this);
         this.session = session;
         this.announcer = (0, announce_1.createAnnouncer)(session.bbs);
     }
@@ -227,6 +248,11 @@ class CardLobbyApp {
                 this.runAction(() => this.tableFlow.createTableFlow());
             }
         });
+        this.screen.key(['t'], () => {
+            if (this.modalActive)
+                return;
+            this.runAction(() => this.saySomething());
+        });
         this.screen.key(['r'], () => {
             if (this.modalActive)
                 return;
@@ -345,6 +371,7 @@ class CardLobbyApp {
             showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
             showCardStyleWindow: () => this.chooseCardStyle(),
             showThemeWindow: () => this.chooseTheme(),
+            saySomething: () => this.saySomething(),
             exitDoor: this.exitDoor.bind(this),
             runAction: this.runAction.bind(this),
         });
@@ -710,22 +737,28 @@ class CardLobbyApp {
         }
         this.logWindow.log(message);
         this.updateActivityPanel();
+        this.chat.paint();
     }
-    /**
-     * Ask how this player wants cards drawn, remember it, and redraw.
-     *
-     * The preference lives on the profile, so it follows the player between
-     * sessions and between games - the same choice covers a poker board and
-     * an UNO discard pile.
-     */
-    /**
-     * Change the door's theme without leaving the door.
-     *
-     * The panel previews as the highlight moves: openThemeMenu re-tints every
-     * widget on screen, and `onApply` re-points UI_THEME so anything this door
-     * builds AFTER the switch - a dialog, a repainted panel - is built in the
-     * new colours rather than the old ones.
-     */
+    /** The table this player is sitting at, for tagging what they say. */
+    get currentTableId() {
+        return this.currentProfile?.currentTableId ?? null;
+    }
+    chatHasItsOwnPanel() {
+        return this.uiManager.chatHasItsOwnPanel();
+    }
+    setChatLines(lines) {
+        this.uiManager.setChatLines(lines);
+    }
+    promptForLine(title, text) {
+        return this.dialogManager.showPromptDialog(title, text, '');
+    }
+    render() {
+        this.screen.render();
+    }
+    /** T talks. The lobby had no way to say anything at all until now. */
+    async saySomething() {
+        await this.chat.saySomething();
+    }
     async chooseTheme() {
         await (0, blessed_1.openThemeMenu)({
             screen: this.screen,

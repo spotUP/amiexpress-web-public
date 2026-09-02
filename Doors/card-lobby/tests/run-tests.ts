@@ -15,6 +15,7 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './activity-panel.test',
   './menus.test',
   './card-style.test',
+  './chat.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

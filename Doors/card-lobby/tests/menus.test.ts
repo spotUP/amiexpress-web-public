@@ -55,7 +55,7 @@ export async function viewsHoldsBothFocusEntriesAndTheWindows(): Promise<void> {
 
     assert.deepStrictEqual(labels,
       ['Lobby', 'Table', 'Profile', 'Leaders', 'Achievements', 'Bulletins',
-       'Card Style', 'Theme'],
+       'Say Something (T)', 'Card Style', 'Theme'],
       'the two focus entries lead, then the windows, then how the door looks');
   } finally { app.screen?.destroy?.(); }
 }
