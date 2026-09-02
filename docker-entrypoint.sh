@@ -555,6 +555,83 @@ EOF
     find "$BBS_DATA_DIR/Doors" -maxdepth 2 -name "*.ts" -not -path "*/node_modules/*" -not -path "*/dist/*" -delete 2>/dev/null || true
     echo "[Entrypoint]   Cleaned .ts source files from Doors"
 
+    # A door's dist/ belongs to the IMAGE, so it is mirrored, not merged.
+    #
+    # The sync above extracts a tar stream, and extraction only ever WRITES:
+    # a file the image stopped shipping stays on the volume for ever. For
+    # compiled door output that is not a stale file, it is a live one - the
+    # door loads what is in dist/, so a renamed or deleted module keeps
+    # running next to its replacement. Eight such orphans were removed by
+    # hand from Doors/sprite-editor/dist on 2026-09-02.
+    #
+    # The scope is deliberate and narrow:
+    #
+    #   * only doors the IMAGE ships. A door DOORREPO installed at runtime
+    #     exists on the volume alone; the image is not its source and
+    #     mirroring would delete the whole door.
+    #   * only dist/. The rest of a door directory holds runtime state -
+    #     databases, logs, node_modules, whatever the door writes - which
+    #     the image has no opinion about.
+    #   * only COMPILED OUTPUT inside dist/, by extension. dist/ is not
+    #     purely image-owned on this board: a dry run against the live
+    #     volume on 2026-09-02 found frogger/dist/highscores.json and
+    #     super-qix/dist/highscores.json, which are the players' scores and
+    #     exist nowhere in the image. A whitelist is the only safe
+    #     direction - an unrecognised file is left alone, and the worst case
+    #     is an orphan nobody loads.
+    #   * never when the image's dist/ is empty. That is a broken build or a
+    #     half-copied image, and the answer to "the source looks empty" is
+    #     never "delete the board's working copy".
+    #
+    # What a TypeScript build emits inside dist/, and nothing else. `ts`
+    # covers the .d.ts declarations; a door's own sources never live here.
+    PRUNABLE_DIST_EXTS="js mjs cjs ts map css html"
+    prune_image_door_dists() {
+        pruned=0
+        for image_door in "$DEFAULT_DATA_DIR/Doors"/*; do
+            [ -d "$image_door/dist" ] || continue
+
+            door_name=$(basename "$image_door")
+            volume_dist="$BBS_DATA_DIR/Doors/$door_name/dist"
+            [ -d "$volume_dist" ] || continue
+
+            # An empty image dist/ means the build failed, not that the door
+            # has no files.
+            image_files=$(cd "$image_door/dist" && find . \( -type f -o -type l \) | wc -l)
+            [ "$image_files" -gt 0 ] || continue
+
+            while IFS= read -r rel; do
+                [ -n "$rel" ] || continue
+                [ -e "$image_door/dist/$rel" ] && continue
+
+                # Build output only. A file with any other extension - or
+                # none - is the door's own, whatever it is doing in dist/.
+                ext="${rel##*.}"
+                [ "$ext" = "$rel" ] && continue
+                prunable=""
+                for allowed in $PRUNABLE_DIST_EXTS; do
+                    [ "$ext" = "$allowed" ] && prunable=1 && break
+                done
+                [ -n "$prunable" ] || continue
+
+                rm -f "$volume_dist/$rel" || continue
+                pruned=$((pruned + 1))
+                echo "[Entrypoint]   Pruned orphan: Doors/$door_name/dist/$rel"
+            done <<EOF
+$(cd "$volume_dist" && find . \( -type f -o -type l \) | sed 's|^\./||')
+EOF
+
+            # Directories the pruning emptied are orphans too; dist/ itself
+            # stays whatever happens.
+            find "$volume_dist" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+        done
+        echo "[Entrypoint]   Pruned $pruned orphaned door dist file(s)"
+    }
+    if [ -d "$DEFAULT_DATA_DIR/Doors" ] && [ -d "$BBS_DATA_DIR/Doors" ]; then
+        echo "[Entrypoint] Mirroring image door dist/ directories..."
+        prune_image_door_dists
+    fi
+
     # Orphan cleanup: `cp -r src/. dst/` is additive — files removed from
     # the image are NOT removed from the volume. Anything that needs to
     # disappear at deploy time has to be deleted explicitly here.
