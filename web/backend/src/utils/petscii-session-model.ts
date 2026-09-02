@@ -118,3 +118,77 @@ export function disposePetsciiSessionModel(session: any): void {
   session.petsciiTransducer = undefined;
   session.screenSegments = undefined;
 }
+
+/**
+ * Marks the SOCKET, not the emit function.
+ *
+ * A function-keyed marker is lost the moment anything replaces `socket.emit`
+ * with an unmarked wrapper - which the modem emulator does unconditionally
+ * (`utils/modem-emulator.util.ts:276`). The reconnect block in
+ * `server/auth-socket-handlers.ts` runs right beside
+ * `getModemEmulator(socket).install()`, so a function-keyed guard would let a
+ * SECOND choke be installed on top of the modem wrapper and every
+ * `ansi-output` would be transduced TWICE. The three wrappers already in this
+ * codebase all key their marker on the socket - `_modemEmulatorInstalled`
+ * (`utils/modem-emulator.util.ts:267,291`), `_ansiFilterInstalled`
+ * (`services/login-post.service.ts:85,99`), `__ansiTapInstalled`
+ * (`server/socket-handlers.ts:139-140`) - and this follows them.
+ */
+const PETSCII_MODEL_CHOKE = Symbol('petsciiModelChoke');
+
+/**
+ * The web transport's model choke.
+ *
+ * Web does NO server-side PETSCII conversion - the browser converts
+ * (`packages/terminal/src/components/BBSTerminal.tsx`) - so this wrapper
+ * changes not one byte on the wire. It exists only so the server carries the
+ * same terminal model a telnet C64 gets for free from the connection emitter
+ * (`server/connection-emitter.ts`), because the `.seq` render encodes every
+ * substituted value against it.
+ *
+ * Installed at REGISTRATION, before login and before any door, so the door
+ * teardown pins (`tests/doors/door-min-columns-gate.test.ts:393,421`) - which
+ * capture `socket.emit` on their own fresh mock and require it back exactly -
+ * never see it; those tests never run `registerSocketHandlers`.
+ *
+ * Registration installs it LAST, so among the registration-time wrappers it is
+ * the OUTERMOST and sees everything the session log sees. Everything installed
+ * later - the ANSI filter (`services/login-post.service.ts:139`), the modem
+ * emulator (`:149`), a door adapter (`server/c64-door-adapter.ts:293`) - wraps
+ * ABOVE it and calls DOWN into it, which is why their output still reaches the
+ * model. The modem emulator queues `ansi-output` only
+ * (`utils/modem-emulator.util.ts:276-288`) and the client receives that same
+ * order, so a delayed string reaches the model in wire order too.
+ *
+ * The session is resolved AT EMIT TIME, not captured: a reconnecting browser
+ * gets a new socket.io socket which runs this registrar with a throwaway
+ * session, and `server/auth-socket-handlers.ts` swaps the restored session in
+ * afterwards (`setSession(socket.id, existingSession)`).
+ *
+ * A SESSION RESOLVER rather than an imported `getSession`:
+ * `server/session-manager.ts` imports `../index`, so a leaf util reaching back
+ * into `server/` for it would put a cycle under a module every handler already
+ * imports. Callers that hold a socket carrying its own live `session` - the
+ * connection emitter, the `tests/petscii/*` mocks - use the default.
+ */
+export function installPetsciiModelChoke(
+  socket: any,
+  resolveSession: () => any = () => (socket as any).session,
+): void {
+  if (!socket || typeof socket.emit !== 'function') return;
+  if ((socket as any)[PETSCII_MODEL_CHOKE]) return;   // SOCKET-keyed, not function-keyed
+  const downstream = socket.emit.bind(socket);
+  const choked = function (event: string, ...args: any[]): any {
+    const session = resolveSession();
+    if (session && sessionWantsPetscii(session)) {
+      if ((event === 'ansi-output' || event === 'petscii-output') && typeof args[0] === 'string') {
+        transducePetsciiAtChoke(session, args[0]);
+      } else if (event === 'petscii-bytes' && typeof args[0] === 'string') {
+        observePetsciiBytesAtChoke(session, args[0]);
+      }
+    }
+    return downstream(event, ...args);
+  };
+  socket.emit = choked as any;
+  (socket as any)[PETSCII_MODEL_CHOKE] = true;
+}

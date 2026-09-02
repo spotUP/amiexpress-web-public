@@ -38,6 +38,7 @@ import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
 import { disposePetsciiRenderCtx } from '../handlers/petscii-screen.render';
+import { installPetsciiModelChoke, flushPetsciiModel } from '../utils/petscii-session-model';
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
@@ -182,6 +183,16 @@ console.error('[Socket] EXECUTE_ON_CONNECT failed:', err)
     }
     return originalEmit(event, ...args);
   }) as any;
+
+  // The session's PETSCII terminal model. Installed LAST among the
+  // registration-time wrappers, so it is the OUTERMOST one and sees
+  // everything the session log sees; every wrapper installed later (the ANSI
+  // filter, the modem emulator, a C64 door adapter) sits ABOVE it and calls
+  // down into it. Inert for an ANSI session: one property read per emit and
+  // the arguments are passed through untouched. The session is resolved at
+  // emit time because a reconnect swaps a restored session in behind this
+  // socket id (`auth-socket-handlers.ts`).
+  installPetsciiModelChoke(socket, () => getSession(socket.id));
 
   // NOTE: Session initialization is handled by index.ts BEFORE calling this function
   // This function only registers event handlers - it should NOT create or initialize sessions
@@ -569,6 +580,16 @@ console.log('[socket-handlers] keys:state received:', data);
 console.error('No session found for socket:', socket.id);
       return;
     }
+
+    // Output stops, input begins - the same boundary index.ts:1144 uses for
+    // telnet. A trailing bare CR held in the model resolves into its $9D walk
+    // here, so the model matches what the browser's own transducer did before
+    // it sent this key (BBSTerminal.tsx flushes on the same edge). Nothing is
+    // written to the wire: on web the flush output is a MODEL event only,
+    // because the browser produced the real bytes itself. That is the one
+    // place web and telnet differ, and it is why `flushPendingPetscii` stays a
+    // separate telnet-only function that writes.
+    flushPetsciiModel(session);
 
     // Capture user input for session log viewer
     sessionLogManager.captureInput(socket.id, data);

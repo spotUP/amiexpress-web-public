@@ -32,6 +32,7 @@ import { getSystemTime } from '../utils/date-time.util';
 import { beginLogoff } from './logoff';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
+import { installPetsciiModelChoke, disposePetsciiSessionModel } from '../utils/petscii-session-model';
 
 /**
  * Check password strength against MIN_PASSWORD_LENGTH and MIN_PASSWORD_STRENGTH tooltypes.
@@ -159,6 +160,25 @@ console.log('[Session Restore] Found existing session for user, rebinding to new
         // Update session with new socket ID
         existingSession.socketId = socket.id;
         setSession(socket.id, existingSession);
+
+        // Belt to registration's brace: the ONE place a restored session could
+        // otherwise land on an unwrapped socket. Socket-keyed, so it is a
+        // no-op when registration already installed one - and it goes in
+        // BEFORE getModemEmulator(socket).install() below, which replaces
+        // socket.emit with a wrapper of its own that the choke must sit under.
+        installPetsciiModelChoke(socket, () => getSessionBySocketId(socket.id));
+
+        // The browser rebuilt its canvas and its own transducer from scratch
+        // (BBSTerminal.tsx clearPetsciiSession/ensurePetsciiSession), so a
+        // model still describing the pre-disconnect screen would encode the
+        // first post-reconnect `.seq` value against a screen nobody has.
+        // DISPOSE, not reset: a `~SP`-paused `.seq` parks its remaining
+        // segments on `session.screenSegments` TOGETHER with a `petsciiCtx`
+        // holding this very machine (`handlers/screen.handler.ts`). Homing the
+        // machine while those segments stay parked would resume the pause
+        // against a cursor the segments were never encoded for. Disposal drops
+        // both; the model is recreated on next use.
+        disposePetsciiSessionModel(existingSession);
 
         // Clear any pending disconnect timer
         clearPendingDisconnect(String(user.id));
