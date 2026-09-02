@@ -598,3 +598,27 @@ export function parseWipeMCI(content: string): { wipeType: WipeType | null; cont
 
   return { wipeType, content: cleanedContent };
 }
+
+/**
+ * Whether this session's screens may play a wipe animation at all
+ * (C64/40-col plan, Task 8).
+ *
+ * A wipe is an 80-column effect by construction: `getWipeFrames` composes
+ * the screen into a grid, reveals it cell by cell, and emits each frame
+ * straight at the socket with its own clear-and-home. Those frames never
+ * pass the session reflow choke (`wrapForSession`) and never pass Task 7's
+ * menu reflow, so on a 40-column canvas the animation smeared the very
+ * screen the rest of this plan had just fitted - the board's own menu
+ * carries `~WX`.
+ *
+ * The answer is the effects-off principle Task 3/6 applied to the doors'
+ * glitch, typewriter and masthead animations at the XXS tier: on a C64 the
+ * effect does not run, and the screen paints directly. Nothing is re-sized
+ * or half-played. `petsciiMode === true` is the single source of truth for
+ * "is this a C64 caller" (the same gate `wrapForSession` and
+ * `sessionColumns` use), so an ANSI caller - at any width, including a
+ * narrow browser window - keeps every wipe it has today, byte for byte.
+ */
+export function wipeEffectsEnabled(session: { petsciiMode?: boolean } | null | undefined): boolean {
+  return session?.petsciiMode !== true;
+}

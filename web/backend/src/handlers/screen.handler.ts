@@ -44,7 +44,7 @@ import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
-import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe.util';
+import { parseWipeMCI, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer, type MciDispatchMap, type MciPrefixDispatchMap, applyMciWidth } from '../utils/mci-tokenizer.util';
@@ -1996,7 +1996,13 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // because inline mode emits content directly and sets parsed='',
     // preventing later wipe detection.
     const earlyWipeResult = parseWipeMCI(content);
-    const hasEarlyWipeAnimation = earlyWipeResult.wipeType !== null;
+    const wipeCodePresent = earlyWipeResult.wipeType !== null;
+    // Effects-off for a C64 caller (C64/40-col Task 8): the wipe does not
+    // run at all on a PETSCII session and the screen paints directly - the
+    // frames are composed 80 columns wide and go straight at the socket,
+    // past the reflow choke. The directive is still stripped below, so
+    // `~WX` never prints. An ANSI session is unaffected at any width.
+    const hasEarlyWipeAnimation = wipeCodePresent && wipeEffectsEnabled(session);
     // Use content without wipe code for MCI processing
     // If the file starts with a form feed (0x0C = Amiga "clear screen"), emit ESC[2J and strip it.
     // xterm.js treats 0x0C as a newline; on Amiga console.device it clears the screen.
@@ -2005,10 +2011,13 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
       : content;
     // When wipe is detected, disable inline mode so parsed contains full content for animation
     // (inline mode emits content directly and sets parsed='', breaking wipe animation)
-    const mciSocket = hasEarlyWipeAnimation ? undefined : socket;
-    if (hasEarlyWipeAnimation) {
+    // Inline MCI stays disabled whenever a wipe code is present, animation or
+    // not: the PETSCII reflow below needs the whole screen in `parsed` too.
+    const mciSocket = wipeCodePresent ? undefined : socket;
+    if (wipeCodePresent) {
       contentForMci = earlyWipeResult.content; // Remove wipe code from content before MCI processing
-      console.log(`[WIPE-EARLY] Detected wipe ${earlyWipeResult.wipeType} in ${screenName}, disabled inline mode`);
+      console.log(`[WIPE-EARLY] Detected wipe ${earlyWipeResult.wipeType} in ${screenName}, disabled inline mode`
+        + (hasEarlyWipeAnimation ? '' : ' (effects off for this session)'));
     }
 
     // === MCI Guard: allowMCI check (express.e:6800-6806) ===
