@@ -75,7 +75,9 @@ function wrapper({ children }: { children: ReactNode }) {
 async function openEditor(user: ReturnType<typeof userEvent.setup>) {
   render(<ScreenFilesPage />, { wrapper });
   await user.click(await screen.findByText('BBSTITLE'));
-  await user.click(await screen.findByRole('button', { name: /Edit Node1\/BBSTITLE\.txt/i }));
+  // The row opens the art; there is no Edit button any more.
+  const rows = await screen.findAllByText('Node1/BBSTITLE.txt');
+  await user.click(rows[0]);
   return screen.findByRole('dialog');
 }
 

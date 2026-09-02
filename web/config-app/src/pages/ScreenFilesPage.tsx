@@ -359,9 +359,7 @@ export function ScreenFilesPage() {
       header: 'File',
       value: res => res.file ?? '',
       cell: res => (res.file ? (
-        <button className="underline font-topaz" onClick={() => setOpenFile(res.file)}>
-          {res.file}
-        </button>
+        <span className="font-topaz underline">{res.file}</span>
       ) : (
         <span className="text-status-warn">nothing resolves</span>
       )),
@@ -371,38 +369,6 @@ export function ScreenFilesPage() {
       header: 'Variants',
       value: res => res.variants.join(' '),
       cell: res => <span className="font-topaz">{res.variants.join(' ')}</span>,
-    },
-    {
-      id: 'actions',
-      header: '',
-      align: 'right',
-      cell: res => {
-        if (!res.file) return null;
-        // The index already knows each file's format, so a row can say whether
-        // there is art to edit rather than opening an editor that refuses.
-        const format = data?.files[res.file]?.format;
-        const editable = format === 'ansi' || format === 'text';
-
-        return (
-          <span className="whitespace-nowrap">
-            {editable && (
-              <button
-                className="inline-flex items-center gap-1 underline mr-3"
-                aria-label={`Edit ${res.file}`}
-                onClick={() => { setOpenFile(res.file); setPendingEdit(res.file); }}
-              >
-                <Pencil size={14} /> Edit
-              </button>
-            )}
-            <a
-              className="inline-flex items-center gap-1 underline"
-              href={`/api/screens/file?path=${encodeURIComponent(res.file)}&download=1`}
-            >
-              <Download size={14} /> Download
-            </a>
-          </span>
-        );
-      },
     },
   ];
 
@@ -543,10 +509,21 @@ export function ScreenFilesPage() {
             the file name opens what the board knows about it.
           </p>
 
+          {/*
+            The ROW opens the art. "Make all screens open the edit dialog when
+            i click their lines in the table" - so there is no Edit button to
+            find, and a scope where nothing resolves has nothing to open.
+          */}
           <DataTable
             columns={resolutionColumns}
             rows={entry.resolutions}
             getRowId={res => `${res.scope}-${res.id}`}
+            onRowClick={res => {
+              if (!res.file) return;
+              setOpenFile(res.file);
+              const format = data?.files[res.file]?.format;
+              if (format === 'ansi' || format === 'text') setPendingEdit(res.file);
+            }}
           />
 
           {entry.duplicateGroups.map(group => (
@@ -629,6 +606,13 @@ export function ScreenFilesPage() {
           <ScreenEditor
             surface={editing}
             mci={file?.mci ?? []}
+            filePath={openFile ?? undefined}
+            // The page owns the CP437 bridge, so it decodes the picked file and
+            // hands the editor a surface. Nothing is written until Save.
+            onLoadFile={async chosen => {
+              const bytes = await readAsBase64(chosen);
+              setEditing(createSurface(await screenToCanvas(bytes)));
+            }}
             onChange={setEditing}
             // An edit produces bytes, and bytes go out the way an uploaded file
             // does - the same fan-out, the same backup, the same refusals. The

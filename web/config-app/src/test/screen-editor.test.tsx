@@ -91,7 +91,10 @@ function wrapper({ children }: { children: ReactNode }) {
 async function openTheFile(user: ReturnType<typeof userEvent.setup>) {
   render(<ScreenFilesPage />, { wrapper });
   await user.click(await screen.findByText('BBSTITLE'));
-  await user.click(await screen.findByRole('button', { name: 'Node1/BBSTITLE.txt' }));
+  // The resolution row is the affordance now, not a button in the cell. The
+  // path appears in the row and again in the dialog title, so take the row's.
+  const rows = await screen.findAllByText('Node1/BBSTITLE.txt');
+  await user.click(rows[0]);
 }
 
 describe('editing a screen in the browser', () => {
@@ -106,7 +109,6 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
     expect(await screen.findByTestId('ansi-canvas')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /^save$/i }));
@@ -125,7 +127,6 @@ describe('editing a screen in the browser', () => {
   it('saves what was drawn, not what was loaded', async () => {
     const user = userEvent.setup();
     await openTheFile(user);
-    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
 
     // A stroke on an empty row, in a colour the loaded screen does not carry.
     await user.click(screen.getByRole('button', { name: 'Bright green foreground' }));
@@ -151,7 +152,6 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
     await user.click(screen.getByRole('button', { name: /cancel editing/i }));
 
     expect(screen.queryByTestId('ansi-canvas')).toBeNull();
@@ -167,7 +167,6 @@ describe('editing a screen in the browser', () => {
 
     const user = userEvent.setup();
     await openTheFile(user);
-    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
 
     expect(await screen.findByText(/~CC_nosuchdoor - points at nothing/)).toBeTruthy();
   });
@@ -175,7 +174,6 @@ describe('editing a screen in the browser', () => {
   it('inserts a code at the cursor, as one thing the sysop can undo', async () => {
     const user = userEvent.setup();
     await openTheFile(user);
-    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
 
     await user.click(screen.getByRole('button', { name: 'List the conferences' }));
 
@@ -212,7 +210,8 @@ describe('reaching the editor', () => {
     render(<ScreenFilesPage />, { wrapper });
 
     await user.click(await screen.findByText('BBSTITLE'));
-    await user.click(await screen.findByRole('button', { name: /edit Node1\/BBSTITLE\.txt/i }));
+    // One click on the row - no Edit button in it, which is the point.
+    await user.click((await screen.findAllByText('Node1/BBSTITLE.txt'))[0]);
 
     expect(await screen.findByTestId('ansi-canvas')).toBeTruthy();
   });

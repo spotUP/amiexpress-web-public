@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Undo2, Redo2, Save, X } from 'lucide-react';
+import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
@@ -36,6 +36,16 @@ const BRUSHES = ['█', '▓', '▒', '░', '▀', '▄', '▌', '▐', ' '];
 
 export interface ScreenEditorProps {
   surface: EditorSurface;
+  /** The file being edited, so the editor can offer it for download. */
+  filePath?: string;
+  /**
+   * Replace the canvas from a local file the sysop picked.
+   *
+   * The bytes are decoded by the page, which owns the CP437 bridge; the editor
+   * only knows that a new surface arrived. Nothing is written until Save - this
+   * loads art INTO the editor, it does not replace the file on the board.
+   */
+  onLoadFile?: (file: File) => void;
   /** What the index knows about this file's MCI codes - which of them resolve. */
   mci?: MciReferenceShape[];
   onChange: (surface: EditorSurface) => void;
@@ -44,7 +54,9 @@ export interface ScreenEditorProps {
   onCancel: () => void;
 }
 
-export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: ScreenEditorProps) {
+export function ScreenEditor({
+  surface, mci = [], filePath, onLoadFile, onChange, onSave, onCancel,
+}: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Re-found on every change rather than tracked: a code is edited character by
@@ -228,7 +240,30 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
         </div>
       )}
 
-      <div className="flex items-center gap-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        {onLoadFile && (
+          <label className="inline-flex items-center gap-1 underline cursor-pointer">
+            <Upload size={14} /> Open a file into the editor
+            <input
+              type="file"
+              aria-label="Open a file into the editor"
+              className="hidden"
+              onChange={event => {
+                const chosen = event.target.files?.[0];
+                if (chosen) onLoadFile(chosen);
+                event.target.value = '';
+              }}
+            />
+          </label>
+        )}
+        {filePath && (
+          <a
+            className="inline-flex items-center gap-1 underline"
+            href={`/api/screens/file?path=${encodeURIComponent(filePath)}&download=1`}
+          >
+            <Download size={14} /> Download
+          </a>
+        )}
         <button type="button" className="inline-flex items-center gap-1 underline"
           onClick={() => onChange(undo(surface))}>
           <Undo2 size={14} /> Undo

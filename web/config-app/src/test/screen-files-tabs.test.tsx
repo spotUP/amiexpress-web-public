@@ -120,6 +120,7 @@ describe('Screen Files, tabbed', () => {
     await user.click(await screen.findByText('BBSTITLE'));
 
     const detail = await screen.findByTestId('screen-detail');
-    expect(within(detail).getByRole('button', { name: /Edit Node1\/BBSTITLE\.txt/i })).toBeTruthy();
+    // The resolution row names the file and opens it when clicked.
+    expect(within(detail).getByText('Node1/BBSTITLE.txt')).toBeTruthy();
   });
 });
