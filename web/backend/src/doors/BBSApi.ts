@@ -32,6 +32,7 @@ import { applyInstallMetadata, buildDoorList, DoorListEntry } from './door-list'
 import { deleteDoorAndRefresh } from './door-delete';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
+import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { listOnlineNodes, type OnlineNode } from './who-is-online';
@@ -214,11 +215,25 @@ export class BBSApi {
   }
 
   /**
-   * Get terminal dimensions (40x25 for PETSCII, 80x25 for ANSI)
+   * Get terminal dimensions (40x25 for PETSCII, 80x25 for ANSI).
+   *
+   * This is the ONLY geometry a TypeScript door ever sees: the SDK's
+   * `createScreen()` calls it (sdk/utils/blessed-helpers.ts:923) and sizes
+   * the blessed Screen from the answer, so a 40 here is what puts a door on
+   * the XXS tier (sdk/engines/ui/blessed/core/responsive-constants.ts).
+   *
+   * The width comes from `doorScreenWidth()` - the same single source of
+   * truth that answers BB_SCRWIDTH for 68K doors and sets launch-time
+   * lineWrap (amiga-emulation/xim/screen-width.util.ts). A PETSCII session
+   * is 40 columns even if `screenWidth` is missing or carries a stale 80
+   * (a web caller's xterm reports 80 before the caller answers `P`);
+   * anything else keeps exactly the width it had before, so 80-column
+   * doors are byte-for-byte unchanged.
    */
   getTerminalSize(): { width: number; height: number } {
+    const reported = this.session?.screenWidth;
     return {
-      width: this.session?.screenWidth || 80,
+      width: doorScreenWidth(this.session, reported && reported > 0 ? reported : 80),
       height: this.session?.screenHeight || 25
     };
   }
