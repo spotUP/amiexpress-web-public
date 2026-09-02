@@ -315,6 +315,9 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         bottom: 1, left: 0,
         width: '100%-2', height: 1,
         tags: true,
+        // As in layout.ts: a one-row hint carrying Panel's default border has no
+        // interior, and this line never told anybody how to leave the overlay.
+        border: undefined,
         style: { fg: 'white', bg: 'black' },
         content: '  [Enter] jet   [ESC] cancel',
     });

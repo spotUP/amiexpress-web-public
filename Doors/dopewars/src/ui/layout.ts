@@ -20,6 +20,10 @@ export function createLayout(session: any): Layout {
   const header = blessed.box({
     parent: screen, top: 0, left: 0, width: '100%', height: 1,
     tags: true,
+    // A bar, not a framed box: blessed.box builds a Panel, and Panel draws a
+    // line border when the caller names none. A one-row box with a frame has
+    // no interior, so this header has never shown a character of its content.
+    border: undefined,
     style: { fg: 'white', bg: 'blue' },
     content: '',
   });
