@@ -20,6 +20,14 @@ describe('looksLikeAsciiArt (port of web/backend/src/utils/ascii-art.util.ts)', 
     expect(looksLikeAsciiArt('Enter command you want HELP with [press <RETURN> to quit]->')).toBe(false);
     expect(looksLikeAsciiArt('files   browse a door\'s own files on disk')).toBe(false);
   });
+
+  it('the artChars >= 8 branch (>= 8 of |_/\\-() with ratio < 0.8) is reachable on its own', () => {
+    // 'a-b-c-d-e-f-g-h-i': 8 dashes (artChars), (letters+digits)/length = 9/17
+    // ~= 0.53 - clears the punctuationRatio>=0.6 branch (0.47<0.6) and the
+    // dead-by-construction symbolCount>=3&&ratio<0.4 branch (0.53 is not
+    // <0.4), so this line reaches the artChars branch specifically.
+    expect(looksLikeAsciiArt('a-b-c-d-e-f-g-h-i')).toBe(true);
+  });
 });
 
 describe('positionsCursorAbsolutely (port)', () => {
@@ -51,7 +59,7 @@ describe('classifyRow', () => {
     expect(classifyRow(row('Below are the available AmiExpress commands with brief descriptions.'))).toBe('prose');
   });
 
-  it('the ported heuristics call most colon-labelled stat rows ART (indent >= 4 with 2 symbols, or 2 long gaps with 3 symbols) - so they split, not gutter; a pack pins better', () => {
+  it('colon-labelled stat rows classify as ART, not TABLE (see classify.ts doc comment)', () => {
     expect(classifyRow(row('      uSeR nAME: Sysop                  dOWNLoADeD tODaY: 0 bYTeS'))).toBe('art');
     expect(classifyRow(row('  ND#/Calls    User/PhoneNumber                Location/Action'))).toBe('art');
   });

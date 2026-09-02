@@ -24,6 +24,27 @@ export function positionsCursorAbsolutely(line: string): boolean {
   return /\x1b\[[0-9;]*[HfABCDGdEFJKsu]/.test(line);
 }
 
+/**
+ * Most colon-labelled stat rows (e.g. "uSeR nAME: Sysop ... dOWNLoADeD tODaY:
+ * 0 bYTeS") are classified ART, not TABLE, by the indent/symbol-count and
+ * long-gap/symbol-count branches below - so they split as prose fragments
+ * rather than gutter-align as a table. classifyRow's fixture pack pins the
+ * better split; this is a known property of the ported heuristic, not a bug
+ * introduced here.
+ *
+ * Two branches below are dead by construction in the ORIGINAL heuristic and
+ * are kept anyway because this is a verbatim port (parity test proves the
+ * two copies stay identical, not that every branch is reachable):
+ * - `symbolCount >= 3 && ratio < 0.4`: whenever ratio < 0.4 and
+ *   trimmed.length >= 4, punctuationRatio (= 1 - ratio) is already >= 0.6,
+ *   so the punctuationRatio branch above always fires first; when
+ *   trimmed.length < 4, symbolCount >= 3 forces letters+digits === 0, so the
+ *   letters+digits===0 branch fires first instead.
+ * - `borderedLine`: its conditions (starts/ends with '|', symbolCount >= 4)
+ *   are a strict subset of `borderArt`'s (starts/ends with '|' or ':',
+ *   symbolCount >= 2), which is checked first and always matches whenever
+ *   borderedLine would.
+ */
 export function looksLikeAsciiArt(line: string): boolean {
   const trimmed = line.trim();
   if (trimmed.length === 0) {
