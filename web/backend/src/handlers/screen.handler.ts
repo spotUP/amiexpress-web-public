@@ -464,9 +464,9 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       if (!checkConfAccess(session.user, confId)) continue;
       num++;
       // C64/40-col Task 5c: narrow drops the 21-space centering indent and
-      // clips the name to the room a 39-column row leaves.
+      // clips the name to the room a 40-column row leaves.
       if (isNarrow(session)) {
-        confList += `  \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${conferences[i].name.substring(0, 32)}\x1b[0m\r\n`;
+        confList += `  \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${conferences[i].name.substring(0, 33)}\x1b[0m\r\n`;
         continue;
       }
       const confName = conferences[i].name.padEnd(30, ' ');
@@ -487,7 +487,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       // C64/40-col Task 5c: narrow is a SINGLE column - two 33-column
       // entries per row cannot fit 40 whatever the names are.
       if (isNarrow(session)) {
-        confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3, '0')}\x1b[34m] \x1b[0m${conferences[i].name.substring(0, 30)}\r\n`;
+        confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3, '0')}\x1b[34m] \x1b[0m${conferences[i].name.substring(0, 31)}\r\n`;
         continue;
       }
       const confName = conferences[i].name.padEnd(30, ' ');
@@ -510,7 +510,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
           const num = i + 1;
           const name = messageBases[i].name || 'Default';
           if (isNarrow(session)) {
-            msgBaseList += `  \x1b[32m${num}\x1b[33m) \x1b[35m${name.substring(0, 32)}\x1b[0m\r\n`;
+            msgBaseList += `  \x1b[32m${num}\x1b[33m) \x1b[35m${name.substring(0, 33)}\x1b[0m\r\n`;
             continue;
           }
           const namePadded = name.padEnd(30, ' ');
@@ -545,7 +545,7 @@ console.error('[parseMciCodes] Error getting message base list:', error);
           const num = i + 1;
           const name = messageBases[i].name || 'Default';
           if (isNarrow(session)) {
-            msgBaseDesc += `   \x1b[34m[\x1b[0m${num}\x1b[34m] \x1b[0m${name.substring(0, 30)}\r\n`;
+            msgBaseDesc += `   \x1b[34m[\x1b[0m${num}\x1b[34m] \x1b[0m${name.substring(0, 31)}\r\n`;
             continue;
           }
           msgBaseDesc += `   \x1b[34m[\x1b[0m${num}\x1b[34m] \x1b[0m${name.padEnd(30, ' ')}`;

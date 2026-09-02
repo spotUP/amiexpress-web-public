@@ -270,9 +270,12 @@ export function buildNodeStatusRow(
       `\x1b[34m|\x1b[33m ${nodeStr}  \x1b[34m|\x1b[33m ${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m`,
     ];
   }
+  // Clip the PLAIN fields, then colour: narrowClip counts raw characters,
+  // so clipping a string that already carries escapes would spend the row
+  // budget on invisible bytes (and could sever an escape sequence).
   return [
-    narrowClip(`\x1b[33m${nodeStr} ${nameStr.trimEnd()}\x1b[0m`, 60),
-    narrowClip(`\x1b[0m   ${actStr.trimEnd()}\x1b[0m`, 60),
+    `\x1b[33m${narrowClip(`${nodeStr} ${nameStr.trimEnd()}`)}\x1b[0m`,
+    `\x1b[0m${narrowClip(`   ${actStr.trimEnd()}`)}\x1b[0m`,
   ];
 }
 

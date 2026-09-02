@@ -5,7 +5,7 @@
  */
 
 import { BBSSession } from '../../index';
-import { isNarrow, narrowClip, narrowField, narrowRule } from '../../utils/table-format.util';
+import { isNarrow, narrowClip, narrowField, narrowMailRow, narrowRule } from '../../utils/table-format.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -278,18 +278,16 @@ export function buildMsgListRow(
   m: { msgNum: number; isPrivate: boolean; from: string; subject: string },
   narrow: boolean
 ): string[] {
-  const typeStr = m.isPrivate ? 'Private' : 'Public ';
-  const msgNumStr = String(m.msgNum).padStart(6, '0');
   if (!narrow) {
+    const typeStr = m.isPrivate ? 'Private' : 'Public ';
+    const msgNumStr = String(m.msgNum).padStart(6, '0');
     const fromPad = (m.from || '').substring(0, 29).padEnd(29);
     const subjPad = (m.subject || '').substring(0, 21).padEnd(21);
     return [`${msgNumStr} ${typeStr}  ${fromPad}  ${subjPad}\x1b[0m`];
   }
-  return [
-    `${msgNumStr} ${typeStr}`,
-    narrowClip(`  ${m.from || ''}`),
-    narrowClip(`  ${m.subject || ''}`),
-  ];
+  // Narrow: the shared stacked shape, so this table and the mail scan
+  // cannot drift apart at 40 columns.
+  return narrowMailRow(m);
 }
 
 /**
@@ -643,17 +641,27 @@ export function displayMessageNavigationPrompt(socket: any, session: BBSSession)
   const navStr = getMsgNavStr(messages, currentIndex);
 
   // express.e:12016-12020: [32mMsg. Options: [33mA[36m[,D][,M][36m,[33mF...[32m([0m str[32m )>:
-  emitText(socket, '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m');
+  //
+  // ONE string, ONE emit. Built as four emitText calls this prompt was 45
+  // printable columns that the session-width choke could never see: each
+  // chunk was short, so wrapForSession passed every one of them through and
+  // the C64 got a folded prompt. A prompt assembled in pieces defeats the
+  // choke by construction, so it is assembled here instead.
+  const del = checkSecurity(session.user, ACSPermission.DELETE_MESSAGE) ? ',\x1b[33mD\x1b[36m' : '';
+  const sysopRead = checkSecurity(session.user, ACSPermission.SYSOP_READ) ? ',\x1b[33mM\x1b[36m' : '';
+  const options =
+    `\x1b[32mMsg. Options: \x1b[33mA\x1b[36m${del}${sysopRead}` +
+    ',\x1b[33mF\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mQ\x1b[36m,\x1b[33m?\x1b[36m,\x1b[33m??\x1b[36m,\x1b[32m<\x1b[33mCR\x1b[32m>';
+  const navTail = ` \x1b[32m(\x1b[0m ${navStr}\x1b[32m )\x1b[0m>: `;
 
-  if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
-    emitText(socket, ',\x1b[33mD\x1b[36m');
+  if (isNarrow(session)) {
+    // 37 printable columns of option letters is a ROW (all forty are
+    // usable); the answer prompt the cursor rests on goes underneath.
+    emitText(socket, `\r\n${options}\r\n`);
+    emitText(socket, navTail.trimStart());
+  } else {
+    emitText(socket, `\r\n${options}${navTail}`);
   }
-
-  if (checkSecurity(session.user, ACSPermission.SYSOP_READ)) {
-    emitText(socket, ',\x1b[33mM\x1b[36m');
-  }
-
-  emitText(socket, ',\x1b[33mF\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mQ\x1b[36m,\x1b[33m?\x1b[36m,\x1b[33m??\x1b[36m,\x1b[32m<\x1b[33mCR\x1b[32m> \x1b[32m(\x1b[0m ' + navStr + '\x1b[32m )\x1b[0m>: ');
 
   session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
@@ -1017,11 +1025,20 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       isPrivate: msg.isPrivate
     };
 
-    // Prompt for From name - express.e:11611-11613
-    emitText(socket, '\r\n');
-    emitText(socket, `     ${AnsiUtil.colorize('From', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} `);
-    emitText(socket, `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Enter', 'yellow')}${AnsiUtil.colorize(')', 'green')}`);
-    emitText(socket, `=${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize(msg.author, 'yellow')}${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize('?', 'green')} `);
+    // Prompt for From name - express.e:11611-11613.
+    // ONE string, ONE emit: split across four emitText calls the choke saw
+    // only short chunks and never the ~43-column prompt they concatenate
+    // into. Narrow drops the five-space indent and clips the author name so
+    // the cursor still rests inside the row.
+    const fromNarrow = isNarrow(session);
+    const author = fromNarrow ? narrowClip(msg.author || '', 21) : (msg.author || '');
+    emitText(
+      socket,
+      '\r\n' +
+        `${fromNarrow ? '' : '     '}${AnsiUtil.colorize('From', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} ` +
+        `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Enter', 'yellow')}${AnsiUtil.colorize(')', 'green')}` +
+        `=${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize(author, 'yellow')}${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize('?', 'green')} `
+    );
     session.subState = LoggedOnSubState.MSG_EDIT_HEADER_FROM;
     return;
   }

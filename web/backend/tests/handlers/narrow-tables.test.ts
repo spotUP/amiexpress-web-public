@@ -36,7 +36,13 @@ jest.mock('../../src/utils/flag-pause.util', () => ({
 import { flushOutput } from '../../src/utils/output.util';
 import { printableLength } from '../../src/utils/wrap-for-session.util';
 
-const NARROW_LINE_WIDTH = 39;
+// WIDTH RULING (2026-09-02): a CRLF-terminated ROW may use all forty
+// columns - the PETSCII transducer latches pendingWrap on the 40th glyph and
+// newline() consumes the latch without emitting a $0D of its own
+// (sdk/petscii/ansi-to-petscii.ts:108, :259-263, :289-301). A trailing
+// PROMPT, which no CRLF follows and on which the cursor rests, stops at 39.
+const NARROW_ROW_WIDTH = 40;
+const NARROW_PROMPT_WIDTH = 39;
 
 let socketSeq = 0;
 
@@ -81,14 +87,24 @@ function makeDriver(sessionOverrides: any = {}): Driver {
   };
 }
 
-/** Every emitted line fits a C64 row. */
+/** Every one of these lines is a ROW: forty columns are available. */
 function expectFitsNarrow(lines: string[]): void {
   for (const line of lines) {
-    expect({ line, columns: printableLength(line) }).toEqual({
-      line,
-      columns: expect.any(Number),
-    });
-    expect(printableLength(line)).toBeLessThanOrEqual(NARROW_LINE_WIDTH);
+    expect(printableLength(line)).toBeLessThanOrEqual(NARROW_ROW_WIDTH);
+  }
+}
+
+/**
+ * A whole narrow screen: everything before the last CRLF is a row (<= 40),
+ * and whatever trails the last CRLF is the prompt the cursor rests on
+ * (<= 39). `skip` drops lines this task does not own.
+ */
+function expectNarrowScreen(out: string, skip: (line: string) => boolean = () => false): void {
+  const parts = out.split('\r\n');
+  const prompt = parts.pop() ?? '';
+  expectFitsNarrow(parts.filter((l) => l.length > 0 && !skip(l)));
+  if (prompt.length > 0 && !skip(prompt)) {
+    expect(printableLength(prompt)).toBeLessThanOrEqual(NARROW_PROMPT_WIDTH);
   }
 }
 
@@ -146,7 +162,7 @@ describe('5a file search listing (file.handler.ts handleFileSearch)', () => {
     await driveSearch(driver);
 
     const out = driver.output();
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expectNarrowScreen(out);
 
     // The exact block, so a row that only fits because the prose choke
     // folded it fails here: the choke's break lands in a different place.
@@ -162,7 +178,7 @@ describe('5a file search listing (file.handler.ts handleFileSearch)', () => {
         .map((l: string) => `${l}\r\n`)
         .join('') + '\r\n';
     expect(out).toContain(expected);
-    expect(out).toContain('ALKYS241.LHA'.padEnd(35) + ' 88K\r\n');
+    expect(out).toContain('ALKYS241.LHA'.padEnd(36) + ' 88K\r\n');
   });
 });
 
@@ -214,11 +230,7 @@ describe('5a new files listing (file.handler.ts displayNewFiles)', () => {
     // table row: it reaches the emitText choke, which wraps at the session
     // width of 40. Task 5 lays out TABLES; the banner is excluded here so
     // this test fails for a table row and nothing else.
-    expectFitsNarrow(
-      out
-        .split('\r\n')
-        .filter((l) => l.length > 0 && !l.startsWith('Searching for files newer than'))
-    );
+    expectNarrowScreen(out, (l) => l.startsWith('Searching for files newer than'));
 
     const [nameLine, ...descLines] = narrowFileLines({
       filename: NEW_FILE.filename,
@@ -292,9 +304,15 @@ describe('5b LIVECHAT WHO (chat-commands.handler.ts showOnlineUsers)', () => {
     await driveChat(driver, 'WHO');
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
-    expect(out).toContain('ZAPHOD');
-    expect(out).toContain('Available');
+    expectNarrowScreen(out);
+
+    // Exact banner, header and row - the Real Name column is gone and the
+    // full English status word survives.
+    expect(out).toContain('\x1b[36m' + '═'.repeat(40) + '\x1b[0m\r\n');
+    expect(out).toContain(
+      '\x1b[33mUsername          Status\r\n' + '================  =============\r\n\x1b[0m'
+    );
+    expect(out).toContain('ZAPHOD'.padEnd(16) + '  \x1b[32mAvailable\x1b[0m\r\n');
   });
 });
 
@@ -321,14 +339,16 @@ describe('5b LIVECHAT picker (chat-commands.handler.ts renderChatUserList)', () 
     await driveChat(driver, '');
     const out = driver.output();
 
-    expectFitsNarrow(
-      out
-        .replace('\x1b[2J\x1b[H', '')
-        .split('\r\n')
-        .filter((l) => l.length > 0)
+    expectNarrowScreen(out.replace('\x1b[2J\x1b[H', ''));
+
+    expect(out).toContain('\x1b[33mUsername          Status\x1b[0m\r\n');
+    expect(out).toContain('\x1b[33m' + '─'.repeat(40) + '\x1b[0m\r\n');
+    // Exact selected row: inverse video, no Real Name column.
+    expect(out).toContain(
+      '\x1b[44m\x1b[37m> ' + 'ZAPHOD'.padEnd(16) + '  ' + 'Available'.padEnd(13) + '\x1b[0m\r\n'
     );
-    expect(out).toContain('ZAPHOD');
-    expect(out).toContain('\x1b[44m\x1b[37m>');
+    // ASCII footer: the arrow glyphs are not PETSCII characters.
+    expect(out).toContain('Up/Dn select, ENTER chat, Q quit');
   });
 });
 
@@ -370,10 +390,15 @@ describe('5b user list (account.handler.ts displayUserList)', () => {
     await driveUserList(driver);
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
-    expect(out).toContain('ZAPHOD');
-    expect(out).toContain('255');
-    expect(out).toContain('Betelgeuse Five');
+    expectNarrowScreen(out);
+
+    // Exact header, rule and the two stacked rows.
+    expect(out).toContain('\x1b[32mUsername         Lvl  Last Login\x1b[0m\r\n');
+    expect(out).toContain('\x1b[36m' + '='.repeat(40) + '\x1b[0m\r\n');
+    expect(out).toContain(
+      'ZAPHOD'.padEnd(16) + ' ' + '255'.padStart(3) + '  ' + LIST_USER.lastLogin.toLocaleDateString() + '\r\n'
+    );
+    expect(out).toContain('  Betelgeuse Five\r\n');
   });
 });
 
@@ -428,9 +453,12 @@ describe('5b room members (room-commands.handler.ts whoInRoom)', () => {
     await driveWho(driver);
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
-    expect(out).toContain('ZAPHOD');
-    expect(out).toContain('[MOD]');
+    expectNarrowScreen(out);
+
+    // Exact rule and row: the Joined column is gone, the ASCII flag stays.
+    expect(out).toContain('─'.repeat(40));
+    expect(out).toContain('ZAPHOD'.padEnd(16) + '[MOD]\r\n');
+    expect(out).not.toContain(joinedAt);
   });
 });
 
@@ -469,7 +497,7 @@ describe('5c transfer protocol menu (info-commands.handler.ts, W option 11)', ()
     await driveProtocolMenu(driver);
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expectNarrowScreen(out);
     // Exact rows: a menu that only fits because the prose choke folded the
     // 80-column descriptions fails here.
     expect(out).toContain('\x1b[34m[1] \x1b[0mZMODEM (recommended)\r\n');
@@ -547,8 +575,26 @@ describe('5c conference / message-base MCI lists (screen.handler.ts parseMciCode
       const lines = parsed.split('\r\n').filter((l) => l.length > 0);
       expect(lines.length).toBe(2); // single column: one entry per row
       expectFitsNarrow(lines);
-      expect(parsed).toContain(code.startsWith('~C') ? 'Amiga Demo Scene' : 'General Discussion');
     }
+  });
+
+  test('40-col: the exact single-column rows', async () => {
+    expect(await render(narrow(), '~CL.')).toBe(
+      '  \x1b[32m  1\x1b[33m) \x1b[35mAmiga Demo Scene Chat!\x1b[0m\r\n' +
+        '  \x1b[32m  2\x1b[33m) \x1b[35mCommodore 64 Programming\x1b[0m\r\n'
+    );
+    expect(await render(narrow(), '~CD.')).toBe(
+      '   \x1b[34m[\x1b[0m001\x1b[34m] \x1b[0mAmiga Demo Scene Chat!\r\n' +
+        '   \x1b[34m[\x1b[0m002\x1b[34m] \x1b[0mCommodore 64 Programming\r\n'
+    );
+    expect(await render(narrow(), '~ML.')).toBe(
+      '  \x1b[32m1\x1b[33m) \x1b[35mGeneral Discussion\x1b[0m\r\n' +
+        '  \x1b[32m2\x1b[33m) \x1b[35mAmiga Coding Corner\x1b[0m\r\n'
+    );
+    expect(await render(narrow(), '~MD.')).toBe(
+      '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mGeneral Discussion\r\n' +
+        '   \x1b[34m[\x1b[0m2\x1b[34m] \x1b[0mAmiga Coding Corner\r\n'
+    );
   });
 });
 
@@ -630,17 +676,64 @@ describe('5d message reader (messaging.handler.ts displaySingleMessage + msg lis
     await messaging.displaySingleMessage(driver.socket, driver.session, 0);
     const out = driver.output();
 
-    // The "Msg. Options:" navigation prompt is chrome, not a table, and it
-    // is emitted in three separate emitText chunks (messaging.handler.ts
-    // :646-656) - each chunk is short, so the Task 4 width choke never sees
-    // the 45-column line they concatenate into. Out of Task 5's scope;
-    // recorded in the task report.
-    expectFitsNarrow(
-      out.split('\r\n').filter((l) => l.length > 0 && !l.includes('Msg. Options:'))
-    );
+    // Nothing excluded: the "Msg. Options:" prompt used to be four separate
+    // emitText calls, each short enough that the session-width choke never
+    // saw the 45-column line they concatenated into. It is one string now,
+    // so it is held to the ruling like everything else.
+    expectNarrowScreen(out);
     expect(out).toContain('Number : 42');
     expect(out).toContain('From   : ZAPHOD BEEBLEBROX');
     expect(out).toContain('Subject: Your Amiga demo is ready');
+  });
+
+  test('40-col: the reader prompt is a row of letters plus a 39-column answer line', async () => {
+    const driver = narrow();
+    const messaging = prepare(driver);
+    driver.session.user.securityFlags = 'T'.repeat(64); // D and M offered too
+    await messaging.displaySingleMessage(driver.socket, driver.session, 0);
+    messaging.displayMessageNavigationPrompt(driver.socket, driver.session);
+    const out = driver.output();
+
+    expectNarrowScreen(out);
+    // The letters keep every option, including the permission-gated D and M.
+    expect(out).toContain(
+      '\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mM\x1b[36m' +
+        ',\x1b[33mF\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mQ\x1b[36m,\x1b[33m?\x1b[36m,\x1b[33m??\x1b[36m,\x1b[32m<\x1b[33mCR\x1b[32m>\r\n'
+    );
+    // ...and the cursor rests on a separate, shorter answer line.
+    expect(out.endsWith('\x1b[32m(\x1b[0m QUIT\x1b[32m )\x1b[0m>: ')).toBe(true);
+  });
+
+  test('EH From prompt: one emit, 80-col byte-identical, narrow inside the row', async () => {
+    const wideDriver = wide();
+    const messagingWide = prepare(wideDriver);
+    wideDriver.session.user.securityFlags = 'T'.repeat(64);
+    await messagingWide.handleMessageReaderNav(wideDriver.socket, wideDriver.session, 'EH');
+    expect(wideDriver.output()).toContain(
+      '\r\n     \x1b[36mFrom\x1b[0m\x1b[33m:\x1b[0m ' +
+        '\x1b[32m(\x1b[0m\x1b[33mEnter\x1b[0m\x1b[32m)\x1b[0m' +
+        '=\x1b[32m\'\x1b[0m\x1b[33mZAPHOD BEEBLEBROX\x1b[0m\x1b[32m\'\x1b[0m\x1b[32m?\x1b[0m '
+    );
+
+    const narrowDriver = narrow();
+    const messagingNarrow = prepare(narrowDriver);
+    narrowDriver.session.user.securityFlags = 'T'.repeat(64);
+    await messagingNarrow.handleMessageReaderNav(narrowDriver.socket, narrowDriver.session, 'EH');
+    expectNarrowScreen(narrowDriver.output());
+  });
+
+  test('80-col PIN: the reader prompt is byte-identical to the four-chunk original', async () => {
+    const driver = wide();
+    const messaging = prepare(driver);
+    driver.session.user.securityFlags = 'T'.repeat(64);
+    messaging.displayMessageNavigationPrompt(driver.socket, driver.session);
+
+    expect(driver.output()).toBe(
+      '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m' +
+        ',\x1b[33mD\x1b[36m' +
+        ',\x1b[33mM\x1b[36m' +
+        ',\x1b[33mF\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mQ\x1b[36m,\x1b[33m?\x1b[36m,\x1b[33m??\x1b[36m,\x1b[32m<\x1b[33mCR\x1b[32m> \x1b[32m(\x1b[0m QUIT\x1b[32m )\x1b[0m>: '
+    );
   });
 
   test('80-col PIN: msg list row (express.e:8864), byte-identical', () => {
@@ -724,9 +817,13 @@ describe('5d node status (message-commands.handler.ts handleNodeManagementComman
     driveNodeStatus(driver);
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
-    expect(out).toContain('ZAPHOD');
-    expect(out).toContain('IDLE');
+    expectNarrowScreen(out);
+
+    // Exact rows: no box drawing, node+handle then the action indented.
+    expect(out).toContain(`\x1b[34m${'-'.repeat(40)}\x1b[0m\r\n`);
+    expect(out).toContain('\x1b[33m02 ZAPHOD\x1b[0m\r\n');
+    expect(out).toContain('\x1b[0m   IDLE\x1b[0m\r\n');
+    expect(out).not.toContain('|');
   });
 });
 
@@ -754,7 +851,7 @@ describe('5d new-user computer picker (new-user.handler.ts handleLinesInput)', (
     const choices = await drivePicker(driver);
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expectNarrowScreen(out);
     expect(out).toContain(` 1> ${choices[0]}\r\n`);
     expect(out).toContain(` 2> ${choices[1]}\r\n`);
   });
@@ -801,9 +898,13 @@ describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () =
     await driveFileStatus(driver);
     const out = driver.output();
 
-    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
-    expect(out).toContain('UL');
-    expect(out).toContain('DL');
+    expectNarrowScreen(out);
+
+    // Exact stacked block for the one conference.
+    expect(out).toContain('\x1b[33m   1>\x1b[0m\r\n');
+    expect(out).toContain(` UL ${'12'.padEnd(7)} ${'1234567'.padStart(14)}\r\n`);
+    expect(out).toContain(` DL ${'34'.padEnd(7)} ${'7654321'.padStart(14)}\r\n`);
+    expect(out).toContain(' Avail Infinite  3:1\r\n');
   });
 });
 
@@ -834,7 +935,7 @@ describe('5d doors list (door.handler.ts displayDoorMenu)', () => {
     );
   });
 
-  test('40-col: masthead, rule and rows fit 39 columns, [40] marker kept', async () => {
+  test('40-col: masthead, rule and rows fit the row width, [40] marker kept', async () => {
     const driver = narrow();
     await driveDoorMenu(driver);
     const out = driver.output();
@@ -850,7 +951,7 @@ describe('5d doors list (door.handler.ts displayDoorMenu)', () => {
     // The [40] marker (Task 1) must survive the narrow row's truncation.
     const door = require('../../src/handlers/door.handler');
     const narrowRow = door.formatDoorLine(DOORS[0], false, true).replace(/\x1b\[2K/g, '');
-    expect(printableLength(narrowRow)).toBeLessThanOrEqual(NARROW_LINE_WIDTH);
+    expect(printableLength(narrowRow)).toBeLessThanOrEqual(NARROW_ROW_WIDTH);
     expect(narrowRow).toContain('PENGO');
     expect(narrowRow).toContain('[40]');
   });

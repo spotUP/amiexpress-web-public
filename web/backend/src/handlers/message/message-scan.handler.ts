@@ -5,7 +5,7 @@
  */
 
 import { checkSecurity } from '../../utils/acs.util';
-import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
+import { isNarrow, narrowMailRow, narrowRule } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -65,18 +65,14 @@ export function buildMailScanRow(
   m: { isPrivate: boolean; from: string; subject: string; msgNum: number },
   narrow: boolean
 ): string[] {
-  const status = m.isPrivate ? 'Private' : 'Public ';
-  const num = String(m.msgNum).padStart(6, '0');
   if (!narrow) {
+    const status = m.isPrivate ? 'Private' : 'Public ';
+    const num = String(m.msgNum).padStart(6, '0');
     const from = (m.from || '').substring(0, 29).padEnd(29);
     const subj = (m.subject || '').substring(0, 21).padEnd(21);
     return [`${status}  ${from}  ${subj}  \x1b[0m${num}`];
   }
-  return [
-    `${num} ${status}`,
-    narrowClip(`  ${m.from || ''}`),
-    narrowClip(`  ${m.subject || ''}`),
-  ];
+  return narrowMailRow(m);
 }
 
 /**
