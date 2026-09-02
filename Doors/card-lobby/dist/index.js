@@ -21,6 +21,8 @@ const uno_engine_1 = require("./lib/uno-engine");
 const lib_1 = require("./lib");
 const activity_hints_1 = require("./lib/activity-hints");
 const live_chat_1 = require("./lib/live-chat");
+const achievements_1 = require("./lib/achievements");
+const desktop_layout_1 = require("./lib/desktop-layout");
 const metadata_1 = require("./lib/metadata");
 const managers_1 = require("./managers");
 const announce_1 = require("@amiexpress/bbs-door-sdk/core/announce");
@@ -340,6 +342,7 @@ class CardLobbyApp {
             showLeaderboardWindow: () => this.dialogManager.showLeaderboardWindow(this.profiles),
             showAchievementsWindow: () => this.dialogManager.showAchievementsWindow(this.currentProfile),
             showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
+            showCardStyleWindow: () => this.chooseCardStyle(),
             exitDoor: this.exitDoor.bind(this),
             runAction: this.runAction.bind(this),
         });
@@ -478,6 +481,8 @@ class CardLobbyApp {
         this.lobby = lobby;
         this.profiles = profiles;
         this.currentProfile = profile;
+        // The renderer draws cards the way this player asked for them.
+        this.applyCardPreferences();
         let changed = false;
         lobby.tables.forEach((table) => {
             const updateResult = this.syncBotsForTable(table);
@@ -704,6 +709,28 @@ class CardLobbyApp {
         this.logWindow.log(message);
         this.updateActivityPanel();
     }
+    /**
+     * Ask how this player wants cards drawn, remember it, and redraw.
+     *
+     * The preference lives on the profile, so it follows the player between
+     * sessions and between games - the same choice covers a poker board and
+     * an UNO discard pile.
+     */
+    async chooseCardStyle() {
+        const chosen = await this.dialogManager.showCardStyleWindow(this.currentProfile, Boolean(this.session.bbs?.unicodeCapable));
+        if (!chosen || !this.currentProfile)
+            return;
+        this.currentProfile.cards = chosen;
+        this.applyCardPreferences();
+        await this.persistState();
+        this.updateAllPanels();
+    }
+    /** Hand the renderer the player's card preferences and this terminal's reach. */
+    applyCardPreferences() {
+        this.uiManager.cardPreferences = this.currentProfile?.cards;
+        this.uiManager.unicodeCapable =
+            Boolean(this.session.bbs?.unicodeCapable);
+    }
     emitLiveChat(message) {
         (0, live_chat_1.emitLiveChatAnnouncement)(this.session, message);
     }
@@ -883,130 +910,10 @@ class CardLobbyApp {
         }
     }
     updateTablePanel() {
-        if (!this.lobby || !this.currentProfile)
-            return;
-        const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
-        if (!tableId) {
-            this.flopPanel.hide();
-            this.playersPanel.hide();
-            this.handPanel.hide();
-            this.activityPanel.hide();
-            this.tableActions.hide();
-            this.tableContent.show();
-            this.tableContent.setContent([
-                'Select a table to view details.',
-                '',
-                `{${lib_1.UI_THEME.accent}-fg}Quick start{/}:`,
-                '',
-                // One key per line: the panel is 52 columns wide at 80x25 and a
-                // single sentence naming all three ran off the right edge.
-                `  {${lib_1.UI_THEME.accent}-fg}C{/}      create a table`,
-                `  {${lib_1.UI_THEME.accent}-fg}ENTER{/}  join the highlighted table`,
-                `  {${lib_1.UI_THEME.accent}-fg}O{/}      observe it`,
-                `  {${lib_1.UI_THEME.accent}-fg}R{/}      refresh the lobby`,
-            ].join('\n'));
-            this.updateTableActions();
-            return;
-        }
-        const table = this.findTableById(tableId);
-        if (!table) {
-            this.flopPanel.hide();
-            this.playersPanel.hide();
-            this.handPanel.hide();
-            this.activityPanel.hide();
-            this.tableActions.hide();
-            this.tableContent.show();
-            this.tableContent.setContent(`Table not found. Press {${lib_1.UI_THEME.accent}-fg}R{/} to refresh the lobby.`);
-            this.updateTableActions();
-            return;
-        }
-        const isObserver = this.tableFlow.isObserverForTable(table, this.currentProfile.userId);
-        const showGameView = this.viewMode === 'table' && this.currentProfile?.currentTableId === table.id;
-        if (showGameView) {
-            this.tableContent.hide();
-            this.flopPanel.show();
-            this.playersPanel.show();
-            this.handPanel.show();
-            this.activityPanel.show();
-            this.tableActions.show();
-            this.layoutTablePanels();
-            // Detect game type and render appropriately
-            if ((0, lib_1.isUnoTable)(table)) {
-                this.gameViews.renderUnoGameView(table);
-            }
-            else {
-                this.gameViews.renderPokerGameView(table);
-            }
-            this.updateTableActions();
-            this.updateTopInfoBar();
-            this.screen.render();
-            return;
-        }
-        this.flopPanel.hide();
-        this.playersPanel.hide();
-        this.handPanel.hide();
-        this.activityPanel.hide();
-        this.tableActions.hide();
-        this.tableContent.show();
-        const contentWidth = Math.max(40, this.tableContent.iwidth ?? 78);
-        const gap = 2;
-        const minLeftWidth = 24;
-        const minRightWidth = 20;
-        const leftLines = [];
-        const rightLines = [];
-        rightLines.push(`{${lib_1.UI_THEME.accent}-fg}Table #${table.id}{/} - ${table.gameName}`);
-        rightLines.push(`Stakes: ${table.stakesLabel}  Buy-in: ${table.buyIn}`);
-        rightLines.push(`Status: ${table.status}  Players: ${table.players.filter((p) => p.role === 'player').length}/${table.maxPlayers}`);
-        if (table.isPrivate && table.inviteCode) {
-            rightLines.push(`Invite: ${table.inviteCode}`);
-        }
-        if (isObserver) {
-            rightLines.push('Mode: Observer');
-        }
-        if (table.lastHand) {
-            const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
-            rightLines.push('');
-            rightLines.push(`Last hand pot: ${table.lastHand.pot}`);
-            rightLines.push(`Last winners: ${winners || 'TBD'}`);
-        }
-        rightLines.push('');
-        rightLines.push('Seats:');
-        const seated = table.players
-            .filter((player) => player.role === 'player')
-            .sort((a, b) => a.seat - b.seat);
-        seated.forEach((player) => {
-            const tag = (0, lib_1.isBotPlayer)(player) ? '*' : ' ';
-            const name = `${player.username}${tag}`.slice(0, 10);
-            rightLines.push(`${(0, lib_1.pad)(String(player.seat + 1), 2)} ${(0, lib_1.pad)(name, 10)} ${(0, lib_1.pad)(String(player.stack), 5)}`);
-        });
-        if (table.observers.length > 0) {
-            rightLines.push('');
-            rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
-        }
-        rightLines.push('');
-        rightLines.push(`{${lib_1.UI_THEME.accent}-fg}Actions{/}: ENTER Join  O Observe`);
-        rightLines.push(`{${lib_1.UI_THEME.accent}-fg}More{/}: C Create  R Refresh  F Filter`);
-        rightLines.push(`{${lib_1.UI_THEME.dim}-fg}Auto-deal starts when enough players are seated.{/}`);
-        let lines = [];
-        if (leftLines.length === 0) {
-            lines = rightLines;
-        }
-        else {
-            const maxLeftWidth = Math.max(minLeftWidth, ...leftLines.map(lib_1.visibleWidth));
-            const canUseColumns = maxLeftWidth + gap + minRightWidth <= contentWidth;
-            if (canUseColumns) {
-                const leftWidth = Math.min(maxLeftWidth, contentWidth - minRightWidth - gap);
-                const rightWidth = Math.max(minRightWidth, contentWidth - leftWidth - gap);
-                lines = (0, lib_1.mergeColumns)(leftLines, rightLines, leftWidth, rightWidth, gap);
-            }
-            else {
-                lines = [...leftLines, '', ...rightLines];
-            }
-        }
-        this.tableContent.setContent(lines.join('\n'));
-        this.tableContent.resetScroll();
-        this.updateTableActions();
-        this.screen.render();
+        // The painting lives with the other table painting
+        // (managers/GameViews.ts); this door is at the repo's line ceiling
+        // and has been shaved four times already to stay under it.
+        this.gameViews.updateTablePanel();
     }
     getActionContext() {
         if (!this.currentProfile || !this.lobby) {
@@ -1388,7 +1295,12 @@ class CardLobbyApp {
         const { width, leftWidth, rightWidth, mainHeight, tableHeight } = this.layout;
         // LIVE properties, not `options`: that seeds a widget once and is never
         // read again, so writing it left the window as narrow as it was built.
-        if (this.viewMode === 'table') {
+        // A terminal with room for everything shows everything: the lobby and
+        // its chat log stay where they are and the table takes the rest, rather
+        // than the door hiding half of itself on a screen that could hold it
+        // (lib/desktop-layout.ts).
+        const roomForEverything = (0, desktop_layout_1.hasRoomForEverything)(Number(this.screen.width) || 80, Number(this.screen.height) || 25);
+        if (this.viewMode === 'table' && !roomForEverything) {
             this.lobbyWindow.hide();
             this.tableWindow.show();
             this.tableWindow.left = 0;
@@ -1478,49 +1390,12 @@ class CardLobbyApp {
         this.updateAllPanels();
     }
     handleAchievementUnlocks(profile) {
-        const unlocked = new Set(profile.achievements);
-        const addAchievement = (id) => {
-            if (unlocked.has(id))
-                return;
-            const def = lib_1.ACHIEVEMENTS.find((achievement) => achievement.id === id);
-            if (!def)
-                return;
-            unlocked.add(id);
-            profile.achievements.push(id);
-            profile.wallet.chips += def.reward;
-            profile.wallet.lifetimeEarned += def.reward;
-            this.pushNotice(`Achievement unlocked: ${def.name} (+${def.reward})`);
-        };
-        if (profile.stats.handsPlayed >= 1)
-            addAchievement('first_hand');
-        if (profile.stats.wins >= 1)
-            addAchievement('first_win');
-        if (profile.stats.bestWinStreak >= 3)
-            addAchievement('hot_streak');
-        if (profile.stats.biggestPot >= 500)
-            addAchievement('big_pot');
-        if (profile.stats.handsPlayed >= 25)
-            addAchievement('grinder');
+        for (const unlocked of (0, achievements_1.unlockAchievements)(profile)) {
+            this.pushNotice(`Achievement unlocked: ${unlocked.name} (+${unlocked.reward})`);
+        }
     }
     updateStatsAfterHand(profile, delta, pot) {
-        profile.stats.handsPlayed += 1;
-        profile.stats.net += delta;
-        profile.stats.daily.hands += 1;
-        profile.stats.weekly.hands += 1;
-        profile.stats.daily.net += delta;
-        profile.stats.weekly.net += delta;
-        if (delta > 0) {
-            profile.stats.wins += 1;
-            profile.stats.daily.wins += 1;
-            profile.stats.weekly.wins += 1;
-            profile.stats.winStreak += 1;
-            profile.stats.bestWinStreak = Math.max(profile.stats.bestWinStreak, profile.stats.winStreak);
-        }
-        else if (delta < 0) {
-            profile.stats.losses += 1;
-            profile.stats.winStreak = 0;
-        }
-        profile.stats.biggestPot = Math.max(profile.stats.biggestPot, pot);
+        (0, achievements_1.recordHandResult)(profile, delta, pot);
     }
     // Game state delegation methods
     async finalizeHoldemHand(table, engine, beforeStacks) {

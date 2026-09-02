@@ -10,8 +10,9 @@
 import type { Box, Log, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { type PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoGameEngine } from '../lib/uno-engine';
-import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn } from '../lib';
+import { type LobbyTable, type PlayerProfile, isBotPlayer, isUnoTable, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
 import type { UIManager } from './UIManager';
+import { UI_THEME } from '../lib/constants';
 
 export interface GameViewHost {
   readonly uiManager: UIManager;
@@ -31,10 +32,162 @@ export interface GameViewHost {
   renderBoardAndHand(boardCards: any[], playerHand: any[], flopCardSize: string, handCardSize: string, hasActiveHand: boolean): void;
   runDealAnimation(boardCards: any[], playerHand: any[], flopCardSize: string, handCardSize: string): Promise<void> | void;
   updateActivityPanel(tableOverride?: LobbyTable | null, engineOverride?: PokerEngine | null): void;
+  // What updateTablePanel needs, now that it lives here: the state it
+  // paints from, the panels it shows and hides, and the three other
+  // painters it hands off to.
+  readonly lobby: { tables: LobbyTable[] } | null;
+  readonly selectedTableId: number | null;
+  readonly activityPanel: Box;
+  readonly tableActions: Box;
+  readonly tableContent: ScrollableText;
+  findTableById(id: number): LobbyTable | undefined;
+  updateTableActions(): void;
+  layoutTablePanels(): void;
+  updateTopInfoBar(table?: LobbyTable | null): void;
+  readonly viewMode: 'lobby' | 'table';
+  readonly tableFlow: { isObserverForTable(table: LobbyTable, userId: string): boolean };
+  readonly screen: { render(): void };
 }
 
 export class GameViews {
   constructor(private host: GameViewHost) {}
+
+  updateTablePanel(): void {
+    if (!this.host.lobby || !this.host.currentProfile) return;
+    const tableId = this.host.currentProfile.currentTableId ?? this.host.selectedTableId;
+    if (!tableId) {
+      this.host.flopPanel.hide();
+      this.host.playersPanel.hide();
+      this.host.handPanel.hide();
+      this.host.activityPanel.hide();
+      this.host.tableActions.hide();
+      this.host.tableContent.show();
+      this.host.tableContent.setContent([
+        'Select a table to view details.',
+        '',
+        `{${UI_THEME.accent}-fg}Quick start{/}:`,
+        '',
+        // One key per line: the panel is 52 columns wide at 80x25 and a
+        // single sentence naming all three ran off the right edge.
+        `  {${UI_THEME.accent}-fg}C{/}      create a table`,
+        `  {${UI_THEME.accent}-fg}ENTER{/}  join the highlighted table`,
+        `  {${UI_THEME.accent}-fg}O{/}      observe it`,
+        `  {${UI_THEME.accent}-fg}R{/}      refresh the lobby`,
+      ].join('\n'));
+      this.host.updateTableActions();
+      return;
+    }
+
+    const table = this.host.findTableById(tableId);
+    if (!table) {
+      this.host.flopPanel.hide();
+      this.host.playersPanel.hide();
+      this.host.handPanel.hide();
+      this.host.activityPanel.hide();
+      this.host.tableActions.hide();
+      this.host.tableContent.show();
+      this.host.tableContent.setContent(`Table not found. Press {${UI_THEME.accent}-fg}R{/} to refresh the lobby.`);
+      this.host.updateTableActions();
+      return;
+    }
+
+    const isObserver = this.host.tableFlow.isObserverForTable(table, this.host.currentProfile.userId);
+    const showGameView = this.host.viewMode === 'table' && this.host.currentProfile?.currentTableId === table.id;
+
+    if (showGameView) {
+      this.host.tableContent.hide();
+      this.host.flopPanel.show();
+      this.host.playersPanel.show();
+      this.host.handPanel.show();
+      this.host.activityPanel.show();
+      this.host.tableActions.show();
+      this.host.layoutTablePanels();
+
+      // Detect game type and render appropriately
+      if (isUnoTable(table)) {
+        this.renderUnoGameView(table);
+      } else {
+        this.renderPokerGameView(table);
+      }
+
+      this.host.updateTableActions();
+      this.host.updateTopInfoBar();
+      this.host.screen.render();
+      return;
+    }
+
+    this.host.flopPanel.hide();
+    this.host.playersPanel.hide();
+    this.host.handPanel.hide();
+    this.host.activityPanel.hide();
+    this.host.tableActions.hide();
+    this.host.tableContent.show();
+
+    const contentWidth = Math.max(40, (this.host.tableContent as any).iwidth ?? 78);
+    const gap = 2;
+    const minLeftWidth = 24;
+    const minRightWidth = 20;
+
+    const leftLines: string[] = [];
+    const rightLines: string[] = [];
+
+    rightLines.push(`{${UI_THEME.accent}-fg}Table #${table.id}{/} - ${table.gameName}`);
+    rightLines.push(`Stakes: ${table.stakesLabel}  Buy-in: ${table.buyIn}`);
+    rightLines.push(`Status: ${table.status}  Players: ${table.players.filter((p) => p.role === 'player').length}/${table.maxPlayers}`);
+    if (table.isPrivate && table.inviteCode) {
+      rightLines.push(`Invite: ${table.inviteCode}`);
+    }
+    if (isObserver) {
+      rightLines.push('Mode: Observer');
+    }
+
+    if (table.lastHand) {
+      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
+      rightLines.push('');
+      rightLines.push(`Last hand pot: ${table.lastHand.pot}`);
+      rightLines.push(`Last winners: ${winners || 'TBD'}`);
+    }
+
+    rightLines.push('');
+    rightLines.push('Seats:');
+    const seated = table.players
+      .filter((player) => player.role === 'player')
+      .sort((a, b) => a.seat - b.seat);
+    seated.forEach((player) => {
+      const tag = isBotPlayer(player) ? '*' : ' ';
+      const name = `${player.username}${tag}`.slice(0, 10);
+      rightLines.push(`${pad(String(player.seat + 1), 2)} ${pad(name, 10)} ${pad(String(player.stack), 5)}`);
+    });
+
+    if (table.observers.length > 0) {
+      rightLines.push('');
+      rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
+    }
+
+    rightLines.push('');
+    rightLines.push(`{${UI_THEME.accent}-fg}Actions{/}: ENTER Join  O Observe`);
+    rightLines.push(`{${UI_THEME.accent}-fg}More{/}: C Create  R Refresh  F Filter`);
+    rightLines.push(`{${UI_THEME.dim}-fg}Auto-deal starts when enough players are seated.{/}`);
+
+    let lines: string[] = [];
+    if (leftLines.length === 0) {
+      lines = rightLines;
+    } else {
+      const maxLeftWidth = Math.max(minLeftWidth, ...leftLines.map(visibleWidth));
+      const canUseColumns = maxLeftWidth + gap + minRightWidth <= contentWidth;
+      if (canUseColumns) {
+        const leftWidth = Math.min(maxLeftWidth, contentWidth - minRightWidth - gap);
+        const rightWidth = Math.max(minRightWidth, contentWidth - leftWidth - gap);
+        lines = mergeColumns(leftLines, rightLines, leftWidth, rightWidth, gap);
+      } else {
+        lines = [...leftLines, '', ...rightLines];
+      }
+    }
+    this.host.tableContent.setContent(lines.join('\n'));
+    this.host.tableContent.resetScroll();
+    this.host.updateTableActions();
+    this.host.screen.render();
+  }
 
   renderPokerGameView(table: LobbyTable): void {
     const flopInnerHeight = Math.max(0, Number(this.host.flopPanel.height) - 2);

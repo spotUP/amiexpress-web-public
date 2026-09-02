@@ -11,9 +11,136 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameViews = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const lib_1 = require("../lib");
+const constants_1 = require("../lib/constants");
 class GameViews {
     constructor(host) {
         this.host = host;
+    }
+    updateTablePanel() {
+        if (!this.host.lobby || !this.host.currentProfile)
+            return;
+        const tableId = this.host.currentProfile.currentTableId ?? this.host.selectedTableId;
+        if (!tableId) {
+            this.host.flopPanel.hide();
+            this.host.playersPanel.hide();
+            this.host.handPanel.hide();
+            this.host.activityPanel.hide();
+            this.host.tableActions.hide();
+            this.host.tableContent.show();
+            this.host.tableContent.setContent([
+                'Select a table to view details.',
+                '',
+                `{${constants_1.UI_THEME.accent}-fg}Quick start{/}:`,
+                '',
+                // One key per line: the panel is 52 columns wide at 80x25 and a
+                // single sentence naming all three ran off the right edge.
+                `  {${constants_1.UI_THEME.accent}-fg}C{/}      create a table`,
+                `  {${constants_1.UI_THEME.accent}-fg}ENTER{/}  join the highlighted table`,
+                `  {${constants_1.UI_THEME.accent}-fg}O{/}      observe it`,
+                `  {${constants_1.UI_THEME.accent}-fg}R{/}      refresh the lobby`,
+            ].join('\n'));
+            this.host.updateTableActions();
+            return;
+        }
+        const table = this.host.findTableById(tableId);
+        if (!table) {
+            this.host.flopPanel.hide();
+            this.host.playersPanel.hide();
+            this.host.handPanel.hide();
+            this.host.activityPanel.hide();
+            this.host.tableActions.hide();
+            this.host.tableContent.show();
+            this.host.tableContent.setContent(`Table not found. Press {${constants_1.UI_THEME.accent}-fg}R{/} to refresh the lobby.`);
+            this.host.updateTableActions();
+            return;
+        }
+        const isObserver = this.host.tableFlow.isObserverForTable(table, this.host.currentProfile.userId);
+        const showGameView = this.host.viewMode === 'table' && this.host.currentProfile?.currentTableId === table.id;
+        if (showGameView) {
+            this.host.tableContent.hide();
+            this.host.flopPanel.show();
+            this.host.playersPanel.show();
+            this.host.handPanel.show();
+            this.host.activityPanel.show();
+            this.host.tableActions.show();
+            this.host.layoutTablePanels();
+            // Detect game type and render appropriately
+            if ((0, lib_1.isUnoTable)(table)) {
+                this.renderUnoGameView(table);
+            }
+            else {
+                this.renderPokerGameView(table);
+            }
+            this.host.updateTableActions();
+            this.host.updateTopInfoBar();
+            this.host.screen.render();
+            return;
+        }
+        this.host.flopPanel.hide();
+        this.host.playersPanel.hide();
+        this.host.handPanel.hide();
+        this.host.activityPanel.hide();
+        this.host.tableActions.hide();
+        this.host.tableContent.show();
+        const contentWidth = Math.max(40, this.host.tableContent.iwidth ?? 78);
+        const gap = 2;
+        const minLeftWidth = 24;
+        const minRightWidth = 20;
+        const leftLines = [];
+        const rightLines = [];
+        rightLines.push(`{${constants_1.UI_THEME.accent}-fg}Table #${table.id}{/} - ${table.gameName}`);
+        rightLines.push(`Stakes: ${table.stakesLabel}  Buy-in: ${table.buyIn}`);
+        rightLines.push(`Status: ${table.status}  Players: ${table.players.filter((p) => p.role === 'player').length}/${table.maxPlayers}`);
+        if (table.isPrivate && table.inviteCode) {
+            rightLines.push(`Invite: ${table.inviteCode}`);
+        }
+        if (isObserver) {
+            rightLines.push('Mode: Observer');
+        }
+        if (table.lastHand) {
+            const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
+            rightLines.push('');
+            rightLines.push(`Last hand pot: ${table.lastHand.pot}`);
+            rightLines.push(`Last winners: ${winners || 'TBD'}`);
+        }
+        rightLines.push('');
+        rightLines.push('Seats:');
+        const seated = table.players
+            .filter((player) => player.role === 'player')
+            .sort((a, b) => a.seat - b.seat);
+        seated.forEach((player) => {
+            const tag = (0, lib_1.isBotPlayer)(player) ? '*' : ' ';
+            const name = `${player.username}${tag}`.slice(0, 10);
+            rightLines.push(`${(0, lib_1.pad)(String(player.seat + 1), 2)} ${(0, lib_1.pad)(name, 10)} ${(0, lib_1.pad)(String(player.stack), 5)}`);
+        });
+        if (table.observers.length > 0) {
+            rightLines.push('');
+            rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
+        }
+        rightLines.push('');
+        rightLines.push(`{${constants_1.UI_THEME.accent}-fg}Actions{/}: ENTER Join  O Observe`);
+        rightLines.push(`{${constants_1.UI_THEME.accent}-fg}More{/}: C Create  R Refresh  F Filter`);
+        rightLines.push(`{${constants_1.UI_THEME.dim}-fg}Auto-deal starts when enough players are seated.{/}`);
+        let lines = [];
+        if (leftLines.length === 0) {
+            lines = rightLines;
+        }
+        else {
+            const maxLeftWidth = Math.max(minLeftWidth, ...leftLines.map(lib_1.visibleWidth));
+            const canUseColumns = maxLeftWidth + gap + minRightWidth <= contentWidth;
+            if (canUseColumns) {
+                const leftWidth = Math.min(maxLeftWidth, contentWidth - minRightWidth - gap);
+                const rightWidth = Math.max(minRightWidth, contentWidth - leftWidth - gap);
+                lines = (0, lib_1.mergeColumns)(leftLines, rightLines, leftWidth, rightWidth, gap);
+            }
+            else {
+                lines = [...leftLines, '', ...rightLines];
+            }
+        }
+        this.host.tableContent.setContent(lines.join('\n'));
+        this.host.tableContent.resetScroll();
+        this.host.updateTableActions();
+        this.host.screen.render();
     }
     renderPokerGameView(table) {
         const flopInnerHeight = Math.max(0, Number(this.host.flopPanel.height) - 2);

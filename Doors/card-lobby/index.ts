@@ -114,6 +114,8 @@ import {
 } from './lib';
 import { buildActivityHints } from './lib/activity-hints';
 import { emitLiveChatAnnouncement } from './lib/live-chat';
+import { unlockAchievements, recordHandResult } from './lib/achievements';
+import { hasRoomForEverything } from './lib/desktop-layout';
 import { metadata as doorMetadata } from './lib/metadata';
 import { UIManager, DialogManager, GameStateManager } from './managers';
 import { createAnnouncer, type DoorAnnouncer } from '@amiexpress/bbs-door-sdk/core/announce';
@@ -142,7 +144,7 @@ export class CardLobbyApp {
   public uiManager!: UIManager;
   private dialogManager!: DialogManager;
   private gameStateManager!: GameStateManager;
-  private tableFlow!: TableFlow;
+  public tableFlow!: TableFlow;
   private unoEvents!: UnoEventBus;
   private gameViews!: GameViews;
   private terminalMode!: TerminalModeSwitch;
@@ -160,15 +162,15 @@ export class CardLobbyApp {
   private get tableWindow() { return this.uiManager.tableWindow; }
   private get lobbyList() { return this.uiManager.lobbyList; }
   private get lobbyActions() { return this.uiManager.lobbyActions; }
-  private get tableActions() { return this.uiManager.tableActions; }
-  private get tableContent() { return this.uiManager.tableContent; }
+  public get tableActions() { return this.uiManager.tableActions; }
+  public get tableContent() { return this.uiManager.tableContent; }
   public get flopPanel() { return this.uiManager.flopPanel; }
   public get flopContent() { return this.uiManager.flopContent; }
   public get playersPanel() { return this.uiManager.playersPanel; }
   public get playersContent() { return this.uiManager.playersContent; }
   public get handPanel() { return this.uiManager.handPanel; }
   public get handContent() { return this.uiManager.handContent; }
-  private get activityPanel() { return this.uiManager.activityPanel; }
+  public get activityPanel() { return this.uiManager.activityPanel; }
   public get activityContent() { return this.uiManager.activityContent; }
   private get actionButtons() { return this.uiManager.actionButtons; }
   private get overlayShade() { return this.uiManager.overlayShade; }
@@ -190,7 +192,7 @@ export class CardLobbyApp {
   public renderBoardAndHand(boardCards: any[], playerHand: any[], flopCardSize: string, handCardSize: string, hasActiveHand: boolean) {
     return this.uiManager.renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, hasActiveHand);
   }
-  private layoutTablePanels() {
+  public layoutTablePanels() {
     return this.uiManager.layoutTablePanels();
   }
   private layoutActionButtons() {
@@ -490,6 +492,7 @@ export class CardLobbyApp {
       showLeaderboardWindow: () => this.dialogManager.showLeaderboardWindow(this.profiles),
       showAchievementsWindow: () => this.dialogManager.showAchievementsWindow(this.currentProfile),
       showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
+      showCardStyleWindow: () => this.chooseCardStyle(),
       exitDoor: this.exitDoor.bind(this),
       runAction: this.runAction.bind(this),
     });
@@ -648,6 +651,8 @@ export class CardLobbyApp {
     this.lobby = lobby;
     this.profiles = profiles;
     this.currentProfile = profile;
+    // The renderer draws cards the way this player asked for them.
+    this.applyCardPreferences();
 
     let changed = false;
     lobby.tables.forEach((table) => {
@@ -905,6 +910,33 @@ export class CardLobbyApp {
     this.updateActivityPanel();
   }
 
+  /**
+   * Ask how this player wants cards drawn, remember it, and redraw.
+   *
+   * The preference lives on the profile, so it follows the player between
+   * sessions and between games - the same choice covers a poker board and
+   * an UNO discard pile.
+   */
+  private async chooseCardStyle(): Promise<void> {
+    const chosen = await this.dialogManager.showCardStyleWindow(
+      this.currentProfile,
+      Boolean((this.session.bbs as { unicodeCapable?: boolean })?.unicodeCapable),
+    );
+    if (!chosen || !this.currentProfile) return;
+
+    this.currentProfile.cards = chosen;
+    this.applyCardPreferences();
+    await this.persistState();
+    this.updateAllPanels();
+  }
+
+  /** Hand the renderer the player's card preferences and this terminal's reach. */
+  public applyCardPreferences(): void {
+    this.uiManager.cardPreferences = this.currentProfile?.cards;
+    this.uiManager.unicodeCapable =
+      Boolean((this.session.bbs as { unicodeCapable?: boolean })?.unicodeCapable);
+  }
+
   public emitLiveChat(message: string): void {
     emitLiveChatAnnouncement(this.session as any, message);
   }
@@ -933,7 +965,7 @@ export class CardLobbyApp {
     this.screen.render();
   }
 
-  private updateTopInfoBar(): void {
+  public updateTopInfoBar(): void {
     if (!this.currentProfile || !this.lobby) return;
     const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
     if (!tableId) {
@@ -1093,140 +1125,10 @@ export class CardLobbyApp {
   }
 
   private updateTablePanel(): void {
-    if (!this.lobby || !this.currentProfile) return;
-    const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
-    if (!tableId) {
-      this.flopPanel.hide();
-      this.playersPanel.hide();
-      this.handPanel.hide();
-      this.activityPanel.hide();
-      this.tableActions.hide();
-      this.tableContent.show();
-      this.tableContent.setContent([
-        'Select a table to view details.',
-        '',
-        `{${UI_THEME.accent}-fg}Quick start{/}:`,
-        '',
-        // One key per line: the panel is 52 columns wide at 80x25 and a
-        // single sentence naming all three ran off the right edge.
-        `  {${UI_THEME.accent}-fg}C{/}      create a table`,
-        `  {${UI_THEME.accent}-fg}ENTER{/}  join the highlighted table`,
-        `  {${UI_THEME.accent}-fg}O{/}      observe it`,
-        `  {${UI_THEME.accent}-fg}R{/}      refresh the lobby`,
-      ].join('\n'));
-      this.updateTableActions();
-      return;
-    }
-
-    const table = this.findTableById(tableId);
-    if (!table) {
-      this.flopPanel.hide();
-      this.playersPanel.hide();
-      this.handPanel.hide();
-      this.activityPanel.hide();
-      this.tableActions.hide();
-      this.tableContent.show();
-      this.tableContent.setContent(`Table not found. Press {${UI_THEME.accent}-fg}R{/} to refresh the lobby.`);
-      this.updateTableActions();
-      return;
-    }
-
-    const isObserver = this.tableFlow.isObserverForTable(table, this.currentProfile.userId);
-    const showGameView = this.viewMode === 'table' && this.currentProfile?.currentTableId === table.id;
-
-    if (showGameView) {
-      this.tableContent.hide();
-      this.flopPanel.show();
-      this.playersPanel.show();
-      this.handPanel.show();
-      this.activityPanel.show();
-      this.tableActions.show();
-      this.layoutTablePanels();
-
-      // Detect game type and render appropriately
-      if (isUnoTable(table)) {
-        this.gameViews.renderUnoGameView(table);
-      } else {
-        this.gameViews.renderPokerGameView(table);
-      }
-
-      this.updateTableActions();
-      this.updateTopInfoBar();
-      this.screen.render();
-      return;
-    }
-
-    this.flopPanel.hide();
-    this.playersPanel.hide();
-    this.handPanel.hide();
-    this.activityPanel.hide();
-    this.tableActions.hide();
-    this.tableContent.show();
-
-    const contentWidth = Math.max(40, (this.tableContent as any).iwidth ?? 78);
-    const gap = 2;
-    const minLeftWidth = 24;
-    const minRightWidth = 20;
-
-    const leftLines: string[] = [];
-    const rightLines: string[] = [];
-
-    rightLines.push(`{${UI_THEME.accent}-fg}Table #${table.id}{/} - ${table.gameName}`);
-    rightLines.push(`Stakes: ${table.stakesLabel}  Buy-in: ${table.buyIn}`);
-    rightLines.push(`Status: ${table.status}  Players: ${table.players.filter((p) => p.role === 'player').length}/${table.maxPlayers}`);
-    if (table.isPrivate && table.inviteCode) {
-      rightLines.push(`Invite: ${table.inviteCode}`);
-    }
-    if (isObserver) {
-      rightLines.push('Mode: Observer');
-    }
-
-    if (table.lastHand) {
-      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
-      rightLines.push('');
-      rightLines.push(`Last hand pot: ${table.lastHand.pot}`);
-      rightLines.push(`Last winners: ${winners || 'TBD'}`);
-    }
-
-    rightLines.push('');
-    rightLines.push('Seats:');
-    const seated = table.players
-      .filter((player) => player.role === 'player')
-      .sort((a, b) => a.seat - b.seat);
-    seated.forEach((player) => {
-      const tag = isBotPlayer(player) ? '*' : ' ';
-      const name = `${player.username}${tag}`.slice(0, 10);
-      rightLines.push(`${pad(String(player.seat + 1), 2)} ${pad(name, 10)} ${pad(String(player.stack), 5)}`);
-    });
-
-    if (table.observers.length > 0) {
-      rightLines.push('');
-      rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
-    }
-
-    rightLines.push('');
-    rightLines.push(`{${UI_THEME.accent}-fg}Actions{/}: ENTER Join  O Observe`);
-    rightLines.push(`{${UI_THEME.accent}-fg}More{/}: C Create  R Refresh  F Filter`);
-    rightLines.push(`{${UI_THEME.dim}-fg}Auto-deal starts when enough players are seated.{/}`);
-
-    let lines: string[] = [];
-    if (leftLines.length === 0) {
-      lines = rightLines;
-    } else {
-      const maxLeftWidth = Math.max(minLeftWidth, ...leftLines.map(visibleWidth));
-      const canUseColumns = maxLeftWidth + gap + minRightWidth <= contentWidth;
-      if (canUseColumns) {
-        const leftWidth = Math.min(maxLeftWidth, contentWidth - minRightWidth - gap);
-        const rightWidth = Math.max(minRightWidth, contentWidth - leftWidth - gap);
-        lines = mergeColumns(leftLines, rightLines, leftWidth, rightWidth, gap);
-      } else {
-        lines = [...leftLines, '', ...rightLines];
-      }
-    }
-    this.tableContent.setContent(lines.join('\n'));
-    this.tableContent.resetScroll();
-    this.updateTableActions();
-    this.screen.render();
+    // The painting lives with the other table painting
+    // (managers/GameViews.ts); this door is at the repo's line ceiling
+    // and has been shaved four times already to stay under it.
+    this.gameViews.updateTablePanel();
   }
 
   private getActionContext(): { table: LobbyTable | null; isObserver: boolean; canAct: boolean; toCall: number } {
@@ -1476,7 +1378,7 @@ export class CardLobbyApp {
     this.runAction(() => this.handleUnoAction(challengeType as UnoActionType));
   }
 
-  private updateTableActions(): void {
+  public updateTableActions(): void {
     if (!this.currentProfile || !this.lobby) return;
     if (this.viewMode !== 'table' || !this.currentProfile.currentTableId) {
       this.tableActions.hide();
@@ -1650,7 +1552,16 @@ export class CardLobbyApp {
 
     // LIVE properties, not `options`: that seeds a widget once and is never
     // read again, so writing it left the window as narrow as it was built.
-    if (this.viewMode === 'table') {
+    // A terminal with room for everything shows everything: the lobby and
+    // its chat log stay where they are and the table takes the rest, rather
+    // than the door hiding half of itself on a screen that could hold it
+    // (lib/desktop-layout.ts).
+    const roomForEverything = hasRoomForEverything(
+      Number(this.screen.width) || 80,
+      Number(this.screen.height) || 25,
+    );
+
+    if (this.viewMode === 'table' && !roomForEverything) {
       this.lobbyWindow.hide();
       this.tableWindow.show();
       this.tableWindow.left = 0;
@@ -1752,46 +1663,13 @@ export class CardLobbyApp {
   }
 
   private handleAchievementUnlocks(profile: PlayerProfile): void {
-    const unlocked = new Set(profile.achievements);
-
-    const addAchievement = (id: string): void => {
-      if (unlocked.has(id)) return;
-      const def = ACHIEVEMENTS.find((achievement) => achievement.id === id);
-      if (!def) return;
-      unlocked.add(id);
-      profile.achievements.push(id);
-      profile.wallet.chips += def.reward;
-      profile.wallet.lifetimeEarned += def.reward;
-      this.pushNotice(`Achievement unlocked: ${def.name} (+${def.reward})`);
-    };
-
-    if (profile.stats.handsPlayed >= 1) addAchievement('first_hand');
-    if (profile.stats.wins >= 1) addAchievement('first_win');
-    if (profile.stats.bestWinStreak >= 3) addAchievement('hot_streak');
-    if (profile.stats.biggestPot >= 500) addAchievement('big_pot');
-    if (profile.stats.handsPlayed >= 25) addAchievement('grinder');
+    for (const unlocked of unlockAchievements(profile)) {
+      this.pushNotice(`Achievement unlocked: ${unlocked.name} (+${unlocked.reward})`);
+    }
   }
 
   private updateStatsAfterHand(profile: PlayerProfile, delta: number, pot: number): void {
-    profile.stats.handsPlayed += 1;
-    profile.stats.net += delta;
-    profile.stats.daily.hands += 1;
-    profile.stats.weekly.hands += 1;
-    profile.stats.daily.net += delta;
-    profile.stats.weekly.net += delta;
-
-    if (delta > 0) {
-      profile.stats.wins += 1;
-      profile.stats.daily.wins += 1;
-      profile.stats.weekly.wins += 1;
-      profile.stats.winStreak += 1;
-      profile.stats.bestWinStreak = Math.max(profile.stats.bestWinStreak, profile.stats.winStreak);
-    } else if (delta < 0) {
-      profile.stats.losses += 1;
-      profile.stats.winStreak = 0;
-    }
-
-    profile.stats.biggestPot = Math.max(profile.stats.biggestPot, pot);
+    recordHandResult(profile, delta, pot);
   }
 
   // Game state delegation methods

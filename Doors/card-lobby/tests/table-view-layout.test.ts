@@ -138,3 +138,65 @@ export async function aResizeAtATableKeepsTheTableFullWidth(): Promise<void> {
       'the table is as wide as the terminal it was just given');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function aBigTerminalShowsTheLobbyAndTheTableTogether(): Promise<void> {
+  // "in responsive mode we have room for all views on screen i think, lobby
+  // chat etc that would be nice" (sysop, 2026-09-02). The view swap exists
+  // because 80x25 cannot hold both; a terminal that can hold both should not
+  // be made to choose.
+  const { hasRoomForEverything, WIDE_DESKTOP_COLUMNS, WIDE_DESKTOP_ROWS } =
+    await import('../lib/desktop-layout');
+
+  assert.strictEqual(hasRoomForEverything(80, 25), false, 'the classic board still swaps');
+  assert.strictEqual(hasRoomForEverything(WIDE_DESKTOP_COLUMNS, WIDE_DESKTOP_ROWS), true);
+  assert.strictEqual(hasRoomForEverything(WIDE_DESKTOP_COLUMNS - 1, 60), false, 'too narrow');
+  assert.strictEqual(hasRoomForEverything(200, WIDE_DESKTOP_ROWS - 1), false, 'too short');
+}
+
+export async function onAWideScreenTheTableKeepsTheLobbyBesideIt(): Promise<void> {
+  const app = await openWideApp(140, 42);
+  try {
+    app.lobby.tables = [{
+      id: 1, gameId: 'uno', gameName: 'UNO', stakesLabel: '10',
+      smallBlind: 10, bigBlind: 20, buyIn: 200, entryFee: 0,
+      minPlayers: 2, maxPlayers: 4, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: 'sysop',
+      autoStart: false, isPrivate: false, players: [], observers: [],
+    }];
+    app.currentProfile.currentTableId = 1;
+    app.applyViewMode('table');
+
+    assert.ok(!app.uiManager.lobbyWindow.hidden,
+      'the lobby stays on screen when there is room for it');
+    assert.ok(!app.uiManager.logWindow.hidden, 'and so does the chat log');
+    assert.ok(Number(app.uiManager.tableWindow.position.left) > 0,
+      'the table sits beside the lobby rather than covering it');
+    assert.ok(
+      Number(app.uiManager.tableWindow.position.left) + Number(app.uiManager.tableWindow.position.width)
+        <= 141,
+      'and the two together fit the terminal',
+    );
+  } finally { app.screen?.destroy?.(); }
+}
+
+/** Same harness as openApp, at a size the sysop actually plays at. */
+async function openWideApp(width: number, height: number): Promise<any> {
+  const { CardLobbyApp } = await import('../index');
+  const bbs: any = {
+    write: () => {}, writeLine: () => {}, on: () => {},
+    getTerminalSize: () => ({ width, height }),
+    readFile: async () => null, writeFile: async () => {},
+    enableWideMode: () => {}, disableWideMode: () => {},
+    getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
+    connectionType: 'web', unicodeCapable: true,
+  };
+  const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
+  const app: any = new CardLobbyApp({
+    bbs, socket, params: [],
+    bbsSession: { userId: 1, username: 'sysop', nodeId: 1, secLevel: 255, screenHeight: height, socket },
+    user: { id: 1, username: 'sysop', name: 'sysop', accessLevel: 255 },
+  } as any);
+  void app.run();
+  await new Promise((r) => setTimeout(r, 1500));
+  return app;
+}

@@ -43,9 +43,12 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const constants_1 = require("../lib/constants");
 const utils_1 = require("../lib/utils");
+const card_style_1 = require("../lib/card-style");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
 class UIManager {
     constructor(screen, desktop) {
+        /** Whether this session's terminal can draw unicode card faces. */
+        this.unicodeCapable = false;
         /** Lines above the log (UNO context) and the door's own lines below it. */
         this.activityHeader = [];
         this.activityBody = [];
@@ -59,7 +62,7 @@ class UIManager {
         return this.dealAnimationInProgress;
     }
     buildTopBar(callbacks) {
-        const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, exitDoor, runAction } = callbacks;
+        const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, exitDoor, runAction } = callbacks;
         this.topBar = (0, blessed_helpers_1.createBox)({
             // Panel adds a line border unless the key is present; these are
             // bars and content areas, and the window around them carries the frame.
@@ -110,6 +113,7 @@ class UIManager {
                     { label: 'Leaders', action: () => runAction(showLeaderboardWindow) },
                     { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
                     { label: 'Bulletins', action: () => runAction(showBulletinsWindow) },
+                    { label: 'Card Style', action: () => runAction(showCardStyleWindow) },
                 ],
             },
             {
@@ -589,6 +593,15 @@ class UIManager {
         });
         this.layoutTablePanels();
     }
+    /** Rows a widget has inside its own borders, for sizing what goes in it. */
+    panelRows(widget) {
+        const box = widget;
+        const coords = box._getCoords?.();
+        if (coords && typeof coords.yi === 'number' && typeof coords.yl === 'number') {
+            return Math.max(0, coords.yl - coords.yi);
+        }
+        return Math.max(0, Number(box.height) || 0);
+    }
     /**
      * Move and size a widget.
      *
@@ -897,9 +910,16 @@ class UIManager {
         // raw ANSI becomes something a blessed widget will render.
         const engineCard = this.toEngineUnoCard(card);
         if (engineCard) {
+            // 'mini' used to be hardcoded here, with a comment explaining that the
+            // panel is four rows tall - which it is at 80x25 and is not after
+            // Alt+Enter: "uno in cardlobby doesnt show the full size cards when it
+            // can" (2026-09-02). Poker sized itself from its panel already; this is
+            // the same rule, plus whatever the player asked for (lib/card-style.ts).
+            const chrome = (0, card_style_1.resolveCardStyle)(this.cardPreferences, this.panelRows(this.flopContent) - 3, // two state lines and a gap
+            this.unicodeCapable);
             const lines = cardEngine.renderUnoCardLines(engineCard, {
-                style: 'ascii',
-                size: 'mini',
+                style: chrome.style,
+                size: chrome.size,
                 color: 'ansi',
             });
             return lines.map((line) => ` ${(0, blessed_helpers_1.ansiToTags)(line)}`).join('\n');
@@ -928,6 +948,60 @@ class UIManager {
         });
         this.playersContent.setContent(lines.join('\n'));
     }
+    /**
+     * A hand of UNO cards drawn as cards, side by side, with the key that
+     * plays each one under it - or null when the panel is too short or too
+     * narrow to hold them, in which case the caller falls back to the list.
+     *
+     * Cards are joined column by column: renderUnoCardLines gives one card's
+     * rows, and a hand is those rows concatenated across.
+     */
+    renderUnoHandAsCards(hand, playableIndices, selectedIndex) {
+        const rows = this.panelRows(this.handContent);
+        const chrome = (0, card_style_1.resolveCardStyle)(this.cardPreferences, rows - 4, this.unicodeCapable);
+        if (chrome.size !== 'full')
+            return null; // the list says more in less
+        const drawnCards = [];
+        for (const card of hand) {
+            const engineCard = this.toEngineUnoCard(card);
+            if (!engineCard)
+                return null; // a house-rule card has no art
+            drawnCards.push(cardEngine.renderUnoCardLines(engineCard, {
+                style: chrome.style, size: chrome.size, color: 'ansi',
+            }).map((line) => (0, blessed_helpers_1.ansiToTags)(line)));
+        }
+        if (drawnCards.length === 0)
+            return null;
+        const cardWidth = (0, utils_1.stripBlessedTags)(drawnCards[0][0] ?? '').length;
+        const coords = this.handContent._getCoords?.();
+        const panelWidth = (coords ? coords.xl - coords.xi : 0)
+            || Number(this.handContent.width) || 36;
+        const perRow = Math.max(1, Math.floor(panelWidth / (cardWidth + 1)));
+        const cardRowCount = drawnCards[0].length;
+        const rowsNeeded = Math.ceil(drawnCards.length / perRow) * (cardRowCount + 1);
+        if (perRow < 2 || rowsNeeded > rows - 2)
+            return null;
+        const out = [];
+        for (let start = 0; start < drawnCards.length; start += perRow) {
+            const slice = drawnCards.slice(start, start + perRow);
+            for (let row = 0; row < cardRowCount; row++) {
+                out.push(slice.map((card) => card[row] ?? '').join(' '));
+            }
+            // The key that plays it, and whether it can be played at all.
+            out.push(slice.map((_, offset) => {
+                const index = start + offset;
+                const label = index === 9 ? '0' : String(index + 1);
+                const mark = index === selectedIndex
+                    ? `{yellow-bg}{black-fg}[${label}]{/}{/}`
+                    : playableIndices.includes(index)
+                        ? `{green-fg}[${label}]{/}`
+                        : `{gray-fg}[${label}]{/}`;
+                const pad = Math.max(0, cardWidth - 3);
+                return mark + ' '.repeat(pad);
+            }).join(' '));
+        }
+        return out;
+    }
     renderUnoHand(hand, playableIndices, selectedIndex) {
         if (hand.length === 0) {
             this.handContent.setContent('No cards in hand.');
@@ -936,6 +1010,16 @@ class UIManager {
         const lines = [];
         lines.push(`{${constants_1.UI_THEME.accent}-fg}Your Hand:{/}`);
         lines.push('');
+        // Drawn as CARDS when the panel can hold a row of them - which it can
+        // the moment the door is given a real terminal ("uno in cardlobby
+        // doesnt show the full size cards when it can", 2026-09-02). The
+        // compact list below is what a short panel gets, and it is what every
+        // panel used to get.
+        const drawn = this.renderUnoHandAsCards(hand, playableIndices, selectedIndex);
+        if (drawn) {
+            this.handContent.setContent([...lines, ...drawn].join('\n'));
+            return;
+        }
         // Across the panel, not down it.
         //
         // One card per row needs eleven rows for a seven-card hand, and the panel

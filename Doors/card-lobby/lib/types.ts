@@ -55,6 +55,23 @@ export interface PlayerStats {
   weekly: StatBucket;
 }
 
+/**
+ * How this player likes their cards drawn.
+ *
+ * The SDK's card engine already offers the choices (CardStyle, CardSize and
+ * four card backs, sdk/engines/cards); the door only has to remember which
+ * one a player picked. Absent means the defaults - ASCII faces, sized to
+ * fit whatever panel the card lands in.
+ */
+export interface CardPreferences {
+  /** 'ascii' suits every terminal; 'unicode' needs a client that can draw it. */
+  style?: 'ascii' | 'unicode';
+  /** The back of a face-down card. */
+  back?: 'lined' | 'dotted' | 'classic' | 'shiny';
+  /** 'auto' fills the panel it is drawn in; 'mini' always stays small. */
+  size?: 'auto' | 'mini';
+}
+
 export interface PlayerProfile {
   userId: string;
   username: string;
@@ -63,6 +80,8 @@ export interface PlayerProfile {
   achievements: string[];
   status: 'lobby' | 'table' | 'away';
   currentTableId?: number;
+  /** How this player likes their cards drawn (lib/card-style.ts). */
+  cards?: CardPreferences;
 }
 
 export interface TablePlayer {

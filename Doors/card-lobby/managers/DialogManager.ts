@@ -10,6 +10,7 @@ import {
   type DoorSession,
   type LobbyState,
   type PlayerProfile,
+  type CardPreferences,
   type LeaderboardMode,
   UI_THEME,
   ACHIEVEMENTS,
@@ -127,6 +128,40 @@ export class DialogManager {
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Pick how cards are drawn. The engine offers the choices already
+   * (sdk/engines/cards: ascii or unicode faces, four backs, full or mini);
+   * this is the door asking which one, and remembering the answer.
+   */
+  async showCardStyleWindow(
+    profile: PlayerProfile | null,
+    unicodeCapable: boolean,
+  ): Promise<CardPreferences | null> {
+    if (!profile) return null;
+    const current = profile.cards ?? {};
+
+    const options: Array<{ label: string; apply: (prefs: CardPreferences) => void }> = [
+      { label: `Card size: ${current.size === 'mini' ? 'ALWAYS SMALL' : 'FIT THE PANEL'}`,
+        apply: (p) => { p.size = p.size === 'mini' ? 'auto' : 'mini'; } },
+      { label: `Card faces: ${current.style === 'unicode' ? 'UNICODE' : 'ASCII'}`
+        + (unicodeCapable ? '' : '  (this terminal draws ASCII)'),
+        apply: (p) => { p.style = p.style === 'unicode' ? 'ascii' : 'unicode'; } },
+      { label: `Card backs: ${(current.back ?? 'lined').toUpperCase()}`,
+        apply: (p) => {
+          const backs: Array<CardPreferences['back']> = ['lined', 'dotted', 'classic', 'shiny'];
+          const at = backs.indexOf(p.back ?? 'lined');
+          p.back = backs[(at + 1) % backs.length];
+        } },
+    ];
+
+    const choice = await this.showListDialog('Card Style', options.map((o) => o.label));
+    if (choice === null) return null;
+
+    const next: CardPreferences = { ...current };
+    options[choice]?.apply(next);
+    return next;
   }
 
   async showBulletinsWindow(session: DoorSession): Promise<void> {
