@@ -302,6 +302,23 @@ const SENTINEL_END = '\x00';
 // from the top and re-process the same sentinel forever.
 
 /**
+ * The codes the tokenizer itself substitutes, observed from the real maps.
+ *
+ * Recorded the first time `parseMciCodes()` runs, from `Object.keys()` of the
+ * dispatch objects that were actually built - NOT from a list kept beside them.
+ * A second list is the drift this file's tokenizer header already warns about,
+ * and `tests/screens/mci-catalog.test.ts` checks the catalog against THIS.
+ *
+ * Empty until the first parse; a caller that needs it drives one screen first.
+ */
+let observedDispatchKeys: string[] | null = null;
+
+/** The dispatch keys the last parse built, or `[]` before any parse has run. */
+export function mciDispatchKeys(): string[] {
+  return observedDispatchKeys ? [...observedDispatchKeys] : [];
+}
+
+/**
  * Parse MCI codes and return both parsed content and commands to execute
  * Returns tuple: [parsedContent, commandsToExecute]
  * NOTE: This is async to fetch message base and file area data from database
@@ -772,6 +789,14 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     // tick delay has no Node equivalent.
     w: () => '',
   };
+
+  // Record what the tokenizer can substitute, once per process. Non-inline
+  // mode only: the inline branch below ADDS ~CC_/~SS_/~SR_ sentinel emitters
+  // to prefixDispatch, and those are caller-handled codes in every other
+  // sense - counting them here would say the tokenizer owns them.
+  if (!observedDispatchKeys && !inlineMode) {
+    observedDispatchKeys = [...Object.keys(userInfoDispatch), ...Object.keys(prefixDispatch)];
+  }
 
   // Inline-mode-only sentinel emitters. These convert the inline
   // side-effecting codes (~CC_, ~SS_, ~SR_) into NUL-delimited
