@@ -163,10 +163,17 @@ file_hash() {
 #                                     nothing. First run after this landed
 #                                     must not overwrite edits it has no
 #                                     baseline for.
+#
+# A second argument names the file's path ON THE VOLUME when it differs from
+# the image's only by case. The board's own filesystem is case-insensitive and
+# the volume's is not, so copying the image's `n.info` beside the volume's
+# `N.info` would give this board two icons for one command. The manifest still
+# keys on the IMAGE's path, which is the stable name across deploys.
 sync_tracked() {
     local rel="$1"
+    local dst_rel="${2:-$1}"
     local src="$DEFAULT_DATA_DIR/$rel"
-    local dst="$BBS_DATA_DIR/$rel"
+    local dst="$BBS_DATA_DIR/$dst_rel"
     [ -f "$src" ] || return 0
 
     local ih vh mh
@@ -256,6 +263,51 @@ sync_tracked() {
     # Edited on the board. Keep it, and keep the baseline it diverged from.
     echo "$mh $rel" >> "$DEPLOY_MANIFEST_NEXT"
     TRACKED_KEPT=$((TRACKED_KEPT + 1))
+}
+
+# sync_tracked, with the volume's own spelling of the name.
+#
+# The Amiga's filesystem is case-insensitive and Linux's is not, and this
+# board's volume holds `N.info` and `GL.info` where the image ships `n.info`
+# and `gl.info`. Syncing those by the image's name writes a SECOND file beside
+# the one already there, and the board then has two icons for one command -
+# with `findCaseInsensitive` picking whichever it meets first. The live
+# manifest already carries both `Commands/BBSCmd/N.info` and
+# `Commands/BBSCmd/n.info`, so this has happened.
+#
+# Written as a wrapper rather than folded into sync_tracked because the case
+# question belongs to directories a sysop's tools write into, and the manifest
+# must keep keying on the IMAGE's name - that is the name that is stable
+# across deploys.
+sync_tracked_case_aware() {
+    local rel="$1"
+    local dir=${rel%/*}
+    local bn=${rel##*/}
+    local dst_dir="$BBS_DATA_DIR/$dir"
+    local lower cand cb existing=""
+
+    if [ "$dir" = "$rel" ] || [ ! -d "$dst_dir" ]; then
+        sync_tracked "$rel"
+        return 0
+    fi
+
+    lower=$(printf '%s' "$bn" | tr 'A-Z' 'a-z')
+    for cand in "$dst_dir"/*; do
+        [ -f "$cand" ] || continue
+        cb=${cand##*/}
+        [ "$cb" = "$bn" ] && { existing=""; break; }
+        if [ "$(printf '%s' "$cb" | tr 'A-Z' 'a-z')" = "$lower" ]; then
+            existing=$cb
+            break
+        fi
+    done
+
+    if [ -n "$existing" ]; then
+        echo "[Entrypoint]   $dir: volume has $existing where the image ships $bn - updating that one, not adding a second"
+        sync_tracked "$rel" "$dir/$existing"
+    else
+        sync_tracked "$rel"
+    fi
 }
 
 sync_image_owned() {
@@ -578,7 +630,7 @@ else
         (cd "$DEFAULT_DATA_DIR" && find Commands -type f -print) > "$COMMANDS_LIST"
         while IFS= read -r rel; do
             [ -n "$rel" ] || continue
-            sync_tracked "$rel"
+            sync_tracked_case_aware "$rel"
         done < "$COMMANDS_LIST"
         rm -f "$COMMANDS_LIST"
     fi
