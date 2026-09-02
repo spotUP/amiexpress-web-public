@@ -14,6 +14,10 @@
 /* eslint-disable no-console */
 
 const TEST_MODULES = ['./versus-layout.test',
+  // TETRIS ATTACK (Panel de Pon). The panels engine is proved against
+  // panel-attack's own fixtures; see tests/panels/prng.test.ts.
+  './panels/prng.test',
+  './panels/consts.test',
   './versus-render.test',
   './versus-repaint.test',
   './fullscreen.test',
