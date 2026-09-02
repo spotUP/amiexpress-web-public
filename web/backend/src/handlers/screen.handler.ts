@@ -1762,13 +1762,26 @@ export function addAnsiEscapes(content: string): string {
  * soft-pause / auto-pagination support for PETSCII screens; real .seq art
  * is authored as a single fixed 40x25 frame, matching the one-shot emit
  * here.
+ *
+ * Finding 3 (final review wave): `petscii-bytes` is a session-mode gate,
+ * not just a transport choice. An ANSI web session can reach a .seq screen
+ * (e.g. the BBSTITLE fallback) without ever having opted into PETSCII mode
+ * — emitting `petscii-bytes` there would push the frontend's terminal
+ * irreversibly into canvas mode for a session that never asked for it.
+ * Mirror the telnet emitter's degrade path (connection-emitter.ts's
+ * `petscii-bytes` handler / screen.handler.ts's own loader, which always
+ * populates `content` as the PetMe64-PUA conversion of the same buffer):
+ * only a session that already IS petsciiMode or a real c64 terminal gets
+ * the raw-byte transport; everyone else gets the legacy PUA
+ * `petscii-output`.
  */
 export async function emitPetsciiScreen(
   socket: any,
   session: BBSSession,
   result: { content: string; isPetscii: boolean; isRip: boolean; filePath: string; petsciiBuffer?: Buffer }
 ): Promise<void> {
-  if (result.petsciiBuffer) {
+  const sessionWantsRawPetscii = !!session.petsciiMode || session.terminalType === 'c64';
+  if (result.petsciiBuffer && sessionWantsRawPetscii) {
     socket.emit('petscii-bytes', result.petsciiBuffer.toString('base64'));
   } else {
     socket.emit('petscii-output', result.content);

@@ -9,10 +9,11 @@ export interface PetsciiCanvasProps {
   /** VIC-II color palette, indexed 0-15. Defaults to Colodore. */
   palette?: readonly string[];
   /**
-   * Upper bound on the integer zoom factor. The actual render scale is
-   * auto-fit to the parent container (see `fitScale` below) and will only
-   * ever be this value or smaller - it is a maximum, not a fixed size.
-   * Defaults to 2 (320x200 native -> 640x400 at that cap).
+   * Upper bound on the integer render scale fed to the canvas's backing
+   * store (see `fitScale`/the fill-fit policy below) - a roomy container
+   * still won't render past this many native C64 pixels per screen pixel.
+   * Defaults to 4 (320x200 native -> 1280x800 backing-store resolution at
+   * that cap, CSS-downscaled to whatever actually fits).
    */
   scale?: number;
   /** Keyboard input, already translated to PETSCII bytes. */
@@ -43,7 +44,7 @@ const UNIT_H = ROWS * CELL_PX + 2 * BORDER_PER_SCALE;
 export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
   machine,
   palette = C64_PALETTE_COLODORE,
-  scale: maxScale = 2,
+  scale: maxScale = 4,
   onData,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,15 +52,15 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
   const atlasCacheRef = useRef<TintedAtlasCache | null>(null);
   const [atlasReady, setAtlasReady] = useState(false);
   const [cursorOn, setCursorOn] = useState(true);
-  // The largest integer scale whose full bordered screen (352x232 at scale 1)
-  // fits inside the parent container, measured below. Starts at 1 so the
+  // The CONTINUOUS (not integer) ratio of "parent container size" to "one
+  // unit (352x232) bordered screen", measured below. Starts at 1 so the
   // very first paint never overflows before the initial measurement runs.
   const [fitScale, setFitScale] = useState(1);
 
   // Measure the parent container (ResizeObserver + an initial synchronous
-  // measure) and recompute the largest integer scale that fits without
-  // overflowing. `maxScale` (the `scale` prop) is a ceiling on this, not a
-  // fixed value - a roomy container still won't zoom past it.
+  // measure) and recompute the continuous fit ratio. `maxScale` (the
+  // `scale` prop) caps the render-resolution integer derived from this, not
+  // this ratio itself.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -67,7 +68,7 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
       const availW = el.clientWidth;
       const availH = el.clientHeight;
       if (availW <= 0 || availH <= 0) return;
-      const fit = Math.max(1, Math.floor(Math.min(availW / UNIT_W, availH / UNIT_H)));
+      const fit = Math.min(availW / UNIT_W, availH / UNIT_H);
       setFitScale(fit);
     };
     measure();
@@ -77,7 +78,17 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  const scale = Math.max(1, Math.min(maxScale, fitScale));
+  // Fill-fit policy (sysop live-screenshot review, final wave addendum): a
+  // FLOORED integer scale wastes up to a whole tier of container space -
+  // a 2.9x-fitting container rendered at a hard 2x, leaving a visible black
+  // margin ("black sea") the picture could have filled. Render the canvas's
+  // BACKING STORE at the smallest integer >= the continuous fit instead (a
+  // crisp, slightly-larger-than-needed pixel base), and let the CSS
+  // max-width/max-height:100% + width/height:auto below (a standard
+  // replaced-element scale-down-preserving-aspect-ratio) shrink it down to
+  // the exact continuous fit with `image-rendering: pixelated` - a clean
+  // downscale from the next integer, not the wasted floor.
+  const scale = Math.max(1, Math.min(maxScale, Math.ceil(fitScale)));
 
   const border = 16 * scale;
   const width = COLS * CELL_PX * scale + 2 * border;

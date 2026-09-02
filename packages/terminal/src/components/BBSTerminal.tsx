@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useState } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useState, useReducer } from 'react';
 import * as SDKClient from '@amiexpress/bbs-door-sdk/client';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
@@ -16,6 +16,8 @@ import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 import { PetsciiMachine } from '../petscii/petscii-machine';
 import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
+import { petsciiOverlayReducer, initialPetsciiOverlayState } from '../petscii/overlay-state';
+import { petsciiKeyBytesToCommand } from '../petscii/key-bytes-to-command';
 
 // PETSCII raw-byte transport (Task 9). `MAX_SOFT_CAP_BPS` mirrors
 // modem-emulator.ts's bps=0 soft cap (230400 bps / 10 bits-per-byte =
@@ -23,36 +25,10 @@ import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
 // instead of the whole 40x25 frame landing in one tick.
 const PETSCII_MAX_SOFT_CAP_BPS = 230400;
 
-/**
- * Inverse of `keyEventToPetscii` (petscii/keymap.ts): translates the
- * synthetic PETSCII bytes PetsciiCanvas's onKeyDown produced back into the
- * ASCII string the server's 'command' input path (xterm's term.onData)
- * already understands. Only the ranges the brief scoped are handled;
- * cursor keys, function keys, and Home/Clear are dropped for now (documented
- * limitation - the ASCII command path has no representation for them yet).
- */
-function petsciiKeyBytesToCommand(bytes: number[]): string {
-  let out = '';
-  for (const b of bytes) {
-    if (b === 0x0d) {
-      out += '\r';
-    } else if (b === 0x14) {
-      out += '\x7f';
-    } else if (b >= 0x41 && b <= 0x5a) {
-      // Unshifted letter key (keyEventToPetscii mapped ascii a-z -> $41-$5A).
-      out += String.fromCharCode(b + 0x20);
-    } else if (b >= 0xc1 && b <= 0xda) {
-      // Shifted letter key (keyEventToPetscii mapped ascii A-Z -> $C1-$DA).
-      out += String.fromCharCode(b - 0x80);
-    } else if (b >= 0x20 && b <= 0x3f) {
-      // Digits/punctuation/space: identical in both encodings.
-      out += String.fromCharCode(b);
-    }
-    // Cursor keys ($11/$91/$1D/$9D), F-keys ($85-$8C), Home/Clear ($13/$93):
-    // dropped until the server input path accepts them.
-  }
-  return out;
-}
+// petsciiKeyBytesToCommand moved to petscii/key-bytes-to-command.ts (final
+// review wave, Finding 4) so it's directly unit-testable without pulling in
+// this file's React/xterm/socket.io-client dependencies - see that file's
+// doc comment.
 
 // RIP Graphics.
 //
@@ -264,19 +240,62 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const modemEmulatorRef = useRef<ModemEmulator | null>(null);
 
   // PETSCII raw-byte transport state (Task 9). petsciiMachineRef is created
-  // lazily on the first 'petscii-bytes' event; petsciiActive swaps the
-  // hidden xterm container for <PetsciiCanvas>. petsciiBpsRef mirrors the
-  // same 'modem-speed' event ModemEmulator listens to, so the C64 canvas
-  // draws at the same simulated baud rate as the ANSI/xterm path.
+  // lazily on the first 'petscii-bytes' event and persists for the rest of
+  // the session (machine/queue survive across shows - see
+  // petsciiOverlayState's docs). petsciiBpsRef mirrors the same
+  // 'modem-speed' event ModemEmulator listens to, so the C64 canvas draws
+  // at the same simulated baud rate as the ANSI/xterm path.
+  //
+  // Overlay visibility (final review wave, Finding 2 - the controller's
+  // overlay ruling): xterm stays visible/focused at ALL times as the
+  // interaction surface (term.onData IS the web login state machine).
+  // PetsciiCanvas is drawn OVER it while a raw PETSCII screen plays, and
+  // is dismissed - not the other way around, xterm was never hidden by
+  // this reducer's introduction - by petsciiOverlayReducer (see
+  // petscii/overlay-state.ts): the next ansi-output after the byte stream
+  // drains, or any keypress.
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
-  const [petsciiActive, setPetsciiActive] = useState<boolean>(false);
-  // Pixel box of the (still-visible) xterm terminal, snapshotted at the
-  // moment PETSCII mode is entered. terminalRef gets display:none once
-  // petsciiActive flips, which drops it out of layout flow - in 'fixed'
-  // mode its parent has no explicit height of its own (it sizes off
-  // xterm's rendered content), so without this snapshot the PetsciiCanvas
-  // overlay's box would collapse to 0 height right when it's needed.
+  const [petsciiOverlay, dispatchPetsciiOverlay] = useReducer(petsciiOverlayReducer, initialPetsciiOverlayState);
+  // Pixel box of xterm at the moment the overlay first appears. Kept from
+  // the pre-overlay 'fixed'-mode frame-snapshot fix (commit c4398c955):
+  // xterm no longer gets display:none'd, but pinning the wrapper's height
+  // to this snapshot avoids it visibly resizing out from under the
+  // overlay if xterm's own content height changes while the picture plays.
   const [petsciiFrameSize, setPetsciiFrameSize] = useState<{ width: number; height: number } | null>(null);
+  // Sysop live-screenshot addendum to Finding 2: the overlay used to trust
+  // `inset:0` against the shared wrapper div to land exactly on xterm's
+  // real box. That's only true if the wrapper's CSS width (which flows
+  // through a `width:100%`/`max-width:960px` percentage chain) happens to
+  // resolve to the SAME pixels as terminalRef's actual rendered box - and
+  // terminalRef never calls fitAddon.fit() in 'fixed' mode (see
+  // fitTerminal()'s early return), so xterm renders at its own natural
+  // 80-col pixel width, not necessarily the wrapper's. A live screenshot
+  // showed the canvas centered in the (wider) wrapper, reading as shifted
+  // right of the actual (narrower) terminal underneath. Measuring
+  // terminalRef's real box directly - relative to the SAME offsetParent
+  // (the wrapper, its nearest positioned ancestor) inset:0 would have used
+  // - removes the CSS-resolution guesswork instead of hoping it converges.
+  const [petsciiFrameRect, setPetsciiFrameRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = terminalRef.current;
+    if (!el) return;
+    const measureRect = () => {
+      setPetsciiFrameRect({
+        left: el.offsetLeft,
+        top: el.offsetTop,
+        width: el.offsetWidth,
+        height: el.offsetHeight,
+      });
+    };
+    measureRect();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measureRect);
+      return () => window.removeEventListener('resize', measureRect);
+    }
+    const ro = new ResizeObserver(measureRect);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const petsciiBpsRef = useRef<number>(0);
   const petsciiFeedQueue = useRef<number[]>([]);
   const petsciiDrainActiveRef = useRef<boolean>(false);
@@ -1953,6 +1972,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
+      // Finding 2 (final review wave): text output arriving after a PETSCII
+      // byte stream drains means the art finished and the next prompt is
+      // being drawn underneath the overlay - dismiss it. The reducer itself
+      // guards against dismissing early if this happens mid-drain.
+      dispatchPetsciiOverlay({ type: 'ansi-output' });
+
       // DEBUG: Log first 20 chars of any incoming data to help identify why RIP mode isn't triggering
       if (data.includes('[1!') || data.includes('!|')) {
         console.log(`[Terminal] Incoming possible RIP data (len ${data.length}): ${JSON.stringify(data.slice(0, 50))}`);
@@ -2159,25 +2184,32 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           bytesSent += toSend;
         }
         petsciiDrainActiveRef.current = false;
+        // The feed queue emptied - this screen finished painting. Gates the
+        // overlay reducer's 'ansi-output' auto-dismiss (Finding 2): a login
+        // prompt that lands mid-drain must not cut the picture short.
+        dispatchPetsciiOverlay({ type: 'drain-complete' });
       };
       void step();
     };
     socket.on('petscii-bytes', (b64: string) => {
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       if (!petsciiMachineRef.current) {
+        // Created once and kept for the rest of the session - the machine
+        // and its queue survive across shows (Finding 2's overlay ruling),
+        // so a second .seq screen later reuses the same instance instead of
+        // resetting it.
         petsciiMachineRef.current = new PetsciiMachine();
-        // Snapshot xterm's current box before hiding it (display:none drops
-        // it out of flow) so the PetsciiCanvas overlay inherits the real
-        // terminal-frame dimensions instead of collapsing - see
-        // petsciiFrameSize's declaration for why.
-        if (terminalRef.current) {
-          setPetsciiFrameSize({
-            width: terminalRef.current.clientWidth,
-            height: terminalRef.current.clientHeight,
-          });
-        }
-        setPetsciiActive(true); // swaps the xterm div for <PetsciiCanvas machine=.../>
       }
+      // Snapshot xterm's current box (see petsciiFrameSize's declaration).
+      if (terminalRef.current) {
+        setPetsciiFrameSize({
+          width: terminalRef.current.clientWidth,
+          height: terminalRef.current.clientHeight,
+        });
+      }
+      // (Re)shows the overlay on top of xterm - including on a screen that
+      // arrives after an earlier one was dismissed, not just the first ever.
+      dispatchPetsciiOverlay({ type: 'bytes-arrived' });
       for (const b of bytes) petsciiFeedQueue.current.push(b);
       startPetsciiDrain();
     });
@@ -2983,6 +3015,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
   }, []);
 
+  // Finding 2 (final review wave): while the PETSCII overlay is shown, ANY
+  // keypress dismisses it - the classic BBS "press a key to continue", same
+  // UX as the RIP screen-picture linger (armRipLinger, rip-linger.ts).
+  // Unlike that linger, this listener must NOT call preventDefault /
+  // stopPropagation: the controller's overlay ruling keeps xterm focused
+  // the whole time the overlay is up (it is the login state machine), so
+  // the same keystroke that dismisses the overlay is also meant to reach
+  // xterm's own listener and the server normally - swallowing it here
+  // would be exactly the "canvas bypasses the login state machine" bug
+  // this fix exists to close.
+  useEffect(() => {
+    if (!petsciiOverlay.visible) return;
+    const handleKeydown = () => dispatchPetsciiOverlay({ type: 'keypress' });
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [petsciiOverlay.visible]);
+
   // Focus terminal when clicked
   const handleClick = () => {
     terminalInstance.current?.focus();
@@ -3314,18 +3363,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
           // In 'fixed' mode this div normally has no explicit height of its
           // own - it sizes off terminalRef's rendered content (xterm has no
-          // height style either; see below). Once petsciiActive hides
-          // terminalRef with display:none, that content contribution
-          // disappears and this wrapper would collapse to 0 height right
-          // when the PetsciiCanvas overlay below needs a real box to fit
-          // and center in. petsciiFrameSize snapshots that box's pixel size
-          // from the moment PETSCII mode was entered (terminalRef was still
-          // visible then) so the wrapper - and the flex centering the root
-          // above does around it - keeps behaving exactly as it did with
-          // xterm visible. 'wide' mode is unaffected: it already gets an
-          // explicit height:100% here, a real percentage of a sized
-          // ancestor that stays responsive to resizes.
-          ...(terminalMode === 'fixed' && petsciiActive && petsciiFrameSize
+          // height style either; see below). Finding 2 (final review wave)
+          // keeps xterm visible at all times now, so this no longer guards
+          // against a display:none collapse - it just pins the wrapper's
+          // height to the snapshot taken when the overlay first appeared,
+          // so the box doesn't visibly resize under the picture if xterm's
+          // own content height changes while it plays. 'wide' mode is
+          // unaffected: it already gets an explicit height:100% here, a
+          // real percentage of a sized ancestor that stays responsive to
+          // resizes.
+          ...(terminalMode === 'fixed' && petsciiOverlay.visible && petsciiFrameSize
             ? { height: `${petsciiFrameSize.height}px` }
             : {}),
         }}
@@ -3347,25 +3394,41 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // In wide mode: 100% height to fill screen (the wrapper carries
           // the fixed-mode max-width)
           ...(terminalMode === 'fixed' ? {} : { height: '100%' }),
-          // PETSCII raw-byte transport (Task 9): hide, don't unmount, so
-          // xterm's terminal/session state survives a mode swap (out of
-          // scope for this task to leave PETSCII mode mid-session - the
-          // documented path back is a page reload).
-          ...(petsciiActive ? { display: 'none' } : {}),
+          // Finding 2 (final review wave, controller's overlay ruling):
+          // xterm stays VISIBLE and FOCUSED at all times, even while the
+          // PetsciiCanvas overlay is drawn on top of it - it is the
+          // interaction surface (term.onData IS the web login state
+          // machine). It used to get display:none'd here, which is exactly
+          // what made a web session that answered 'P' unable to log in:
+          // the login prompt rendered into a hidden xterm, invisible, with
+          // no focus. The overlay below draws over it instead.
         }}
       />
-      {petsciiActive && petsciiMachineRef.current && (
+      {petsciiOverlay.visible && petsciiMachineRef.current && (
         <div
           style={{
             position: 'absolute',
-            inset: 0,
+            // True centering, both axes, over the ACTUAL terminal frame
+            // (sysop live-screenshot addendum): positioned from
+            // petsciiFrameRect - terminalRef's measured box, in the same
+            // offsetParent (this wrapper) coordinate space `inset:0` would
+            // use - rather than trusting `inset:0`/`100%` to land on the
+            // same pixels as xterm's real, natural-width render. Falls back
+            // to inset:0 only for the one frame before the measurement
+            // effect has run.
+            ...(petsciiFrameRect
+              ? {
+                  left: petsciiFrameRect.left,
+                  top: petsciiFrameRect.top,
+                  width: petsciiFrameRect.width,
+                  height: petsciiFrameRect.height,
+                }
+              : { inset: 0, width: '100%', height: '100%' }),
             zIndex: 10,
-            // Fills the wrapper above, which now always has a real size
-            // (see petsciiFrameSize's declaration for the 'fixed'-mode
-            // collapse this guards against).
-            width: '100%',
-            height: '100%',
             overflow: 'hidden',
+            // Opaque: this sits directly over the still-visible, still-live
+            // xterm underneath (Finding 2) - it must fully occlude it while
+            // shown, not just visually layer on top.
             backgroundColor: '#000',
             display: 'flex',
             alignItems: 'center',
@@ -3375,6 +3438,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           <PetsciiCanvas
             machine={petsciiMachineRef.current}
             onData={(bytes) => {
+              // Full-canvas-door path (not the login path - see Finding 2's
+              // ruling): kept for a future door session that owns the
+              // canvas outright. Login/menu input flows through xterm's own
+              // term.onData while this overlay is up; this handler never
+              // fires for it because the overlay does not take focus.
               flushPetsciiQueue();
               const command = petsciiKeyBytesToCommand(bytes);
               if (command) socketRef.current?.emit('command', command);

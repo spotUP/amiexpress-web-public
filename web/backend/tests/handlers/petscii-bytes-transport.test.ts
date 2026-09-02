@@ -83,6 +83,39 @@ describe('petscii raw byte transport', () => {
     expect(emitted).toEqual([{ event: 'petscii-output', data: '' }]);
   });
 
+  /**
+   * Final review wave, Finding 3 (Important): `petscii-bytes` is a
+   * session-mode gate, not just a transport choice - a plain ANSI web
+   * session (no petsciiMode, no c64 terminalType) that reaches a .seq
+   * screen (e.g. a BBSTITLE fallback with no per-terminal-type screen
+   * configured) must never get pushed into the frontend's canvas overlay
+   * mode. Mirrors connection-emitter.ts's own petscii-bytes degrade path.
+   */
+  it('a session WITHOUT petsciiMode never gets petscii-bytes, even when the loader carried a raw buffer (Finding 3)', async () => {
+    const emitted: Array<{ event: string; data: any }> = [];
+    const socket = { emit: (event: string, data: any) => emitted.push({ event, data }) };
+
+    await emitPetsciiScreen(socket as any, { petsciiMode: false, terminalType: 'ansi' } as any, {
+      content: 'legacy PUA text', isPetscii: true, isRip: false, filePath: 'x.seq', petsciiBuffer: fixture,
+    });
+
+    expect(emitted.some((e) => e.event === 'petscii-bytes')).toBe(false);
+    expect(emitted).toEqual([{ event: 'petscii-output', data: 'legacy PUA text' }]);
+  });
+
+  it('a session with terminalType c64 but no petsciiMode flag still gets petscii-bytes (Finding 3 gate is an OR, not just petsciiMode)', async () => {
+    const emitted: Array<{ event: string; data: any }> = [];
+    const socket = { emit: (event: string, data: any) => emitted.push({ event, data }) };
+
+    await emitPetsciiScreen(socket as any, { petsciiMode: false, terminalType: 'c64' } as any, {
+      content: '', isPetscii: true, isRip: false, filePath: 'x.seq', petsciiBuffer: fixture,
+    });
+
+    const evt = emitted.find((e) => e.event === 'petscii-bytes');
+    expect(evt).toBeDefined();
+    expect(Buffer.compare(Buffer.from(evt!.data, 'base64'), fixture)).toBe(0);
+  });
+
   it('telnet emitter writes raw PETSCII bytes for terminalType c64', () => {
     const written: Buffer[] = [];
     const connection = {

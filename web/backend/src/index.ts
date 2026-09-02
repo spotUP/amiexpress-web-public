@@ -7,6 +7,8 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import multer from "multer";
 import { buildConnectionEmitter } from "./server/connection-emitter";
+import { handleC64Detected } from "./server/c64-detected-handler";
+import { resolveTelnetPetsciiPort } from "./utils/telnet-petscii-port.util";
 import {
   User,
   Door,
@@ -47,9 +49,7 @@ import {
 import { testFile, TestResult } from "./utils/file-test.util";
 import { moveUploadedFile, getConferenceDir } from "./utils/file-hold.util";
 import {
-  convertUnicodePuaToPetscii,
   convertPetsciiInputToAscii,
-  convertAsciiToPetsciiOutput,
 } from "./utils/petscii.util";
 import { writeUploadToDirFile } from "./utils/dir-file.util";
 import { classifyFirstKeypress } from "./utils/c64-detect.util";
@@ -1772,40 +1772,13 @@ console.error("[WS-Terminal] Failed to attach:", err);
 
     // Shared c64-detected handler (skip graphics prompt, show BBSTITLE
     // directly) — used by both the primary telnet server and, when
-    // configured, the dedicated PETSCII port (task 10) below. Extracted
-    // so the second listener reuses this exact session-init logic
-    // instead of carrying its own hand-rolled copy.
-    const handleC64Detected = async (connection: TelnetConnection) => {
-      if (connection.session) {
-console.log(
-          "[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE"
-        );
-        const { displayScreen } = await import("./handlers/screen.handler");
-        // Create a telnet-compatible emitter for displayScreen
-        const emitter = {
-          emit: (event: string, data: any) => {
-            if (event === "petscii-output" || event === "ansi-output") {
-              // For C64, convert to raw PETSCII if needed
-              if (typeof data === "string") {
-                const petsciiData = convertUnicodePuaToPetscii(data);
-                connection.write(petsciiData);
-              } else {
-                connection.write(data);
-              }
-            }
-          },
-        };
-        await displayScreen(emitter as any, connection.session, "BBSTITLE");
-        // Transition to login
-        connection.session.state = BBSState.LOGON;
-        connection.session.subState = undefined;
-        connection.session.tempData = connection.session.tempData || {};
-        connection.session.tempData.loginPhase = "username";
-        connection.write(Buffer.from([0x0d, 0x0d])); // Two CR for spacing
-        // Send Username: prompt in proper PETSCII (uppercase displays correctly)
-        connection.write(convertAsciiToPetsciiOutput("Username: "));
-      }
-    };
+    // configured, the dedicated PETSCII port (task 10) below. Extracted to
+    // server/c64-detected-handler.ts (final review wave, Finding 1) so it
+    // reuses buildConnectionEmitter — the same emitter every other
+    // telnet/SSH session uses — instead of a hand-rolled mini-emitter that
+    // silently dropped `petscii-bytes` (Task 9's raw .seq transport) and
+    // lacked the case-swap/charset-prelude handling real 'ansi-output'
+    // needs for a C64.
 
     // Start telnet server
     try {
@@ -1830,9 +1803,11 @@ console.log("   BBS will continue without telnet support");
     // Feeds the SAME connection handler and c64-detected handler as the
     // primary telnet server above; only the port and the petsciiDefault
     // flag differ.
-    const telnetPetsciiPort = process.env.TELNET_PETSCII_PORT
-      ? parseInt(process.env.TELNET_PETSCII_PORT, 10)
-      : undefined;
+    const { port: telnetPetsciiPort, warning: telnetPetsciiPortWarning } =
+      resolveTelnetPetsciiPort(process.env.TELNET_PETSCII_PORT);
+    if (telnetPetsciiPortWarning) {
+console.warn(`[WARNING] ${telnetPetsciiPortWarning}`);
+    }
     if (telnetPetsciiPort) {
       try {
         telnetPetsciiServer = new TelnetServer(telnetPetsciiPort, { petsciiDefault: true });
